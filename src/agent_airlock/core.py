@@ -20,10 +20,14 @@ import structlog
 from pydantic import ValidationError
 
 from .config import DEFAULT_CONFIG, AirlockConfig
+from .policy import PolicyViolation, SecurityPolicy, ViolationType
+from .sanitizer import sanitize_output
 from .self_heal import (
     AirlockResponse,
     BlockReason,
     handle_ghost_argument_error,
+    handle_policy_violation,
+    handle_rate_limit,
     handle_validation_error,
 )
 from .validator import GhostArgumentError, create_strict_validator, strip_ghost_arguments
@@ -58,7 +62,7 @@ class Airlock:
         *,
         sandbox: bool = False,
         config: AirlockConfig | None = None,
-        policy: Any | None = None,  # Will be SecurityPolicy in Phase 3
+        policy: SecurityPolicy | None = None,
         return_dict: bool = False,
     ) -> None:
         """Initialize the Airlock decorator.
@@ -66,7 +70,7 @@ class Airlock:
         Args:
             sandbox: If True, execute the function in an E2B sandbox.
             config: Configuration options. Uses DEFAULT_CONFIG if not provided.
-            policy: Security policy to enforce (Phase 3 feature).
+            policy: Security policy to enforce (RBAC, rate limits, time restrictions).
             return_dict: If True, always return AirlockResponse as dict.
                         If False (default), return the raw result on success,
                         and AirlockResponse dict on error.
@@ -141,7 +145,27 @@ class Airlock:
                 self._log_blocked(func_name, response, start_time)
                 return response.to_dict()
 
-            # Step 2: Validate with Pydantic strict mode
+            # Step 2: Check security policy
+            if self.policy is not None:
+                try:
+                    self.policy.check(func_name)
+                except PolicyViolation as e:
+                    if e.violation_type == ViolationType.RATE_LIMITED.value:
+                        response = handle_rate_limit(
+                            func_name,
+                            limit=e.details.get("limit", "unknown"),
+                            reset_seconds=int(e.details.get("reset_seconds", 60)),
+                        )
+                    else:
+                        response = handle_policy_violation(
+                            func_name,
+                            policy_name="SecurityPolicy",
+                            reason=e.message,
+                        )
+                    self._log_blocked(func_name, response, start_time)
+                    return response.to_dict()
+
+            # Step 3: Validate with Pydantic strict mode
             try:
                 if self.sandbox:
                     # Phase 2: E2B sandbox execution
@@ -164,7 +188,41 @@ class Airlock:
                 )
                 return response.to_dict()
 
-            # Step 3: Post-process result (Phase 4: sanitization, truncation)
+            # Step 4: Post-process result (sanitization, truncation)
+            warnings: list[str] = []
+
+            if self.config.sanitize_output and result is not None:
+                # Determine max chars (0 = unlimited)
+                max_chars = self.config.max_output_chars if self.config.max_output_chars > 0 else None
+
+                sanitization = sanitize_output(
+                    result,
+                    mask_pii=self.config.mask_pii,
+                    mask_secrets=self.config.mask_secrets,
+                    max_chars=max_chars,
+                )
+
+                if sanitization.detection_count > 0:
+                    warnings.append(
+                        f"Masked {sanitization.detection_count} sensitive value(s) in output"
+                    )
+                    logger.info(
+                        "output_sanitized",
+                        function=func_name,
+                        detections=sanitization.detection_count,
+                    )
+
+                if sanitization.was_truncated:
+                    warnings.append(
+                        f"Output truncated from {sanitization.original_length:,} "
+                        f"to {sanitization.sanitized_length:,} characters"
+                    )
+
+                # If result was a string, use sanitized content
+                # For complex types, the sanitization was for logging/detection
+                if isinstance(result, str):
+                    result = sanitization.content  # type: ignore[assignment]
+
             elapsed = time.time() - start_time
             logger.info(
                 "airlock_success",
@@ -173,7 +231,7 @@ class Airlock:
             )
 
             if self.return_dict:
-                return AirlockResponse.success_response(result).to_dict()
+                return AirlockResponse.success_response(result, warnings=warnings or None).to_dict()
 
             return result
 
@@ -260,7 +318,7 @@ def airlock(
     *,
     sandbox: bool = False,
     config: AirlockConfig | None = None,
-    policy: Any | None = None,
+    policy: SecurityPolicy | None = None,
     return_dict: bool = False,
 ) -> Callable[P, R | dict[str, Any]] | Callable[[Callable[P, R]], Callable[P, R | dict[str, Any]]]:
     """Functional interface for the Airlock decorator.

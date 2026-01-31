@@ -27,8 +27,10 @@ class AirlockConfig:
     Attributes:
         strict_mode: If True, reject unknown arguments. If False, strip them silently.
         max_output_tokens: Maximum tokens in tool output before truncation. 0 = unlimited.
+        max_output_chars: Maximum characters in output before truncation. 0 = unlimited.
         mask_pii: Auto-detect and mask PII (SSN, credit cards, emails) in output.
         mask_secrets: Auto-detect and mask API keys, passwords in output.
+        sanitize_output: If True, apply output sanitization (PII masking, truncation).
         enable_audit_log: Write all tool calls to audit log file.
         audit_log_path: Path to audit log file.
         e2b_api_key: API key for E2B sandbox. Falls back to E2B_API_KEY env var.
@@ -38,8 +40,10 @@ class AirlockConfig:
 
     strict_mode: bool = False
     max_output_tokens: int = 5000
+    max_output_chars: int = 20000
     mask_pii: bool = True
     mask_secrets: bool = True
+    sanitize_output: bool = True
     enable_audit_log: bool = True
     audit_log_path: Path = field(default_factory=lambda: Path("airlock_audit.json"))
     e2b_api_key: str | None = None
@@ -103,12 +107,12 @@ class AirlockConfig:
         result: dict[str, Any] = {}
 
         # Boolean fields
-        for key in ("strict_mode", "mask_pii", "mask_secrets", "enable_audit_log"):
+        for key in ("strict_mode", "mask_pii", "mask_secrets", "sanitize_output", "enable_audit_log"):
             if key in data:
                 result[key] = bool(data[key])
 
         # Integer fields
-        for key in ("max_output_tokens", "sandbox_timeout", "sandbox_pool_size"):
+        for key in ("max_output_tokens", "max_output_chars", "sandbox_timeout", "sandbox_pool_size"):
             if key in data:
                 result[key] = int(data[key])
 

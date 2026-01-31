@@ -50,18 +50,20 @@ src/agent_airlock/
 ├── self_heal.py      # LLM-friendly error responses
 ├── config.py         # Configuration (env vars, TOML, constructor)
 ├── sandbox.py        # E2B sandbox pool + execution (implemented)
-├── policy.py         # RBAC policy engine (Phase 3)
-├── sanitizer.py      # PII/secret masking (Phase 4)
-└── logging.py        # Audit logging (Phase 4)
+├── policy.py         # RBAC policy engine (implemented)
+├── sanitizer.py      # PII/secret masking (implemented)
+├── mcp.py            # FastMCP integration (implemented)
+└── logging.py        # Audit logging (deferred)
 ```
 
 **Data Flow:**
 1. LLM calls MCP tool with arguments
 2. `@Airlock` intercepts the call
 3. Ghost arguments stripped/rejected
-4. Pydantic validates types strictly
-5. If sandbox=True, execute in E2B MicroVM
-6. Return result or self-healing error
+4. Security policy checked (RBAC, rate limits, time restrictions)
+5. Pydantic validates types strictly
+6. If sandbox=True, execute in E2B MicroVM
+7. Return result or self-healing error
 
 <!-- END AUTO-MANAGED -->
 
@@ -97,25 +99,33 @@ src/agent_airlock/
 - [x] Self-healing responses
 - [x] Configuration system
 
-### Phase 2 (Current): E2B Sandbox
+### Phase 2: E2B Sandbox
 - [x] Warm sandbox pool (SandboxPool class)
 - [x] Function serialization (cloudpickle)
 - [x] E2B integration (execute_in_sandbox)
 - [ ] File mounting (deferred to Phase 5)
 
 ### Phase 3: Policy Engine
-- [ ] RBAC for agents
-- [ ] Time restrictions
-- [ ] Rate limiting
+- [x] SecurityPolicy class with allow/deny lists
+- [x] Time-based restrictions (TimeWindow)
+- [x] Rate limiting (token bucket algorithm)
+- [x] Agent identity and role-based access control
+- [x] Predefined policies (PERMISSIVE, STRICT, READ_ONLY, BUSINESS_HOURS)
 
 ### Phase 4: Output Sanitization
-- [ ] PII masking
-- [ ] Token truncation
-- [ ] Audit logging
+- [x] PII detection and masking (email, phone, SSN, credit card, IP)
+- [x] Secret detection and masking (API keys, passwords, AWS keys, JWT, connection strings)
+- [x] Token/character truncation with configurable limits
+- [x] Masking strategies (FULL, PARTIAL, TYPE_ONLY, HASH)
+- [ ] Audit logging (deferred)
 
 ### Phase 5: FastMCP Integration
-- [ ] MCP context awareness
-- [ ] Decorator composition
+- [x] MCPAirlock decorator for MCP-specific features
+- [x] secure_tool convenience decorator
+- [x] create_secure_mcp_server factory function
+- [x] MCP context extraction utilities
+- [x] Progress reporting support
+- [x] Comprehensive example (fastmcp_integration.py)
 
 ### Phase 6: Launch
 - [ ] PyPI release

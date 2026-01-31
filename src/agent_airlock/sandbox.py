@@ -300,7 +300,7 @@ class SandboxPool:
             logger.warning("sandbox_close_failed", error=str(e))
 
     @contextmanager
-    def sandbox(self) -> "Generator[Sandbox, None, None]":
+    def sandbox(self) -> Generator[Sandbox, None, None]:
         """Context manager for acquiring and releasing a sandbox.
 
         Yields:
