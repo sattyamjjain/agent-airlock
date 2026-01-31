@@ -1,0 +1,133 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-airlock"
+version = "0.1.0"
+description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Sattyam Jain", email = "sattyamjain@example.com" }
+]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "ai-security",
+    "agent-safety",
+    "pydantic",
+    "e2b",
+    "sandbox",
+    "llm",
+    "validation",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "pydantic>=2.0,<3.0",
+    "structlog>=24.0",
+    "tomli>=2.0;python_version<'3.11'",
+]
+
+[project.optional-dependencies]
+sandbox = [
+    "e2b>=1.0,<2.0",
+    "cloudpickle>=3.0",
+]
+mcp = [
+    "mcp>=1.0",
+    "fastmcp>=2.0,<3.0",
+]
+all = [
+    "agent-airlock[sandbox,mcp]",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.23",
+    "mypy>=1.8",
+    "ruff>=0.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/sattyamjain/agent-airlock"
+Documentation = "https://github.com/sattyamjain/agent-airlock#readme"
+Repository = "https://github.com/sattyamjain/agent-airlock"
+Issues = "https://github.com/sattyamjain/agent-airlock/issues"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_airlock"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent_airlock"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "e2b.*",
+    "cloudpickle.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --cov=agent_airlock --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["src/agent_airlock"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

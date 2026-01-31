@@ -1,0 +1,240 @@
+"""Core Airlock decorator for securing MCP tool calls.
+
+The @Airlock decorator provides:
+1. Ghost argument detection and stripping
+2. Pydantic strict schema validation
+3. Self-healing error responses
+4. Optional E2B sandbox execution
+5. Policy enforcement
+6. Audit logging
+"""
+
+from __future__ import annotations
+
+import functools
+import time
+from collections.abc import Callable
+from typing import Any, ParamSpec, TypeVar, overload
+
+import structlog
+from pydantic import ValidationError
+
+from .config import DEFAULT_CONFIG, AirlockConfig
+from .self_heal import (
+    AirlockResponse,
+    BlockReason,
+    handle_ghost_argument_error,
+    handle_validation_error,
+)
+from .validator import GhostArgumentError, create_strict_validator, strip_ghost_arguments
+
+logger = structlog.get_logger("agent-airlock")
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+class Airlock:
+    """Decorator that secures function calls with validation, sandboxing, and policies.
+
+    Example:
+        @Airlock()
+        def read_file(filename: str) -> str:
+            with open(filename) as f:
+                return f.read()
+
+        @Airlock(sandbox=True)
+        def run_code(code: str) -> str:
+            exec(code)
+            return "executed"
+
+        @Airlock(config=AirlockConfig(strict_mode=True))
+        def delete_record(id: int) -> bool:
+            ...
+    """
+
+    def __init__(
+        self,
+        *,
+        sandbox: bool = False,
+        config: AirlockConfig | None = None,
+        policy: Any | None = None,  # Will be SecurityPolicy in Phase 3
+        return_dict: bool = False,
+    ) -> None:
+        """Initialize the Airlock decorator.
+
+        Args:
+            sandbox: If True, execute the function in an E2B sandbox.
+            config: Configuration options. Uses DEFAULT_CONFIG if not provided.
+            policy: Security policy to enforce (Phase 3 feature).
+            return_dict: If True, always return AirlockResponse as dict.
+                        If False (default), return the raw result on success,
+                        and AirlockResponse dict on error.
+        """
+        self.sandbox = sandbox
+        self.config = config or DEFAULT_CONFIG
+        self.policy = policy
+        self.return_dict = return_dict
+
+    @overload
+    def __call__(self, func: Callable[P, R]) -> Callable[P, R | dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, func: None = None) -> Callable[[Callable[P, R]], Callable[P, R | dict[str, Any]]]: ...
+
+    def __call__(
+        self,
+        func: Callable[P, R] | None = None,
+    ) -> Callable[P, R | dict[str, Any]] | Callable[[Callable[P, R]], Callable[P, R | dict[str, Any]]]:
+        """Apply the Airlock decorator to a function.
+
+        Supports both @Airlock() and @Airlock syntaxes.
+        """
+        if func is None:
+            # Called with arguments: @Airlock(sandbox=True)
+            return self._decorator
+
+        # Called without arguments: @Airlock
+        return self._decorator(func)
+
+    def _decorator(self, func: Callable[P, R]) -> Callable[P, R | dict[str, Any]]:
+        """The actual decorator implementation."""
+        # Create strict validator wrapper
+        validated_func = create_strict_validator(func)
+
+        @functools.wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | dict[str, Any]:
+            start_time = time.time()
+            func_name = func.__name__
+
+            logger.debug("airlock_intercept", function=func_name, args_count=len(args), kwargs_keys=list(kwargs.keys()))
+
+            # Step 1: Strip or reject ghost arguments
+            try:
+                cleaned_kwargs, stripped = strip_ghost_arguments(
+                    func,
+                    dict(kwargs),
+                    strict=self.config.strict_mode,
+                )
+                kwargs = cleaned_kwargs  # type: ignore[assignment]
+
+                if stripped:
+                    logger.info(
+                        "ghost_arguments_handled",
+                        function=func_name,
+                        stripped=sorted(stripped),
+                        mode="rejected" if self.config.strict_mode else "stripped",
+                    )
+
+            except GhostArgumentError as e:
+                response = handle_ghost_argument_error(e)
+                self._log_blocked(func_name, response, start_time)
+                return response.to_dict()
+
+            # Step 2: Validate with Pydantic strict mode
+            try:
+                if self.sandbox:
+                    # Phase 2: E2B sandbox execution
+                    result = self._execute_in_sandbox(func, *args, **kwargs)
+                else:
+                    result = validated_func(*args, **kwargs)
+
+            except ValidationError as e:
+                response = handle_validation_error(e, func_name)
+                self._log_blocked(func_name, response, start_time)
+                return response.to_dict()
+
+            except Exception as e:
+                # Unexpected errors - don't expose internals to LLM
+                logger.exception("unexpected_error", function=func_name, error=str(e))
+                response = AirlockResponse.blocked_response(
+                    reason=BlockReason.VALIDATION_ERROR,
+                    error=f"AIRLOCK_BLOCK: Unexpected error in '{func_name}'",
+                    fix_hints=["An internal error occurred. Please try again."],
+                )
+                return response.to_dict()
+
+            # Step 3: Post-process result (Phase 4: sanitization, truncation)
+            elapsed = time.time() - start_time
+            logger.info(
+                "airlock_success",
+                function=func_name,
+                elapsed_ms=round(elapsed * 1000, 2),
+            )
+
+            if self.return_dict:
+                return AirlockResponse.success_response(result).to_dict()
+
+            return result
+
+        return wrapper
+
+    def _execute_in_sandbox(
+        self,
+        func: Callable[P, R],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> R:
+        """Execute function in E2B sandbox.
+
+        This is a placeholder for Phase 2 implementation.
+        Currently falls back to local execution with a warning.
+        """
+        logger.warning(
+            "sandbox_not_implemented",
+            function=func.__name__,
+            message="E2B sandbox execution not yet implemented. Running locally.",
+        )
+        # Phase 2 will implement actual E2B execution
+        # For now, run locally (still with validation)
+        validated_func = create_strict_validator(func)
+        return validated_func(*args, **kwargs)
+
+    def _log_blocked(
+        self,
+        func_name: str,
+        response: AirlockResponse,
+        start_time: float,
+    ) -> None:
+        """Log a blocked tool call."""
+        elapsed = time.time() - start_time
+        logger.warning(
+            "airlock_blocked",
+            function=func_name,
+            reason=response.block_reason.value if response.block_reason else "unknown",
+            error=response.error,
+            elapsed_ms=round(elapsed * 1000, 2),
+        )
+
+
+# Convenience alias for common use case
+def airlock(
+    func: Callable[P, R] | None = None,
+    *,
+    sandbox: bool = False,
+    config: AirlockConfig | None = None,
+    policy: Any | None = None,
+    return_dict: bool = False,
+) -> Callable[P, R | dict[str, Any]] | Callable[[Callable[P, R]], Callable[P, R | dict[str, Any]]]:
+    """Functional interface for the Airlock decorator.
+
+    Example:
+        @airlock
+        def my_tool(x: int) -> int:
+            return x * 2
+
+        @airlock(sandbox=True)
+        def dangerous_tool(code: str) -> str:
+            exec(code)
+            return "ok"
+    """
+    decorator = Airlock(
+        sandbox=sandbox,
+        config=config,
+        policy=policy,
+        return_dict=return_dict,
+    )
+
+    if func is None:
+        return decorator
+    return decorator(func)
