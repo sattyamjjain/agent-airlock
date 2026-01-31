@@ -1,6 +1,8 @@
 # Framework Compatibility Guide
 
-Agent-Airlock is designed to work seamlessly with all major AI agent frameworks. This guide covers integration patterns and the critical "Golden Rule" for decorator ordering.
+Agent-Airlock is designed to work seamlessly with all major AI agent frameworks in 2026. This guide covers integration patterns, the critical "Golden Rule" for decorator ordering, and links to comprehensive examples.
+
+> **See also:** Full working examples in [`examples/`](../examples/README.md)
 
 ---
 
@@ -8,13 +10,13 @@ Agent-Airlock is designed to work seamlessly with all major AI agent frameworks.
 
 > **Always put `@Airlock` closest to the function definition.**
 
-AI frameworks like LangChain, CrewAI, and AutoGen use `inspect.signature()` to generate JSON schemas for LLM tool calls. If decorators are ordered incorrectly, the LLM sees "empty arguments" and tool calls fail.
+AI frameworks like LangChain, CrewAI, OpenAI Agents SDK, and AutoGen use `inspect.signature()` to generate JSON schemas for LLM tool calls. If decorators are ordered incorrectly, the LLM sees "empty arguments" and tool calls fail.
 
 ### Correct Order
 
 ```python
 # ✅ CORRECT: @Airlock is closest to the function
-@langchain_tool
+@framework_decorator
 @Airlock()
 def my_tool(x: int, y: str) -> dict:
     return {"x": x, "y": y}
@@ -25,7 +27,7 @@ def my_tool(x: int, y: str) -> dict:
 ```python
 # ❌ WRONG: @Airlock wraps the framework decorator
 @Airlock()
-@langchain_tool
+@framework_decorator
 def my_tool(x: int, y: str) -> dict:
     return {"x": x, "y": y}
 ```
@@ -37,6 +39,8 @@ def my_tool(x: int, y: str) -> dict:
 ## LangChain Integration
 
 LangChain's `@tool` decorator reads function signatures to build schemas for the LLM.
+
+> **Full example:** [`examples/langchain_integration.py`](../examples/langchain_integration.py)
 
 ### Basic Usage
 
@@ -58,7 +62,7 @@ def search_database(query: str, limit: int = 10) -> list[dict]:
     return db.search(query, limit=limit)
 ```
 
-### With LangChain Agents
+### With AgentExecutor
 
 ```python
 from langchain.agents import AgentExecutor, create_openai_tools_agent
@@ -69,74 +73,102 @@ from agent_airlock import Airlock, STRICT_POLICY
 @tool
 @Airlock(policy=STRICT_POLICY)
 def get_user_info(user_id: str) -> dict:
-    """Get information about a user.
-
-    Args:
-        user_id: The unique user identifier
-    """
+    """Get information about a user."""
     return {"id": user_id, "name": "John Doe"}
 
-# Create agent with secured tools
 llm = ChatOpenAI(model="gpt-4")
 tools = [get_user_info]
 agent = create_openai_tools_agent(llm, tools, prompt)
 executor = AgentExecutor(agent=agent, tools=tools)
 ```
 
-### Reference
+### References
 - [LangChain Tools Documentation](https://docs.langchain.com/oss/python/langchain/tools)
 - [LangChain Custom Tools Guide](https://latenode.com/blog/ai-frameworks-technical-infrastructure/langchain-setup-tools-agents-memory/langchain-tools-complete-guide-creating-using-custom-llm-tools-code-examples-2025)
 
 ---
 
+## LangGraph Integration
+
+LangGraph is the evolution of LangChain for stateful, graph-based agent workflows.
+
+> **Full example:** [`examples/langgraph_integration.py`](../examples/langgraph_integration.py)
+
+### With ToolNode
+
+```python
+from langchain_core.tools import tool
+from langgraph.prebuilt import ToolNode
+from langgraph.graph import StateGraph, MessagesState
+from agent_airlock import Airlock
+
+@tool
+@Airlock()
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+@tool
+@Airlock()
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers."""
+    return a * b
+
+# Create ToolNode with secured tools
+tools = [add, multiply]
+tool_node = ToolNode(tools)
+
+# Build graph
+workflow = StateGraph(MessagesState)
+workflow.add_node("agent", call_model)
+workflow.add_node("tools", tool_node)
+# ... add edges
+```
+
+### References
+- [LangGraph Documentation](https://docs.langchain.com/oss/python/langgraph/quickstart)
+- [LangGraph Tutorial 2026](https://langchain-tutorials.github.io/langgraph-tutorial-2026-beginners-guide/)
+
+---
+
 ## CrewAI Integration
 
-CrewAI's `@tool` decorator works similarly to LangChain.
+CrewAI's `@tool` decorator enables role-based multi-agent collaboration.
+
+> **Full example:** [`examples/crewai_integration.py`](../examples/crewai_integration.py)
 
 ### Basic Usage
 
 ```python
-from crewai_tools import tool
+from crewai.tools import tool
 from agent_airlock import Airlock, READ_ONLY_POLICY
 
 @tool("Database Query Tool")
 @Airlock(policy=READ_ONLY_POLICY)
 def query_database(sql: str) -> list[dict]:
-    """Execute a read-only SQL query against the database.
-
-    Args:
-        sql: The SQL query to execute (SELECT only)
-    """
+    """Execute a read-only SQL query."""
     return db.execute(sql)
 ```
 
-### With CrewAI Agents
+### With Crew Agents
 
 ```python
-from crewai import Agent, Task, Crew
-from crewai_tools import tool
+from crewai import Agent, Crew, Task
+from crewai.tools import tool
 from agent_airlock import Airlock, SecurityPolicy
 
-# Custom policy for this crew
 ANALYST_POLICY = SecurityPolicy(
-    allowed_tools=["query_*", "read_*", "get_*"],
+    allowed_tools=["query_*", "read_*"],
     denied_tools=["write_*", "delete_*"],
     rate_limits={"*": "100/hour"},
 )
 
 @tool("Query Tool")
 @Airlock(policy=ANALYST_POLICY)
-def query_data(metric: str, start_date: str, end_date: str) -> dict:
-    """Query analytics data for a specific metric.
+def query_data(metric: str) -> dict:
+    """Query analytics data."""
+    return analytics.query(metric)
 
-    Args:
-        metric: The metric name to query
-        start_date: Start date in YYYY-MM-DD format
-        end_date: End date in YYYY-MM-DD format
-    """
-    return analytics.query(metric, start_date, end_date)
-
-# Create agent with secured tool
 analyst = Agent(
     role="Data Analyst",
     goal="Analyze business metrics",
@@ -144,106 +176,297 @@ analyst = Agent(
 )
 ```
 
-### Reference
+### References
 - [CrewAI Tools Documentation](https://docs.crewai.com/en/learn/create-custom-tools)
-- [CrewAI Tools GitHub](https://github.com/crewAIInc/crewAI-tools)
+- [CrewAI GitHub](https://github.com/crewAIInc/crewAI-tools)
 
 ---
 
-## AutoGen Integration
+## OpenAI Agents SDK Integration
 
-AutoGen uses `register_for_llm` to generate tool schemas from function signatures.
+OpenAI's Agents SDK is a lightweight framework for multi-agent workflows.
 
-### Basic Usage (AutoGen 0.2)
+> **Full example:** [`examples/openai_agents_sdk_integration.py`](../examples/openai_agents_sdk_integration.py)
+
+### Basic Usage
 
 ```python
-from autogen import ConversableAgent
+from agents import Agent, Runner, function_tool
 from agent_airlock import Airlock, AirlockConfig
 
 config = AirlockConfig(strict_mode=True, mask_pii=True)
 
-# Define the secured function first
+@function_tool
 @Airlock(config=config)
-def calculate_price(item_id: str, quantity: int, discount: float = 0.0) -> dict:
-    """Calculate the total price for an order.
+def get_weather(city: str, units: str = "celsius") -> str:
+    """Get weather for a city."""
+    return f"Weather in {city}: 22°{units[0].upper()}"
 
-    Args:
-        item_id: The product ID
-        quantity: Number of items
-        discount: Discount percentage (0.0 to 1.0)
-    """
-    price = get_item_price(item_id)
-    total = price * quantity * (1 - discount)
-    return {"item_id": item_id, "total": total}
-
-# Create agent and register the tool
-assistant = ConversableAgent("assistant", llm_config=llm_config)
-user_proxy = ConversableAgent("user_proxy", human_input_mode="NEVER")
-
-# Register with both agents
-assistant.register_for_llm(description="Calculate order price")(calculate_price)
-user_proxy.register_for_execution()(calculate_price)
+agent = Agent(
+    name="weather_agent",
+    tools=[get_weather],
+    model="gpt-4o-mini",
+)
 ```
 
-### AutoGen 0.4+ (FunctionTool)
+### Handoff Pattern
 
 ```python
-from autogen_core.tools import FunctionTool
-from agent_airlock import Airlock
+# Specialist agents with secured tools
+billing_agent = Agent(
+    name="billing",
+    tools=[get_billing_info],  # @Airlock secured
+)
 
-@Airlock()
-def get_weather(city: str) -> dict:
-    """Get current weather for a city.
+technical_agent = Agent(
+    name="technical",
+    tools=[check_service, execute_code],  # @Airlock secured
+)
 
-    Args:
-        city: The city name
-    """
-    return {"city": city, "temp": 72, "condition": "sunny"}
-
-# Wrap as FunctionTool - signature is preserved
-weather_tool = FunctionTool(get_weather, description="Get weather info")
+# Triage agent with handoffs
+triage = Agent(
+    name="triage",
+    handoffs=[billing_agent, technical_agent],
+)
 ```
 
-### Reference
-- [AutoGen Tools Documentation](https://microsoft.github.io/autogen/stable//user-guide/core-user-guide/components/tools.html)
-- [AutoGen Function Utils](https://microsoft.github.io/autogen/0.2/docs/reference/function_utils/)
+### References
+- [OpenAI Agents SDK Documentation](https://openai.github.io/openai-agents-python/)
+- [OpenAI Agents SDK GitHub](https://github.com/openai/openai-agents-python)
 
 ---
 
 ## PydanticAI Integration
 
-PydanticAI uses Pydantic models for tool schemas, which works naturally with Airlock.
+PydanticAI provides type-safe agents with Pydantic validation.
+
+> **Full example:** [`examples/pydanticai_integration.py`](../examples/pydanticai_integration.py)
 
 ### Basic Usage
 
 ```python
 from pydantic_ai import Agent
-from pydantic import BaseModel
 from agent_airlock import Airlock
 
-class UserQuery(BaseModel):
-    user_id: str
-    include_history: bool = False
-
+# Pre-secure the function
 @Airlock()
-def get_user_details(query: UserQuery) -> dict:
-    """Get detailed user information.
+def get_stock_price(symbol: str) -> str:
+    """Get stock price."""
+    return f"Stock {symbol}: $150.25"
 
-    Args:
-        query: The user query parameters
-    """
-    user = db.get_user(query.user_id)
-    if query.include_history:
-        user["history"] = db.get_history(query.user_id)
-    return user
-
-# PydanticAI sees the Pydantic model in the signature
-agent = Agent("openai:gpt-4", tools=[get_user_details])
+# Pass to Agent
+agent = Agent(
+    "openai:gpt-4o",
+    tools=[get_stock_price],
+)
 ```
 
-### Reference
-- [PydanticAI Output Documentation](https://ai.pydantic.dev/output/)
-- [Pydantic Validation Decorator](https://docs.pydantic.dev/latest/concepts/validation_decorator/)
+### With @agent.tool_plain
+
+```python
+from pydantic_ai import Agent
+from agent_airlock import Airlock
+
+agent = Agent("openai:gpt-4o")
+
+@agent.tool_plain
+@Airlock()
+def search(query: str) -> str:
+    """Search for information."""
+    return f"Results for '{query}'"
+```
+
+### References
+- [PydanticAI Documentation](https://ai.pydantic.dev/)
+- [PydanticAI Function Tools](https://ai.pydantic.dev/tools/)
+
+---
+
+## Microsoft AutoGen Integration
+
+AutoGen enables multi-agent conversations and code execution.
+
+> **Full example:** [`examples/autogen_integration.py`](../examples/autogen_integration.py)
+
+### AutoGen 0.4+ (FunctionTool)
+
+```python
+from autogen_agentchat.agents import AssistantAgent
+from autogen_core.tools import FunctionTool
+from agent_airlock import Airlock
+
+@Airlock()
+def get_weather(city: str) -> str:
+    """Get weather."""
+    return f"Weather in {city}: Sunny"
+
+# Wrap as FunctionTool
+weather_tool = FunctionTool(get_weather, description="Get weather")
+
+# Use with AssistantAgent
+agent = AssistantAgent(
+    name="assistant",
+    tools=[get_weather],  # Direct function works too
+)
+```
+
+### AutoGen 0.2 (register_function)
+
+```python
+from autogen import ConversableAgent, register_function
+from agent_airlock import Airlock
+
+@Airlock()
+def calculate(expression: str) -> str:
+    """Calculate math."""
+    return str(eval(expression))
+
+assistant = ConversableAgent("assistant", llm_config=llm_config)
+executor = ConversableAgent("executor", human_input_mode="NEVER")
+
+register_function(
+    calculate,
+    caller=assistant,
+    executor=executor,
+    description="Calculate math expressions",
+)
+```
+
+### References
+- [AutoGen Documentation](https://microsoft.github.io/autogen/stable/)
+- [AutoGen Tools](https://microsoft.github.io/autogen/stable/user-guide/core-user-guide/components/tools.html)
+
+---
+
+## LlamaIndex Integration
+
+LlamaIndex provides tools for RAG and agent workflows.
+
+> **Full example:** [`examples/llamaindex_integration.py`](../examples/llamaindex_integration.py)
+
+### FunctionTool
+
+```python
+from llama_index.core.tools import FunctionTool
+from llama_index.core.agent import ReActAgent
+from agent_airlock import Airlock
+
+@Airlock()
+def search_docs(query: str) -> str:
+    """Search documents."""
+    return f"Found docs for '{query}'"
+
+# Wrap as FunctionTool
+search_tool = FunctionTool.from_defaults(fn=search_docs)
+
+# Use with ReActAgent
+agent = ReActAgent.from_tools([search_tool], llm=llm)
+```
+
+### References
+- [LlamaIndex Tools](https://developers.llamaindex.ai/python/framework/module_guides/deploying/agents/tools/)
+- [LlamaIndex Agents](https://developers.llamaindex.ai/python/framework/use_cases/agents/)
+
+---
+
+## Hugging Face smolagents Integration
+
+smolagents provides code-writing agents that are 30% more efficient than ReAct.
+
+> **Full example:** [`examples/smolagents_integration.py`](../examples/smolagents_integration.py)
+
+### Basic Usage
+
+```python
+from smolagents import CodeAgent, InferenceClientModel, tool
+from agent_airlock import Airlock
+
+@tool
+@Airlock()
+def calculator(expression: str) -> str:
+    """Calculate math expressions."""
+    return str(eval(expression))
+
+agent = CodeAgent(
+    tools=[calculator],
+    model=InferenceClientModel(),
+)
+result = agent.run("Calculate 15 * 23")
+```
+
+### References
+- [smolagents Documentation](https://huggingface.co/docs/smolagents/en/index)
+- [smolagents GitHub](https://github.com/huggingface/smolagents)
+
+---
+
+## Anthropic Claude Integration
+
+Direct integration with Anthropic's Claude API for tool use.
+
+> **Full example:** [`examples/anthropic_integration.py`](../examples/anthropic_integration.py)
+
+### Pattern
+
+```python
+import anthropic
+from agent_airlock import Airlock
+
+# 1. Define secured function
+@Airlock()
+def get_weather(location: str) -> str:
+    """Get weather."""
+    return f"Weather in {location}: Sunny"
+
+# 2. Create tool schema
+WEATHER_TOOL = {
+    "name": "get_weather",
+    "description": "Get weather for a location",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "location": {"type": "string"},
+        },
+        "required": ["location"],
+    },
+}
+
+# 3. Execute on tool_use
+def execute_tool(name: str, input: dict) -> str:
+    if name == "get_weather":
+        return get_weather(**input)
+```
+
+### References
+- [Claude Tool Use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/programmatic-tool-calling)
+- [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python)
+
+---
+
+## FastMCP Integration
+
+FastMCP is the recommended way to build MCP servers.
+
+> **Full example:** [`examples/fastmcp_integration.py`](../examples/fastmcp_integration.py)
+
+### @secure_tool Convenience Decorator
+
+```python
+from agent_airlock.mcp import secure_tool, create_secure_mcp_server
+
+mcp, secure = create_secure_mcp_server("My Server")
+
+@secure
+def read_file(path: str) -> str:
+    """Read a file."""
+    return Path(path).read_text()
+
+@secure(sandbox=True, sandbox_required=True)
+def execute_code(code: str) -> str:
+    """Execute code in sandbox."""
+    exec(code)
+    return "done"
+```
 
 ---
 
@@ -262,9 +485,6 @@ def execute_code(python_code: str) -> str:
 
     SECURITY: This runs in an isolated E2B Firecracker MicroVM.
     It will NEVER fall back to local execution.
-
-    Args:
-        python_code: The Python code to execute
     """
     import io, sys
     old_stdout = sys.stdout
@@ -292,36 +512,37 @@ def execute_code(python_code: str) -> str:
 
 **Solution:** Ensure your function has proper type hints and the LLM sends correct types.
 
-```python
-# ❌ This fails: LLM sends "42" (string)
-def process(count: int) -> int:
-    return count * 2
-
-# ✅ This works: Accept string and convert
-def process(count: str) -> int:
-    return int(count) * 2
-```
-
 ### Problem: Ghost arguments being stripped
 
 **Cause:** LLM is hallucinating parameters that don't exist.
 
 **Solution:** This is expected behavior! Airlock strips them by default. Use `strict_mode=True` to reject instead.
 
+### Problem: Rate limit errors
+
+**Cause:** Policy rate limits exceeded.
+
+**Solution:** Check your `SecurityPolicy` rate limits. Default is no limit.
+
 ---
 
 ## Framework Support Matrix
 
-| Framework | Status | Notes |
-|-----------|--------|-------|
-| LangChain | ✅ Full | Use `@tool` then `@Airlock` |
-| CrewAI | ✅ Full | Use `@tool()` then `@Airlock` |
-| AutoGen 0.2 | ✅ Full | Register after decoration |
-| AutoGen 0.4+ | ✅ Full | Works with FunctionTool |
-| PydanticAI | ✅ Full | Native Pydantic support |
-| FastMCP | ✅ Full | Use `@secure_tool` for convenience |
-| Claude Tools | ✅ Full | Standard decorator pattern |
-| OpenAI Functions | ✅ Full | Schema generated correctly |
+| Framework | Version | Status | Decorator Pattern |
+|-----------|---------|--------|-------------------|
+| LangChain | 0.3+ | ✅ Full | `@tool` → `@Airlock` |
+| LangGraph | 1.x | ✅ Full | `@tool` → `@Airlock` |
+| CrewAI | 0.50+ | ✅ Full | `@tool()` → `@Airlock` |
+| OpenAI Agents SDK | 0.7+ | ✅ Full | `@function_tool` → `@Airlock` |
+| PydanticAI | 0.3+ | ✅ Full | `@agent.tool_plain` → `@Airlock` |
+| AutoGen | 0.4+ | ✅ Full | `@Airlock` → `FunctionTool()` |
+| AutoGen | 0.2 | ✅ Full | `@Airlock` → `register_function()` |
+| LlamaIndex | 0.11+ | ✅ Full | `@Airlock` → `FunctionTool.from_defaults()` |
+| smolagents | 1.x | ✅ Full | `@tool` → `@Airlock` |
+| Anthropic Claude | 0.40+ | ✅ Full | `@Airlock` → schema dict |
+| FastMCP | 2.x | ✅ Full | `@mcp.tool` → `@Airlock` or `@secure_tool` |
+| Claude Tools | - | ✅ Full | Standard decorator pattern |
+| OpenAI Functions | - | ✅ Full | Schema generated correctly |
 
 ---
 
@@ -331,3 +552,18 @@ def process(count: str) -> int:
 - **E2B cold start:** ~125ms ([Firecracker MicroVM](https://e2b.dev/blog/firecracker-vs-qemu))
 - **E2B warm pool:** <200ms (pre-warmed sandboxes)
 - **Signature introspection:** Negligible (cached by frameworks)
+
+---
+
+## References
+
+- [LangChain Documentation](https://docs.langchain.com/)
+- [LangGraph Documentation](https://docs.langchain.com/oss/python/langgraph/)
+- [CrewAI Documentation](https://docs.crewai.com/)
+- [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
+- [PydanticAI Documentation](https://ai.pydantic.dev/)
+- [Microsoft AutoGen](https://microsoft.github.io/autogen/)
+- [LlamaIndex Documentation](https://developers.llamaindex.ai/)
+- [smolagents Documentation](https://huggingface.co/docs/smolagents/)
+- [Anthropic Claude](https://platform.claude.com/docs/)
+- [Agent Framework Comparison 2026](https://langfuse.com/blog/2025-03-19-ai-agent-comparison)

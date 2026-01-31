@@ -12,14 +12,12 @@ from datetime import datetime
 
 from agent_airlock import (
     BUSINESS_HOURS_POLICY,
-    PERMISSIVE_POLICY,
     READ_ONLY_POLICY,
     AgentIdentity,
     Airlock,
     PolicyViolation,
     SecurityPolicy,
 )
-
 
 # Example 1: Simple allow/deny lists
 read_only_policy = SecurityPolicy(

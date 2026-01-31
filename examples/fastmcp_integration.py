@@ -41,12 +41,12 @@ try:
 except ImportError:
     print("FastMCP is required for this example.")
     print("Install with: pip install agent-airlock[mcp]")
-    raise SystemExit(1)
+    raise SystemExit(1) from None
 
 from agent_airlock import (
+    READ_ONLY_POLICY,
     Airlock,
     AirlockConfig,
-    READ_ONLY_POLICY,
     SecurityPolicy,
 )
 from agent_airlock.mcp import MCPAirlock, secure_tool

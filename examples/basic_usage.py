@@ -79,9 +79,7 @@ def main() -> None:
     # Test 1: Valid call
     print("\n1. Valid function call:")
     try:
-        result = deploy_service(
-            args=DeployArgs(service_name="my-api", replicas=3)
-        )
+        result = deploy_service(args=DeployArgs(service_name="my-api", replicas=3))
         print(f"   Result: {result}")
     except Exception as e:
         print(f"   Error: {e}")
