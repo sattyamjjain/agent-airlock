@@ -44,7 +44,7 @@ from .sanitizer import (
 from .self_heal import AirlockResponse, BlockReason
 from .validator import GhostArgumentError
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 __all__ = [
     # Core
