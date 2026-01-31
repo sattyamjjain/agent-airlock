@@ -235,13 +235,13 @@ class TestContextExtractorEdgeCases:
         # Test with agent_id attr
         obj1 = MagicMock()
         obj1.agent_id = "agent-direct"
-        context1 = ContextExtractor.extract_from_args((obj1,), {})
+        ContextExtractor.extract_from_args((obj1,), {})
         # Should extract from first positional arg with agent_id
 
         # Test with user_id attr
         obj2 = MagicMock(spec=["user_id"])
         obj2.user_id = "user-123"
-        context2 = ContextExtractor.extract_from_args((obj2,), {})
+        ContextExtractor.extract_from_args((obj2,), {})
 
     def test_extract_roles_from_string(self) -> None:
         """Test extracting roles from string value."""
@@ -326,6 +326,7 @@ class TestAuditLoggerWriteError:
     def test_write_error_logged_not_raised(self) -> None:
         """Test write error is logged but not raised."""
         import os
+
         # Clear singleton cache
         AuditLogger._instances = {}
 
@@ -360,6 +361,7 @@ class TestAuditLoggerWriteError:
 
     def test_preview_result_exception(self) -> None:
         """Test _preview_result handles objects that fail str()."""
+
         class BadStr:
             def __str__(self):
                 raise RuntimeError("Cannot stringify")
@@ -428,12 +430,11 @@ class TestSanitizerEdgeCases:
 
     def test_mask_multiple_overlapping(self) -> None:
         """Test masking multiple overlapping patterns."""
-        from agent_airlock.sanitizer import mask_sensitive_data, SensitiveDataType
+        from agent_airlock.sanitizer import SensitiveDataType, mask_sensitive_data
 
         content = "Contact john@example.com at 555-123-4567"
         result, detections = mask_sensitive_data(
-            content,
-            [SensitiveDataType.EMAIL, SensitiveDataType.PHONE]
+            content, [SensitiveDataType.EMAIL, SensitiveDataType.PHONE]
         )
         assert "john@example.com" not in result
         assert len(detections) >= 1
@@ -498,11 +499,11 @@ class TestSanitizerEdgeCases:
 
     def test_sanitize_with_phone_filtering(self) -> None:
         """Test phone number filtering with workspace config."""
-        from agent_airlock.sanitizer import sanitize_with_workspace_config, WorkspacePIIConfig
+        from agent_airlock.sanitizer import WorkspacePIIConfig, sanitize_with_workspace_config
 
         config = WorkspacePIIConfig(
             workspace_id="test",
-            allow_phone_prefixes=["555-123"]  # Allow specific prefix
+            allow_phone_prefixes=["555-123"],  # Allow specific prefix
         )
         content = "Call 555-123-4567"
         result = sanitize_with_workspace_config(content, workspace_config=config, mask_pii=True)
@@ -695,15 +696,17 @@ class TestCoreAsyncSandboxFallback:
         This covers core.py line 656 - the path where sandbox fallback runs
         a sync function inside async wrapper.
         """
-        from agent_airlock import Airlock
-        import agent_airlock.sandbox as sandbox_mod
         from unittest.mock import patch
+
+        import agent_airlock.sandbox as sandbox_mod
+        from agent_airlock import Airlock
 
         # Mock ImportError to simulate E2B not being available
         def raise_import_error(*args, **kwargs):
             raise ImportError("No E2B")
 
         with patch.object(sandbox_mod, "execute_in_sandbox_async", side_effect=raise_import_error):
+
             @Airlock(sandbox=True, sandbox_required=False)
             async def async_func_calling_sync(x: int) -> int:
                 # This is an async function that will hit the sync fallback path
@@ -721,7 +724,7 @@ class TestSanitizerWorkspaceJsonError:
 
         This covers sanitizer.py lines 571-577.
         """
-        from agent_airlock.sanitizer import sanitize_with_workspace_config, WorkspacePIIConfig
+        from agent_airlock.sanitizer import WorkspacePIIConfig, sanitize_with_workspace_config
 
         config = WorkspacePIIConfig(workspace_id="test")
 
@@ -749,11 +752,11 @@ class TestSanitizerWorkspacePhoneFiltering:
 
         This covers sanitizer.py line 625.
         """
-        from agent_airlock.sanitizer import sanitize_with_workspace_config, WorkspacePIIConfig
+        from agent_airlock.sanitizer import WorkspacePIIConfig, sanitize_with_workspace_config
 
         config = WorkspacePIIConfig(
             workspace_id="test",
-            allow_phone_prefixes=["+1555", "555"]  # Allow these prefixes
+            allow_phone_prefixes=["+1555", "555"],  # Allow these prefixes
         )
 
         content = "Call us at 555-123-4567 for support."
@@ -771,7 +774,7 @@ class TestSanitizerWorkspacePasswordMasking:
 
         This covers sanitizer.py lines 662-673.
         """
-        from agent_airlock.sanitizer import sanitize_with_workspace_config, WorkspacePIIConfig
+        from agent_airlock.sanitizer import WorkspacePIIConfig, sanitize_with_workspace_config
 
         config = WorkspacePIIConfig(workspace_id="test")
 
@@ -791,8 +794,8 @@ class TestStreamingTruncationEdgeCases:
 
         This covers streaming.py line 155.
         """
-        from agent_airlock.streaming import StreamingAirlock
         from agent_airlock.config import AirlockConfig
+        from agent_airlock.streaming import StreamingAirlock
 
         config = AirlockConfig(max_output_chars=0)  # Zero means no limit
         streamer = StreamingAirlock(config=config)
@@ -807,8 +810,8 @@ class TestStreamingTruncationEdgeCases:
 
         This covers streaming.py line 195.
         """
-        from agent_airlock.streaming import StreamingAirlock
         from agent_airlock.config import AirlockConfig
+        from agent_airlock.streaming import StreamingAirlock
 
         config = AirlockConfig(max_output_chars=10)
         streamer = StreamingAirlock(config=config)
@@ -816,7 +819,7 @@ class TestStreamingTruncationEdgeCases:
         def gen():
             yield "First chunk that is very long"  # Will cause truncation
             yield "Second chunk"  # Should not be yielded
-            yield "Third chunk"   # Should not be yielded
+            yield "Third chunk"  # Should not be yielded
 
         chunks = list(streamer.wrap_generator(gen()))
         # After truncation, generator should stop
@@ -829,8 +832,8 @@ class TestStreamingTruncationEdgeCases:
 
         This covers streaming.py line 254.
         """
-        from agent_airlock.streaming import StreamingAirlock
         from agent_airlock.config import AirlockConfig
+        from agent_airlock.streaming import StreamingAirlock
 
         config = AirlockConfig(max_output_chars=10)
         streamer = StreamingAirlock(config=config)
@@ -838,7 +841,7 @@ class TestStreamingTruncationEdgeCases:
         async def async_gen():
             yield "First chunk that is very long"  # Will cause truncation
             yield "Second chunk"  # Should not be yielded
-            yield "Third chunk"   # Should not be yielded
+            yield "Third chunk"  # Should not be yielded
 
         chunks = []
         async for chunk in streamer.wrap_async_generator(async_gen()):
@@ -883,8 +886,9 @@ class TestSandboxPoolCreation:
 
         This covers sandbox.py line 243.
         """
+        from unittest.mock import MagicMock, patch
+
         from agent_airlock.sandbox import SandboxPool, _check_e2b_available
-        from unittest.mock import patch, MagicMock
 
         if not _check_e2b_available():
             pytest.skip("E2B not installed")
@@ -897,7 +901,9 @@ class TestSandboxPoolCreation:
         mock_sandbox_class = MagicMock()
         mock_sandbox_class.create = MagicMock(return_value=mock_sandbox)
 
-        with patch.dict("sys.modules", {"e2b_code_interpreter": MagicMock(Sandbox=mock_sandbox_class)}):
+        with patch.dict(
+            "sys.modules", {"e2b_code_interpreter": MagicMock(Sandbox=mock_sandbox_class)}
+        ):
             pool = SandboxPool(pool_size=1, api_key="test-api-key", timeout=30)
 
             # This should set the API key in environment and create sandbox
@@ -925,9 +931,11 @@ class TestConfigTomliImport:
 
         if sys.version_info >= (3, 11):
             import tomllib
+
             assert tomllib is not None
         else:
             import tomli as tomllib
+
             assert tomllib is not None
 
 
@@ -940,7 +948,7 @@ class TestSanitizerMissingPattern:
         This is defensive code that currently can't be reached because
         all SensitiveDataType values have patterns defined in PATTERNS.
         """
-        from agent_airlock.sanitizer import detect_sensitive_data, SensitiveDataType, PATTERNS
+        from agent_airlock.sanitizer import PATTERNS, SensitiveDataType
 
         # Just verify all types have patterns
         for data_type in SensitiveDataType:
@@ -956,12 +964,11 @@ class TestSanitizerJsonDumpsError:
         This covers sanitizer.py lines 347-348.
         The except block catches (TypeError, ValueError).
         """
-        from agent_airlock.sanitizer import sanitize_output
         from unittest.mock import patch
-        import json
+
+        from agent_airlock.sanitizer import sanitize_output
 
         # Mock json.dumps to raise ValueError
-        original_dumps = json.dumps
 
         def failing_dumps(*args, **kwargs):
             raise ValueError("Cannot serialize")
@@ -979,8 +986,9 @@ class TestSanitizerJsonDumpsError:
 
         This covers sanitizer.py lines 574-575.
         """
-        from agent_airlock.sanitizer import sanitize_with_workspace_config, WorkspacePIIConfig
         from unittest.mock import patch
+
+        from agent_airlock.sanitizer import WorkspacePIIConfig, sanitize_with_workspace_config
 
         config = WorkspacePIIConfig(workspace_id="test")
 
@@ -998,7 +1006,7 @@ class TestSanitizerJsonDumpsError:
 
         This covers sanitizer.py line 577.
         """
-        from agent_airlock.sanitizer import sanitize_with_workspace_config, WorkspacePIIConfig
+        from agent_airlock.sanitizer import WorkspacePIIConfig, sanitize_with_workspace_config
 
         config = WorkspacePIIConfig(workspace_id="test")
 
@@ -1023,8 +1031,8 @@ class TestStreamingExactTruncation:
 
         This ensures line 195 (early return when truncated) is hit.
         """
-        from agent_airlock.streaming import StreamingAirlock
         from agent_airlock.config import AirlockConfig
+        from agent_airlock.streaming import StreamingAirlock
 
         # Very small limit to force truncation on first chunk
         config = AirlockConfig(max_output_chars=5)
@@ -1053,8 +1061,8 @@ class TestStreamingExactTruncation:
 
         This ensures line 254 (early return when truncated) is hit.
         """
-        from agent_airlock.streaming import StreamingAirlock
         from agent_airlock.config import AirlockConfig
+        from agent_airlock.streaming import StreamingAirlock
 
         config = AirlockConfig(max_output_chars=5)
         streamer = StreamingAirlock(config=config)
@@ -1077,8 +1085,8 @@ class TestStreamingExactTruncation:
 
     def test_apply_truncation_at_exact_limit(self) -> None:
         """Test truncation when total_chars exactly equals max_chars."""
-        from agent_airlock.streaming import StreamingAirlock
         from agent_airlock.config import AirlockConfig
+        from agent_airlock.streaming import StreamingAirlock
 
         config = AirlockConfig(max_output_chars=10)
         streamer = StreamingAirlock(config=config)
@@ -1109,15 +1117,18 @@ class TestCoreAsyncSandboxSyncFallback:
         at decoration time, so this path is hit when an async function
         falls back to local execution.
         """
-        from agent_airlock import Airlock
-        from agent_airlock.sandbox import SandboxResult
         from unittest.mock import patch
+
+        from agent_airlock import Airlock
 
         # Mock sandbox to fail
         async def mock_failing_sandbox(*args, **kwargs):
             raise ImportError("No E2B available")
 
-        with patch("agent_airlock.sandbox.execute_in_sandbox_async", side_effect=mock_failing_sandbox):
+        with patch(
+            "agent_airlock.sandbox.execute_in_sandbox_async", side_effect=mock_failing_sandbox
+        ):
+
             @Airlock(sandbox=True, sandbox_required=False)
             async def async_tool(x: int) -> int:
                 return x * 5
@@ -1137,6 +1148,7 @@ class TestSandboxAvailabilityReturnTrue:
         # Direct import to verify it exists
         try:
             import e2b_code_interpreter  # noqa: F401
+
             e2b_installed = True
         except ImportError:
             e2b_installed = False
@@ -1146,6 +1158,7 @@ class TestSandboxAvailabilityReturnTrue:
 
         # Now test the check function
         from agent_airlock.sandbox import _check_e2b_available
+
         result = _check_e2b_available()
         assert result is True
 
@@ -1158,6 +1171,7 @@ class TestSandboxAvailabilityReturnTrue:
         import cloudpickle  # noqa: F401
 
         from agent_airlock.sandbox import _check_cloudpickle_available
+
         result = _check_cloudpickle_available()
         assert result is True
 
@@ -1205,7 +1219,6 @@ class TestSandboxAvailabilityImportError:
             return original_import(name, *args, **kwargs)
 
         # Need to reload the module to get a fresh check
-        import importlib
         import agent_airlock.sandbox as sandbox_mod
 
         with patch.object(builtins, "__import__", side_effect=mock_import):

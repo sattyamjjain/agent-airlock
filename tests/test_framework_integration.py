@@ -69,7 +69,7 @@ class TestSignaturePreservation:
             """Get user by ID."""
             return {"id": str(user_id), "name": "Test"}
 
-        sig = inspect.signature(get_user)
+        inspect.signature(get_user)
         # Note: Return type may be modified by Airlock to include dict[str, Any]
         # but the original should still be accessible via get_type_hints
         hints = get_type_hints(get_user)
@@ -141,8 +141,8 @@ class TestTypeHintPreservation:
             return float(x)
 
         hints = get_type_hints(hint_tool)
-        assert hints.get("x") == int
-        assert hints.get("y") == str
+        assert hints.get("x") is int
+        assert hints.get("y") is str
         assert hints.get("return") is not None
 
 
@@ -232,9 +232,9 @@ class TestPydanticAICompatibility:
 
         # Verify PydanticAI can extract what it needs
         assert "query" in sig.parameters
-        assert hints.get("query") == str
+        assert hints.get("query") is str
         assert "max_results" in sig.parameters
-        assert hints.get("max_results") == int
+        assert hints.get("max_results") is int
 
         # Verify the function works
         results = web_search(query="test", max_results=3)
@@ -367,7 +367,7 @@ class TestEdgeCases:
             return x + y
 
         # Should still be callable
-        result = untyped_tool(x=1, y=2)
+        untyped_tool(x=1, y=2)
         # May return blocked response due to strict validation
         # but signature should be preserved
         sig = inspect.signature(untyped_tool)

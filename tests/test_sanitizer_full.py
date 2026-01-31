@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from agent_airlock.sanitizer import (
     MaskingStrategy,
     SensitiveDataType,
@@ -25,9 +23,7 @@ class TestMaskValueStrategies:
 
     def test_type_only_masking(self) -> None:
         """Test TYPE_ONLY masking strategy."""
-        result = _mask_value(
-            "test@example.com", SensitiveDataType.EMAIL, MaskingStrategy.TYPE_ONLY
-        )
+        result = _mask_value("test@example.com", SensitiveDataType.EMAIL, MaskingStrategy.TYPE_ONLY)
         assert result == "[EMAIL]"
 
     def test_hash_masking(self) -> None:
@@ -88,9 +84,7 @@ class TestMaskValueStrategies:
 
     def test_partial_masking_default(self) -> None:
         """Test PARTIAL masking default behavior."""
-        result = _mask_value(
-            "1234567890", SensitiveDataType.PHONE, MaskingStrategy.PARTIAL
-        )
+        result = _mask_value("1234567890", SensitiveDataType.PHONE, MaskingStrategy.PARTIAL)
         assert result.startswith("123")
         assert result.endswith("890")
         assert "***" in result
@@ -136,7 +130,7 @@ class TestMaskSensitiveData:
 
     def test_mask_password_pattern(self) -> None:
         """Test masking password patterns."""
-        content = 'password=mysecret123'
+        content = "password=mysecret123"
         result, detections = mask_sensitive_data(content, [SensitiveDataType.PASSWORD])
         # Check that something was detected and masked
         assert len(detections) > 0

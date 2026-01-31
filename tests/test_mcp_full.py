@@ -53,9 +53,7 @@ class TestMCPAirlock:
         config = AirlockConfig(strict_mode=True)
         policy = SecurityPolicy(allowed_tools=["*"])
 
-        decorator = MCPAirlock(
-            sandbox=True, config=config, policy=policy, report_progress=True
-        )
+        decorator = MCPAirlock(sandbox=True, config=config, policy=policy, report_progress=True)
 
         assert decorator.sandbox is True
         assert decorator.config is config
@@ -193,9 +191,7 @@ class TestCreateSecureMCPServer:
         mock_mcp_instance.tool = MagicMock(side_effect=lambda **kwargs: lambda f: f)
 
         with patch("agent_airlock.mcp._check_fastmcp_available", return_value=True):
-            with patch.dict(
-                sys.modules, {"fastmcp": MagicMock(FastMCP=mock_fastmcp_class)}
-            ):
+            with patch.dict(sys.modules, {"fastmcp": MagicMock(FastMCP=mock_fastmcp_class)}):
                 mcp, secure = create_secure_mcp_server(
                     "Test Server",
                     config=AirlockConfig(strict_mode=True),
@@ -215,9 +211,7 @@ class TestCreateSecureMCPServer:
         mock_mcp_instance.tool = MagicMock(side_effect=lambda **kwargs: lambda f: f)
 
         with patch("agent_airlock.mcp._check_fastmcp_available", return_value=True):
-            with patch.dict(
-                sys.modules, {"fastmcp": MagicMock(FastMCP=mock_fastmcp_class)}
-            ):
+            with patch.dict(sys.modules, {"fastmcp": MagicMock(FastMCP=mock_fastmcp_class)}):
                 mcp, secure = create_secure_mcp_server("Test Server")
 
                 def my_tool(x: int) -> int:
@@ -237,9 +231,7 @@ class TestCreateSecureMCPServer:
         mock_mcp_instance.tool = MagicMock(side_effect=lambda **kwargs: lambda f: f)
 
         with patch("agent_airlock.mcp._check_fastmcp_available", return_value=True):
-            with patch.dict(
-                sys.modules, {"fastmcp": MagicMock(FastMCP=mock_fastmcp_class)}
-            ):
+            with patch.dict(sys.modules, {"fastmcp": MagicMock(FastMCP=mock_fastmcp_class)}):
                 mcp, secure = create_secure_mcp_server("Test Server")
 
                 @secure(sandbox=True, tool_name="custom")
@@ -288,9 +280,7 @@ class TestMCPContextExtractor:
 
         mock_ctx = MagicMock()
         # Make accessing client_id raise an exception
-        type(mock_ctx).client_id = property(
-            lambda self: (_ for _ in ()).throw(Exception("Error"))
-        )
+        type(mock_ctx).client_id = property(lambda self: (_ for _ in ()).throw(Exception("Error")))
 
         result = MCPContextExtractor.extract_agent_id(mock_ctx)
         assert result is None

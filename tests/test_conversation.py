@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from agent_airlock.conversation import (
     ConversationConstraints,
     ConversationState,
@@ -232,9 +230,7 @@ class TestConversationConstraints:
         tracker.record_call("session-1", "delete_user", blocked=False)
 
         # Any tool should now be blocked
-        should_block, reason = tracker.should_block(
-            "session-1", "any_tool", constraints
-        )
+        should_block, reason = tracker.should_block("session-1", "any_tool", constraints)
         assert should_block
         assert "delete_user" in reason
         assert "Cooldown" in reason
@@ -250,9 +246,7 @@ class TestConversationConstraints:
         tracker.record_call("session-1", "delete_user", blocked=True)
 
         # Should not trigger cooldown
-        should_block, _ = tracker.should_block(
-            "session-1", "any_tool", constraints
-        )
+        should_block, _ = tracker.should_block("session-1", "any_tool", constraints)
         assert not should_block
 
     def test_tool_cooldowns(self) -> None:
@@ -263,17 +257,13 @@ class TestConversationConstraints:
         )
 
         # First call should work
-        should_block, _ = tracker.should_block(
-            "session-1", "send_email", constraints
-        )
+        should_block, _ = tracker.should_block("session-1", "send_email", constraints)
         assert not should_block
 
         tracker.record_call("session-1", "send_email", blocked=False)
 
         # Second call should be blocked
-        should_block, reason = tracker.should_block(
-            "session-1", "send_email", constraints
-        )
+        should_block, reason = tracker.should_block("session-1", "send_email", constraints)
         assert should_block
         assert "cooldown" in reason.lower()
 
@@ -285,17 +275,13 @@ class TestConversationConstraints:
         )
 
         # First call should work
-        should_block, _ = tracker.should_block(
-            "session-1", "delete_database", constraints
-        )
+        should_block, _ = tracker.should_block("session-1", "delete_database", constraints)
         assert not should_block
 
         tracker.record_call("session-1", "delete_database", blocked=False)
 
         # Second call should be blocked
-        should_block, reason = tracker.should_block(
-            "session-1", "delete_database", constraints
-        )
+        should_block, reason = tracker.should_block("session-1", "delete_database", constraints)
         assert should_block
         assert "limit reached" in reason.lower()
 
@@ -307,9 +293,7 @@ class TestConversationConstraints:
         )
 
         # Can't delete without prerequisites
-        should_block, reason = tracker.should_block(
-            "session-1", "delete_user", constraints
-        )
+        should_block, reason = tracker.should_block("session-1", "delete_user", constraints)
         assert should_block
         assert "requires prior calls" in reason.lower()
 
@@ -317,9 +301,7 @@ class TestConversationConstraints:
         tracker.record_call("session-1", "get_user", blocked=False)
 
         # Still blocked - need confirm_delete
-        should_block, reason = tracker.should_block(
-            "session-1", "delete_user", constraints
-        )
+        should_block, reason = tracker.should_block("session-1", "delete_user", constraints)
         assert should_block
         assert "confirm_delete" in reason
 
@@ -327,9 +309,7 @@ class TestConversationConstraints:
         tracker.record_call("session-1", "confirm_delete", blocked=False)
 
         # Now delete_user should be allowed
-        should_block, _ = tracker.should_block(
-            "session-1", "delete_user", constraints
-        )
+        should_block, _ = tracker.should_block("session-1", "delete_user", constraints)
         assert not should_block
 
     def test_max_total_calls(self) -> None:
@@ -338,16 +318,12 @@ class TestConversationConstraints:
         constraints = ConversationConstraints(max_total_calls=3)
 
         for i in range(3):
-            should_block, _ = tracker.should_block(
-                "session-1", f"tool_{i}", constraints
-            )
+            should_block, _ = tracker.should_block("session-1", f"tool_{i}", constraints)
             assert not should_block
             tracker.record_call("session-1", f"tool_{i}", blocked=False)
 
         # 4th call should be blocked
-        should_block, reason = tracker.should_block(
-            "session-1", "tool_4", constraints
-        )
+        should_block, reason = tracker.should_block("session-1", "tool_4", constraints)
         assert should_block
         assert "limit reached" in reason.lower()
 
@@ -361,9 +337,7 @@ class TestConversationConstraints:
         tracker.record_call("session-1", "tool2", blocked=True)
 
         # At exactly 50%, should be blocked
-        should_block, reason = tracker.should_block(
-            "session-1", "tool3", constraints
-        )
+        should_block, reason = tracker.should_block("session-1", "tool3", constraints)
         assert should_block
         assert "blocked calls" in reason.lower()
 
@@ -374,9 +348,7 @@ class TestConversationConstraints:
 
         tracker.block_conversation("session-1", 60, "Manual block")
 
-        should_block, reason = tracker.should_block(
-            "session-1", "any_tool", constraints
-        )
+        should_block, reason = tracker.should_block("session-1", "any_tool", constraints)
         assert should_block
         assert "blocked until" in reason.lower()
 
@@ -423,10 +395,7 @@ class TestThreadSafety:
             except Exception as e:
                 errors.append(e)
 
-        threads = [
-            threading.Thread(target=record_calls, args=(f"session-{i}",))
-            for i in range(10)
-        ]
+        threads = [threading.Thread(target=record_calls, args=(f"session-{i}",)) for i in range(10)]
 
         for t in threads:
             t.start()

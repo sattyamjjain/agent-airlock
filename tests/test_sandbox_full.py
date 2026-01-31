@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import sys
-import threading
-from queue import Empty
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -79,21 +75,21 @@ class TestSerializeFunctionCall:
         def func(x: int) -> int:
             return x
 
-        with patch(
-            "agent_airlock.sandbox._check_cloudpickle_available", return_value=False
-        ):
+        with patch("agent_airlock.sandbox._check_cloudpickle_available", return_value=False):
             with pytest.raises(SandboxNotAvailableError) as exc_info:
                 serialize_function_call(func, (), {})
             assert "cloudpickle" in str(exc_info.value)
 
     def test_serialize_function_behavior(self) -> None:
         """Test serialization requires cloudpickle."""
+
         def func(x: int) -> int:
             return x * 2
 
         # Check if cloudpickle is available
         if _check_cloudpickle_available():
             import base64
+
             # If cloudpickle is installed, test real serialization
             result = serialize_function_call(func, (5,), {"y": 10})
             assert isinstance(result, str)
@@ -146,18 +142,20 @@ class TestSandboxPool:
 
         pool = SandboxPool(api_key="test-key")
 
-        with patch.dict(
-            sys.modules, {"e2b_code_interpreter": MagicMock(Sandbox=mock_sandbox_class)}
+        with (
+            patch.dict(
+                sys.modules, {"e2b_code_interpreter": MagicMock(Sandbox=mock_sandbox_class)}
+            ),
+            patch("agent_airlock.sandbox._check_e2b_available", return_value=True),
         ):
-            with patch("agent_airlock.sandbox._check_e2b_available", return_value=True):
-                # Import the mocked module
-                from unittest.mock import patch as mock_patch
+            # Import the mocked module
+            from unittest.mock import patch as mock_patch
 
-                with mock_patch(
-                    "agent_airlock.sandbox.SandboxPool._create_sandbox",
-                    return_value=mock_sandbox,
-                ):
-                    pool._ensure_e2b_available()
+            with mock_patch(
+                "agent_airlock.sandbox.SandboxPool._create_sandbox",
+                return_value=mock_sandbox,
+            ):
+                pool._ensure_e2b_available()
 
     def test_warm_up_with_mock(self) -> None:
         """Test warm_up creates sandboxes."""
@@ -176,9 +174,7 @@ class TestSandboxPool:
         pool = SandboxPool(pool_size=2)
 
         with patch.object(pool, "_ensure_e2b_available"):
-            with patch.object(
-                pool, "_create_sandbox", side_effect=Exception("Creation failed")
-            ):
+            with patch.object(pool, "_create_sandbox", side_effect=Exception("Creation failed")):
                 # Should not raise, just log warning
                 pool.warm_up(count=2)
                 assert pool._initialized is True
@@ -330,9 +326,7 @@ class TestExecuteInSandbox:
     def test_execute_without_cloudpickle(self) -> None:
         """Test execute returns error when cloudpickle not available."""
         with patch("agent_airlock.sandbox._check_e2b_available", return_value=True):
-            with patch(
-                "agent_airlock.sandbox._check_cloudpickle_available", return_value=False
-            ):
+            with patch("agent_airlock.sandbox._check_cloudpickle_available", return_value=False):
 
                 def func(x: int) -> int:
                     return x
@@ -344,9 +338,7 @@ class TestExecuteInSandbox:
     def test_execute_serialization_error(self) -> None:
         """Test execute handles serialization errors."""
         with patch("agent_airlock.sandbox._check_e2b_available", return_value=True):
-            with patch(
-                "agent_airlock.sandbox._check_cloudpickle_available", return_value=True
-            ):
+            with patch("agent_airlock.sandbox._check_cloudpickle_available", return_value=True):
                 with patch(
                     "agent_airlock.sandbox.serialize_function_call",
                     side_effect=Exception("Serialize failed"),
@@ -378,16 +370,12 @@ class TestExecuteInSandbox:
         mock_pool.sandbox.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("agent_airlock.sandbox._check_e2b_available", return_value=True):
-            with patch(
-                "agent_airlock.sandbox._check_cloudpickle_available", return_value=True
-            ):
+            with patch("agent_airlock.sandbox._check_cloudpickle_available", return_value=True):
                 with patch(
                     "agent_airlock.sandbox.serialize_function_call",
                     return_value="serialized",
                 ):
-                    with patch(
-                        "agent_airlock.sandbox.get_sandbox_pool", return_value=mock_pool
-                    ):
+                    with patch("agent_airlock.sandbox.get_sandbox_pool", return_value=mock_pool):
 
                         def func(x: int) -> int:
                             return x * 2
@@ -415,16 +403,12 @@ class TestExecuteInSandbox:
         mock_pool.sandbox.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("agent_airlock.sandbox._check_e2b_available", return_value=True):
-            with patch(
-                "agent_airlock.sandbox._check_cloudpickle_available", return_value=True
-            ):
+            with patch("agent_airlock.sandbox._check_cloudpickle_available", return_value=True):
                 with patch(
                     "agent_airlock.sandbox.serialize_function_call",
                     return_value="serialized",
                 ):
-                    with patch(
-                        "agent_airlock.sandbox.get_sandbox_pool", return_value=mock_pool
-                    ):
+                    with patch("agent_airlock.sandbox.get_sandbox_pool", return_value=mock_pool):
 
                         def func(x: int) -> int:
                             return x
@@ -452,16 +436,12 @@ class TestExecuteInSandbox:
         mock_pool.sandbox.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("agent_airlock.sandbox._check_e2b_available", return_value=True):
-            with patch(
-                "agent_airlock.sandbox._check_cloudpickle_available", return_value=True
-            ):
+            with patch("agent_airlock.sandbox._check_cloudpickle_available", return_value=True):
                 with patch(
                     "agent_airlock.sandbox.serialize_function_call",
                     return_value="serialized",
                 ):
-                    with patch(
-                        "agent_airlock.sandbox.get_sandbox_pool", return_value=mock_pool
-                    ):
+                    with patch("agent_airlock.sandbox.get_sandbox_pool", return_value=mock_pool):
 
                         def func(x: int) -> int:
                             return x
@@ -473,21 +453,15 @@ class TestExecuteInSandbox:
     def test_execute_exception(self) -> None:
         """Test execute handles sandbox exceptions."""
         mock_pool = MagicMock()
-        mock_pool.sandbox.return_value.__enter__ = MagicMock(
-            side_effect=Exception("Sandbox error")
-        )
+        mock_pool.sandbox.return_value.__enter__ = MagicMock(side_effect=Exception("Sandbox error"))
 
         with patch("agent_airlock.sandbox._check_e2b_available", return_value=True):
-            with patch(
-                "agent_airlock.sandbox._check_cloudpickle_available", return_value=True
-            ):
+            with patch("agent_airlock.sandbox._check_cloudpickle_available", return_value=True):
                 with patch(
                     "agent_airlock.sandbox.serialize_function_call",
                     return_value="serialized",
                 ):
-                    with patch(
-                        "agent_airlock.sandbox.get_sandbox_pool", return_value=mock_pool
-                    ):
+                    with patch("agent_airlock.sandbox.get_sandbox_pool", return_value=mock_pool):
 
                         def func(x: int) -> int:
                             return x
@@ -509,9 +483,7 @@ class TestExecuteInSandboxAsync:
 
         mock_result = SandboxResult(success=True, result=10)
 
-        with patch(
-            "agent_airlock.sandbox.execute_in_sandbox", return_value=mock_result
-        ):
+        with patch("agent_airlock.sandbox.execute_in_sandbox", return_value=mock_result):
             result = await execute_in_sandbox_async(func, (5,))
             assert result.success is True
             assert result.result == 10

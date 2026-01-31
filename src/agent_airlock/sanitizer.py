@@ -616,13 +616,15 @@ def sanitize_with_workspace_config(
         data_type = SensitiveDataType(detection["type"])
 
         # Apply workspace-specific filtering
-        if data_type == SensitiveDataType.EMAIL:
-            if not workspace_config.should_mask_email(detection["value"]):
-                continue
+        if data_type == SensitiveDataType.EMAIL and not workspace_config.should_mask_email(
+            detection["value"]
+        ):
+            continue
 
-        if data_type == SensitiveDataType.PHONE:
-            if not workspace_config.should_mask_phone(detection["value"]):
-                continue
+        if data_type == SensitiveDataType.PHONE and not workspace_config.should_mask_phone(
+            detection["value"]
+        ):
+            continue
 
         filtered_detections.append(detection)
 
@@ -650,10 +652,12 @@ def sanitize_with_workspace_config(
         # Handle custom patterns
         if type_str.startswith("custom:"):
             pattern_name = type_str[7:]
-            strategy = workspace_config.custom_strategies.get(
-                pattern_name, MaskingStrategy.FULL
+            strategy = workspace_config.custom_strategies.get(pattern_name, MaskingStrategy.FULL)
+            masked = (
+                f"[{pattern_name.upper()}]"
+                if strategy == MaskingStrategy.TYPE_ONLY
+                else "[REDACTED]"
             )
-            masked = f"[{pattern_name.upper()}]" if strategy == MaskingStrategy.TYPE_ONLY else "[REDACTED]"
         else:
             data_type = SensitiveDataType(type_str)
             strategy = mask_config.get(data_type, MaskingStrategy.FULL)
@@ -664,9 +668,7 @@ def sanitize_with_workspace_config(
                 masked_value = _mask_value(password_value, data_type, strategy)
                 masked = full_match.replace(password_value, masked_value)
                 result_text = (
-                    result_text[: detection["start"]]
-                    + masked
-                    + result_text[detection["end"] :]
+                    result_text[: detection["start"]] + masked + result_text[detection["end"] :]
                 )
                 detection["masked_as"] = "[REDACTED]"
                 detections.append(detection)
@@ -674,11 +676,7 @@ def sanitize_with_workspace_config(
             else:
                 masked = _mask_value(detection["value"], data_type, strategy)
 
-        result_text = (
-            result_text[: detection["start"]]
-            + masked
-            + result_text[detection["end"] :]
-        )
+        result_text = result_text[: detection["start"]] + masked + result_text[detection["end"] :]
         detection["masked_as"] = masked
         detections.append(detection)
 

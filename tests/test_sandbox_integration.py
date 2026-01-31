@@ -16,21 +16,19 @@ from __future__ import annotations
 
 import os
 import sys
+
 import pytest
 
 from agent_airlock import Airlock, AirlockConfig
 from agent_airlock.sandbox import (
     SandboxPool,
     SandboxResult,
+    _check_e2b_available,
     execute_in_sandbox,
     execute_in_sandbox_async,
-    get_sandbox_pool,
-    serialize_function_call,
     generate_execution_code,
-    _check_e2b_available,
-    _check_cloudpickle_available,
+    serialize_function_call,
 )
-
 
 # Skip all tests if E2B is not available
 pytestmark = pytest.mark.skipif(
@@ -48,6 +46,7 @@ class TestRealSandboxSerialization:
 
     def test_serialize_simple_function(self) -> None:
         """Test serializing a simple function."""
+
         def add(x: int, y: int) -> int:
             return x + y
 
@@ -57,6 +56,7 @@ class TestRealSandboxSerialization:
 
     def test_serialize_with_kwargs(self) -> None:
         """Test serializing function with kwargs."""
+
         def greet(name: str, greeting: str = "Hello") -> str:
             return f"{greeting}, {name}!"
 
@@ -80,11 +80,11 @@ class TestRealSandboxExecution:
     """
 
     @pytest.mark.skipif(
-        PYTHON_313_PLUS,
-        reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
+        PYTHON_313_PLUS, reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
     )
     def test_execute_simple_function(self) -> None:
         """Test executing a simple function in sandbox."""
+
         def multiply(x: int, y: int) -> int:
             return x * y
 
@@ -97,11 +97,11 @@ class TestRealSandboxExecution:
         assert result.sandbox_id is not None
 
     @pytest.mark.skipif(
-        PYTHON_313_PLUS,
-        reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
+        PYTHON_313_PLUS, reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
     )
     def test_execute_function_with_error(self) -> None:
         """Test executing a function that raises error."""
+
         def fail() -> None:
             raise ValueError("Intentional error")
 
@@ -110,11 +110,11 @@ class TestRealSandboxExecution:
         assert "ValueError" in result.error or "Intentional error" in result.error
 
     @pytest.mark.skipif(
-        PYTHON_313_PLUS,
-        reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
+        PYTHON_313_PLUS, reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
     )
     def test_execute_with_string_result(self) -> None:
         """Test executing function returning string."""
+
         def greet(name: str) -> str:
             return f"Hello, {name}!"
 
@@ -123,14 +123,14 @@ class TestRealSandboxExecution:
         assert result.result == "Hello, World!"
 
     @pytest.mark.skipif(
-        PYTHON_313_PLUS,
-        reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
+        PYTHON_313_PLUS, reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
     )
     @pytest.mark.asyncio
     async def test_execute_async(self) -> None:
         """Test async sandbox execution."""
+
         def compute(x: int) -> int:
-            return x ** 2
+            return x**2
 
         result = await execute_in_sandbox_async(compute, (5,))
         assert result.success is True
@@ -176,8 +176,7 @@ class TestAirlockWithRealSandbox:
     """
 
     @pytest.mark.skipif(
-        PYTHON_313_PLUS,
-        reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
+        PYTHON_313_PLUS, reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
     )
     def test_airlock_sandbox_success(self) -> None:
         """Test Airlock with sandbox=True succeeds."""
@@ -192,8 +191,7 @@ class TestAirlockWithRealSandbox:
         assert result["result"] == 30
 
     @pytest.mark.skipif(
-        PYTHON_313_PLUS,
-        reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
+        PYTHON_313_PLUS, reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
     )
     def test_airlock_sandbox_with_validation(self) -> None:
         """Test Airlock sandbox with type validation."""
@@ -208,8 +206,7 @@ class TestAirlockWithRealSandbox:
         assert result["result"] == 10
 
     @pytest.mark.skipif(
-        PYTHON_313_PLUS,
-        reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
+        PYTHON_313_PLUS, reason="Python 3.13+ bytecode incompatible with E2B sandbox Python version"
     )
     @pytest.mark.asyncio
     async def test_airlock_async_sandbox(self) -> None:
@@ -217,7 +214,7 @@ class TestAirlockWithRealSandbox:
 
         @Airlock(sandbox=True, return_dict=True)
         async def async_compute(x: int) -> int:
-            return x ** 2
+            return x**2
 
         result = await async_compute(x=4)
         assert isinstance(result, dict)

@@ -430,8 +430,6 @@ def execute_in_sandbox(
 
     # Execute in sandbox
     pool = get_sandbox_pool(config)
-    stdout_lines: list[str] = []
-    stderr_lines: list[str] = []
 
     try:
         with pool.sandbox() as sandbox:

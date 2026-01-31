@@ -448,9 +448,7 @@ class Airlock:
                 token = set_current_context(context)
                 try:
                     if self.sandbox:
-                        result = await self._execute_in_sandbox_async(
-                            func, *args, **cleaned_kwargs
-                        )
+                        result = await self._execute_in_sandbox_async(func, *args, **cleaned_kwargs)
                     else:
                         # Await the async validated function
                         # Type ignore: validated_func preserves async nature of func

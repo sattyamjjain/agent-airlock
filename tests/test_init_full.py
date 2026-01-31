@@ -5,8 +5,6 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from agent_airlock.config import AirlockConfig
 from agent_airlock.policy import SecurityPolicy
 
@@ -45,9 +43,7 @@ class TestGetMCPAirlock:
 
         mock_mcp_airlock = MagicMock()
 
-        with patch.dict(
-            sys.modules, {"agent_airlock.mcp": MagicMock(MCPAirlock=mock_mcp_airlock)}
-        ):
+        with patch.dict(sys.modules, {"agent_airlock.mcp": MagicMock(MCPAirlock=mock_mcp_airlock)}):
             # This tests the import path
             result = get_mcp_airlock()
             assert result is not None
@@ -84,9 +80,7 @@ class TestCreateSecureMCPServer:
         ):
             config = AirlockConfig()
             policy = SecurityPolicy()
-            result = create_secure_mcp_server(
-                "Test Server", config=config, default_policy=policy
-            )
+            result = create_secure_mcp_server("Test Server", config=config, default_policy=policy)
             assert result is not None
 
 

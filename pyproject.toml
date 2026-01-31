@@ -110,6 +110,13 @@ ignore = [
     "E501",   # line too long (handled by formatter)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "ARG001",  # Unused function arguments common in test stubs
+    "ARG005",  # Unused lambda arguments common in mock side_effects
+    "SIM117",  # Nested with statements clearer for multiple mocks
+]
+
 [tool.ruff.lint.isort]
 known-first-party = ["agent_airlock"]
 

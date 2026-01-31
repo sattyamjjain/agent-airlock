@@ -14,8 +14,6 @@ import inspect
 import json
 from typing import Any, Literal, get_type_hints
 
-import pytest
-
 from agent_airlock import Airlock, AirlockConfig, SecurityPolicy
 
 
@@ -58,13 +56,13 @@ class TestAzureOpenAIFunctionSchema:
             prop: dict[str, Any] = {}
 
             # Map Python types to JSON Schema types
-            if hint == str or str(hint) == "str":
+            if hint is str or str(hint) == "str":
                 prop["type"] = "string"
-            elif hint == int or str(hint) == "int":
+            elif hint is int or str(hint) == "int":
                 prop["type"] = "integer"
-            elif hint == float or str(hint) == "float":
+            elif hint is float or str(hint) == "float":
                 prop["type"] = "number"
-            elif hint == bool or str(hint) == "bool":
+            elif hint is bool or str(hint) == "bool":
                 prop["type"] = "boolean"
             elif hasattr(hint, "__origin__") and hint.__origin__ is Literal:
                 prop["type"] = "string"
@@ -387,13 +385,13 @@ class TestAzureOpenAIClientSimulation:
         """Convert Python type hint to JSON schema type."""
         if hint is None:
             return "string"
-        if hint == str or str(hint) == "str":
+        if hint is str or str(hint) == "str":
             return "string"
-        if hint == int or str(hint) == "int":
+        if hint is int or str(hint) == "int":
             return "integer"
-        if hint == float or str(hint) == "float":
+        if hint is float or str(hint) == "float":
             return "number"
-        if hint == bool or str(hint) == "bool":
+        if hint is bool or str(hint) == "bool":
             return "boolean"
         return "string"
 
@@ -420,7 +418,9 @@ class TestAzureRateLimiting:
         result = rate_limited_tool(x=2)
         assert isinstance(result, dict)
         assert result.get("status") == "blocked"
-        assert "rate" in result.get("reason", "").lower() or "limit" in result.get("error", "").lower()
+        assert (
+            "rate" in result.get("reason", "").lower() or "limit" in result.get("error", "").lower()
+        )
 
 
 class TestAzureGovCloud:

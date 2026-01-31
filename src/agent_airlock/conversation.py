@@ -161,9 +161,7 @@ class ConversationTracker:
         self._last_cleanup = now
         cutoff = datetime.now(timezone.utc).timestamp() - self._ttl_seconds
         expired = [
-            sid
-            for sid, state in self._sessions.items()
-            if state.created_at.timestamp() < cutoff
+            sid for sid, state in self._sessions.items() if state.created_at.timestamp() < cutoff
         ]
 
         for sid in expired:
@@ -264,7 +262,10 @@ class ConversationTracker:
 
             # Check if conversation is blocked
             if state.is_blocked:
-                return True, f"Conversation blocked until {state.blocked_until}: {state.block_reason}"
+                return (
+                    True,
+                    f"Conversation blocked until {state.blocked_until}: {state.block_reason}",
+                )
 
             # Check cooldown_after constraints
             for trigger_tool, cooldown_seconds in constraints.cooldown_after.items():
@@ -287,8 +288,7 @@ class ConversationTracker:
                     if elapsed < cooldown:
                         remaining = int(cooldown - elapsed)
                         return True, (
-                            f"Tool '{tool_name}' cooldown: "
-                            f"{remaining}s remaining of {cooldown}s"
+                            f"Tool '{tool_name}' cooldown: {remaining}s remaining of {cooldown}s"
                         )
 
             # Check max calls per tool
@@ -297,8 +297,7 @@ class ConversationTracker:
                 current_calls = len(state.get_successful_calls_for_tool(tool_name))
                 if current_calls >= max_calls:
                     return True, (
-                        f"Tool '{tool_name}' limit reached: "
-                        f"{current_calls}/{max_calls} calls used"
+                        f"Tool '{tool_name}' limit reached: {current_calls}/{max_calls} calls used"
                     )
 
             # Check required_before constraints
@@ -308,17 +307,18 @@ class ConversationTracker:
                 missing = set(required_tools) - called_tools
                 if missing:
                     return True, (
-                        f"Tool '{tool_name}' requires prior calls to: "
-                        f"{', '.join(sorted(missing))}"
+                        f"Tool '{tool_name}' requires prior calls to: {', '.join(sorted(missing))}"
                     )
 
             # Check max total calls
-            if constraints.max_total_calls is not None:
-                if state.success_count >= constraints.max_total_calls:
-                    return True, (
-                        f"Conversation call limit reached: "
-                        f"{state.success_count}/{constraints.max_total_calls}"
-                    )
+            if (
+                constraints.max_total_calls is not None
+                and state.success_count >= constraints.max_total_calls
+            ):
+                return True, (
+                    f"Conversation call limit reached: "
+                    f"{state.success_count}/{constraints.max_total_calls}"
+                )
 
             # Check blocked ratio
             if constraints.max_blocked_ratio is not None and state.call_count > 0:

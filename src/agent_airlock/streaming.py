@@ -361,6 +361,5 @@ def create_streaming_wrapper(
 
     else:
         raise TypeError(
-            f"create_streaming_wrapper requires a generator function, "
-            f"got {type(func).__name__}"
+            f"create_streaming_wrapper requires a generator function, got {type(func).__name__}"
         )

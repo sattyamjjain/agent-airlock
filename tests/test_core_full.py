@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
 from agent_airlock import Airlock, AirlockConfig, SecurityPolicy, airlock
-from agent_airlock.core import SENSITIVE_PARAM_NAMES, _filter_sensitive_keys
+from agent_airlock.core import _filter_sensitive_keys
 
 
 class TestFilterSensitiveKeys:
@@ -268,7 +268,6 @@ class TestSandboxExecutionWithMock:
 
     def test_sandbox_required_true_fails_when_unavailable(self) -> None:
         """Test sandbox_required=True returns error when E2B unavailable."""
-        from agent_airlock.core import SandboxUnavailableError
 
         @Airlock(sandbox=True, sandbox_required=True)
         def my_func(x: int) -> int:
@@ -292,6 +291,7 @@ class TestSandboxExecutionWithMock:
         )
 
         with patch("agent_airlock.sandbox.execute_in_sandbox", return_value=mock_result):
+
             @Airlock(sandbox=True)
             def my_func(x: int) -> int:
                 return x * 2
@@ -310,6 +310,7 @@ class TestSandboxExecutionWithMock:
         )
 
         with patch("agent_airlock.sandbox.execute_in_sandbox", return_value=mock_result):
+
             @Airlock(sandbox=True)
             def my_func(x: int) -> int:
                 return x * 2
@@ -335,9 +336,10 @@ class TestSandboxExecutionWithMock:
             return mock_result
 
         with patch("agent_airlock.sandbox.execute_in_sandbox_async", side_effect=mock_execute):
+
             @Airlock(sandbox=True)
             async def my_async_func(x: int) -> int:
-                return x ** 2
+                return x**2
 
             result = await my_async_func(x=10)
             assert result == 100
@@ -357,9 +359,10 @@ class TestSandboxExecutionWithMock:
             return mock_result
 
         with patch("agent_airlock.sandbox.execute_in_sandbox_async", side_effect=mock_execute):
+
             @Airlock(sandbox=True)
             async def my_async_func(x: int) -> int:
-                return x ** 2
+                return x**2
 
             result = await my_async_func(x=10)
             assert isinstance(result, dict)
@@ -370,12 +373,12 @@ class TestSandboxExecutionWithMock:
         """Test async sandbox fallback when ImportError occurs."""
         # Mock ImportError by making the import fail
         import agent_airlock.sandbox as sandbox_mod
-        original_execute = sandbox_mod.execute_in_sandbox_async
 
         def raise_import_error(*args: Any, **kwargs: Any) -> None:
             raise ImportError("No E2B")
 
         with patch.object(sandbox_mod, "execute_in_sandbox_async", side_effect=raise_import_error):
+
             @Airlock(sandbox=True, sandbox_required=False)
             async def my_async_func(x: int) -> int:
                 return x * 3
@@ -393,6 +396,7 @@ class TestSandboxExecutionWithMock:
             raise ImportError("No E2B")
 
         with patch.object(sandbox_mod, "execute_in_sandbox_async", side_effect=raise_import_error):
+
             @Airlock(sandbox=True, sandbox_required=True)
             async def my_async_func(x: int) -> int:
                 return x * 3
@@ -410,6 +414,7 @@ class TestSandboxExecutionWithMock:
             raise ImportError("No E2B")
 
         with patch.object(sandbox_mod, "execute_in_sandbox", side_effect=raise_import_error):
+
             @Airlock(sandbox=True, sandbox_required=False)
             def my_sync_func(x: int) -> int:
                 return x * 4
@@ -426,6 +431,7 @@ class TestSandboxExecutionWithMock:
             raise ImportError("No E2B")
 
         with patch.object(sandbox_mod, "execute_in_sandbox", side_effect=raise_import_error):
+
             @Airlock(sandbox=True, sandbox_required=True)
             def my_sync_func(x: int) -> int:
                 return x * 4
@@ -437,6 +443,7 @@ class TestSandboxExecutionWithMock:
 
     def test_sync_sandbox_fallback_without_e2b_key(self) -> None:
         """Test sync sandbox fallback works without sandbox execution."""
+
         # With sandbox=False, it should run locally
         @Airlock(sandbox=False)
         def my_local_func(x: int) -> int:

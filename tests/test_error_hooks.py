@@ -24,7 +24,7 @@ class TestOnValidationErrorHook:
             return x * 2
 
         # Pass wrong type to trigger validation error
-        result = typed_tool(x="not_an_int")  # type: ignore[arg-type]
+        typed_tool(x="not_an_int")  # type: ignore[arg-type]
 
         # Verify callback was called
         assert callback.called
@@ -98,7 +98,7 @@ class TestOnBlockedHook:
             return x
 
         # Pass ghost argument in strict mode
-        result = strict_tool(x=42, ghost_arg="should_be_rejected")  # type: ignore[call-arg]
+        strict_tool(x=42, ghost_arg="should_be_rejected")  # type: ignore[call-arg]
 
         assert callback.called
         call_args = callback.call_args
@@ -116,7 +116,7 @@ class TestOnBlockedHook:
         def blocked_tool(x: int) -> int:
             return x
 
-        result = blocked_tool(x=42)
+        blocked_tool(x=42)
 
         assert callback.called
         call_args = callback.call_args
@@ -309,7 +309,7 @@ class TestAsyncCallbacks:
         async def async_tool(x: int) -> int:
             return x * 2
 
-        result = await async_tool(x="not_an_int")  # type: ignore[arg-type]
+        await async_tool(x="not_an_int")  # type: ignore[arg-type]
 
         assert callback.called
         assert callback.call_args[0][0] == "async_tool"

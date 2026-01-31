@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from agent_airlock.sanitizer import (
     MaskingStrategy,
     SensitiveDataType,
@@ -255,9 +253,7 @@ class TestSanitizeWithWorkspaceConfig:
         config = WorkspacePIIConfig(workspace_id="test")
         content = "Email: user@example.com, API: sk-1234567890abcdefghijklmnop"
 
-        result = sanitize_with_workspace_config(
-            content, config, mask_pii=False, mask_secrets=True
-        )
+        result = sanitize_with_workspace_config(content, config, mask_pii=False, mask_secrets=True)
 
         assert "user@example.com" in result.content  # PII not masked
         assert "sk-1234567890abcdefghijklmnop" not in result.content  # Secret masked
@@ -267,9 +263,7 @@ class TestSanitizeWithWorkspaceConfig:
         config = WorkspacePIIConfig(workspace_id="test")
         content = "Email: user@example.com, API: sk-1234567890abcdefghijklmnop"
 
-        result = sanitize_with_workspace_config(
-            content, config, mask_pii=True, mask_secrets=False
-        )
+        result = sanitize_with_workspace_config(content, config, mask_pii=True, mask_secrets=False)
 
         assert "user@example.com" not in result.content  # PII masked
         assert "sk-1234567890abcdefghijklmnop" in result.content  # Secret not masked
