@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.1.2"
+version = "0.1.3"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
