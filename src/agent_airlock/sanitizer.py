@@ -70,9 +70,7 @@ class SanitizationResult:
 # Compiled regex patterns for sensitive data detection
 PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     # PII Patterns
-    SensitiveDataType.EMAIL: re.compile(
-        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
-    ),
+    SensitiveDataType.EMAIL: re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
     SensitiveDataType.PHONE: re.compile(
         r"\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b"
     ),
@@ -99,18 +97,14 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         r"xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}"  # Slack
         r")\b"
     ),
-    SensitiveDataType.AWS_KEY: re.compile(
-        r"\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b"
-    ),
+    SensitiveDataType.AWS_KEY: re.compile(r"\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b"),
     SensitiveDataType.PASSWORD: re.compile(
         r"(?i)(?:password|passwd|pwd|secret|token)[\s]*[=:]\s*['\"]?([^\s'\"]{8,})['\"]?",
     ),
     SensitiveDataType.PRIVATE_KEY: re.compile(
         r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"
     ),
-    SensitiveDataType.JWT: re.compile(
-        r"\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\b"
-    ),
+    SensitiveDataType.JWT: re.compile(r"\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\b"),
     SensitiveDataType.CONNECTION_STRING: re.compile(
         r"(?i)(?:"
         r"mongodb(?:\+srv)?://[^\s]+|"

@@ -1,8 +1,10 @@
-# Agent-Airlock
+# Agent-Airlock 🛡️
 
-**The Pydantic-based Firewall for MCP Servers. Stops 99% of Hallucinated Tool Calls.**
+**The Pydantic-based Firewall for MCP Servers. Stops Hallucinated Tool Calls Before They Wreck Your System.**
 
 [![PyPI version](https://badge.fury.io/py/agent-airlock.svg)](https://badge.fury.io/py/agent-airlock)
+[![CI](https://github.com/sattyamjain/agent-airlock/actions/workflows/ci.yml/badge.svg)](https://github.com/sattyamjain/agent-airlock/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sattyamjain/agent-airlock/branch/main/graph/badge.svg)](https://codecov.io/gh/sattyamjain/agent-airlock)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -98,12 +100,12 @@ def run_code(code: str) -> str:
 
 ```python
 from fastmcp import FastMCP
-from agent_airlock import Airlock, SecurityPolicy
+from agent_airlock import Airlock, STRICT_POLICY
 
 mcp = FastMCP("secure-server")
 
 @mcp.tool
-@Airlock(policy=SecurityPolicy.STRICT)
+@Airlock(policy=STRICT_POLICY)
 def delete_records(table: str, where: str) -> dict:
     # Validated, policy-checked, and logged
     ...
@@ -128,20 +130,78 @@ def my_tool(...):
 
 ## Why Agent-Airlock?
 
-| Feature | LangChain | AutoGen | Agent-Airlock |
-|---------|-----------|---------|---------------|
-| Schema Validation | Manual | Manual | **Automatic** |
-| Self-Healing | No | No | **Yes** |
-| Sandbox Execution | No | No | **E2B Native** |
-| Open Source | Yes | Yes | **Yes** |
-| MCP Native | No | No | **Yes** |
+| Feature | LangChain | AutoGen | Prompt Security | **Agent-Airlock** |
+|---------|-----------|---------|-----------------|-------------------|
+| Schema Validation | Manual | Manual | Enterprise | **Automatic** |
+| Self-Healing Errors | No | No | No | **Yes** |
+| Sandbox Execution | No | No | No | **E2B Native** |
+| MCP Native | No | No | Gateway | **Decorator** |
+| Pricing | Open Source | Open Source | Enterprise $$ | **Open Source** |
+
+## Predefined Policies
+
+```python
+from agent_airlock import (
+    PERMISSIVE_POLICY,      # No restrictions
+    STRICT_POLICY,          # Requires agent ID
+    READ_ONLY_POLICY,       # Blocks write/delete operations
+    BUSINESS_HOURS_POLICY,  # 9 AM - 5 PM only
+)
+
+# Custom policy
+from agent_airlock import SecurityPolicy
+
+PRODUCTION_POLICY = SecurityPolicy(
+    allowed_tools=["read_*", "query_*"],
+    denied_tools=["delete_*", "drop_*"],
+    rate_limits={"*": "100/minute"},
+    time_restrictions={"write_*": "09:00-17:00"},
+)
+```
+
+## Output Sanitization
+
+```python
+from agent_airlock import Airlock, AirlockConfig
+
+config = AirlockConfig(
+    mask_pii=True,          # Masks SSN, credit cards, emails
+    mask_secrets=True,      # Masks API keys, passwords
+    max_output_chars=5000,  # Prevents token explosion
+)
+
+@Airlock(config=config)
+def query_users(name: str) -> dict:
+    # Output automatically sanitized:
+    # {"ssn": "123-45-6789"} → {"ssn": "***-**-6789"}
+    # {"api_key": "sk-live-xxx"} → {"api_key": "***REDACTED***"}
+    return db.find_user(name)
+```
 
 ## Documentation
 
-- [Full Documentation](https://github.com/sattyamjain/agent-airlock)
-- [Examples](./examples)
-- [Security Best Practices](./docs/SECURITY.md)
+- [Examples](./examples) - Usage patterns and integrations
+- [Security Best Practices](./docs/SECURITY.md) - Production deployment guide
+- [API Reference](https://github.com/sattyamjain/agent-airlock#api-reference)
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Run tests (`pytest tests/ -v`)
+4. Run linting (`ruff check src/ tests/`)
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
 ## License
 
 MIT License - see [LICENSE](./LICENSE)
+
+---
+
+**Built with ❤️ for the AI agent security community.**
+
+*If Agent-Airlock saved your production database from an LLM hallucination, consider giving us a ⭐!*

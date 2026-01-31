@@ -272,9 +272,7 @@ class SecurityPolicy:
         """Check if tool name matches a glob pattern."""
         return fnmatch.fnmatch(tool_name, pattern)
 
-    def _find_matching_patterns(
-        self, tool_name: str, patterns: dict[str, Any]
-    ) -> list[str]:
+    def _find_matching_patterns(self, tool_name: str, patterns: dict[str, Any]) -> list[str]:
         """Find all patterns that match a tool name, sorted by specificity."""
         matches = [p for p in patterns if self._matches_pattern(tool_name, p)]
         # Sort by specificity (longer patterns are more specific)
@@ -306,8 +304,7 @@ class SecurityPolicy:
         # Check allowed list (if specified)
         if self.allowed_tools:
             allowed = any(
-                self._matches_pattern(tool_name, pattern)
-                for pattern in self.allowed_tools
+                self._matches_pattern(tool_name, pattern) for pattern in self.allowed_tools
             )
             if not allowed:
                 raise PolicyViolation(
@@ -316,9 +313,7 @@ class SecurityPolicy:
                     details={"tool": tool_name, "allowed": self.allowed_tools},
                 )
 
-    def check_time_restriction(
-        self, tool_name: str, dt: datetime | None = None
-    ) -> None:
+    def check_time_restriction(self, tool_name: str, dt: datetime | None = None) -> None:
         """Check if a tool call is within allowed time window.
 
         Args:
@@ -372,8 +367,7 @@ class SecurityPolicy:
 
         if not limiter.acquire():
             raise PolicyViolation(
-                f"Rate limit exceeded for tool '{tool_name}'. "
-                f"Limit: {self.rate_limits[pattern]}",
+                f"Rate limit exceeded for tool '{tool_name}'. Limit: {self.rate_limits[pattern]}",
                 violation_type=ViolationType.RATE_LIMITED.value,
                 details={
                     "tool": tool_name,

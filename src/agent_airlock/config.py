@@ -107,12 +107,23 @@ class AirlockConfig:
         result: dict[str, Any] = {}
 
         # Boolean fields
-        for key in ("strict_mode", "mask_pii", "mask_secrets", "sanitize_output", "enable_audit_log"):
+        for key in (
+            "strict_mode",
+            "mask_pii",
+            "mask_secrets",
+            "sanitize_output",
+            "enable_audit_log",
+        ):
             if key in data:
                 result[key] = bool(data[key])
 
         # Integer fields
-        for key in ("max_output_tokens", "max_output_chars", "sandbox_timeout", "sandbox_pool_size"):
+        for key in (
+            "max_output_tokens",
+            "max_output_chars",
+            "sandbox_timeout",
+            "sandbox_pool_size",
+        ):
             if key in data:
                 result[key] = int(data[key])
 

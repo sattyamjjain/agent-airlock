@@ -193,7 +193,9 @@ class Airlock:
 
             if self.config.sanitize_output and result is not None:
                 # Determine max chars (0 = unlimited)
-                max_chars = self.config.max_output_chars if self.config.max_output_chars > 0 else None
+                max_chars = (
+                    self.config.max_output_chars if self.config.max_output_chars > 0 else None
+                )
 
                 sanitization = sanitize_output(
                     result,

@@ -252,8 +252,7 @@ def create_secure_mcp_server(
     """
     if not _check_fastmcp_available():
         raise ImportError(
-            "FastMCP is required for MCP integration. "
-            "Install with: pip install agent-airlock[mcp]"
+            "FastMCP is required for MCP integration. Install with: pip install agent-airlock[mcp]"
         )
 
     from fastmcp import FastMCP
