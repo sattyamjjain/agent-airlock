@@ -96,6 +96,120 @@ class TestTimeWindow:
         dt_noon = datetime(2026, 1, 31, 12, 0)
         assert window.is_within(dt_noon) is False
 
+    # === Edge Case Tests ===
+
+    def test_parse_edge_boundary_full_day(self) -> None:
+        """Test full day window from midnight to 23:59."""
+        window = TimeWindow.parse("00:00-23:59")
+        assert window.start_hour == 0
+        assert window.start_minute == 0
+        assert window.end_hour == 23
+        assert window.end_minute == 59
+
+        # Should allow any time
+        assert window.is_within(datetime(2026, 1, 31, 0, 0)) is True
+        assert window.is_within(datetime(2026, 1, 31, 12, 0)) is True
+        assert window.is_within(datetime(2026, 1, 31, 23, 59)) is True
+
+    def test_parse_edge_boundary_midnight_start(self) -> None:
+        """Test window starting at midnight."""
+        window = TimeWindow.parse("00:00-06:00")
+        assert window.start_hour == 0
+        assert window.start_minute == 0
+
+        assert window.is_within(datetime(2026, 1, 31, 0, 0)) is True
+        assert window.is_within(datetime(2026, 1, 31, 3, 0)) is True
+        assert window.is_within(datetime(2026, 1, 31, 6, 0)) is True
+        assert window.is_within(datetime(2026, 1, 31, 7, 0)) is False
+
+    def test_parse_edge_boundary_end_at_2359(self) -> None:
+        """Test window ending at 23:59."""
+        window = TimeWindow.parse("18:00-23:59")
+        assert window.end_hour == 23
+        assert window.end_minute == 59
+
+        assert window.is_within(datetime(2026, 1, 31, 18, 0)) is True
+        assert window.is_within(datetime(2026, 1, 31, 23, 59)) is True
+        assert window.is_within(datetime(2026, 1, 31, 17, 59)) is False
+
+    def test_parse_same_start_end_time(self) -> None:
+        """Test zero-width window (same start and end time)."""
+        window = TimeWindow.parse("12:00-12:00")
+        assert window.start_hour == 12
+        assert window.end_hour == 12
+
+        # Only exact time should match
+        assert window.is_within(datetime(2026, 1, 31, 12, 0)) is True
+        assert window.is_within(datetime(2026, 1, 31, 12, 1)) is False
+        assert window.is_within(datetime(2026, 1, 31, 11, 59)) is False
+
+    def test_parse_invalid_format_empty_string(self) -> None:
+        """Test empty string format."""
+        with pytest.raises(ValueError, match="Invalid time window format"):
+            TimeWindow.parse("")
+
+    def test_parse_invalid_format_single_time(self) -> None:
+        """Test single time without range."""
+        with pytest.raises(ValueError, match="Invalid time window format"):
+            TimeWindow.parse("09:00")
+
+    def test_parse_invalid_format_wrong_separator(self) -> None:
+        """Test wrong separator."""
+        with pytest.raises(ValueError, match="Invalid time window format"):
+            TimeWindow.parse("09:00_17:00")
+
+    def test_parse_invalid_format_reversed(self) -> None:
+        """Test time format with colons reversed."""
+        with pytest.raises(ValueError, match="Invalid time window format"):
+            TimeWindow.parse("09-00:17-00")
+
+    def test_parse_invalid_hour_24(self) -> None:
+        """Test hour = 24 (should fail, max is 23)."""
+        with pytest.raises(ValueError, match="Hour must be between"):
+            TimeWindow.parse("24:00-17:00")
+
+    def test_parse_invalid_hour_end(self) -> None:
+        """Test invalid hour in end time."""
+        with pytest.raises(ValueError, match="Hour must be between"):
+            TimeWindow.parse("09:00-25:00")
+
+    def test_parse_invalid_minute_end(self) -> None:
+        """Test invalid minute in end time."""
+        with pytest.raises(ValueError, match="Minute must be between"):
+            TimeWindow.parse("09:00-17:61")
+
+    def test_parse_invalid_format_letters(self) -> None:
+        """Test format with letters."""
+        with pytest.raises(ValueError, match="Invalid time window format"):
+            TimeWindow.parse("09:00-5pm")
+
+    def test_parse_invalid_format_spaces(self) -> None:
+        """Test format with spaces."""
+        with pytest.raises(ValueError, match="Invalid time window format"):
+            TimeWindow.parse("09:00 - 17:00")
+
+    def test_is_within_one_minute_window(self) -> None:
+        """Test very small window (1 minute)."""
+        window = TimeWindow.parse("12:30-12:31")
+
+        assert window.is_within(datetime(2026, 1, 31, 12, 30)) is True
+        assert window.is_within(datetime(2026, 1, 31, 12, 31)) is True
+        assert window.is_within(datetime(2026, 1, 31, 12, 29)) is False
+        assert window.is_within(datetime(2026, 1, 31, 12, 32)) is False
+
+    def test_is_within_overnight_at_boundaries(self) -> None:
+        """Test overnight window at exact boundaries."""
+        window = TimeWindow.parse("23:00-01:00")
+
+        # At start boundary
+        assert window.is_within(datetime(2026, 1, 31, 23, 0)) is True
+        # At end boundary
+        assert window.is_within(datetime(2026, 1, 31, 1, 0)) is True
+        # Just before start
+        assert window.is_within(datetime(2026, 1, 31, 22, 59)) is False
+        # Just after end
+        assert window.is_within(datetime(2026, 1, 31, 1, 1)) is False
+
 
 class TestRateLimit:
     """Tests for RateLimit parsing and token bucket algorithm."""
@@ -151,6 +265,131 @@ class TestRateLimit:
 
         # Should have some tokens back
         assert limit.remaining() > 0
+
+    # === Edge Case Tests ===
+
+    def test_parse_zero_count(self) -> None:
+        """Test rate limit with zero count (edge case)."""
+        limit = RateLimit.parse("0/hour")
+        assert limit.max_tokens == 0
+        assert limit.refill_period_seconds == 3600.0
+        # Should immediately fail to acquire
+        assert limit.acquire() is False
+        assert limit.remaining() == 0
+
+    def test_parse_large_count(self) -> None:
+        """Test rate limit with very large count."""
+        limit = RateLimit.parse("1000000/day")
+        assert limit.max_tokens == 1000000
+        assert limit.refill_period_seconds == 86400.0
+        assert limit.remaining() == 1000000
+
+    def test_parse_case_insensitive(self) -> None:
+        """Test case insensitivity of period."""
+        limit1 = RateLimit.parse("10/HOUR")
+        limit2 = RateLimit.parse("10/Hour")
+        limit3 = RateLimit.parse("10/hOuR")
+
+        assert limit1.refill_period_seconds == 3600.0
+        assert limit2.refill_period_seconds == 3600.0
+        assert limit3.refill_period_seconds == 3600.0
+
+    def test_parse_invalid_format_empty_string(self) -> None:
+        """Test empty string format."""
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("")
+
+    def test_parse_invalid_format_no_period(self) -> None:
+        """Test format without period."""
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("100")
+
+    def test_parse_invalid_format_no_count(self) -> None:
+        """Test format without count."""
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("/hour")
+
+    def test_parse_invalid_format_negative(self) -> None:
+        """Test negative count (regex won't match)."""
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("-10/hour")
+
+    def test_parse_invalid_format_decimal(self) -> None:
+        """Test decimal count (regex won't match)."""
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("10.5/hour")
+
+    def test_parse_invalid_period(self) -> None:
+        """Test invalid period names."""
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("100/week")
+
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("100/month")
+
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("100/year")
+
+    def test_parse_invalid_format_spaces(self) -> None:
+        """Test format with spaces."""
+        with pytest.raises(ValueError, match="Invalid rate limit format"):
+            RateLimit.parse("100 / hour")
+
+    def test_acquire_zero_tokens(self) -> None:
+        """Test acquiring zero tokens."""
+        limit = RateLimit.parse("10/second")
+        # Acquiring 0 tokens should always succeed
+        assert limit.acquire(tokens=0) is True
+        assert limit.remaining() == 10  # No tokens consumed
+
+    def test_acquire_exact_remaining(self) -> None:
+        """Test acquiring exactly the remaining tokens."""
+        limit = RateLimit.parse("5/second")
+        assert limit.acquire(tokens=5) is True
+        assert limit.remaining() == 0
+        assert limit.acquire(tokens=1) is False
+
+    def test_acquire_more_than_max(self) -> None:
+        """Test acquiring more than max tokens."""
+        limit = RateLimit.parse("5/second")
+        assert limit.acquire(tokens=6) is False
+        # Tokens should not be consumed on failed acquire
+        assert limit.remaining() == 5
+
+    def test_remaining_after_partial_refill(self) -> None:
+        """Test remaining tokens after partial refill."""
+        limit = RateLimit.parse("10/second")
+        limit.acquire(tokens=10)  # Exhaust all
+        assert limit.remaining() == 0
+
+        # Wait for partial refill (50%)
+        time.sleep(0.5)
+        remaining = limit.remaining()
+        # Should have approximately 5 tokens (allow some variance)
+        assert 4 <= remaining <= 6
+
+    def test_token_bucket_does_not_exceed_max(self) -> None:
+        """Test that tokens never exceed max after refill."""
+        limit = RateLimit.parse("5/second")
+        assert limit.remaining() == 5
+
+        # Wait longer than refill period
+        time.sleep(0.2)
+
+        # Should still be capped at max
+        assert limit.remaining() == 5
+
+    def test_acquire_single_token_repeatedly(self) -> None:
+        """Test acquiring single tokens until exhaustion."""
+        limit = RateLimit.parse("3/second")
+
+        assert limit.acquire() is True
+        assert limit.remaining() == 2
+        assert limit.acquire() is True
+        assert limit.remaining() == 1
+        assert limit.acquire() is True
+        assert limit.remaining() == 0
+        assert limit.acquire() is False
 
 
 class TestAgentIdentity:

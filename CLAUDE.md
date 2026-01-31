@@ -14,7 +14,7 @@
 - PII/secret detection and masking in outputs
 - FastMCP integration with `@secure_tool` decorator
 
-**Stats:** 5,000+ lines of code | 629 tests | 86% coverage (enforced 80% in CI)
+**Stats:** ~5,000 lines of code | 647 tests | 99% coverage (enforced 80% in CI)
 
 <!-- END AUTO-MANAGED -->
 
@@ -57,16 +57,19 @@ python examples/fastmcp_integration.py
 ```
 src/agent_airlock/
 ├── __init__.py       # Public API exports (all decorators, configs, policies)
-├── core.py           # @Airlock decorator - main entry point (~450 lines)
+├── core.py           # @Airlock decorator - main entry point (726 lines)
 │                     └─ Handles: ghost args, validation, sandbox, policies
 │                     └─ Full async/await support, context propagation
 │                     └─ Dynamic policy resolution via callables
-├── audit.py          # JSON Lines audit logging
+├── audit.py          # JSON Lines audit logging (301 lines)
 │                     └─ AuditLogger, AuditRecord, thread-safe writes
-├── context.py        # Request-scoped context (NEW)
+├── context.py        # Request-scoped context (318 lines)
 │                     └─ AirlockContext, ContextExtractor, contextvars
 │                     └─ RunContextWrapper pattern extraction
-├── streaming.py      # Generator/streaming support (NEW)
+├── conversation.py   # Multi-turn conversation state (425 lines)
+│                     └─ ConversationState, ConversationConstraints
+│                     └─ Cross-call tracking, budget management
+├── streaming.py      # Generator/streaming support (365 lines)
 │                     └─ StreamingAirlock, per-chunk sanitization
 │                     └─ Truncation across streamed output
 ├── validator.py      # Ghost argument detection + Pydantic strict validation
@@ -75,13 +78,13 @@ src/agent_airlock/
 │                     └─ AirlockResponse with fix_hints for retry
 ├── config.py         # Configuration: env vars > constructor > TOML file
 │                     └─ AirlockConfig dataclass (12 options)
-├── policy.py         # RBAC engine (476 lines)
+├── policy.py         # RBAC engine (475 lines)
 │                     └─ SecurityPolicy, RateLimit (token bucket), TimeWindow
-├── sanitizer.py      # PII/secret detection + masking (430 lines)
+├── sanitizer.py      # PII/secret detection + masking (705 lines)
 │                     └─ 12 data types, 4 masking strategies
-├── sandbox.py        # E2B integration with warm pool (509 lines)
+├── sandbox.py        # E2B integration with warm pool (518 lines)
 │                     └─ SandboxPool, cloudpickle serialization
-└── mcp.py            # FastMCP integration (335 lines)
+└── mcp.py            # FastMCP integration (344 lines)
                       └─ MCPAirlock, secure_tool, create_secure_mcp_server
 ```
 
@@ -126,6 +129,7 @@ src/agent_airlock/
 - **Context Propagation:** `contextvars` for request-scoped state (AirlockContext)
 - **Policy Resolver:** Dynamic policies via `Callable[[AirlockContext], SecurityPolicy]`
 - **Streaming Sanitization:** Per-chunk validation with cumulative truncation
+- **Conversation State:** Multi-turn tracking with budget management (ConversationConstraints)
 
 <!-- END AUTO-MANAGED -->
 
@@ -133,16 +137,17 @@ src/agent_airlock/
 ## Git Insights
 
 Recent commits:
+- `2630882` fix: skip cloudpickle tests when not installed
+- `489b8d4` fix: resolve all ruff lint and format errors for CI
+- `f138bb5` feat: v0.1.5 - Production-ready release with streaming, context, and 99% coverage
 - `f859cfa` chore: bump version to 0.1.3
 - `a18dacf` docs: upgrade README to top 1% 2026 standards
-- `93116b6` docs: add comprehensive framework integration examples
-- `283226c` chore: bump version to 0.1.2
-- `7c41838` feat: add framework compatibility and signature preservation
 
 Key security additions:
 - `sandbox_required=True` parameter prevents unsafe local execution fallback
 - Sensitive parameter names filtered from debug logs
 - Path validation to prevent directory traversal attacks
+- Per-file-ignores for test patterns (ARG001, ARG005, SIM117)
 
 <!-- END AUTO-MANAGED -->
 
@@ -186,8 +191,8 @@ Key security additions:
 ### Phase 0: Production Readiness (Added 2026-01-31)
 - [x] Audit logging implementation (was config-only, now fully working)
 - [x] Async function support (proper async/await wrapper)
-- [x] Coverage verification (86%, enforced 80% in CI)
-- [x] 292 tests total (66 new for context, streaming, audit, async)
+- [x] Coverage verification (99%, enforced 80% in CI)
+- [x] 647 tests total (includes context, streaming, audit, async, edge cases)
 
 ### Production Phase 1: Core Missing Features (Added 2026-01-31)
 - [x] P1.1: Streaming/generator support (StreamingAirlock class)
@@ -216,5 +221,39 @@ All major AI frameworks tested and working:
 - [x] PydanticAI - `output_type` param, RunContext preservation
 - [x] OpenAI Agents SDK - `@function_tool` + `@Airlock()`, Agent.run()
 - [ ] Anthropic, AutoGen, CrewAI, LlamaIndex, smolagents (deps not installed)
+
+### Enterprise Production Roadmap (Added 2026-02-01)
+
+See `PRODUCTION_ROADMAP.md` for full details.
+
+**Already Implemented (v0.1.5):**
+- [x] Async function support (proper async/await)
+- [x] Streaming support (StreamingAirlock)
+- [x] Context propagation (AirlockContext)
+- [x] Dynamic policy resolution (PolicyResolver callable)
+- [x] Audit logging (JSON Lines, thread-safe)
+- [x] Workspace PII config (per-tenant rules)
+- [x] Conversation tracking (multi-turn state)
+
+**P0 - Critical for Production (Week 1-2):**
+- [ ] Redis-backed distributed rate limiting
+- [ ] India-specific PII (Aadhaar, PAN, UPI, IFSC)
+- [ ] Performance benchmarks with CI
+
+**P1 - Enterprise Features (Week 3-4):**
+- [ ] OpenAI Agents SDK Guardrails bridge
+- [ ] Observability hooks (Datadog, OTEL, PostHog)
+- [ ] Circuit breaker pattern
+
+**P2 - Nice to Have (Week 5-6):**
+- [ ] Cost tracking callbacks
+- [ ] Anthropic SDK integration
+- [ ] LangChain integration module
+- [ ] Retry policies
+
+**Target Versions:**
+- v0.2.0: Redis rate limiting, India PII, Benchmarks
+- v0.3.0: Guardrails bridge, Observability
+- v1.0.0: Production certified, All integrations
 
 <!-- END MANUAL -->
