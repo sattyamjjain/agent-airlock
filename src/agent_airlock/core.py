@@ -11,7 +11,9 @@ The @Airlock decorator provides:
 
 from __future__ import annotations
 
+import contextlib
 import functools
+import inspect
 import time
 from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar, overload
@@ -38,12 +40,31 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 # Parameter names that should not appear in debug logs
-SENSITIVE_PARAM_NAMES = frozenset({
-    "password", "passwd", "pwd", "secret", "token", "key", "api_key",
-    "apikey", "auth", "authorization", "credential", "credentials",
-    "private_key", "privatekey", "access_token", "refresh_token",
-    "session", "cookie", "ssn", "credit_card", "card_number",
-})
+SENSITIVE_PARAM_NAMES = frozenset(
+    {
+        "password",
+        "passwd",
+        "pwd",
+        "secret",
+        "token",
+        "key",
+        "api_key",
+        "apikey",
+        "auth",
+        "authorization",
+        "credential",
+        "credentials",
+        "private_key",
+        "privatekey",
+        "access_token",
+        "refresh_token",
+        "session",
+        "cookie",
+        "ssn",
+        "credit_card",
+        "card_number",
+    }
+)
 
 
 def _filter_sensitive_keys(keys: list[str]) -> list[str]:
@@ -262,6 +283,34 @@ class Airlock:
 
             return result
 
+        # CRITICAL: Preserve function signature for framework introspection
+        # LangChain, CrewAI, AutoGen, PydanticAI use inspect.signature() to
+        # generate JSON schemas for LLM tool calls. Without this, the LLM
+        # sees "empty arguments" and tool calls fail.
+        #
+        # References:
+        # - https://docs.python.org/3/library/inspect.html
+        # - https://sorokin.engineer/posts/en/python_decorator_function_signature.html
+        with contextlib.suppress(ValueError, TypeError):
+            # Some built-in functions don't have inspectable signatures
+            wrapper.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+
+        # Copy annotations for type-aware frameworks
+        wrapper.__annotations__ = getattr(func, "__annotations__", {})
+
+        # Pydantic V2 pass-through: Copy validator attributes if they exist
+        # This ensures PydanticAI and validate_call see through the decorator
+        for attr in (
+            "__pydantic_complete__",
+            "__pydantic_config__",
+            "__pydantic_decorators__",
+            "__pydantic_fields__",
+            "__pydantic_validator__",
+            "__get_pydantic_core_schema__",
+        ):
+            if hasattr(func, attr):
+                setattr(wrapper, attr, getattr(func, attr))
+
         return wrapper
 
     def _execute_in_sandbox(
@@ -312,7 +361,7 @@ class Airlock:
                     "Install with: pip install agent-airlock[sandbox] and set E2B_API_KEY. "
                     "SECURITY WARNING: This function was marked sandbox_required=True to "
                     "prevent accidental local execution of dangerous code."
-                )
+                ) from None
             # Fall back to local execution with warning
             logger.warning(
                 "sandbox_fallback_local",

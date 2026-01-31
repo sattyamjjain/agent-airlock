@@ -243,10 +243,12 @@ def execute_code(code: str) -> str:
 
 ### Sandbox Limitations
 
-- Cold start: ~500ms (warm pool reduces to ~100ms)
+- Cold start: ~125-180ms (E2B Firecracker MicroVM)
+- Warm pool: <200ms (pre-warmed sandboxes eliminate cold starts)
 - Max execution time: 60 seconds (configurable)
 - No persistent state between calls
 - Network access is sandboxed
+- 24-hour session cap (E2B limitation)
 
 ### E2B API Key Security
 
@@ -399,9 +401,26 @@ Before deploying to production:
 
 ---
 
+## OWASP LLM Top 10 Mapping (2025)
+
+Agent-Airlock provides mitigations for these OWASP LLM Application Security risks:
+
+| OWASP Risk | Agent-Airlock Mitigation |
+|------------|--------------------------|
+| **LLM01: Prompt Injection** | Strict type validation rejects malformed inputs; no implicit type coercion |
+| **LLM05: Improper Output Handling** | PII/secret detection + masking sanitizes all tool outputs |
+| **LLM06: Excessive Agency** | Rate limiting, time restrictions, and RBAC policies constrain agent actions |
+| **LLM09: Misinformation** | Ghost argument rejection prevents hallucinated parameters from executing |
+| **LLM10: Unbounded Consumption** | Output truncation limits token usage; rate limiting prevents API abuse |
+
+---
+
 ## References
 
-- [OWASP AI Agent Security Top 10 (2026)](https://owasp.org/www-project-ai-security/)
+- [OWASP Top 10 for LLM Applications 2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/)
+- [OWASP Top 10 for LLMs v2025 PDF](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf)
+- [LLM01: Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
 - [MCP Security Guidelines](https://modelcontextprotocol.io/specification)
 - [E2B Security Model](https://e2b.dev/docs/security)
+- [E2B Firecracker Performance](https://e2b.dev/blog/firecracker-vs-qemu) - Cold start ~125ms
 - [Pydantic Strict Mode](https://docs.pydantic.dev/latest/concepts/strict_mode/)

@@ -180,3 +180,66 @@ class TestEdgeCases:
         assert isinstance(result, dict)
         assert result["success"] is False
         assert result["metadata"]["error_count"] == 3
+
+
+class TestSignaturePreservation:
+    """Tests for function signature preservation.
+
+    Critical for framework introspection (LangChain, CrewAI, AutoGen).
+    These frameworks use inspect.signature() to generate JSON schemas for LLM tool calls.
+    """
+
+    def test_preserves_signature(self) -> None:
+        """Verify __signature__ is correctly preserved."""
+        import inspect
+
+        @Airlock()
+        def test_func(name: str, count: int = 5) -> str:
+            return f"{name}: {count}"
+
+        sig = inspect.signature(test_func)
+        params = list(sig.parameters.keys())
+
+        assert params == ["name", "count"]
+        assert sig.parameters["name"].annotation is str
+        assert sig.parameters["count"].annotation is int
+        assert sig.parameters["count"].default == 5
+
+    def test_preserves_annotations(self) -> None:
+        """Verify __annotations__ is correctly preserved."""
+
+        @Airlock()
+        def test_func(x: int, y: str) -> bool:  # noqa: ARG001
+            return True
+
+        assert test_func.__annotations__ == {"x": int, "y": str, "return": bool}
+
+    def test_preserves_docstring(self) -> None:
+        """Verify __doc__ is correctly preserved."""
+
+        @Airlock()
+        def test_func(x: int) -> int:
+            """This is the docstring."""
+            return x
+
+        assert test_func.__doc__ == "This is the docstring."
+
+    def test_preserves_name(self) -> None:
+        """Verify __name__ is correctly preserved."""
+
+        @Airlock()
+        def my_tool_function(x: int) -> int:
+            return x
+
+        assert my_tool_function.__name__ == "my_tool_function"
+
+    def test_wrapped_attribute_set(self) -> None:
+        """Verify __wrapped__ points to original function."""
+
+        def original(x: int) -> int:
+            return x
+
+        wrapped = Airlock()(original)
+
+        assert hasattr(wrapped, "__wrapped__")
+        assert wrapped.__wrapped__ is original  # type: ignore[attr-defined]

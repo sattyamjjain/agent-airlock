@@ -9,7 +9,9 @@ Provides seamless integration with FastMCP servers, enabling:
 
 from __future__ import annotations
 
+import contextlib
 import functools
+import inspect
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
@@ -144,6 +146,14 @@ class MCPAirlock:
                     pass
 
             return result  # type: ignore[return-value]
+
+        # Preserve function signature for MCP/LLM framework introspection
+        # FastMCP and other frameworks use inspect.signature() to generate
+        # JSON schemas for tool calls
+        with contextlib.suppress(ValueError, TypeError):
+            wrapper.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+
+        wrapper.__annotations__ = getattr(func, "__annotations__", {})
 
         return wrapper
 

@@ -142,7 +142,12 @@ def query_logs(query: str) -> str:
     return massive_log_query(query)
 ```
 
-**Result:** Agents that cost 70% less to run. Not a marketing number—it's what happens when you stop feeding 10MB responses to a tokenizer.
+**Result:** Token costs drop dramatically when you:
+- Truncate 10MB logs to 5KB before tokenization
+- Prevent infinite retry loops from validation errors
+- Block runaway agent chains with rate limiting
+
+*Math: 10MB = ~2.5M tokens at $0.01/1K = $25 per response. Truncated to 5KB = ~1.25K tokens = $0.01. That's 99.96% reduction per bloated response.*
 
 ---
 
@@ -231,11 +236,27 @@ export E2B_API_KEY="your-key-here"
 
 ---
 
+## OWASP LLM Top 10 Compliance (2025)
+
+Agent-Airlock directly mitigates the top security risks identified by OWASP:
+
+| OWASP Risk | Mitigation |
+|------------|------------|
+| **[LLM01: Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)** | Strict type validation prevents injected payloads from exploiting type coercion |
+| **[LLM05: Improper Output Handling](https://owasp.org/www-project-top-10-for-large-language-model-applications/)** | PII/secret masking sanitizes outputs before they reach the LLM |
+| **[LLM06: Excessive Agency](https://owasp.org/www-project-top-10-for-large-language-model-applications/)** | Rate limiting + time restrictions + RBAC prevent runaway agent actions |
+| **[LLM09: Misinformation](https://owasp.org/www-project-top-10-for-large-language-model-applications/)** | Ghost argument rejection prevents hallucinated parameters from executing |
+
+> Reference: [OWASP Top 10 for LLMs v2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf)
+
+---
+
 ## The Numbers
 
-- **182 tests** passing
+- **187 tests** passing
 - **84% coverage**
 - **<50ms** validation overhead
+- **~125ms** sandbox cold start ([E2B Firecracker](https://e2b.dev/blog/firecracker-vs-qemu))
 - **<200ms** sandbox execution (warm pool)
 - **0** external dependencies for core functionality
 
@@ -244,6 +265,7 @@ export E2B_API_KEY="your-key-here"
 ## Documentation
 
 - **[Examples](./examples/)** — Copy-paste patterns for common use cases
+- **[Compatibility Guide](./docs/COMPATIBILITY.md)** — LangChain, CrewAI, AutoGen integration
 - **[Security Guide](./docs/SECURITY.md)** — Production deployment checklist
 - **[API Reference](#api-reference)** — Every function, every parameter
 
