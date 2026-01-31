@@ -121,6 +121,8 @@ module = [
     "fastmcp.*",
     "mcp",
     "mcp.*",
+    "tomli",
+    "tomli.*",
 ]
 ignore_missing_imports = true
 
