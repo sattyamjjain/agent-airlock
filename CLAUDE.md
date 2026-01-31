@@ -49,7 +49,7 @@ src/agent_airlock/
 ├── validator.py      # Ghost arg detection + Pydantic validation
 ├── self_heal.py      # LLM-friendly error responses
 ├── config.py         # Configuration (env vars, TOML, constructor)
-├── sandbox.py        # E2B integration (Phase 2)
+├── sandbox.py        # E2B sandbox pool + execution (implemented)
 ├── policy.py         # RBAC policy engine (Phase 3)
 ├── sanitizer.py      # PII/secret masking (Phase 4)
 └── logging.py        # Audit logging (Phase 4)
@@ -91,16 +91,17 @@ src/agent_airlock/
 <!-- MANUAL -->
 ## Project Notes
 
-### Phase 1 (Current): Core Validator
+### Phase 1: Core Validator
 - [x] Ghost argument stripping
 - [x] Pydantic strict validation
 - [x] Self-healing responses
 - [x] Configuration system
 
-### Phase 2: E2B Sandbox
-- [ ] Warm sandbox pool
-- [ ] Function serialization
-- [ ] File mounting
+### Phase 2 (Current): E2B Sandbox
+- [x] Warm sandbox pool (SandboxPool class)
+- [x] Function serialization (cloudpickle)
+- [x] E2B integration (execute_in_sandbox)
+- [ ] File mounting (deferred to Phase 5)
 
 ### Phase 3: Policy Engine
 - [ ] RBAC for agents

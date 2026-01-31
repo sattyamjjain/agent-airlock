@@ -152,13 +152,15 @@ def format_validation_error(error: ValidationError) -> dict[str, Any]:
         # Generate fix hint based on error type
         fix_hint = _generate_fix_hint(error_type, location, input_value)
 
-        formatted_errors.append({
-            "field": location,
-            "type": error_type,
-            "message": message,
-            "input": repr(input_value) if input_value is not None else None,
-            "fix_hint": fix_hint,
-        })
+        formatted_errors.append(
+            {
+                "field": location,
+                "type": error_type,
+                "message": message,
+                "input": repr(input_value) if input_value is not None else None,
+                "fix_hint": fix_hint,
+            }
+        )
 
     return {
         "error_count": len(errors),

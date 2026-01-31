@@ -120,10 +120,7 @@ def handle_validation_error(
     fix_hints = [err["fix_hint"] for err in formatted["errors"]]
 
     # Create LLM-friendly error message
-    error_summary = "; ".join(
-        f"{err['field']}: {err['message']}"
-        for err in formatted["errors"]
-    )
+    error_summary = "; ".join(f"{err['field']}: {err['message']}" for err in formatted["errors"])
 
     return AirlockResponse.blocked_response(
         reason=BlockReason.VALIDATION_ERROR,

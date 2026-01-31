@@ -80,12 +80,17 @@ class Airlock:
     def __call__(self, func: Callable[P, R]) -> Callable[P, R | dict[str, Any]]: ...
 
     @overload
-    def __call__(self, func: None = None) -> Callable[[Callable[P, R]], Callable[P, R | dict[str, Any]]]: ...
+    def __call__(
+        self, func: None = None
+    ) -> Callable[[Callable[P, R]], Callable[P, R | dict[str, Any]]]: ...
 
     def __call__(
         self,
         func: Callable[P, R] | None = None,
-    ) -> Callable[P, R | dict[str, Any]] | Callable[[Callable[P, R]], Callable[P, R | dict[str, Any]]]:
+    ) -> (
+        Callable[P, R | dict[str, Any]]
+        | Callable[[Callable[P, R]], Callable[P, R | dict[str, Any]]]
+    ):
         """Apply the Airlock decorator to a function.
 
         Supports both @Airlock() and @Airlock syntaxes.
@@ -107,7 +112,12 @@ class Airlock:
             start_time = time.time()
             func_name = func.__name__
 
-            logger.debug("airlock_intercept", function=func_name, args_count=len(args), kwargs_keys=list(kwargs.keys()))
+            logger.debug(
+                "airlock_intercept",
+                function=func_name,
+                args_count=len(args),
+                kwargs_keys=list(kwargs.keys()),
+            )
 
             # Step 1: Strip or reject ghost arguments
             try:
@@ -177,18 +187,46 @@ class Airlock:
     ) -> R:
         """Execute function in E2B sandbox.
 
-        This is a placeholder for Phase 2 implementation.
-        Currently falls back to local execution with a warning.
+        Serializes the function and arguments, executes in an isolated
+        E2B Firecracker MicroVM, and returns the result.
+
+        Falls back to local execution if E2B is not available.
         """
-        logger.warning(
-            "sandbox_not_implemented",
-            function=func.__name__,
-            message="E2B sandbox execution not yet implemented. Running locally.",
-        )
-        # Phase 2 will implement actual E2B execution
-        # For now, run locally (still with validation)
-        validated_func = create_strict_validator(func)
-        return validated_func(*args, **kwargs)
+        try:
+            from .sandbox import execute_in_sandbox
+
+            result = execute_in_sandbox(
+                func,
+                args=args,
+                kwargs=dict(kwargs),
+                config=self.config,
+            )
+
+            if result.success:
+                logger.info(
+                    "sandbox_execution_success",
+                    function=func.__name__,
+                    sandbox_id=result.sandbox_id,
+                    execution_time_ms=result.execution_time_ms,
+                )
+                # Result is deserialized from sandbox - type is preserved by cloudpickle
+                return result.result  # type: ignore[no-any-return]
+            else:
+                # Sandbox execution failed - raise as exception
+                raise SandboxExecutionError(
+                    f"Sandbox execution failed: {result.error}",
+                    details=result.to_dict(),
+                )
+
+        except ImportError:
+            # E2B not installed, fall back to local execution with warning
+            logger.warning(
+                "sandbox_fallback_local",
+                function=func.__name__,
+                message="E2B not available. Install with: pip install agent-airlock[sandbox]",
+            )
+            validated_func = create_strict_validator(func)
+            return validated_func(*args, **kwargs)
 
     def _log_blocked(
         self,
@@ -205,6 +243,15 @@ class Airlock:
             error=response.error,
             elapsed_ms=round(elapsed * 1000, 2),
         )
+
+
+class SandboxExecutionError(Exception):
+    """Raised when sandbox execution fails."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
+        self.message = message
+        self.details = details or {}
+        super().__init__(message)
 
 
 # Convenience alias for common use case

@@ -111,7 +111,11 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = [
+    "e2b",
     "e2b.*",
+    "e2b_code_interpreter",
+    "e2b_code_interpreter.*",
+    "cloudpickle",
     "cloudpickle.*",
 ]
 ignore_missing_imports = true

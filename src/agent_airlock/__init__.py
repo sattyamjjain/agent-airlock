@@ -17,7 +17,7 @@ Example:
 """
 
 from .config import DEFAULT_CONFIG, AirlockConfig
-from .core import Airlock, airlock
+from .core import Airlock, SandboxExecutionError, airlock
 from .self_heal import AirlockResponse, BlockReason
 from .validator import GhostArgumentError
 
@@ -35,6 +35,25 @@ __all__ = [
     "BlockReason",
     # Exceptions
     "GhostArgumentError",
+    "SandboxExecutionError",
     # Version
     "__version__",
 ]
+
+
+def get_sandbox_pool(config: AirlockConfig | None = None) -> "SandboxPool":
+    """Get the global sandbox pool for E2B execution.
+
+    Requires: pip install agent-airlock[sandbox]
+    """
+    from .sandbox import SandboxPool  # noqa: F401
+    from .sandbox import get_sandbox_pool as _get_pool
+
+    return _get_pool(config)
+
+
+# Import SandboxPool type for annotation only
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .sandbox import SandboxPool
