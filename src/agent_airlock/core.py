@@ -37,6 +37,22 @@ logger = structlog.get_logger("agent-airlock")
 P = ParamSpec("P")
 R = TypeVar("R")
 
+# Parameter names that should not appear in debug logs
+SENSITIVE_PARAM_NAMES = frozenset({
+    "password", "passwd", "pwd", "secret", "token", "key", "api_key",
+    "apikey", "auth", "authorization", "credential", "credentials",
+    "private_key", "privatekey", "access_token", "refresh_token",
+    "session", "cookie", "ssn", "credit_card", "card_number",
+})
+
+
+def _filter_sensitive_keys(keys: list[str]) -> list[str]:
+    """Filter out sensitive parameter names from a list of keys.
+
+    SECURITY: Prevents leaking sensitive parameter names to logs.
+    """
+    return [k for k in keys if k.lower() not in SENSITIVE_PARAM_NAMES]
+
 
 class Airlock:
     """Decorator that secures function calls with validation, sandboxing, and policies.
@@ -61,6 +77,7 @@ class Airlock:
         self,
         *,
         sandbox: bool = False,
+        sandbox_required: bool = False,
         config: AirlockConfig | None = None,
         policy: SecurityPolicy | None = None,
         return_dict: bool = False,
@@ -69,6 +86,10 @@ class Airlock:
 
         Args:
             sandbox: If True, execute the function in an E2B sandbox.
+            sandbox_required: If True and sandbox=True, raise an error instead of
+                            falling back to local execution when E2B is unavailable.
+                            SECURITY: Always set this to True for dangerous operations
+                            like exec() to prevent accidental local execution.
             config: Configuration options. Uses DEFAULT_CONFIG if not provided.
             policy: Security policy to enforce (RBAC, rate limits, time restrictions).
             return_dict: If True, always return AirlockResponse as dict.
@@ -76,6 +97,7 @@ class Airlock:
                         and AirlockResponse dict on error.
         """
         self.sandbox = sandbox
+        self.sandbox_required = sandbox_required
         self.config = config or DEFAULT_CONFIG
         self.policy = policy
         self.return_dict = return_dict
@@ -120,7 +142,7 @@ class Airlock:
                 "airlock_intercept",
                 function=func_name,
                 args_count=len(args),
-                kwargs_keys=list(kwargs.keys()),
+                kwargs_keys=_filter_sensitive_keys(list(kwargs.keys())),
             )
 
             # Step 1: Strip or reject ghost arguments
@@ -133,10 +155,13 @@ class Airlock:
                 kwargs = cleaned_kwargs  # type: ignore[assignment]
 
                 if stripped:
+                    # Filter sensitive names from log output
+                    filtered_stripped = _filter_sensitive_keys(sorted(stripped))
                     logger.info(
                         "ghost_arguments_handled",
                         function=func_name,
-                        stripped=sorted(stripped),
+                        stripped=filtered_stripped,
+                        stripped_count=len(stripped),
                         mode="rejected" if self.config.strict_mode else "stripped",
                     )
 
@@ -279,7 +304,16 @@ class Airlock:
                 )
 
         except ImportError:
-            # E2B not installed, fall back to local execution with warning
+            # E2B not installed
+            if self.sandbox_required:
+                # SECURITY: Do not fall back to local execution for dangerous operations
+                raise SandboxUnavailableError(
+                    f"Sandbox required for '{func.__name__}' but E2B is not available. "
+                    "Install with: pip install agent-airlock[sandbox] and set E2B_API_KEY. "
+                    "SECURITY WARNING: This function was marked sandbox_required=True to "
+                    "prevent accidental local execution of dangerous code."
+                )
+            # Fall back to local execution with warning
             logger.warning(
                 "sandbox_fallback_local",
                 function=func.__name__,
@@ -314,11 +348,23 @@ class SandboxExecutionError(Exception):
         super().__init__(message)
 
 
+class SandboxUnavailableError(Exception):
+    """Raised when sandbox is required but E2B is not available.
+
+    This error is raised when sandbox_required=True and E2B dependencies
+    are not installed or configured. This prevents dangerous operations
+    like exec() from accidentally running on the local machine.
+    """
+
+    pass
+
+
 # Convenience alias for common use case
 def airlock(
     func: Callable[P, R] | None = None,
     *,
     sandbox: bool = False,
+    sandbox_required: bool = False,
     config: AirlockConfig | None = None,
     policy: SecurityPolicy | None = None,
     return_dict: bool = False,
@@ -330,13 +376,15 @@ def airlock(
         def my_tool(x: int) -> int:
             return x * 2
 
-        @airlock(sandbox=True)
+        @airlock(sandbox=True, sandbox_required=True)
         def dangerous_tool(code: str) -> str:
+            # SECURITY: sandbox_required=True ensures this never runs locally
             exec(code)
             return "ok"
     """
     decorator = Airlock(
         sandbox=sandbox,
+        sandbox_required=sandbox_required,
         config=config,
         policy=policy,
         return_dict=return_dict,

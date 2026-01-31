@@ -2,6 +2,17 @@
 
 Provides secure, isolated execution of functions in E2B Firecracker MicroVMs.
 Includes warm pool management for low-latency execution (<200ms target).
+
+SECURITY NOTES:
+    This module uses cloudpickle for function serialization. Pickle deserialization
+    can execute arbitrary code, but this is mitigated by:
+
+    1. Deserialization occurs INSIDE the E2B sandbox (isolated MicroVM)
+    2. The sandbox has no access to the host filesystem or network
+    3. Even if malicious code executes, it's contained in the sandbox
+
+    For high-security environments, consider adding HMAC payload signing.
+    See docs/SECURITY.md for detailed security guidance.
 """
 
 from __future__ import annotations
@@ -147,10 +158,14 @@ import cloudpickle
 import json
 import traceback
 
+# SECURITY: This code runs INSIDE the E2B sandbox (isolated MicroVM).
+# Pickle deserialization is safe here because even if malicious code
+# executes, it's contained within the sandbox with no host access.
+
 # Decode and unpickle the function call
 payload_b64 = "{serialized_payload}"
 payload_bytes = base64.b64decode(payload_b64)
-payload = cloudpickle.loads(payload_bytes)
+payload = cloudpickle.loads(payload_bytes)  # Safe: runs in sandbox
 
 func = payload["func"]
 args = payload["args"]

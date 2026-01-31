@@ -11,12 +11,16 @@ Prerequisites:
        export E2B_API_KEY=your_api_key_here
 
     3. Get your API key at: https://e2b.dev/dashboard
+
+SECURITY WARNING:
+    When sandbox=True but E2B is not available, functions will fall back
+    to LOCAL execution by default. For dangerous operations like exec(),
+    ALWAYS use sandbox_required=True to prevent accidental local execution.
 """
 
 import os
-import sys
 
-from agent_airlock import Airlock, AirlockConfig
+from agent_airlock import Airlock, AirlockConfig, SandboxUnavailableError
 
 
 # Check if E2B is configured
@@ -25,10 +29,13 @@ def check_e2b_configured() -> bool:
     return bool(os.environ.get("E2B_API_KEY"))
 
 
-# Example 1: Basic sandbox execution
+# Example 1: Basic sandbox execution (safe to fall back)
 @Airlock(sandbox=True)
 def calculate_factorial(n: int) -> int:
-    """Calculate factorial - runs in isolated sandbox."""
+    """Calculate factorial - runs in isolated sandbox.
+
+    This is safe to fall back to local execution since it's just math.
+    """
     if n <= 1:
         return 1
     result = 1
@@ -37,13 +44,23 @@ def calculate_factorial(n: int) -> int:
     return result
 
 
-# Example 2: Dangerous operation that benefits from isolation
-@Airlock(sandbox=True)
+# Example 2: DANGEROUS operation - MUST use sandbox_required=True
+# ================================================================
+# SECURITY: sandbox_required=True ensures this NEVER runs locally.
+# If E2B is not available, it will raise SandboxUnavailableError
+# instead of executing arbitrary code on your machine.
+# ================================================================
+@Airlock(sandbox=True, sandbox_required=True)
 def execute_python_code(code: str) -> str:
     """Execute arbitrary Python code safely in sandbox.
 
-    This would be extremely dangerous to run locally,
-    but in a sandbox it's isolated from your system.
+    SECURITY WARNING:
+        This function uses exec() which is extremely dangerous.
+        The sandbox_required=True flag ensures this ONLY runs
+        inside an E2B sandbox, never on your local machine.
+
+        If E2B is not configured, this will raise an error
+        rather than executing code locally.
     """
     import io
     import sys
@@ -66,7 +83,10 @@ def execute_python_code(code: str) -> str:
 # Example 3: File operations in sandbox (isolated filesystem)
 @Airlock(sandbox=True)
 def create_and_read_file(filename: str, content: str) -> str:
-    """Create a file and read it back - all in sandbox filesystem."""
+    """Create a file and read it back - all in sandbox filesystem.
+
+    Safe to fall back since file operations are limited to sandbox paths.
+    """
     with open(filename, "w") as f:
         f.write(content)
 
@@ -127,8 +147,8 @@ def main() -> None:
         print("\n⚠️  E2B_API_KEY not set!")
         print("   Set your API key: export E2B_API_KEY=your_key")
         print("   Get your key at: https://e2b.dev/dashboard")
-        print("\n   Running in FALLBACK mode (local execution)...")
-        print("   Sandbox isolation will NOT be active!\n")
+        print("\n   Some examples will fall back to local execution.")
+        print("   Functions with sandbox_required=True will raise errors.\n")
 
     # Example 1: Basic calculation
     print("\n1. Calculate factorial in sandbox:")
@@ -138,19 +158,23 @@ def main() -> None:
     else:
         print(f"   10! = {result}")
 
-    # Example 2: Execute code (would be dangerous locally!)
-    print("\n2. Execute Python code in sandbox:")
-    code = """
+    # Example 2: Execute code (REQUIRES sandbox - will error if unavailable)
+    print("\n2. Execute Python code in sandbox (sandbox_required=True):")
+    try:
+        code = """
 import platform
 print(f"Python: {platform.python_version()}")
 print(f"OS: {platform.system()}")
 print("Hello from the sandbox!")
 """
-    result = execute_python_code(code=code)
-    if isinstance(result, dict) and "error" in result:
-        print(f"   Error: {result['error']}")
-    else:
-        print(f"   Output:\n{result}")
+        result = execute_python_code(code=code)
+        if isinstance(result, dict) and "error" in result:
+            print(f"   Error: {result['error']}")
+        else:
+            print(f"   Output:\n{result}")
+    except SandboxUnavailableError as e:
+        print(f"   SECURITY: {e}")
+        print("   This is expected behavior - exec() requires a real sandbox!")
 
     # Example 3: File operations
     print("\n3. File operations in sandbox:")

@@ -36,11 +36,12 @@ class TestAirlockConfig:
         assert config.sandbox_timeout == 120
 
     def test_e2b_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("E2B_API_KEY", "test-api-key-123")
+        # SECURITY: Use obviously fake test keys to prevent accidental use
+        monkeypatch.setenv("E2B_API_KEY", "FAKE-KEY-DO-NOT-USE-12345")
 
         config = AirlockConfig()
 
-        assert config.e2b_api_key == "test-api-key-123"
+        assert config.e2b_api_key == "FAKE-KEY-DO-NOT-USE-12345"
 
     def test_e2b_api_key_constructor_priority(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("E2B_API_KEY", "env-key")

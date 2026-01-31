@@ -215,13 +215,31 @@ Use `sandbox=True` for tools that:
 - Make network requests to arbitrary URLs
 - Perform filesystem operations
 
+### CRITICAL: Use sandbox_required=True for Dangerous Operations
+
+**SECURITY WARNING**: When `sandbox=True` but E2B is unavailable, the default
+behavior is to fall back to local execution. This can be dangerous for tools
+that execute arbitrary code.
+
 ```python
+# DANGEROUS: Falls back to local execution if E2B unavailable
 @Airlock(sandbox=True)
 def execute_code(code: str) -> str:
-    """Runs in isolated E2B MicroVM."""
-    exec(code)
+    exec(code)  # May run locally!
+    return "executed"
+
+# SECURE: Raises error instead of local fallback
+@Airlock(sandbox=True, sandbox_required=True)
+def execute_code(code: str) -> str:
+    """Runs in isolated E2B MicroVM. Never runs locally."""
+    exec(code)  # Only runs in sandbox
     return "executed"
 ```
+
+**Always use `sandbox_required=True` for**:
+- Code execution (exec(), eval())
+- Shell command execution
+- Any operation that could compromise the host system
 
 ### Sandbox Limitations
 
@@ -241,6 +259,35 @@ export E2B_API_KEY="your-key-here"
 [sandbox]
 e2b_api_key = "your-key-here"  # Ensure file permissions are restricted
 ```
+
+### Pickle Serialization Security
+
+Agent-Airlock uses `cloudpickle` to serialize functions and arguments for
+sandbox execution. This is inherently risky because pickle can execute
+arbitrary code during deserialization.
+
+**Why this is acceptable**:
+1. Deserialization occurs INSIDE the E2B sandbox (isolated MicroVM)
+2. Even if malicious code executes, it's contained in the sandbox
+3. The sandbox has no access to your host filesystem or network
+
+**For high-security environments**, consider:
+- Adding HMAC signing to verify payload integrity before sending to sandbox
+- Implementing a restricted unpickler that validates types
+- Using JSON serialization for simple argument types
+
+**Risk assessment**:
+- If an attacker can modify the pickle payload in transit → RCE in sandbox only
+- Sandbox isolation prevents host compromise
+- This is defense-in-depth: validation + isolation + sanitization
+
+### Rate Limit State Persistence
+
+**Note**: Rate limit state is stored in memory and resets on process restart.
+In distributed deployments, consider:
+- Using external storage (Redis) for rate limit state
+- Accepting per-instance rate limiting as a temporary measure
+- Documenting this limitation in your deployment guide
 
 ---
 
@@ -343,9 +390,11 @@ Before deploying to production:
 - [ ] Enable PII and secret masking
 - [ ] Set reasonable `max_output_chars` limit
 - [ ] Use `sandbox=True` for code execution tools
+- [ ] **Use `sandbox_required=True` for exec()/eval() tools**
 - [ ] Store E2B API key in environment variable
 - [ ] Configure audit logging
 - [ ] Review and test rate limits
+- [ ] **Validate file paths to prevent directory traversal**
 - [ ] Test with adversarial inputs
 
 ---

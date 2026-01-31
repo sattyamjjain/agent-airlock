@@ -7,6 +7,7 @@ It shows:
 3. The secure_tool convenience decorator
 4. Policy enforcement for different tool types
 5. Sandbox execution for dangerous operations
+6. Secure path validation patterns
 
 Requirements:
     pip install agent-airlock[mcp]
@@ -25,6 +26,11 @@ To test with Claude Desktop, add to your claude_desktop_config.json:
             }
         }
     }
+
+SECURITY NOTES:
+    - sandbox_required=True is used for exec() to prevent local execution fallback
+    - Path validation prevents directory traversal attacks
+    - Always validate and sanitize file paths before use
 """
 
 from pathlib import Path
@@ -99,17 +105,49 @@ def list_files(directory: str = ".") -> list[str]:
 # Apply a read-only policy to prevent modifications
 
 
+# Define allowed directories for file operations (security best practice)
+ALLOWED_DIRECTORIES = [Path.cwd(), Path.home() / "Documents"]
+
+
+def validate_path(path: str, allowed_dirs: list[Path]) -> tuple[bool, Path | str]:
+    """Validate a path is within allowed directories.
+
+    SECURITY: Prevents path traversal attacks like '../../etc/passwd'
+
+    Returns:
+        Tuple of (is_valid, resolved_path_or_error_message)
+    """
+    try:
+        resolved = Path(path).resolve()
+        for allowed in allowed_dirs:
+            try:
+                resolved.relative_to(allowed.resolve())
+                return True, resolved
+            except ValueError:
+                continue
+        return False, f"Access denied: Path must be within {[str(d) for d in allowed_dirs]}"
+    except Exception as e:
+        return False, f"Invalid path: {e}"
+
+
 @mcp.tool
 @Airlock(config=config, policy=READ_ONLY_POLICY)
 def read_file(path: str) -> str:
     """Read contents of a file.
 
-    This tool is protected by READ_ONLY_POLICY.
+    This tool is protected by:
+    - READ_ONLY_POLICY (prevents write operations)
+    - Path validation (prevents directory traversal)
 
     Args:
         path: Path to the file to read
     """
-    file_path = Path(path)
+    # SECURITY: Validate path to prevent directory traversal
+    is_valid, result = validate_path(path, ALLOWED_DIRECTORIES)
+    if not is_valid:
+        return f"Error: {result}"
+
+    file_path = result  # Now it's a validated Path object
     if not file_path.exists():
         return f"Error: File '{path}' does not exist"
     if not file_path.is_file():
@@ -181,18 +219,25 @@ def get_file_info(path: str) -> dict[str, str]:
 # Note: Requires E2B API key and pip install agent-airlock[sandbox]
 
 
+# =============================================================================
+# SECURITY: sandbox_required=True ensures exec() NEVER runs locally
+# =============================================================================
 @mcp.tool
-@Airlock(config=config, sandbox=True)
+@Airlock(config=config, sandbox=True, sandbox_required=True)
 def execute_python(code: str) -> str:
     """Execute Python code in a secure sandbox.
 
+    SECURITY:
+        - sandbox_required=True ensures this ONLY runs in E2B sandbox
+        - If E2B is not available, raises SandboxUnavailableError
+        - NEVER falls back to local execution (unlike sandbox=True alone)
+
     The code runs in an isolated E2B Firecracker MicroVM.
-    Falls back to local execution if E2B is not available.
 
     Args:
         code: Python code to execute
     """
-    # This code will run in the sandbox
+    # This code will ONLY run in the sandbox, never locally
     import io
     import sys
 
@@ -200,7 +245,7 @@ def execute_python(code: str) -> str:
     sys.stdout = io.StringIO()
 
     try:
-        exec(code)  # noqa: S102
+        exec(code)  # noqa: S102 - Safe because sandbox_required=True
         output = sys.stdout.getvalue()
     except Exception as e:
         output = f"Error: {e}"
@@ -226,13 +271,20 @@ BUSINESS_HOURS_WRITE_POLICY = SecurityPolicy(
 def write_file(path: str, content: str) -> str:
     """Write content to a file.
 
-    Only allowed during business hours (9 AM - 5 PM).
+    Protected by:
+    - Business hours restriction (9 AM - 5 PM)
+    - Path validation (prevents directory traversal)
 
     Args:
         path: Path to the file
         content: Content to write
     """
-    file_path = Path(path)
+    # SECURITY: Validate path to prevent directory traversal
+    is_valid, result = validate_path(path, ALLOWED_DIRECTORIES)
+    if not is_valid:
+        return f"Error: {result}"
+
+    file_path = result
     file_path.write_text(content)
     return f"Successfully wrote {len(content)} characters to {path}"
 

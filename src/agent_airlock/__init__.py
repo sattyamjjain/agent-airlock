@@ -19,7 +19,7 @@ Example:
 from typing import TYPE_CHECKING
 
 from .config import DEFAULT_CONFIG, AirlockConfig
-from .core import Airlock, SandboxExecutionError, airlock
+from .core import Airlock, SandboxExecutionError, SandboxUnavailableError, airlock
 from .policy import (
     BUSINESS_HOURS_POLICY,
     PERMISSIVE_POLICY,
@@ -79,6 +79,7 @@ __all__ = [
     # Exceptions
     "GhostArgumentError",
     "SandboxExecutionError",
+    "SandboxUnavailableError",
     # Version
     "__version__",
 ]

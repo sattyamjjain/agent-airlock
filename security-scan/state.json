@@ -1,0 +1,67 @@
+{
+  "scan_date": "2026-01-31",
+  "project": "agent-airlock",
+  "total_findings": 8,
+  "fixed": 0,
+  "findings": [
+    {
+      "id": 1,
+      "severity": "critical",
+      "title": "Unsafe Pickle Deserialization in Sandbox",
+      "file": "src/agent_airlock/sandbox.py",
+      "lines": "150-153",
+      "status": "pending"
+    },
+    {
+      "id": 2,
+      "severity": "high",
+      "title": "Unsafe exec() Fallback Without Warning",
+      "files": ["examples/e2b_sandbox.py", "examples/fastmcp_integration.py"],
+      "status": "pending"
+    },
+    {
+      "id": 3,
+      "severity": "medium",
+      "title": "Path Traversal in Example File Operations",
+      "files": ["examples/basic_usage.py", "examples/e2b_sandbox.py", "examples/fastmcp_integration.py"],
+      "status": "pending"
+    },
+    {
+      "id": 4,
+      "severity": "medium",
+      "title": "Sensitive Parameter Names in Logs",
+      "file": "src/agent_airlock/core.py",
+      "lines": "119-124",
+      "status": "pending"
+    },
+    {
+      "id": 5,
+      "severity": "medium",
+      "title": "Missing TOML Schema Validation",
+      "file": "src/agent_airlock/config.py",
+      "lines": "66-88",
+      "status": "pending"
+    },
+    {
+      "id": 6,
+      "severity": "low",
+      "title": "In-Memory Rate Limit State",
+      "file": "src/agent_airlock/policy.py",
+      "status": "pending"
+    },
+    {
+      "id": 7,
+      "severity": "low",
+      "title": "Example Test Credentials",
+      "file": "tests/test_config.py",
+      "status": "pending"
+    },
+    {
+      "id": 8,
+      "severity": "low",
+      "title": "Missing Input Edge Case Tests",
+      "file": "src/agent_airlock/policy.py",
+      "status": "pending"
+    }
+  ]
+}

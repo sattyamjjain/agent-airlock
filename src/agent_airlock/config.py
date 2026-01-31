@@ -14,10 +14,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import structlog
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
+
+logger = structlog.get_logger("agent-airlock.config")
 
 
 @dataclass
@@ -105,6 +109,30 @@ class AirlockConfig:
     def _parse_config(data: dict[str, Any]) -> dict[str, Any]:
         """Parse and validate config data from TOML."""
         result: dict[str, Any] = {}
+
+        # Known configuration keys
+        known_keys = {
+            "strict_mode",
+            "mask_pii",
+            "mask_secrets",
+            "sanitize_output",
+            "enable_audit_log",
+            "max_output_tokens",
+            "max_output_chars",
+            "sandbox_timeout",
+            "sandbox_pool_size",
+            "e2b_api_key",
+            "audit_log_path",
+        }
+
+        # SECURITY: Warn about unknown keys (likely typos)
+        unknown_keys = set(data.keys()) - known_keys
+        if unknown_keys:
+            logger.warning(
+                "unknown_config_keys",
+                unknown_keys=sorted(unknown_keys),
+                hint="These keys will be ignored. Check for typos.",
+            )
 
         # Boolean fields
         for key in (
