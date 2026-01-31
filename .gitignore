@@ -59,6 +59,9 @@ dmypy.json
 *.log
 airlock_audit.json
 
+# Generated files
+sbom.json
+
 # OS
 .DS_Store
 Thumbs.db

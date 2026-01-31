@@ -18,7 +18,16 @@ Example:
 
 from typing import TYPE_CHECKING
 
+from .audit import AuditLogger, AuditRecord, get_audit_logger
 from .config import DEFAULT_CONFIG, AirlockConfig
+from .context import (
+    AirlockContext,
+    ContextExtractor,
+    create_context_from_args,
+    get_current_context,
+    reset_context,
+    set_current_context,
+)
 from .core import Airlock, SandboxExecutionError, SandboxUnavailableError, airlock
 from .policy import (
     BUSINESS_HOURS_POLICY,
@@ -37,14 +46,31 @@ from .sanitizer import (
     SanitizationConfig,
     SanitizationResult,
     SensitiveDataType,
+    WorkspacePIIConfig,
     detect_sensitive_data,
     mask_sensitive_data,
     sanitize_output,
+    sanitize_with_workspace_config,
 )
 from .self_heal import AirlockResponse, BlockReason
+from .streaming import (
+    StreamingAirlock,
+    StreamingState,
+    create_streaming_wrapper,
+    is_async_generator_function,
+    is_generator_function,
+)
+from .conversation import (
+    ConversationConstraints,
+    ConversationState,
+    ConversationTracker,
+    ToolCall,
+    get_conversation_tracker,
+    reset_conversation_tracker,
+)
 from .validator import GhostArgumentError
 
-__version__ = "0.1.2"
+__version__ = "0.1.5"
 
 __all__ = [
     # Core
@@ -67,12 +93,14 @@ __all__ = [
     "BUSINESS_HOURS_POLICY",
     # Sanitization
     "sanitize_output",
+    "sanitize_with_workspace_config",
     "detect_sensitive_data",
     "mask_sensitive_data",
     "SanitizationResult",
     "SanitizationConfig",
     "SensitiveDataType",
     "MaskingStrategy",
+    "WorkspacePIIConfig",
     # Response types
     "AirlockResponse",
     "BlockReason",
@@ -80,6 +108,30 @@ __all__ = [
     "GhostArgumentError",
     "SandboxExecutionError",
     "SandboxUnavailableError",
+    # Audit
+    "AuditLogger",
+    "AuditRecord",
+    "get_audit_logger",
+    # Context
+    "AirlockContext",
+    "ContextExtractor",
+    "get_current_context",
+    "set_current_context",
+    "reset_context",
+    "create_context_from_args",
+    # Streaming
+    "StreamingAirlock",
+    "StreamingState",
+    "create_streaming_wrapper",
+    "is_generator_function",
+    "is_async_generator_function",
+    # Conversation
+    "ConversationTracker",
+    "ConversationState",
+    "ConversationConstraints",
+    "ToolCall",
+    "get_conversation_tracker",
+    "reset_conversation_tracker",
     # Version
     "__version__",
 ]

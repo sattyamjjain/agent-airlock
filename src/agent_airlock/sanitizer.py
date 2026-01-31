@@ -29,7 +29,7 @@ class SensitiveDataType(str, Enum):
 
     # Secrets
     API_KEY = "api_key"
-    PASSWORD = "password"
+    PASSWORD = "password"  # nosec B105 - enum value name, not actual password
     AWS_KEY = "aws_key"
     PRIVATE_KEY = "private_key"
     JWT = "jwt"
@@ -206,7 +206,7 @@ def detect_sensitive_data(
 
     for data_type in types:
         pattern = PATTERNS.get(data_type)
-        if not pattern:
+        if not pattern:  # pragma: no cover - all types have patterns
             continue
 
         for match in pattern.finditer(content):
@@ -427,3 +427,281 @@ class SanitizationConfig:
     )
     pii_types: list[SensitiveDataType] | None = None
     secret_types: list[SensitiveDataType] | None = None
+
+
+@dataclass
+class WorkspacePIIConfig:
+    """Workspace-specific PII handling configuration.
+
+    Allows different workspaces/tenants to have customized PII masking rules.
+
+    Attributes:
+        workspace_id: Identifier for this workspace configuration.
+        mask_email_domains: Only mask emails from these domains. Empty list = mask all.
+        allow_email_domains: Never mask emails from these domains.
+        mask_phone_prefixes: Only mask phones with these prefixes. Empty list = mask all.
+        allow_phone_prefixes: Never mask phones with these prefixes.
+        custom_patterns: Workspace-specific regex patterns to detect and mask.
+            Keys are pattern names, values are regex patterns.
+        custom_strategies: Masking strategies for custom patterns.
+        disabled_types: Sensitive data types to NOT mask for this workspace.
+        enabled_types: If set, ONLY mask these types (overrides disabled_types).
+
+    Example:
+        config = WorkspacePIIConfig(
+            workspace_id="enterprise-123",
+            mask_email_domains=["competitor.com"],  # Only mask competitor emails
+            allow_email_domains=["company.com"],  # Never mask internal emails
+            custom_patterns={
+                "employee_id": r"EMP-\\d{6}",  # Custom employee ID format
+            },
+        )
+    """
+
+    workspace_id: str
+    mask_email_domains: list[str] = field(default_factory=list)
+    allow_email_domains: list[str] = field(default_factory=list)
+    mask_phone_prefixes: list[str] = field(default_factory=list)
+    allow_phone_prefixes: list[str] = field(default_factory=list)
+    custom_patterns: dict[str, str] = field(default_factory=dict)
+    custom_strategies: dict[str, MaskingStrategy] = field(default_factory=dict)
+    disabled_types: list[SensitiveDataType] = field(default_factory=list)
+    enabled_types: list[SensitiveDataType] | None = None
+
+    def should_mask_email(self, email: str) -> bool:
+        """Determine if an email should be masked based on workspace rules.
+
+        Args:
+            email: The email address to check.
+
+        Returns:
+            True if the email should be masked, False otherwise.
+        """
+        domain = email.split("@")[-1].lower() if "@" in email else ""
+
+        # Never mask allowed domains
+        if any(domain.endswith(allowed.lower()) for allowed in self.allow_email_domains):
+            return False
+
+        # If mask_email_domains is set, only mask those domains
+        if self.mask_email_domains:
+            return any(domain.endswith(masked.lower()) for masked in self.mask_email_domains)
+
+        # Default: mask all emails
+        return True
+
+    def should_mask_phone(self, phone: str) -> bool:
+        """Determine if a phone number should be masked based on workspace rules.
+
+        Args:
+            phone: The phone number to check.
+
+        Returns:
+            True if the phone should be masked, False otherwise.
+        """
+        # Normalize phone for prefix checking
+        normalized = re.sub(r"[^\d+]", "", phone)
+
+        # Never mask allowed prefixes
+        if any(normalized.startswith(allowed) for allowed in self.allow_phone_prefixes):
+            return False
+
+        # If mask_phone_prefixes is set, only mask those prefixes
+        if self.mask_phone_prefixes:
+            return any(normalized.startswith(prefix) for prefix in self.mask_phone_prefixes)
+
+        # Default: mask all phones
+        return True
+
+    def get_active_types(self) -> list[SensitiveDataType]:
+        """Get the list of sensitive data types that should be checked.
+
+        Returns:
+            List of SensitiveDataType that should be active for this workspace.
+        """
+        if self.enabled_types is not None:
+            return self.enabled_types
+
+        return [t for t in SensitiveDataType if t not in self.disabled_types]
+
+    def get_custom_compiled_patterns(self) -> dict[str, re.Pattern[str]]:
+        """Get compiled regex patterns for custom patterns.
+
+        Returns:
+            Dict mapping pattern name to compiled regex.
+        """
+        compiled: dict[str, re.Pattern[str]] = {}
+        for name, pattern in self.custom_patterns.items():
+            try:
+                compiled[name] = re.compile(pattern)
+            except re.error as e:
+                logger.warning(
+                    "invalid_custom_pattern",
+                    workspace_id=self.workspace_id,
+                    pattern_name=name,
+                    error=str(e),
+                )
+        return compiled
+
+
+def sanitize_with_workspace_config(
+    content: Any,
+    workspace_config: WorkspacePIIConfig,
+    mask_pii: bool = True,
+    mask_secrets: bool = True,
+    max_chars: int | None = None,
+    mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
+) -> SanitizationResult:
+    """Sanitize output with workspace-specific PII rules.
+
+    Args:
+        content: Content to sanitize.
+        workspace_config: Workspace-specific configuration.
+        mask_pii: If True, mask PII.
+        mask_secrets: If True, mask secrets.
+        max_chars: Maximum output length.
+        mask_config: Custom masking strategies.
+
+    Returns:
+        SanitizationResult with sanitized content.
+    """
+    # Convert to string
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, dict | list):
+        try:
+            text = json.dumps(content, indent=2, default=str)
+        except (TypeError, ValueError):
+            text = str(content)
+    else:
+        text = str(content)
+
+    original_length = len(text)
+    detections: list[dict[str, Any]] = []
+    result_text = text
+
+    # Get active types based on workspace config
+    active_types = workspace_config.get_active_types()
+
+    # Filter by PII/secrets flags
+    types_to_check: list[SensitiveDataType] = []
+    pii_types = {
+        SensitiveDataType.EMAIL,
+        SensitiveDataType.PHONE,
+        SensitiveDataType.SSN,
+        SensitiveDataType.CREDIT_CARD,
+        SensitiveDataType.IP_ADDRESS,
+    }
+    secret_types = {
+        SensitiveDataType.API_KEY,
+        SensitiveDataType.PASSWORD,
+        SensitiveDataType.AWS_KEY,
+        SensitiveDataType.PRIVATE_KEY,
+        SensitiveDataType.JWT,
+        SensitiveDataType.CONNECTION_STRING,
+    }
+
+    if mask_pii:
+        types_to_check.extend(t for t in active_types if t in pii_types)
+    if mask_secrets:
+        types_to_check.extend(t for t in active_types if t in secret_types)
+
+    # Detect sensitive data
+    mask_config = mask_config or DEFAULT_MASK_CONFIG
+    all_detections = detect_sensitive_data(text, types_to_check)
+
+    # Filter detections based on workspace rules
+    filtered_detections: list[dict[str, Any]] = []
+    for detection in all_detections:
+        data_type = SensitiveDataType(detection["type"])
+
+        # Apply workspace-specific filtering
+        if data_type == SensitiveDataType.EMAIL:
+            if not workspace_config.should_mask_email(detection["value"]):
+                continue
+
+        if data_type == SensitiveDataType.PHONE:
+            if not workspace_config.should_mask_phone(detection["value"]):
+                continue
+
+        filtered_detections.append(detection)
+
+    # Apply custom patterns
+    custom_patterns = workspace_config.get_custom_compiled_patterns()
+    for name, pattern in custom_patterns.items():
+        for match in pattern.finditer(text):
+            filtered_detections.append(
+                {
+                    "type": f"custom:{name}",
+                    "value": match.group(0),
+                    "start": match.start(),
+                    "end": match.end(),
+                    "full_match": match.group(0),
+                }
+            )
+
+    # Sort by position for proper replacement
+    filtered_detections.sort(key=lambda d: d["start"])
+
+    # Apply masks in reverse order
+    for detection in reversed(filtered_detections):
+        type_str = detection["type"]
+
+        # Handle custom patterns
+        if type_str.startswith("custom:"):
+            pattern_name = type_str[7:]
+            strategy = workspace_config.custom_strategies.get(
+                pattern_name, MaskingStrategy.FULL
+            )
+            masked = f"[{pattern_name.upper()}]" if strategy == MaskingStrategy.TYPE_ONLY else "[REDACTED]"
+        else:
+            data_type = SensitiveDataType(type_str)
+            strategy = mask_config.get(data_type, MaskingStrategy.FULL)
+
+            if data_type == SensitiveDataType.PASSWORD:
+                full_match = detection["full_match"]
+                password_value = detection["value"]
+                masked_value = _mask_value(password_value, data_type, strategy)
+                masked = full_match.replace(password_value, masked_value)
+                result_text = (
+                    result_text[: detection["start"]]
+                    + masked
+                    + result_text[detection["end"] :]
+                )
+                detection["masked_as"] = "[REDACTED]"
+                detections.append(detection)
+                continue
+            else:
+                masked = _mask_value(detection["value"], data_type, strategy)
+
+        result_text = (
+            result_text[: detection["start"]]
+            + masked
+            + result_text[detection["end"] :]
+        )
+        detection["masked_as"] = masked
+        detections.append(detection)
+
+    # Reverse detections list to maintain original order
+    detections.reverse()
+
+    # Truncate if needed
+    was_truncated = False
+    if max_chars is not None and len(result_text) > max_chars:
+        result_text, was_truncated = truncate_output(result_text, max_chars)
+
+    if detections:
+        logger.info(
+            "workspace_sensitive_data_masked",
+            workspace_id=workspace_config.workspace_id,
+            detection_count=len(detections),
+        )
+
+    return SanitizationResult(
+        original_length=original_length,
+        sanitized_length=len(result_text),
+        content=result_text,
+        was_truncated=was_truncated,
+        detections=detections,
+        detection_count=len(detections),
+    )

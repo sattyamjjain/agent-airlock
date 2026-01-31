@@ -236,7 +236,7 @@ class OrderQuery(BaseModel):
 # Agent with structured output
 order_agent = Agent(
     "openai:gpt-4o",
-    result_type=OrderStatus,
+    output_type=OrderStatus,
     system_prompt="You look up order statuses.",
 )
 

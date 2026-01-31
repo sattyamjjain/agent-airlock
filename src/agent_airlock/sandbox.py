@@ -139,7 +139,9 @@ def serialize_function_call(
         "args": args,
         "kwargs": kwargs,
     }
-    pickled = cloudpickle.dumps(payload)
+    # Use protocol 4 for cross-version compatibility (Python 3.4+)
+    # Protocol 5 and higher may have opcodes not supported in E2B sandbox
+    pickled = cloudpickle.dumps(payload, protocol=4)
     return base64.b64encode(pickled).decode("utf-8")
 
 
@@ -228,12 +230,20 @@ class SandboxPool:
 
     def _create_sandbox(self) -> Sandbox:
         """Create a new E2B sandbox."""
+        import os
+
         from e2b_code_interpreter import Sandbox
 
         logger.debug("sandbox_creating")
         start = time.time()
 
-        sandbox = Sandbox(api_key=self.api_key, timeout=self.timeout)
+        # E2B v2.x reads API key from environment variable E2B_API_KEY
+        # Set it if we have one configured
+        if self.api_key:
+            os.environ["E2B_API_KEY"] = self.api_key
+
+        # E2B v2.x uses Sandbox.create() factory method with timeout in seconds
+        sandbox = Sandbox.create(timeout=self.timeout)
 
         # Pre-install cloudpickle in the sandbox
         sandbox.run_code(
@@ -425,14 +435,16 @@ def execute_in_sandbox(
 
     try:
         with pool.sandbox() as sandbox:
-            sandbox.run_code(
-                code,
-                on_stdout=lambda line: stdout_lines.append(line),
-                on_stderr=lambda line: stderr_lines.append(line),
-            )
+            execution = sandbox.run_code(code)
 
-            stdout = "".join(stdout_lines)
-            stderr = "".join(stderr_lines)
+            # E2B v2.x returns Execution object with logs
+            # Extract stdout/stderr from execution result
+            stdout = ""
+            stderr = ""
+            if execution.logs:
+                # logs.stdout and logs.stderr are lists of strings
+                stdout = "".join(execution.logs.stdout)
+                stderr = "".join(execution.logs.stderr)
 
             # Parse the result from stdout
             if "__AIRLOCK_RESULT__" in stdout:

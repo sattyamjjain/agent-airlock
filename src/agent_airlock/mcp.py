@@ -117,7 +117,7 @@ class MCPAirlock:
                     if hasattr(ctx, "report_progress"):
                         ctx.report_progress(0, f"Starting {func.__name__}...")
                 except Exception:
-                    pass  # Ignore progress reporting errors
+                    pass  # Ignore progress reporting errors  # nosec B110
 
             # Execute the airlocked function
             result = airlocked_func(*args, **kwargs)
@@ -143,7 +143,7 @@ class MCPAirlock:
                     if hasattr(ctx, "report_progress"):
                         ctx.report_progress(100, f"Completed {func.__name__}")
                 except Exception:
-                    pass
+                    pass  # nosec B110 - progress reporting is non-critical
 
             return result  # type: ignore[return-value]
 
@@ -316,7 +316,7 @@ class MCPContextExtractor:
             if hasattr(ctx, "request_id"):
                 return str(ctx.request_id)
         except Exception:
-            pass
+            pass  # nosec B110 - context extraction is best-effort
         return None
 
     @staticmethod
@@ -330,7 +330,7 @@ class MCPContextExtractor:
             if hasattr(ctx, "protocol_version"):
                 metadata["protocol_version"] = ctx.protocol_version
         except Exception:
-            pass
+            pass  # nosec B110 - metadata extraction is best-effort
 
         return metadata
 

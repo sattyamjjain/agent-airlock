@@ -49,6 +49,11 @@ Agent-Airlock preserves `__signature__` and `__annotations__` so frameworks can 
 | [`basic_usage.py`](basic_usage.py) | Core features: validation, ghost args, strict mode |
 | [`policy_example.py`](policy_example.py) | Security policies, rate limits, RBAC |
 | [`e2b_sandbox.py`](e2b_sandbox.py) | E2B Firecracker sandbox execution |
+| [`async_tools.py`](async_tools.py) | Async function support with Airlock |
+| [`streaming.py`](streaming.py) | Generator/streaming support with per-chunk sanitization |
+| [`conversation_tracking.py`](conversation_tracking.py) | Multi-agent conversation validation |
+| [`workspace_pii.py`](workspace_pii.py) | Workspace-specific PII masking |
+| [`error_hooks.py`](error_hooks.py) | Error recovery hooks (on_validation_error, on_blocked, on_rate_limit) |
 
 ### MCP Integration
 

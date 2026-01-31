@@ -10,16 +10,20 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from pydantic import ValidationError
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:
-    import tomli as tomllib
+    import tomli as tomllib  # pragma: no cover
 
 logger = structlog.get_logger("agent-airlock.config")
 
@@ -40,6 +44,12 @@ class AirlockConfig:
         e2b_api_key: API key for E2B sandbox. Falls back to E2B_API_KEY env var.
         sandbox_timeout: Timeout in seconds for sandbox execution.
         sandbox_pool_size: Number of warm sandboxes to keep ready.
+        on_validation_error: Callback invoked when Pydantic validation fails.
+            Signature: (tool_name: str, error: ValidationError) -> None
+        on_blocked: Callback invoked when a tool call is blocked by policy.
+            Signature: (tool_name: str, reason: str, context: dict) -> None
+        on_rate_limit: Callback invoked when rate limit is exceeded.
+            Signature: (tool_name: str, retry_after_seconds: int) -> None
     """
 
     strict_mode: bool = False
@@ -53,6 +63,11 @@ class AirlockConfig:
     e2b_api_key: str | None = None
     sandbox_timeout: int = 60
     sandbox_pool_size: int = 2
+
+    # Error recovery hooks - callbacks invoked on specific events
+    on_validation_error: Callable[[str, ValidationError], None] | None = None
+    on_blocked: Callable[[str, str, dict[str, Any]], None] | None = None
+    on_rate_limit: Callable[[str, int], None] | None = None
 
     def __post_init__(self) -> None:
         """Apply environment variable overrides after initialization."""

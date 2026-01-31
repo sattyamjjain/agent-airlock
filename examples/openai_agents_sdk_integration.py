@@ -361,41 +361,54 @@ async def demo_openai_agents():
     print("DEMO: OpenAI Agents SDK + Agent-Airlock")
     print("=" * 60)
 
-    # Test 1: Basic tool call
-    print("\n1. Basic secured tool call:")
-    result = get_weather(city="San Francisco")
-    print(f"   Result: {result}")
+    # Test 1: Tools are registered with Airlock protection
+    print("\n1. Tools registered with Airlock:")
+    print(f"   get_weather: {type(get_weather).__name__}")
+    print(f"   search_products: {type(search_products).__name__}")
+    print("   Note: FunctionTools are used by the Agent, not called directly")
 
-    # Test 2: PII masking
-    print("\n2. PII masking in output:")
-    result = get_customer_info(customer_id="CUST-123")
-    print(f"   Result: {result}")
-
-    # Test 3: Type validation
-    print("\n3. Type validation (wrong type):")
-    result = search_products(query="laptop", limit="ten")  # type: ignore
-    print(f"   Result: {result}")
-    if isinstance(result, dict) and not result.get("success"):
-        print(f"   Fix hints: {result.get('fix_hints', [])}")
-
-    # Test 4: Ghost argument rejection
-    print("\n4. Ghost argument rejection (strict mode):")
-    result = get_weather(city="Tokyo", force=True, debug=True)  # type: ignore
-    print(f"   Result: {result}")
-
-    # Test 5: Run with Agent
-    print("\n5. Running agent with secured tools:")
+    # Test 2: Run with Agent - this is the real test
+    print("\n2. Running agent with secured tools (weather):")
     try:
         agent = Agent(
-            name="demo_agent",
-            instructions="You are a helpful assistant.",
-            tools=[get_weather, search_products],
+            name="weather_agent",
+            instructions="You are a helpful weather assistant. Use the get_weather tool.",
+            tools=[get_weather],
             model="gpt-4o-mini",
         )
         result = await Runner.run(agent, "What's the weather in Paris?")
         print(f"   Agent response: {result.final_output}")
     except Exception as e:
-        print(f"   (Agent run requires OpenAI API key): {e}")
+        print(f"   Error: {e}")
+
+    # Test 3: Run with Agent - product search
+    print("\n3. Running agent with secured tools (products):")
+    try:
+        agent = Agent(
+            name="product_agent",
+            instructions="You are a product search assistant. Use the search_products tool.",
+            tools=[search_products],
+            model="gpt-4o-mini",
+        )
+        result = await Runner.run(agent, "Find me 5 laptops in the electronics category")
+        print(f"   Agent response: {result.final_output}")
+    except Exception as e:
+        print(f"   Error: {e}")
+
+    # Test 4: PII masking with customer info
+    print("\n4. Running agent with PII masking:")
+    try:
+        agent = Agent(
+            name="customer_agent",
+            instructions="You are a customer service agent. Use get_customer_info to look up customers.",
+            tools=[get_customer_info],
+            model="gpt-4o-mini",
+        )
+        result = await Runner.run(agent, "Get info for customer CUST-123")
+        print(f"   Agent response: {result.final_output}")
+        print("   Note: Email/phone should be masked in the response")
+    except Exception as e:
+        print(f"   Error: {e}")
 
 
 # =============================================================================

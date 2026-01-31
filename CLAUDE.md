@@ -14,7 +14,7 @@
 - PII/secret detection and masking in outputs
 - FastMCP integration with `@secure_tool` decorator
 
-**Stats:** 2,871 lines of code | 182 tests | 84% coverage
+**Stats:** 5,000+ lines of code | 629 tests | 86% coverage (enforced 80% in CI)
 
 <!-- END AUTO-MANAGED -->
 
@@ -57,8 +57,18 @@ python examples/fastmcp_integration.py
 ```
 src/agent_airlock/
 ├── __init__.py       # Public API exports (all decorators, configs, policies)
-├── core.py           # @Airlock decorator - main entry point (396 lines)
+├── core.py           # @Airlock decorator - main entry point (~450 lines)
 │                     └─ Handles: ghost args, validation, sandbox, policies
+│                     └─ Full async/await support, context propagation
+│                     └─ Dynamic policy resolution via callables
+├── audit.py          # JSON Lines audit logging
+│                     └─ AuditLogger, AuditRecord, thread-safe writes
+├── context.py        # Request-scoped context (NEW)
+│                     └─ AirlockContext, ContextExtractor, contextvars
+│                     └─ RunContextWrapper pattern extraction
+├── streaming.py      # Generator/streaming support (NEW)
+│                     └─ StreamingAirlock, per-chunk sanitization
+│                     └─ Truncation across streamed output
 ├── validator.py      # Ghost argument detection + Pydantic strict validation
 │                     └─ strip_ghost_arguments(), create_strict_validator()
 ├── self_heal.py      # LLM-friendly error responses
@@ -113,6 +123,9 @@ src/agent_airlock/
 - **Token Bucket:** Rate limiting via `RateLimit` class with thread-safe refill
 - **Warm Pool:** `SandboxPool` maintains pre-created E2B sandboxes (<200ms latency)
 - **Predefined Policies:** `PERMISSIVE_POLICY`, `STRICT_POLICY`, `READ_ONLY_POLICY`, `BUSINESS_HOURS_POLICY`
+- **Context Propagation:** `contextvars` for request-scoped state (AirlockContext)
+- **Policy Resolver:** Dynamic policies via `Callable[[AirlockContext], SecurityPolicy]`
+- **Streaming Sanitization:** Per-chunk validation with cumulative truncation
 
 <!-- END AUTO-MANAGED -->
 
@@ -120,11 +133,11 @@ src/agent_airlock/
 ## Git Insights
 
 Recent commits:
-- `436b9e7` security: fix all vulnerabilities from security scan
-- `6525b3a` ci: switch to API token auth for PyPI publish
-- `f7070b9` docs: rewrite README as manifesto for viral launch
-- `18a3e56` fix: resolve mypy unused-ignore error for tomli import
-- `1c777c3` docs: complete Phase 6 launch preparation
+- `f859cfa` chore: bump version to 0.1.3
+- `a18dacf` docs: upgrade README to top 1% 2026 standards
+- `93116b6` docs: add comprehensive framework integration examples
+- `283226c` chore: bump version to 0.1.2
+- `7c41838` feat: add framework compatibility and signature preservation
 
 Key security additions:
 - `sandbox_required=True` parameter prevents unsafe local execution fallback
@@ -160,7 +173,7 @@ Key security additions:
 - [x] Secret detection and masking (API keys, passwords, AWS keys, JWT, connection strings)
 - [x] Token/character truncation with configurable limits
 - [x] Masking strategies (FULL, PARTIAL, TYPE_ONLY, HASH)
-- [ ] Audit logging (deferred)
+- [x] Audit logging (JSON Lines format, thread-safe)
 
 ### Phase 5: FastMCP Integration
 - [x] MCPAirlock decorator for MCP-specific features
@@ -170,10 +183,38 @@ Key security additions:
 - [x] Progress reporting support
 - [x] Comprehensive example (fastmcp_integration.py)
 
+### Phase 0: Production Readiness (Added 2026-01-31)
+- [x] Audit logging implementation (was config-only, now fully working)
+- [x] Async function support (proper async/await wrapper)
+- [x] Coverage verification (86%, enforced 80% in CI)
+- [x] 292 tests total (66 new for context, streaming, audit, async)
+
+### Production Phase 1: Core Missing Features (Added 2026-01-31)
+- [x] P1.1: Streaming/generator support (StreamingAirlock class)
+  - Per-chunk PII/secret sanitization
+  - Cumulative output truncation
+  - Sync and async generator wrapping
+- [x] P1.2: RunContext preservation (AirlockContext)
+  - contextvars for request-scoped state
+  - ContextExtractor for RunContextWrapper pattern
+  - get_current_context() available inside tools
+- [x] P1.3: Dynamic policy resolution
+  - Policy can be SecurityPolicy or Callable[[AirlockContext], SecurityPolicy]
+  - Enables workspace/tenant-specific policies
+  - Context extracted from first arg with .context/.ctx attribute
+
 ### Phase 6: Launch
-- [ ] PyPI release (requires PYPI_API_TOKEN secret in GitHub)
+- [x] PyPI release v0.1.3, v0.1.4
 - [x] README with manifesto-style copy
 - [x] Security scan and fixes
 - [ ] Outreach
+
+### Framework Integrations (Tested 2026-01-31)
+All major AI frameworks tested and working:
+- [x] LangChain - `@tool` + `@Airlock()` pattern, `.invoke()` for tool calls
+- [x] LangGraph - ToolNode integration, state graphs with security
+- [x] PydanticAI - `output_type` param, RunContext preservation
+- [x] OpenAI Agents SDK - `@function_tool` + `@Airlock()`, Agent.run()
+- [ ] Anthropic, AutoGen, CrewAI, LlamaIndex, smolagents (deps not installed)
 
 <!-- END MANUAL -->

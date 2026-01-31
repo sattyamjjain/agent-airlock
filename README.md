@@ -1,181 +1,217 @@
 <div align="center">
 
-# 🛡️ Agent-Airlock
+<!-- Animated Typing Header -->
+<a href="https://github.com/sattyamjjain/agent-airlock">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=28&duration=3000&pause=1000&color=00D4FF&center=true&vCenter=true&multiline=true&repeat=true&width=700&height=100&lines=%F0%9F%9B%A1%EF%B8%8F+Agent-Airlock;Your+AI+Agent+Just+Tried+rm+-rf+%2F.+We+Stopped+It." alt="Agent-Airlock Typing Animation" />
+</a>
 
-### Your AI Agent Just Tried to `rm -rf /`. We Stopped It.
+### The Open-Source Firewall for AI Agents
 
-**The open-source firewall for AI agents. One decorator. Zero trust. Full control.**
+**One decorator. Zero trust. Full control.**
 
-[![PyPI version](https://img.shields.io/pypi/v/agent-airlock?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/agent-airlock/)
-[![Downloads](https://img.shields.io/pypi/dm/agent-airlock?style=for-the-badge&logo=python&logoColor=white)](https://pypistats.org/packages/agent-airlock)
-[![CI](https://img.shields.io/github/actions/workflow/status/sattyamjjain/agent-airlock/ci.yml?style=for-the-badge&logo=github&label=CI)](https://github.com/sattyamjjain/agent-airlock/actions/workflows/ci.yml)
+<!-- Primary Badges Row -->
+[![PyPI version](https://img.shields.io/pypi/v/agent-airlock?style=for-the-badge&logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/agent-airlock/)
+[![Downloads](https://img.shields.io/pypi/dm/agent-airlock?style=for-the-badge&logo=python&logoColor=white&color=success)](https://pypistats.org/packages/agent-airlock)
+[![CI](https://img.shields.io/github/actions/workflow/status/sattyamjjain/agent-airlock/ci.yml?style=for-the-badge&logo=github&label=CI&color=success)](https://github.com/sattyamjjain/agent-airlock/actions/workflows/ci.yml)
 [![codecov](https://img.shields.io/codecov/c/github/sattyamjjain/agent-airlock?style=for-the-badge&logo=codecov&logoColor=white)](https://codecov.io/gh/sattyamjjain/agent-airlock)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/sattyamjjain/agent-airlock?style=for-the-badge&logo=github)](https://github.com/sattyamjjain/agent-airlock/stargazers)
 
-[📦 Install](#install) • [🚀 Quick Start](#what-this-actually-does) • [🔌 Frameworks](#-framework-compatibility) • [📖 Docs](#documentation) • [🤝 Contribute](#contributing)
+<!-- Secondary Badges Row -->
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](https://opensource.org/licenses/MIT)
+[![GitHub stars](https://img.shields.io/github/stars/sattyamjjain/agent-airlock?style=flat-square&logo=github)](https://github.com/sattyamjjain/agent-airlock/stargazers)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
+
+<br/>
+
+[**Get Started in 30 Seconds**](#-30-second-quickstart) · [**Why Airlock?**](#-the-problem-no-one-talks-about) · [**All Frameworks**](#-framework-compatibility) · [**Docs**](#-documentation)
+
+<br/>
 
 </div>
 
 ---
 
-<!--
-🎬 DEMO GIF PLACEHOLDER
-Record with: asciinema rec demo.cast && agg demo.cast demo.gif
-Show: Agent tries dangerous command → Airlock blocks with red shield
--->
-
-<!--
+<!-- Hero Visual Block -->
 <div align="center">
-  <img src="docs/assets/demo.gif" alt="Agent-Airlock Demo" width="600">
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  🤖 AI Agent: "Let me help clean up disk space..."            │
+│                           ↓                                    │
+│               rm -rf / --no-preserve-root                      │
+│                           ↓                                    │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  🛡️ AIRLOCK: BLOCKED                                     │  │
+│  │                                                          │  │
+│  │  Reason: Matches denied pattern 'rm_*'                   │  │
+│  │  Policy: STRICT_POLICY                                   │  │
+│  │  Fix: Use approved cleanup tools only                    │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
+```
+
 </div>
--->
-
-## 📋 Table of Contents
-
-<details>
-<summary>Click to expand</summary>
-
-- [🚨 The Problem](#-the-reality-no-one-talks-about)
-- [🚀 Quick Start](#-what-this-actually-does)
-- [🔒 E2B Sandbox](#-when-you-need-the-big-guns)
-- [📜 Security Policies](#-the-policies-youll-actually-use)
-- [💰 Cost Control](#-the-cost-problem-and-how-we-solve-it)
-- [🔐 PII Masking](#-the-security-you-forgot-you-needed)
-- [⚡ FastMCP Integration](#-fastmcp-integration-the-clean-way)
-- [🔌 Framework Compatibility](#-framework-compatibility) — LangChain, OpenAI, PydanticAI, LlamaIndex, CrewAI, AutoGen, smolagents
-- [🏆 Comparison](#-why-not-just-use-insert-enterprise-vendor)
-- [📦 Install](#-install)
-- [🛡️ OWASP Compliance](#️-owasp-llm-top-10-compliance-2025)
-- [📊 The Numbers](#-the-numbers)
-- [📖 Documentation](#-documentation)
-- [🤝 Contributing](#-contributing)
-- [⭐ Star History](#-star-history)
-
-</details>
 
 ---
 
-```
-Agent: "I'll help you clean up disk space..."
-       ↓
-       rm -rf / --no-preserve-root
-       ↓
-┌─────────────────────────────────────────┐
-│  🛡️ AIRLOCK_BLOCK: Operation Denied     │
-│                                         │
-│  Reason: Matches denied pattern 'rm_*'  │
-│  Policy: PRODUCTION_POLICY              │
-│  Fix: Use approved cleanup tools only   │
-└─────────────────────────────────────────┘
-```
-
-**Agent-Airlock is the open-source firewall for MCP servers.**
-One decorator. Zero trust. Full control.
+## 🎯 30-Second Quickstart
 
 ```bash
 pip install agent-airlock
 ```
 
-<br>
+```python
+from agent_airlock import Airlock
+
+@Airlock()
+def transfer_funds(account: str, amount: int) -> dict:
+    return {"status": "transferred", "amount": amount}
+
+# LLM sends amount="500" (string) → BLOCKED with fix_hint
+# LLM sends force=True (invented arg) → STRIPPED silently
+# LLM sends amount=500 (correct) → EXECUTED safely
+```
+
+**That's it.** Your function now has ghost argument stripping, strict type validation, and self-healing errors.
+
+---
+
+## 🧠 The Problem No One Talks About
 
 <table>
 <tr>
-<td align="center">🚫<br><b>Ghost Args</b><br><sub>Strip hallucinated params</sub></td>
-<td align="center">✅<br><b>Strict Types</b><br><sub>No silent coercion</sub></td>
-<td align="center">🔄<br><b>Self-Healing</b><br><sub>LLM-friendly errors</sub></td>
-<td align="center">🔒<br><b>E2B Sandbox</b><br><sub>Isolated execution</sub></td>
-<td align="center">📜<br><b>RBAC</b><br><sub>Role-based access</sub></td>
-<td align="center">🔐<br><b>PII Mask</b><br><sub>Auto-redact secrets</sub></td>
+<td width="50%">
+
+### The Hype
+
+> *"MCP has 16,000+ servers on GitHub!"*
+> *"OpenAI adopted it!"*
+> *"Linux Foundation hosts it!"*
+
+</td>
+<td width="50%">
+
+### The Reality
+
+**LLMs hallucinate tool calls. Every. Single. Day.**
+
+- Claude invents arguments that don't exist
+- GPT-4 sends `"100"` when you need `100`
+- Agents chain 47 calls before one deletes prod data
+
+</td>
+</tr>
+</table>
+
+**Enterprise solutions exist:** Prompt Security ($50K/year), Pangea (proxy your data), Cisco ("coming soon").
+
+**We built the open-source alternative.** One decorator. No vendor lock-in. Your data never leaves your infrastructure.
+
+---
+
+## ✨ What You Get
+
+<table>
+<tr>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/delete-shield.png" alt="shield"/>
+<br/><b>Ghost Args</b>
+<br/><sub>Strip LLM-invented params</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/checked.png" alt="check"/>
+<br/><b>Strict Types</b>
+<br/><sub>No silent coercion</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/refresh.png" alt="refresh"/>
+<br/><b>Self-Healing</b>
+<br/><sub>LLM-friendly errors</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/lock.png" alt="lock"/>
+<br/><b>E2B Sandbox</b>
+<br/><sub>Isolated execution</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/user-shield.png" alt="user"/>
+<br/><b>RBAC</b>
+<br/><sub>Role-based access</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/privacy.png" alt="privacy"/>
+<br/><b>PII Mask</b>
+<br/><sub>Auto-redact secrets</sub>
+</td>
 </tr>
 </table>
 
 ---
 
-## 🚨 The Reality No One Talks About
+## 📋 Table of Contents
 
-In January 2026, MCP has 16,000+ servers on GitHub. OpenAI adopted it. The Linux Foundation hosts it.
+<details>
+<summary><b>Click to expand full navigation</b></summary>
 
-But here's what the hype cycle ignores:
+- [30-Second Quickstart](#-30-second-quickstart)
+- [The Problem](#-the-problem-no-one-talks-about)
+- [What You Get](#-what-you-get)
+- [Core Features](#-core-features)
+  - [E2B Sandbox](#-e2b-sandbox-execution)
+  - [Security Policies](#-security-policies)
+  - [Cost Control](#-cost-control)
+  - [PII Masking](#-pii--secret-masking)
+- [Framework Compatibility](#-framework-compatibility)
+- [FastMCP Integration](#-fastmcp-integration)
+- [Comparison](#-why-not-enterprise-vendors)
+- [Installation](#-installation)
+- [OWASP Compliance](#️-owasp-compliance)
+- [Performance](#-performance)
+- [Documentation](#-documentation)
+- [Contributing](#-contributing)
+- [Support](#-support)
 
-**LLMs hallucinate tool calls.** Every. Single. Day.
-
-- Claude invents arguments that don't exist in your function signature
-- GPT-4 sends `"100"` when your code expects `100`
-- Agents chain 47 tool calls before you notice one deleted production data
-
-The enterprise vendors saw this coming. Prompt Security charges $50K/year. Pangea wants your data flowing through their proxy. Cisco is "coming soon."
-
-**We built the alternative.**
-
----
-
-## 🚀 What This Actually Does
-
-```python
-from agent_airlock import Airlock
-
-@Airlock()
-def transfer_funds(from_account: str, to_account: str, amount: int) -> dict:
-    # Your banking logic here
-    return {"status": "transferred", "amount": amount}
-```
-
-That's it. One line. Now your function has:
-
-| Protection | What It Stops |
-|------------|---------------|
-| **Ghost Argument Stripping** | LLM sends `force=True` that doesn't exist → stripped silently |
-| **Strict Type Validation** | LLM sends `amount="500"` → blocked, not silently coerced to 500 |
-| **Self-Healing Errors** | Instead of crashing, returns `{"fix_hint": "amount must be int"}` |
-
-The LLM gets a structured error. It retries correctly. Your system stays alive.
+</details>
 
 ---
 
-## 🔒 When You Need the Big Guns
+## 🔥 Core Features
+
+### 🔒 E2B Sandbox Execution
 
 ```python
 from agent_airlock import Airlock, STRICT_POLICY
 
-@Airlock(sandbox=True, policy=STRICT_POLICY)
+@Airlock(sandbox=True, sandbox_required=True, policy=STRICT_POLICY)
 def execute_code(code: str) -> str:
-    """This runs in an E2B Firecracker MicroVM. Not on your machine."""
+    """Runs in an E2B Firecracker MicroVM. Not on your machine."""
     exec(code)
     return "executed"
 ```
 
-**sandbox=True** means:
-- Code executes in an isolated VM (125ms boot time)
-- No access to your filesystem, network, or secrets
-- Warm pool keeps latency under 200ms after first call
-
-**policy=STRICT_POLICY** means:
-- Rate limited to 100 calls/hour
-- Requires agent identity tracking
-- Every call logged for audit
+| Feature | Value |
+|---------|-------|
+| Boot time | ~125ms cold, <200ms warm |
+| Isolation | Firecracker MicroVM |
+| Fallback | `sandbox_required=True` blocks local execution |
 
 ---
 
-## 📜 The Policies You'll Actually Use
+### 📜 Security Policies
 
 ```python
 from agent_airlock import (
-    PERMISSIVE_POLICY,      # Development - no restrictions
-    STRICT_POLICY,          # Production - rate limited, requires agent ID
-    READ_ONLY_POLICY,       # Analytics agents - can query, can't mutate
-    BUSINESS_HOURS_POLICY,  # Dangerous ops only during 9-5
+    PERMISSIVE_POLICY,      # Dev - no restrictions
+    STRICT_POLICY,          # Prod - rate limited, agent ID required
+    READ_ONLY_POLICY,       # Analytics - query only
+    BUSINESS_HOURS_POLICY,  # Dangerous ops 9-5 only
 )
-```
 
-Or build your own:
-
-```python
+# Or build your own:
 from agent_airlock import SecurityPolicy
 
 MY_POLICY = SecurityPolicy(
-    allowed_tools=["read_*", "query_*", "search_*"],
+    allowed_tools=["read_*", "query_*"],
     denied_tools=["delete_*", "drop_*", "rm_*"],
     rate_limits={"*": "1000/hour", "write_*": "100/hour"},
     time_restrictions={"deploy_*": "09:00-17:00"},
@@ -184,9 +220,9 @@ MY_POLICY = SecurityPolicy(
 
 ---
 
-## 💰 The Cost Problem (And How We Solve It)
+### 💰 Cost Control
 
-A single runaway agent can burn $500 in API costs before you notice.
+A runaway agent can burn $500 in API costs before you notice.
 
 ```python
 from agent_airlock import Airlock, AirlockConfig
@@ -198,74 +234,45 @@ config = AirlockConfig(
 
 @Airlock(config=config)
 def query_logs(query: str) -> str:
-    # Even if this returns 10MB of logs,
-    # Airlock truncates to 5000 chars before the LLM sees it
-    return massive_log_query(query)
+    return massive_log_query(query)  # 10MB → 5KB
 ```
 
-**Result:** Token costs drop dramatically when you:
-- Truncate 10MB logs to 5KB before tokenization
-- Prevent infinite retry loops from validation errors
-- Block runaway agent chains with rate limiting
-
-*Math: 10MB = ~2.5M tokens at $0.01/1K = $25 per response. Truncated to 5KB = ~1.25K tokens = $0.01. That's 99.96% reduction per bloated response.*
+**ROI:** 10MB logs = ~2.5M tokens = $25/response. Truncated = ~1.25K tokens = $0.01. **99.96% savings.**
 
 ---
 
-## 🔐 The Security You Forgot You Needed
-
-Your agent just queried a user's profile. The LLM is about to see their SSN.
+### 🔐 PII & Secret Masking
 
 ```python
 config = AirlockConfig(
-    mask_pii=True,      # SSN, credit cards, phone numbers
-    mask_secrets=True,  # API keys, passwords, connection strings
+    mask_pii=True,      # SSN, credit cards, phones, emails
+    mask_secrets=True,  # API keys, passwords, JWTs
 )
 
 @Airlock(config=config)
 def get_user(user_id: str) -> dict:
     return db.users.find_one({"id": user_id})
 
-# What the LLM sees:
-# {"name": "John", "ssn": "[REDACTED]", "api_key": "sk-...XXXX"}
+# LLM sees: {"name": "John", "ssn": "[REDACTED]", "api_key": "sk-...XXXX"}
 ```
 
-The data exists in your database. The LLM never sees it. The audit log has the masked version.
-
----
-
-## ⚡ FastMCP Integration (The Clean Way)
-
-```python
-from fastmcp import FastMCP
-from agent_airlock.mcp import secure_tool, STRICT_POLICY
-
-mcp = FastMCP("production-server")
-
-@secure_tool(mcp, policy=STRICT_POLICY)
-def delete_user(user_id: str) -> dict:
-    """One decorator. MCP registration + Airlock protection."""
-    return db.users.delete(user_id)
-```
-
-No ceremony. No boilerplate. The `@secure_tool` decorator handles:
-1. MCP tool registration
-2. Ghost argument stripping
-3. Type validation
-4. Policy enforcement
-5. Output sanitization
+**12 PII types detected** · **4 masking strategies** · **Zero data leakage**
 
 ---
 
 ## 🔌 Framework Compatibility
 
-**The Golden Rule:** `@Airlock` must be closest to the function definition.
+> **The Golden Rule:** `@Airlock` must be closest to the function definition.
 
+```python
+@framework_decorator    # ← Framework sees secured function
+@Airlock()             # ← Security layer (innermost)
+def my_function():     # ← Your code
 ```
-@framework_decorator    ← Framework sees the secured function
-@Airlock()             ← Security layer (innermost)
-def my_function():     ← Your code
-```
+
+<table>
+<tr>
+<td>
 
 ### LangChain / LangGraph
 
@@ -278,30 +285,28 @@ from agent_airlock import Airlock
 def search(query: str) -> str:
     """Search for information."""
     return f"Results for: {query}"
-
-# Use with LangGraph ToolNode
-from langgraph.prebuilt import ToolNode
-tool_node = ToolNode([search])
 ```
+
+</td>
+<td>
 
 ### OpenAI Agents SDK
 
 ```python
-from agents import Agent, function_tool
-from agent_airlock import Airlock, STRICT_POLICY
+from agents import function_tool
+from agent_airlock import Airlock
 
 @function_tool
-@Airlock(policy=STRICT_POLICY)
+@Airlock()
 def get_weather(city: str) -> str:
     """Get weather for a city."""
-    return f"Weather in {city}: 22°C, Sunny"
-
-agent = Agent(
-    name="weather_agent",
-    tools=[get_weather],
-    model="gpt-4o-mini",
-)
+    return f"Weather in {city}: 22°C"
 ```
+
+</td>
+</tr>
+<tr>
+<td>
 
 ### PydanticAI
 
@@ -309,54 +314,47 @@ agent = Agent(
 from pydantic_ai import Agent
 from agent_airlock import Airlock
 
-# Option 1: Pre-secure, then pass to Agent
 @Airlock()
-def get_stock_price(symbol: str) -> str:
-    return f"Stock {symbol}: $150.25"
+def get_stock(symbol: str) -> str:
+    return f"Stock {symbol}: $150"
 
-agent = Agent("openai:gpt-4o", tools=[get_stock_price])
-
-# Option 2: With @agent.tool_plain
-@agent.tool_plain
-@Airlock()
-def get_forecast(city: str) -> str:
-    return f"Forecast for {city}: Sunny"
+agent = Agent("openai:gpt-4o", tools=[get_stock])
 ```
+
+</td>
+<td>
+
+### CrewAI
+
+```python
+from crewai.tools import tool
+from agent_airlock import Airlock
+
+@tool
+@Airlock()
+def search_docs(query: str) -> str:
+    """Search internal docs."""
+    return f"Found 5 docs for: {query}"
+```
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>More frameworks: LlamaIndex, AutoGen, smolagents, Anthropic</b></summary>
 
 ### LlamaIndex
 
 ```python
 from llama_index.core.tools import FunctionTool
-from llama_index.core.agent import ReActAgent
 from agent_airlock import Airlock
 
 @Airlock()
 def calculate(expression: str) -> int:
     return eval(expression, {"__builtins__": {}})
 
-# Wrap with FunctionTool
 calc_tool = FunctionTool.from_defaults(fn=calculate)
-agent = ReActAgent.from_tools([calc_tool], llm=llm)
-```
-
-### CrewAI
-
-```python
-from crewai import Agent, Task, Crew
-from crewai.tools import tool
-from agent_airlock import Airlock, READ_ONLY_POLICY
-
-@tool
-@Airlock(policy=READ_ONLY_POLICY)
-def search_documents(query: str) -> str:
-    """Search internal documents."""
-    return f"Found 5 docs for: {query}"
-
-researcher = Agent(
-    role="Researcher",
-    tools=[search_documents],
-    llm="gpt-4o",
-)
 ```
 
 ### AutoGen
@@ -366,93 +364,93 @@ from autogen import ConversableAgent
 from agent_airlock import Airlock
 
 @Airlock()
-def analyze_data(dataset: str, metric: str = "mean") -> str:
-    return f"Analysis of {dataset}: {metric}=42.5"
+def analyze_data(dataset: str) -> str:
+    return f"Analysis of {dataset}: mean=42.5"
 
-assistant = ConversableAgent(
-    name="analyst",
-    llm_config={"model": "gpt-4o"},
-)
+assistant = ConversableAgent(name="analyst", llm_config={"model": "gpt-4o"})
 assistant.register_for_llm()(analyze_data)
 ```
 
-### Hugging Face smolagents
+### smolagents
 
 ```python
-from smolagents import CodeAgent, tool
+from smolagents import tool
 from agent_airlock import Airlock
 
 @tool
-@Airlock(sandbox=True, sandbox_required=True)
-def execute_code(code: str) -> str:
-    """Execute Python in E2B sandbox."""
+@Airlock(sandbox=True)
+def run_code(code: str) -> str:
+    """Execute in E2B sandbox."""
     exec(code)
     return "Executed"
-
-agent = CodeAgent(tools=[execute_code], model=model)
 ```
 
-### Anthropic Claude (Direct API)
+### Anthropic (Direct API)
 
 ```python
-import anthropic
 from agent_airlock import Airlock
-
-client = anthropic.Anthropic()
 
 @Airlock()
 def get_weather(city: str) -> str:
     return f"Weather in {city}: 22°C"
 
-# Register as tool definition
-tools = [{
-    "name": "get_weather",
-    "description": get_weather.__doc__,
-    "input_schema": {...}
-}]
-
-# Execute with Airlock protection
+# Use in tool handler
 def handle_tool_call(name, inputs):
     if name == "get_weather":
         return get_weather(**inputs)  # Airlock validates
 ```
 
-### Full Examples
+</details>
 
-See the [examples/](./examples/) directory for complete, runnable integrations:
+### Complete Examples
 
-| Framework | Example File | Features Demonstrated |
-|-----------|--------------|----------------------|
-| LangChain | `langchain_integration.py` | @tool, AgentExecutor, chains |
-| LangGraph | `langgraph_integration.py` | StateGraph, ToolNode, multi-agent |
-| OpenAI Agents | `openai_agents_sdk_integration.py` | Handoffs, manager pattern |
-| PydanticAI | `pydanticai_integration.py` | Dependencies, structured output |
-| LlamaIndex | `llamaindex_integration.py` | ReActAgent, QueryEngineTool |
-| CrewAI | `crewai_integration.py` | Crews, tasks, role-based |
-| AutoGen | `autogen_integration.py` | ConversableAgent, group chat |
-| smolagents | `smolagents_integration.py` | CodeAgent, E2B sandbox |
-| Anthropic | `anthropic_integration.py` | Direct API, streaming |
+| Framework | Example | Key Features |
+|-----------|---------|--------------|
+| LangChain | [`langchain_integration.py`](./examples/langchain_integration.py) | @tool, AgentExecutor |
+| LangGraph | [`langgraph_integration.py`](./examples/langgraph_integration.py) | StateGraph, ToolNode |
+| OpenAI Agents | [`openai_agents_sdk_integration.py`](./examples/openai_agents_sdk_integration.py) | Handoffs, manager pattern |
+| PydanticAI | [`pydanticai_integration.py`](./examples/pydanticai_integration.py) | Dependencies, structured output |
+| LlamaIndex | [`llamaindex_integration.py`](./examples/llamaindex_integration.py) | ReActAgent |
+| CrewAI | [`crewai_integration.py`](./examples/crewai_integration.py) | Crews, roles |
+| AutoGen | [`autogen_integration.py`](./examples/autogen_integration.py) | ConversableAgent |
+| smolagents | [`smolagents_integration.py`](./examples/smolagents_integration.py) | CodeAgent, E2B |
+| Anthropic | [`anthropic_integration.py`](./examples/anthropic_integration.py) | Direct API |
 
 ---
 
-## 🏆 Why Not Just Use [Insert Enterprise Vendor]?
+## ⚡ FastMCP Integration
+
+```python
+from fastmcp import FastMCP
+from agent_airlock.mcp import secure_tool, STRICT_POLICY
+
+mcp = FastMCP("production-server")
+
+@secure_tool(mcp, policy=STRICT_POLICY)
+def delete_user(user_id: str) -> dict:
+    """One decorator: MCP registration + Airlock protection."""
+    return db.users.delete(user_id)
+```
+
+---
+
+## 🏆 Why Not Enterprise Vendors?
 
 | | Prompt Security | Pangea | **Agent-Airlock** |
-|---|---|---|---|
+|---|:---:|:---:|:---:|
 | **Pricing** | $50K+/year | Enterprise | **Free forever** |
 | **Integration** | Proxy gateway | Proxy gateway | **One decorator** |
-| **Self-Healing** | No | No | **Yes** |
-| **E2B Sandboxing** | No | No | **Native** |
-| **Your Data** | Through their servers | Through their servers | **Never leaves your infra** |
+| **Self-Healing** | ❌ | ❌ | **✅** |
+| **E2B Sandboxing** | ❌ | ❌ | **✅ Native** |
+| **Your Data** | Their servers | Their servers | **Never leaves you** |
 | **Source Code** | Closed | Closed | **MIT Licensed** |
 
-We're not anti-enterprise. We're anti-gatekeeping.
-
-Security for AI agents shouldn't require a procurement process.
+> We're not anti-enterprise. We're anti-gatekeeping.
+> **Security for AI agents shouldn't require a procurement process.**
 
 ---
 
-## 📦 Install
+## 📦 Installation
 
 ```bash
 # Core (validation + policies + sanitization)
@@ -468,67 +466,53 @@ pip install agent-airlock[mcp]
 pip install agent-airlock[all]
 ```
 
-Set your E2B key (if using sandbox):
 ```bash
+# E2B key for sandbox execution
 export E2B_API_KEY="your-key-here"
 ```
 
 ---
 
-## 🛡️ OWASP LLM Top 10 Compliance (2025)
+## 🛡️ OWASP Compliance
 
-Agent-Airlock directly mitigates the top security risks identified by OWASP:
+Agent-Airlock mitigates the [OWASP Top 10 for LLMs (2025)](https://owasp.org/www-project-top-10-for-large-language-model-applications/):
 
 | OWASP Risk | Mitigation |
 |------------|------------|
-| **[LLM01: Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)** | Strict type validation prevents injected payloads from exploiting type coercion |
-| **[LLM05: Improper Output Handling](https://owasp.org/www-project-top-10-for-large-language-model-applications/)** | PII/secret masking sanitizes outputs before they reach the LLM |
-| **[LLM06: Excessive Agency](https://owasp.org/www-project-top-10-for-large-language-model-applications/)** | Rate limiting + time restrictions + RBAC prevent runaway agent actions |
-| **[LLM09: Misinformation](https://owasp.org/www-project-top-10-for-large-language-model-applications/)** | Ghost argument rejection prevents hallucinated parameters from executing |
-
-> Reference: [OWASP Top 10 for LLMs v2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf)
+| **LLM01: Prompt Injection** | Strict type validation blocks injected payloads |
+| **LLM05: Improper Output Handling** | PII/secret masking sanitizes outputs |
+| **LLM06: Excessive Agency** | Rate limits + RBAC prevent runaway agents |
+| **LLM09: Misinformation** | Ghost argument rejection blocks hallucinated params |
 
 ---
 
-## 📊 The Numbers
+## 📊 Performance
 
-- **187 tests** passing
-- **84% coverage**
-- **9 framework integrations** — LangChain, LangGraph, OpenAI, PydanticAI, LlamaIndex, CrewAI, AutoGen, smolagents, Anthropic
-- **<50ms** validation overhead
-- **~125ms** sandbox cold start ([E2B Firecracker](https://e2b.dev/blog/firecracker-vs-qemu))
-- **<200ms** sandbox execution (warm pool)
-- **0** external dependencies for core functionality
+| Metric | Value |
+|--------|-------|
+| **Tests** | 629 passing |
+| **Coverage** | 86% (80% enforced in CI) |
+| **Validation overhead** | <50ms |
+| **Sandbox cold start** | ~125ms |
+| **Sandbox warm pool** | <200ms |
+| **Framework integrations** | 9 |
+| **Core dependencies** | 0 (Pydantic only) |
 
 ---
 
 ## 📖 Documentation
 
-- **[Examples](./examples/)** — 9 framework integrations with copy-paste code
-- **[Compatibility Guide](./docs/COMPATIBILITY.md)** — Detailed patterns for all major frameworks
-- **[Security Guide](./docs/SECURITY.md)** — Production deployment checklist
-- **[API Reference](#api-reference)** — Every function, every parameter
-
-### Quick Links
-
-| I want to... | Go to |
-|--------------|-------|
-| Integrate with LangChain | [langchain_integration.py](./examples/langchain_integration.py) |
-| Use with LangGraph | [langgraph_integration.py](./examples/langgraph_integration.py) |
-| Secure OpenAI Agents SDK | [openai_agents_sdk_integration.py](./examples/openai_agents_sdk_integration.py) |
-| Add to PydanticAI | [pydanticai_integration.py](./examples/pydanticai_integration.py) |
-| Protect LlamaIndex tools | [llamaindex_integration.py](./examples/llamaindex_integration.py) |
-| Secure CrewAI agents | [crewai_integration.py](./examples/crewai_integration.py) |
-| Use with AutoGen | [autogen_integration.py](./examples/autogen_integration.py) |
-| Integrate smolagents | [smolagents_integration.py](./examples/smolagents_integration.py) |
-| Direct Anthropic API | [anthropic_integration.py](./examples/anthropic_integration.py) |
-| Build MCP servers | [fastmcp_integration.py](./examples/fastmcp_integration.py) |
+| Resource | Description |
+|----------|-------------|
+| [**Examples**](./examples/) | 9 framework integrations with copy-paste code |
+| [**Security Guide**](./docs/SECURITY.md) | Production deployment checklist |
+| [**API Reference**](./docs/API.md) | Every function, every parameter |
 
 ---
 
-## 👤 Who Built This
+## 👤 About
 
-[Sattyam Jain](https://github.com/sattyamjjain) — Building AI infrastructure at scale.
+Built by [**Sattyam Jain**](https://github.com/sattyamjjain) — AI infrastructure engineer.
 
 This started as an internal tool after watching an agent hallucinate its way through a production database. Now it's yours.
 
@@ -545,14 +529,19 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-Found a bug? [Open an issue](https://github.com/sattyamjjain/agent-airlock/issues).
-Have a feature idea? [Start a discussion](https://github.com/sattyamjjain/agent-airlock/discussions).
+- **Bug?** [Open an issue](https://github.com/sattyamjjain/agent-airlock/issues)
+- **Feature idea?** [Start a discussion](https://github.com/sattyamjjain/agent-airlock/discussions)
+- **Want to contribute?** [See open issues](https://github.com/sattyamjjain/agent-airlock/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 
 ---
 
-## 📄 License
+## 💖 Support
 
-MIT. Use it. Fork it. Ship it. No strings.
+If Agent-Airlock saved your production database:
+
+- ⭐ **Star this repo** — Helps others discover it
+- 🐛 **Report bugs** — [Open an issue](https://github.com/sattyamjjain/agent-airlock/issues)
+- 📣 **Spread the word** — Tweet, blog, share
 
 ---
 
@@ -566,18 +555,6 @@ MIT. Use it. Fork it. Ship it. No strings.
 
 ---
 
-## 💖 Support
-
-If Agent-Airlock saved your production database from an LLM hallucination:
-
-- ⭐ **Star this repo** — It helps others discover the project
-- 🐛 **Report bugs** — [Open an issue](https://github.com/sattyamjjain/agent-airlock/issues)
-- 💡 **Request features** — [Start a discussion](https://github.com/sattyamjjain/agent-airlock/discussions)
-- 🔀 **Contribute** — PRs reviewed within 48 hours
-- 📣 **Spread the word** — Tweet about it, write a blog post
-
----
-
 <div align="center">
 
 **Built with 🛡️ by [Sattyam Jain](https://github.com/sattyamjjain)**
@@ -587,4 +564,14 @@ If Agent-Airlock saved your production database from an LLM hallucination:
 [![GitHub](https://img.shields.io/badge/GitHub-sattyamjjain-181717?style=flat-square&logo=github)](https://github.com/sattyamjjain)
 [![Twitter](https://img.shields.io/badge/Twitter-@sattyamjjain-1DA1F2?style=flat-square&logo=twitter&logoColor=white)](https://twitter.com/sattyamjjain)
 
+</div>
+
+---
+
+<div align="center">
+<sub>
+
+**Sources:** This README follows best practices from [awesome-readme](https://github.com/matiassingers/awesome-readme), [Best-README-Template](https://github.com/othneildrew/Best-README-Template), and the [GitHub Blog](https://github.blog/open-source/maintainers/marketing-for-maintainers-how-to-promote-your-project-to-both-users-and-contributors/).
+
+</sub>
 </div>

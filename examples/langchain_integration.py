@@ -304,23 +304,23 @@ def demo_self_healing():
     print("DEMO: Self-Healing Error Responses")
     print("=" * 60)
 
-    # Simulate LLM sending wrong type
+    # Simulate LLM sending wrong type (use .invoke() for LangChain tools)
     print("\n1. LLM sends string '10' instead of int 10:")
-    result = search_database(query="test", limit="10")  # type: ignore
+    result = search_database.invoke({"query": "test", "limit": "10"})
     print(f"   Result: {result}")
     if isinstance(result, dict) and not result.get("success"):
         print(f"   Fix hints: {result.get('fix_hints', [])}")
 
     # Simulate LLM sending ghost arguments
     print("\n2. LLM sends ghost argument 'force=True' (strict mode):")
-    result = delete_user(user_id="123", force=True)  # type: ignore
+    result = delete_user.invoke({"user_id": "123", "force": True})
     print(f"   Result: {result}")
     if isinstance(result, dict) and not result.get("success"):
         print(f"   Fix hints: {result.get('fix_hints', [])}")
 
     # Valid call
     print("\n3. Correct call passes validation:")
-    result = search_database(query="customer query", limit=25)
+    result = search_database.invoke({"query": "customer query", "limit": 25})
     print(f"   Result: {result}")
 
 
