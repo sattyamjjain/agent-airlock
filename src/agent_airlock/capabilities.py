@@ -182,9 +182,10 @@ class CapabilityPolicy:
             return
 
         # Explicit deny takes precedence
-        denied_caps = required & self.denied
+        # Note: mypy has known issues with Flag enum bitwise ops, runtime works correctly
+        denied_caps = required & self.denied  # type: ignore[operator]
         if denied_caps:
-            denied_names = [c.name for c in Capability if c in denied_caps and c.name]
+            denied_names = _capability_flag_names(denied_caps)
             raise CapabilityDeniedError(
                 f"Tool '{tool_name}' requires denied capabilities: {denied_names}",
                 tool_name=tool_name,
@@ -194,9 +195,9 @@ class CapabilityPolicy:
 
         # Check if granted (only if granted is not NONE)
         if self.granted != Capability.NONE:
-            missing = required & ~self.granted
+            missing = required & ~self.granted  # type: ignore[operator]
             if missing:
-                missing_names = [c.name for c in Capability if c in missing and c.name]
+                missing_names = _capability_flag_names(missing)
                 raise CapabilityDeniedError(
                     f"Tool '{tool_name}' requires capabilities not granted: {missing_names}",
                     tool_name=tool_name,
@@ -281,6 +282,30 @@ def get_required_capabilities(func: Callable[..., Any]) -> Capability:
     return getattr(func, "__airlock_capabilities__", Capability.NONE)
 
 
+def _capability_flag_names(caps: Capability) -> list[str]:
+    """Extract individual flag names from a Capability value.
+
+    This is a mypy-compatible way to iterate over Flag members.
+
+    Args:
+        caps: Capability flags to extract names from.
+
+    Returns:
+        List of individual capability names.
+    """
+    names: list[str] = []
+    for member in Capability:
+        # Skip NONE and composite flags
+        if member == Capability.NONE:
+            continue
+        # Check if this individual flag is set (using bitwise AND)
+        if member.value and (caps.value & member.value) == member.value:
+            # Only include primitive flags (not composites)
+            if member.name and member.value.bit_count() == 1:
+                names.append(member.name)
+    return names
+
+
 def capabilities_to_list(caps: Capability) -> list[str]:
     """Convert Capability flags to a list of names.
 
@@ -292,7 +317,7 @@ def capabilities_to_list(caps: Capability) -> list[str]:
     Returns:
         List of capability names.
     """
-    return [c.name for c in Capability if c in caps and c.name and c.name != "NONE"]
+    return _capability_flag_names(caps)
 
 
 # Predefined capability policies

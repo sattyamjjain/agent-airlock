@@ -153,6 +153,12 @@ module = [
     "mcp.*",
     "tomli",
     "tomli.*",
+    "docker",
+    "docker.*",
+    "opentelemetry",
+    "opentelemetry.*",
+    "langchain_core",
+    "langchain_core.*",
 ]
 ignore_missing_imports = true
 

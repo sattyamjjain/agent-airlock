@@ -16,7 +16,7 @@ import random
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeGuard
 
 import structlog
 
@@ -354,13 +354,21 @@ async def create_honeypot_response_async(
     return fake_data
 
 
-def should_use_honeypot(config: HoneypotConfig | None) -> bool:
-    """Check if honeypot strategy should be used."""
+def should_use_honeypot(config: HoneypotConfig | None) -> TypeGuard[HoneypotConfig]:
+    """Check if honeypot strategy should be used.
+
+    Returns:
+        TypeGuard that narrows config to HoneypotConfig if True.
+    """
     return config is not None and config.strategy == BlockStrategy.HONEYPOT
 
 
-def should_soft_block(config: HoneypotConfig | None) -> bool:
-    """Check if soft block strategy should be used (log only, allow through)."""
+def should_soft_block(config: HoneypotConfig | None) -> TypeGuard[HoneypotConfig]:
+    """Check if soft block strategy should be used (log only, allow through).
+
+    Returns:
+        TypeGuard that narrows config to HoneypotConfig if True.
+    """
     return config is not None and config.strategy == BlockStrategy.SOFT_BLOCK
 
 

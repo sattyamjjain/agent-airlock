@@ -50,12 +50,13 @@ def secure_tool(
     """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        # Airlock returns T | dict, but for integration purposes we preserve T signature
         return Airlock(
             config=config,
             policy=policy,
             sandbox=sandbox,
             **airlock_kwargs,
-        )(func)
+        )(func)  # type: ignore[return-value]
 
     return decorator
 
@@ -165,7 +166,7 @@ def wrap_langchain_tool(
         def secured_run(*args: Any, **kwargs: Any) -> Any:
             return airlock(original_run)(*args, **kwargs)
 
-        tool._run = secured_run
+        tool._run = secured_run  # type: ignore[method-assign]
 
     return tool
 

@@ -173,7 +173,8 @@ def _blocked_connect(self: socket.socket, address: Any) -> None:
         # No policy active, use original
         if _original_socket_connect is None:
             raise RuntimeError("Socket interceptors not properly installed")
-        return _original_socket_connect(self, address)
+        _original_socket_connect(self, address)
+        return None
 
     if not policy.allow_egress:
         host, port = _extract_host_port(address)
@@ -234,7 +235,8 @@ def _blocked_connect(self: socket.socket, address: Any) -> None:
     # Connection allowed
     if _original_socket_connect is None:
         raise RuntimeError("Socket interceptors not properly installed")
-    return _original_socket_connect(self, address)
+    _original_socket_connect(self, address)
+    return None
 
 
 def _blocked_connect_ex(self: socket.socket, address: Any) -> int:
@@ -377,8 +379,8 @@ def _install_socket_interceptors() -> None:
         _original_getaddrinfo = socket.getaddrinfo
 
         # Install interceptors
-        socket.socket.connect = _blocked_connect  # type: ignore[method-assign]
-        socket.socket.connect_ex = _blocked_connect_ex  # type: ignore[method-assign]
+        socket.socket.connect = _blocked_connect  # type: ignore[assignment,method-assign]
+        socket.socket.connect_ex = _blocked_connect_ex  # type: ignore[assignment,method-assign]
         socket.getaddrinfo = _blocked_getaddrinfo  # type: ignore[assignment]
 
         _socket_patched = True
@@ -416,7 +418,7 @@ def _uninstall_socket_interceptors() -> None:
         if _original_socket_connect_ex is not None:
             socket.socket.connect_ex = _original_socket_connect_ex  # type: ignore[method-assign]
         if _original_getaddrinfo is not None:
-            socket.getaddrinfo = _original_getaddrinfo  # type: ignore[assignment]
+            socket.getaddrinfo = _original_getaddrinfo
 
         _socket_patched = False
         logger.debug("socket_interceptors_uninstalled")
@@ -510,7 +512,7 @@ def _reset_interceptors() -> None:
             if _original_socket_connect_ex is not None:
                 socket.socket.connect_ex = _original_socket_connect_ex  # type: ignore[method-assign]
             if _original_getaddrinfo is not None:
-                socket.getaddrinfo = _original_getaddrinfo  # type: ignore[assignment]
+                socket.getaddrinfo = _original_getaddrinfo
             _socket_patched = False
 
         _interceptor_ref_count = 0

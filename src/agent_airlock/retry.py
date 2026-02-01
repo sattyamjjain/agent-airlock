@@ -270,7 +270,7 @@ class RetryPolicy:
 
             @functools.wraps(func)
             async def async_wrapper(*args: Any, **kwargs: Any) -> T:
-                return await self.execute_async(func, *args, **kwargs)  # type: ignore[arg-type]
+                return await self.execute_async(func, *args, **kwargs)
 
             return async_wrapper  # type: ignore[return-value]
         else:

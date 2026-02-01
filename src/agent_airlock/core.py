@@ -58,7 +58,12 @@ import structlog
 from pydantic import ValidationError
 
 from .audit import AuditLogger
-from .capabilities import Capability, CapabilityDeniedError, get_required_capabilities
+from .capabilities import (
+    Capability,
+    CapabilityDeniedError,
+    capabilities_to_list,
+    get_required_capabilities,
+)
 from .config import DEFAULT_CONFIG, AirlockConfig
 from .context import AirlockContext, ContextExtractor, reset_context, set_current_context
 from .filesystem import PathValidationError, validate_path
@@ -468,7 +473,7 @@ class Airlock:
                             else "unknown",
                         )
                         if honeypot_result is not None:
-                            return honeypot_result  # type: ignore[return-value]
+                            return honeypot_result  # type: ignore[no-any-return]
 
                     self._log_blocked(func_name, error_response, start_time)
                     audit_logger.log(
@@ -523,7 +528,7 @@ class Airlock:
                             block_reason="network_blocked",
                         )
                         if honeypot_result is not None:
-                            return honeypot_result  # type: ignore[return-value]
+                            return honeypot_result  # type: ignore[no-any-return]
 
                     response = handle_network_blocked(
                         func_name,
@@ -579,7 +584,7 @@ class Airlock:
                             else "unknown",
                         )
                         if honeypot_result is not None:
-                            return honeypot_result  # type: ignore[return-value]
+                            return honeypot_result  # type: ignore[no-any-return]
 
                     self._log_blocked(func_name, error_response, start_time)
                     audit_logger.log(
@@ -625,7 +630,7 @@ class Airlock:
                             block_reason="network_blocked",
                         )
                         if honeypot_result is not None:
-                            return honeypot_result  # type: ignore[return-value]
+                            return honeypot_result  # type: ignore[no-any-return]
 
                     response = handle_network_blocked(
                         func_name,
@@ -1003,7 +1008,7 @@ class Airlock:
             logger.debug(
                 "capability_check_passed",
                 function=func_name,
-                required=[c.name for c in Capability if c in required_caps and c.name],
+                required=capabilities_to_list(required_caps),
             )
         except CapabilityDeniedError as e:
             logger.warning(
@@ -1014,9 +1019,8 @@ class Airlock:
                 denied=str(e.denied) if e.denied else None,
             )
             response = AirlockResponse.blocked_response(
-                tool_name=func_name,
                 reason=BlockReason.CAPABILITY_DENIED,
-                details=e.message,
+                error=f"{func_name}: {e.message}",
             )
             self._safe_invoke_callback(
                 self.config.on_blocked,

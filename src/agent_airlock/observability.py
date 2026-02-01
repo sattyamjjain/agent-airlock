@@ -351,12 +351,12 @@ class observe:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: Any,
-    ) -> bool:
+    ) -> None:
         if self._span:
             if exc_val is not None and isinstance(exc_val, Exception):
                 self._span.set_error(exc_val)
             end_span(self._span)
-        return False
+        # Don't suppress exceptions
 
     def __call__(self, func: Callable[..., Any]) -> Callable[..., Any]:
         import functools

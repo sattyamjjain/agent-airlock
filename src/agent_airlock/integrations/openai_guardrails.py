@@ -271,7 +271,8 @@ class AirlockGuardrails:
             )(f)
 
             self._tools[tool_name] = secured
-            return secured
+            # Airlock returns T | dict, but for integration we preserve T signature
+            return secured  # type: ignore[return-value]
 
         if func is not None:
             return decorator(func)

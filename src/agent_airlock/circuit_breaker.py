@@ -269,13 +269,13 @@ class CircuitBreaker:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: Any,
-    ) -> bool:
-        """Context manager exit."""
+    ) -> None:
+        """Context manager exit (never suppresses exceptions)."""
         if exc_val is None:
             self._record_success()
         elif isinstance(exc_val, Exception):
             self._record_failure(exc_val)
-        return False  # Don't suppress exceptions
+        # Don't suppress exceptions (return None = don't suppress)
 
 
 # Global registry of circuit breakers

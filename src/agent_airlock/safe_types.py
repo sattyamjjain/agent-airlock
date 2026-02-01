@@ -32,7 +32,7 @@ from __future__ import annotations
 import fnmatch
 import ipaddress
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 import structlog
@@ -481,7 +481,7 @@ def create_safe_path_type(
     deny_patterns: list[str] | None = None,
     allow_absolute: bool = True,
     extra_deny_patterns: list[str] | None = None,
-) -> type:
+) -> Any:
     """Create a custom SafePath type with specific validation rules.
 
     Args:
@@ -516,7 +516,7 @@ def create_safe_url_type(
     block_private_ips: bool = True,
     block_metadata_urls: bool = True,
     extra_blocked_hosts: list[str] | None = None,
-) -> type:
+) -> Any:
     """Create a custom SafeURL type with specific validation rules.
 
     Args:

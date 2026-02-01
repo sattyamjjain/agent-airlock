@@ -146,20 +146,12 @@ def handle_unknown_args(
 
         # Emit audit event if logger available
         if audit_logger is not None:
-            from datetime import datetime, timezone
-
-            from .audit import AuditRecord
-
-            record = AuditRecord(
-                timestamp=datetime.now(timezone.utc).isoformat(),
+            audit_logger.log(
                 tool_name=func_name,
                 blocked=False,
-                block_reason=None,
-                args_preview={"_stripped": ", ".join(sorted(stripped_args))},
-                result_type="unknown_args_event",
-                result_preview=f"Stripped {len(stripped_args)} unknown args",
+                args={"_stripped": ", ".join(sorted(stripped_args))},
+                error=f"Stripped {len(stripped_args)} unknown args: {sorted(stripped_args)}",
             )
-            audit_logger.write(record)
 
     elif mode == UnknownArgsMode.STRIP_SILENT:
         # Silent strip - only debug log

@@ -719,7 +719,7 @@ def download_file(
     """
     try:
         # E2B v2.x uses sandbox.files.read()
-        content = sandbox.files.read(sandbox_path)
+        content: bytes = sandbox.files.read(sandbox_path)
 
         if local_path:
             with open(local_path, "wb") as f:

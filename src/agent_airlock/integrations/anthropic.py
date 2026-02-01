@@ -48,12 +48,13 @@ def secure_tool(
     """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        # Airlock returns T | dict, but for integration purposes we preserve T signature
         return Airlock(
             config=config,
             policy=policy,
             sandbox=sandbox,
             **airlock_kwargs,
-        )(func)
+        )(func)  # type: ignore[return-value]
 
     return decorator
 
@@ -118,7 +119,8 @@ class ToolRegistry:
             self._tools[tool_name] = secured
             self._schemas[tool_name] = self._generate_schema(func, tool_name, tool_desc)
 
-            return secured
+            # Airlock returns T | dict, but for integration we preserve T signature
+            return secured  # type: ignore[return-value]
 
         return decorator
 

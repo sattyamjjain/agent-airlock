@@ -429,7 +429,7 @@ class CostContext:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: Any,
-    ) -> bool:
+    ) -> None:
         duration_ms = (time.time() - self._start_time) * 1000
 
         tokens = TokenUsage(
@@ -454,7 +454,7 @@ class CostContext:
         except Exception:
             logger.exception("cost_tracking_error", tool=self.tool_name)
 
-        return False  # Don't suppress exceptions
+        # Don't suppress exceptions (return None = don't suppress)
 
 
 # Global tracker instance
