@@ -24,6 +24,11 @@ class BlockReason(str, Enum):
     RATE_LIMIT = "rate_limit"
     SANDBOX_ERROR = "sandbox_error"
     OUTPUT_SANITIZED = "output_sanitized"
+    # V0.3.0 security reasons
+    PATH_VIOLATION = "path_violation"
+    NETWORK_BLOCKED = "network_blocked"
+    # V0.4.0 security reasons
+    CAPABILITY_DENIED = "capability_denied"
 
 
 @dataclass
@@ -218,5 +223,78 @@ def handle_rate_limit(
             "function": func_name,
             "limit": limit,
             "reset_seconds": reset_seconds,
+        },
+    )
+
+
+def handle_path_violation(
+    func_name: str,
+    path: str,
+    violation_type: str,
+    details: dict[str, Any] | None = None,
+) -> AirlockResponse:
+    """Create a response for filesystem path violations.
+
+    Args:
+        func_name: Name of the function that was blocked.
+        path: The path that violated the policy.
+        violation_type: Type of path violation (e.g., "outside_allowed_roots").
+        details: Additional details about the violation.
+
+    Returns:
+        AirlockResponse explaining the path violation.
+    """
+    fix_hints = [
+        "The specified path is not accessible due to security policy",
+        "Use paths within the allowed directory roots",
+    ]
+
+    if violation_type == "symlink_detected":
+        fix_hints.append("Symlinks are not allowed; use direct paths")
+    elif violation_type == "denied_pattern":
+        fix_hints.append("This file type or location is explicitly blocked")
+
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.PATH_VIOLATION,
+        error=f"AIRLOCK_BLOCK: Path '{path}' blocked for '{func_name}'",
+        fix_hints=fix_hints,
+        metadata={
+            "function": func_name,
+            "path": path,
+            "violation_type": violation_type,
+            **(details or {}),
+        },
+    )
+
+
+def handle_network_blocked(
+    func_name: str,
+    operation: str,
+    target: str | None,
+    details: dict[str, Any] | None = None,
+) -> AirlockResponse:
+    """Create a response for blocked network operations.
+
+    Args:
+        func_name: Name of the function that was blocked.
+        operation: Type of network operation (e.g., "connect", "dns_lookup").
+        target: The target host/address that was blocked.
+        details: Additional details about the blocked operation.
+
+    Returns:
+        AirlockResponse explaining the network block.
+    """
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.NETWORK_BLOCKED,
+        error=f"AIRLOCK_BLOCK: Network {operation} blocked for '{func_name}'",
+        fix_hints=[
+            "Network access is restricted during tool execution",
+            "This operation requires explicit network permission",
+        ],
+        metadata={
+            "function": func_name,
+            "operation": operation,
+            "target": target,
+            **(details or {}),
         },
     )

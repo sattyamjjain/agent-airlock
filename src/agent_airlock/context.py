@@ -316,3 +316,18 @@ def create_context_from_args(
         Extracted context.
     """
     return ContextExtractor.extract_from_args(args, kwargs)
+
+
+def _reset_context() -> None:
+    """Reset the global context state for testing.
+
+    This function should only be used in tests to ensure isolation
+    between test cases. Note that contextvars are automatically
+    isolated per asyncio.Task, so this mainly clears any stale state.
+    """
+    import contextlib
+
+    # ContextVars don't have a global reset, but we can set to None
+    # This only affects the current context (thread/task)
+    with contextlib.suppress(ValueError):
+        _current_context.set(None)  # type: ignore[arg-type]

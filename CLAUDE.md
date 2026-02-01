@@ -11,10 +11,13 @@
 - Self-healing error responses with fix_hints for LLM retry
 - E2B Firecracker sandbox execution for dangerous code
 - RBAC policy engine (rate limits, time windows, role-based access)
-- PII/secret detection and masking in outputs
+- PII/secret detection and masking (12 types including India PII)
 - FastMCP integration with `@secure_tool` decorator
+- V0.3.0: Filesystem validation, network egress control, honeypot deception, framework vaccination
+- V0.4.0: Circuit breaker, cost tracking, retry policies, OpenTelemetry observability, capability gating
 
-**Stats:** ~5,000 lines of code | 647 tests | 99% coverage (enforced 80% in CI)
+**Stats:** ~11,400 lines of code | 1143 tests | 79%+ coverage (enforced in CI)
+**Version:** 0.4.0 "Enterprise"
 
 <!-- END AUTO-MANAGED -->
 
@@ -56,47 +59,70 @@ python examples/fastmcp_integration.py
 
 ```
 src/agent_airlock/
-├── __init__.py       # Public API exports (all decorators, configs, policies)
-├── core.py           # @Airlock decorator - main entry point (726 lines)
-│                     └─ Handles: ghost args, validation, sandbox, policies
-│                     └─ Full async/await support, context propagation
-│                     └─ Dynamic policy resolution via callables
-├── audit.py          # JSON Lines audit logging (301 lines)
-│                     └─ AuditLogger, AuditRecord, thread-safe writes
-├── context.py        # Request-scoped context (318 lines)
-│                     └─ AirlockContext, ContextExtractor, contextvars
-│                     └─ RunContextWrapper pattern extraction
-├── conversation.py   # Multi-turn conversation state (425 lines)
-│                     └─ ConversationState, ConversationConstraints
-│                     └─ Cross-call tracking, budget management
-├── streaming.py      # Generator/streaming support (365 lines)
-│                     └─ StreamingAirlock, per-chunk sanitization
-│                     └─ Truncation across streamed output
-├── validator.py      # Ghost argument detection + Pydantic strict validation
-│                     └─ strip_ghost_arguments(), create_strict_validator()
-├── self_heal.py      # LLM-friendly error responses
-│                     └─ AirlockResponse with fix_hints for retry
-├── config.py         # Configuration: env vars > constructor > TOML file
-│                     └─ AirlockConfig dataclass (12 options)
-├── policy.py         # RBAC engine (475 lines)
-│                     └─ SecurityPolicy, RateLimit (token bucket), TimeWindow
-├── sanitizer.py      # PII/secret detection + masking (705 lines)
-│                     └─ 12 data types, 4 masking strategies
-├── sandbox.py        # E2B integration with warm pool (518 lines)
-│                     └─ SandboxPool, cloudpickle serialization
-└── mcp.py            # FastMCP integration (344 lines)
-                      └─ MCPAirlock, secure_tool, create_secure_mcp_server
+├── __init__.py         # Public API exports (200+ symbols)
+├── core.py             # @Airlock decorator - main entry point (1003 lines)
+│                       └─ Ghost args, validation, sandbox, policies, capabilities
+│                       └─ Full async/await support, context propagation
+│
+├── ── VALIDATION LAYER ──
+├── validator.py        # Ghost argument detection + Pydantic strict validation
+├── unknown_args.py     # V0.4.0 BLOCK/STRIP_AND_LOG/STRIP_SILENT modes
+├── safe_types.py       # SafePath, SafeURL with auto-validation
+│
+├── ── POLICY LAYER ──
+├── policy.py           # SecurityPolicy, RBAC, RateLimit (token bucket)
+├── capabilities.py     # V0.4.0 Capability gating (Flag enum)
+│
+├── ── EXECUTION LAYER ──
+├── sandbox.py          # E2B Firecracker MicroVM integration
+├── sandbox_backend.py  # V0.4.0 Pluggable backends (E2B/Docker/Local)
+├── streaming.py        # StreamingAirlock for generators
+├── context.py          # AirlockContext with contextvars
+├── conversation.py     # Multi-turn state tracking
+│
+├── ── SANITIZATION LAYER ──
+├── sanitizer.py        # PII/secret detection (12 types, 4 strategies)
+│
+├── ── V0.3.0 "VACCINE" FEATURES ──
+├── filesystem.py       # Path validation (CVE-resistant)
+├── network.py          # Egress control (socket monkeypatch)
+├── honeypot.py         # Deception protocol (fake success data)
+├── vaccine.py          # Framework injection (LangChain/OpenAI auto-wrap)
+│
+├── ── V0.4.0 "ENTERPRISE" FEATURES ──
+├── circuit_breaker.py  # Fault tolerance pattern (CLOSED/OPEN/HALF_OPEN)
+├── cost_tracking.py    # Token usage + budget limits
+├── retry.py            # Exponential backoff + jitter
+├── observability.py    # OpenTelemetry spans/metrics
+├── audit_otel.py       # OTel audit export
+├── mcp_proxy_guard.py  # Token passthrough prevention
+│
+├── ── INTEGRATIONS ──
+├── integrations/
+│   ├── langchain.py    # LangChain @tool wrapper
+│   ├── anthropic.py    # Anthropic SDK ToolRegistry
+│   └── openai_guardrails.py # OpenAI Agents SDK bridge
+│
+├── mcp.py              # FastMCP integration
+│
+└── cli/                # CLI tools
+    ├── doctor.py       # airlock doctor command
+    └── verify.py       # airlock verify command
 ```
 
 **Data Flow:**
 1. LLM calls MCP tool with arguments
 2. `@Airlock` intercepts → logs with sensitive param filtering
-3. Ghost arguments stripped/rejected based on `strict_mode`
+3. Ghost arguments handled (BLOCK/STRIP_AND_LOG/STRIP_SILENT)
 4. Security policy checked (RBAC, rate limits, time restrictions)
-5. Pydantic validates types strictly (no coercion)
-6. If `sandbox=True`, serialize with cloudpickle → execute in E2B MicroVM
-7. Output sanitized (PII/secrets masked, truncated if needed)
-8. Return result or self-healing error with `fix_hints`
+5. Filesystem path validation (V0.3.0)
+6. Capability gating (V0.4.0)
+7. Pydantic validates types strictly (no coercion)
+8. Network airgap applied if configured (V0.3.0)
+9. Execute: local or E2B sandbox (with circuit breaker)
+10. Output sanitized (PII/secrets masked, truncated)
+11. Cost tracked, audit logged (with OTel export option)
+12. Return result or self-healing error with `fix_hints`
 
 <!-- END AUTO-MANAGED -->
 
@@ -119,7 +145,7 @@ src/agent_airlock/
 ## Detected Patterns
 
 - **Decorator Pattern:** `@Airlock()` wraps functions with validation/security
-- **Defense-in-Depth:** 4 layers: validation → policy → sandbox → sanitization
+- **Defense-in-Depth:** 6 layers: validation → policy → capability → filesystem → network → sandbox
 - **Response Objects:** `AirlockResponse` for consistent blocked/success format
 - **Config Priority:** ENV vars (`AIRLOCK_*`) > constructor > `airlock.toml`
 - **Self-Healing:** `ValidationError` → structured JSON with `fix_hints` for LLM retry
@@ -130,6 +156,10 @@ src/agent_airlock/
 - **Policy Resolver:** Dynamic policies via `Callable[[AirlockContext], SecurityPolicy]`
 - **Streaming Sanitization:** Per-chunk validation with cumulative truncation
 - **Conversation State:** Multi-turn tracking with budget management (ConversationConstraints)
+- **Circuit Breaker:** CLOSED → OPEN → HALF_OPEN states for fault tolerance (V0.4.0)
+- **Framework Vaccination:** Monkeypatch `@tool` decorators via `vaccinate()` (V0.3.0)
+- **Honeypot Deception:** Return fake success data instead of errors (V0.3.0)
+- **Signature Preservation:** Copy `__signature__`, `__annotations__` for framework introspection
 
 <!-- END AUTO-MANAGED -->
 
@@ -137,17 +167,19 @@ src/agent_airlock/
 ## Git Insights
 
 Recent commits:
+- `4b5fe16` feat: v0.2.0 - Security hardening and production roadmap
 - `2630882` fix: skip cloudpickle tests when not installed
 - `489b8d4` fix: resolve all ruff lint and format errors for CI
 - `f138bb5` feat: v0.1.5 - Production-ready release with streaming, context, and 99% coverage
 - `f859cfa` chore: bump version to 0.1.3
-- `a18dacf` docs: upgrade README to top 1% 2026 standards
 
 Key security additions:
 - `sandbox_required=True` parameter prevents unsafe local execution fallback
 - Sensitive parameter names filtered from debug logs
-- Path validation to prevent directory traversal attacks
-- Per-file-ignores for test patterns (ARG001, ARG005, SIM117)
+- Path validation (CVE-resistant using `os.path.commonpath()`)
+- Network egress control via socket monkeypatch with thread-local storage
+- Capability gating with `@requires(Capability.*)` decorator
+- Circuit breaker for fault tolerance
 
 <!-- END AUTO-MANAGED -->
 
@@ -214,13 +246,17 @@ Key security additions:
 - [x] Security scan and fixes
 - [ ] Outreach
 
-### Framework Integrations (Tested 2026-01-31)
+### Framework Integrations (Tested 2026-02-01)
 All major AI frameworks tested and working:
 - [x] LangChain - `@tool` + `@Airlock()` pattern, `.invoke()` for tool calls
 - [x] LangGraph - ToolNode integration, state graphs with security
 - [x] PydanticAI - `output_type` param, RunContext preservation
 - [x] OpenAI Agents SDK - `@function_tool` + `@Airlock()`, Agent.run()
-- [ ] Anthropic, AutoGen, CrewAI, LlamaIndex, smolagents (deps not installed)
+- [x] Anthropic - `@Airlock()` with tool_use blocks, Messages API
+- [x] AutoGen - FunctionTool with airlocked functions
+- [x] CrewAI - `@tool` decorator pattern (Tool object wrapper)
+- [x] LlamaIndex - FunctionTool.from_defaults(), ToolOutput.raw_output
+- [x] smolagents - `@tool` + `@Airlock()` with proper Args docstrings
 
 ### Enterprise Production Roadmap (Added 2026-02-01)
 
@@ -235,25 +271,29 @@ See `PRODUCTION_ROADMAP.md` for full details.
 - [x] Workspace PII config (per-tenant rules)
 - [x] Conversation tracking (multi-turn state)
 
-**P0 - Critical for Production (Week 1-2):**
+**V0.3.0 "Vaccine" Features (COMPLETED):**
+- [x] Filesystem path validation (CVE-resistant)
+- [x] Network egress control (socket monkeypatch)
+- [x] Honeypot deception protocol
+- [x] Framework vaccination (LangChain, OpenAI SDK auto-wrap)
+
+**V0.4.0 "Enterprise" Features (COMPLETED):**
+- [x] UnknownArgsMode (BLOCK/STRIP_AND_LOG/STRIP_SILENT)
+- [x] SafePath/SafeURL safe types
+- [x] Capability gating (@requires decorator)
+- [x] Pluggable sandbox backends (E2B/Docker/Local)
+- [x] OpenTelemetry observability
+- [x] Circuit breaker pattern
+- [x] Cost tracking with budget limits
+- [x] Retry policies with exponential backoff
+- [x] MCP Proxy Guard
+- [x] India-specific PII (Aadhaar, PAN, UPI, IFSC)
+
+**Future Roadmap:**
 - [ ] Redis-backed distributed rate limiting
-- [ ] India-specific PII (Aadhaar, PAN, UPI, IFSC)
-- [ ] Performance benchmarks with CI
+- [ ] Performance benchmarks in CI
+- [ ] Additional framework integrations
 
-**P1 - Enterprise Features (Week 3-4):**
-- [ ] OpenAI Agents SDK Guardrails bridge
-- [ ] Observability hooks (Datadog, OTEL, PostHog)
-- [ ] Circuit breaker pattern
-
-**P2 - Nice to Have (Week 5-6):**
-- [ ] Cost tracking callbacks
-- [ ] Anthropic SDK integration
-- [ ] LangChain integration module
-- [ ] Retry policies
-
-**Target Versions:**
-- v0.2.0: Redis rate limiting, India PII, Benchmarks
-- v0.3.0: Guardrails bridge, Observability
-- v1.0.0: Production certified, All integrations
+**Current Version:** v0.4.0 "Enterprise"
 
 <!-- END MANUAL -->

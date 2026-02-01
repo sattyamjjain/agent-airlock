@@ -2,6 +2,18 @@
 
 Provides thread-safe JSON Lines audit logging for all tool calls.
 This was previously a config-only feature - now fully implemented.
+
+THREAD SAFETY:
+    This module is thread-safe. The AuditLogger uses:
+    - Class-level _lock for managing the global instances dict
+    - Instance-level _file_lock for protecting file writes
+
+    Lock Acquisition Order (to prevent deadlocks):
+    1. AuditLogger._lock (class lock) - acquired for close_all()
+    2. self._file_lock (instance lock) - acquired for individual writes
+
+    File writes are atomic within a single log() call. Multiple threads
+    can safely write to the same audit logger concurrently.
 """
 
 from __future__ import annotations
@@ -258,7 +270,12 @@ class AuditLogger:
             if len(s) > max_len:
                 return s[:max_len] + f"... ({len(s):,} chars total)"
             return s
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "preview_result_failed",
+                result_type=type(result).__name__,
+                error=str(e),
+            )
             return f"<{type(result).__name__}>"
 
     def flush(self) -> None:

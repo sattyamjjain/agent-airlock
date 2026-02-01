@@ -5,6 +5,7 @@ Provides RBAC (Role-Based Access Control) for AI agents with:
 - Time-based restrictions
 - Rate limiting
 - Agent identity tracking
+- Capability gating (V0.4.0)
 """
 
 from __future__ import annotations
@@ -16,9 +17,12 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from .capabilities import CapabilityPolicy
 
 logger = structlog.get_logger("agent-airlock.policy")
 
@@ -244,6 +248,7 @@ class SecurityPolicy:
                      More specific patterns take precedence.
         require_agent_id: If True, reject calls without agent identity.
         allowed_roles: If set, agent must have at least one of these roles.
+        capability_policy: V0.4.0 - Capability gating policy for per-tool permissions.
     """
 
     allowed_tools: list[str] = field(default_factory=list)
@@ -252,6 +257,8 @@ class SecurityPolicy:
     rate_limits: dict[str, str] = field(default_factory=dict)
     require_agent_id: bool = False
     allowed_roles: list[str] = field(default_factory=list)
+    # V0.4.0 capability gating
+    capability_policy: CapabilityPolicy | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -451,18 +458,63 @@ PERMISSIVE_POLICY = SecurityPolicy()
 """Allows all tools with no restrictions."""
 
 
+def _get_strict_capability_policy() -> CapabilityPolicy | None:
+    """Lazy import capability policy for STRICT_POLICY."""
+    try:
+        from .capabilities import Capability, CapabilityPolicy
+
+        return CapabilityPolicy(
+            granted=Capability.FILESYSTEM_READ
+            | Capability.NETWORK_HTTPS
+            | Capability.DATABASE_READ,
+            denied=Capability.PROCESS_SHELL | Capability.FILESYSTEM_DELETE,
+            require_sandbox_for=Capability.DANGEROUS,
+        )
+    except ImportError:
+        return None
+
+
+def _get_read_only_capability_policy() -> CapabilityPolicy | None:
+    """Lazy import capability policy for READ_ONLY_POLICY."""
+    try:
+        from .capabilities import Capability, CapabilityPolicy
+
+        return CapabilityPolicy(
+            granted=Capability.FILESYSTEM_READ
+            | Capability.DATABASE_READ
+            | Capability.NETWORK_HTTPS,
+            denied=Capability.FILESYSTEM_WRITE
+            | Capability.FILESYSTEM_DELETE
+            | Capability.DATABASE_WRITE,
+            require_sandbox_for=Capability.PROCESS_EXEC | Capability.PROCESS_SHELL,
+        )
+    except ImportError:
+        return None
+
+
 STRICT_POLICY = SecurityPolicy(
     require_agent_id=True,
     rate_limits={"*": "100/hour"},
+    capability_policy=_get_strict_capability_policy(),
 )
-"""Requires agent identity and applies global rate limit."""
+"""Requires agent identity, applies global rate limit, and enforces strict capabilities.
+
+V0.4.0: Adds capability policy that:
+- Grants: FILESYSTEM_READ, NETWORK_HTTPS, DATABASE_READ
+- Denies: PROCESS_SHELL, FILESYSTEM_DELETE
+- Requires sandbox for: DANGEROUS operations
+"""
 
 
 READ_ONLY_POLICY = SecurityPolicy(
     allowed_tools=["read_*", "get_*", "list_*", "search_*"],
     denied_tools=["write_*", "delete_*", "update_*", "create_*"],
+    capability_policy=_get_read_only_capability_policy(),
 )
-"""Only allows read operations."""
+"""Only allows read operations with matching capability policy.
+
+V0.4.0: Adds capability policy that denies write/delete capabilities.
+"""
 
 
 BUSINESS_HOURS_POLICY = SecurityPolicy(

@@ -144,6 +144,38 @@ def transfer_funds(account: str, amount: int) -> dict:
 <br/><sub>Auto-redact secrets</sub>
 </td>
 </tr>
+<tr>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/network-card.png" alt="network"/>
+<br/><b>Network Guard</b>
+<br/><sub>Block data exfiltration</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/folder-invoices.png" alt="folder"/>
+<br/><b>Path Validation</b>
+<br/><sub>CVE-resistant traversal</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/restart.png" alt="circuit"/>
+<br/><b>Circuit Breaker</b>
+<br/><sub>Fault tolerance</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/analytics.png" alt="otel"/>
+<br/><b>OpenTelemetry</b>
+<br/><sub>Enterprise observability</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/money-bag.png" alt="cost"/>
+<br/><b>Cost Tracking</b>
+<br/><sub>Budget limits</sub>
+</td>
+<td align="center" width="16%">
+<img width="40" src="https://img.icons8.com/fluency/48/syringe.png" alt="vaccine"/>
+<br/><b>Vaccination</b>
+<br/><sub>Auto-secure frameworks</sub>
+</td>
+</tr>
 </table>
 
 ---
@@ -161,6 +193,10 @@ def transfer_funds(account: str, amount: int) -> dict:
   - [Security Policies](#-security-policies)
   - [Cost Control](#-cost-control)
   - [PII Masking](#-pii--secret-masking)
+  - [Network Airgap](#-network-airgap-v030)
+  - [Framework Vaccination](#-framework-vaccination-v030)
+  - [Circuit Breaker](#-circuit-breaker-v040)
+  - [OpenTelemetry](#-opentelemetry-observability-v040)
 - [Framework Compatibility](#-framework-compatibility)
 - [FastMCP Integration](#-fastmcp-integration)
 - [Comparison](#-why-not-enterprise-vendors)
@@ -257,6 +293,86 @@ def get_user(user_id: str) -> dict:
 ```
 
 **12 PII types detected** · **4 masking strategies** · **Zero data leakage**
+
+---
+
+### 🌐 Network Airgap (V0.3.0)
+
+Block data exfiltration during tool execution:
+
+```python
+from agent_airlock import network_airgap, NO_NETWORK_POLICY
+
+# Block ALL network access
+with network_airgap(NO_NETWORK_POLICY):
+    result = untrusted_tool()  # Any socket call → NetworkBlockedError
+
+# Or allow specific hosts only
+from agent_airlock import NetworkPolicy
+
+INTERNAL_ONLY = NetworkPolicy(
+    allow_egress=True,
+    allowed_hosts=["api.internal.com", "*.company.local"],
+    allowed_ports=[443],
+)
+```
+
+---
+
+### 💉 Framework Vaccination (V0.3.0)
+
+Secure existing code **without changing a single line**:
+
+```python
+from agent_airlock import vaccinate, STRICT_POLICY
+
+# Before: Your existing LangChain tools are unprotected
+vaccinate("langchain", policy=STRICT_POLICY)
+
+# After: ALL @tool decorators now include Airlock security
+# No code changes required!
+```
+
+**Supported:** LangChain, OpenAI Agents SDK, PydanticAI, CrewAI
+
+---
+
+### ⚡ Circuit Breaker (V0.4.0)
+
+Prevent cascading failures with fault tolerance:
+
+```python
+from agent_airlock import CircuitBreaker, AGGRESSIVE_BREAKER
+
+breaker = CircuitBreaker("external_api", config=AGGRESSIVE_BREAKER)
+
+@breaker
+def call_external_api(query: str) -> dict:
+    return external_service.query(query)
+
+# After 5 failures → circuit OPENS → fast-fails for 30s
+# Then HALF_OPEN → allows 1 test request → recovers or reopens
+```
+
+---
+
+### 📈 OpenTelemetry Observability (V0.4.0)
+
+Enterprise-grade monitoring:
+
+```python
+from agent_airlock import configure_observability, observe
+
+configure_observability(
+    service_name="my-agent",
+    otlp_endpoint="http://otel-collector:4317",
+)
+
+@observe(name="critical_operation")
+def process_data(data: dict) -> dict:
+    # Automatic span creation, metrics, and audit logging
+    return transform(data)
+```
 
 ---
 
@@ -480,8 +596,10 @@ Agent-Airlock mitigates the [OWASP Top 10 for LLMs (2025)](https://owasp.org/www
 | OWASP Risk | Mitigation |
 |------------|------------|
 | **LLM01: Prompt Injection** | Strict type validation blocks injected payloads |
+| **LLM02: Sensitive Data Disclosure** | Network airgap prevents data exfiltration |
 | **LLM05: Improper Output Handling** | PII/secret masking sanitizes outputs |
-| **LLM06: Excessive Agency** | Rate limits + RBAC prevent runaway agents |
+| **LLM06: Excessive Agency** | Rate limits + RBAC + capability gating prevent runaway agents |
+| **LLM07: System Prompt Leakage** | Honeypot returns fake data instead of errors |
 | **LLM09: Misinformation** | Ghost argument rejection blocks hallucinated params |
 
 ---
@@ -490,8 +608,9 @@ Agent-Airlock mitigates the [OWASP Top 10 for LLMs (2025)](https://owasp.org/www
 
 | Metric | Value |
 |--------|-------|
-| **Tests** | 629 passing |
-| **Coverage** | 86% (80% enforced in CI) |
+| **Tests** | 1,143 passing |
+| **Coverage** | 80% (enforced in CI) |
+| **Lines of Code** | ~11,400 |
 | **Validation overhead** | <50ms |
 | **Sandbox cold start** | ~125ms |
 | **Sandbox warm pool** | <200ms |

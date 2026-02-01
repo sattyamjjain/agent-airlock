@@ -1,109 +1,72 @@
 # Changelog
 
-All notable changes to Agent-Airlock are documented here.
+For the complete changelog with all versions and detailed release notes, see the [CHANGELOG.md](../CHANGELOG.md) file in the project root.
 
-## [0.1.0] - 2026-01-31
+## Quick Version Summary
 
-### Added
+| Version | Codename | Highlights |
+|---------|----------|------------|
+| **0.4.0** | "Enterprise" | UnknownArgsMode, Safe Types, Capability Gating, Circuit Breaker, Cost Tracking, Retry Policies, OpenTelemetry, MCP Proxy Guard |
+| **0.3.0** | "Vaccine" | Filesystem path validation, Network egress control, Honeypot deception, Framework vaccination |
+| **0.2.0** | - | Security hardening, Production roadmap |
+| **0.1.5** | - | Streaming support, Context propagation, Dynamic policy resolution, Conversation tracking |
+| **0.1.3** | - | Framework compatibility (LangChain, OpenAI SDK, PydanticAI, etc.), Signature preservation |
+| **0.1.1** | - | Policy engine, Output sanitization, FastMCP integration, Audit logging |
+| **0.1.0** | - | Core validator, E2B sandbox integration, Configuration system |
 
-#### Core Features
-- **@Airlock decorator** - Main entry point for securing tool functions
-- **Ghost argument detection** - Strips or rejects LLM-invented parameters
-- **Pydantic V2 strict validation** - No silent type coercion
-- **Self-healing responses** - Structured errors with fix_hints for LLM retry
+---
 
-#### Security Policy Engine
-- **SecurityPolicy class** - RBAC with allow/deny lists
-- **Rate limiting** - Token bucket algorithm with configurable limits
-- **Time-based restrictions** - Control when tools can be called
-- **Agent identity** - Per-agent access control and rate limits
-- **Predefined policies** - PERMISSIVE, STRICT, READ_ONLY, BUSINESS_HOURS
+## Latest Release: V0.4.0 "Enterprise"
 
-#### Output Sanitization
-- **PII detection and masking** - Email, phone, SSN, credit card, IP
-- **Secret detection and masking** - API keys, passwords, AWS keys, JWT
-- **Masking strategies** - FULL, PARTIAL, TYPE_ONLY, HASH
-- **Token/character truncation** - Cost control circuit breaker
-- **Workspace-specific rules** - Multi-tenant PII configuration
+### ✨ New Features
 
-#### E2B Sandbox Integration
-- **SandboxPool** - Warm pool of MicroVMs for low latency
-- **Function serialization** - cloudpickle for safe transfer
-- **Timeout control** - Configurable execution limits
-- **sandbox_required** - Prevent unsafe local fallback
+- **UnknownArgsMode**: Explicit `BLOCK`, `STRIP_AND_LOG`, `STRIP_SILENT` modes (replaces `strict_mode`)
+- **Safe Types**: `SafePath`, `SafePathStrict`, `SafeURL`, `SafeURLAllowHttp`
+- **Capability Gating**: `@requires(Capability.FILESYSTEM_READ)` decorator
+- **Pluggable Sandbox Backends**: E2B, Docker, Local
+- **Circuit Breaker**: Prevent cascading failures with CLOSED/OPEN/HALF_OPEN states
+- **Cost Tracking**: Budget limits with soft/hard thresholds and alerts
+- **Retry Policies**: Exponential backoff with jitter support
+- **OpenTelemetry**: Distributed tracing with span attributes and metrics
+- **MCP Proxy Guard**: Token passthrough prevention, session binding
+- **CLI Tools**: `airlock doctor`, `airlock verify`
 
-#### FastMCP Integration
-- **secure_tool decorator** - Convenience wrapper for MCP tools
-- **MCPAirlock class** - MCP-specific features
-- **create_secure_mcp_server** - Factory for secured MCP servers
-- **Progress reporting** - Support for MCP progress updates
+### 🔧 Improvements
 
-#### Conversation Tracking
-- **ConversationTracker** - Multi-agent session management
-- **ConversationConstraints** - Cooldowns, quotas, sequences
-- **Manual blocking** - Admin controls for suspicious sessions
+- Enhanced audit logging with OpenTelemetry export support
+- Better error messages for capability denials
+- Improved thread safety in rate limiters and circuit breakers
 
-#### Streaming Support
-- **StreamingAirlock** - Per-chunk sanitization
-- **Generator wrapping** - Sync and async generators
-- **Truncation in streams** - Character limit enforcement
+---
 
-#### Developer Experience
-- **AirlockConfig** - Centralized configuration
-- **Environment variables** - AIRLOCK_* for all settings
-- **airlock.toml** - File-based configuration
-- **Error hooks** - on_validation_error, on_blocked, on_rate_limit
-- **Framework compatibility** - OpenAI, Azure, LangChain
+## V0.3.0 "Vaccine"
 
-### Security
-- Fixed potential ReDoS in regex patterns
-- Added Bandit security scanning to CI
-- Added Safety dependency checking
-- SBOM generation with cyclonedx-bom
-- Comprehensive SECURITY.md documentation
+### ✨ New Features
 
-### Documentation
-- Full API reference
-- User guide with concepts, validation, policy, sanitization, sandbox
-- 18 example files covering all features
-- MkDocs configuration for documentation site
+- **Filesystem Path Validation**: `os.path.commonpath()` (CVE-resistant)
+- **Network Egress Control**: `network_airgap()` context manager
+- **Honeypot Deception**: Return fake data instead of errors
+- **Framework Vaccination**: `vaccinate("langchain")` automatic security
 
 ---
 
 ## Upgrade Guide
 
-### From Pre-release to 0.1.0
+### From V0.3.0 to V0.4.0
 
-This is the initial release. No migration needed.
+**UnknownArgsMode migration:**
+```python
+# Old (deprecated)
+@Airlock(config=AirlockConfig(strict_mode=True))
 
-### Configuration Priority
+# New (V0.4.0)
+from agent_airlock import UnknownArgsMode
+@Airlock(unknown_args_mode=UnknownArgsMode.BLOCK)
+```
 
-Configuration is loaded in this order (highest priority first):
+### From V0.1.x to V0.3.0
 
-1. Environment variables (`AIRLOCK_*`)
-2. Constructor arguments
-3. Configuration file (`airlock.toml`)
-4. Default values
-
-### Breaking Changes
-
-None - this is the initial release.
-
----
-
-## Roadmap
-
-### 0.2.0 (Planned)
-- FastMCP 3.x support
-- File mounting for sandboxes
-- Audit logging with structlog
-- LangChain integration package
-
-### 0.3.0 (Planned)
-- Web dashboard for monitoring
-- Prometheus metrics endpoint
-- Redis-backed rate limiting
-- Multi-region sandbox pools
+No breaking changes - all V0.3.0 features are opt-in.
 
 ---
 
@@ -111,4 +74,8 @@ None - this is the initial release.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 
-Report issues at [GitHub Issues](https://github.com/attri-ai/agent-airlock/issues).
+Report issues at [GitHub Issues](https://github.com/sattyamjjain/agent-airlock/issues).
+
+---
+
+[View full changelog →](../CHANGELOG.md)

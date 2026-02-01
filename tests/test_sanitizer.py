@@ -111,7 +111,12 @@ class TestDetectSensitiveData:
         assert len(detections) == 1
 
     def test_detect_jwt(self) -> None:
-        content = "Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+        jwt_token = (
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+            ".eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+            ".dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+        )
+        content = f"Token: {jwt_token}"
         detections = detect_sensitive_data(content, [SensitiveDataType.JWT])
 
         assert len(detections) == 1
@@ -127,6 +132,76 @@ class TestDetectSensitiveData:
         detections = detect_sensitive_data(content, [SensitiveDataType.CONNECTION_STRING])
 
         assert len(detections) == 1
+
+    # India-specific PII tests
+    def test_detect_aadhaar(self) -> None:
+        """Test detection of Indian Aadhaar numbers."""
+        content = "Aadhaar: 2345 6789 0123"
+        detections = detect_sensitive_data(content, [SensitiveDataType.AADHAAR])
+
+        assert len(detections) == 1
+        assert detections[0]["type"] == "aadhaar"
+
+    def test_detect_aadhaar_no_spaces(self) -> None:
+        """Test detection of Aadhaar without spaces."""
+        content = "ID: 234567890123"
+        detections = detect_sensitive_data(content, [SensitiveDataType.AADHAAR])
+
+        assert len(detections) == 1
+
+    def test_detect_aadhaar_with_dashes(self) -> None:
+        """Test detection of Aadhaar with dashes."""
+        content = "Aadhaar: 2345-6789-0123"
+        detections = detect_sensitive_data(content, [SensitiveDataType.AADHAAR])
+
+        assert len(detections) == 1
+
+    def test_detect_pan(self) -> None:
+        """Test detection of Indian PAN card numbers."""
+        content = "PAN: ABCDE1234F"
+        detections = detect_sensitive_data(content, [SensitiveDataType.PAN])
+
+        assert len(detections) == 1
+        assert detections[0]["type"] == "pan"
+        assert detections[0]["value"] == "ABCDE1234F"
+
+    def test_detect_upi_id(self) -> None:
+        """Test detection of UPI IDs."""
+        content = "Pay to: user.name@okaxis"
+        detections = detect_sensitive_data(content, [SensitiveDataType.UPI_ID])
+
+        assert len(detections) == 1
+        assert detections[0]["type"] == "upi_id"
+
+    def test_detect_upi_id_variants(self) -> None:
+        """Test detection of various UPI ID formats."""
+        test_cases = [
+            "john@ybl",
+            "payment@paytm",
+            "user123@oksbi",
+            "shop@phonepe",
+        ]
+        for upi in test_cases:
+            content = f"UPI: {upi}"
+            detections = detect_sensitive_data(content, [SensitiveDataType.UPI_ID])
+            assert len(detections) == 1, f"Failed to detect {upi}"
+
+    def test_detect_ifsc(self) -> None:
+        """Test detection of IFSC codes."""
+        content = "IFSC: SBIN0001234"
+        detections = detect_sensitive_data(content, [SensitiveDataType.IFSC])
+
+        assert len(detections) == 1
+        assert detections[0]["type"] == "ifsc"
+        assert detections[0]["value"] == "SBIN0001234"
+
+    def test_detect_ifsc_various_banks(self) -> None:
+        """Test detection of IFSC codes from various banks."""
+        test_cases = ["HDFC0001234", "ICIC0006789", "UTIB0002345", "PUNB0123400"]
+        for ifsc in test_cases:
+            content = f"Bank IFSC: {ifsc}"
+            detections = detect_sensitive_data(content, [SensitiveDataType.IFSC])
+            assert len(detections) == 1, f"Failed to detect {ifsc}"
 
     def test_detect_all_types(self) -> None:
         content = "Email: test@example.com, SSN: 123-45-6789"

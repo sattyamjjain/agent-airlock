@@ -116,8 +116,13 @@ class MCPAirlock:
                     # Report start of execution
                     if hasattr(ctx, "report_progress"):
                         ctx.report_progress(0, f"Starting {func.__name__}...")
-                except Exception:
-                    pass  # Ignore progress reporting errors  # nosec B110
+                except Exception as e:
+                    logger.debug(
+                        "progress_report_failed",
+                        function=func.__name__,
+                        stage="start",
+                        error=str(e),
+                    )
 
             # Execute the airlocked function
             result = airlocked_func(*args, **kwargs)
@@ -142,8 +147,13 @@ class MCPAirlock:
                 try:
                     if hasattr(ctx, "report_progress"):
                         ctx.report_progress(100, f"Completed {func.__name__}")
-                except Exception:
-                    pass  # nosec B110 - progress reporting is non-critical
+                except Exception as e:
+                    logger.debug(
+                        "progress_report_failed",
+                        function=func.__name__,
+                        stage="complete",
+                        error=str(e),
+                    )
 
             return result  # type: ignore[return-value]
 
@@ -315,8 +325,12 @@ class MCPContextExtractor:
                 return str(ctx.session_id)
             if hasattr(ctx, "request_id"):
                 return str(ctx.request_id)
-        except Exception:
-            pass  # nosec B110 - context extraction is best-effort
+        except Exception as e:
+            logger.debug(
+                "context_extraction_failed",
+                field="agent_id",
+                error=str(e),
+            )
         return None
 
     @staticmethod
@@ -329,8 +343,11 @@ class MCPContextExtractor:
                 metadata["client_info"] = ctx.client_info
             if hasattr(ctx, "protocol_version"):
                 metadata["protocol_version"] = ctx.protocol_version
-        except Exception:
-            pass  # nosec B110 - metadata extraction is best-effort
+        except Exception as e:
+            logger.debug(
+                "metadata_extraction_failed",
+                error=str(e),
+            )
 
         return metadata
 

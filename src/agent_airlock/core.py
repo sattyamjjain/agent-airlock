@@ -8,6 +8,40 @@ The @Airlock decorator provides:
 5. Policy enforcement
 6. Audit logging (JSON Lines format)
 7. Full async function support
+8. Filesystem path validation (V0.3.0)
+9. Network egress control (V0.3.0)
+10. Honeypot deception (V0.3.0)
+
+Security Notes
+--------------
+
+exec() Usage:
+    This module contains exec() calls ONLY in docstring examples demonstrating
+    how to safely execute user code with sandbox=True. These examples show the
+    intended pattern:
+
+        @Airlock(sandbox=True, sandbox_required=True)
+        def run_code(code: str) -> str:
+            exec(code)  # Runs in E2B MicroVM, never locally
+            return "ok"
+
+    When sandbox_required=True, Airlock raises SandboxUnavailableError if E2B
+    is not available, preventing accidental local execution of dangerous code.
+    Never use exec() without sandbox protection in production.
+
+Thread Safety:
+    This module is thread-safe. The Airlock class can be used as a decorator
+    from multiple threads concurrently. State is managed through:
+    - contextvars for request-scoped context (AirlockContext)
+    - Thread-local storage for network policy (in network.py)
+    - Locks in sandbox pool and audit logger
+
+    Lock Acquisition Order (to prevent deadlocks):
+    1. _pool_lock (sandbox.py) - sandbox pool access
+    2. audit._file_lock (audit.py) - audit file writes
+    3. _patch_lock (network.py) - socket interceptor installation
+
+    Note: Locks should never be held across await boundaries or external calls.
 """
 
 from __future__ import annotations
@@ -24,18 +58,30 @@ import structlog
 from pydantic import ValidationError
 
 from .audit import AuditLogger
+from .capabilities import Capability, CapabilityDeniedError, get_required_capabilities
 from .config import DEFAULT_CONFIG, AirlockConfig
 from .context import AirlockContext, ContextExtractor, reset_context, set_current_context
+from .filesystem import PathValidationError, validate_path
+from .honeypot import (
+    create_honeypot_response,
+    create_honeypot_response_async,
+    should_soft_block,
+    should_use_honeypot,
+)
+from .network import NetworkBlockedError, network_airgap
 from .policy import PolicyViolation, SecurityPolicy, ViolationType
 from .sanitizer import sanitize_output
 from .self_heal import (
     AirlockResponse,
     BlockReason,
     handle_ghost_argument_error,
+    handle_network_blocked,
+    handle_path_violation,
     handle_policy_violation,
     handle_rate_limit,
     handle_validation_error,
 )
+from .unknown_args import UnknownArgsMode, handle_unknown_args
 from .validator import GhostArgumentError, create_strict_validator, strip_ghost_arguments
 
 logger = structlog.get_logger("agent-airlock")
@@ -80,6 +126,66 @@ def _filter_sensitive_keys(keys: list[str]) -> list[str]:
     SECURITY: Prevents leaking sensitive parameter names to logs.
     """
     return [k for k in keys if k.lower() not in SENSITIVE_PARAM_NAMES]
+
+
+# Parameter names that typically contain file paths
+PATH_PARAM_NAMES = frozenset(
+    {
+        "path",
+        "file",
+        "filename",
+        "filepath",
+        "file_path",
+        "directory",
+        "dir",
+        "folder",
+        "source",
+        "destination",
+        "dest",
+        "src",
+        "target",
+        "input_file",
+        "output_file",
+        "config_file",
+        "log_file",
+    }
+)
+
+
+def _looks_like_path(key: str, value: Any) -> bool:
+    """Check if a parameter looks like a file path.
+
+    Uses heuristics based on:
+    - Parameter name patterns
+    - Value patterns (starts with /, contains path separators)
+    """
+    if not isinstance(value, str):
+        return False
+
+    # Check parameter name
+    if key.lower() in PATH_PARAM_NAMES:
+        return True
+
+    # Check value patterns
+    value_lower = value.lower()
+
+    # Absolute paths
+    if value.startswith("/") or value.startswith("\\"):
+        return True
+
+    # Windows paths
+    if len(value) > 2 and value[1] == ":" and value[2] in ("/", "\\"):
+        return True
+
+    # Relative paths with separators
+    if "/" in value or "\\" in value:
+        # Exclude URLs
+        return "://" not in value
+
+    # Common file extensions
+    return any(
+        value_lower.endswith(ext) for ext in (".txt", ".json", ".yaml", ".yml", ".env", ".py")
+    )
 
 
 class Airlock:
@@ -181,6 +287,12 @@ class Airlock:
         ) -> tuple[dict[str, Any], float, AirlockContext[Any], AirlockResponse | None]:
             """Shared pre-execution logic for sync and async wrappers.
 
+            Orchestrates 4 validation steps:
+            1. Ghost argument validation (strip/reject hallucinated params)
+            2. Security policy resolution and checking
+            3. Filesystem path validation
+            4. Capability gating
+
             Returns:
                 Tuple of (cleaned_kwargs, start_time, context, error_response or None)
             """
@@ -199,106 +311,25 @@ class Airlock:
                 session_id=context.session_id,
             )
 
-            # Step 1: Strip or reject ghost arguments
-            try:
-                cleaned_kwargs, stripped = strip_ghost_arguments(
-                    func,
-                    dict(kwargs),
-                    strict=self.config.strict_mode,
-                )
-
-                if stripped:
-                    filtered_stripped = _filter_sensitive_keys(sorted(stripped))
-                    logger.info(
-                        "ghost_arguments_handled",
-                        function=func_name,
-                        stripped=filtered_stripped,
-                        stripped_count=len(stripped),
-                        mode="rejected" if self.config.strict_mode else "stripped",
-                    )
-
-            except GhostArgumentError as e:
-                response = handle_ghost_argument_error(e)
-                # Invoke on_blocked callback if configured
-                if self.config.on_blocked is not None:
-                    try:
-                        self.config.on_blocked(
-                            func_name,
-                            f"Ghost arguments rejected: {e.ghost_args}",
-                            {"ghost_args": list(e.ghost_args)},
-                        )
-                    except Exception as callback_error:
-                        logger.warning(
-                            "callback_error",
-                            callback="on_blocked",
-                            error=str(callback_error),
-                        )
-                return kwargs, start_time, context, response
+            # Step 1: Validate and handle ghost arguments
+            cleaned_kwargs, _, ghost_error = self._validate_ghost_arguments(func, func_name, kwargs)
+            if ghost_error is not None:
+                return kwargs, start_time, context, ghost_error
 
             # Step 2: Resolve and check security policy
-            resolved_policy: SecurityPolicy | None = None
-            if self.policy is not None:
-                # Support dynamic policy resolution via callable
-                if callable(self.policy) and not isinstance(self.policy, SecurityPolicy):
-                    try:
-                        resolved_policy = self.policy(context)
-                    except Exception as e:
-                        logger.error(
-                            "policy_resolver_error",
-                            function=func_name,
-                            error=str(e),
-                        )
-                        response = handle_policy_violation(
-                            func_name,
-                            policy_name="PolicyResolver",
-                            reason=f"Policy resolution failed: {e}",
-                        )
-                        return kwargs, start_time, context, response
-                else:
-                    resolved_policy = self.policy
+            resolved_policy, policy_error = self._resolve_and_check_policy(func_name, context)
+            if policy_error is not None:
+                return kwargs, start_time, context, policy_error
 
-            if resolved_policy is not None:
-                try:
-                    resolved_policy.check(func_name)
-                except PolicyViolation as e:
-                    if e.violation_type == ViolationType.RATE_LIMITED.value:
-                        reset_seconds = int(e.details.get("reset_seconds", 60))
-                        response = handle_rate_limit(
-                            func_name,
-                            limit=e.details.get("limit", "unknown"),
-                            reset_seconds=reset_seconds,
-                        )
-                        # Invoke on_rate_limit callback if configured
-                        if self.config.on_rate_limit is not None:
-                            try:
-                                self.config.on_rate_limit(func_name, reset_seconds)
-                            except Exception as callback_error:
-                                logger.warning(
-                                    "callback_error",
-                                    callback="on_rate_limit",
-                                    error=str(callback_error),
-                                )
-                    else:
-                        response = handle_policy_violation(
-                            func_name,
-                            policy_name="SecurityPolicy",
-                            reason=e.message,
-                        )
-                        # Invoke on_blocked callback if configured
-                        if self.config.on_blocked is not None:
-                            try:
-                                self.config.on_blocked(
-                                    func_name,
-                                    e.message,
-                                    {"violation_type": e.violation_type, **e.details},
-                                )
-                            except Exception as callback_error:
-                                logger.warning(
-                                    "callback_error",
-                                    callback="on_blocked",
-                                    error=str(callback_error),
-                                )
-                    return kwargs, start_time, context, response
+            # Step 3: Validate filesystem paths
+            fs_error = self._validate_filesystem_paths(func_name, cleaned_kwargs)
+            if fs_error is not None:
+                return kwargs, start_time, context, fs_error
+
+            # Step 4: Check capability requirements
+            cap_error = self._check_capabilities(func, func_name, resolved_policy)
+            if cap_error is not None:
+                return kwargs, start_time, context, cap_error
 
             return cleaned_kwargs, start_time, context, None
 
@@ -384,16 +415,12 @@ class Airlock:
             """Handle execution errors and return appropriate response."""
             if isinstance(error, ValidationError):
                 response = handle_validation_error(error, func_name)
-                # Invoke on_validation_error callback if configured
-                if self.config.on_validation_error is not None:
-                    try:
-                        self.config.on_validation_error(func_name, error)
-                    except Exception as callback_error:
-                        logger.warning(
-                            "callback_error",
-                            callback="on_validation_error",
-                            error=str(callback_error),
-                        )
+                self._safe_invoke_callback(
+                    self.config.on_validation_error,
+                    "on_validation_error",
+                    func_name,
+                    error,
+                )
             else:
                 logger.exception("unexpected_error", function=func_name, error=str(error))
                 response = AirlockResponse.blocked_response(
@@ -429,6 +456,20 @@ class Airlock:
                 )
 
                 if error_response is not None:
+                    # Check for honeypot response before returning error
+                    if should_use_honeypot(self.config.honeypot_config):
+                        # Use async version to avoid blocking event loop
+                        honeypot_result = await create_honeypot_response_async(
+                            func_name,
+                            cleaned_kwargs,
+                            self.config.honeypot_config,
+                            block_reason=error_response.block_reason.value
+                            if error_response.block_reason
+                            else "unknown",
+                        )
+                        if honeypot_result is not None:
+                            return honeypot_result  # type: ignore[return-value]
+
                     self._log_blocked(func_name, error_response, start_time)
                     audit_logger.log(
                         tool_name=func_name,
@@ -447,13 +488,59 @@ class Airlock:
                 # Set context as current for the duration of execution
                 token = set_current_context(context)
                 try:
-                    if self.sandbox:
-                        result = await self._execute_in_sandbox_async(func, *args, **cleaned_kwargs)
+                    # V0.3.0: Apply network airgap if configured
+                    # Note: For async, we still use the sync context manager
+                    # as socket operations are fundamentally sync
+                    if (
+                        self.config.network_policy is not None
+                        and not self.config.network_policy.allow_egress
+                    ):
+                        with network_airgap(self.config.network_policy):
+                            if self.sandbox:
+                                result = await self._execute_in_sandbox_async(
+                                    func, *args, **cleaned_kwargs
+                                )
+                            else:
+                                result = await validated_func(*args, **cleaned_kwargs)  # type: ignore[misc]
                     else:
-                        # Await the async validated function
-                        # Type ignore: validated_func preserves async nature of func
-                        result = await validated_func(*args, **cleaned_kwargs)  # type: ignore[misc]
+                        if self.sandbox:
+                            result = await self._execute_in_sandbox_async(
+                                func, *args, **cleaned_kwargs
+                            )
+                        else:
+                            # Await the async validated function
+                            # Type ignore: validated_func preserves async nature of func
+                            result = await validated_func(*args, **cleaned_kwargs)  # type: ignore[misc]
 
+                except NetworkBlockedError as e:
+                    # Handle network blocking with potential honeypot
+                    if should_use_honeypot(self.config.honeypot_config):
+                        # Use async version to avoid blocking event loop
+                        honeypot_result = await create_honeypot_response_async(
+                            func_name,
+                            cleaned_kwargs,
+                            self.config.honeypot_config,
+                            block_reason="network_blocked",
+                        )
+                        if honeypot_result is not None:
+                            return honeypot_result  # type: ignore[return-value]
+
+                    response = handle_network_blocked(
+                        func_name,
+                        operation=e.operation,
+                        target=e.target,
+                        details=e.details,
+                    )
+                    self._log_blocked(func_name, response, start_time)
+                    audit_logger.log(
+                        tool_name=func_name,
+                        blocked=True,
+                        block_reason="network_blocked",
+                        duration_ms=(time.time() - start_time) * 1000,
+                        args=cleaned_kwargs,
+                        error=response.error,
+                    )
+                    return response.to_dict()
                 except Exception as e:
                     return _handle_error(func_name, e, start_time, cleaned_kwargs)
                 finally:
@@ -481,6 +568,19 @@ class Airlock:
                 )
 
                 if error_response is not None:
+                    # Check for honeypot response before returning error
+                    if should_use_honeypot(self.config.honeypot_config):
+                        honeypot_result = create_honeypot_response(
+                            func_name,
+                            cleaned_kwargs,
+                            self.config.honeypot_config,
+                            block_reason=error_response.block_reason.value
+                            if error_response.block_reason
+                            else "unknown",
+                        )
+                        if honeypot_result is not None:
+                            return honeypot_result  # type: ignore[return-value]
+
                     self._log_blocked(func_name, error_response, start_time)
                     audit_logger.log(
                         tool_name=func_name,
@@ -499,11 +599,50 @@ class Airlock:
                 # Set context as current for the duration of execution
                 token = set_current_context(context)
                 try:
-                    if self.sandbox:
-                        result = self._execute_in_sandbox(func, *args, **cleaned_kwargs)
+                    # V0.3.0: Apply network airgap if configured
+                    if (
+                        self.config.network_policy is not None
+                        and not self.config.network_policy.allow_egress
+                    ):
+                        with network_airgap(self.config.network_policy):
+                            if self.sandbox:
+                                result = self._execute_in_sandbox(func, *args, **cleaned_kwargs)
+                            else:
+                                result = validated_func(*args, **cleaned_kwargs)
                     else:
-                        result = validated_func(*args, **cleaned_kwargs)
+                        if self.sandbox:
+                            result = self._execute_in_sandbox(func, *args, **cleaned_kwargs)
+                        else:
+                            result = validated_func(*args, **cleaned_kwargs)
 
+                except NetworkBlockedError as e:
+                    # Handle network blocking with potential honeypot
+                    if should_use_honeypot(self.config.honeypot_config):
+                        honeypot_result = create_honeypot_response(
+                            func_name,
+                            cleaned_kwargs,
+                            self.config.honeypot_config,
+                            block_reason="network_blocked",
+                        )
+                        if honeypot_result is not None:
+                            return honeypot_result  # type: ignore[return-value]
+
+                    response = handle_network_blocked(
+                        func_name,
+                        operation=e.operation,
+                        target=e.target,
+                        details=e.details,
+                    )
+                    self._log_blocked(func_name, response, start_time)
+                    audit_logger.log(
+                        tool_name=func_name,
+                        blocked=True,
+                        block_reason="network_blocked",
+                        duration_ms=(time.time() - start_time) * 1000,
+                        args=cleaned_kwargs,
+                        error=response.error,
+                    )
+                    return response.to_dict()
                 except Exception as e:
                     return _handle_error(func_name, e, start_time, cleaned_kwargs)
                 finally:
@@ -652,6 +791,265 @@ class Airlock:
             if asyncio.iscoroutinefunction(func):
                 return await validated_func(*args, **kwargs)  # type: ignore[misc, no-any-return]
             return validated_func(*args, **kwargs)  # pragma: no cover - defensive code
+
+    def _validate_ghost_arguments(
+        self,
+        func: Callable[..., Any],
+        func_name: str,
+        kwargs: dict[str, Any],
+    ) -> tuple[dict[str, Any], set[str] | None, AirlockResponse | None]:
+        """Validate and strip ghost (hallucinated) arguments.
+
+        Args:
+            func: The function being called.
+            func_name: Name of the function.
+            kwargs: Keyword arguments to validate.
+
+        Returns:
+            Tuple of (cleaned_kwargs, stripped_args, error_response).
+            If error_response is not None, validation failed.
+        """
+        should_block = self.config.unknown_args == UnknownArgsMode.BLOCK
+        try:
+            cleaned_kwargs, stripped = strip_ghost_arguments(
+                func,
+                dict(kwargs),
+                strict=should_block,
+            )
+
+            if stripped:
+                filtered_stripped = _filter_sensitive_keys(sorted(stripped))
+                logger.info(
+                    "ghost_arguments_handled",
+                    function=func_name,
+                    stripped=filtered_stripped,
+                    stripped_count=len(stripped),
+                    mode=self.config.unknown_args.value,
+                )
+
+                handle_unknown_args(
+                    mode=self.config.unknown_args,
+                    func_name=func_name,
+                    stripped_args=stripped,
+                    audit_logger=None,
+                )
+
+            return cleaned_kwargs, stripped, None
+
+        except GhostArgumentError as e:
+            response = handle_ghost_argument_error(e)
+            self._safe_invoke_callback(
+                self.config.on_blocked,
+                "on_blocked",
+                func_name,
+                f"Ghost arguments rejected: {e.ghost_args}",
+                {"ghost_args": list(e.ghost_args)},
+            )
+            return kwargs, None, response
+
+    def _resolve_and_check_policy(
+        self,
+        func_name: str,
+        context: AirlockContext[Any],
+    ) -> tuple[SecurityPolicy | None, AirlockResponse | None]:
+        """Resolve and check security policy.
+
+        Args:
+            func_name: Name of the function being called.
+            context: The current airlock context.
+
+        Returns:
+            Tuple of (resolved_policy, error_response).
+            If error_response is not None, policy check failed.
+        """
+        if self.policy is None:
+            return None, None
+
+        resolved_policy: SecurityPolicy | None = None
+
+        # Support dynamic policy resolution via callable
+        if callable(self.policy) and not isinstance(self.policy, SecurityPolicy):
+            try:
+                resolved_policy = self.policy(context)
+            except Exception as e:
+                logger.error(
+                    "policy_resolver_error",
+                    function=func_name,
+                    error=str(e),
+                )
+                response = handle_policy_violation(
+                    func_name,
+                    policy_name="PolicyResolver",
+                    reason=f"Policy resolution failed: {e}",
+                )
+                return None, response
+        else:
+            resolved_policy = self.policy
+
+        if resolved_policy is not None:
+            try:
+                resolved_policy.check(func_name)
+            except PolicyViolation as e:
+                if e.violation_type == ViolationType.RATE_LIMITED.value:
+                    reset_seconds = int(e.details.get("reset_seconds", 60))
+                    response = handle_rate_limit(
+                        func_name,
+                        limit=e.details.get("limit", "unknown"),
+                        reset_seconds=reset_seconds,
+                    )
+                    self._safe_invoke_callback(
+                        self.config.on_rate_limit,
+                        "on_rate_limit",
+                        func_name,
+                        reset_seconds,
+                    )
+                else:
+                    response = handle_policy_violation(
+                        func_name,
+                        policy_name="SecurityPolicy",
+                        reason=e.message,
+                    )
+                    self._safe_invoke_callback(
+                        self.config.on_blocked,
+                        "on_blocked",
+                        func_name,
+                        e.message,
+                        {"violation_type": e.violation_type, **e.details},
+                    )
+                return resolved_policy, response
+
+        return resolved_policy, None
+
+    def _validate_filesystem_paths(
+        self,
+        func_name: str,
+        cleaned_kwargs: dict[str, Any],
+    ) -> AirlockResponse | None:
+        """Validate filesystem paths in arguments.
+
+        Args:
+            func_name: Name of the function being called.
+            cleaned_kwargs: Cleaned keyword arguments to check.
+
+        Returns:
+            Error response if validation failed, None otherwise.
+        """
+        if self.config.filesystem_policy is None:
+            return None
+
+        for key, value in cleaned_kwargs.items():
+            if _looks_like_path(key, value):
+                try:
+                    validate_path(value, self.config.filesystem_policy)
+                except PathValidationError as e:
+                    logger.warning(
+                        "path_validation_failed",
+                        function=func_name,
+                        path=e.path,
+                        violation_type=e.violation_type,
+                    )
+                    # Check for honeypot or soft block strategies
+                    if should_use_honeypot(self.config.honeypot_config):
+                        # Honeypot response handled later in main flow
+                        pass
+                    elif not should_soft_block(self.config.honeypot_config):
+                        response = handle_path_violation(
+                            func_name,
+                            path=e.path,
+                            violation_type=e.violation_type,
+                            details=e.details,
+                        )
+                        self._safe_invoke_callback(
+                            self.config.on_blocked,
+                            "on_blocked",
+                            func_name,
+                            f"Path violation: {e.message}",
+                            {"path": e.path, "violation_type": e.violation_type},
+                        )
+                        return response
+
+        return None
+
+    def _check_capabilities(
+        self,
+        func: Callable[..., Any],
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+    ) -> AirlockResponse | None:
+        """Check capability requirements for the function.
+
+        Args:
+            func: The function being called.
+            func_name: Name of the function.
+            resolved_policy: The resolved security policy (may have capability_policy).
+
+        Returns:
+            Error response if capability check failed, None otherwise.
+        """
+        # Determine which capability policy to use
+        capability_policy = self.config.capability_policy
+        if resolved_policy is not None and resolved_policy.capability_policy is not None:
+            capability_policy = resolved_policy.capability_policy
+
+        if capability_policy is None:
+            return None
+
+        required_caps = get_required_capabilities(func)
+        if required_caps == Capability.NONE:
+            return None
+
+        try:
+            capability_policy.check(required_caps, func_name)
+            logger.debug(
+                "capability_check_passed",
+                function=func_name,
+                required=[c.name for c in Capability if c in required_caps and c.name],
+            )
+        except CapabilityDeniedError as e:
+            logger.warning(
+                "capability_denied",
+                function=func_name,
+                required=str(e.required),
+                missing=str(e.missing) if e.missing else None,
+                denied=str(e.denied) if e.denied else None,
+            )
+            response = AirlockResponse.blocked_response(
+                tool_name=func_name,
+                reason=BlockReason.CAPABILITY_DENIED,
+                details=e.message,
+            )
+            self._safe_invoke_callback(
+                self.config.on_blocked,
+                "on_blocked",
+                func_name,
+                e.message,
+                {"required": str(e.required), "denied": str(e.denied)},
+            )
+            return response
+
+        return None
+
+    def _safe_invoke_callback(
+        self,
+        callback: Callable[..., Any] | None,
+        callback_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """Safely invoke a callback, logging any errors.
+
+        Args:
+            callback: The callback function to invoke (may be None).
+            callback_name: Name of the callback for logging.
+            *args: Positional arguments to pass to the callback.
+            **kwargs: Keyword arguments to pass to the callback.
+        """
+        if callback is None:
+            return
+        try:
+            callback(*args, **kwargs)
+        except Exception as e:
+            logger.warning("callback_error", callback=callback_name, error=str(e))
 
     def _log_blocked(
         self,

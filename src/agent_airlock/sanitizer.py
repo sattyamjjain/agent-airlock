@@ -27,6 +27,12 @@ class SensitiveDataType(str, Enum):
     CREDIT_CARD = "credit_card"
     IP_ADDRESS = "ip_address"
 
+    # India-specific PII
+    AADHAAR = "aadhaar"  # 12-digit Indian ID
+    PAN = "pan"  # Indian Permanent Account Number
+    UPI_ID = "upi_id"  # Unified Payments Interface ID
+    IFSC = "ifsc"  # Indian Financial System Code
+
     # Secrets
     API_KEY = "api_key"
     PASSWORD = "password"  # nosec B105 - enum value name, not actual password
@@ -85,6 +91,20 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
         r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
     ),
+    # India-specific PII Patterns
+    SensitiveDataType.AADHAAR: re.compile(
+        r"\b[2-9][0-9]{3}[\s-]?[0-9]{4}[\s-]?[0-9]{4}\b"  # 12 digits, starts with 2-9
+    ),
+    SensitiveDataType.PAN: re.compile(
+        r"\b[A-Z]{5}[0-9]{4}[A-Z]\b"  # ABCDE1234F format
+    ),
+    SensitiveDataType.UPI_ID: re.compile(
+        r"\b[a-zA-Z0-9._-]+@(?:ybl|paytm|oksbi|okaxis|okicici|okhdfcbank|phonepe|gpay|apl|axl|ibl|sbi|pnb|boi|cnrb|upi|airtel|jio|freecharge|mobikwik|amazonpay)\b",
+        re.IGNORECASE,
+    ),
+    SensitiveDataType.IFSC: re.compile(
+        r"\b[A-Z]{4}0[A-Z0-9]{6}\b"  # 4 letters + 0 + 6 alphanumeric
+    ),
     # Secret Patterns
     SensitiveDataType.API_KEY: re.compile(
         r"\b(?:"
@@ -124,6 +144,12 @@ DEFAULT_MASK_CONFIG: dict[SensitiveDataType, MaskingStrategy] = {
     SensitiveDataType.SSN: MaskingStrategy.FULL,
     SensitiveDataType.CREDIT_CARD: MaskingStrategy.PARTIAL,
     SensitiveDataType.IP_ADDRESS: MaskingStrategy.PARTIAL,
+    # India-specific PII
+    SensitiveDataType.AADHAAR: MaskingStrategy.PARTIAL,  # Show last 4 digits
+    SensitiveDataType.PAN: MaskingStrategy.PARTIAL,  # Show first 2 + last 2
+    SensitiveDataType.UPI_ID: MaskingStrategy.PARTIAL,  # Show @bank suffix
+    SensitiveDataType.IFSC: MaskingStrategy.TYPE_ONLY,  # Bank codes are semi-public
+    # Secrets
     SensitiveDataType.API_KEY: MaskingStrategy.PARTIAL,
     SensitiveDataType.AWS_KEY: MaskingStrategy.PARTIAL,
     SensitiveDataType.PASSWORD: MaskingStrategy.FULL,
