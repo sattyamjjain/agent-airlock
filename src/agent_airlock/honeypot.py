@@ -171,7 +171,7 @@ SECRET_KEY=not-a-real-secret-key-for-testing-only
         if "token" in tool_name:
             return self.FAKE_CREDENTIALS["token"]
         if "api_key" in tool_name or "apikey" in tool_name:
-            return random.choice(self.FAKE_API_KEYS)
+            return random.choice(self.FAKE_API_KEYS)  # nosec B311 - intentionally fake data
         return self.FAKE_CREDENTIALS
 
     def _fake_query_result(self) -> list[dict[str, Any]]:

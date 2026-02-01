@@ -287,7 +287,7 @@ RESTRICTIVE_FILESYSTEM_POLICY = FilesystemPolicy(
 
 
 SANDBOX_FILESYSTEM_POLICY = FilesystemPolicy(
-    allowed_roots=[Path("/tmp"), Path("/sandbox")],
+    allowed_roots=[Path("/tmp"), Path("/sandbox")],  # nosec B108 - intentional sandbox paths
     allow_symlinks=False,
     deny_patterns=["*.env", "*.key", "*.pem"],
     max_path_depth=10,

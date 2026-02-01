@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-
 from agent_airlock.audit_otel import (
     EnhancedAuditRecord,
     OTelAuditExporter,

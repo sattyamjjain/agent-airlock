@@ -83,7 +83,7 @@ def calculate_delay(
     # Add jitter if enabled
     if config.jitter:
         jitter_range = delay * config.jitter_factor
-        delay = delay + random.uniform(-jitter_range, jitter_range)
+        delay = delay + random.uniform(-jitter_range, jitter_range)  # nosec B311 - jitter not security
 
     return max(0, delay)
 

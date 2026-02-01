@@ -17,8 +17,7 @@ from typing import Any, get_type_hints
 
 import pytest
 
-from agent_airlock import Airlock, AirlockConfig, READ_ONLY_POLICY
-
+from agent_airlock import READ_ONLY_POLICY, Airlock, AirlockConfig
 
 # Common config for tests
 test_config = AirlockConfig(

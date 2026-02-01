@@ -408,7 +408,7 @@ class SafeURLValidator:
                 pass
 
             # Check for localhost aliases
-            if hostname in ["localhost", "127.0.0.1", "::1", "0.0.0.0"]:
+            if hostname in ["localhost", "127.0.0.1", "::1", "0.0.0.0"]:  # nosec B104 - checking not binding
                 raise SafeURLValidationError(
                     f"URL points to localhost: {hostname}",
                     url=value,
@@ -421,7 +421,7 @@ class SafeURLValidator:
 # Pre-configured validators
 _default_path_validator = SafePathValidator()
 _strict_path_validator = SafePathValidator(allow_absolute=False)
-_tmp_path_validator = SafePathValidator(root_dir=Path("/tmp/airlock"))
+_tmp_path_validator = SafePathValidator(root_dir=Path("/tmp/airlock"))  # nosec B108 - intentional
 _default_url_validator = SafeURLValidator()
 _http_url_validator = SafeURLValidator(allowed_schemes=["http", "https"])
 

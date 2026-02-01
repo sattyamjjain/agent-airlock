@@ -8,7 +8,6 @@ import threading
 import pytest
 
 import agent_airlock.network as network_module
-
 from agent_airlock.network import (
     HTTPS_ONLY_POLICY,
     INTERNAL_ONLY_POLICY,

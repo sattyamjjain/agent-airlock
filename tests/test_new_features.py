@@ -30,11 +30,13 @@ from agent_airlock.observability import (
     NoOpProvider,
     OpenTelemetryProvider,
     SpanContext,
-    configure as configure_observability,
     end_span,
     get_provider,
     observe,
     start_span,
+)
+from agent_airlock.observability import (
+    configure as configure_observability,
 )
 from agent_airlock.retry import (
     FAST_RETRY,
