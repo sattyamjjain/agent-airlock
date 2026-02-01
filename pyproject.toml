@@ -159,8 +159,14 @@ module = [
     "opentelemetry.*",
     "langchain_core",
     "langchain_core.*",
+    "jwt",
+    "jwt.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "agent_airlock.integrations.langchain"
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
