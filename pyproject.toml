@@ -108,13 +108,24 @@ select = [
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
+    "SIM102", # nested if - often clearer for readability
+    "SIM103", # return condition directly - clearer to be explicit
+    "B027",   # empty method in ABC - intentional for optional overrides
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "ARG001",  # Unused function arguments common in test stubs
+    "ARG002",  # Unused method arguments common in test stubs
     "ARG005",  # Unused lambda arguments common in mock side_effects
     "SIM117",  # Nested with statements clearer for multiple mocks
+]
+"src/agent_airlock/integrations/*.py" = [
+    "ARG001",  # Guardrail callback signatures require ctx for interface
+    "ARG002",  # Callback signatures require unused args for interface compliance
+]
+"src/agent_airlock/cli/*.py" = [
+    "ARG002",  # Consistent interface for check methods
 ]
 
 [tool.ruff.lint.isort]

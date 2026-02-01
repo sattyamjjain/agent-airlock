@@ -247,12 +247,12 @@ class SafePathValidator:
                     raise SafePathValidationError(
                         f"Path escapes root directory {self.root_dir}: {path_str}",
                         path=path_str,
-                    )
+                    ) from None
             except OSError as e:
                 raise SafePathValidationError(
                     f"Path resolution failed: {e}",
                     path=path_str,
-                )
+                ) from e
 
         return path
 
@@ -349,7 +349,7 @@ class SafeURLValidator:
                 f"Invalid URL: {e}",
                 url=value,
                 reason="parse_error",
-            )
+            ) from e
 
         # Check scheme
         if parsed.scheme not in self.allowed_schemes:

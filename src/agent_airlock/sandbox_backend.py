@@ -135,7 +135,7 @@ class SandboxBackend(ABC):
         The default implementation does nothing. Backends that support
         warm pools (like E2B) should override this.
         """
-        pass
+        ...  # noqa: B027 - intentionally empty, subclasses override
 
     def shutdown(self) -> None:
         """Optional: Clean up sandbox resources.
@@ -143,7 +143,7 @@ class SandboxBackend(ABC):
         The default implementation does nothing. Backends that maintain
         pools or persistent connections should override this.
         """
-        pass
+        ...  # noqa: B027 - intentionally empty, subclasses override
 
 
 class E2BBackend(SandboxBackend):
@@ -300,7 +300,7 @@ class DockerBackend(SandboxBackend):
         func: Callable[..., R],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
-        timeout: int = 60,
+        _timeout: int = 60,  # TODO: implement container timeout
     ) -> SandboxResult:
         """Execute function in Docker container."""
         start_time = time.time()
@@ -458,7 +458,7 @@ class LocalBackend(SandboxBackend):
         func: Callable[..., R],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
-        timeout: int = 60,
+        _timeout: int = 60,  # Not used - local execution has no timeout
     ) -> SandboxResult:
         """Execute function locally with NO isolation.
 

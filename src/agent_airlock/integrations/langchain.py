@@ -193,8 +193,8 @@ def create_secure_tool(
     """
     try:
         from langchain_core.tools import StructuredTool
-    except ImportError:
-        raise ImportError("langchain-core is required: pip install langchain-core")
+    except ImportError as e:
+        raise ImportError("langchain-core is required: pip install langchain-core") from e
 
     # Wrap with Airlock first
     secured_func = Airlock(config=config, policy=policy, sandbox=sandbox)(func)
