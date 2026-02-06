@@ -608,9 +608,9 @@ Agent-Airlock mitigates the [OWASP Top 10 for LLMs (2025)](https://owasp.org/www
 
 | Metric | Value |
 |--------|-------|
-| **Tests** | 1,143 passing |
-| **Coverage** | 80% (enforced in CI) |
-| **Lines of Code** | ~11,400 |
+| **Tests** | 1,157 passing |
+| **Coverage** | 79%+ (enforced in CI) |
+| **Lines of Code** | ~25,900 |
 | **Validation overhead** | <50ms |
 | **Sandbox cold start** | ~125ms |
 | **Sandbox warm pool** | <200ms |

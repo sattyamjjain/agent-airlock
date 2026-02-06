@@ -16,7 +16,7 @@
 - V0.3.0: Filesystem validation, network egress control, honeypot deception, framework vaccination
 - V0.4.0: Circuit breaker, cost tracking, retry policies, OpenTelemetry observability, capability gating
 
-**Stats:** ~11,400 lines of code | 1143 tests | 79%+ coverage (enforced in CI)
+**Stats:** ~25,900 lines of code | 1157 tests | 79%+ coverage (enforced in CI)
 **Version:** 0.4.0 "Enterprise"
 
 <!-- END AUTO-MANAGED -->
@@ -167,11 +167,12 @@ src/agent_airlock/
 ## Git Insights
 
 Recent commits:
+- `3f02298` fix: resolve additional mypy errors (jwt, langchain)
+- `d754b28` fix: resolve all mypy type errors for CI
+- `c253dd5` fix: resolve all ruff lint errors for CI
+- `1c47174` fix: resolve CI failures - bandit security warnings and import sorting
+- `8a3939e` feat: v0.4.0 "Enterprise" - Production-ready security platform
 - `4b5fe16` feat: v0.2.0 - Security hardening and production roadmap
-- `2630882` fix: skip cloudpickle tests when not installed
-- `489b8d4` fix: resolve all ruff lint and format errors for CI
-- `f138bb5` feat: v0.1.5 - Production-ready release with streaming, context, and 99% coverage
-- `f859cfa` chore: bump version to 0.1.3
 
 Key security additions:
 - `sandbox_required=True` parameter prevents unsafe local execution fallback
@@ -180,6 +181,8 @@ Key security additions:
 - Network egress control via socket monkeypatch with thread-local storage
 - Capability gating with `@requires(Capability.*)` decorator
 - Circuit breaker for fault tolerance
+- MCP Proxy Guard for token passthrough prevention
+- OpenTelemetry observability integration
 
 <!-- END AUTO-MANAGED -->
 
