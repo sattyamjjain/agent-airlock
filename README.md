@@ -604,6 +604,20 @@ Agent-Airlock mitigates the [OWASP Top 10 for LLMs (2025)](https://owasp.org/www
 
 ---
 
+## 🏢 Used By
+
+Agent-Airlock secures AI agent systems in production:
+
+| Project | Use Case |
+|---------|----------|
+| [**Attri.ai**](https://attri.ai) | Multi-agent orchestration platform — governance & security layer |
+| [**FerrumDeck**](https://github.com/sattyamjjain/FerrumDeck) | AgentOps control plane — deny-by-default tool execution |
+| [**Mnemo**](https://github.com/sattyamjjain/Mnemo) | MCP-native memory database — secure tool call validation |
+
+> Using Agent-Airlock in production? [Open a PR](https://github.com/sattyamjjain/agent-airlock/edit/main/README.md) to add your project!
+
+---
+
 ## 📊 Performance
 
 | Metric | Value |
