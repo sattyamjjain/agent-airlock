@@ -129,15 +129,20 @@ src/agent_airlock/
 <!-- AUTO-MANAGED: conventions -->
 ## Code Conventions
 
-- **Python:** 3.10+ with full type hints
+- **Python:** 3.10+ with full type hints (`X | Y` unions, no `Optional`)
 - **Validation:** Pydantic V2 strict mode
-- **Logging:** structlog for structured JSON output
+- **Logging:** structlog for structured JSON output (`logger = structlog.get_logger("agent-airlock")`)
 - **Build:** src/ layout with hatch build system
-- **Testing:** pytest with 80%+ coverage target
-- **Types:** mypy --strict (no untyped defs)
+- **Testing:** pytest with 80%+ coverage target, class-based `Test<Feature>` naming
+- **Types:** mypy --strict (no untyped defs), `TypeVar`/`ParamSpec`/`overload` for generics
 - **Lint/Format:** ruff check and ruff format
-- **Imports:** isort via ruff, first-party = agent_airlock
+- **Imports:** `from __future__ import annotations` first, then stdlib → 3rd-party → first-party (agent_airlock)
 - **Line length:** 100 characters
+- **Docstrings:** Google-style (Args/Returns/Raises sections)
+- **Naming:** snake_case (functions), PascalCase (classes), UPPER_SNAKE_CASE (constants), `_` prefix (private)
+- **Enums:** Extend `str, Enum` for JSON serialization
+- **Dataclasses:** `@dataclass` with `field(default_factory=...)` for mutable defaults
+- **Commits:** Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `security:`)
 
 <!-- END AUTO-MANAGED -->
 
@@ -183,6 +188,22 @@ Key security additions:
 - Circuit breaker for fault tolerance
 - MCP Proxy Guard for token passthrough prevention
 - OpenTelemetry observability integration
+
+<!-- END AUTO-MANAGED -->
+
+<!-- AUTO-MANAGED: best-practices -->
+## Best Practices
+
+- Always run `pytest tests/ -v` after code changes to verify nothing breaks
+- Run `mypy src/` and `ruff check src/ tests/` before committing
+- Use `python3 -m py_compile <file>` to verify syntax after writing Python
+- Keep coverage above 79% (CI enforced via `--cov-fail-under=79`)
+- New modules should follow the layered architecture pattern (validation → policy → execution → sanitization)
+- Security-sensitive code must include structured logging via structlog
+- Custom exceptions should store details as attributes and call `super().__init__()`
+- Use `TYPE_CHECKING` guards for imports only needed by type checkers
+- Prefer `@dataclass` over plain dicts for structured data
+- Test classes should be named `Test<Feature>` with `test_<scenario>` methods
 
 <!-- END AUTO-MANAGED -->
 

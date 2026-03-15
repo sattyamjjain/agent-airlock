@@ -21,10 +21,12 @@ import structlog
 if TYPE_CHECKING:
     from pydantic import ValidationError
 
+    from .anomaly import AnomalyDetectorConfig
     from .capabilities import CapabilityPolicy
     from .filesystem import FilesystemPolicy
     from .honeypot import HoneypotConfig
-    from .network import NetworkPolicy
+    from .mcp_proxy_guard import CredentialScope
+    from .network import EndpointPolicy, NetworkPolicy
 
 from .unknown_args import UnknownArgsMode, mode_from_strict_bool
 
@@ -108,6 +110,12 @@ class AirlockConfig:
 
     # V0.4.0 Capability Policy
     capability_policy: CapabilityPolicy | None = None
+
+    # V0.4.1 Per-tool endpoint policies
+    endpoint_policies: dict[str, EndpointPolicy] = field(default_factory=dict)
+
+    # V0.4.1 Anomaly detection
+    anomaly_config: AnomalyDetectorConfig | None = None
 
     def __post_init__(self) -> None:
         """Apply environment variable overrides after initialization."""
@@ -222,6 +230,10 @@ class AirlockConfig:
             "honeypot",
             # V0.4.0 nested config sections
             "capabilities",
+            # V0.4.1 nested config sections
+            "endpoints",
+            "anomaly",
+            "credentials",
         }
 
         # SECURITY: Warn about unknown keys (likely typos)
@@ -292,6 +304,19 @@ class AirlockConfig:
         if "capabilities" in data:
             result["capability_policy"] = _parse_capability_policy(data["capabilities"])
 
+        # V0.4.1 Per-tool endpoint policies
+        if "endpoints" in data:
+            result["endpoint_policies"] = _parse_endpoint_policies(data["endpoints"])
+
+        # V0.4.1 Anomaly detection
+        if "anomaly" in data:
+            result["anomaly_config"] = _parse_anomaly_config(data["anomaly"])
+
+        # V0.4.1 Per-tool credential scopes
+        if "credentials" in data:
+            # Store as _credential_scopes, to be used when creating MCPProxyConfig
+            result["_credential_scopes"] = _parse_credential_scopes(data["credentials"])
+
         return result
 
 
@@ -358,6 +383,53 @@ def _parse_capability_policy(data: dict[str, Any]) -> CapabilityPolicy:
         denied=denied,
         require_sandbox_for=require_sandbox_for,
     )
+
+
+def _parse_endpoint_policies(data: dict[str, Any]) -> dict[str, EndpointPolicy]:
+    """Parse per-tool endpoint policies from TOML data (V0.4.1)."""
+    from .network import EndpointPolicy
+
+    policies: dict[str, EndpointPolicy] = {}
+    for tool_name, tool_data in data.items():
+        if isinstance(tool_data, dict):
+            policies[tool_name] = EndpointPolicy(
+                allowed_endpoints=list(tool_data.get("allowed_endpoints", [])),
+                blocked_patterns=list(tool_data.get("blocked_patterns", [])),
+                allow_private_ips=bool(tool_data.get("allow_private_ips", False)),
+                allow_metadata_urls=bool(tool_data.get("allow_metadata_urls", False)),
+            )
+    return policies
+
+
+def _parse_anomaly_config(data: dict[str, Any]) -> AnomalyDetectorConfig:
+    """Parse anomaly detection config from TOML data (V0.4.1)."""
+    from .anomaly import AnomalyDetectorConfig
+
+    return AnomalyDetectorConfig(
+        window_seconds=float(data.get("window_seconds", 60.0)),
+        max_calls_per_window=int(data.get("max_calls_per_window", 50)),
+        max_unique_endpoints_per_window=int(data.get("max_unique_endpoints_per_window", 10)),
+        max_error_rate=float(data.get("max_error_rate", 0.5)),
+        max_consecutive_blocked=int(data.get("max_consecutive_blocked", 5)),
+        auto_block_duration_seconds=float(data.get("auto_block_duration_seconds", 300.0)),
+        enabled=bool(data.get("enabled", True)),
+    )
+
+
+def _parse_credential_scopes(data: dict[str, Any]) -> dict[str, CredentialScope]:
+    """Parse per-tool credential scopes from TOML data (V0.4.1)."""
+    from .mcp_proxy_guard import CredentialScope
+
+    scopes: dict[str, CredentialScope] = {}
+    for tool_name, tool_data in data.items():
+        if isinstance(tool_data, dict):
+            scopes[tool_name] = CredentialScope(
+                required_scopes=list(tool_data.get("required_scopes", [])),
+                max_token_age_seconds=int(tool_data.get("max_token_age_seconds", 3600)),
+                require_fresh_token=bool(tool_data.get("require_fresh_token", False)),
+                allowed_audiences=list(tool_data.get("allowed_audiences", [])),
+            )
+    return scopes
 
 
 # Default configuration instance

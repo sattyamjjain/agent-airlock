@@ -79,6 +79,7 @@ from .sanitizer import sanitize_output
 from .self_heal import (
     AirlockResponse,
     BlockReason,
+    handle_endpoint_violation,
     handle_ghost_argument_error,
     handle_network_blocked,
     handle_path_violation,
@@ -193,6 +194,42 @@ def _looks_like_path(key: str, value: Any) -> bool:
     )
 
 
+# Parameter names that typically contain URLs
+URL_PARAM_NAMES = frozenset(
+    {
+        "url",
+        "uri",
+        "endpoint",
+        "href",
+        "link",
+        "api_url",
+        "base_url",
+        "callback_url",
+        "redirect_url",
+        "webhook_url",
+        "resource_url",
+    }
+)
+
+
+def _looks_like_url(key: str, value: Any) -> bool:
+    """Check if a parameter looks like a URL.
+
+    Uses heuristics based on:
+    - Parameter name patterns
+    - Value patterns (starts with http://, https://)
+    """
+    if not isinstance(value, str):
+        return False
+
+    # Check parameter name
+    if key.lower() in URL_PARAM_NAMES:
+        return True
+
+    # Check value patterns
+    return value.startswith("http://") or value.startswith("https://")
+
+
 class Airlock:
     """Decorator that secures function calls with validation, sandboxing, and policies.
 
@@ -292,11 +329,12 @@ class Airlock:
         ) -> tuple[dict[str, Any], float, AirlockContext[Any], AirlockResponse | None]:
             """Shared pre-execution logic for sync and async wrappers.
 
-            Orchestrates 4 validation steps:
+            Orchestrates 5 validation steps:
             1. Ghost argument validation (strip/reject hallucinated params)
             2. Security policy resolution and checking
             3. Filesystem path validation
             4. Capability gating
+            5. Endpoint policy validation (V0.4.1)
 
             Returns:
                 Tuple of (cleaned_kwargs, start_time, context, error_response or None)
@@ -335,6 +373,11 @@ class Airlock:
             cap_error = self._check_capabilities(func, func_name, resolved_policy)
             if cap_error is not None:
                 return kwargs, start_time, context, cap_error
+
+            # Step 5: Validate endpoint policies (V0.4.1)
+            ep_error = self._validate_endpoint_policies(func_name, cleaned_kwargs)
+            if ep_error is not None:
+                return kwargs, start_time, context, ep_error
 
             return cleaned_kwargs, start_time, context, None
 
@@ -972,6 +1015,51 @@ class Airlock:
                             {"path": e.path, "violation_type": e.violation_type},
                         )
                         return response
+
+        return None
+
+    def _validate_endpoint_policies(
+        self,
+        func_name: str,
+        cleaned_kwargs: dict[str, Any],
+    ) -> AirlockResponse | None:
+        """Validate URL parameters against per-tool endpoint policies.
+
+        Args:
+            func_name: Name of the function being called.
+            cleaned_kwargs: Cleaned keyword arguments to check.
+
+        Returns:
+            Error response if validation failed, None otherwise.
+        """
+        if not self.config.endpoint_policies:
+            return None
+
+        policy = self.config.endpoint_policies.get(func_name)
+        if policy is None:
+            return None
+
+        from .network import NetworkBlockedError as _NetworkBlockedError
+        from .network import validate_endpoint
+
+        for key, value in cleaned_kwargs.items():
+            if _looks_like_url(key, value):
+                try:
+                    validate_endpoint(value, policy)
+                except _NetworkBlockedError as e:
+                    logger.warning(
+                        "endpoint_policy_violation",
+                        function=func_name,
+                        url=value,
+                        reason=e.details.get("reason", "unknown"),
+                    )
+                    return handle_endpoint_violation(
+                        func_name,
+                        url=value,
+                        hostname=e.details.get("hostname", "unknown"),
+                        reason=e.details.get("reason", "unknown"),
+                        allowed_endpoints=policy.allowed_endpoints or None,
+                    )
 
         return None
 

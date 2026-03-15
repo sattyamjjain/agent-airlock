@@ -27,6 +27,7 @@ THREAD SAFETY:
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import socket
 import threading
 from collections.abc import Generator
@@ -84,6 +85,197 @@ class NetworkPolicy:
     allowed_hosts: list[str] = field(default_factory=list)
     allowed_ports: list[int] = field(default_factory=list)
     block_dns: bool = False
+
+
+@dataclass
+class EndpointPolicy:
+    """Per-tool URL endpoint allowlist.
+
+    Prevents SSRF attacks like CVE-2026-26118 by restricting which
+    URLs a tool can access based on hostname and pattern matching.
+
+    Example:
+        policy = EndpointPolicy(
+            allowed_endpoints=["management.azure.com", "*.blob.core.windows.net"],
+            blocked_patterns=["169.254.169.254", "localhost"],
+        )
+        validate_endpoint("https://management.azure.com/resource", policy)  # OK
+        validate_endpoint("http://169.254.169.254/meta", policy)  # Raises
+
+    Attributes:
+        allowed_endpoints: Hostnames/patterns allowed. Supports wildcards (*.example.com).
+            Empty list means no endpoint restriction (only blocked_patterns apply).
+        blocked_patterns: Hostname patterns to always block. Checked before allowed_endpoints.
+        allow_private_ips: If False (default), block private/loopback/link-local IPs.
+        allow_metadata_urls: If False (default), block cloud metadata endpoints.
+    """
+
+    allowed_endpoints: list[str] = field(default_factory=list)
+    blocked_patterns: list[str] = field(default_factory=list)
+    allow_private_ips: bool = False
+    allow_metadata_urls: bool = False
+
+
+# Cloud metadata IPs/hosts to block
+_METADATA_HOSTS = frozenset(
+    {
+        "169.254.169.254",
+        "fd00:ec2::254",
+        "metadata.google.internal",
+        "169.254.169.253",
+    }
+)
+
+
+def _matches_endpoint_pattern(hostname: str, pattern: str) -> bool:
+    """Check if a hostname matches an endpoint pattern.
+
+    Supports exact match and wildcard subdomains (*.example.com).
+    """
+    if pattern == hostname:
+        return True
+    if pattern.startswith("*.") and hostname.endswith(pattern[1:]):
+        return True
+    return False
+
+
+def _is_private_ip(hostname: str) -> bool:
+    """Check if a hostname is a private/loopback/link-local IP."""
+    try:
+        ip = ipaddress.ip_address(hostname)
+        return ip.is_private or ip.is_loopback or ip.is_link_local
+    except ValueError:
+        return False
+
+
+def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
+    """Validate a URL against an endpoint policy.
+
+    Checks in order:
+    1. Parse URL and extract hostname
+    2. Check blocked patterns
+    3. Check metadata URL blocking
+    4. Check private IP blocking
+    5. Check allowed endpoints (if specified)
+
+    Args:
+        url: The URL to validate.
+        policy: The endpoint policy to enforce.
+
+    Raises:
+        NetworkBlockedError: If the URL is blocked by the policy.
+
+    Example:
+        policy = EndpointPolicy(
+            allowed_endpoints=["api.example.com"],
+            blocked_patterns=["evil.com"],
+        )
+        validate_endpoint("https://api.example.com/data", policy)  # OK
+        validate_endpoint("https://evil.com/steal", policy)  # Raises
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        raise NetworkBlockedError(
+            f"Invalid URL: {e}",
+            operation="endpoint_validation",
+            target=url,
+            details={"reason": "parse_error"},
+        ) from e
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise NetworkBlockedError(
+            "URL must have a hostname",
+            operation="endpoint_validation",
+            target=url,
+            details={"reason": "missing_hostname"},
+        )
+
+    # Check blocked patterns first
+    for pattern in policy.blocked_patterns:
+        if _matches_endpoint_pattern(hostname, pattern):
+            logger.warning(
+                "endpoint_blocked",
+                url=url,
+                hostname=hostname,
+                pattern=pattern,
+                reason="blocked_pattern",
+            )
+            raise NetworkBlockedError(
+                f"URL blocked by pattern '{pattern}': {hostname}",
+                operation="endpoint_validation",
+                target=url,
+                details={
+                    "reason": "blocked_pattern",
+                    "hostname": hostname,
+                    "pattern": pattern,
+                },
+            )
+
+    # Check metadata URLs
+    if not policy.allow_metadata_urls and hostname in _METADATA_HOSTS:
+        logger.warning(
+            "endpoint_blocked",
+            url=url,
+            hostname=hostname,
+            reason="metadata_url",
+        )
+        raise NetworkBlockedError(
+            f"Cloud metadata endpoint blocked: {hostname}",
+            operation="endpoint_validation",
+            target=url,
+            details={"reason": "metadata_url", "hostname": hostname},
+        )
+
+    # Check private IPs
+    if not policy.allow_private_ips and _is_private_ip(hostname):
+        logger.warning(
+            "endpoint_blocked",
+            url=url,
+            hostname=hostname,
+            reason="private_ip",
+        )
+        raise NetworkBlockedError(
+            f"Private IP blocked: {hostname}",
+            operation="endpoint_validation",
+            target=url,
+            details={"reason": "private_ip", "hostname": hostname},
+        )
+
+    # Check localhost aliases
+    if not policy.allow_private_ips and hostname in ("localhost", "0.0.0.0"):
+        raise NetworkBlockedError(
+            f"Localhost blocked: {hostname}",
+            operation="endpoint_validation",
+            target=url,
+            details={"reason": "localhost", "hostname": hostname},
+        )
+
+    # Check allowed endpoints (if specified)
+    if policy.allowed_endpoints:
+        for allowed in policy.allowed_endpoints:
+            if _matches_endpoint_pattern(hostname, allowed):
+                return  # Allowed
+        logger.warning(
+            "endpoint_blocked",
+            url=url,
+            hostname=hostname,
+            reason="not_in_allowlist",
+            allowed_endpoints=policy.allowed_endpoints,
+        )
+        raise NetworkBlockedError(
+            f"Host '{hostname}' not in allowed endpoints",
+            operation="endpoint_validation",
+            target=url,
+            details={
+                "reason": "not_in_allowlist",
+                "hostname": hostname,
+                "allowed_endpoints": policy.allowed_endpoints,
+            },
+        )
 
 
 # Thread-local storage for policy enforcement

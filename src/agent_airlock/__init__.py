@@ -24,6 +24,11 @@ V0.4.0 "Enterprise" Features:
     - MCP Proxy Guard: Token passthrough prevention, session binding
     - CLI Tools: airlock doctor, airlock verify
 
+V0.4.1 CVE-2026-26118 Defense Features:
+    - Per-tool endpoint policies: URL allowlisting per tool to prevent SSRF attacks
+    - Anomaly detection: Real-time monitoring of tool call patterns with auto-blocking
+    - Credential scope declarations: Per-tool minimum-privilege enforcement
+
 V0.3.0 "Vaccine" Features:
     - Filesystem path validation (prevent directory traversal)
     - Network egress control (prevent data exfiltration)
@@ -33,6 +38,14 @@ V0.3.0 "Vaccine" Features:
 
 from typing import TYPE_CHECKING
 
+# V0.4.1 Anomaly detection
+from .anomaly import (
+    AnomalyDetector,
+    AnomalyDetectorConfig,
+    AnomalyEvent,
+    AnomalySeverity,
+    AnomalyType,
+)
 from .audit import AuditLogger, AuditRecord, get_audit_logger
 
 # V0.4.0 OTel audit
@@ -134,6 +147,7 @@ from .mcp_proxy_guard import (
     DEFAULT_PROXY_CONFIG,
     PERMISSIVE_PROXY_CONFIG,
     STRICT_PROXY_CONFIG,
+    CredentialScope,
     MCPProxyConfig,
     MCPProxyGuard,
     MCPSecurityError,
@@ -145,9 +159,11 @@ from .network import (
     HTTPS_ONLY_POLICY,
     INTERNAL_ONLY_POLICY,
     NO_NETWORK_POLICY,
+    EndpointPolicy,
     NetworkBlockedError,
     NetworkPolicy,
     network_airgap,
+    validate_endpoint,
 )
 
 # V0.4.0 Observability (OTEL)
@@ -274,7 +290,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 __all__ = [
     # Core
@@ -350,6 +366,17 @@ __all__ = [
     "NO_NETWORK_POLICY",
     "INTERNAL_ONLY_POLICY",
     "HTTPS_ONLY_POLICY",
+    # V0.4.1 Endpoint Policies
+    "EndpointPolicy",
+    "validate_endpoint",
+    # V0.4.1 Anomaly Detection
+    "AnomalyDetector",
+    "AnomalyDetectorConfig",
+    "AnomalyEvent",
+    "AnomalyType",
+    "AnomalySeverity",
+    # V0.4.1 Credential Scope
+    "CredentialScope",
     # V0.3.0 Honeypot
     "BlockStrategy",
     "HoneypotConfig",

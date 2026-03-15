@@ -125,6 +125,36 @@ class MCPProxyConfig:
         ]
     )
 
+    # V0.4.1 Per-tool credential scopes
+    tool_scopes: dict[str, CredentialScope] = field(default_factory=dict)
+
+
+@dataclass
+class CredentialScope:
+    """Declares minimum credential requirements for a tool.
+
+    Used to enforce least-privilege: if a tool only needs read access
+    to storage, the scope declaration makes this explicit and auditable.
+
+    Example:
+        scope = CredentialScope(
+            required_scopes=["storage.read", "keyvault.list"],
+            max_token_age_seconds=300,
+            allowed_audiences=["https://management.azure.com"],
+        )
+
+    Attributes:
+        required_scopes: Scopes the token must have (checked against 'scp' or 'scope' claim).
+        max_token_age_seconds: Reject tokens older than this. Default 3600 (1 hour).
+        require_fresh_token: If True, token must be <60s old (checked via 'iat' claim).
+        allowed_audiences: If set, token 'aud' claim must match one of these.
+    """
+
+    required_scopes: list[str] = field(default_factory=list)
+    max_token_age_seconds: int = 3600
+    require_fresh_token: bool = False
+    allowed_audiences: list[str] = field(default_factory=list)
+
 
 class MCPProxyGuard:
     """Security guard for MCP proxy servers.
@@ -361,6 +391,195 @@ class MCPProxyGuard:
             session_id=session.session_id[:8] + "...",
             tool_name=tool_name,
         )
+
+    def validate_tool_credentials(
+        self,
+        tool_name: str,
+        token: str | None = None,
+        token_claims: dict[str, Any] | None = None,
+    ) -> None:
+        """Validate that credentials meet the tool's scope requirements.
+
+        Checks:
+        - Required scopes are present in token claims
+        - Token age is within max_token_age_seconds
+        - Token audience matches allowed_audiences
+        - Token freshness (if require_fresh_token is True)
+
+        Args:
+            tool_name: Name of the tool being called.
+            token: JWT token string (decoded if token_claims not provided).
+            token_claims: Pre-decoded token claims dict.
+
+        Raises:
+            MCPSecurityError: If validation fails.
+
+        Example:
+            guard.validate_tool_credentials(
+                "azure_query",
+                token_claims={"scp": "storage.read keyvault.list", "aud": "..."},
+            )
+        """
+        scope = self.get_tool_scope(tool_name)
+        if scope is None:
+            return  # No scope declared, pass freely
+
+        # Get claims from token or use provided claims
+        claims = token_claims
+        if claims is None and token is not None:
+            claims = self._decode_token_claims(token)
+
+        if claims is None:
+            if scope.required_scopes:
+                logger.warning(
+                    "credential_scope_validation_failed",
+                    tool_name=tool_name,
+                    reason="no_token_provided",
+                )
+                raise MCPSecurityError(
+                    f"Tool '{tool_name}' requires credentials but no token was provided",
+                    violation_type="missing_credentials",
+                    details={"tool": tool_name, "required_scopes": scope.required_scopes},
+                )
+            return
+
+        # Check required scopes
+        if scope.required_scopes:
+            token_scopes = self._extract_scopes(claims)
+            missing_scopes = [s for s in scope.required_scopes if s not in token_scopes]
+            if missing_scopes:
+                logger.warning(
+                    "credential_scope_validation_failed",
+                    tool_name=tool_name,
+                    reason="missing_scopes",
+                    missing=missing_scopes,
+                )
+                raise MCPSecurityError(
+                    f"Token missing required scopes for '{tool_name}': {missing_scopes}",
+                    violation_type="insufficient_scopes",
+                    details={
+                        "tool": tool_name,
+                        "missing_scopes": missing_scopes,
+                        "required_scopes": scope.required_scopes,
+                        "token_scopes": list(token_scopes),
+                    },
+                )
+
+        # Check token age
+        iat = claims.get("iat")
+        if iat is not None:
+            token_age = time.time() - float(iat)
+            if token_age > scope.max_token_age_seconds:
+                logger.warning(
+                    "credential_scope_validation_failed",
+                    tool_name=tool_name,
+                    reason="token_expired",
+                    token_age_seconds=round(token_age),
+                    max_age=scope.max_token_age_seconds,
+                )
+                raise MCPSecurityError(
+                    f"Token too old for '{tool_name}': "
+                    f"{round(token_age)}s > {scope.max_token_age_seconds}s",
+                    violation_type="token_expired",
+                    details={
+                        "tool": tool_name,
+                        "token_age_seconds": round(token_age),
+                        "max_token_age_seconds": scope.max_token_age_seconds,
+                    },
+                )
+
+            # Check freshness requirement
+            if scope.require_fresh_token and token_age > 60:
+                logger.warning(
+                    "credential_scope_validation_failed",
+                    tool_name=tool_name,
+                    reason="token_not_fresh",
+                    token_age_seconds=round(token_age),
+                )
+                raise MCPSecurityError(
+                    f"Token not fresh enough for '{tool_name}': {round(token_age)}s old (max 60s)",
+                    violation_type="token_not_fresh",
+                    details={
+                        "tool": tool_name,
+                        "token_age_seconds": round(token_age),
+                        "max_fresh_seconds": 60,
+                    },
+                )
+
+        # Check audience
+        if scope.allowed_audiences:
+            aud = claims.get("aud")
+            aud_list = [aud] if isinstance(aud, str) else (aud or [])
+            if not any(a in scope.allowed_audiences for a in aud_list):
+                logger.warning(
+                    "credential_scope_validation_failed",
+                    tool_name=tool_name,
+                    reason="audience_mismatch",
+                    token_aud=aud_list,
+                    allowed=scope.allowed_audiences,
+                )
+                raise MCPSecurityError(
+                    f"Token audience mismatch for '{tool_name}'",
+                    violation_type="audience_mismatch",
+                    details={
+                        "tool": tool_name,
+                        "token_audience": aud_list,
+                        "allowed_audiences": scope.allowed_audiences,
+                    },
+                )
+
+        logger.info(
+            "credential_scope_validated",
+            tool_name=tool_name,
+            scopes_checked=len(scope.required_scopes),
+        )
+
+    def get_tool_scope(self, tool_name: str) -> CredentialScope | None:
+        """Get the declared credential scope for a tool.
+
+        Args:
+            tool_name: Name of the tool.
+
+        Returns:
+            CredentialScope if declared, None otherwise.
+        """
+        return self.config.tool_scopes.get(tool_name)
+
+    @staticmethod
+    def _extract_scopes(claims: dict[str, Any]) -> set[str]:
+        """Extract scopes from token claims.
+
+        Checks 'scp' (space-separated string) and 'scope' (string or list) claims.
+        """
+        scopes: set[str] = set()
+        # Azure AD uses 'scp' as space-separated string
+        scp = claims.get("scp", "")
+        if isinstance(scp, str) and scp:
+            scopes.update(scp.split())
+        # Some providers use 'scope'
+        scope_claim = claims.get("scope", "")
+        if isinstance(scope_claim, str) and scope_claim:
+            scopes.update(scope_claim.split())
+        elif isinstance(scope_claim, list):
+            scopes.update(scope_claim)
+        return scopes
+
+    @staticmethod
+    def _decode_token_claims(token: str) -> dict[str, Any] | None:
+        """Decode JWT token claims without signature verification."""
+        try:
+            import jwt
+
+            return jwt.decode(token, options={"verify_signature": False})  # type: ignore[no-any-return]
+        except ImportError:
+            logger.warning(
+                "pyjwt_not_installed",
+                hint="Install PyJWT for token validation: pip install PyJWT",
+            )
+            return None
+        except Exception as e:
+            logger.warning("token_decode_failed", error=str(e))
+            return None
 
     def cleanup_expired_sessions(self) -> int:
         """Remove expired sessions.

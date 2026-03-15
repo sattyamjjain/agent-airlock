@@ -29,6 +29,9 @@ class BlockReason(str, Enum):
     NETWORK_BLOCKED = "network_blocked"
     # V0.4.0 security reasons
     CAPABILITY_DENIED = "capability_denied"
+    # V0.4.1 security reasons
+    ENDPOINT_BLOCKED = "endpoint_blocked"
+    ANOMALY_DETECTED = "anomaly_detected"
 
 
 @dataclass
@@ -295,6 +298,80 @@ def handle_network_blocked(
             "function": func_name,
             "operation": operation,
             "target": target,
+            **(details or {}),
+        },
+    )
+
+
+def handle_endpoint_violation(
+    func_name: str,
+    url: str,
+    hostname: str,
+    reason: str,
+    allowed_endpoints: list[str] | None = None,
+) -> AirlockResponse:
+    """Create a response for endpoint policy violations.
+
+    Args:
+        func_name: Name of the function that was blocked.
+        url: The URL that violated the policy.
+        hostname: The hostname that was blocked.
+        reason: The reason for blocking.
+        allowed_endpoints: List of allowed endpoints (for fix hints).
+
+    Returns:
+        AirlockResponse explaining the endpoint violation with fix hints.
+    """
+    fix_hints = [
+        f"The URL '{url}' is not permitted by the endpoint policy for this tool",
+    ]
+    if allowed_endpoints:
+        fix_hints.append(f"Allowed endpoints for this tool: {', '.join(allowed_endpoints)}")
+    fix_hints.append("Use only URLs that match the tool's configured endpoint allowlist")
+
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.ENDPOINT_BLOCKED,
+        error=f"AIRLOCK_BLOCK: Endpoint blocked for '{func_name}': {hostname}",
+        fix_hints=fix_hints,
+        metadata={
+            "function": func_name,
+            "url": url,
+            "hostname": hostname,
+            "block_reason": reason,
+            "allowed_endpoints": allowed_endpoints or [],
+        },
+    )
+
+
+def handle_anomaly_block(
+    func_name: str,
+    session_id: str,
+    anomaly_type: str,
+    details: dict[str, Any] | None = None,
+) -> AirlockResponse:
+    """Create a response for anomaly-based session blocks.
+
+    Args:
+        func_name: Name of the function that was blocked.
+        session_id: The blocked session ID.
+        anomaly_type: Type of anomaly that triggered the block.
+        details: Additional details about the anomaly.
+
+    Returns:
+        AirlockResponse explaining the anomaly block.
+    """
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.ANOMALY_DETECTED,
+        error=(f"AIRLOCK_BLOCK: Session blocked due to anomalous behavior for '{func_name}'"),
+        fix_hints=[
+            "Your session has been temporarily blocked due to unusual activity",
+            f"Anomaly type: {anomaly_type}",
+            "Wait for the block to expire or contact the administrator",
+        ],
+        metadata={
+            "function": func_name,
+            "session_id": session_id,
+            "anomaly_type": anomaly_type,
             **(details or {}),
         },
     )
