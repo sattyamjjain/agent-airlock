@@ -86,6 +86,8 @@ nav:
     - PII Masking: examples/pii.md
     - Sandbox Execution: examples/sandbox.md
   - CVE Catalog: cves/index.md
+  - Observability:
+    - OTel Semantic Conventions: observability/semconv.md
   - Security: SECURITY.md
   - Contributing: CONTRIBUTING.md
   - Changelog: changelog.md
