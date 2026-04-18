@@ -318,6 +318,6 @@ See `PRODUCTION_ROADMAP.md` for full details.
 - [ ] Performance benchmarks in CI
 - [ ] Additional framework integrations
 
-**Current Version:** v0.4.0 "Enterprise"
+**Current Version:** v0.5.0 "April 2026"
 
 <!-- END MANUAL -->

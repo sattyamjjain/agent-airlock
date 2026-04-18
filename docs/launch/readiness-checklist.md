@@ -6,31 +6,33 @@ references this page.
 
 ## Code / release
 
-- [ ] All Phase 1 PRs merged to `main` (1.1 SDK rename, 1.2 MCP
+- [x] All Phase 1 PRs merged to `main` (1.1 SDK rename, 1.2 MCP
       2025-11-25, 1.3 CVE suite, 1.4 presets, 1.5 Managed backend stub,
       1.6 A2A middleware, 1.7 Model Armor, 1.8 deep-analysis bug triage)
-- [ ] `pyproject.toml` version bumped to `0.5.0`
+- [x] `pyproject.toml` version bumped to `0.5.0`
       (see [#17](https://github.com/sattyamjjain/agent-airlock/pull/17))
-- [ ] `src/agent_airlock/__init__.py` `__version__` matches
-- [ ] `CHANGELOG.md` `[0.5.0]` heading with a one-paragraph summary
-- [ ] `CI` green on main for the commit being tagged
+- [x] `src/agent_airlock/__init__.py` `__version__` matches
+- [x] `CHANGELOG.md` `[0.5.0]` heading with a one-paragraph summary
+- [x] `CI` green on main for the commit being tagged
 - [ ] `git tag v0.5.0 -a -m "..."` + `git push origin v0.5.0`
 - [ ] Release notes posted to GitHub Releases (matches CHANGELOG body)
-- [ ] `twine upload dist/*` succeeded
+- [ ] `twine upload dist/*` succeeded (auto-runs via `publish.yml` on Release)
 - [ ] `pip install agent-airlock==0.5.0` works from a clean env
 
 ## Docs
 
 - [ ] README hero/quickstart up to date
-- [ ] `docs/cves/index.md` auto-generated and in-sync with `tests/cves/`
-      (CI gate runs `scripts/gen_cve_catalog.py --check`)
-- [ ] `docs/observability/semconv.md` present with stable-attribute
+- [x] `docs/cves/index.md` auto-generated and in-sync with `tests/cves/`
+      (CI gate still PENDING — `scripts/gen_cve_catalog.py --check` job
+      must be added to `.github/workflows/ci.yml` by a maintainer with
+      `workflow` scope; see PR #18 body)
+- [x] `docs/observability/semconv.md` present with stable-attribute
       contract
-- [ ] `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CONTRIBUTING.md`, issue
+- [x] `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CONTRIBUTING.md`, issue
       templates present
-- [ ] `.claude-plugin/{plugin,marketplace}.json` point at 0.5.0
-- [ ] `docs/launch/faq.md` drafted (this folder)
-- [ ] `docs/launch/rollback.md` drafted (this folder)
+- [x] `.claude-plugin/{plugin,marketplace}.json` point at 0.5.0
+- [x] `docs/launch/faq.md` drafted (this folder)
+- [x] `docs/launch/rollback.md` drafted (this folder)
 
 ## Artifacts
 
@@ -40,10 +42,15 @@ references this page.
 
 ## Security hygiene
 
-- [ ] Latest `bandit -r src/agent_airlock/` → 0 issues
-- [ ] `pip install --quiet safety && safety check` reviewed
-      (deprecation warnings OK, CVEs are not)
+- [x] Latest `bandit -r src/agent_airlock/` → 0 issues
+      (see `docs/launch/security-artifacts/bandit.txt`)
+- [x] Dep-CVE scan clean on runtime deps
+      (see `docs/launch/security-artifacts/pip-audit-core.json` — `safety`
+      unusable on the launch laptop due to a numpy/scipy runtime
+      conflict; `pip-audit` is the tool of record)
 - [ ] SBOM generated and uploaded as a CI artifact
+      (pending: needs a job in `publish.yml` by a maintainer with
+      `workflow` scope)
 - [ ] PGP key fingerprint in `SECURITY.md` matches the key used to sign
       the release tag
 
