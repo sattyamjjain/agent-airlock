@@ -166,7 +166,7 @@ def wrap_langchain_tool(
         def secured_run(*args: Any, **kwargs: Any) -> Any:
             return airlock(original_run)(*args, **kwargs)
 
-        tool._run = secured_run  # type: ignore[method-assign]
+        tool._run = secured_run
 
     return tool
 
