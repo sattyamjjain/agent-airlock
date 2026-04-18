@@ -531,6 +531,7 @@ def handle_tool_call(name, inputs):
 | AutoGen | [`autogen_integration.py`](./examples/autogen_integration.py) | ConversableAgent |
 | smolagents | [`smolagents_integration.py`](./examples/smolagents_integration.py) | CodeAgent, E2B |
 | Anthropic | [`anthropic_integration.py`](./examples/anthropic_integration.py) | Direct API |
+| Claude Agent SDK | [`anthropic_integration.py`](./examples/anthropic_integration.py) (Example 7) | Agent SDK tools as in-process MCP servers |
 
 ---
 
