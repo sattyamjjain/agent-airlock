@@ -240,11 +240,12 @@ from .safe_types import (
     create_safe_url_type,
 )
 
-# V0.4.0 Sandbox backends
+# V0.4.0 Sandbox backends (V0.5.0 adds ManagedSandboxBackend stub)
 from .sandbox_backend import (
     DockerBackend,
     E2BBackend,
     LocalBackend,
+    ManagedSandboxBackend,
     SandboxBackend,
     SandboxResult,
     get_default_backend,
@@ -459,6 +460,7 @@ __all__ = [
     "E2BBackend",
     "DockerBackend",
     "LocalBackend",
+    "ManagedSandboxBackend",
     "get_default_backend",
     # V0.4.0 OTel Audit
     "OTelAuditExporter",
