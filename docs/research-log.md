@@ -96,6 +96,26 @@ Phase 1.3 will write regression tests for the 5 strong-fit CVEs in `tests/cves/`
 
 ---
 
+## 2026-04-18 — Deep-analysis bug triage
+
+**Driver:** Roadmap [#6](https://github.com/sattyamjjain/agent-airlock/issues/6) Phase 1.8. The execution brief listed three claimed bugs: (1) sensitive-param filter misses custom names; (2) streaming sanitizer double-counts tokens on re-entry; (3) capability gating bypass when `@requires` stacked with `@functools.wraps`.
+
+**Sources consulted:** the source tree (`src/agent_airlock/core.py`, `streaming.py`, `capabilities.py`) and the Python `functools` module (for `functools.wraps` semantics — `WRAPPER_ASSIGNMENTS` + `WRAPPER_UPDATES = ('__dict__',)`).
+
+**Findings:**
+1. **Bug 1 is real.** `_filter_sensitive_keys` used `k.lower() not in SENSITIVE_PARAM_NAMES` — an exact-match frozenset check. Custom compound names (`user_password`, `my_api_key`, `aws_secret_key`, `session_cookie`, `db_token`) bypassed the filter and leaked to debug logs. Fix: substring match against a new `SENSITIVE_PARAM_SUBSTRINGS` tuple.
+2. **Bug 2 is UNVERIFIED.** I could not reproduce a double-count in `StreamingAirlock`. `wrap_generator` / `wrap_async_generator` call `self.reset()` before iterating, `create_streaming_wrapper` constructs one instance per decorated function but every call goes through `wrap_generator` (which resets), and `_sanitize_chunk` increments `sanitized_count` exactly once per chunk. Asserted the current (correct) behaviour with three regression tests so a future change that introduces a double-count trips the suite. Flagged UNVERIFIED rather than silently fabricating a fix.
+3. **Bug 3 claim is mis-stated; underlying bug is real.** `functools.wraps` merges the wrapped function's `__dict__` into the wrapper's, which PRESERVES `__airlock_capabilities__`. The real failure mode is an OUTER decorator that does NOT use `functools.wraps` — such a wrapper drops the attribute, and `get_required_capabilities` (using a plain `getattr`) returned `Capability.NONE`, allowing a bypass. Fix: `get_required_capabilities` now walks the `__wrapped__` chain (bounded to 32 hops to avoid pathological cycles) so that any decorator that preserves `__wrapped__` still surfaces the capability.
+
+**Conclusion:**
+- `src/agent_airlock/core.py`: `_filter_sensitive_keys` now uses substring matching. The old `SENSITIVE_PARAM_NAMES` frozenset remains for backward compatibility but is no longer used inside the filter.
+- `src/agent_airlock/capabilities.py`: `get_required_capabilities` walks the `__wrapped__` chain.
+- `tests/test_deep_analysis_bugs.py`: 15 new tests. 7 failed before the fixes (TDD per the brief) and pass after; 8 cover the UNVERIFIED streaming claim and adjacent correct paths.
+
+**Retrieval date:** 2026-04-18.
+
+---
+
 ## 2026-04-18 — Google Cloud Model Armor adapter
 
 **Driver:** Roadmap [#6](https://github.com/sattyamjjain/agent-airlock/issues/6) Phase 1.7. `src/agent_airlock/integrations/model_armor.py`.
