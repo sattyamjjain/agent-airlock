@@ -4,7 +4,7 @@ First off, thank you for considering contributing to Agent-Airlock! It's people 
 
 ## Code of Conduct
 
-This project and everyone participating in it is governed by our commitment to providing a welcoming and inclusive environment. By participating, you are expected to uphold this standard.
+This project and everyone participating in it is governed by the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Report unacceptable behavior to [platform.dev@attri.ai](mailto:platform.dev@attri.ai).
 
 ## How Can I Contribute?
 
