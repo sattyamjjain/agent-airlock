@@ -96,6 +96,38 @@ Phase 1.3 will write regression tests for the 5 strong-fit CVEs in `tests/cves/`
 
 ---
 
+## 2026-04-18 — A2A protocol middleware
+
+**Driver:** Roadmap [#6](https://github.com/sattyamjjain/agent-airlock/issues/6) Phase 1.6. `src/agent_airlock/a2a.py`.
+
+**Sources consulted:**
+- Canonical repo: https://github.com/a2aproject/A2A — the older `google/A2A` redirects here; project donated to Linux Foundation.
+- Rendered spec: https://a2a-protocol.org/latest/specification/ — v1.0 shipped early 2026, with `/v0.3.0/` and `/dev/` versioned branches.
+- "What's new in v1.0": https://a2a-protocol.org/latest/whats-new-v1/
+- A2A + MCP relationship (complementary): https://a2a-protocol.org/latest/topics/a2a-and-mcp/
+- Python SDK: https://pypi.org/project/a2a-sdk/ (Apache 2.0, Python ≥ 3.10, covers transport/HTTP/gRPC).
+- Normative `.proto` file: `spec/a2a.proto` in the A2A repo (search-only access; not fetched line-by-line).
+
+**Findings:**
+1. A2A is JSON-RPC 2.0 over HTTP(S). Methods in the v1.0 core set: `message/send`, `message/stream`, `tasks/get`, `tasks/cancel`, `tasks/resubscribe`. Three transport bindings: JSON-RPC over HTTP POST, gRPC, HTTP+JSON (REST). Streaming uses Server-Sent Events.
+2. Core shapes: `Message` has required `messageId`, `role ∈ {user, agent}`, `parts`, `kind = "message"`; optional `taskId`, `contextId`, `referenceTaskIds`, `extensions`, `metadata`. `Task` has required `id`, `status`, `kind = "task"`; optional `contextId`, `history`, `artifacts`, `metadata`. `Part` is a union (text / file / data).
+3. Auth lives at the HTTP layer — OAuth2 / OIDC advertised in the AgentCard security schemes. **JSON-RPC payloads do NOT carry identity.** The middleware must not try to authenticate from the body.
+4. A2A is complementary to MCP: A2A = agent-to-agent (horizontal), MCP = agent-to-tool (vertical). Confirmed at `a2a-protocol.org/latest/topics/a2a-and-mcp/`.
+
+**UNVERIFIED items (flagged in code):**
+- Exact v1.0 release date and field-level diff vs v0.3.0. Models below mirror v0.3.0 fields that search results indicate are unchanged in v1.0.
+- `Task.contextId` required-vs-optional in the normative proto.
+- AgentCard full required/optional split (not modelled here; belongs in a future PR if we add full AgentCard validation).
+
+**Conclusion:**
+- `src/agent_airlock/a2a.py` implements: `JSONRPCRequest` / `JSONRPCResponse` / `JSONRPCError` Pydantic models, `Message` / `Task` / `Part` / `TaskStatus` models (Pydantic strict, `extra="forbid"` at envelope level, `extra="allow"` on `Part` to preserve binding-specific content), and an `A2AValidator` with a pluggable `A2ACustomValidator` hook.
+- 25 tests in `tests/test_a2a.py` covering envelope validation, method allow-list, `result` XOR `error` response invariant, `Message` / `Task` schema violations, and the custom-hook lifecycle (including exception containment).
+- Transport concerns (HTTP, gRPC, SSE) deliberately out of scope — callers should use `a2a-sdk` for transport and feed payloads to this validator.
+
+**Retrieval date:** 2026-04-18.
+
+---
+
 *Template for future entries:*
 
 ```
