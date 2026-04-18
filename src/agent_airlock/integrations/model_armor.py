@@ -239,7 +239,7 @@ class ModelArmorScanner:
         client = self._get_client()
 
         try:
-            from google.cloud import modelarmor_v1  # type: ignore[import-not-found]
+            from google.cloud import modelarmor_v1
         except ImportError as e:  # pragma: no cover
             raise ModelArmorNotInstalled(str(e)) from e
 
