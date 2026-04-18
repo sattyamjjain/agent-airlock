@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **CI green on main** — removed an unused `# type: ignore[method-assign]` in `integrations/langchain.py` that began failing mypy 1.8+. Suppressed a bandit B104 false positive on the localhost blocklist check in `network.py`. Main had been red since Feb 6; PR #7 restored all three test matrix versions plus the `security` job.
+- **Sensitive-parameter filter now catches compound names** (`user_password`, `my_api_key`, `aws_secret_key`, `session_cookie`, `db_token`, etc.). `_filter_sensitive_keys` previously used an exact-match frozenset lookup, letting custom-named parameters leak into debug logs. Fix: substring match against `SENSITIVE_PARAM_SUBSTRINGS`. Old `SENSITIVE_PARAM_NAMES` constant retained for backward compatibility.
+- **Capability gating now survives non-`functools.wraps` outer decorators.** `get_required_capabilities` now walks the `__wrapped__` chain (bounded to 32 hops) so that any outer decorator preserving `__wrapped__` continues to surface `__airlock_capabilities__`. Previously a naive wrapper that did not copy `__dict__` would cause `@requires` to silently degrade to `Capability.NONE` — a bypass. 7 TDD regression tests in `tests/test_deep_analysis_bugs.py`.
 
 ### Documentation
 - **April 2026 briefing pack** committed to tree: `ECOSYSTEM_STATE_2026-04.md`, `ROADMAP_2026.md`, `LAUNCH_PLAYBOOK_2026.md`, `DEEP_ANALYSIS.md`, `CROSS_PROJECT_SYNTHESIS.md`, `CLAUDE_PROMPT.md` (#8). Anchors the v0.5.0 roadmap in #6.
