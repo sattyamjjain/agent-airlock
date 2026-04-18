@@ -492,6 +492,100 @@ class LocalBackend(SandboxBackend):
             )
 
 
+class ManagedSandboxBackend(SandboxBackend):
+    """Anthropic Managed Agents backend — **beta, opt-in only**.
+
+    Anthropic's Managed Agents product (https://anthropic.com/, announced
+    April 2026) runs complete agent loops — model turns, tool calls, and
+    state — on Anthropic-operated infrastructure. This does NOT map
+    one-to-one onto the `SandboxBackend.execute()` contract, which is
+    "run THIS function with THESE arguments in an isolated environment."
+
+    Why this backend exists:
+
+    - The roadmap (#6) tracks a Managed Agents story for v0.5.0.
+    - Users need a clear opt-in hook rather than discovering later that
+      Managed Agents is not plug-compatible with `E2BBackend`.
+
+    What this backend currently does:
+
+    - ``is_available()`` returns ``True`` when the ``anthropic`` SDK is
+      importable **and** either ``api_key`` is provided or
+      ``ANTHROPIC_API_KEY`` is set in the environment.
+    - ``execute()`` does not run the provided function. It returns a
+      ``SandboxResult(success=False, error=...)`` with a pointer to the
+      Anthropic-SDK-based integration (``examples/anthropic_integration.py``)
+      that wraps an agent loop rather than a single function call.
+    - ``warmup()`` and ``shutdown()`` are no-ops.
+
+    Future work (tracked in #6): a session-based ``ManagedAgentExecutor``
+    that accepts a tool registry and a prompt, then runs a full agent
+    loop inside a Managed session. That lives outside the
+    ``SandboxBackend`` interface because the shapes disagree. When it
+    lands, this class will document the integration point.
+    """
+
+    def __init__(self, api_key: str | None = None) -> None:
+        """Initialize the Managed Agents backend.
+
+        Args:
+            api_key: Anthropic API key. Falls back to ``ANTHROPIC_API_KEY``
+                env var.
+        """
+        self.api_key = api_key
+
+    @property
+    def name(self) -> str:
+        return "managed"
+
+    def is_available(self) -> bool:
+        """Check that the SDK is installed AND an API key is reachable."""
+        try:
+            import anthropic  # type: ignore[import-not-found,unused-ignore]  # noqa: F401
+        except ImportError:
+            return False
+        import os
+
+        return bool(self.api_key or os.environ.get("ANTHROPIC_API_KEY"))
+
+    def execute(
+        self,
+        func: Callable[..., R],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        timeout: int = 60,
+    ) -> SandboxResult:
+        """Deliberately does not run ``func``.
+
+        See class docstring — Managed Agents runs agent loops, not single
+        function calls. This method returns a failure ``SandboxResult`` with
+        a message pointing the caller at the right abstraction so silent
+        misuse is impossible.
+        """
+        del args, kwargs, timeout  # intentionally unused — see docstring
+        logger.warning(
+            "managed_sandbox_execute_not_supported",
+            tool_name=getattr(func, "__name__", "unknown"),
+            hint=(
+                "SandboxBackend.execute() runs one function; Anthropic Managed "
+                "Agents runs a full agent loop. Use the anthropic SDK "
+                "integration (examples/anthropic_integration.py) or the "
+                "ClaudeAgentSDK extra for loop-style execution."
+            ),
+        )
+        return SandboxResult(
+            success=False,
+            error=(
+                "ManagedSandboxBackend is a session-based backend: "
+                "single-function execute() is not supported. "
+                "See examples/anthropic_integration.py for the agent-loop "
+                "integration, or roadmap issue #6 for the planned "
+                "ManagedAgentExecutor interface."
+            ),
+            backend=self.name,
+        )
+
+
 # Default backend factory
 def get_default_backend(config: AirlockConfig | None = None) -> SandboxBackend:
     """Get the default sandbox backend based on availability.
@@ -535,4 +629,4 @@ def get_default_backend(config: AirlockConfig | None = None) -> SandboxBackend:
 
 
 # Type alias for backend configuration
-BackendType = E2BBackend | DockerBackend | LocalBackend
+BackendType = E2BBackend | DockerBackend | LocalBackend | ManagedSandboxBackend
