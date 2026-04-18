@@ -58,8 +58,14 @@ mcp = [
 claude-agent = [
     "claude-agent-sdk>=0.1.58",
 ]
+# Google Cloud Model Armor — opt-in prompt/response classifier.
+# Install with: pip install "agent-airlock[model-armor]"
+# See: https://pypi.org/project/google-cloud-modelarmor/
+model-armor = [
+    "google-cloud-modelarmor>=0.2",
+]
 all = [
-    "agent-airlock[sandbox,mcp,claude-agent]",
+    "agent-airlock[sandbox,mcp,claude-agent,model-armor]",
 ]
 dev = [
     "pytest>=8.0",
