@@ -255,9 +255,7 @@ def owasp_mcp_top_10_2026_policy() -> SecurityPolicy:
 
         cap_policy = _capabilities(
             granted=(
-                Capability.FILESYSTEM_READ
-                | Capability.NETWORK_HTTPS
-                | Capability.DATABASE_READ
+                Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
             ).value,
             denied=(
                 Capability.PROCESS_SHELL
@@ -336,9 +334,7 @@ def eu_ai_act_article_15_policy() -> SecurityPolicy:
 
         cap_policy = _capabilities(
             granted=(
-                Capability.FILESYSTEM_READ
-                | Capability.NETWORK_HTTPS
-                | Capability.DATABASE_READ
+                Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
             ).value,
             denied=(
                 Capability.NETWORK_ARBITRARY
@@ -400,9 +396,7 @@ def india_dpdp_2023_policy() -> SecurityPolicy:
 
         cap_policy = _capabilities(
             granted=(
-                Capability.FILESYSTEM_READ
-                | Capability.DATABASE_READ
-                | Capability.NETWORK_HTTPS
+                Capability.FILESYSTEM_READ | Capability.DATABASE_READ | Capability.NETWORK_HTTPS
             ).value,
             denied=(
                 Capability.DATA_PII
