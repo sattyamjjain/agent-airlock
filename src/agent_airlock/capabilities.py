@@ -273,13 +273,37 @@ def requires(*capabilities: Capability) -> Callable[[F], F]:
 def get_required_capabilities(func: Callable[..., Any]) -> Capability:
     """Get the capabilities required by a function.
 
+    Walks the `__wrapped__` chain that `functools.wraps` (and well-behaved
+    manual decorators) set, so an outer wrapper that does not itself copy
+    `__airlock_capabilities__` cannot silently drop it. If neither the
+    outermost callable nor any wrapped inner callable has the attribute,
+    returns `Capability.NONE`.
+
     Args:
         func: Function to check.
 
     Returns:
         Capability flags required by the function, or NONE if not decorated.
     """
-    return getattr(func, "__airlock_capabilities__", Capability.NONE)
+    caps = getattr(func, "__airlock_capabilities__", None)
+    if caps is not None:
+        return caps  # type: ignore[no-any-return]
+
+    # Walk the __wrapped__ chain (bounded depth to avoid infinite loops on
+    # pathological cycles).
+    seen: set[int] = set()
+    current = func
+    for _ in range(32):
+        inner = getattr(current, "__wrapped__", None)
+        if inner is None or id(inner) in seen:
+            break
+        seen.add(id(inner))
+        inner_caps = getattr(inner, "__airlock_capabilities__", None)
+        if inner_caps is not None:
+            return inner_caps  # type: ignore[no-any-return]
+        current = inner
+
+    return Capability.NONE
 
 
 def _capability_flag_names(caps: Capability) -> list[str]:

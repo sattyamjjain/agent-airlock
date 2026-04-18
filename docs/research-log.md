@@ -52,6 +52,70 @@ Cite this file from PR descriptions via anchor (e.g. `docs/research-log.md#2026-
 
 ---
 
+## 2026-04-18 — 2026 policy presets
+
+**Driver:** Roadmap [#6](https://github.com/sattyamjjain/agent-airlock/issues/6) Phase 1.4. `src/agent_airlock/policy_presets.py`.
+
+**Sources consulted:**
+- OWASP MCP Top 10 (beta): https://owasp.org/www-project-mcp-top-10/ · https://nest.owasp.org/projects/mcp-top-10 — categories MCP01 token mismanagement, MCP02 excessive permissions, MCP03 tool poisoning, MCP04 supply chain, MCP05 command injection, MCP07 insufficient auth, MCP09 shadow MCP servers, MCP10 context oversharing.
+- OWASP Top 10 for Agentic Applications 2026: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/ — ASI01 Agent Goal Hijack, ASI02 Tool Misuse, ASI03 Identity/Privilege Abuse, ASI04 Supply Chain, ASI05 Unexpected Code Execution, ASI06 Memory/Context Poisoning, ASI07 Insecure Inter-Agent Communication, ASI08 Cascading Failures, ASI09 Human-Agent Trust, ASI10 Rogue Agents.
+- EU AI Act Article 15: https://artificialintelligenceact.eu/article/15/ · https://ai-act-service-desk.ec.europa.eu/en/ai-act/article-15 — cybersecurity resilience for high-risk AI; applies 2 Aug 2026.
+- India DPDP Act 2023: https://www.meity.gov.in/static/uploads/2024/06/2bf1f0e9f04e6fb4f8fef35e82c42aa5.pdf — notified by MeitY Nov 13, 2025 + DPDP Rules 2025.
+- Anthropic GTG-1002 disclosure (public threat intelligence, late 2025).
+- Mexican-government breach public press coverage, Feb 2026.
+
+**Findings:**
+1. 5 presets implemented: `GTG_1002_DEFENSE`, `MEX_GOV_2026`, `OWASP_MCP_TOP_10_2026`, `EU_AI_ACT_ARTICLE_15`, `INDIA_DPDP_2023`.
+2. Each preset is both an eager constant AND a factory function (mirrors the `_get_strict_capability_policy()` pattern in existing `policy.py`).
+3. Presets only change the `SecurityPolicy` / `CapabilityPolicy` layer. Output sanitization (India PII pack), OTel export, and conversation tracking are orthogonal and must be wired by the caller — each preset's docstring says so.
+4. `OWASP_AGENTIC_2026_ASI01_ASI10` preset deferred to a follow-up PR: the Agentic Top 10 is broader than what runtime policy alone can cover (ASI01 "goal hijack" needs prompt-layer defenses; ASI07 "inter-agent communication" is the A2A middleware in Phase 1.6). Split rather than overstate.
+
+**Conclusion:**
+25 new tests in `tests/test_policy_presets.py`, all passing. Each preset has at least one blocking + one allowing canonical test. Factory-vs-constant equivalence tested.
+
+**Retrieval date:** 2026-04-18.
+
+---
+
+## 2026-04-18 — 9 MCP-adjacent CVEs
+
+**Driver:** Roadmap [#6](https://github.com/sattyamjjain/agent-airlock/issues/6) Phase 1.3 `tests/cves/` gate.
+
+**Sources consulted:** NVD entries + vendor advisories for CVE-2025-59536, CVE-2025-68143, CVE-2025-68144, CVE-2025-68145, CVE-2026-26118, CVE-2026-27825, CVE-2026-27826, CVE-2026-33032, CVE-2026-23744. See https://nvd.nist.gov/vuln/detail/CVE-YYYY-NNNNN for each.
+
+**Findings:**
+- All nine resolve on NVD. Not UNVERIFIED.
+- Strong airlock fit (writable regression): **CVE-2025-68143** (git_init path traversal — SafePath), **CVE-2025-68144** (git ref argument injection — Pydantic strict), **CVE-2025-68145** (repo root confinement — SafePath/filesystem), **CVE-2026-26118** (Azure MCP SSRF — EndpointPolicy, already shipped v0.4.1), **CVE-2026-27825** (mcp-atlassian arbitrary-write — SafePath).
+- Partial fit: **CVE-2025-59536** (Claude Code hooks RCE — exfil leg only via network egress), **CVE-2026-27826** (mcp-atlassian header SSRF — only if URL surfaces as a tool param).
+- Out of scope for runtime middleware: **CVE-2026-33032** (nginx-ui missing HTTP auth middleware), **CVE-2026-23744** (@mcpjam/inspector missing auth on /api/mcp/connect). These are transport-layer / web-framework bugs; airlock sits in front of tool execution, not HTTP auth.
+
+**Conclusion:**
+Phase 1.3 will write regression tests for the 5 strong-fit CVEs in `tests/cves/` with the argument-level patterns that airlock blocks. Partial-fit CVEs get explanatory test cases documenting the bounds of runtime coverage. The two out-of-scope CVEs are excluded from the suite with a note in `tests/cves/README.md`.
+
+**Retrieval date:** 2026-04-18.
+
+---
+
+## 2026-04-18 — Deep-analysis bug triage
+
+**Driver:** Roadmap [#6](https://github.com/sattyamjjain/agent-airlock/issues/6) Phase 1.8. The execution brief listed three claimed bugs: (1) sensitive-param filter misses custom names; (2) streaming sanitizer double-counts tokens on re-entry; (3) capability gating bypass when `@requires` stacked with `@functools.wraps`.
+
+**Sources consulted:** the source tree (`src/agent_airlock/core.py`, `streaming.py`, `capabilities.py`) and the Python `functools` module (for `functools.wraps` semantics — `WRAPPER_ASSIGNMENTS` + `WRAPPER_UPDATES = ('__dict__',)`).
+
+**Findings:**
+1. **Bug 1 is real.** `_filter_sensitive_keys` used `k.lower() not in SENSITIVE_PARAM_NAMES` — an exact-match frozenset check. Custom compound names (`user_password`, `my_api_key`, `aws_secret_key`, `session_cookie`, `db_token`) bypassed the filter and leaked to debug logs. Fix: substring match against a new `SENSITIVE_PARAM_SUBSTRINGS` tuple.
+2. **Bug 2 is UNVERIFIED.** I could not reproduce a double-count in `StreamingAirlock`. `wrap_generator` / `wrap_async_generator` call `self.reset()` before iterating, `create_streaming_wrapper` constructs one instance per decorated function but every call goes through `wrap_generator` (which resets), and `_sanitize_chunk` increments `sanitized_count` exactly once per chunk. Asserted the current (correct) behaviour with three regression tests so a future change that introduces a double-count trips the suite. Flagged UNVERIFIED rather than silently fabricating a fix.
+3. **Bug 3 claim is mis-stated; underlying bug is real.** `functools.wraps` merges the wrapped function's `__dict__` into the wrapper's, which PRESERVES `__airlock_capabilities__`. The real failure mode is an OUTER decorator that does NOT use `functools.wraps` — such a wrapper drops the attribute, and `get_required_capabilities` (using a plain `getattr`) returned `Capability.NONE`, allowing a bypass. Fix: `get_required_capabilities` now walks the `__wrapped__` chain (bounded to 32 hops to avoid pathological cycles) so that any decorator that preserves `__wrapped__` still surfaces the capability.
+
+**Conclusion:**
+- `src/agent_airlock/core.py`: `_filter_sensitive_keys` now uses substring matching. The old `SENSITIVE_PARAM_NAMES` frozenset remains for backward compatibility but is no longer used inside the filter.
+- `src/agent_airlock/capabilities.py`: `get_required_capabilities` walks the `__wrapped__` chain.
+- `tests/test_deep_analysis_bugs.py`: 15 new tests. 7 failed before the fixes (TDD per the brief) and pass after; 8 cover the UNVERIFIED streaming claim and adjacent correct paths.
+
+**Retrieval date:** 2026-04-18.
+
+---
+
 *Template for future entries:*
 
 ```
