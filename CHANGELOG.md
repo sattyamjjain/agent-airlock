@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(no entries yet)
+
+---
+
+## [0.5.0] - 2026-04-18 — "April 2026"
+
+First release of the April 2026 roadmap (#6). Turns agent-airlock into a
+runtime-compliant MCP 2025-11-25 defender: ships the CVE regression suite,
+2026 policy presets, Google Model Armor adapter, A2A protocol middleware,
+Claude Agent SDK extra, and fixes two real defence-in-depth bugs caught in
+deep analysis.
+
 ### Added
 - **MCP 2025-11-25 spec compliance helpers** (`agent_airlock.mcp_spec`): OAuth 2.1 + PKCE S256 utilities (PKCE generate/verify with RFC 7636 test vector, redirect URI allow-list, Bearer + `WWW-Authenticate` header parsers, RFC 8707 resource-URI canonicalisation, Authorization Server + Protected Resource Metadata Pydantic models enforcing `S256` in `code_challenge_methods_supported`, JWT audience validator), Tasks primitive (SEP-1686) Pydantic models (`Task`, `TaskStatus`, `TaskGetRequest`, `TaskCancelRequest`, five-state lifecycle), and Streamable HTTP transport validators (`MCP-Protocol-Version: 2025-11-25` header enforcement, rejects access tokens in query string, Content-Type / Accept rules, `WWW-Authenticate` on 401). 81 conformance tests. DPoP deliberately deferred — spec lists it as SEP-draft only.
 - **Claude Agent SDK** (`claude-agent-sdk`) as an optional extra: install with `pip install "agent-airlock[claude-agent]"`. Renamed from Claude Code SDK in Sept 2025 ([anthropics/claude-agent-sdk-python](https://github.com/anthropics/claude-agent-sdk-python)). `examples/anthropic_integration.py` Example 7 already uses the new import path.

@@ -16,8 +16,8 @@
 - V0.3.0: Filesystem validation, network egress control, honeypot deception, framework vaccination
 - V0.4.0: Circuit breaker, cost tracking, retry policies, OpenTelemetry observability, capability gating
 
-**Stats:** ~25,900 lines of code | 1157 tests | 79%+ coverage (enforced in CI)
-**Version:** 0.4.0 "Enterprise"
+**Stats:** ~27,400 lines of code | 1362 tests | 81%+ coverage (enforced at 80% in CI)
+**Version:** 0.5.0 "April 2026"
 
 <!-- END AUTO-MANAGED -->
 
@@ -197,7 +197,7 @@ Key security additions:
 - Always run `pytest tests/ -v` after code changes to verify nothing breaks
 - Run `mypy src/` and `ruff check src/ tests/` before committing
 - Use `python3 -m py_compile <file>` to verify syntax after writing Python
-- Keep coverage above 79% (CI enforced via `--cov-fail-under=79`)
+- Keep coverage above 80% (CI enforced via `--cov-fail-under=80`)
 - New modules should follow the layered architecture pattern (validation → policy → execution → sanitization)
 - Security-sensitive code must include structured logging via structlog
 - Custom exceptions should store details as attributes and call `super().__init__()`
