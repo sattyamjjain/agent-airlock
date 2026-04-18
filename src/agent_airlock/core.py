@@ -98,40 +98,55 @@ R = TypeVar("R")
 # Type alias for policy resolver functions
 PolicyResolver = Callable[[AirlockContext[Any]], SecurityPolicy | None]
 
-# Parameter names that should not appear in debug logs
-SENSITIVE_PARAM_NAMES = frozenset(
-    {
-        "password",
-        "passwd",
-        "pwd",
-        "secret",
-        "token",
-        "key",
-        "api_key",
-        "apikey",
-        "auth",
-        "authorization",
-        "credential",
-        "credentials",
-        "private_key",
-        "privatekey",
-        "access_token",
-        "refresh_token",
-        "session",
-        "cookie",
-        "ssn",
-        "credit_card",
-        "card_number",
-    }
+# Substrings that indicate a parameter name is sensitive and must not
+# appear in debug logs. Any key whose lowercase form CONTAINS any of
+# these substrings is filtered. This catches both exact matches
+# (`password`) and compound variants (`user_password`, `my_api_key`,
+# `aws_secret_key`, `session_cookie`, `db_token`, ...) that a previous
+# exact-match implementation leaked.
+SENSITIVE_PARAM_SUBSTRINGS: tuple[str, ...] = (
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "auth",
+    "credential",
+    "private_key",
+    "privatekey",
+    "access_token",
+    "refresh_token",
+    "session",
+    "cookie",
+    "ssn",
+    "credit_card",
+    "card_number",
 )
+
+# Legacy exact-match set kept for backward compatibility with any
+# downstream code that imported SENSITIVE_PARAM_NAMES before v0.5.0.
+# New code should rely on the substring check in _filter_sensitive_keys.
+SENSITIVE_PARAM_NAMES = frozenset(SENSITIVE_PARAM_SUBSTRINGS) | {"key"}
 
 
 def _filter_sensitive_keys(keys: list[str]) -> list[str]:
     """Filter out sensitive parameter names from a list of keys.
 
-    SECURITY: Prevents leaking sensitive parameter names to logs.
+    SECURITY: Prevents leaking sensitive parameter names to logs. Uses
+    substring matching so that compound names (`user_password`,
+    `my_api_key`, `aws_secret_key`, `session_cookie`) are caught in
+    addition to exact matches.
     """
-    return [k for k in keys if k.lower() not in SENSITIVE_PARAM_NAMES]
+    filtered: list[str] = []
+    for k in keys:
+        lowered = k.lower()
+        if any(s in lowered for s in SENSITIVE_PARAM_SUBSTRINGS):
+            continue
+        filtered.append(k)
+    return filtered
 
 
 # Parameter names that typically contain file paths

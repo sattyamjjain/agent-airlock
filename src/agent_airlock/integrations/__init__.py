@@ -9,4 +9,5 @@ __all__ = [
     "langchain",
     "anthropic",
     "openai_guardrails",
+    "model_armor",
 ]
