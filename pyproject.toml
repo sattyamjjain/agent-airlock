@@ -186,7 +186,7 @@ disallow_untyped_calls = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --cov=agent_airlock --cov-report=term-missing"
+addopts = "-v --cov=agent_airlock --cov-report=term-missing --ignore=tests/benchmarks"
 
 [tool.coverage.run]
 source = ["src/agent_airlock"]
