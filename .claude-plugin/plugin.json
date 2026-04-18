@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/schemas/plugin.schema.json",
+  "name": "agent-airlock",
+  "version": "0.5.0",
+  "description": "Security middleware for MCP servers. Intercepts, validates, and sandboxes AI agent tool calls to prevent hallucinated arguments, type errors, and dangerous operations.",
+  "summary": "The open-source firewall for AI agents. One decorator. Zero trust. Full control.",
+  "homepage": "https://github.com/sattyamjjain/agent-airlock",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sattyamjjain/agent-airlock.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "security",
+    "firewall",
+    "ai-agents",
+    "validation",
+    "sandbox",
+    "pii",
+    "oauth",
+    "pkce",
+    "cve"
+  ],
+  "categories": [
+    "security",
+    "mcp-middleware",
+    "agent-runtime"
+  ],
+  "maintainer": {
+    "name": "Attri.ai",
+    "email": "platform.dev@attri.ai",
+    "url": "https://github.com/sattyamjjain"
+  },
+  "install": {
+    "pypi": "agent-airlock",
+    "extras": {
+      "sandbox": "E2B Firecracker micro-VM execution",
+      "mcp": "FastMCP integration + @secure_tool decorator",
+      "claude-agent": "Claude Agent SDK integration",
+      "model-armor": "Google Cloud Model Armor prompt/response scanner",
+      "all": "Everything above"
+    }
+  },
+  "minimum_claude_version": "1.0.0",
+  "tags": [
+    "mcp-2025-11-25",
+    "oauth-2.1",
+    "cve-regression-suite",
+    "owasp-mcp-top-10"
+  ],
+  "documentation": {
+    "readme": "https://github.com/sattyamjjain/agent-airlock#readme",
+    "quickstart": "https://github.com/sattyamjjain/agent-airlock/blob/main/docs/getting-started/quickstart.md",
+    "cve_catalog": "https://github.com/sattyamjjain/agent-airlock/blob/main/docs/cves/index.md",
+    "compliance": "https://github.com/sattyamjjain/agent-airlock/blob/main/docs/COMPATIBILITY.md"
+  }
+}

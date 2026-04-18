@@ -1,0 +1,60 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/schemas/marketplace.schema.json",
+  "plugin": "agent-airlock",
+  "listing": {
+    "title": "Agent-Airlock",
+    "tagline": "The open-source firewall for AI agents.",
+    "hero_image": "https://github.com/sattyamjjain/agent-airlock/raw/main/docs/media/hero.png",
+    "demo_gif": "https://github.com/sattyamjjain/agent-airlock/raw/main/docs/media/blocked-cve.gif",
+    "screenshots": [],
+    "feature_bullets": [
+      "Stops hallucinated tool arguments before Pydantic ever sees them",
+      "Pydantic V2 strict validation + self-healing fix_hints for LLM retry",
+      "Sandboxes dangerous execution in E2B, Docker, or local (opt-in)",
+      "Output sanitization: 12 PII / secret types, 4 masking strategies",
+      "RBAC + rate limits + time windows + capability gating",
+      "Regression suite for 7 disclosed MCP-adjacent CVEs (2025-2026)",
+      "OAuth 2.1 + PKCE S256 + RFC 8707 validators for MCP 2025-11-25",
+      "OpenTelemetry audit export with documented semantic conventions",
+      "Works with every major agent framework (LangChain, LangGraph, CrewAI, AutoGen, OpenAI SDK, Anthropic SDK, PydanticAI, smolagents, LlamaIndex)"
+    ],
+    "why_this_plugin": [
+      "Runtime, not prompt-layer. We sit in front of tool execution, not in the system prompt.",
+      "Zero-cost defaults. The core validator does not need an LLM judge model.",
+      "Stdlib-first. No heavyweight deps; pip install agent-airlock is instantaneous.",
+      "Offline-capable. The CVE suite, policy presets, and validators all work air-gapped."
+    ],
+    "proof_points": [
+      "1362 tests, 81%+ coverage",
+      "7 CVE regression tests covering CVE-2025-59536, 68143, 68144, 68145, 2026-26118, 27825, 27826",
+      "5 policy presets (GTG_1002_DEFENSE, MEX_GOV_2026, OWASP_MCP_TOP_10_2026, EU_AI_ACT_ARTICLE_15, INDIA_DPDP_2023)"
+    ],
+    "audience": [
+      "AI platform engineers",
+      "Security engineers evaluating MCP deployments",
+      "Red teamers and MCP tool authors"
+    ]
+  },
+  "submission_targets": [
+    {
+      "marketplace": "anthropics/claude-plugins-official",
+      "status": "pending",
+      "notes": "Requires a PR to https://github.com/anthropics/claude-plugins-official (maintainer action)."
+    },
+    {
+      "marketplace": "claudemarketplaces.com",
+      "status": "pending",
+      "notes": "Submission form at https://claudemarketplaces.com/submit (maintainer action)."
+    },
+    {
+      "marketplace": "aitmpl.com",
+      "status": "pending",
+      "notes": "Outreach via community Discord."
+    },
+    {
+      "marketplace": "buildwithclaude.com",
+      "status": "pending",
+      "notes": "Submission form (maintainer action)."
+    }
+  ]
+}
