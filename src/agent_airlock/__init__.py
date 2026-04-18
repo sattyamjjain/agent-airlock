@@ -195,6 +195,20 @@ from .policy import (
     ViolationType,
 )
 
+# V0.5.0 2026 policy presets
+from .policy_presets import (
+    EU_AI_ACT_ARTICLE_15,
+    GTG_1002_DEFENSE,
+    INDIA_DPDP_2023,
+    MEX_GOV_2026,
+    OWASP_MCP_TOP_10_2026,
+    eu_ai_act_article_15_policy,
+    gtg_1002_defense_policy,
+    india_dpdp_2023_policy,
+    mex_gov_2026_policy,
+    owasp_mcp_top_10_2026_policy,
+)
+
 # V0.4.0 Retry Policies
 from .retry import (
     AGGRESSIVE_RETRY,
@@ -311,6 +325,17 @@ __all__ = [
     "STRICT_POLICY",
     "READ_ONLY_POLICY",
     "BUSINESS_HOURS_POLICY",
+    # V0.5.0 2026 policy presets
+    "GTG_1002_DEFENSE",
+    "MEX_GOV_2026",
+    "OWASP_MCP_TOP_10_2026",
+    "EU_AI_ACT_ARTICLE_15",
+    "INDIA_DPDP_2023",
+    "gtg_1002_defense_policy",
+    "mex_gov_2026_policy",
+    "owasp_mcp_top_10_2026_policy",
+    "eu_ai_act_article_15_policy",
+    "india_dpdp_2023_policy",
     # Sanitization
     "sanitize_output",
     "sanitize_with_workspace_config",
