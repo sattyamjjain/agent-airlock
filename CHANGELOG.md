@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Claude Agent SDK** (`claude-agent-sdk`) as an optional extra: install with `pip install "agent-airlock[claude-agent]"`. Renamed from Claude Code SDK in Sept 2025 ([anthropics/claude-agent-sdk-python](https://github.com/anthropics/claude-agent-sdk-python)). `examples/anthropic_integration.py` Example 7 already uses the new import path.
+- **CVE regression suite** (`tests/cves/`): 30 tests covering 7 disclosed MCP-adjacent CVEs — CVE-2025-59536 (Claude Code hooks RCE, exfil leg), CVE-2025-68143/44/45 (mcp-server-git path traversal / arg injection / repo root escape), CVE-2026-26118 (Azure MCP SSRF), CVE-2026-27825 (mcp-atlassian arbitrary write), CVE-2026-27826 (mcp-atlassian header SSRF, tool-param case). Each test reproduces the vulnerable tool-call pattern and asserts the matching airlock primitive blocks it. See `tests/cves/README.md` for out-of-scope CVEs.
 - **Research log** (`docs/research-log.md`) tracking primary-source verifications that back every non-trivial change in the April 2026 roadmap (#6).
 
 ### Fixed
