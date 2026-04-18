@@ -96,6 +96,41 @@ Phase 1.3 will write regression tests for the 5 strong-fit CVEs in `tests/cves/`
 
 ---
 
+## 2026-04-18 — Google Cloud Model Armor adapter
+
+**Driver:** Roadmap [#6](https://github.com/sattyamjjain/agent-airlock/issues/6) Phase 1.7. `src/agent_airlock/integrations/model_armor.py`.
+
+**Sources consulted:**
+- Overview: https://docs.cloud.google.com/model-armor/overview
+- Sanitize prompts / responses: https://docs.cloud.google.com/model-armor/sanitize-prompts-responses
+- REST reference: https://docs.cloud.google.com/model-armor/reference/rest
+- Python client: https://docs.cloud.google.com/python/docs/reference/google-cloud-modelarmor/latest
+- PyPI: https://pypi.org/project/google-cloud-modelarmor/
+- Product/pricing: https://cloud.google.com/security/products/model-armor — free up to 2M tokens/month, then $0.10 per million tokens.
+- Floor settings for Google-managed MCP (PREVIEW): https://docs.cloud.google.com/model-armor/model-armor-mcp-google-cloud-integration
+
+**Findings:**
+1. Regional endpoint: `https://modelarmor.LOCATION.rep.googleapis.com`.
+2. Two API methods: `projects/P/locations/L/templates/T:sanitizeUserPrompt` and `...:sanitizeModelResponse`. PyPI: `google-cloud-modelarmor`, client class `ModelArmorClient` from `google.cloud.modelarmor_v1`.
+3. Response shape has `sanitization_result.filter_match_state ∈ {MATCH_FOUND, NO_MATCH_FOUND}`, plus `rai_filter_result`, `sdp_filter_result`, `pi_and_jailbreak_filter_result`, `malicious_uri_filter_result`, `csam_filter_filter_result`.
+4. Auth: ADC, service account JSON via `GOOGLE_APPLICATION_CREDENTIALS`, or OAuth bearer token. No API-key flow.
+5. Floor settings for Google-managed MCP are PREVIEW — enforced server-side, no adapter code required.
+
+**UNVERIFIED items (per background research agent):**
+- Exact proto field names in `modelarmor_v1` (snake_case vs camelCase in the Python client). Adapter uses documented snake_case names wrapped in `getattr` + safe fallbacks so a Google-side rename surfaces as "no detection" rather than a crash.
+- `sanitize_model_response` canonical request field (`userPrompt` vs `userPromptData`). Adapter sends both via `user_prompt=...` kwarg; lets server ignore unrecognised fields.
+- Quota / RPS numbers (not quoted on the public docs page fetched).
+- Billed in tokens vs characters — phrasing is ambiguous on the product page.
+
+**Conclusion:**
+- `src/agent_airlock/integrations/model_armor.py` implements `ModelArmorScanner` (opt-in, `AIRLOCK_MODEL_ARMOR_ENABLED=1` + `AIRLOCK_MODEL_ARMOR_TEMPLATE=...`). Callers invoke `scan_user_prompt(...)` / `scan_model_response(...)` explicitly before/after tool execution.
+- `[model-armor]` optional extra pinned `google-cloud-modelarmor>=0.2`.
+- 14 tests in `tests/test_model_armor_integration.py` using stub client (no live API calls).
+
+**Retrieval date:** 2026-04-18.
+
+---
+
 *Template for future entries:*
 
 ```
