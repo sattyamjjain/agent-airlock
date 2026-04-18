@@ -88,6 +88,11 @@ nav:
   - CVE Catalog: cves/index.md
   - Security: SECURITY.md
   - Contributing: CONTRIBUTING.md
+  - Launch:
+    - Overview: launch/index.md
+    - Readiness Checklist: launch/readiness-checklist.md
+    - Launch FAQ: launch/faq.md
+    - Rollback Plan: launch/rollback.md
   - Changelog: changelog.md
 
 extra:
