@@ -246,7 +246,8 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
         )
 
     # Check localhost aliases
-    if not policy.allow_private_ips and hostname in ("localhost", "0.0.0.0"):
+    # nosec B104 - "0.0.0.0" is being blocklisted here, not used as a bind address
+    if not policy.allow_private_ips and hostname in ("localhost", "0.0.0.0"):  # nosec B104
         raise NetworkBlockedError(
             f"Localhost blocked: {hostname}",
             operation="endpoint_validation",
