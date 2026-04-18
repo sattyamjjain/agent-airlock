@@ -1,8 +1,8 @@
 site_name: Agent-Airlock
 site_description: Security middleware for MCP servers - Intercept, validate, and sandbox AI agent tool calls
 site_url: https://agent-airlock.dev
-repo_url: https://github.com/attri-ai/agent-airlock
-repo_name: attri-ai/agent-airlock
+repo_url: https://github.com/sattyamjjain/agent-airlock
+repo_name: sattyamjjain/agent-airlock
 
 theme:
   name: material
@@ -100,7 +100,7 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/attri-ai/agent-airlock
+      link: https://github.com/sattyamjjain/agent-airlock
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/agent-airlock/
 
