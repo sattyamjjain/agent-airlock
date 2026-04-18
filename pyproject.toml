@@ -52,8 +52,14 @@ mcp = [
     "mcp>=1.0",
     "fastmcp>=2.0,<3.0",
 ]
+# Claude Agent SDK (renamed from Claude Code SDK in Sept 2025).
+# Install with: pip install "agent-airlock[claude-agent]"
+# See: https://pypi.org/project/claude-agent-sdk/
+claude-agent = [
+    "claude-agent-sdk>=0.1.58",
+]
 all = [
-    "agent-airlock[sandbox,mcp]",
+    "agent-airlock[sandbox,mcp,claude-agent]",
 ]
 dev = [
     "pytest>=8.0",
