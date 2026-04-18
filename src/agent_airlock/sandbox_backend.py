@@ -541,7 +541,7 @@ class ManagedSandboxBackend(SandboxBackend):
     def is_available(self) -> bool:
         """Check that the SDK is installed AND an API key is reachable."""
         try:
-            import anthropic  # noqa: F401
+            import anthropic  # type: ignore[import-not-found,unused-ignore]  # noqa: F401
         except ImportError:
             return False
         import os
