@@ -14,10 +14,14 @@ references this page.
 - [x] `src/agent_airlock/__init__.py` `__version__` matches
 - [x] `CHANGELOG.md` `[0.5.0]` heading with a one-paragraph summary
 - [x] `CI` green on main for the commit being tagged
-- [ ] `git tag v0.5.0 -a -m "..."` + `git push origin v0.5.0`
-- [ ] Release notes posted to GitHub Releases (matches CHANGELOG body)
-- [ ] `twine upload dist/*` succeeded (auto-runs via `publish.yml` on Release)
-- [ ] `pip install agent-airlock==0.5.0` works from a clean env
+- [x] `git tag v0.5.0 -a -m "..."` + `git push origin v0.5.0`
+      (annotated, not yet PGP-signed — see security-hygiene section)
+- [x] Release notes posted to GitHub Releases (matches CHANGELOG body)
+      <https://github.com/sattyamjjain/agent-airlock/releases/tag/v0.5.0>
+- [x] `twine upload dist/*` succeeded (auto-ran via `publish.yml` on
+      Release; see GitHub Actions "Publish to PyPI" run)
+- [x] `pip install agent-airlock==0.5.0` works from a clean env
+      (verified 2026-04-18: version prints `0.5.0`, core imports resolve)
 
 ## Docs
 
