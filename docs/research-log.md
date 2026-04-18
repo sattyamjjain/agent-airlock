@@ -183,6 +183,42 @@ Phase 1.3 will write regression tests for the 5 strong-fit CVEs in `tests/cves/`
 
 ---
 
+## 2026-04-18 — MCP 2025-11-25 compliance
+
+**Driver:** Roadmap [#6](https://github.com/sattyamjjain/agent-airlock/issues/6) Phase 1.2. `src/agent_airlock/mcp_spec/`.
+
+**Sources consulted (all fetched 2026-04-18):**
+- https://modelcontextprotocol.io/specification/2025-11-25 — top-level spec (protocol overview, normative references).
+- https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization — **primary source** for every OAuth / PKCE / resource-parameter requirement implemented here. Includes the exact normative `WWW-Authenticate` examples used in test fixtures.
+- https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1686 — SEP-1686 tracking issue for the Tasks primitive.
+- https://blog.modelcontextprotocol.io/posts/2025-11-25-first-mcp-anniversary/ — release-notes summary confirming the Tasks primitive, Streamable HTTP, and OAuth 2.1 mandate are the three load-bearing additions.
+- RFC 7636 §4.1 + §4.2 (PKCE generation/transform) — known-vector test in `test_rfc7636_known_vector`.
+- RFC 8707 (Resource Indicators) — canonical URI rules per spec §"Canonical Server URI".
+- RFC 8414 (OAuth 2.0 AS Metadata) and RFC 9728 (Protected Resource Metadata) — referenced by the spec for discovery.
+
+**Findings:**
+1. **PKCE S256 is the only acceptable method.** Spec §"Authorization Code Protection": "MCP clients MUST use the `S256` code challenge method when technically capable" + "If `code_challenge_methods_supported` is absent, the authorization server does not support PKCE and MCP clients MUST refuse to proceed." → `AuthorizationServerMetadata.code_challenge_methods_supported` Pydantic validator rejects any value set lacking `"S256"`.
+2. **Redirect URIs MUST be localhost or HTTPS** (spec §"Communication Security"). `validate_redirect_uri` accepts `https://`, rejects `http://` unless the host is `localhost` / `127.0.0.1` / `[::1]`.
+3. **Access tokens MUST be `Authorization: Bearer`** (spec §"Access Token Usage"). Query-string tokens explicitly forbidden — the Streamable HTTP validator rejects `?access_token=` or `?bearer=` on any URL.
+4. **`resource` parameter (RFC 8707) is mandatory.** `canonicalize_resource_uri` normalises to lowercase scheme+host, strips trailing slash except on bare `/`, and rejects fragments per spec §"Canonical Server URI".
+5. **Token audience validation is mandatory.** Spec §"Token Handling": "MCP servers MUST validate that access tokens were issued specifically for them as the intended audience." `validate_access_token_audience` accepts string `aud`, list `aud`, canonicalises both sides, and rejects missing/mismatched/non-string types.
+6. **401 responses MUST include `WWW-Authenticate`** with either a `resource_metadata` param (preferred) or enough Bearer-scheme info for well-known-URI fallback.
+7. **MCP-Protocol-Version header** is enforced on every Streamable HTTP request; value `2025-11-25` matches the spec revision this module implements.
+
+**UNVERIFIED items (flagged in code):**
+- Exact Tasks primitive state-name spelling (`working` / `input_required` / `completed` / `failed` / `cancelled`) — confirmed by release-notes summary but not verified against `spec/schema.ts` line-by-line. If the normative proto uses different casing, `TaskState` is the only module to update.
+- `tasks/resubscribe` method shape — listed in search results; not modelled in this PR. Follow-up can add `TaskResubscribeRequest`.
+- **DPoP deliberately skipped.** The executed spec page lists DPoP only under "MCP Authorization Extensions" as an optional additive extension — not a normative requirement for 2025-11-25. No implementation attempt was made; flagged UNVERIFIED rather than guessed.
+
+**Conclusion:**
+- New submodule `src/agent_airlock/mcp_spec/` with `oauth.py` (PKCE + metadata + redirect URI + audience validation), `tasks.py` (Pydantic V2 strict models for SEP-1686), and `transport.py` (Streamable HTTP request/response validators).
+- 81 conformance tests in `tests/mcp_spec/`, all passing. Uses the literal `WWW-Authenticate` examples from the spec page as fixtures so the parser is checked against the canonical wire format.
+- Scope: runtime validators, not an OAuth server or MCP server framework. Callers (e.g. the FastMCP integration) invoke `validate_streamable_http_request(...)` on incoming requests and `validate_access_token_audience(...)` inside their token middleware.
+
+**Retrieval date:** 2026-04-18.
+
+---
+
 *Template for future entries:*
 
 ```
