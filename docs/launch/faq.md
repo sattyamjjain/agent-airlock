@@ -161,7 +161,7 @@ Or construct your own `@Airlock(...)` with a custom policy. See
 
 ### Q: Are you looking for design partners?
 
-Yes — email `platform.dev@attri.ai` with your use case. We're
+Yes — email `sattyamjjain@gmail.com` with your use case. We're
 prioritizing 3 partners for case studies at weeks 8, 10, and 12 after
 launch.
 
@@ -184,4 +184,4 @@ rumored CVE.
 
 ### Q: Who's behind this?
 
-Sattyam Jain at attri.ai. Open-source MIT. Not a company product.
+Sattyam Jain. Open-source MIT, personal project. Not a company product.

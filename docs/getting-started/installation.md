@@ -71,7 +71,7 @@ pip install agent-airlock[all]
 For contributing to Agent-Airlock:
 
 ```bash
-git clone https://github.com/attri-ai/agent-airlock.git
+git clone https://github.com/sattyamjjain/agent-airlock.git
 cd agent-airlock
 pip install -e ".[dev,all]"
 ```

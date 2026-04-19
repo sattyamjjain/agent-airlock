@@ -611,7 +611,6 @@ Agent-Airlock secures AI agent systems in production:
 
 | Project | Use Case |
 |---------|----------|
-| [**Attri.ai**](https://attri.ai) | Multi-agent orchestration platform — governance & security layer |
 | [**FerrumDeck**](https://github.com/sattyamjjain/FerrumDeck) | AgentOps control plane — deny-by-default tool execution |
 | [**Mnemo**](https://github.com/sattyamjjain/Mnemo) | MCP-native memory database — secure tool call validation |
 
