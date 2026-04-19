@@ -379,6 +379,34 @@ class CostTracker:
         with self._lock:
             return list(self._records)
 
+    def to_task_budget(self, total: int, soft: bool = True) -> dict[str, Any]:
+        """Render current usage as a Claude ``task_budget`` payload (v0.5.1+).
+
+        Returns the dict expected by the Anthropic ``task-budgets-2026-03-13``
+        beta (see ``agent_airlock.integrations.claude_task_budget`` for the
+        canonical builder). Computes ``remaining_tokens`` as
+        ``total - tracker.summary.total_tokens``, clamped to zero.
+
+        Args:
+            total: The per-task token budget to report to the model.
+            soft: If True, policy is "soft" (model receives a countdown
+                  but may overshoot). If False, policy is "hard".
+
+        Returns:
+            A dict of the shape
+            ``{"task_budget": {"total_tokens", "remaining_tokens", "policy"}}``
+            ready to be merged into an Anthropic Messages API request body.
+        """
+        summary = self.get_summary()
+        remaining = max(0, total - summary.total_tokens)
+        return {
+            "task_budget": {
+                "total_tokens": total,
+                "remaining_tokens": remaining,
+                "policy": "soft" if soft else "hard",
+            }
+        }
+
     def reset(self) -> None:
         """Reset all tracked costs."""
         with self._lock:

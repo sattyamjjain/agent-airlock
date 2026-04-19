@@ -205,6 +205,46 @@ class RateLimit:
 
 
 @dataclass
+class StdioGuardConfig:
+    """Config for the Ox MCP STDIO sanitizer (v0.5.1+).
+
+    Applied before any ``subprocess.Popen`` invocation driven by an MCP
+    STDIO transport. Mitigates the Ox Security advisory class
+    (CVE-2026-30616 and siblings) where MCP clients passed attacker-
+    controlled argv straight to ``execve``. See
+    ``agent_airlock.mcp_spec.stdio_guard.validate_stdio_command``.
+
+    Attributes:
+        allowed_binaries: argv[0] basename must be in this set unless
+            the argv[0] starts with one of ``allowed_binary_prefixes``.
+        allowed_binary_prefixes: absolute-path prefixes that bypass the
+            basename allowlist (e.g. ``/usr/local/bin/``).
+        deny_patterns: compiled regex list; an arg matching any is
+            rejected. Applied after metachar check.
+        allow_shell_metachars: if True, ``metachars`` is ignored.
+            Default False — keep False unless you deliberately want to
+            spawn a shell from your MCP transport (you don't).
+        metachars: the shell metacharacter tokens that cause a reject.
+    """
+
+    allowed_binaries: frozenset[str] = field(default_factory=frozenset)
+    allowed_binary_prefixes: tuple[str, ...] = ()
+    deny_patterns: tuple[re.Pattern[str], ...] = ()
+    allow_shell_metachars: bool = False
+    metachars: tuple[str, ...] = (
+        ";",
+        "&&",
+        "||",
+        "|",
+        "`",
+        "$(",
+        "$",
+        "\n",
+        "\r",
+    )
+
+
+@dataclass
 class AgentIdentity:
     """Represents an AI agent's identity for policy enforcement.
 

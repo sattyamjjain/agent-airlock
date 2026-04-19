@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.5.0"
+version = "0.5.1"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -186,7 +186,12 @@ disallow_untyped_calls = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --cov=agent_airlock --cov-report=term-missing --ignore=tests/benchmarks"
+# Integration markers must be OPT-IN (``pytest -m docker``). The default
+# suite excludes them so CI does not need a Docker daemon.
+addopts = "-v --cov=agent_airlock --cov-report=term-missing --ignore=tests/benchmarks -m 'not docker'"
+markers = [
+    "docker: integration test that requires a running Docker daemon (opt in with `pytest -m docker`)",
+]
 
 [tool.coverage.run]
 source = ["src/agent_airlock"]

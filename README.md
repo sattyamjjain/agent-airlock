@@ -254,6 +254,13 @@ MY_POLICY = SecurityPolicy(
 )
 ```
 
+> **Running an MCP server with STDIO transport?** Also wire the
+> [Ox MCP STDIO sanitizer](#️-owasp-compliance) via
+> `stdio_guard_ox_defaults()` — it blocks the entire
+> CVE-2026-30616 class (shell metacharacter injection,
+> non-allowlisted binaries, Trojan-Source RTL overrides, and
+> inline-code flags) before `subprocess.Popen`.
+
 ---
 
 ### 💰 Cost Control
@@ -592,16 +599,57 @@ export E2B_API_KEY="your-key-here"
 
 ## 🛡️ OWASP Compliance
 
-Agent-Airlock mitigates the [OWASP Top 10 for LLMs (2025)](https://owasp.org/www-project-top-10-for-large-language-model-applications/):
+Agent-Airlock maps to the [**OWASP Top 10 for Agentic Applications (2026)**](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)
+— the agentic-era successor to the old LLM Top 10. Coverage is
+reported honestly: **Full** means the primitive ships and blocks the
+class in tests; **Partial** means agent-airlock covers the runtime
+leg but something upstream (client UI, IAM, training data) is out of
+scope; **Monitor-only** means we surface the signal but do not
+actually prevent the risk.
 
-| OWASP Risk | Mitigation |
-|------------|------------|
-| **LLM01: Prompt Injection** | Strict type validation blocks injected payloads |
-| **LLM02: Sensitive Data Disclosure** | Network airgap prevents data exfiltration |
-| **LLM05: Improper Output Handling** | PII/secret masking sanitizes outputs |
-| **LLM06: Excessive Agency** | Rate limits + RBAC + capability gating prevent runaway agents |
-| **LLM07: System Prompt Leakage** | Honeypot returns fake data instead of errors |
-| **LLM09: Misinformation** | Ghost argument rejection blocks hallucinated params |
+| Risk | Implemented in agent-airlock | Module / preset | Coverage |
+|------|------------------------------|-----------------|----------|
+| **ASI01 Agent Goal Hijack** | Pydantic strict validation + ghost-arg rejection + `UnknownArgsMode.BLOCK` | `validator`, `unknown_args`, `core` | Partial |
+| **ASI02 Tool Misuse and Exploitation** | Deny-by-default `SecurityPolicy`, RBAC, rate limits, `SafePath` / `SafeURL` | `policy`, `safe_types`, `filesystem`, `network` | **Full** |
+| **ASI03 Identity and Privilege Abuse** | `AgentIdentity`, `MCPProxyGuard` token-passthrough prevention, `CredentialScope` | `policy`, `mcp_proxy_guard` | Partial |
+| **ASI04 Agentic Supply Chain Vulnerabilities** | Ox MCP STDIO sanitizer + CVE regression suite (8 CVEs tracked) | `mcp_spec.stdio_guard`, `policy_presets.stdio_guard_ox_defaults`, `tests/cves/` | Partial |
+| **ASI05 Unexpected Code Execution (RCE)** | E2B Firecracker sandbox, pluggable `SandboxBackend`, capability gating for `PROCESS_SHELL` | `sandbox`, `sandbox_backend`, `capabilities` | **Full** |
+| **ASI06 Memory & Context Poisoning** | `AirlockContext` `contextvars` isolation, `ConversationConstraints` budget caps, audit logging | `context`, `conversation`, `sanitizer` | Partial |
+| **ASI07 Insecure Inter-Agent Communication** | A2A middleware Pydantic strict validation, method allow-lists | `a2a` | Partial |
+| **ASI08 Cascading Failures** | `CircuitBreaker`, `RetryPolicy`, token-bucket rate limits | `circuit_breaker`, `retry`, `policy` | **Full** |
+| **ASI09 Human-Agent Trust Exploitation** | Honeypot deception, audit-log attribution, structured `fix_hints` | `honeypot`, `audit_otel` | Partial |
+| **ASI10 Rogue Agents** | Audit telemetry + anomaly detector; no quarantine primitive | `observability`, `anomaly` | Monitor-only |
+
+### MCP-specific mapping
+
+The [OWASP MCP Top 10 (2026 beta)](https://owasp.org/www-project-mcp-top-10/)
+is covered end-to-end by the `OWASP_MCP_TOP_10_2026` policy preset:
+
+| MCP risk | Ships in agent-airlock |
+|----------|------------------------|
+| **MCP01 Token Mismanagement** | `MCPProxyGuard` rejects passthrough headers, enforces audience |
+| **MCP02 Excessive Permissions** | `SecurityPolicy` + `CredentialScope` |
+| **MCP03 Tool Poisoning** | ghost-arg rejection + `SafePath`/`SafeURL` |
+| **MCP04 Supply Chain** | `stdio_guard_ox_defaults()` (Ox 2026-04-16 advisory) |
+| **MCP05 Command Injection** | `stdio_guard` shell-metachar + deny-pattern rules |
+| **MCP07 Insufficient Authentication** | OAuth 2.1 + PKCE S256 helpers in `mcp_spec.oauth` |
+| **MCP10 Context Oversharing** | PII/secret sanitizer + workspace-scoped config |
+
+Use it directly:
+
+```python
+from agent_airlock import Airlock
+from agent_airlock.policy_presets import owasp_mcp_top_10_2026_policy
+
+@Airlock(policy=owasp_mcp_top_10_2026_policy())
+def my_mcp_tool(...):
+    ...
+```
+
+> **Ox Security STDIO advisory** (2026-04-16, CVE-2026-30616): see
+> [`docs/cves/index.md#cve-2026-30616`](docs/cves/index.md#cve-2026-30616)
+> and the `stdio_guard_ox_defaults()` preset above. agent-airlock
+> blocks 3 of 4 Ox attack classes at the runtime seam.
 
 ---
 
