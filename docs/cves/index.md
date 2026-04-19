@@ -36,6 +36,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-26118](#cve-2026-26118) | Microsoft Azure MCP Server SSRF (IMDS token theft) | 8.8 (High) | Strong |
 | [CVE-2026-27825](#cve-2026-27825) | mcp-atlassian arbitrary file write via download_path | 9.1 (Critical) | Strong |
 | [CVE-2026-27826](#cve-2026-27826) | mcp-atlassian SSRF via `X-Atlassian-*-Url` headers | 7.5 (High, AV:A/PR:N/UI:N, C:H) | Partial |
+| [CVE-2026-30616](#cve-2026-30616) | MCP STDIO transport command-injection (Ox Security class) | 9.8 (Critical) | Strongest |
 
 ## Details
 
@@ -263,3 +264,74 @@ HTTP reverse proxy that strips or validates these headers before
 they reach application code.
 
 <a id="cve-2026-27826"></a>
+
+### CVE-2026-30616
+
+**MCP STDIO transport command-injection (Ox Security class)**
+
+- **CVSS:** 9.8 (Critical)
+- **Airlock fit:** strongest
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-30616](https://nvd.nist.gov/vuln/detail/CVE-2026-30616)
+- **Advisory:** [https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem](https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem)
+- **Write-up:** [https://www.theregister.com/2026/04/16/anthropic_mcp_design_flaw/](https://www.theregister.com/2026/04/16/anthropic_mcp_design_flaw/)
+- **Regression test:** [`tests/cves/test_cve_2026_30616_mcp_stdio_rce.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30616_mcp_stdio_rce.py)
+
+**Vulnerability**
+
+The MCP STDIO transport, implemented in the official Anthropic MCP
+SDKs across Python, TypeScript, Java, and Rust, passes the
+``command`` and ``args`` fields of a client's STDIO server entry
+directly to a subprocess without validation, sanitisation, or
+sandboxing. The subprocess is spawned BEFORE the MCP handshake
+completes — so if the attacker controls the payload, the OS-level
+command runs whether or not the "server" ever returns a valid
+handshake. Ox catalogued four attack classes:
+
+    1. Unauthenticated command injection via a poisoned
+       ``mcp.json`` / ``claude_desktop_config.json`` / ``.cursor``
+       entry.
+    2. Authenticated command injection via a trusted-but-vulnerable
+       MCP server that forwards user-controlled strings into a new
+       STDIO invocation.
+    3. Zero-click prompt-injection chains across Claude Code,
+       Cursor, Gemini-CLI, Windsurf, and GitHub Copilot — the agent
+       writes a config entry on the attacker's behalf.
+    4. Config-file takeover — an attacker who can write to
+       ``~/.cursor`` or the Claude Desktop config directory owns
+       the machine on next launch.
+
+Tenable has CVE-2026-30616 live against Jaaz 1.0.30 as one
+instance of this class. Ox documents 30+ affected open-source
+projects (LangChain-ChatChat, Agent Zero, LibreChat, MaxKB,
+WeKnora, Flowise, MCPJam Inspector, and more), and estimates
+~200,000 vulnerable server instances across the ecosystem.
+
+**Airlock mitigation**
+
+The root cause is "the STDIO transport runs arbitrary OS commands
+with no policy layer in front of it." That is precisely the seam
+agent-airlock was designed to fill.
+
+Anthropic's public position (per The Register, 2026-04-16) is that
+input sanitisation is the application author's responsibility and
+that STDIO behaviour is "expected." Agent-airlock is the
+Anthropic-side answer to that: a deny-by-default, in-process
+middleware that sits between the tool call and the subprocess.
+
+We assert:
+1. ``SecurityPolicy`` with an explicit tool allow-list blocks any
+   call to an out-of-list tool (stops attack class 1 at the
+   configuration seam — if ``spawn_stdio_server`` or equivalent is
+   not in the allow-list, the payload never reaches ``execve``).
+2. ``UnknownArgsMode.BLOCK`` rejects ghost / LLM-invented arguments
+   on a known tool (stops attack class 2, where the model was
+   talked into inventing a malicious ``env`` or ``args`` field).
+3. ``SafePath`` rejects a config-path traversal that would let the
+   attacker write a poisoned entry into ``~/.cursor`` or Claude
+   Desktop's config directory (stops attack class 4).
+
+Attack class 3 (prompt-injection of the chat UI) is a
+client-surface problem and out-of-scope for runtime middleware;
+see ``docs/cves/index.md`` fit-matrix notes.
+
+<a id="cve-2026-30616"></a>

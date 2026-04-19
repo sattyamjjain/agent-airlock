@@ -5,15 +5,67 @@ contingent. Keep answers short and cite primary sources.
 
 ## Positioning
 
-### Q: How is agent-airlock different from Lakera / Snyk Agent Scan / PANW / Invariant / Cloudflare Firewall for AI / Google Model Armor?
+### Q: Why am I reading this *this* week?
 
-**Runtime seam, not prompt seam.** All of the above intercept at or near
-the LLM prompt boundary — they scan prompts, responses, or proxy HTTP
-traffic. Agent-airlock sits in front of **tool execution**, inside the
-agent process. If your model never calls a tool, airlock never fires.
-If your model invents a tool argument that shouldn't exist
-(ghost argument), airlock catches it before the tool runs — a layer
-none of the prompt-layer products reach.
+On **April 15, 2026**, Ox Security disclosed a systemic RCE class in
+the MCP STDIO transport across the official Anthropic SDKs (Python,
+TypeScript, Java, Rust). ~200,000 vulnerable instances, 150M+
+downloads, 10+ CVEs including **CVE-2026-30616**.
+[The Register](https://www.theregister.com/2026/04/16/anthropic_mcp_design_flaw/)
+covered Anthropic's response on April 16: *"expected behavior."*
+Nine-day turnaround, doc update only, no SDK patch.
+
+OpenAI shipped the opposite answer the **same week** — an
+[Agents SDK update](https://openai.com/index/the-next-evolution-of-the-agents-sdk/)
+with sandbox-by-default (Blaxel, Cloudflare, Daytona, E2B, Modal,
+Runloop, Vercel) and
+["harness separated from compute"](https://thenewstack.io/openai-agents-sdk-sandboxes/).
+Cloudflare [went GA](https://blog.cloudflare.com/sandbox-ga/) with
+container sandboxes on April 17.
+
+Agent-airlock is what the Anthropic-side ecosystem has in that seam
+today — a deny-by-default, in-process middleware that sits between
+the tool call and the subprocess. MIT-licensed, air-gap-safe, stdlib-
+first. It was built for this moment; the moment just arrived.
+
+### Q: Does airlock block the Ox STDIO RCE class (CVE-2026-30616)?
+
+Three of the four Ox attack classes, yes — at the runtime seam:
+
+- **Class 1 (unauthenticated command injection):** `SecurityPolicy`
+  with an allow-list blocks any tool not explicitly permitted, so
+  `spawn_stdio_server` never reaches `execve` unless you asked for it.
+- **Class 2 (authenticated / ghost-argument injection):**
+  `UnknownArgsMode.BLOCK` rejects LLM-invented `env` / `args` fields
+  before the subprocess spawns.
+- **Class 4 (config-file takeover):** `SafePath` rejects writes to
+  `~/.cursor/mcp.json`, `~/Library/Application Support/Claude/…`, and
+  traversal strings that would poison a host config.
+
+Class 3 (prompt-injection of the chat UI itself) is a client-surface
+bug and out-of-scope for runtime middleware — upgrade Claude Code /
+Cursor / Windsurf. Regression test:
+[`tests/cves/test_cve_2026_30616_mcp_stdio_rce.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30616_mcp_stdio_rce.py).
+Full fit matrix: [`docs/cves/index.md`](../cves/index.md).
+
+### Q: How is agent-airlock different from Lakera / Snyk Agent Scan / PANW / Invariant / Cloudflare AI Firewall / Google Model Armor?
+
+**Runtime seam, not prompt seam.** All of the above intercept at or
+near the LLM prompt boundary — they scan prompts, responses, or proxy
+HTTP traffic. Agent-airlock sits in front of **tool execution**,
+inside the agent process. If your model never calls a tool, airlock
+never fires. If your model invents a tool argument that shouldn't
+exist (ghost argument), airlock catches it before the tool runs — a
+layer none of the prompt-layer products reach.
+
+### Q: And vs Kong AI Gateway / Traefik Hub / SurePath / MintMCP?
+
+Those are **gateway-layer** plays — a reverse proxy or policy proxy
+that sits between the model host and the MCP server. They work if
+your agents talk to MCP over HTTP and you control the network path.
+Agent-airlock is the in-process case: the same deny-by-default
+policy, but as a Python decorator, enforced even for STDIO-only
+setups and air-gapped runners where there IS no gateway.
 
 ### Q: Is this a replacement for Model Armor / Lakera?
 
@@ -25,8 +77,8 @@ from ever running with bad arguments.
 ### Q: Why no hosted SaaS?
 
 The value prop is "offline, stdlib-first, air-gap-safe." A hosted
-version dilutes that. We'd rather be the best local-only primitive than
-a middling SaaS.
+version dilutes that. We'd rather be the best local-only primitive
+than a middling SaaS.
 
 ## Threat model
 
@@ -39,10 +91,12 @@ a middling SaaS.
   CVE-2025-59536 hook-execution path, which runs on client launch).
   We block the exfil leg via `EndpointPolicy`; we can't block the
   hook-execution leg.
-- Prompt-injection into the model itself. That's an LLM safety
-  problem — use Model Armor, Lakera, or your model vendor's native
-  guardrails.
-- See `docs/cves/index.md` for the full fit matrix.
+- Prompt-injection into the model itself (Ox attack class 3). That's
+  an LLM-safety / client-surface problem — use Model Armor, Lakera,
+  or your model vendor's native guardrails and upgrade your agent
+  host (Claude Code / Cursor / Windsurf).
+- See [`docs/cves/index.md`](../cves/index.md) for the full fit
+  matrix — 8 CVEs including CVE-2026-30616.
 
 ### Q: What's the attack surface of airlock itself?
 
