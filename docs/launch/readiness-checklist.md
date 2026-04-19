@@ -60,10 +60,39 @@ references this page.
 
 ## Go / no-go
 
-- [ ] **Launch day is a Tuesday**, not a Friday
+### Context shift (2026-04-19)
+
+Between the original checklist draft and today, three things moved:
+
+1. **Ox Security disclosed the MCP STDIO RCE class on 2026-04-15**
+   ([advisory](https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem),
+   [The Register](https://www.theregister.com/2026/04/16/anthropic_mcp_design_flaw/)).
+   Anthropic's response is *"expected behavior"* — doc update only.
+2. **OpenAI shipped sandbox-by-default the same day** ([blog](https://openai.com/index/the-next-evolution-of-the-agents-sdk/)).
+   "Separates the harness from the compute" is now their public
+   framing.
+3. **Cloudflare Sandboxes went GA 2026-04-17** ([blog](https://blog.cloudflare.com/sandbox-ga/))
+   as part of Agents Week.
+
+The post-Ox narrative is the launch thesis now. We block 3 of 4 Ox
+attack classes at the runtime seam (regression test:
+[`tests/cves/test_cve_2026_30616_mcp_stdio_rce.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30616_mcp_stdio_rce.py)).
+FAQ §Positioning and `docs/launch/announcement.md` both lead with it.
+
+### Gates
+
+- [ ] **Launch day is a Tuesday**, not a Friday. Next Tuesday after
+      today (2026-04-19, Sun) is **2026-04-21**. The Ox thread is
+      still on the security-Twitter front page at that point —
+      ideal.
 - [ ] Launch-readiness PR approved by the maintainer
 - [ ] Rollback plan reviewed (see `rollback.md`)
 - [ ] Maintainer available to watch HN comments for 4 hours after post
+- [ ] `announcement.md` reviewed and the "chose not to ship" line
+      either kept or softened (maintainer call — the current draft
+      leans into the Anthropic quote)
+- [ ] Post scheduled for 09:00 ET on Tuesday (HN front-page peak for
+      security posts)
 
 ## External submissions (not blocking launch, but schedule)
 
