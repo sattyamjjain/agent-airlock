@@ -55,9 +55,10 @@ Primary sources (retrieved 2026-04-18):
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
-from .policy import SecurityPolicy
+from .policy import SecurityPolicy, StdioGuardConfig
 
 if TYPE_CHECKING:
     from .capabilities import CapabilityPolicy
@@ -431,6 +432,76 @@ def india_dpdp_2023_policy() -> SecurityPolicy:
 # per-process fresh instance - e.g. to apply dynamic rate-limit overrides
 # - call the factory function instead of using the constant.
 
+def stdio_guard_ox_defaults() -> StdioGuardConfig:
+    """Ox Security advisory defaults for the MCP STDIO sanitizer (v0.5.1+).
+
+    Disclosed 2026-04-16: the MCP STDIO transport executed attacker-supplied
+    argv before the handshake, giving pre-auth RCE across Claude Code,
+    Cursor, Windsurf, Gemini-CLI, and GitHub Copilot. Anthropic declined a
+    protocol-level fix; ``validate_stdio_command()`` + this preset is the
+    client-side answer.
+
+    Policy:
+
+    - Binary allowlist: the common MCP launchers (``uvx``, ``npx``,
+      ``pipx``, ``node``, ``python``, ``python3``, ``deno``, ``bunx``)
+      plus the Python launcher ``uv``.
+    - Absolute-path prefix allowlist: the system + user package dirs
+      that Homebrew, apt, and pipx use. Anything outside these prefixes
+      is rejected even if the basename would have matched — this is the
+      ``/tmp/evil.sh`` defence.
+    - Deny patterns: common remote-code patterns ``curl|wget piped into
+      a shell``, ``base64 -d | sh``, python ``-c`` inline, and the
+      literal ``IFS=`` tricks.
+    - Shell metacharacters: always rejected (``;``, ``&&``, ``||``,
+      ``|``, backtick, ``$(``, ``$``, newline, carriage return).
+
+    Primary source:
+      https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem
+    """
+    return StdioGuardConfig(
+        allowed_binaries=frozenset(
+            {
+                "uvx",
+                "uv",
+                "npx",
+                "pipx",
+                "node",
+                "python",
+                "python3",
+                "deno",
+                "bunx",
+            }
+        ),
+        allowed_binary_prefixes=(
+            "/usr/bin/",
+            "/usr/local/bin/",
+            "/opt/homebrew/bin/",
+            "/home/",  # pipx user installs: /home/$user/.local/bin/...
+            "/Users/",  # macOS user installs
+        ),
+        deny_patterns=(
+            re.compile(r"curl[^\n]*\bsh\b", re.IGNORECASE),
+            re.compile(r"wget[^\n]*\bsh\b", re.IGNORECASE),
+            re.compile(r"base64\s+-d", re.IGNORECASE),
+            # Inline-code flags across interpreters we otherwise allow:
+            # - python/bash:  -c
+            # - node/deno:    -e / --eval
+            # - perl:         -e
+            re.compile(r"^-c$"),
+            re.compile(r"^-e$"),
+            re.compile(r"^--eval$"),
+            re.compile(r"IFS\s*=", re.IGNORECASE),
+        ),
+        allow_shell_metachars=False,
+    )
+
+
+STDIO_GUARD_OX_DEFAULTS = stdio_guard_ox_defaults()
+"""Eagerly-constructed default for the Ox STDIO sanitizer. Import this
+constant unless you need dynamic overrides (then call the factory)."""
+
+
 GTG_1002_DEFENSE = gtg_1002_defense_policy()
 MEX_GOV_2026 = mex_gov_2026_policy()
 OWASP_MCP_TOP_10_2026 = owasp_mcp_top_10_2026_policy()
@@ -445,10 +516,12 @@ __all__ = [
     "owasp_mcp_top_10_2026_policy",
     "eu_ai_act_article_15_policy",
     "india_dpdp_2023_policy",
+    "stdio_guard_ox_defaults",
     # Eagerly constructed defaults
     "GTG_1002_DEFENSE",
     "MEX_GOV_2026",
     "OWASP_MCP_TOP_10_2026",
     "EU_AI_ACT_ARTICLE_15",
     "INDIA_DPDP_2023",
+    "STDIO_GUARD_OX_DEFAULTS",
 ]

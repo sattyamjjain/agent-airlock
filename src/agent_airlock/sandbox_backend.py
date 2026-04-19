@@ -27,6 +27,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -262,19 +263,28 @@ class DockerBackend(SandboxBackend):
         network_mode: str = "none",
         memory_limit: str = "512m",
         cpu_limit: float = 1.0,
+        security_opt: list[str] | None = None,
     ) -> None:
         """Initialize Docker backend.
 
         Args:
             image: Docker image to use.
-            network_mode: Docker network mode. "none" = no network access.
+            network_mode: Docker network mode. ``"none"`` = no network
+                access; strongly recommended default.
             memory_limit: Memory limit for containers.
             cpu_limit: CPU limit for containers.
+            security_opt: Extra ``--security-opt`` flags. The backend
+                already sets ``no-new-privileges`` and drops all
+                capabilities by default; pass a seccomp profile here
+                (e.g. ``["seccomp=/path/to/profile.json"]``) to tighten
+                further. Leave as ``None`` to rely on the dropped-caps
+                posture alone.
         """
         self.image = image
         self.network_mode = network_mode
         self.memory_limit = memory_limit
         self.cpu_limit = cpu_limit
+        self.security_opt = security_opt or []
 
     @property
     def name(self) -> str:
@@ -300,9 +310,15 @@ class DockerBackend(SandboxBackend):
         func: Callable[..., R],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
-        _timeout: int = 60,  # TODO: implement container timeout
+        timeout: int = 60,
     ) -> SandboxResult:
-        """Execute function in Docker container."""
+        """Execute function in Docker container with a hard timeout (v0.5.1+).
+
+        v0.5.1: the ``timeout`` parameter is now honored — the container
+        is killed and removed if it has not exited within ``timeout``
+        seconds. Prior to v0.5.1 a runaway function could hang forever
+        because the parameter was a TODO.
+        """
         start_time = time.time()
 
         if not self.is_available():
@@ -315,6 +331,7 @@ class DockerBackend(SandboxBackend):
                 backend=self.name,
             )
 
+        container = None
         try:
             import base64
             import json
@@ -362,20 +379,53 @@ print(json.dumps(output, default=str))
 print("__AIRLOCK_END__")
 '''
 
-            # Run container
+            # Strong hardening defaults: no new privileges, drop every
+            # capability, and honor the caller's extra security_opt.
             container = client.containers.run(
                 self.image,
                 command=["python", "-c", script],
                 network_mode=self.network_mode,
                 mem_limit=self.memory_limit,
                 nano_cpus=int(self.cpu_limit * 1e9),
-                remove=True,
-                detach=False,
+                security_opt=["no-new-privileges:true", *self.security_opt],
+                cap_drop=["ALL"],
+                detach=True,  # detach so we can enforce timeout
                 stdout=True,
                 stderr=True,
             )
 
-            output = container.decode() if isinstance(container, bytes) else str(container)
+            try:
+                exit_info = container.wait(timeout=timeout)
+            except Exception as wait_err:
+                # docker-py raises either ReadTimeout (via requests) or
+                # docker.errors.APIError on timeout. Kill + remove the
+                # container either way and report.
+                with contextlib.suppress(Exception):
+                    container.kill()
+                with contextlib.suppress(Exception):
+                    container.remove(force=True)
+                elapsed = (time.time() - start_time) * 1000
+                return SandboxResult(
+                    success=False,
+                    error=f"Docker execution timed out after {timeout}s ({wait_err})",
+                    execution_time_ms=round(elapsed, 2),
+                    backend=self.name,
+                )
+
+            logs = container.logs(stdout=True, stderr=True)
+            output = logs.decode() if isinstance(logs, bytes) else str(logs)
+            container.remove(force=True)
+
+            # Non-zero exit always yields a failure, regardless of what
+            # (if anything) the script printed.
+            exit_code = exit_info.get("StatusCode") if isinstance(exit_info, dict) else 0
+            if exit_code != 0 and "__AIRLOCK_RESULT__" not in output:
+                return SandboxResult(
+                    success=False,
+                    error=f"Container exited with status {exit_code}",
+                    stdout=output,
+                    backend=self.name,
+                )
 
             # Parse result
             if "__AIRLOCK_RESULT__" in output:
@@ -405,6 +455,11 @@ print("__AIRLOCK_END__")
         except Exception as e:
             elapsed = (time.time() - start_time) * 1000
             logger.exception("docker_execution_failed", error=str(e))
+            # best-effort cleanup if the container was created but the
+            # code path that would normally remove it did not run.
+            if container is not None:
+                with contextlib.suppress(Exception):
+                    container.remove(force=True)
             return SandboxResult(
                 success=False,
                 error=f"Docker execution failed: {e}",

@@ -13,6 +13,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.1] - 2026-04-19 — "Ox response"
+
+Same-day response to the [Ox Security MCP STDIO RCE advisory](https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem)
+(2026-04-16, CVE-2026-30616). Anthropic [declined a protocol-level fix](https://www.theregister.com/2026/04/16/anthropic_mcp_design_flaw/);
+this release is the client-side answer. Also ships the Anthropic
+`task-budgets-2026-03-13` beta adapter and upgrades the OWASP mapping
+to the 2026 Agentic list.
+
+### Added
+- **Ox MCP STDIO sanitizer** (`agent_airlock.mcp_spec.stdio_guard`):
+  `validate_stdio_command(cmd, config)` is a deny-by-default argv
+  validator that runs immediately before `subprocess.Popen` in any
+  MCP STDIO transport. Rejects (1) shell metacharacters from the full
+  POSIX set, (2) non-allowlisted argv[0], (3) absolute paths outside
+  allowed prefixes, (4) caller-supplied deny-pattern regexes, and
+  (5) Trojan-Source-class Unicode overrides (U+202A..E, U+2066..9).
+  Raises `StdioInjectionError` — a subclass of the new
+  `agent_airlock.exceptions.AirlockError` base. Preset
+  `stdio_guard_ox_defaults()` ships the vetted allowlist + deny-pattern
+  set. 14 new tests in `tests/cves/test_ox_mcp_stdio.py`, plus a
+  10-payload primary-source-cited fixture in
+  `tests/cves/fixtures/ox_stdio_payloads.json`.
+- **`MCPProxyGuard.validate_stdio_spawn()`**: ties the new sanitizer
+  into the existing proxy-guard API. Set
+  `MCPProxyConfig.stdio_guard = stdio_guard_ox_defaults()` and call
+  `.validate_stdio_spawn(cmd)` before any spawn.
+- **Anthropic `task_budget` adapter**
+  (`agent_airlock.integrations.claude_task_budget`): pinned to the
+  `task-budgets-2026-03-13` beta header.
+  `build_task_budget_headers()` returns the beta header;
+  `build_output_config(total, remaining, soft=True)` returns the
+  request-body fragment; `CostTracker.to_task_budget(total, soft=True)`
+  computes it from live tracker state. Hard policy (`soft=False`)
+  raises `TaskBudgetExhausted` (another `AirlockError` subclass)
+  instead of silently letting the model overshoot. 13 new tests in
+  `tests/integrations/test_claude_task_budget.py`.
+- **`agent_airlock.exceptions.AirlockError`**: new canonical base class
+  for errors raised by v0.5.1+ primitives. Existing module-local
+  exceptions (e.g. `PathValidationError`, `MCPSecurityError`) are
+  intentionally untouched to avoid breaking downstream `except` sites.
+
+### Changed
+- **README OWASP section rewritten** to map to the
+  [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)
+  (ASI01..ASI10) instead of the deprecated LLM Top 10 2025. Coverage
+  reported honestly: **Full** for ASI02 (Tool Misuse), ASI05 (RCE),
+  ASI08 (Cascading Failures); **Partial** for six; **Monitor-only**
+  for ASI10 (Rogue Agents) — we surface the telemetry but do not
+  quarantine. New MCP-specific sub-table points at the
+  `OWASP_MCP_TOP_10_2026` preset.
+- **`DockerBackend` timeout now honored** (`sandbox_backend.py`). The
+  `timeout: int = 60` parameter was a TODO since v0.4.0 — a runaway
+  function could hang forever. v0.5.1 uses `container.wait(timeout=...)`
+  with kill-and-remove cleanup. Also hardened by default:
+  `no-new-privileges`, `cap_drop=["ALL"]`, and a `security_opt`
+  parameter for caller-supplied seccomp profiles. Four opt-in
+  integration tests behind the new `pytest -m docker` marker
+  (`tests/test_sandbox_backend_docker_integration.py`); default CI
+  runs exclude them so no Docker daemon is required. Closes #2.
+
+### Performance
+- `@Airlock` strict-validation path: median **75.2 μs**
+  (v0.5.0: ~77 μs). No regression — v0.5.1 is additive; the sanitizer
+  and task-budget helpers live outside the decorator hot path.
+
+### Dependencies
+- No new runtime deps.
+
+### Primary sources
+- Ox Security advisory (2026-04-16):
+  <https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem>
+- The Register on Anthropic's "expected behavior" response (2026-04-16):
+  <https://www.theregister.com/2026/04/16/anthropic_mcp_design_flaw/>
+- Anthropic task-budgets beta:
+  <https://platform.claude.com/docs/en/build-with-claude/task-budgets>
+- OWASP Top 10 for Agentic Applications 2026:
+  <https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/>
+
+---
+
 ## [0.5.0] - 2026-04-18 — "April 2026"
 
 First release of the April 2026 roadmap (#6). Turns agent-airlock into a

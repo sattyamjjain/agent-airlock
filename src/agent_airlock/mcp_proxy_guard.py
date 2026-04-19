@@ -29,6 +29,8 @@ from typing import Any
 
 import structlog
 
+from .policy import StdioGuardConfig
+
 logger = structlog.get_logger("agent-airlock.mcp_proxy_guard")
 
 
@@ -127,6 +129,13 @@ class MCPProxyConfig:
 
     # V0.4.1 Per-tool credential scopes
     tool_scopes: dict[str, CredentialScope] = field(default_factory=dict)
+
+    # V0.5.1 Ox MCP STDIO sanitizer. When set, ``MCPProxyGuard``
+    # exposes ``validate_stdio_spawn()`` which callers must invoke
+    # before any ``subprocess.Popen`` for a STDIO transport. See
+    # ``agent_airlock.policy.StdioGuardConfig`` and
+    # ``agent_airlock.policy_presets.stdio_guard_ox_defaults``.
+    stdio_guard: StdioGuardConfig | None = None
 
 
 @dataclass
@@ -580,6 +589,33 @@ class MCPProxyGuard:
         except Exception as e:
             logger.warning("token_decode_failed", error=str(e))
             return None
+
+    def validate_stdio_spawn(self, cmd: list[str]) -> None:
+        """Validate a STDIO-transport spawn against the configured guard.
+
+        Call this immediately before ``subprocess.Popen(cmd, shell=False)``
+        when the Popen is being driven by an MCP STDIO transport (i.e. you
+        are spawning an MCP server subprocess because an mcp.json entry
+        told you to). Mitigates the Ox Security 2026-04 advisory class.
+
+        Args:
+            cmd: argv list, as for ``subprocess.Popen(args=[...])``.
+
+        Raises:
+            MCPSecurityError: If no ``stdio_guard`` is configured.
+            StdioInjectionError: If the argv fails any sanitiser rule.
+                Subclass of ``agent_airlock.exceptions.AirlockError``.
+        """
+        if self.config.stdio_guard is None:
+            raise MCPSecurityError(
+                "stdio_guard is not configured on this MCPProxyGuard",
+                violation_type="stdio_guard_not_configured",
+            )
+        # Local import to avoid a top-level cycle (stdio_guard imports
+        # StdioGuardConfig from policy.py, but is itself inside mcp_spec/).
+        from .mcp_spec.stdio_guard import validate_stdio_command
+
+        validate_stdio_command(cmd, self.config.stdio_guard)
 
     def cleanup_expired_sessions(self) -> int:
         """Remove expired sessions.

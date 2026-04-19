@@ -191,22 +191,25 @@ from .policy import (
     PolicyViolation,
     RateLimit,
     SecurityPolicy,
+    StdioGuardConfig,
     TimeWindow,
     ViolationType,
 )
 
-# V0.5.0 2026 policy presets
+# V0.5.0 2026 policy presets + V0.5.1 Ox STDIO sanitizer preset
 from .policy_presets import (
     EU_AI_ACT_ARTICLE_15,
     GTG_1002_DEFENSE,
     INDIA_DPDP_2023,
     MEX_GOV_2026,
     OWASP_MCP_TOP_10_2026,
+    STDIO_GUARD_OX_DEFAULTS,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
     mex_gov_2026_policy,
     owasp_mcp_top_10_2026_policy,
+    stdio_guard_ox_defaults,
 )
 
 # V0.4.0 Retry Policies
@@ -305,7 +308,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 __all__ = [
     # Core
@@ -337,6 +340,10 @@ __all__ = [
     "owasp_mcp_top_10_2026_policy",
     "eu_ai_act_article_15_policy",
     "india_dpdp_2023_policy",
+    # V0.5.1 Ox MCP STDIO sanitizer
+    "StdioGuardConfig",
+    "STDIO_GUARD_OX_DEFAULTS",
+    "stdio_guard_ox_defaults",
     # Sanitization
     "sanitize_output",
     "sanitize_with_workspace_config",
