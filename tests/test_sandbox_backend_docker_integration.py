@@ -54,8 +54,6 @@ def _network_probe() -> str:
         return f"BLOCKED: {e}"
 
 
-
-
 class TestDockerBackendIntegration:
     def test_is_available_when_daemon_running(self) -> None:
         """The happy-path availability check — prerequisite for the rest."""

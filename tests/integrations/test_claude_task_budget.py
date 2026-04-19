@@ -20,9 +20,7 @@ from agent_airlock.integrations.claude_task_budget import (
 
 class TestHeaderBuilder:
     def test_returns_pinned_beta_value(self) -> None:
-        assert build_task_budget_headers() == {
-            "anthropic-beta": "task-budgets-2026-03-13"
-        }
+        assert build_task_budget_headers() == {"anthropic-beta": "task-budgets-2026-03-13"}
 
     def test_beta_value_is_the_constant(self) -> None:
         assert build_task_budget_headers()["anthropic-beta"] == BETA_HEADER_VALUE

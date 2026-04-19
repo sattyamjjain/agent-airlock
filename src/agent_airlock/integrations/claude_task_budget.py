@@ -62,9 +62,7 @@ class TaskBudgetExhausted(AirlockError):
     def __init__(self, *, total: int, used: int) -> None:
         self.total = total
         self.used = used
-        super().__init__(
-            f"task budget exhausted: used {used} of {total} tokens"
-        )
+        super().__init__(f"task budget exhausted: used {used} of {total} tokens")
 
 
 def build_task_budget_headers(

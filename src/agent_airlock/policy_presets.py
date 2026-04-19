@@ -432,6 +432,7 @@ def india_dpdp_2023_policy() -> SecurityPolicy:
 # per-process fresh instance - e.g. to apply dynamic rate-limit overrides
 # - call the factory function instead of using the constant.
 
+
 def stdio_guard_ox_defaults() -> StdioGuardConfig:
     """Ox Security advisory defaults for the MCP STDIO sanitizer (v0.5.1+).
 
