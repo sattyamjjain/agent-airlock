@@ -56,8 +56,9 @@ Primary sources (retrieved 2026-04-18):
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from .exceptions import AirlockError
 from .policy import SecurityPolicy, StdioGuardConfig
 
 if TYPE_CHECKING:
@@ -566,35 +567,8 @@ _TRUSTED_AUTH_MIDDLEWARES: frozenset[str] = frozenset(
 )
 
 
-class UnauthenticatedDestructiveToolError(Exception):  # noqa: N818 — intentional name
-    """Raised when a destructive MCP tool lacks authenticating middleware.
-
-    Subclass of :class:`agent_airlock.exceptions.AirlockError` — see the
-    actual class body below (we can't forward-reference the base without
-    a circular import at module import time).
-    """
-
-
-def _load_airlock_error_base() -> None:
-    """Re-home ``UnauthenticatedDestructiveToolError`` onto ``AirlockError``.
-
-    We keep the class definition above simple (no import chain at top of
-    module) and then fix up the base class at module load time. This
-    keeps ``policy_presets`` free of an ``agent_airlock.exceptions``
-    dependency at import order while still giving callers the unified
-    ``AirlockError`` catch surface.
-    """
-    from .exceptions import AirlockError
-
-    global UnauthenticatedDestructiveToolError
-    UnauthenticatedDestructiveToolError = type(  # type: ignore[misc]
-        "UnauthenticatedDestructiveToolError",
-        (AirlockError,),
-        dict(UnauthenticatedDestructiveToolError.__dict__),
-    )
-
-
-_load_airlock_error_base()
+class UnauthenticatedDestructiveToolError(AirlockError):
+    """Raised when a destructive MCP tool lacks authenticating middleware."""
 
 
 def is_destructive_tool(tool_name: str) -> bool:
@@ -607,7 +581,7 @@ def is_destructive_tool(tool_name: str) -> bool:
 
 
 def mcpwn_cve_2026_33032_check(
-    tools: list[dict],
+    tools: list[dict[str, Any]],
 ) -> None:
     """Assert every destructive tool is wrapped in real auth middleware.
 
@@ -639,7 +613,7 @@ def mcpwn_cve_2026_33032_check(
             )
 
 
-def mcpwn_cve_2026_33032_defaults() -> dict:
+def mcpwn_cve_2026_33032_defaults() -> dict[str, Any]:
     """Preset-style factory returning the MCPwn audit config.
 
     Because this preset's output is the checker function itself rather
@@ -682,28 +656,11 @@ _EVAL_TOKENS: tuple[str, ...] = (
 )
 
 
-class FlowiseEvalTokenError(Exception):  # noqa: N818 — intentional name
-    """Raised when a tool manifest embeds a JS dynamic-eval token.
-
-    Re-homed onto ``AirlockError`` at module load (see
-    ``_load_airlock_error_base``)."""
+class FlowiseEvalTokenError(AirlockError):
+    """Raised when a tool manifest embeds a JS dynamic-eval token."""
 
 
-def _load_flowise_base() -> None:
-    from .exceptions import AirlockError
-
-    global FlowiseEvalTokenError
-    FlowiseEvalTokenError = type(  # type: ignore[misc]
-        "FlowiseEvalTokenError",
-        (AirlockError,),
-        dict(FlowiseEvalTokenError.__dict__),
-    )
-
-
-_load_flowise_base()
-
-
-def flowise_cve_2025_59528_check(tools: list[dict]) -> None:
+def flowise_cve_2025_59528_check(tools: list[dict[str, Any]]) -> None:
     """Reject any tool whose handler or config embeds a JS eval token.
 
     The Flowise CustomMCP RCE (CVE-2025-59528, CVSS 10.0) passed user-
@@ -737,7 +694,7 @@ def flowise_cve_2025_59528_check(tools: list[dict]) -> None:
                     )
 
 
-def high_value_action_deny_by_default() -> dict:
+def high_value_action_deny_by_default() -> dict[str, Any]:
     """Deny-by-default preset for financial / on-chain / high-value tools.
 
     Motivation: the 2026-04-19 Kelp DAO LayerZero bridge exploit ($292M
@@ -790,27 +747,11 @@ def high_value_action_deny_by_default() -> dict:
     }
 
 
-class HighValueActionBlocked(Exception):  # noqa: N818 — intentional name
-    """Raised when a high-value action runs without explicit opt-in.
-
-    Re-homed onto ``AirlockError`` at module load."""
+class HighValueActionBlocked(AirlockError):
+    """Raised when a high-value action runs without explicit opt-in."""
 
 
-def _load_hv_base() -> None:
-    from .exceptions import AirlockError
-
-    global HighValueActionBlocked
-    HighValueActionBlocked = type(  # type: ignore[misc]
-        "HighValueActionBlocked",
-        (AirlockError,),
-        dict(HighValueActionBlocked.__dict__),
-    )
-
-
-_load_hv_base()
-
-
-def flowise_cve_2025_59528_defaults() -> dict:
+def flowise_cve_2025_59528_defaults() -> dict[str, Any]:
     """Preset-style factory returning the Flowise-eval checker.
 
     Usage::
