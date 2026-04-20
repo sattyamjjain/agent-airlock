@@ -1,0 +1,23 @@
+{
+  "$schema": "documented destructive MCP tool names from CVE-2026-33032 (nginx-ui MCPwn). Missing AuthRequired() middleware on /mcp_message meant all 12 were invokable with zero credentials. CVSS 9.8, actively exploited April 2026.",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-33032",
+    "rapid7": "https://www.rapid7.com/blog/post/etr-cve-2026-33032-nginx-ui-missing-mcp-authentication/",
+    "fixed_version": "nginx-ui 2.3.4"
+  },
+  "affected_product": "0xJacky/nginx-ui <= 2.3.3",
+  "destructive_tools": [
+    {"name": "reload_nginx", "source": "Rapid7 analysis §tool inventory"},
+    {"name": "restart_nginx", "source": "Rapid7 analysis §tool inventory"},
+    {"name": "stop_nginx", "source": "Rapid7 analysis §tool inventory"},
+    {"name": "start_nginx", "source": "Rapid7 analysis §tool inventory"},
+    {"name": "configure_site", "source": "Rapid7 analysis §config-write tools"},
+    {"name": "delete_site", "source": "Rapid7 analysis §config-write tools"},
+    {"name": "enable_site", "source": "Rapid7 analysis §config-write tools"},
+    {"name": "disable_site", "source": "Rapid7 analysis §config-write tools"},
+    {"name": "upload_certificate", "source": "Rapid7 analysis §cert management"},
+    {"name": "install_package", "source": "Rapid7 analysis §host mutation"},
+    {"name": "run_shell_command", "source": "Rapid7 analysis §RCE primitive"},
+    {"name": "backup_restore", "source": "Rapid7 analysis §data tools"}
+  ]
+}

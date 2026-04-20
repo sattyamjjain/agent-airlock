@@ -25,11 +25,14 @@ from __future__ import annotations
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from .policy import StdioGuardConfig
+
+if TYPE_CHECKING:
+    from .mcp_spec.oauth_audit import OAuthAppAuditConfig, OAuthAuditReport
 
 logger = structlog.get_logger("agent-airlock.mcp_proxy_guard")
 
@@ -136,6 +139,12 @@ class MCPProxyConfig:
     # ``agent_airlock.policy.StdioGuardConfig`` and
     # ``agent_airlock.policy_presets.stdio_guard_ox_defaults``.
     stdio_guard: StdioGuardConfig | None = None
+
+    # V0.5.2 OAuth audit guard (Vercel/Context.ai 2026-04-19). When
+    # set, ``MCPProxyGuard.audit_oauth_exchange()`` delegates to
+    # ``agent_airlock.mcp_spec.oauth_audit.audit_oauth_exchange`` with
+    # this config. Default None preserves v0.5.1 behavior.
+    oauth_audit: OAuthAppAuditConfig | None = None
 
 
 @dataclass
@@ -589,6 +598,43 @@ class MCPProxyGuard:
         except Exception as e:
             logger.warning("token_decode_failed", error=str(e))
             return None
+
+    def audit_oauth_exchange(
+        self,
+        token_response: dict[str, Any],
+        client_id: str,
+    ) -> OAuthAuditReport:
+        """Audit an OAuth token exchange against the configured policy.
+
+        Call this immediately after a successful token exchange via
+        ``agent_airlock.mcp_spec.oauth`` and before caching the
+        token. Mitigates the 2026-04-19 Vercel / Context.ai
+        compromised-OAuth-app class by rejecting known-compromised
+        client IDs, oversize token lifetimes, missing PKCE evidence,
+        and refresh-token reuse.
+
+        Args:
+            token_response: The JSON body of the token endpoint
+                response.
+            client_id: The OAuth client_id that initiated the exchange.
+
+        Returns:
+            ``OAuthAuditReport`` on success.
+
+        Raises:
+            MCPSecurityError: If no ``oauth_audit`` is configured.
+            OAuthAppBlocked: The client_id is on the deny-list.
+            OAuthPolicyViolation: Token response violated the policy
+                (missing PKCE, stale refresh, oversize lifetime, etc.).
+        """
+        if self.config.oauth_audit is None:
+            raise MCPSecurityError(
+                "oauth_audit is not configured on this MCPProxyGuard",
+                violation_type="oauth_audit_not_configured",
+            )
+        from .mcp_spec.oauth_audit import audit_oauth_exchange
+
+        return audit_oauth_exchange(token_response, client_id, self.config.oauth_audit)
 
     def validate_stdio_spawn(self, cmd: list[str]) -> None:
         """Validate a STDIO-transport spawn against the configured guard.

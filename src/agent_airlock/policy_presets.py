@@ -56,12 +56,14 @@ Primary sources (retrieved 2026-04-18):
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from .exceptions import AirlockError
 from .policy import SecurityPolicy, StdioGuardConfig
 
 if TYPE_CHECKING:
     from .capabilities import CapabilityPolicy
+    from .mcp_spec.oauth_audit import OAuthAppAuditConfig
 
 
 def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy | None:
@@ -503,6 +505,274 @@ STDIO_GUARD_OX_DEFAULTS = stdio_guard_ox_defaults()
 constant unless you need dynamic overrides (then call the factory)."""
 
 
+def oauth_audit_vercel_2026_defaults() -> OAuthAppAuditConfig:
+    """OAuth app audit defaults driven by the 2026-04-19 Vercel breach.
+
+    Vercel confirmed a compromise that started with a third-party
+    Google Workspace OAuth app (Context.ai). The attacker used the
+    app's legitimate consent flow to exfiltrate an employee's tokens
+    and, from there, 580 employee records + API keys + source code.
+    This preset seeds the deny-list with the Context.ai client_id
+    disclosed in the Vercel bulletin and enforces PKCE + refresh-
+    rotation + a 1-hour token-lifetime cap.
+
+    Pair with ``MCPProxyGuard`` so any OAuth exchange run through
+    ``agent_airlock.mcp_spec.oauth`` is audited before the token is
+    cached.
+
+    Primary source:
+      https://vercel.com/kb/bulletin/vercel-april-2026-security-incident
+    """
+    from .mcp_spec.oauth_audit import KNOWN_COMPROMISED_CLIENT_IDS, OAuthAppAuditConfig
+
+    return OAuthAppAuditConfig(
+        blocked_client_ids=KNOWN_COMPROMISED_CLIENT_IDS,
+        max_token_age_seconds=3600,
+        require_pkce=True,
+        require_refresh_rotation=True,
+    )
+
+
+OAUTH_AUDIT_VERCEL_2026_DEFAULTS = oauth_audit_vercel_2026_defaults()
+"""Eagerly-constructed OAuth-audit defaults (post Vercel 2026-04-19)."""
+
+
+# -----------------------------------------------------------------------------
+# CVE-2026-33032 "MCPwn" — destructive-tool auth-middleware regression preset
+# -----------------------------------------------------------------------------
+
+# Matches write / exec / kill / destructive verbs. Expanded from the
+# 12 nginx-ui tool names cataloged in the Rapid7 write-up.
+_DESTRUCTIVE_TOOL_PATTERN = re.compile(
+    r"(?i)^(?:"
+    r"delete|destroy|drop|erase|purge|"
+    r"install|uninstall|upload|overwrite|"
+    r"reload|restart|stop|start|kill|"
+    r"configure|enable|disable|patch|"
+    r"run_shell|exec|execute|shell|"
+    r"backup_restore|rollback|factory_reset"
+    r").*$"
+)
+
+# Middleware identifiers we DO accept as enforcing real authentication.
+# "ip_allowlist" alone is NOT accepted — nginx-ui's default was 0.0.0.0/0.
+_TRUSTED_AUTH_MIDDLEWARES: frozenset[str] = frozenset(
+    {
+        "AuthRequired",
+        "SessionRequired",
+        "BearerRequired",
+        "OIDCRequired",
+        "OAuthRequired",
+    }
+)
+
+
+class UnauthenticatedDestructiveToolError(AirlockError):
+    """Raised when a destructive MCP tool lacks authenticating middleware."""
+
+
+def is_destructive_tool(tool_name: str) -> bool:
+    """Return True iff ``tool_name`` matches the destructive-verb pattern.
+
+    Public so users can pre-classify their own tool catalogs before
+    handing them to :func:`mcpwn_cve_2026_33032_check`.
+    """
+    return bool(_DESTRUCTIVE_TOOL_PATTERN.match(tool_name or ""))
+
+
+def mcpwn_cve_2026_33032_check(
+    tools: list[dict[str, Any]],
+) -> None:
+    """Assert every destructive tool is wrapped in real auth middleware.
+
+    Args:
+        tools: A list of tool manifests. Each entry must carry:
+            - ``name`` (str): the MCP tool name.
+            - ``middlewares`` (list[str]): the middleware names applied
+              to the tool's HTTP endpoint, in order.
+
+    Raises:
+        UnauthenticatedDestructiveToolError: When a destructive tool
+            name (see :func:`is_destructive_tool`) is present but no
+            middleware in :data:`_TRUSTED_AUTH_MIDDLEWARES` is applied
+            to it. Raised as soon as the first offender is found — the
+            error details identify it.
+    """
+    for tool in tools:
+        name = tool.get("name", "")
+        if not is_destructive_tool(name):
+            continue
+        middlewares = tool.get("middlewares") or []
+        has_auth = any(m in _TRUSTED_AUTH_MIDDLEWARES for m in middlewares)
+        if not has_auth:
+            raise UnauthenticatedDestructiveToolError(
+                f"destructive MCP tool {name!r} exposes no "
+                f"authenticating middleware (saw {middlewares!r}). "
+                "Regression class: CVE-2026-33032 (nginx-ui MCPwn). "
+                "See https://nvd.nist.gov/vuln/detail/CVE-2026-33032"
+            )
+
+
+def mcpwn_cve_2026_33032_defaults() -> dict[str, Any]:
+    """Preset-style factory returning the MCPwn audit config.
+
+    Because this preset's output is the checker function itself rather
+    than a ``SecurityPolicy``, the return value is a small mapping that
+    a caller uses like::
+
+        from agent_airlock.policy_presets import mcpwn_cve_2026_33032_defaults
+
+        cfg = mcpwn_cve_2026_33032_defaults()
+        cfg["check"](my_tool_manifests)
+
+    Primary source: https://nvd.nist.gov/vuln/detail/CVE-2026-33032
+    """
+    return {
+        "check": mcpwn_cve_2026_33032_check,
+        "is_destructive": is_destructive_tool,
+        "trusted_middlewares": _TRUSTED_AUTH_MIDDLEWARES,
+        "source": (
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-33032, "
+            "https://www.rapid7.com/blog/post/etr-cve-2026-33032-nginx-ui-missing-mcp-authentication/"
+        ),
+    }
+
+
+# -----------------------------------------------------------------------------
+# CVE-2025-59528 Flowise CustomMCP RCE — eval/Function() tool-manifest ban
+# -----------------------------------------------------------------------------
+
+# Tokens whose presence inside a tool manifest's ``handler`` or
+# ``config`` string means user input reaches JS dynamic-evaluation.
+# Primary sources:
+#   https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/
+#   https://advisories.gitlab.com/npm/flowise/CVE-2025-59528/
+_EVAL_TOKENS: tuple[str, ...] = (
+    "Function(",
+    "new Function",
+    "eval(",
+    "Deno.eval",
+    "vm.runInNewContext",
+)
+
+
+class FlowiseEvalTokenError(AirlockError):
+    """Raised when a tool manifest embeds a JS dynamic-eval token."""
+
+
+def flowise_cve_2025_59528_check(tools: list[dict[str, Any]]) -> None:
+    """Reject any tool whose handler or config embeds a JS eval token.
+
+    The Flowise CustomMCP RCE (CVE-2025-59528, CVSS 10.0) passed user-
+    supplied strings from ``/api/v1/node-load-method/customMCP`` into
+    the JavaScript ``Function()`` constructor. CSA documented active
+    exploitation in April 2026 despite a September 2025 patch. This
+    check makes the class non-transportable: if a manifest carries
+    any of the banned tokens, refuse to register the tool.
+
+    Args:
+        tools: Tool manifests. Each entry may carry ``handler`` and/or
+            ``config`` string fields.
+
+    Raises:
+        FlowiseEvalTokenError: First offender wins; error message names
+            the tool and the banned token.
+    """
+    for tool in tools:
+        for field_name in ("handler", "config"):
+            value = tool.get(field_name)
+            if not isinstance(value, str):
+                continue
+            for token in _EVAL_TOKENS:
+                if token in value:
+                    raise FlowiseEvalTokenError(
+                        f"tool {tool.get('name', '<unnamed>')!r} "
+                        f"field {field_name!r} contains banned JS "
+                        f"eval token {token!r}. Regression class: "
+                        "CVE-2025-59528 (Flowise CustomMCP RCE). "
+                        "See https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/"
+                    )
+
+
+def high_value_action_deny_by_default() -> dict[str, Any]:
+    """Deny-by-default preset for financial / on-chain / high-value tools.
+
+    Motivation: the 2026-04-19 Kelp DAO LayerZero bridge exploit ($292M
+    stolen, ~$200M Aave bad debt) started with a cross-chain message
+    forgery that reached an agent authorizing a collateral move. Any
+    tool whose name implies money movement should require explicit
+    opt-in.
+
+    This preset tags a tool as "high-value" when its name matches
+    ``(?i)(transfer|bridge|approve|withdraw|borrow|liquidate|swap|mint|burn)``
+    and refuses to run it unless the ``@airlock`` caller passes
+    ``allow_high_value=True``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import (
+            high_value_action_deny_by_default,
+            HighValueActionBlocked,
+        )
+
+        cfg = high_value_action_deny_by_default()
+        cfg["check"]("transfer", allow_high_value=False)   # raises
+        cfg["check"]("transfer", allow_high_value=True)    # passes
+        cfg["check"]("read_balance", allow_high_value=False)  # passes
+
+    Primary sources:
+      - https://www.bloomberg.com/news/articles/2026-04-19/crypto-hack-worth-290-million-triggers-defi-contagion-shock
+      - https://thedefiant.io/news/defi/aave-price-crash-kelpdao-exploit-whale-dump-rxi8o9
+    """
+    pattern = re.compile(r"(?i)(transfer|bridge|approve|withdraw|borrow|liquidate|swap|mint|burn)")
+
+    def is_high_value(tool_name: str) -> bool:
+        return bool(pattern.search(tool_name or ""))
+
+    def check(tool_name: str, allow_high_value: bool = False) -> None:
+        if is_high_value(tool_name) and not allow_high_value:
+            raise HighValueActionBlocked(
+                f"tool {tool_name!r} matches the high-value pattern "
+                f"({pattern.pattern!r}) and requires allow_high_value=True. "
+                "Motivating incident: Kelp DAO LayerZero exploit 2026-04-19."
+            )
+
+    return {
+        "check": check,
+        "is_high_value": is_high_value,
+        "pattern": pattern.pattern,
+        "source": (
+            "https://www.bloomberg.com/news/articles/2026-04-19/crypto-hack-worth-290-million-triggers-defi-contagion-shock"
+        ),
+    }
+
+
+class HighValueActionBlocked(AirlockError):
+    """Raised when a high-value action runs without explicit opt-in."""
+
+
+def flowise_cve_2025_59528_defaults() -> dict[str, Any]:
+    """Preset-style factory returning the Flowise-eval checker.
+
+    Usage::
+
+        from agent_airlock.policy_presets import flowise_cve_2025_59528_defaults
+
+        cfg = flowise_cve_2025_59528_defaults()
+        cfg["check"](my_tool_manifests)
+
+    Primary source:
+      https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/
+    """
+    return {
+        "check": flowise_cve_2025_59528_check,
+        "banned_tokens": _EVAL_TOKENS,
+        "source": (
+            "https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/"
+        ),
+    }
+
+
 GTG_1002_DEFENSE = gtg_1002_defense_policy()
 MEX_GOV_2026 = mex_gov_2026_policy()
 OWASP_MCP_TOP_10_2026 = owasp_mcp_top_10_2026_policy()
@@ -518,6 +788,16 @@ __all__ = [
     "eu_ai_act_article_15_policy",
     "india_dpdp_2023_policy",
     "stdio_guard_ox_defaults",
+    "oauth_audit_vercel_2026_defaults",
+    "mcpwn_cve_2026_33032_defaults",
+    "mcpwn_cve_2026_33032_check",
+    "is_destructive_tool",
+    "UnauthenticatedDestructiveToolError",
+    "flowise_cve_2025_59528_defaults",
+    "flowise_cve_2025_59528_check",
+    "FlowiseEvalTokenError",
+    "high_value_action_deny_by_default",
+    "HighValueActionBlocked",
     # Eagerly constructed defaults
     "GTG_1002_DEFENSE",
     "MEX_GOV_2026",
@@ -525,4 +805,5 @@ __all__ = [
     "EU_AI_ACT_ARTICLE_15",
     "INDIA_DPDP_2023",
     "STDIO_GUARD_OX_DEFAULTS",
+    "OAUTH_AUDIT_VERCEL_2026_DEFAULTS",
 ]
