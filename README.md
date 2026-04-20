@@ -231,6 +231,11 @@ def execute_code(code: str) -> str:
 | Isolation | Firecracker MicroVM |
 | Fallback | `sandbox_required=True` blocks local execution |
 
+Air-gapped / on-prem? `DockerBackend` is the supported alternative
+— `cap_drop=["ALL"]`, `no-new-privileges`, `network_mode="none"`,
+timeout enforced, opt-in `pytest -m docker` integration tests. See
+[`docs/sandbox/docker.md`](docs/sandbox/docker.md).
+
 ---
 
 ### 📜 Security Policies
@@ -610,10 +615,10 @@ actually prevent the risk.
 | Risk | Implemented in agent-airlock | Module / preset | Coverage |
 |------|------------------------------|-----------------|----------|
 | **ASI01 Agent Goal Hijack** | Pydantic strict validation + ghost-arg rejection + `UnknownArgsMode.BLOCK` | `validator`, `unknown_args`, `core` | Partial |
-| **ASI02 Tool Misuse and Exploitation** | Deny-by-default `SecurityPolicy`, RBAC, rate limits, `SafePath` / `SafeURL` | `policy`, `safe_types`, `filesystem`, `network` | **Full** |
-| **ASI03 Identity and Privilege Abuse** | `AgentIdentity`, `MCPProxyGuard` token-passthrough prevention, `CredentialScope` | `policy`, `mcp_proxy_guard` | Partial |
-| **ASI04 Agentic Supply Chain Vulnerabilities** | Ox MCP STDIO sanitizer + CVE regression suite (8 CVEs tracked) | `mcp_spec.stdio_guard`, `policy_presets.stdio_guard_ox_defaults`, `tests/cves/` | Partial |
-| **ASI05 Unexpected Code Execution (RCE)** | E2B Firecracker sandbox, pluggable `SandboxBackend`, capability gating for `PROCESS_SHELL` | `sandbox`, `sandbox_backend`, `capabilities` | **Full** |
+| **ASI02 Tool Misuse and Exploitation** | Deny-by-default `SecurityPolicy`, RBAC, rate limits, `SafePath` / `SafeURL`, Flowise `Function()`/`eval` token ban ([CVE-2025-59528](https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/)), MCPwn destructive-auth check ([CVE-2026-33032](https://nvd.nist.gov/vuln/detail/CVE-2026-33032)) | `policy`, `safe_types`, `filesystem`, `network`, `policy_presets.flowise_cve_2025_59528_defaults`, `policy_presets.mcpwn_cve_2026_33032_defaults` | **Full** |
+| **ASI03 Identity and Privilege Abuse** | `AgentIdentity`, `MCPProxyGuard` token-passthrough prevention, `CredentialScope`, OAuth-app audit ([Vercel 2026-04-19](https://vercel.com/kb/bulletin/vercel-april-2026-security-incident)) | `policy`, `mcp_proxy_guard`, `mcp_spec.oauth_audit`, `policy_presets.oauth_audit_vercel_2026_defaults` | Partial |
+| **ASI04 Agentic Supply Chain Vulnerabilities** | Ox MCP STDIO sanitizer + CVE regression suite (10+ CVEs tracked) + session-snapshot integrity guard | `mcp_spec.stdio_guard`, `mcp_spec.session_guard`, `policy_presets.stdio_guard_ox_defaults`, `tests/cves/` | Partial |
+| **ASI05 Unexpected Code Execution (RCE)** | E2B Firecracker sandbox, pluggable `SandboxBackend`, capability gating for `PROCESS_SHELL`, Flowise eval-token ban ([CVE-2025-59528](https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/)) | `sandbox`, `sandbox_backend`, `capabilities`, `policy_presets.flowise_cve_2025_59528_defaults` | **Full** |
 | **ASI06 Memory & Context Poisoning** | `AirlockContext` `contextvars` isolation, `ConversationConstraints` budget caps, audit logging | `context`, `conversation`, `sanitizer` | Partial |
 | **ASI07 Insecure Inter-Agent Communication** | A2A middleware Pydantic strict validation, method allow-lists | `a2a` | Partial |
 | **ASI08 Cascading Failures** | `CircuitBreaker`, `RetryPolicy`, token-bucket rate limits | `circuit_breaker`, `retry`, `policy` | **Full** |

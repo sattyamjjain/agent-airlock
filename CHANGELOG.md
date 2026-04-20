@@ -13,6 +13,119 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] - 2026-04-20 — "OAuth audit bundle"
+
+Driven by 72 hours of April 2026 industry signal. Seven new guards /
+presets; every one ships **off by default** and activates only when
+the user opts in via preset or config. Task 4's half-fix from v0.5.1
+(DockerBackend hardening) is now closed out — issue #2 resolved with
+a docs page and two tracked follow-ups (#37 rootless, #38 digest pin).
+
+### Security presets
+
+- **OAuth app audit guard** (`agent_airlock.mcp_spec.oauth_audit`):
+  `OAuthAppAuditConfig`, `audit_oauth_exchange()`, `OAuthAppBlocked`,
+  `OAuthPolicyViolation` (both `AirlockError` subclasses). Preset
+  `oauth_audit_vercel_2026_defaults()` seeds a deny-list with the
+  Vercel-disclosed Context.ai OAuth client_id
+  (`110671459871-30f1spbu0hptbs60cb4vsmv79i7bbvqj.apps.googleusercontent.com`),
+  enforces PKCE, refresh-token rotation, and a 1-hour lifetime cap.
+  Optional JSON deny-list feed loader (air-gap-safe by default —
+  reads from a local path). `MCPProxyGuard.audit_oauth_exchange()`
+  method wires the audit into the existing guard API. 8 new tests.
+  Source: <https://vercel.com/kb/bulletin/vercel-april-2026-security-incident>
+- **Session-snapshot integrity guard**
+  (`agent_airlock.mcp_spec.session_guard`): `SessionSnapshotRef`,
+  `SnapshotGuardConfig`, `verify_snapshot()`, `SnapshotIntegrityError`
+  (`AirlockError` subclass). Six checks — provider allow-list
+  (Blaxel, Cloudflare, Daytona, E2B, Modal, Runloop, Vercel), size
+  cap (25 MiB DoS guard), metadata consistency, SHA-256, freshness,
+  signer allow-list, secret-redaction pre-check. `CostTracker`
+  carry-forward via `carry_forward_cost()` — rehydrating a session
+  cannot reset the token budget. New `SnapshotAwareTransport` mixin
+  for the seven sanctioned providers. 13 new tests.
+  Source: <https://openai.com/index/the-next-evolution-of-the-agents-sdk/>
+- **CVE-2026-33032 MCPwn preset**
+  (`policy_presets.mcpwn_cve_2026_33032_defaults`):
+  `mcpwn_cve_2026_33032_check()` + `UnauthenticatedDestructiveToolError`
+  refuse any destructive MCP tool (write / exec / kill verbs) that
+  is not wrapped in a trusted auth middleware. Fixture
+  `tests/cves/fixtures/cve_2026_33032_mcpwn.json` carries the 12
+  nginx-ui tool names from the Rapid7 write-up, each with a
+  primary-source line. 6 new tests.
+  Source: <https://nvd.nist.gov/vuln/detail/CVE-2026-33032>
+- **CVE-2025-59528 Flowise CustomMCP RCE preset**
+  (`policy_presets.flowise_cve_2025_59528_defaults`):
+  `flowise_cve_2025_59528_check()` + `FlowiseEvalTokenError` reject
+  any tool manifest whose `handler` or `config` string contains
+  `Function(`, `new Function`, `eval(`, `Deno.eval`, or
+  `vm.runInNewContext`. 8 new tests.
+  Source: <https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/>
+- **High-value action deny-by-default preset**
+  (`policy_presets.high_value_action_deny_by_default`):
+  regex-matches `(?i)(transfer|bridge|approve|withdraw|borrow|`
+  `liquidate|swap|mint|burn)` and refuses to run any matching tool
+  unless the caller passes `allow_high_value=True`. Raises
+  `HighValueActionBlocked`. 6 new tests. Docs at
+  [`docs/presets/high-value-actions.md`](docs/presets/high-value-actions.md).
+  Source: Kelp DAO / LayerZero $292M / Aave bad-debt incident,
+  <https://www.bloomberg.com/news/articles/2026-04-19/crypto-hack-worth-290-million-triggers-defi-contagion-shock>
+
+### Integrations
+
+- **Claude Opus 4.7 Auto Memory / Auto Dream guard**
+  (`agent_airlock.integrations.claude_auto_memory`):
+  `AutoMemoryAccessPolicy`, `guarded_read()`, `guarded_write()`,
+  `AutoMemoryCrossTenantError`, `AutoMemoryQuotaError` (both
+  `AirlockError` subclasses). Every call is tenant-scoped under
+  `/memory/{tenant_id}/`, quota-bounded (default 64 KiB per read),
+  redaction-enforced on write (reuses `sanitize_output`), and
+  observable via OTel spans `airlock.auto_memory.read` /
+  `airlock.auto_memory.write` carrying `tenant_id`, `bytes`,
+  `redacted_count`. 9 new tests.
+  Source: <https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7>
+
+### Docs
+
+- `docs/sandbox/docker.md` — explicit inventory of what
+  `DockerBackend` ships as of v0.5.1 (timeout, `no-new-privileges`,
+  `cap_drop=["ALL"]`, `security_opt`), plus a tracked "Known gaps"
+  list pointing at #37 (rootless) and #38 (digest pin). Issue #2
+  closed with a permalink comment.
+- `docs/presets/high-value-actions.md` — preset rationale, usage,
+  and known limitations. Cites the Kelp DAO / Aave incident.
+- README OWASP Agentic table updated: ASI02 (Tool Misuse) and ASI05
+  (RCE) now cite the Flowise eval-token preset; ASI03 (Identity)
+  cites the Vercel OAuth audit preset; ASI04 (Supply Chain) cites
+  the session-snapshot guard.
+
+### Performance
+
+- `@Airlock` strict-validation path: median **81.9 μs** (v0.5.1
+  baseline 75.2 μs). New primitives live outside the decorator hot
+  path; variance is within run-to-run noise on a laptop.
+
+### Dependencies
+
+- No new runtime deps. No new optional extras required for this
+  release.
+
+### Closes
+
+- #2 — Add Docker sandbox backend implementation (docs + follow-ups)
+
+### Primary sources (used verbatim in docstrings and this CHANGELOG)
+
+- Vercel bulletin (2026-04-19): <https://vercel.com/kb/bulletin/vercel-april-2026-security-incident>
+- OpenAI Agents SDK next evolution (2026-04-15): <https://openai.com/index/the-next-evolution-of-the-agents-sdk/>
+- NVD CVE-2026-33032 (MCPwn, 2026-04-15): <https://nvd.nist.gov/vuln/detail/CVE-2026-33032>
+- Rapid7 CVE-2026-33032 ETR (2026-04-15): <https://www.rapid7.com/blog/post/etr-cve-2026-33032-nginx-ui-missing-mcp-authentication/>
+- CSA Flowise research note (2026-04-09): <https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/>
+- Anthropic Claude 4.7 release notes (2026-04-17): <https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7>
+- Bloomberg Kelp DAO / Aave coverage (2026-04-19): <https://www.bloomberg.com/news/articles/2026-04-19/crypto-hack-worth-290-million-triggers-defi-contagion-shock>
+
+---
+
 ## [0.5.1] - 2026-04-19 — "Ox response"
 
 Same-day response to the [Ox Security MCP STDIO RCE advisory](https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem)
