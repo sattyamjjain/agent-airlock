@@ -13,6 +13,139 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.3] - 2026-04-21 — "MCP supply-chain response"
+
+Driven by the OX Security "Mother of All AI Supply Chains" dossier
+([2026-04-20](https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20))
+— 10+ coordinated MCP-ecosystem CVEs in a single report, with
+Anthropic publicly declining to patch four of the six Claude Desktop
+tool-definition tampering CVEs. v0.5.3 ships the caller's side of
+that defense.
+
+Seven new surfaces (B–G below) and an honesty-bug fix carryover (A).
+Every new primitive is **opt-in**; no behavior change for existing
+`@Airlock` users.
+
+### Honesty fixes
+
+- **Top-level error re-exports.** Six v0.5.2 error classes
+  (`OAuthAppBlocked`, `OAuthPolicyViolation`,
+  `SnapshotIntegrityError`, `AutoMemoryCrossTenantError`,
+  `AutoMemoryQuotaError`, `HighValueActionBlocked`) now importable
+  from the top-level `agent_airlock` namespace, matching the public-
+  API convention documented in the README. New smoke-test module
+  `tests/test_public_api.py` freezes the contract so no future
+  refactor regresses it. 9 new tests.
+- **`test-badge` tooling (new capability, not a retroactive fix).**
+  `scripts/update_test_badge.py` + the `<!-- TEST-BADGE-START/END -->`
+  block in `README.md` + a `make test-badge` target + a pre-release
+  checklist line in `CONTRIBUTING.md`. `python3 scripts/update_test_badge.py
+  --check` fails the build on drift.
+
+### Security presets
+
+- **Azure MCP response-header audit** — CVE-2026-32211, CVSS 8.6
+  (Azure MCP Server echoed bearer tokens in 401 `WWW-Authenticate`
+  headers, fixed in Azure MCP 1.4.2). New module
+  `agent_airlock.mcp_spec.header_audit` with `audit_response_headers`,
+  `ResponseHeaderAuditConfig`, `ResponseHeaderLeakError`. Preset
+  `azure_mcp_cve_2026_32211_defaults()` seeds bearer + JWT regexes
+  and the 401 `WWW-Authenticate` watchlist. `MCPProxyGuard.audit_response_headers()`
+  wires it into the existing guard API. 9 new tests.
+  Sources: <https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211>,
+  <https://nvd.nist.gov/vuln/detail/CVE-2026-32211>.
+- **OX MCP supply-chain dossier umbrella.**
+  `ox_mcp_supply_chain_2026_04_defaults()` composes the existing
+  MCPwn / Flowise / Azure checks and adds three new micro-checks:
+  - `ToolDefinitionRegistry` (TOFU digest for tool manifests) —
+    covers CVE-2026-30615/30617/30618/30623/30624/30625 (Claude
+    Desktop tool-def tampering, Anthropic declined four of six).
+  - `check_mcp_bridge_target` (SSRF refusal for RFC1918, link-local,
+    loopback, CGN, IPv6 ULA/link-local + AWS IMDS) — covers
+    CVE-2026-26015 (OpenAI MCP Bridge).
+  - `check_tool_response_content_type` (refuses pickle /
+    octet-stream / Java serialized / msgpack without explicit
+    allow-list) — covers CVE-2026-33224 (LlamaIndex).
+  16 new tests + `tests/cves/fixtures/ox_supply_chain_2026_04.json`
+  listing all 10 CVEs with per-entry primary-source URLs.
+  Source: <https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20>.
+
+### Integrations
+
+- **Log-redaction filter (CVE-2026-20205 response).**
+  `agent_airlock.integrations.log_redaction` exports
+  `RedactingLogFilter` and `install_airlock_log_redaction()`.
+  Redacts 14 documented secret shapes (Splunk HEC, GitHub PAT,
+  AWS, Anthropic, OpenAI, Snowflake, Azure AAD JWT, generic
+  Bearer / Basic, Slack, Stripe, Postmark, PEM private-key
+  headers) before any log record reaches a handler. Pattern fixture
+  at `src/agent_airlock/fixtures/redaction_patterns_2026_04.txt`
+  with per-pattern primary-source citations. Idempotent install.
+  8 new tests.
+  Sources: <https://advisory.splunk.com/advisories/SVD-2026-0419>,
+  <https://nvd.nist.gov/vuln/detail/CVE-2026-20205>.
+- **Claude Auto Memory provenance chain.** Extends v0.5.2's
+  `claude_auto_memory` with `MemoryEntry`, HMAC-SHA256 signing
+  (keyed from `AIRLOCK_MEMORY_HMAC_KEY` env var — stdlib `hmac`
+  only, no new runtime deps), `consolidate_memory()` recording the
+  source-session chain, and two new errors:
+  `MemoryProvenanceError` (HMAC mismatch) and
+  `MemoryChainTooDeepError` (chain > `max_chain_depth`, default 8).
+  OTel span `airlock.auto_memory.consolidate` carries `chain_depth`
+  attribute. 8 new tests.
+  Sources: <https://support.claude.com/articles/memory-scope-default-2026-04-19>,
+  <https://claudefa.st/blog/guide/mechanics/auto-dream>.
+
+### Tooling
+
+- **Agent Egress Bench.** `scripts/egress_bench.py` walks
+  `tests/cves/fixtures/*.json` and asserts every documented payload
+  is blocked by the corresponding preset. Three output formats
+  (TAP / JSON / Markdown). `airlock egress-bench` CLI subcommand
+  in `agent_airlock.cli.egress_bench`. `make egress-bench` target.
+  CI job sample at `docs/security/egress-bench-ci.yml.sample`
+  (maintainer with `workflow` scope must copy it into
+  `.github/workflows/`). Current state: 3 fixtures, 32 payloads,
+  **zero slips**.
+- **`Makefile` consolidates dev loops.** `make test / coverage /
+  lint / format / bench / test-badge / egress-bench`.
+
+### Docs
+
+- `docs/presets/ox-mcp-supply-chain-2026-04.md` — umbrella preset
+  reference with per-CVE primary-source table.
+- `docs/security/egress-bench.md` — bench contract and current
+  coverage.
+- `docs/regulatory/nist-ai-rmf-v2-comment-2026.md` — draft public
+  comment for the NIST AI RMF v2.0 agentic-AI subsection window
+  (opened 2026-04-18).
+- `CONTRIBUTING.md` — new pre-release checklist section.
+- `README.md` — Documentation table expanded with links to the new
+  preset / bench / sandbox docs, plus a "Regulatory engagement"
+  subsection.
+
+### Performance
+
+- `@Airlock` strict-validation path: median **~82 μs** (v0.5.2
+  baseline 82 μs). New primitives live outside the decorator hot
+  path; no regression.
+
+### Dependencies
+
+- **No new runtime deps.** HMAC uses stdlib `hmac`.
+
+### Primary sources (all seven cited verbatim in module docstrings)
+
+- OX dossier (2026-04-20): <https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20>
+- MSRC CVE-2026-32211 (2026-04-20): <https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211>
+- Splunk SVD-2026-0419 (2026-04-19): <https://advisory.splunk.com/advisories/SVD-2026-0419>
+- Wiz OpenAI sandbox token-leak (2026-04-20): <https://www.wiz.io/blog/openai-agents-sdk-cross-sandbox-token-leak-2026-04>
+- Anthropic Auto Memory scope note (2026-04-19): <https://support.claude.com/articles/memory-scope-default-2026-04-19>
+- Trend Micro Vercel / Context.ai postmortem (2026-04-20): <https://www.trendmicro.com/en_us/research/26/d/vercel-contextai-breach-postmortem.html>
+- NIST AI RMF v2 public comment window (2026-04-18): <https://www.nist.gov/itl/ai-risk-management-framework/ai-rmf-v2-public-comment-2026-04-18>
+
+---
+
 ## [0.5.2] - 2026-04-20 — "OAuth audit bundle"
 
 Driven by 72 hours of April 2026 industry signal. Seven new guards /

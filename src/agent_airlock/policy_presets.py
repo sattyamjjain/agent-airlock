@@ -63,6 +63,7 @@ from .policy import SecurityPolicy, StdioGuardConfig
 
 if TYPE_CHECKING:
     from .capabilities import CapabilityPolicy
+    from .mcp_spec.header_audit import ResponseHeaderAuditConfig
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig
 
 
@@ -537,6 +538,88 @@ OAUTH_AUDIT_VERCEL_2026_DEFAULTS = oauth_audit_vercel_2026_defaults()
 """Eagerly-constructed OAuth-audit defaults (post Vercel 2026-04-19)."""
 
 
+def azure_mcp_cve_2026_32211_defaults() -> ResponseHeaderAuditConfig:
+    """Response-header audit defaults for CVE-2026-32211.
+
+    MSRC disclosed 2026-04-20: the reference Azure MCP server echoed
+    the caller's ``Authorization`` header back in a ``WWW-Authenticate``
+    field on 401 responses, leaking short-lived AAD tokens. CVSS 8.6,
+    fixed in Azure MCP Server 1.4.2. This preset is the runtime
+    defence — a proxy fronting an unpatched server will refuse to
+    forward the leaked value.
+
+    Primary sources:
+      https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211
+      https://nvd.nist.gov/vuln/detail/CVE-2026-32211
+    """
+    from .mcp_spec.header_audit import (
+        DEFAULT_FORBIDDEN_HEADER_NAMES_BY_STATUS,
+        DEFAULT_FORBIDDEN_PATTERNS,
+        ResponseHeaderAuditConfig,
+    )
+
+    return ResponseHeaderAuditConfig(
+        forbidden_patterns=DEFAULT_FORBIDDEN_PATTERNS,
+        forbidden_header_names_by_status=dict(DEFAULT_FORBIDDEN_HEADER_NAMES_BY_STATUS),
+        max_header_value_bytes=8192,
+    )
+
+
+AZURE_MCP_CVE_2026_32211_DEFAULTS = azure_mcp_cve_2026_32211_defaults()
+"""Eagerly-constructed response-header-audit defaults (CVE-2026-32211)."""
+
+
+def ox_mcp_supply_chain_2026_04_defaults() -> dict[str, Any]:
+    """Umbrella preset for the OX Security 2026-04-20 MCP dossier.
+
+    Composes existing primitives (MCPwn / Flowise / Azure header
+    audit) and adds three new micro-checks (tool-manifest tamper,
+    MCP bridge SSRF, unsafe deserialization) into a single bundle
+    covering the 10 CVEs disclosed in the "Mother of All AI Supply
+    Chains" report.
+
+    The returned mapping lets callers cherry-pick::
+
+        cfg = ox_mcp_supply_chain_2026_04_defaults()
+        cfg["destructive_tool_check"](my_tools)
+        cfg["eval_token_check"](my_tools)
+        cfg["header_audit"]                 # ResponseHeaderAuditConfig
+        cfg["tool_registry"]                # ToolDefinitionRegistry
+        cfg["bridge_ssrf_check"](target)    # callable
+        cfg["content_type_check"](ct, name) # callable
+
+    Primary source:
+      https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20
+    """
+    from .mcp_spec.supply_chain import (
+        ToolDefinitionRegistry,
+        check_mcp_bridge_target,
+        check_tool_response_content_type,
+    )
+
+    return {
+        "destructive_tool_check": mcpwn_cve_2026_33032_check,
+        "eval_token_check": flowise_cve_2025_59528_check,
+        "header_audit": azure_mcp_cve_2026_32211_defaults(),
+        "tool_registry": ToolDefinitionRegistry(),
+        "bridge_ssrf_check": check_mcp_bridge_target,
+        "content_type_check": check_tool_response_content_type,
+        "source": ("https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20"),
+        "cves": (
+            "CVE-2025-65720",
+            "CVE-2026-30615",
+            "CVE-2026-30617",
+            "CVE-2026-30618",
+            "CVE-2026-30623",
+            "CVE-2026-30624",
+            "CVE-2026-30625",
+            "CVE-2026-26015",
+            "CVE-2026-33224",
+            "CVE-2026-40933",
+        ),
+    }
+
+
 # -----------------------------------------------------------------------------
 # CVE-2026-33032 "MCPwn" — destructive-tool auth-middleware regression preset
 # -----------------------------------------------------------------------------
@@ -789,6 +872,9 @@ __all__ = [
     "india_dpdp_2023_policy",
     "stdio_guard_ox_defaults",
     "oauth_audit_vercel_2026_defaults",
+    "azure_mcp_cve_2026_32211_defaults",
+    "AZURE_MCP_CVE_2026_32211_DEFAULTS",
+    "ox_mcp_supply_chain_2026_04_defaults",
     "mcpwn_cve_2026_33032_defaults",
     "mcpwn_cve_2026_33032_check",
     "is_destructive_tool",

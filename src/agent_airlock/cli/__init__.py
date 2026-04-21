@@ -7,6 +7,7 @@ Provides tools for:
 """
 
 from .doctor import doctor
+from .egress_bench import egress_bench
 from .verify import verify
 
-__all__ = ["doctor", "verify"]
+__all__ = ["doctor", "egress_bench", "verify"]
