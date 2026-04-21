@@ -141,9 +141,10 @@ def audit_response_headers(
     sensitive_names = cfg.forbidden_header_names_by_status.get(status, frozenset())
     patterns = _compiled_patterns(cfg)
     for name in sensitive_names:
-        value = lower_headers.get(name)
-        if value is None:
+        found = lower_headers.get(name)
+        if found is None:
             continue
+        value = found
         # The header name is on the "watch list" at this status; any
         # forbidden-pattern match here is a leak.
         for pat in patterns:
