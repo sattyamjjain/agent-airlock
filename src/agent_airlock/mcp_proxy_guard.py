@@ -32,6 +32,7 @@ import structlog
 from .policy import StdioGuardConfig
 
 if TYPE_CHECKING:
+    from .mcp_spec.header_audit import ResponseHeaderAuditConfig
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig, OAuthAuditReport
 
 logger = structlog.get_logger("agent-airlock.mcp_proxy_guard")
@@ -145,6 +146,12 @@ class MCPProxyConfig:
     # ``agent_airlock.mcp_spec.oauth_audit.audit_oauth_exchange`` with
     # this config. Default None preserves v0.5.1 behavior.
     oauth_audit: OAuthAppAuditConfig | None = None
+
+    # V0.5.3 Response-header audit guard (Azure MCP CVE-2026-32211
+    # 2026-04-20). When set, ``MCPProxyGuard.audit_response_headers()``
+    # delegates to ``agent_airlock.mcp_spec.header_audit.audit_response_headers``.
+    # Default None preserves v0.5.2 behavior.
+    response_header_audit: ResponseHeaderAuditConfig | None = None
 
 
 @dataclass
@@ -598,6 +605,36 @@ class MCPProxyGuard:
         except Exception as e:
             logger.warning("token_decode_failed", error=str(e))
             return None
+
+    def audit_response_headers(
+        self,
+        status: int,
+        headers: dict[str, str],
+    ) -> None:
+        """Audit an MCP response header bag before returning it (v0.5.3+).
+
+        Call immediately after receiving a response from an upstream
+        MCP server and before forwarding to the caller. Mitigates
+        Azure MCP CVE-2026-32211 — the 401-response token-echo class.
+
+        Args:
+            status: HTTP status code of the response.
+            headers: Header name → value mapping.
+
+        Raises:
+            MCPSecurityError: If no ``response_header_audit`` is configured.
+            ResponseHeaderLeakError: If a header value matches a
+                forbidden pattern / name / size. Subclass of
+                ``agent_airlock.exceptions.AirlockError``.
+        """
+        if self.config.response_header_audit is None:
+            raise MCPSecurityError(
+                "response_header_audit is not configured on this MCPProxyGuard",
+                violation_type="response_header_audit_not_configured",
+            )
+        from .mcp_spec.header_audit import audit_response_headers
+
+        audit_response_headers(status, headers, self.config.response_header_audit)
 
     def audit_oauth_exchange(
         self,

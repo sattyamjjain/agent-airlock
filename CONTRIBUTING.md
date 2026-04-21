@@ -170,6 +170,21 @@ def test_ghost_arguments_stripped_in_permissive_mode():
     assert result == 10
 ```
 
+## Pre-release checklist
+
+Before cutting a release:
+
+1. `make test coverage lint` — must be green.
+2. `make test-badge` — regenerates the `TEST-BADGE` block in
+   `README.md` with the current test count + coverage. Commit the diff
+   before tagging. `python3 scripts/update_test_badge.py --check` in
+   CI will fail otherwise.
+3. `make egress-bench` — every CVE fixture must block its declared
+   payloads. A regression here means a previously-caught attack class
+   has slipped through.
+4. Bump `pyproject.toml` + `src/agent_airlock/__init__.py` __version__.
+5. Promote `[Unreleased]` → `[X.Y.Z]` in `CHANGELOG.md`.
+
 ## Security
 
 If you discover a security vulnerability, please do NOT open a public issue. Instead, email security concerns privately. See [SECURITY.md](docs/SECURITY.md) for our security policy.

@@ -142,6 +142,17 @@ from .honeypot import (
     should_use_honeypot,
 )
 
+# V0.5.3 Top-level re-exports of error classes introduced in v0.5.2 so
+# users can write `from agent_airlock import OAuthAppBlocked, ...`
+# instead of reaching into the submodule path. Canonical definitions
+# live in the submodules; these are pure re-exports.
+from .integrations.claude_auto_memory import (
+    AutoMemoryCrossTenantError,
+    AutoMemoryQuotaError,
+    MemoryChainTooDeepError,
+    MemoryProvenanceError,
+)
+
 # V0.4.0 MCP Proxy Guard
 from .mcp_proxy_guard import (
     DEFAULT_PROXY_CONFIG,
@@ -153,6 +164,11 @@ from .mcp_proxy_guard import (
     MCPSecurityError,
     MCPSession,
 )
+from .mcp_spec.oauth_audit import (
+    OAuthAppBlocked,
+    OAuthPolicyViolation,
+)
+from .mcp_spec.session_guard import SnapshotIntegrityError
 
 # V0.3.0 Network egress control
 from .network import (
@@ -204,6 +220,7 @@ from .policy_presets import (
     MEX_GOV_2026,
     OWASP_MCP_TOP_10_2026,
     STDIO_GUARD_OX_DEFAULTS,
+    HighValueActionBlocked,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
@@ -308,7 +325,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 
 __all__ = [
     # Core
@@ -344,6 +361,15 @@ __all__ = [
     "StdioGuardConfig",
     "STDIO_GUARD_OX_DEFAULTS",
     "stdio_guard_ox_defaults",
+    # V0.5.3 top-level error re-exports (canonical defs in submodules)
+    "AutoMemoryCrossTenantError",
+    "AutoMemoryQuotaError",
+    "HighValueActionBlocked",
+    "MemoryChainTooDeepError",
+    "MemoryProvenanceError",
+    "OAuthAppBlocked",
+    "OAuthPolicyViolation",
+    "SnapshotIntegrityError",
     # Sanitization
     "sanitize_output",
     "sanitize_with_workspace_config",

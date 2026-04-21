@@ -42,8 +42,13 @@ References
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import os
+import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import structlog
@@ -52,6 +57,9 @@ from ..exceptions import AirlockError
 from ..sanitizer import sanitize_output
 
 logger = structlog.get_logger("agent-airlock.integrations.claude_auto_memory")
+
+_HMAC_ENV_VAR = "AIRLOCK_MEMORY_HMAC_KEY"
+_DEFAULT_MAX_CHAIN_DEPTH = 8
 
 
 @dataclass
@@ -99,6 +107,172 @@ class AutoMemoryQuotaError(AirlockError):
         super().__init__(
             f"auto-memory read of {bytes_requested} bytes exceeds per-call limit {limit}"
         )
+
+
+class MemoryProvenanceError(AirlockError):
+    """Raised when a signed memory entry's HMAC does not verify.
+
+    Motivating incident: Anthropic's 2026-04-19 default-on Auto Memory
+    rollout created a class of cross-project memory reads. A tampered
+    entry is indistinguishable from a legitimate one unless it's
+    signed — this error fires when the signature check fails.
+    """
+
+    def __init__(self, *, tenant_id: str, path: str) -> None:
+        self.tenant_id = tenant_id
+        self.path = path
+        super().__init__(
+            f"memory provenance HMAC mismatch for tenant {tenant_id!r} "
+            f"at {path!r} — entry was tampered with or signed with a "
+            "different key"
+        )
+
+
+class MemoryChainTooDeepError(AirlockError):
+    """Raised when a consolidation chain exceeds ``max_chain_depth``.
+
+    Long chains are a poisoning signal — a hostile earlier session
+    propagating into every downstream consolidation."""
+
+    def __init__(self, *, depth: int, limit: int) -> None:
+        self.depth = depth
+        self.limit = limit
+        super().__init__(
+            f"consolidation chain depth {depth} exceeds limit {limit} — "
+            "memory poisoning signal, refusing to consolidate further"
+        )
+
+
+@dataclass
+class MemoryEntry:
+    """A signed, provenance-tracked Auto Memory write (v0.5.3+).
+
+    Attributes:
+        tenant_id: Owning tenant.
+        path: Absolute memory path under ``/memory/{tenant_id}/``.
+        content: The (already-redacted) payload that was persisted.
+        created_at: Unix timestamp when this entry was written.
+        consolidated_from_session_id: The session that triggered this
+            write (not necessarily the session whose content appears
+            — see ``consolidation_chain``).
+        consolidation_chain: Ordered list of session IDs that
+            contributed to this entry. Latest-consolidation-last.
+        sha256_before_redact: Hex digest of the pre-redaction payload.
+            Stored so a later audit can detect silent content drift
+            without revealing the plaintext.
+        sha256_after_redact: Hex digest of the persisted payload.
+        redacted_token_count: How many secrets the sanitizer
+            stripped before persistence.
+        signature: HMAC-SHA256 over the canonical JSON serialization
+            of all the above fields, keyed from the
+            ``AIRLOCK_MEMORY_HMAC_KEY`` env var.
+    """
+
+    tenant_id: str
+    path: str
+    content: str
+    created_at: float = field(default_factory=time.time)
+    consolidated_from_session_id: str | None = None
+    consolidation_chain: list[str] = field(default_factory=list)
+    sha256_before_redact: str = ""
+    sha256_after_redact: str = ""
+    redacted_token_count: int = 0
+    signature: str = ""
+
+
+def _signing_key() -> bytes:
+    """Load the HMAC signing key from env. Fail closed if absent."""
+    raw = os.environ.get(_HMAC_ENV_VAR)
+    if not raw:
+        raise MemoryProvenanceError(
+            tenant_id="<none>",
+            path=f"<{_HMAC_ENV_VAR} unset>",
+        )
+    return raw.encode("utf-8")
+
+
+def _canonical_entry_bytes(entry: MemoryEntry) -> bytes:
+    """Deterministic JSON serialization for stable HMAC computation.
+
+    The ``signature`` field is excluded — we sign over everything
+    else, then attach the result.
+    """
+    payload = asdict(entry)
+    payload.pop("signature", None)
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def sign_memory_entry(entry: MemoryEntry) -> str:
+    """Compute + attach the HMAC-SHA256 signature on ``entry``.
+
+    Returns the hex digest that was stored on ``entry.signature``.
+    """
+    sig = hmac.new(_signing_key(), _canonical_entry_bytes(entry), hashlib.sha256).hexdigest()
+    entry.signature = sig
+    return sig
+
+
+def verify_memory_entry(entry: MemoryEntry) -> None:
+    """Verify ``entry.signature`` or raise :class:`MemoryProvenanceError`."""
+    expected = hmac.new(_signing_key(), _canonical_entry_bytes(entry), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, entry.signature):
+        raise MemoryProvenanceError(tenant_id=entry.tenant_id, path=entry.path)
+
+
+def consolidate_memory(
+    tenant_id: str,
+    path: str,
+    content: str,
+    source_session_ids: list[str],
+    *,
+    max_chain_depth: int = _DEFAULT_MAX_CHAIN_DEPTH,
+) -> MemoryEntry:
+    """Build a signed :class:`MemoryEntry` with a recorded chain.
+
+    Args:
+        tenant_id: Owning tenant. Must match the path prefix.
+        path: Must start with ``/memory/{tenant_id}/``.
+        content: The payload to persist. Passed through
+            :func:`agent_airlock.sanitizer.sanitize_output`.
+        source_session_ids: Ordered list of session IDs that
+            contributed — the chain.
+        max_chain_depth: Refuse to consolidate when the chain would
+            exceed this length. Default 8.
+
+    Raises:
+        MemoryChainTooDeepError: Chain length exceeds the limit.
+        MemoryProvenanceError: Signing key is unavailable.
+    """
+    if len(source_session_ids) > max_chain_depth:
+        raise MemoryChainTooDeepError(depth=len(source_session_ids), limit=max_chain_depth)
+
+    before_digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    sanitized = sanitize_output(content)
+    after_digest = hashlib.sha256(sanitized.content.encode("utf-8")).hexdigest()
+
+    latest = source_session_ids[-1] if source_session_ids else None
+    entry = MemoryEntry(
+        tenant_id=tenant_id,
+        path=path,
+        content=sanitized.content,
+        consolidated_from_session_id=latest,
+        consolidation_chain=list(source_session_ids),
+        sha256_before_redact=before_digest,
+        sha256_after_redact=after_digest,
+        redacted_token_count=len(sanitized.detections),
+    )
+    sign_memory_entry(entry)
+
+    _emit_span(
+        "airlock.auto_memory.consolidate",
+        {
+            "tenant_id": tenant_id,
+            "path": path,
+            "chain_depth": len(source_session_ids),
+            "redacted_count": entry.redacted_token_count,
+        },
+    )
+    return entry
 
 
 def _tenant_root(tenant_id: str) -> str:
