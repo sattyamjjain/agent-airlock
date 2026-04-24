@@ -65,6 +65,7 @@ from .capabilities import (
     Capability,
     CapabilityDeniedError,
     CapabilityPolicy,
+    ModelCapabilityTier,
     capabilities_to_list,
     get_required_capabilities,
     requires,
@@ -168,6 +169,11 @@ from .mcp_spec.oauth_audit import (
     OAuthAppBlocked,
     OAuthPolicyViolation,
 )
+from .mcp_spec.sampling_guard import (
+    SamplingConsentMissingError,
+    SamplingInstructionPersistenceError,
+    SamplingQuotaExceeded,
+)
 from .mcp_spec.session_guard import SnapshotIntegrityError
 
 # V0.3.0 Network egress control
@@ -204,6 +210,7 @@ from .policy import (
     READ_ONLY_POLICY,
     STRICT_POLICY,
     AgentIdentity,
+    PolicyMutationError,
     PolicyViolation,
     RateLimit,
     SecurityPolicy,
@@ -325,7 +332,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.5.4"
+__version__ = "0.5.5"
 
 __all__ = [
     # Core
@@ -336,6 +343,7 @@ __all__ = [
     "DEFAULT_CONFIG",
     # Policy
     "SecurityPolicy",
+    "PolicyMutationError",
     "PolicyViolation",
     "ViolationType",
     "AgentIdentity",
@@ -369,6 +377,9 @@ __all__ = [
     "MemoryProvenanceError",
     "OAuthAppBlocked",
     "OAuthPolicyViolation",
+    "SamplingConsentMissingError",
+    "SamplingInstructionPersistenceError",
+    "SamplingQuotaExceeded",
     "SnapshotIntegrityError",
     # Sanitization
     "sanitize_output",
@@ -480,6 +491,7 @@ __all__ = [
     "Capability",
     "CapabilityPolicy",
     "CapabilityDeniedError",
+    "ModelCapabilityTier",
     "requires",
     "get_required_capabilities",
     "capabilities_to_list",

@@ -1,0 +1,16 @@
+{
+  "cve": "CVE-2026-5023",
+  "disclosed": "2026-04",
+  "product": "codebase-mcp (npm wrapper of RepoMix CLI)",
+  "cvss_v3": "not yet scored",
+  "patch_status": "unpatched upstream as of 2026-04-24",
+  "description": "Four MCP tool handlers (getCodebase, getRemoteCodebase, saveCodebase, saveRemoteCodebase) shelled out with user-controlled path arguments, yielding trivial OS command injection via shell metacharacters.",
+  "primary_source": "https://www.sentinelone.com/vulnerability-database/cve-2026-5023/",
+  "airlock_preset": "codebase_mcp_cve_2026_5023_defaults",
+  "tool_names": [
+    "getCodebase",
+    "getRemoteCodebase",
+    "saveCodebase",
+    "saveRemoteCodebase"
+  ]
+}

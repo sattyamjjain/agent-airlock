@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from .capabilities import CapabilityPolicy
     from .mcp_spec.header_audit import ResponseHeaderAuditConfig
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig
+    from .mcp_spec.sampling_guard import SamplingGuardConfig
 
 
 def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy | None:
@@ -621,6 +622,295 @@ def ox_mcp_supply_chain_2026_04_defaults() -> dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
+# Unit 42 MCP sampling attack-vector preset (2026-04-24)
+# -----------------------------------------------------------------------------
+
+
+def unit42_mcp_sampling_defaults() -> SamplingGuardConfig:
+    """Sampling-guard defaults for the Unit 42 MCP attack-vector catalog.
+
+    Palo Alto Networks Unit 42 published a catalog of MCP sampling-layer
+    abuses on 2026-04-24. Three patterns are in scope here: quota
+    exhaustion, persistent system-role injection, and session-sticky
+    consent bypass. This preset turns on the opt-in defenses the
+    catalog recommends.
+
+    Defaults:
+
+    - ``max_sampling_requests_per_session`` = 50 (hard cap)
+    - ``max_tokens_per_sampling_request`` = 4096
+    - ``forbid_persistent_instructions`` = True (refuse system role)
+    - ``require_user_consent_per_request`` = True (no session-sticky OK)
+
+    Usage::
+
+        from agent_airlock.policy_presets import unit42_mcp_sampling_defaults
+        from agent_airlock.mcp_spec.sampling_guard import (
+            SamplingSessionState,
+            audit_sampling_request,
+        )
+
+        cfg = unit42_mcp_sampling_defaults()
+        state = SamplingSessionState(session_id=req.session_id)
+        audit_sampling_request(req.body, state, cfg, user_consented=ok)
+
+    Primary source:
+      https://unit42.paloaltonetworks.com/model-context-protocol-attack-vectors/
+    """
+    from .mcp_spec.sampling_guard import SamplingGuardConfig
+
+    return SamplingGuardConfig(
+        max_sampling_requests_per_session=50,
+        max_tokens_per_sampling_request=4096,
+        forbid_persistent_instructions=True,
+        require_user_consent_per_request=True,
+    )
+
+
+UNIT42_MCP_SAMPLING_DEFAULTS = unit42_mcp_sampling_defaults()
+"""Eagerly-constructed sampling-guard defaults (Unit 42 2026-04-24)."""
+
+
+# -----------------------------------------------------------------------------
+# OpenClaw CVE-2026-41349 — agentic consent-bypass (frozen-policy preset)
+# -----------------------------------------------------------------------------
+
+
+def openclaw_cve_2026_41349_defaults(
+    base_policy: SecurityPolicy | None = None,
+) -> SecurityPolicy:
+    """Return a frozen ``SecurityPolicy`` guarding against CVE-2026-41349.
+
+    OpenClaw agentic consent-bypass disclosed 2026-04-23 (CVSS 8.8).
+    Exploit pattern: a prompt-injected agent rewrote its own
+    ``allowed_tools`` / ``denied_tools`` mid-session, then invoked a
+    tool the human operator had never approved. The ``config.patch``
+    family of tool names was the visible tell in the advisory.
+
+    This preset:
+
+    1. Accepts an optional base policy (or defaults to a conservative
+       template that forbids ``*config_patch*`` / ``*update_policy*``
+       / ``*mutate_policy*`` tool name patterns, which are the
+       advisory's named attack surface).
+    2. Returns a :meth:`~SecurityPolicy.freeze`-d deep copy.
+    3. The hosting ``Airlock`` dispatch re-verifies the digest before
+       every tool call (see ``core.py``). Any mutation of the policy
+       after this factory returns will raise
+       :class:`PolicyMutationError`.
+
+    Usage::
+
+        from agent_airlock import Airlock
+        from agent_airlock.policy_presets import openclaw_cve_2026_41349_defaults
+
+        @Airlock(policy=openclaw_cve_2026_41349_defaults())
+        def do_work(...): ...
+
+    Primary source:
+      https://www.thehackerwire.com/vulnerability/CVE-2026-41349/
+    """
+    policy = base_policy if base_policy is not None else SecurityPolicy()
+    # Refuse the three known attack-surface name classes unless the
+    # base policy already denied them (idempotent union).
+    canary_denies = {"*config_patch*", "*update_policy*", "*mutate_policy*"}
+    existing_denies = set(policy.denied_tools)
+    merged = SecurityPolicy(
+        allowed_tools=list(policy.allowed_tools),
+        denied_tools=sorted(existing_denies | canary_denies),
+        time_restrictions=dict(policy.time_restrictions),
+        rate_limits=dict(policy.rate_limits),
+        require_agent_id=policy.require_agent_id,
+        allowed_roles=list(policy.allowed_roles),
+        capability_policy=policy.capability_policy,
+    )
+    return merged.freeze()
+
+
+# -----------------------------------------------------------------------------
+# OpenClaw CVE-2026-41361 — IPv6 SSRF guard bypass (EndpointPolicy preset)
+# -----------------------------------------------------------------------------
+
+
+def openclaw_cve_2026_41361_ipv6_ssrf_defaults() -> dict[str, Any]:
+    """Return the IPv6-range guard and a callable check for CVE-2026-41361.
+
+    OpenClaw's IPv6 allow-list covered only ``::/128``, ``::1/128``,
+    ``fe80::/10``, and ``fc00::/7``, leaving IPv4-mapped, NAT64, 6to4,
+    and documentation ranges routable. Attackers used
+    ``::ffff:169.254.169.254`` (IPv4-mapped) to reach AWS IMDS
+    through a server that believed its IPv6 policy was complete.
+    CVSS 7.1, disclosed 2026-04-23.
+
+    Returned mapping::
+
+        cfg = openclaw_cve_2026_41361_ipv6_ssrf_defaults()
+        cfg["is_blocked"](addr)     # callable -> bool
+        cfg["networks"]             # tuple[(cidr, reason), ...]
+        cfg["source"]               # primary-source URL
+
+    Primary source:
+      https://www.redpacketsecurity.com/cve-alert-cve-2026-41361-openclaw-openclaw/
+    """
+    from .network import _BLOCKED_IPV6_NETWORKS, is_blocked_ipv6_range
+
+    return {
+        "is_blocked": is_blocked_ipv6_range,
+        "networks": _BLOCKED_IPV6_NETWORKS,
+        "source": ("https://www.redpacketsecurity.com/cve-alert-cve-2026-41361-openclaw-openclaw/"),
+    }
+
+
+# -----------------------------------------------------------------------------
+# ModelCapabilityTier — offensive-cyber-capable model restrictions (v0.5.5+)
+# -----------------------------------------------------------------------------
+
+
+def offensive_cyber_model_defaults(model_id: str) -> CapabilityPolicy:
+    """Return a ``CapabilityPolicy`` sized to the given model's tier.
+
+    Introduced in response to the Anthropic Claude Mythos Preview
+    disclosure (2026-04-23 InfoQ): frontier models can now chain
+    reconnaissance + exploit synthesis autonomously. For such models,
+    shell + network + unbounded filesystem writes should be denied
+    unless the caller explicitly opts in by layering their own
+    permissive policy on top.
+
+    Behavior by tier:
+
+    - ``STANDARD`` → empty restrictions (caller owns policy entirely).
+    - ``OFFENSIVE_CYBER_CAPABLE`` → deny ``PROCESS_SHELL``,
+      ``FILESYSTEM_WRITE``, ``FILESYSTEM_DELETE``, ``NETWORK_ARBITRARY``.
+    - ``ZERO_DAY_CAPABLE`` → same as above plus ``PROCESS_EXEC``,
+      ``NETWORK_HTTP`` / ``NETWORK_HTTPS`` denied — the model must
+      run inside a sandbox with no network at all.
+
+    Args:
+        model_id: The driving LLM's model identifier.
+
+    Returns:
+        A :class:`CapabilityPolicy` with ``model_tier`` stamped and
+        ``denied`` populated per the tier table.
+
+    Primary source:
+      https://www.infoq.com/news/2026/04/anthropic-claude-mythos/
+    """
+    from .capabilities import Capability, CapabilityPolicy, ModelCapabilityTier
+    from .integrations.model_tier import classify_model
+
+    tier = classify_model(model_id)
+
+    if tier is ModelCapabilityTier.STANDARD:
+        denied = Capability.NONE
+    elif tier is ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE:
+        denied = (
+            Capability.PROCESS_SHELL
+            | Capability.FILESYSTEM_WRITE
+            | Capability.FILESYSTEM_DELETE
+            | Capability.NETWORK_ARBITRARY
+        )
+    else:  # ZERO_DAY_CAPABLE
+        denied = (
+            Capability.PROCESS_SHELL
+            | Capability.PROCESS_EXEC
+            | Capability.FILESYSTEM_WRITE
+            | Capability.FILESYSTEM_DELETE
+            | Capability.NETWORK_ALL
+        )
+
+    return CapabilityPolicy(
+        granted=Capability.NONE,
+        denied=denied,
+        require_sandbox_for=Capability.DANGEROUS,
+        model_tier=tier,
+    )
+
+
+# -----------------------------------------------------------------------------
+# CVE-2026-5023 — codebase-mcp RepoMix OS command injection (v0.5.5+)
+# -----------------------------------------------------------------------------
+
+_CODEBASE_MCP_TOOL_NAMES = re.compile(r"^(?:get|save)(?:Remote)?Codebase$")
+
+# Shell metacharacters whose mere presence in an argument is a reject.
+# A subset of the StdioGuard metachars with ``&`` added because the
+# ShellJS/RepoMix call path flagged in the SentinelOne entry treated
+# ampersand as a shell separator.
+_CODEBASE_MCP_SHELL_METACHARS: tuple[str, ...] = (
+    ";",
+    "&&",
+    "||",
+    "&",
+    "|",
+    "`",
+    "$(",
+    "$",
+    "\n",
+    "\r",
+    ">",
+    "<",
+)
+
+
+class CodebaseMcpInjectionBlocked(AirlockError):
+    """Raised when a codebase-mcp-style tool carries shell-inject input."""
+
+
+def codebase_mcp_cve_2026_5023_defaults() -> dict[str, Any]:
+    """Return the codebase-mcp regression check for CVE-2026-5023.
+
+    The codebase-mcp package (npm ``codebase-mcp``) wraps the RepoMix
+    CLI. ``getCodebase`` / ``getRemoteCodebase`` / ``saveCodebase``
+    / ``saveRemoteCodebase`` shelled out with user-controlled paths,
+    yielding trivial OS command injection. SentinelOne catalogued
+    2026-04 (unpatched upstream as of 2026-04-24).
+
+    Contract::
+
+        cfg = codebase_mcp_cve_2026_5023_defaults()
+        cfg["check"](tool_name, arguments, allow_subprocess=False)
+        # Raises CodebaseMcpInjectionBlocked on shell metachars or
+        # names matching the four-name allowlist unless
+        # allow_subprocess=True is passed.
+
+    Primary source:
+      https://www.sentinelone.com/vulnerability-database/cve-2026-5023/
+    """
+
+    def check(
+        tool_name: str,
+        arguments: list[str] | tuple[str, ...],
+        *,
+        allow_subprocess: bool = False,
+    ) -> None:
+        if _CODEBASE_MCP_TOOL_NAMES.match(tool_name):
+            if not allow_subprocess:
+                raise CodebaseMcpInjectionBlocked(
+                    f"tool {tool_name!r} is in the CVE-2026-5023 "
+                    "codebase-mcp name allowlist and must be opted "
+                    "into via allow_subprocess=True"
+                )
+            for idx, arg in enumerate(arguments):
+                if not isinstance(arg, str):
+                    continue
+                for metachar in _CODEBASE_MCP_SHELL_METACHARS:
+                    if metachar in arg:
+                        raise CodebaseMcpInjectionBlocked(
+                            f"tool {tool_name!r} argv[{idx}]={arg!r} "
+                            f"contains shell metacharacter {metachar!r} "
+                            "— refusing to spawn subprocess "
+                            "(CVE-2026-5023 regression class)"
+                        )
+
+    return {
+        "check": check,
+        "tool_name_pattern": _CODEBASE_MCP_TOOL_NAMES.pattern,
+        "metachars": _CODEBASE_MCP_SHELL_METACHARS,
+        "source": ("https://www.sentinelone.com/vulnerability-database/cve-2026-5023/"),
+    }
+
+
+# -----------------------------------------------------------------------------
 # CVE-2026-33032 "MCPwn" — destructive-tool auth-middleware regression preset
 # -----------------------------------------------------------------------------
 
@@ -875,6 +1165,13 @@ __all__ = [
     "azure_mcp_cve_2026_32211_defaults",
     "AZURE_MCP_CVE_2026_32211_DEFAULTS",
     "ox_mcp_supply_chain_2026_04_defaults",
+    "unit42_mcp_sampling_defaults",
+    "UNIT42_MCP_SAMPLING_DEFAULTS",
+    "openclaw_cve_2026_41349_defaults",
+    "openclaw_cve_2026_41361_ipv6_ssrf_defaults",
+    "codebase_mcp_cve_2026_5023_defaults",
+    "CodebaseMcpInjectionBlocked",
+    "offensive_cyber_model_defaults",
     "mcpwn_cve_2026_33032_defaults",
     "mcpwn_cve_2026_33032_check",
     "is_destructive_tool",

@@ -74,7 +74,7 @@ from .honeypot import (
     should_use_honeypot,
 )
 from .network import NetworkBlockedError, network_airgap
-from .policy import PolicyViolation, SecurityPolicy, ViolationType
+from .policy import PolicyMutationError, PolicyViolation, SecurityPolicy, ViolationType
 from .sanitizer import sanitize_output
 from .self_heal import (
     AirlockResponse,
@@ -950,6 +950,31 @@ class Airlock:
             resolved_policy = self.policy
 
         if resolved_policy is not None:
+            # v0.5.5: verify frozen policy has not drifted mid-session
+            # (CVE-2026-41349 consent-bypass guard). Runs before check()
+            # so a mutated policy never reaches the allow/deny logic.
+            if resolved_policy.is_frozen():
+                try:
+                    resolved_policy.verify_frozen()
+                except PolicyMutationError as e:
+                    response = handle_policy_violation(
+                        func_name,
+                        policy_name="FrozenSecurityPolicy",
+                        reason=str(e),
+                    )
+                    self._safe_invoke_callback(
+                        self.config.on_blocked,
+                        "on_blocked",
+                        func_name,
+                        str(e),
+                        {
+                            "violation_type": "policy_mutation",
+                            "stored_digest": e.stored_digest,
+                            "actual_digest": e.actual_digest,
+                        },
+                    )
+                    return resolved_policy, response
+
             try:
                 resolved_policy.check(func_name)
             except PolicyViolation as e:
