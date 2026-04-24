@@ -1,0 +1,21 @@
+# v0.5.4 CI coverage-floor bump — maintainer-applied patch
+#
+# The v0.5.4 "honesty sweep" raised `[tool.coverage.report] fail_under`
+# from 80 → 82 in `pyproject.toml` to match the 82.11% lived floor
+# published by the README TEST-BADGE block. Local `pytest` runs already
+# pick this up.
+#
+# The companion change to `.github/workflows/ci.yml` requires the
+# `workflow` OAuth scope to push, so automated PRs cannot apply it.
+# A maintainer must open `.github/workflows/ci.yml` and change the one
+# line shown below by hand (line number may drift; match by context).
+#
+# Before:
+#           pytest tests/ -v --cov=agent_airlock --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+#
+# After:
+#           pytest tests/ -v --cov=agent_airlock --cov-report=xml --cov-report=term-missing --cov-fail-under=82
+#
+# Until applied, CI enforces a floor 2 points below `pyproject.toml`.
+# Drift is harmless but wasteful; apply the one-line change on the next
+# maintainer commit.
