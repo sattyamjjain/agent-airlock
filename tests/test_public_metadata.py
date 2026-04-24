@@ -21,7 +21,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import tomllib
+# tomllib is stdlib on 3.11+; fall back to the tomli extra for 3.10
+# (already a declared dependency via pyproject.toml:43).
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover
+    import tomli as tomllib
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = PROJECT_ROOT / "pyproject.toml"
