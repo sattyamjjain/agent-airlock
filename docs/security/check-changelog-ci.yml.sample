@@ -1,0 +1,26 @@
+# v0.5.5 CHANGELOG drift gate — maintainer-applied CI sample
+#
+# The v0.5.5 release added ``scripts/check_changelog.py``, which fails
+# the build when a released version (``X.Y.Z`` with no pre-release
+# marker) ships while ``CHANGELOG.md``'s ``[Unreleased]`` section
+# still has real entries — a common drift signature caught by the
+# 2026-04-24 live audit.
+#
+# Automated PRs from this repo lack the ``workflow`` OAuth scope
+# needed to write files under ``.github/workflows/``. A maintainer
+# must copy this job definition by hand into the existing
+# ``.github/workflows/ci.yml`` alongside ``test`` / ``lint`` /
+# ``security``.
+#
+# Below is the minimal job. Append it under ``jobs:`` in ci.yml.
+
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Post-release drift gate
+        run: python3 scripts/check_changelog.py

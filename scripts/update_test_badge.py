@@ -108,9 +108,11 @@ def _rewrite(readme_text: str, block: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true",
-                        help="exit non-zero if README drifts from the "
-                        "generator output")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="exit non-zero if README drifts from the generator output",
+    )
     args = parser.parse_args()
 
     tests, coverage = _run_pytest()
@@ -129,8 +131,7 @@ def main() -> int:
     if args.check:
         if current != updated:
             print(
-                "README TEST-BADGE block is stale. "
-                "Run `make test-badge` to refresh it.",
+                "README TEST-BADGE block is stale. Run `make test-badge` to refresh it.",
                 file=sys.stderr,
             )
             return 1

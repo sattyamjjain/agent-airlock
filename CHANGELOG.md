@@ -13,6 +13,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.5] - 2026-04-24 — "Sampling guard + fresh CVE presets"
+
+Six new runtime primitives and three named CVE preset factories —
+each opt-in, zero new runtime deps. Driven by 48 hours of April 2026
+industry signal: Unit 42's MCP sampling-attack catalog (2026-04-24),
+the OpenClaw twin disclosures (CVE-2026-41349 consent-bypass, CVSS
+8.8, and CVE-2026-41361 IPv6 SSRF, CVSS 7.1, both 2026-04-23), a
+still-unpatched codebase-mcp RCE (CVE-2026-5023), and InfoQ's
+Anthropic Mythos Preview write-up (2026-04-23) that names
+zero-day-capable frontier models.
+
+### Security presets
+
+- **Unit 42 MCP sampling-guard** — 2026-04-24 attack-vector catalog.
+  New module `agent_airlock.mcp_spec.sampling_guard` with
+  `SamplingGuardConfig`, `SamplingSessionState`, and
+  `audit_sampling_request()`. Three new errors:
+  `SamplingQuotaExceeded`, `SamplingInstructionPersistenceError`,
+  `SamplingConsentMissingError` (all top-level re-exports).
+  Preset: `unit42_mcp_sampling_defaults()`. Covers the three
+  documented patterns (quota exhaustion, persistent system-role
+  injection, session-sticky consent bypass). 12 new tests.
+  Source: <https://unit42.paloaltonetworks.com/model-context-protocol-attack-vectors/>.
+- **CVE-2026-41349 OpenClaw consent-bypass** (CVSS 8.8, 2026-04-23).
+  `SecurityPolicy.freeze()` / `verify_frozen()` + new
+  `PolicyMutationError`. A frozen policy carries a SHA-256 digest
+  over its public fields; the `Airlock` dispatch re-verifies before
+  every tool call so a prompt-injected agent rewriting
+  `allowed_tools` / `denied_tools` mid-session is caught before the
+  check runs. Preset `openclaw_cve_2026_41349_defaults()` returns a
+  frozen `SecurityPolicy` pre-seeded with the advisory's named
+  deny patterns (`*config_patch*`, `*update_policy*`,
+  `*mutate_policy*`). Fixture at
+  `tests/cves/fixtures/cve_2026_41349_consent_bypass.json`. 14 tests.
+  Source: <https://www.thehackerwire.com/vulnerability/CVE-2026-41349/>.
+- **CVE-2026-41361 OpenClaw IPv6 SSRF** (CVSS 7.1, 2026-04-23).
+  New `agent_airlock.network.is_blocked_ipv6_range()` covering eight
+  ranges — the four canonical (`::/128`, `::1/128`, `fe80::/10`,
+  `fc00::/7`) *and* the four the advisory flagged as routable past
+  OpenClaw's guard: `2001:db8::/32` (documentation), `::ffff:0:0/96`
+  (IPv4-mapped, the IMDS-through-v6 trick), `64:ff9b::/96` (NAT64),
+  `2002::/16` (6to4). Rolled into the existing `_is_private_ip()`
+  so every call site picks it up. Preset
+  `openclaw_cve_2026_41361_ipv6_ssrf_defaults()`. 17 tests.
+  Source: <https://www.redpacketsecurity.com/cve-alert-cve-2026-41361-openclaw-openclaw/>.
+- **CVE-2026-5023 codebase-mcp RepoMix RCE** (unpatched upstream).
+  Preset `codebase_mcp_cve_2026_5023_defaults()` refuses the four
+  handler names (`getCodebase` / `getRemoteCodebase` / `saveCodebase`
+  / `saveRemoteCodebase`) unless the caller opts into subprocess
+  spawning, and rejects any argument carrying shell metacharacters.
+  New `CodebaseMcpInjectionBlocked` error. Fixture +
+  14 tests. Source: <https://www.sentinelone.com/vulnerability-database/cve-2026-5023/>.
+
+### Model tiering
+
+- **`ModelCapabilityTier` enum + offensive-cyber preset.** Motivated
+  by the 2026-04-23 InfoQ coverage of Anthropic's Claude Mythos
+  Preview disclosure (autonomous zero-day discovery). New enum in
+  `agent_airlock.capabilities` with three tiers (`STANDARD`,
+  `OFFENSIVE_CYBER_CAPABLE`, `ZERO_DAY_CAPABLE`). New
+  `CapabilityPolicy.model_tier` field (optional, default `None`).
+  `agent_airlock.integrations.model_tier.classify_model()` maps
+  model IDs to tiers via a conservative prefix table seeded from the
+  disclosure + Unit 42 / MITRE CRT benchmarks. Preset
+  `offensive_cyber_model_defaults(model_id)` returns a tier-sized
+  `CapabilityPolicy` — `STANDARD` gets no restrictions, higher tiers
+  auto-deny `PROCESS_SHELL` / `FILESYSTEM_WRITE` / `NETWORK_*`. Doc
+  at `docs/presets/offensive-cyber-model-tier.md`. 16 tests.
+  Source: <https://www.infoq.com/news/2026/04/anthropic-claude-mythos/>.
+
+### Tooling
+
+- **CHANGELOG drift gate.** New `scripts/check_changelog.py` with
+  two modes: default (post-release drift — fail if
+  `pyproject.toml` is stamped with a released semver but
+  `[Unreleased]` still has entries) and `--release` (pre-tag — fail
+  if `[Unreleased]` is empty). `make check-changelog` and
+  `make check-changelog-release` targets. CI sample at
+  `docs/security/check-changelog-ci.yml.sample`
+  (automated PRs lack `workflow` scope). 15 tests.
+
+### Primary sources
+
+- Unit 42 MCP attack vectors (2026-04-24): <https://unit42.paloaltonetworks.com/model-context-protocol-attack-vectors/>
+- CVE-2026-41349 OpenClaw consent-bypass (2026-04-23): <https://www.thehackerwire.com/vulnerability/CVE-2026-41349/>
+- CVE-2026-41361 OpenClaw IPv6 SSRF (2026-04-23): <https://www.redpacketsecurity.com/cve-alert-cve-2026-41361-openclaw-openclaw/>
+- CVE-2026-5023 codebase-mcp (2026-04): <https://www.sentinelone.com/vulnerability-database/cve-2026-5023/>
+- Anthropic Claude Mythos Preview (2026-04-23 InfoQ): <https://www.infoq.com/news/2026/04/anthropic-claude-mythos/>
+- Anthropic April-23 postmortem (2026-04-23): <https://www.anthropic.com/engineering/april-23-postmortem>
+
+---
+
 ## [0.5.4] - 2026-04-24 — "Honesty sweep"
 
 Pure-hygiene release. No new runtime code, no new presets. Tagged

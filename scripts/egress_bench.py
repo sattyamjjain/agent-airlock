@@ -54,7 +54,9 @@ def _run_ox_stdio(fixture: dict) -> Row:
         StdioInjectionError,
         validate_stdio_command,
     )
-    from agent_airlock.policy_presets import stdio_guard_ox_defaults  # type: ignore[import-not-found]
+    from agent_airlock.policy_presets import (
+        stdio_guard_ox_defaults,  # type: ignore[import-not-found]
+    )
 
     cfg = stdio_guard_ox_defaults()
     blocked = unblocked = 0
@@ -156,10 +158,7 @@ def _emit_tap(rows: list[Row]) -> str:
     lines = [f"1..{len(rows)}"]
     for i, row in enumerate(rows, 1):
         if row.status == "pass":
-            lines.append(
-                f"ok {i} - {row.cve_id} "
-                f"(blocked {row.blocked}/{row.payload_count})"
-            )
+            lines.append(f"ok {i} - {row.cve_id} (blocked {row.blocked}/{row.payload_count})")
         elif row.status == "skip":
             lines.append(f"ok {i} - # SKIP {row.cve_id}: {row.reason}")
         else:
@@ -194,10 +193,7 @@ def _emit_md(rows: list[Row]) -> str:
         "|---|---|---|---|---|",
     ]
     for r in rows:
-        out.append(
-            f"| {r.cve_id} | {r.payload_count} | {r.blocked} | "
-            f"{r.unblocked} | {r.status} |"
-        )
+        out.append(f"| {r.cve_id} | {r.payload_count} | {r.blocked} | {r.unblocked} | {r.status} |")
     return "\n".join(out)
 
 

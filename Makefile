@@ -1,14 +1,16 @@
-.PHONY: help test coverage lint format bench test-badge egress-bench
+.PHONY: help test coverage lint format bench test-badge egress-bench check-changelog check-changelog-release
 
 help:
 	@echo "Targets:"
-	@echo "  test         Run the pytest suite (no coverage)"
-	@echo "  coverage     Run pytest with coverage"
-	@echo "  lint         Run ruff + mypy"
-	@echo "  format       Apply ruff format"
-	@echo "  bench        Run pytest-benchmark suite"
-	@echo "  test-badge   Regenerate the TEST-BADGE block in README.md"
-	@echo "  egress-bench Run the CVE egress-bench walker against tests/cves/fixtures/"
+	@echo "  test                    Run the pytest suite (no coverage)"
+	@echo "  coverage                Run pytest with coverage"
+	@echo "  lint                    Run ruff + mypy"
+	@echo "  format                  Apply ruff format"
+	@echo "  bench                   Run pytest-benchmark suite"
+	@echo "  test-badge              Regenerate the TEST-BADGE block in README.md"
+	@echo "  egress-bench            Run the CVE egress-bench walker against tests/cves/fixtures/"
+	@echo "  check-changelog         Post-release drift gate (fails if [Unreleased] has entries after a release)"
+	@echo "  check-changelog-release Pre-tag gate (fails if [Unreleased] is empty)"
 
 test:
 	python3 -m pytest tests/ -v --no-cov
@@ -33,3 +35,9 @@ test-badge:
 
 egress-bench:
 	python3 scripts/egress_bench.py --format tap
+
+check-changelog:
+	python3 scripts/check_changelog.py
+
+check-changelog-release:
+	python3 scripts/check_changelog.py --release

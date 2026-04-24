@@ -140,12 +140,79 @@ def _matches_endpoint_pattern(hostname: str, pattern: str) -> bool:
 
 
 def _is_private_ip(hostname: str) -> bool:
-    """Check if a hostname is a private/loopback/link-local IP."""
+    """Check if a hostname is a private/loopback/link-local IP.
+
+    v0.5.5: Also flags the comprehensive IPv6 range set from
+    :func:`is_blocked_ipv6_range` (CVE-2026-41361), so callers that
+    route through ``_is_private_ip`` automatically pick up IPv4-mapped,
+    NAT64, 6to4, and documentation ranges that ``ipaddress.is_private``
+    does not flag.
+    """
     try:
         ip = ipaddress.ip_address(hostname)
-        return ip.is_private or ip.is_loopback or ip.is_link_local
     except ValueError:
         return False
+    if ip.is_private or ip.is_loopback or ip.is_link_local:
+        return True
+    if isinstance(ip, ipaddress.IPv6Address) and is_blocked_ipv6_range(hostname):
+        return True
+    return False
+
+
+# -----------------------------------------------------------------------------
+# CVE-2026-41361 — OpenClaw IPv6 SSRF guard bypass (v0.5.5+)
+# -----------------------------------------------------------------------------
+#
+# Palo Alto / redpacketsecurity disclosed 2026-04-23: OpenClaw's IPv6
+# allow-list only covered ``::/128``, ``::1/128``, ``fe80::/10``, and
+# ``fc00::/7``, leaving IPv4-mapped (``::ffff:0:0/96``), NAT64
+# (``64:ff9b::/96``), 6to4 (``2002::/16``), and the documentation-only
+# range (``2001:db8::/32``) routable. Attackers abused
+# ``::ffff:169.254.169.254`` to hit AWS IMDS through a server that
+# thought its IPv6 allow-list was exhaustive. CVSS 7.1.
+#
+# Primary source:
+#   https://www.redpacketsecurity.com/cve-alert-cve-2026-41361-openclaw-openclaw/
+
+_BLOCKED_IPV6_NETWORKS: tuple[tuple[str, str], ...] = (
+    ("::/128", "unspecified / all-zeros"),
+    ("::1/128", "IPv6 loopback"),
+    ("fe80::/10", "IPv6 link-local"),
+    ("fc00::/7", "IPv6 unique-local (ULA)"),
+    ("2001:db8::/32", "IPv6 documentation range (must not be routable)"),
+    ("::ffff:0:0/96", "IPv4-mapped IPv6 (hides an IPv4 address)"),
+    ("64:ff9b::/96", "IPv6 NAT64 (wraps arbitrary IPv4)"),
+    ("2002::/16", "IPv6 6to4 (wraps arbitrary IPv4)"),
+)
+
+_BLOCKED_IPV6_NETS: list[tuple[ipaddress.IPv6Network, str]] = [
+    (ipaddress.IPv6Network(net, strict=False), reason) for net, reason in _BLOCKED_IPV6_NETWORKS
+]
+
+
+def is_blocked_ipv6_range(addr: str) -> bool:
+    """Whether ``addr`` falls inside one of the eight blocked IPv6 ranges.
+
+    Covers CVE-2026-41361 (OpenClaw IPv6 SSRF guard bypass, CVSS 7.1,
+    disclosed 2026-04-23). Returns ``False`` for:
+      - IPv4 addresses (use :func:`_is_private_ip` for those)
+      - unparseable strings
+      - public-routable IPv6 addresses
+
+    Args:
+        addr: IPv6 address in string form.
+
+    Returns:
+        True if ``addr`` is inside any of the eight blocked ranges,
+        otherwise False.
+    """
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return False
+    if not isinstance(ip, ipaddress.IPv6Address):
+        return False
+    return any(ip in net for net, _reason in _BLOCKED_IPV6_NETS)
 
 
 def validate_endpoint(url: str, policy: EndpointPolicy) -> None:

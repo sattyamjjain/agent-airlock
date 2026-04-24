@@ -10,7 +10,10 @@ Provides RBAC (Role-Based Access Control) for AI agents with:
 
 from __future__ import annotations
 
+import copy
 import fnmatch
+import hashlib
+import json
 import re
 import threading
 import time
@@ -21,10 +24,39 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from .exceptions import AirlockError
+
 if TYPE_CHECKING:
     from .capabilities import CapabilityPolicy
 
 logger = structlog.get_logger("agent-airlock.policy")
+
+
+class PolicyMutationError(AirlockError):
+    """Raised when a frozen policy's digest no longer matches its content.
+
+    Introduced 2026-04-24 to close CVE-2026-41349 (OpenClaw agentic
+    consent-bypass, CVSS 8.8). The attack mutated ``allowed_tools`` /
+    ``denied_tools`` mid-session to add a tool the user hadn't approved.
+    :meth:`SecurityPolicy.freeze` records a SHA-256 digest of the
+    policy's public fields; :meth:`SecurityPolicy.verify_frozen`
+    recomputes the digest and raises this error on drift.
+
+    Attributes:
+        stored_digest: Digest recorded by ``freeze()``.
+        actual_digest: Digest recomputed at verification time.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stored_digest: str | None = None,
+        actual_digest: str | None = None,
+    ) -> None:
+        self.stored_digest = stored_digest
+        self.actual_digest = actual_digest
+        super().__init__(message)
 
 
 class PolicyViolation(Exception):
@@ -304,6 +336,8 @@ class SecurityPolicy:
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
     _rate_limiters: dict[str, RateLimit] = field(default_factory=dict, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    # V0.5.5: SHA-256 digest recorded by freeze(); None means policy is mutable.
+    _frozen_digest: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Parse time restrictions and rate limits."""
@@ -489,6 +523,105 @@ class SecurityPolicy:
         self.check_rate_limit(tool_name)
 
         logger.debug("policy_check_passed", tool=tool_name)
+
+    # -- v0.5.5 policy freezing (CVE-2026-41349 consent-bypass guard) --
+
+    def _canonical_bytes(self) -> bytes:
+        """Serialize the public fields into stable bytes for digesting.
+
+        Internal caches (``_time_windows``, ``_rate_limiters``, ``_lock``,
+        ``_frozen_digest``) are deliberately excluded so the digest only
+        covers user-visible configuration. A ``CapabilityPolicy`` is
+        reduced to the integer values of its three ``Capability`` flags.
+        """
+        cap = self.capability_policy
+        cap_tuple: tuple[int, int, int] | None = None
+        if cap is not None:
+            cap_tuple = (
+                int(cap.granted.value),
+                int(cap.denied.value),
+                int(cap.require_sandbox_for.value),
+            )
+        payload = {
+            "allowed_tools": sorted(self.allowed_tools),
+            "denied_tools": sorted(self.denied_tools),
+            "time_restrictions": dict(sorted(self.time_restrictions.items())),
+            "rate_limits": dict(sorted(self.rate_limits.items())),
+            "require_agent_id": self.require_agent_id,
+            "allowed_roles": sorted(self.allowed_roles),
+            "capability_policy": cap_tuple,
+        }
+        return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    def _compute_policy_digest(self) -> str:
+        """Return the canonical SHA-256 hex digest of this policy's public fields."""
+        return hashlib.sha256(self._canonical_bytes()).hexdigest()
+
+    def freeze(self) -> SecurityPolicy:
+        """Return a frozen copy of this policy with a SHA-256 digest.
+
+        The returned instance will refuse :meth:`verify_frozen` checks
+        after any mutation of ``allowed_tools`` / ``denied_tools`` /
+        ``time_restrictions`` / ``rate_limits`` / ``require_agent_id``
+        / ``allowed_roles`` / ``capability_policy``. The original
+        instance is left unchanged.
+
+        Note: ``threading.Lock`` can't be deep-copied, so this method
+        rebuilds the ``SecurityPolicy`` from the public fields (which
+        is all the digest cares about) and gets a fresh lock / cache
+        for free via ``__post_init__``.
+
+        Idempotent: calling ``freeze()`` on an already-frozen policy
+        returns another fresh copy with the same canonical digest
+        (since the digest is excluded from the canonical-bytes payload).
+        """
+        frozen = SecurityPolicy(
+            allowed_tools=list(self.allowed_tools),
+            denied_tools=list(self.denied_tools),
+            time_restrictions=copy.deepcopy(self.time_restrictions),
+            rate_limits=copy.deepcopy(self.rate_limits),
+            require_agent_id=self.require_agent_id,
+            allowed_roles=list(self.allowed_roles),
+            capability_policy=self.capability_policy,
+        )
+        frozen._frozen_digest = frozen._compute_policy_digest()
+        return frozen
+
+    def is_frozen(self) -> bool:
+        """Whether this policy was produced by :meth:`freeze`."""
+        return self._frozen_digest is not None
+
+    def verify_frozen(self, digest: str | None = None) -> None:
+        """Raise :class:`PolicyMutationError` if the policy has drifted.
+
+        Args:
+            digest: Optional expected digest. If omitted, the digest
+                stored on ``freeze()`` is used. Callers that want
+                end-to-end custody (freeze in one process, verify in
+                another) should pass the explicit value.
+
+        Raises:
+            PolicyMutationError: If the policy has not been frozen
+                or if the stored / supplied digest does not match
+                the recomputed digest of the current public fields.
+        """
+        if self._frozen_digest is None:
+            raise PolicyMutationError(
+                "SecurityPolicy.verify_frozen() called on an unfrozen policy — "
+                "call freeze() first to lock the digest",
+                stored_digest=None,
+                actual_digest=None,
+            )
+        expected = digest if digest is not None else self._frozen_digest
+        actual = self._compute_policy_digest()
+        if actual != expected:
+            raise PolicyMutationError(
+                "SecurityPolicy has been mutated after freeze() — "
+                f"expected digest {expected!r}, got {actual!r} "
+                "(CVE-2026-41349 consent-bypass guard)",
+                stored_digest=expected,
+                actual_digest=actual,
+            )
 
 
 # Predefined policies for common use cases

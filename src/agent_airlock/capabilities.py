@@ -27,7 +27,7 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Flag, auto
+from enum import Enum, Flag, auto
 from typing import Any, TypeVar
 
 import structlog
@@ -141,6 +141,36 @@ class CapabilityDeniedError(Exception):
         super().__init__(message)
 
 
+class ModelCapabilityTier(str, Enum):
+    """Tiered classification of the LLM a tool is being driven by (v0.5.5+).
+
+    Introduced in response to the Anthropic Claude Mythos Preview
+    disclosure (2026-04-23 InfoQ coverage), which documented autonomous
+    zero-day discovery capabilities in frontier models. Tiers let a
+    caller pair the tool's capability requirements with the model's
+    actual risk profile.
+
+    Ordering (ascending risk):
+
+    - ``STANDARD``: older / smaller models (GPT-4, Claude 3 Sonnet,
+      Llama 2, Gemini Pro). No extra restrictions layered on.
+    - ``OFFENSIVE_CYBER_CAPABLE``: frontier models demonstrated by
+      recent benchmarks (Unit 42, MITRE CRT) to reliably chain
+      reconnaissance + privilege-escalation + exploit-synthesis
+      prompts. Claude Opus 4.x, GPT-5-2-Codex, and similar.
+    - ``ZERO_DAY_CAPABLE``: models that have publicly demonstrated
+      autonomous zero-day discovery. Currently seeded from
+      Anthropic's Claude Mythos Preview disclosure.
+
+    Source:
+      https://www.infoq.com/news/2026/04/anthropic-claude-mythos/
+    """
+
+    STANDARD = "standard"
+    OFFENSIVE_CYBER_CAPABLE = "offensive_cyber_capable"
+    ZERO_DAY_CAPABLE = "zero_day_capable"
+
+
 @dataclass
 class CapabilityPolicy:
     """Policy for capability gating.
@@ -149,6 +179,11 @@ class CapabilityPolicy:
         granted: Capabilities that are explicitly granted.
         denied: Capabilities that are explicitly denied (takes precedence over granted).
         require_sandbox_for: Capabilities that require sandbox execution.
+        model_tier: V0.5.5 - Optional hint about the driving LLM's tier.
+            Used by ``offensive_cyber_model_defaults()`` to decide
+            whether extra restrictions apply. ``None`` means the caller
+            has not classified the model, which is treated as
+            ``STANDARD`` for enforcement purposes.
 
     Examples:
         # Allow filesystem read and HTTPS, deny shell execution
@@ -167,6 +202,7 @@ class CapabilityPolicy:
     granted: Capability = Capability.NONE
     denied: Capability = Capability.NONE
     require_sandbox_for: Capability = field(default_factory=lambda: Capability.DANGEROUS)
+    model_tier: ModelCapabilityTier | None = None
 
     def check(self, required: Capability, tool_name: str) -> None:
         """Check if required capabilities are allowed.
