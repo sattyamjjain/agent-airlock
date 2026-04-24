@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.5.3"
+version = "0.5.4"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -88,10 +88,10 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sattyamjain/agent-airlock"
-Documentation = "https://github.com/sattyamjain/agent-airlock#readme"
-Repository = "https://github.com/sattyamjain/agent-airlock"
-Issues = "https://github.com/sattyamjain/agent-airlock/issues"
+Homepage = "https://github.com/sattyamjjain/agent-airlock"
+Documentation = "https://github.com/sattyamjjain/agent-airlock#readme"
+Repository = "https://github.com/sattyamjjain/agent-airlock"
+Issues = "https://github.com/sattyamjjain/agent-airlock/issues"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -203,7 +203,7 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
 ]
-fail_under = 80
+fail_under = 82
 show_missing = true
 skip_covered = false
 

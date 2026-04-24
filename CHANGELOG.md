@@ -13,6 +13,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.4] - 2026-04-24 — "Honesty sweep"
+
+Pure-hygiene release. No new runtime code, no new presets. Tagged
+separately from v0.5.5 ("sampling guard + fresh CVE presets") so the
+release notes stay honest about what each tag delivers.
+
+### Honesty fixes
+
+- **PyPI landing-page links were 404.** `pyproject.toml [project.urls]`
+  used `sattyamjain/agent-airlock` (single-``j``) on Homepage,
+  Documentation, Repository, and Issues. Real repo is
+  `sattyamjjain/agent-airlock`. All four URLs corrected.
+- **README `Performance` table contradicted the `TEST-BADGE` block.**
+  The auto-regenerated badge (top of README, owned by
+  `scripts/update_test_badge.py` since v0.5.3) read `1,540 tests ·
+  82.11%`, while four lines below a hand-maintained row still claimed
+  `1,157 passing · 79%+`. The hand-maintained rows are deleted; the
+  badge block is now the single source of truth for test count and
+  coverage. The remaining table tracks latency/surface-area only.
+  Lines-of-code row bumped `~25,900 → ~27,400` to match current tree.
+- **Coverage floor lagged lived coverage.**
+  `[tool.coverage.report] fail_under` raised from `80` to `82` to
+  match the 82.11% lived floor reported by the TEST-BADGE block.
+  Prevents silent coverage regression below the level v0.5.3
+  already ships at for local `pytest` invocations. The matching
+  `.github/workflows/ci.yml --cov-fail-under` bump is delivered as
+  `docs/security/ci-coverage-floor.yml.sample` — automated PRs lack
+  the `workflow` OAuth scope needed to write `.github/workflows/*`,
+  so a maintainer must apply that one-line change by hand on the
+  next commit.
+
+### Tests
+
+- New `tests/test_public_metadata.py` (3 tests) freezes the above
+  fixes as regressions:
+  - `test_project_urls_point_to_canonical_repo` — every URL in
+    `[project.urls]` must contain the canonical `sattyamjjain` slug.
+  - `test_readme_no_contradicting_test_count` — the stale
+    `1,157 passing` string must not reappear in `README.md`.
+  - `test_python_version_matches_pyproject` — sanity guard: the
+    running interpreter meets the declared `requires-python` floor.
+
+### Primary sources
+
+- Prior release notes confirming 1,540 tests / 82.11%:
+  <https://github.com/sattyamjjain/agent-airlock/releases/tag/v0.5.3>
+- Original typo, inherited from v0.5.3 README:
+  <https://github.com/sattyamjjain/agent-airlock/blob/v0.5.3/pyproject.toml#L91-L94>
+
+---
+
 ## [0.5.3] - 2026-04-21 — "MCP supply-chain response"
 
 Driven by the OX Security "Mother of All AI Supply Chains" dossier
