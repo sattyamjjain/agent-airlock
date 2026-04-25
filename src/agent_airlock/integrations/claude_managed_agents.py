@@ -157,14 +157,16 @@ def _emit_otel_span(
     except Exception:  # pragma: no cover
         return
     allowed_count = len(list(allowed))
-    try:
+    # Span emission is best-effort observability — a misconfigured OTel
+    # provider must never break the audit path. ``contextlib.suppress``
+    # makes the silent-failure intent explicit (B110 nosec).
+    import contextlib
+
+    with contextlib.suppress(Exception):  # pragma: no cover
         ctx = start_span("airlock.managed_agents.invoke", tool_name)
         ctx.set_attribute("airlock.managed_agents.session_id", session_id)
         ctx.set_attribute("airlock.managed_agents.allowed_count", allowed_count)
         end_span(ctx)
-    except Exception:  # pragma: no cover
-        # The span is observational; never let it break the audit path.
-        pass
 
 
 def audit_managed_agent_invocation(

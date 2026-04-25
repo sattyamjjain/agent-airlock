@@ -47,9 +47,10 @@ logger = structlog.get_logger("agent-airlock.mcp_spec.bind_address_guard")
 # Public-bind aliases. ``0.0.0.0`` is "any IPv4"; ``::`` and its
 # bracketed / expanded forms are "any IPv6". A handler binding to
 # any of these accepts connections on every NIC the host has.
+# nosec B104 — these are blocklisted strings to *reject*, not bind targets.
 _PUBLIC_BIND_LITERALS: frozenset[str] = frozenset(
     {
-        "0.0.0.0",
+        "0.0.0.0",  # nosec B104 — blocklisted, never used as a bind address
         "::",
         "[::]",
         "0:0:0:0:0:0:0:0",
