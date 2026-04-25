@@ -13,6 +13,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.6.1] - 2026-04-25 — "v0.5.6 doc backfill + archived-MCP wheel-packaging fix"
+
+Doc-and-fix patch on top of v0.5.6 — no new product surfaces. Two
+material changes:
+
+### Bug fix
+
+- **Archived-MCP preset shipped with empty block-list on PyPI.**
+  v0.5.6 loaded the seed list from
+  ``tests/cves/fixtures/archived_mcp_servers_2026_04.json``, which
+  is not packaged in the wheel. On a clean ``pip install
+  agent-airlock==0.5.6``, the preset's ``check()`` returned silently
+  for every package — including the Puppeteer / Brave Search /
+  EverArt seeds. v0.5.6.1 inlines the three-package seed list as
+  ``_ARCHIVED_MCP_DEFAULT_BLOCKLIST`` in
+  ``src/agent_airlock/policy_presets.py`` so it survives wheel
+  packaging. The JSON fixture stays under ``tests/`` for parser /
+  schema regression tests only. Two new tests (``TestWheelPackagingRegression``)
+  freeze the fix: one asserts the default block-list is non-empty,
+  one runs the preset from a directory with no ``tests/`` subtree to
+  simulate the wheel-only environment.
+
+### Doc backfill (per the v0.5.6 wrap-up checklist)
+
+- ``docs/integrations/managed-agents.md`` — Claude Managed Agents
+  audit hook integration guide. Beta-header pinning, tool-list
+  intersection, SSE redaction, OTel span emission, ``task_budget``
+  composition.
+- ``docs/cves/cve-2026-39884.md`` — flux159/mcp-server-kubernetes
+  argv flag-injection. Why it's a different class than CVE-2026-5023
+  (no shell metacharacters, just space-injected flags), how the
+  preset blocks it, direct ``enforce_argv_array`` usage.
+- ``docs/cves/cve-2026-23744.md`` — MCPJam Inspector unauthenticated
+  public bind. Public-bind aliases (``0.0.0.0`` / ``::`` / ``[::]``
+  / ``0:0:0:0:0:0:0:0``), explicit-opt-in path, exact CVE shape.
+- ``docs/cli/egress-bench.md`` — the new ``--since YYYY-MM-DD`` flag
+  and the ``disclosed_at`` fixture requirement.
+- ``releases/v0.5.6.md`` — distilled release note for the v0.5.6 tag,
+  with a known-bug callout pointing at this patch release.
+
+### Stats
+
+- Tests: **1,696 → 1,698** (+2 packaging-regression tests)
+- Coverage: **82.66%** (unchanged)
+- No new runtime deps.
+
+### Primary sources
+
+- v0.5.6 release tag: <https://github.com/sattyamjjain/agent-airlock/releases/tag/v0.5.6>
+- Archived-MCP advisory class: <https://github.com/modelcontextprotocol/servers/issues/3662>
+
+---
+
 ## [0.5.6] - 2026-04-25 — "Managed Agents + fresh MCP CVE presets"
 
 Six new opt-in primitives shipped in 24 hours of fresh April 2026 industry signal:
