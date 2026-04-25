@@ -56,6 +56,7 @@ Primary sources (retrieved 2026-04-18):
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from .exceptions import AirlockError
@@ -911,6 +912,271 @@ def codebase_mcp_cve_2026_5023_defaults() -> dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
+# Archived MCP server advisory gate (v0.5.6+, GitHub issue #3662 class)
+# -----------------------------------------------------------------------------
+
+# Default block-list seeded from the 2026-04 fixture. Loaded lazily so
+# the import cost only lands when callers actually use the preset.
+_ARCHIVED_MCP_FIXTURE_PATH = "tests/cves/fixtures/archived_mcp_servers_2026_04.json"
+
+
+class ArchivedMcpServerBlocked(AirlockError):
+    """Raised when a tool's package_origin is on the archived block-list."""
+
+
+def archived_mcp_server_advisory_defaults(
+    block_list: Iterable[dict[str, Any]] | None = None,
+    allow_list: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Fail-closed gate for tool manifests pointing at archived MCP packages.
+
+    Motivation: GitHub issue #3662 (2026-04) documented that the
+    archived ``@modelcontextprotocol/server-puppeteer`` package was
+    still being installed ~91k times/month, with advisory text
+    covering SSRF, indirect prompt injection, and Chromium sandbox
+    bypass — none of which would ever be patched (repo archived).
+
+    Args:
+        block_list: Iterable of package metadata dicts, each at minimum
+            with a ``"package"`` key. If ``None``, the default
+            shipped fixture is loaded.
+        allow_list: Package names that bypass the block check. Use
+            sparingly; intended for in-house forks of an archived
+            package where the archive text doesn't apply.
+
+    Returns:
+        A mapping with ``check(tool_manifest_dict)`` callable, the
+        compiled block-set, and the primary advisory URL.
+
+    Usage::
+
+        cfg = archived_mcp_server_advisory_defaults()
+        cfg["check"]({"package_origin": "@modelcontextprotocol/server-puppeteer"})
+        # Raises ArchivedMcpServerBlocked.
+
+    Primary source:
+      https://github.com/modelcontextprotocol/servers/issues/3662
+    """
+    import json
+    from pathlib import Path
+
+    if block_list is None:
+        # Look up via repo root — the fixture is always under tests/.
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        fixture = repo_root / _ARCHIVED_MCP_FIXTURE_PATH
+        if fixture.exists():
+            data = json.loads(fixture.read_text(encoding="utf-8"))
+            block_list = data.get("packages") or []
+        else:
+            block_list = []
+
+    block_map: dict[str, dict[str, Any]] = {}
+    for entry in block_list or []:
+        if isinstance(entry, dict) and "package" in entry:
+            block_map[str(entry["package"])] = entry
+
+    allow_set = frozenset(allow_list)
+
+    def check(tool_manifest: dict[str, Any]) -> None:
+        origin = tool_manifest.get("package_origin")
+        if not origin:
+            return
+        if origin in allow_set:
+            return
+        if origin in block_map:
+            details = block_map[origin]
+            raise ArchivedMcpServerBlocked(
+                f"tool manifest references archived MCP package "
+                f"{origin!r} (archived {details.get('archived_at', '?')}, "
+                f"~{details.get('monthly_downloads', '?')} downloads/month, "
+                f"advisory: {details.get('advisory_url', '?')})"
+            )
+
+    return {
+        "check": check,
+        "block_list": tuple(block_map.keys()),
+        "allow_list": allow_set,
+        "source": "https://github.com/modelcontextprotocol/servers/issues/3662",
+    }
+
+
+# -----------------------------------------------------------------------------
+# Claude Managed Agents safe defaults (v0.5.6+, 2026-04-08 launch)
+# -----------------------------------------------------------------------------
+
+
+def claude_managed_agents_safe_defaults() -> dict[str, Any]:
+    """Conservative defaults for the Claude Managed Agents harness.
+
+    Anthropic launched Managed Agents to public beta on 2026-04-08
+    (used by Notion, Rakuten, Asana, Vibecode, Sentry; $0.08/runtime-
+    hour). The runtime ships a curated tool surface — ``read_file``,
+    ``bash``, ``web_browse``, ``code_execute`` — and streams raw tool
+    inputs/outputs over Server-Sent Events.
+
+    This preset returns a :class:`ManagedAgentsAuditConfig` with:
+
+    - ``allowed_tools`` = empty (no managed-agent tool calls until
+      caller explicitly opts in by listing tools).
+    - ``require_beta_header`` = True
+    - ``toolset_version`` = pinned at :data:`AGENT_TOOLSET_VERSION`
+    - ``redact_sse_payloads`` = True
+
+    The mapping returned also includes the harness tool list so
+    callers can build their own intersection::
+
+        cfg = claude_managed_agents_safe_defaults()
+        audit = cfg["audit_config"]
+        # Opt in to read-only operations
+        audit.allowed_tools = ("read_file", "web_browse")
+
+    Primary sources:
+      https://claude.com/blog/claude-managed-agents
+      https://platform.claude.com/docs/en/managed-agents/overview
+    """
+    from .integrations.claude_managed_agents import (
+        AGENT_TOOLSET_VERSION,
+        DEFAULT_HARNESS_TOOLS,
+        MANAGED_AGENTS_BETA_HEADER,
+        ManagedAgentsAuditConfig,
+    )
+
+    return {
+        "audit_config": ManagedAgentsAuditConfig(
+            allowed_tools=(),
+            require_beta_header=True,
+            toolset_version=AGENT_TOOLSET_VERSION,
+            redact_sse_payloads=True,
+        ),
+        "harness_tools": DEFAULT_HARNESS_TOOLS,
+        "beta_header": MANAGED_AGENTS_BETA_HEADER,
+        "toolset_version": AGENT_TOOLSET_VERSION,
+        "source": "https://claude.com/blog/claude-managed-agents",
+    }
+
+
+# -----------------------------------------------------------------------------
+# CVE-2026-23744 — MCPJam Inspector bind-address regression (v0.5.6+)
+# -----------------------------------------------------------------------------
+
+_DEV_SERVER_TOOL_NAME_PATTERN = re.compile(r"(?i)^(?:mcpjam|inspector|dev[-_ ]?server|studio)\b")
+
+
+def mcpjam_cve_2026_23744_defaults() -> dict[str, Any]:
+    """Return the bind-address guard for CVE-2026-23744 (MCPJam ≤ 1.4.2).
+
+    GHSA-232v-j27c-5pp6 (CVSS 9.8) — MCPJam Inspector ≤ 1.4.2 bound
+    to ``0.0.0.0`` by default with no auth. Patched in 1.4.3. The
+    bug class generalises to any local MCP dev server: bind to a
+    public address without auth = LAN-reachable RCE.
+
+    Contract::
+
+        cfg = mcpjam_cve_2026_23744_defaults()
+        cfg["check"](tool_name, addr, auth_required=True)
+
+    The ``check`` callable matches ``tool_name`` against the dev-server
+    name pattern (``mcpjam`` / ``inspector`` / ``dev-server`` /
+    ``studio``) and validates ``addr`` against the bind-address guard.
+    Tools outside the pattern are unaffected — this preset is
+    deliberately scoped to known-dev-server tool name shapes.
+
+    Primary source:
+      https://github.com/advisories/GHSA-232v-j27c-5pp6
+    """
+    from .mcp_spec.bind_address_guard import (
+        BindAddressGuardConfig,
+        validate_bind_address,
+    )
+
+    def check(
+        tool_name: str,
+        addr: str,
+        *,
+        auth_required: bool = False,
+        allow_public_bind: bool = False,
+    ) -> None:
+        if not _DEV_SERVER_TOOL_NAME_PATTERN.match(tool_name or ""):
+            return
+        cfg = BindAddressGuardConfig(
+            allow_public_bind=allow_public_bind,
+            auth_required=auth_required,
+        )
+        validate_bind_address(addr, cfg)
+
+    return {
+        "check": check,
+        "tool_name_pattern": _DEV_SERVER_TOOL_NAME_PATTERN.pattern,
+        "source": ("https://github.com/advisories/GHSA-232v-j27c-5pp6"),
+    }
+
+
+# -----------------------------------------------------------------------------
+# CVE-2026-39884 — flux159/mcp-server-kubernetes argv flag-injection (v0.5.6+)
+# -----------------------------------------------------------------------------
+
+_KUBECTL_PORT_FORWARD_PATTERN = re.compile(r"(?i)port_?forward")
+
+# Field names the SentinelOne advisory called out as injection-prone
+# in ``port_forward``/kubectl handlers. The CVE-2026-39884 fix in
+# ``mcp-server-kubernetes`` 3.5.0 added per-field validation for
+# exactly these.
+_KUBECTL_INJECTION_PRONE_FIELDS: tuple[str, ...] = (
+    "namespace",
+    "resourceType",
+    "resourceName",
+    "localPort",
+    "targetPort",
+)
+
+
+def flux159_mcp_kubernetes_cve_2026_39884_defaults() -> dict[str, Any]:
+    """Return the kubectl argv-injection check for CVE-2026-39884.
+
+    The MCP server ``flux159/mcp-server-kubernetes`` (≤ 3.4.x) built
+    kubectl invocations by string-concatenating user-controlled fields
+    like ``localPort`` into a single argv element. A value such as
+    ``"8080 --kubeconfig=/etc/shadow"`` thereby became extra flags
+    rather than data. SentinelOne disclosed 2026-04-14; fixed in 3.5.0.
+
+    Different injection class than v0.5.5's CVE-2026-5023 codebase-mcp
+    preset: that one rejects shell metacharacters; this one rejects
+    space-injected flag concatenation with no metacharacter present.
+
+    Contract::
+
+        cfg = flux159_mcp_kubernetes_cve_2026_39884_defaults()
+        cfg["check"](tool_name, fields_dict)
+        # Raises ArgvStringConcatenationError if any injection-prone
+        # field carries a value that would survive shlex.quote unwrapped.
+
+    Primary source:
+      https://www.sentinelone.com/vulnerability-database/cve-2026-39884/
+    """
+    from .mcp_spec.argv_guard import (
+        ArgvStringConcatenationError,
+        enforce_argv_array,
+    )
+
+    def check(tool_name: str, fields: dict[str, Any]) -> None:
+        if not _KUBECTL_PORT_FORWARD_PATTERN.search(tool_name or ""):
+            return
+        ordered_fields = [f for f in _KUBECTL_INJECTION_PRONE_FIELDS if f in fields]
+        argv = [str(fields[f]) for f in ordered_fields]
+        try:
+            enforce_argv_array(argv, field_names=ordered_fields)
+        except ArgvStringConcatenationError:
+            raise
+
+    return {
+        "check": check,
+        "tool_name_pattern": _KUBECTL_PORT_FORWARD_PATTERN.pattern,
+        "injection_prone_fields": _KUBECTL_INJECTION_PRONE_FIELDS,
+        "source": ("https://www.sentinelone.com/vulnerability-database/cve-2026-39884/"),
+    }
+
+
+# -----------------------------------------------------------------------------
 # CVE-2026-33032 "MCPwn" — destructive-tool auth-middleware regression preset
 # -----------------------------------------------------------------------------
 
@@ -1171,6 +1437,11 @@ __all__ = [
     "openclaw_cve_2026_41361_ipv6_ssrf_defaults",
     "codebase_mcp_cve_2026_5023_defaults",
     "CodebaseMcpInjectionBlocked",
+    "flux159_mcp_kubernetes_cve_2026_39884_defaults",
+    "mcpjam_cve_2026_23744_defaults",
+    "claude_managed_agents_safe_defaults",
+    "archived_mcp_server_advisory_defaults",
+    "ArchivedMcpServerBlocked",
     "offensive_cyber_model_defaults",
     "mcpwn_cve_2026_33032_defaults",
     "mcpwn_cve_2026_33032_check",

@@ -1,0 +1,48 @@
+{
+  "advisory_class": "archived-but-still-published MCP server packages",
+  "disclosed_at": "2026-04",
+  "description": "MCP server packages that have been archived upstream but remain installable from public registries continue to receive ~tens-of-thousands of downloads per month and ship with un-fixable advisories. The Puppeteer server is the canonical exemplar — repository archived, advisory 3662 documents SSRF + indirect prompt injection + Chromium sandbox bypass, ~91k npm downloads/month at the time of disclosure.",
+  "primary_source": "https://github.com/modelcontextprotocol/servers/issues/3662",
+  "airlock_preset": "archived_mcp_server_advisory_defaults",
+  "packages": [
+    {
+      "package": "@modelcontextprotocol/server-puppeteer",
+      "registry": "npm",
+      "repo_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
+      "archived_at": "2026-04",
+      "monthly_downloads": 91000,
+      "disclosed_classes": [
+        "ssrf",
+        "indirect_prompt_injection",
+        "chromium_sandbox_bypass"
+      ],
+      "advisory_url": "https://github.com/modelcontextprotocol/servers/issues/3662",
+      "disclosed_at": "2026-04"
+    },
+    {
+      "package": "@modelcontextprotocol/server-brave-search",
+      "registry": "npm",
+      "repo_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
+      "archived_at": "2026-03",
+      "monthly_downloads": 38000,
+      "disclosed_classes": [
+        "credential_passthrough",
+        "indirect_prompt_injection"
+      ],
+      "advisory_url": "https://github.com/modelcontextprotocol/servers/issues/3201",
+      "disclosed_at": "2026-03"
+    },
+    {
+      "package": "@modelcontextprotocol/server-everart",
+      "registry": "npm",
+      "repo_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/everart",
+      "archived_at": "2026-02",
+      "monthly_downloads": 12000,
+      "disclosed_classes": [
+        "ssrf"
+      ],
+      "advisory_url": "https://github.com/modelcontextprotocol/servers/issues/2812",
+      "disclosed_at": "2026-02"
+    }
+  ]
+}

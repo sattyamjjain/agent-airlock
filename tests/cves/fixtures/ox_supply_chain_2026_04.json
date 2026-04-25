@@ -1,5 +1,6 @@
 {
-  "$schema": "OX Security 2026-04-20 'Mother of All AI Supply Chains' dossier. 10 CVEs covered by the umbrella preset ox_mcp_supply_chain_2026_04_defaults(). Each entry carries a primary-source URL. Public disclosure — no secrets.",
+  "$schema": "OX Security 2026-04-20 'Mother of All AI Supply Chains' dossier. 10 CVEs covered by the umbrella preset ox_mcp_supply_chain_2026_04_defaults(). Each entry carries a primary-source URL. Public disclosure \u2014 no secrets.",
+  "disclosed_at": "2026-04-20",
   "primary_source": "https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20",
   "coverage_tag": "CVE-2025-65720 + CVE-2026-30615..30625 + CVE-2026-26015 + CVE-2026-33224 + CVE-2026-40933",
   "cves": [
@@ -7,61 +8,71 @@
       "id": "CVE-2025-65720",
       "component": "mcp-python-sdk",
       "class": "path_traversal",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2025-65720 + OX dossier §1"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2025-65720 + OX dossier \u00a71",
+      "disclosed_at": "2025-12-15"
     },
     {
       "id": "CVE-2026-30615",
       "component": "Anthropic Claude Desktop MCP",
       "class": "tool_definition_tamper",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30615 + OX dossier §2 — Anthropic declined to patch"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30615 + OX dossier \u00a72 \u2014 Anthropic declined to patch",
+      "disclosed_at": "2026-04-20"
     },
     {
       "id": "CVE-2026-30617",
       "component": "Anthropic Claude Desktop MCP",
       "class": "tool_definition_tamper",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30617 + OX dossier §2"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30617 + OX dossier \u00a72",
+      "disclosed_at": "2026-04-20"
     },
     {
       "id": "CVE-2026-30618",
       "component": "Anthropic Claude Desktop MCP",
       "class": "tool_definition_tamper",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30618 + OX dossier §2 — Anthropic declined to patch"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30618 + OX dossier \u00a72 \u2014 Anthropic declined to patch",
+      "disclosed_at": "2026-04-20"
     },
     {
       "id": "CVE-2026-30623",
       "component": "Anthropic Claude Desktop MCP",
       "class": "tool_definition_tamper",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30623 + OX dossier §2 — Anthropic declined to patch"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30623 + OX dossier \u00a72 \u2014 Anthropic declined to patch",
+      "disclosed_at": "2026-04-20"
     },
     {
       "id": "CVE-2026-30624",
       "component": "Anthropic Claude Desktop MCP",
       "class": "tool_definition_tamper",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30624 + OX dossier §2 — Anthropic declined to patch"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30624 + OX dossier \u00a72 \u2014 Anthropic declined to patch",
+      "disclosed_at": "2026-04-20"
     },
     {
       "id": "CVE-2026-30625",
       "component": "Anthropic Claude Desktop MCP",
       "class": "tool_definition_tamper",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30625 + OX dossier §2"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30625 + OX dossier \u00a72",
+      "disclosed_at": "2026-04-20"
     },
     {
       "id": "CVE-2026-26015",
       "component": "OpenAI MCP Bridge",
       "class": "mcp_bridge_ssrf",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-26015 + OX dossier §3"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-26015 + OX dossier \u00a73",
+      "disclosed_at": "2026-04-20"
     },
     {
       "id": "CVE-2026-33224",
       "component": "LlamaIndex MCP adapter",
       "class": "unsafe_deserialization",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-33224 + OX dossier §4"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-33224 + OX dossier \u00a74",
+      "disclosed_at": "2026-04-20"
     },
     {
       "id": "CVE-2026-40933",
       "component": "Semantic Kernel MCP connector",
       "class": "auth_header_leak",
-      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-40933 + OX dossier §5"
+      "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-40933 + OX dossier \u00a75",
+      "disclosed_at": "2026-04-20"
     }
   ]
 }

@@ -1,5 +1,6 @@
 {
   "$schema": "documented destructive MCP tool names from CVE-2026-33032 (nginx-ui MCPwn). Missing AuthRequired() middleware on /mcp_message meant all 12 were invokable with zero credentials. CVSS 9.8, actively exploited April 2026.",
+  "disclosed_at": "2026-04-09",
   "references": {
     "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-33032",
     "rapid7": "https://www.rapid7.com/blog/post/etr-cve-2026-33032-nginx-ui-missing-mcp-authentication/",

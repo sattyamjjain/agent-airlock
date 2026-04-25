@@ -1,0 +1,42 @@
+{
+  "cve": "CVE-2026-39884",
+  "disclosed_at": "2026-04-14",
+  "product": "flux159/mcp-server-kubernetes",
+  "fixed_in": "3.5.0",
+  "description": "Argument-injection RCE via flag concatenation in port_forward / kubectl handlers. User-controlled fields like localPort, targetPort, namespace were string-concatenated into a single argv element passed to kubectl, allowing extra-flag injection without any shell metacharacter.",
+  "primary_source": "https://www.sentinelone.com/vulnerability-database/cve-2026-39884/",
+  "secondary_sources": [
+    "https://nvd.nist.gov/vuln/detail/CVE-2026-39884"
+  ],
+  "airlock_preset": "flux159_mcp_kubernetes_cve_2026_39884_defaults",
+  "payloads": [
+    {
+      "name": "kubeconfig_takeover_via_localPort",
+      "field": "localPort",
+      "value": "8080 --kubeconfig=/etc/shadow",
+      "disclosed_at": "2026-04-14",
+      "expected": "blocked"
+    },
+    {
+      "name": "namespace_flag_injection",
+      "field": "namespace",
+      "value": "default --as=system:admin",
+      "disclosed_at": "2026-04-14",
+      "expected": "blocked"
+    },
+    {
+      "name": "resourceType_dash_n_namespace_swap",
+      "field": "resourceType",
+      "value": "pod -n kube-system",
+      "disclosed_at": "2026-04-14",
+      "expected": "blocked"
+    },
+    {
+      "name": "targetPort_kubeconfig_swap",
+      "field": "targetPort",
+      "value": "443 --kubeconfig=evil.yaml",
+      "disclosed_at": "2026-04-14",
+      "expected": "blocked"
+    }
+  ]
+}

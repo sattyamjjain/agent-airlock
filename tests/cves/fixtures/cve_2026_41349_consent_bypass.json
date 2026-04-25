@@ -1,4 +1,5 @@
 {
+  "disclosed_at": "2026-04-23",
   "cve": "CVE-2026-41349",
   "disclosed": "2026-04-23",
   "product": "OpenClaw agentic consent-bypass",

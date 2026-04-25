@@ -13,6 +13,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.6] - 2026-04-25 — "Managed Agents + fresh MCP CVE presets"
+
+Six new opt-in primitives shipped in 24 hours of fresh April 2026 industry signal:
+two MCP-server CVEs (one with no preset coverage anywhere, one with no
+patch upstream), the first-party Claude Managed Agents launch from
+2026-04-08, an "archived-but-still-published" MCP package gate, and a
+time-windowed CVE coverage report flag for the egress-bench walker.
+
+### Honesty fixes
+
+- **README "Framework integrations" claim drifted.** The Performance
+  table hard-coded ``9`` integrations; the Complete Examples table
+  directly above it listed 10 (Claude Agent SDK was added in v0.5.1
+  but the metric never caught up). Bumped to ``10`` and added
+  ``test_readme_integration_count_matches_examples`` so the two
+  tables stay locked.
+
+### Security presets
+
+- **CVE-2026-39884 — flux159/mcp-server-kubernetes argv flag-injection**
+  (disclosed 2026-04-14, fixed in 3.5.0). New module
+  ``agent_airlock.mcp_spec.argv_guard`` with ``enforce_argv_array()``
+  and ``ArgvStringConcatenationError``. Preset
+  ``flux159_mcp_kubernetes_cve_2026_39884_defaults()`` validates the
+  five injection-prone fields (``namespace``, ``resourceType``,
+  ``resourceName``, ``localPort``, ``targetPort``) on any
+  ``port_forward``-shaped tool. Different injection class than the
+  v0.5.5 codebase-mcp preset: this one rejects space-injected flag
+  concatenation that has no shell metacharacters. 12 new tests +
+  ``cve_2026_39884_kubectl_argv.json`` fixture.
+  Source: <https://www.sentinelone.com/vulnerability-database/cve-2026-39884/>.
+- **CVE-2026-23744 — MCPJam Inspector unauthenticated public bind**
+  (CVSS 9.8, fixed in 1.4.3). New module
+  ``agent_airlock.mcp_spec.bind_address_guard`` with
+  ``validate_bind_address()``, ``BindAddressGuardConfig``, and two
+  errors — ``BindAddressPublicError`` (public bind without
+  ``allow_public_bind=True``) and
+  ``UnauthenticatedPublicBindError`` (the exact CVE shape — public
+  bind allowed but no auth). Preset
+  ``mcpjam_cve_2026_23744_defaults()`` scopes the guard to
+  ``mcpjam`` / ``inspector`` / ``dev-server`` / ``studio`` tool
+  names. 12 new tests + ``cve_2026_23744_mcpjam.json`` fixture.
+  Source: <https://github.com/advisories/GHSA-232v-j27c-5pp6>.
+- **Archived MCP server advisory gate.** New
+  ``archived_mcp_server_advisory_defaults()`` preset failing closed
+  on tool manifests pointing at archived-but-still-published
+  packages. Seed list of three (Puppeteer, Brave Search, EverArt) —
+  Puppeteer alone still ~91k npm downloads/month with advisory 3662
+  documenting SSRF + indirect prompt injection + Chromium sandbox
+  bypass. New ``ArchivedMcpServerBlocked`` error. Allow-list opt-out
+  for in-house forks. 9 new tests +
+  ``archived_mcp_servers_2026_04.json`` fixture.
+  Source: <https://github.com/modelcontextprotocol/servers/issues/3662>.
+
+### Integrations
+
+- **Claude Managed Agents audit hook** (Anthropic public beta launched
+  2026-04-08, used by Notion / Rakuten / Asana / Vibecode / Sentry).
+  New ``agent_airlock.integrations.claude_managed_agents`` with
+  ``audit_managed_agent_invocation()``, the pinned constants
+  ``MANAGED_AGENTS_BETA_HEADER = "managed-agents-2026-04-01"`` and
+  ``AGENT_TOOLSET_VERSION = "agent_toolset_20260401"``, three new
+  errors (``ManagedAgentToolBlocked``,
+  ``ManagedAgentBetaHeaderMissingError``,
+  ``UnknownToolsetVersionError``), session-state tracker for
+  composition with the v0.5.1 task-budget adapter, and SSE frame
+  redaction via the v0.5.3 ``log_redaction`` patterns. Preset
+  ``claude_managed_agents_safe_defaults()`` ships with empty
+  ``allowed_tools`` (opt-in). OTel span
+  ``airlock.managed_agents.invoke`` emitted on clean audits. 16 new
+  tests.
+  Sources: <https://claude.com/blog/claude-managed-agents>,
+  <https://platform.claude.com/docs/en/managed-agents/overview>.
+
+### Tooling
+
+- **``airlock egress-bench --since YYYY-MM-DD`` flag.** Time-windowed
+  CVE coverage reporting — answers "what April-2026 CVEs are we now
+  blocking?" in one CLI call. Required new ``disclosed_at`` field on
+  every fixture; backfilled the five v0.5.x fixtures (file-level)
+  plus the ten OX-supply-chain umbrella sub-entries (per-payload).
+  ``--format json`` output now includes filter metadata. 15 new
+  tests.
+
+### Stats
+
+- Tests: **1,631 → 1,696** (+65 net)
+- Coverage: **82.33% → 82.66%**
+- **No new runtime dependencies.**
+
+### Primary sources (cited verbatim in each new module docstring)
+
+- CVE-2026-39884 (2026-04-14): <https://www.sentinelone.com/vulnerability-database/cve-2026-39884/>
+- CVE-2026-23744 (2026-04): <https://github.com/advisories/GHSA-232v-j27c-5pp6>
+- Claude Managed Agents launch (2026-04-08): <https://claude.com/blog/claude-managed-agents>
+- Puppeteer / archived-MCP advisory (2026-04): <https://github.com/modelcontextprotocol/servers/issues/3662>
+
+---
+
 ## [0.5.5] - 2026-04-24 — "Sampling guard + fresh CVE presets"
 
 Six new runtime primitives and three named CVE preset factories —

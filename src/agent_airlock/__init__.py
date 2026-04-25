@@ -153,6 +153,11 @@ from .integrations.claude_auto_memory import (
     MemoryChainTooDeepError,
     MemoryProvenanceError,
 )
+from .integrations.claude_managed_agents import (
+    ManagedAgentBetaHeaderMissingError,
+    ManagedAgentToolBlocked,
+    UnknownToolsetVersionError,
+)
 
 # V0.4.0 MCP Proxy Guard
 from .mcp_proxy_guard import (
@@ -164,6 +169,11 @@ from .mcp_proxy_guard import (
     MCPProxyGuard,
     MCPSecurityError,
     MCPSession,
+)
+from .mcp_spec.argv_guard import ArgvStringConcatenationError
+from .mcp_spec.bind_address_guard import (
+    BindAddressPublicError,
+    UnauthenticatedPublicBindError,
 )
 from .mcp_spec.oauth_audit import (
     OAuthAppBlocked,
@@ -227,6 +237,7 @@ from .policy_presets import (
     MEX_GOV_2026,
     OWASP_MCP_TOP_10_2026,
     STDIO_GUARD_OX_DEFAULTS,
+    ArchivedMcpServerBlocked,
     HighValueActionBlocked,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
@@ -332,7 +343,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.5.5"
+__version__ = "0.5.6"
 
 __all__ = [
     # Core
@@ -370,7 +381,14 @@ __all__ = [
     "STDIO_GUARD_OX_DEFAULTS",
     "stdio_guard_ox_defaults",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
+    "ArchivedMcpServerBlocked",
+    "ArgvStringConcatenationError",
     "AutoMemoryCrossTenantError",
+    "BindAddressPublicError",
+    "ManagedAgentBetaHeaderMissingError",
+    "ManagedAgentToolBlocked",
+    "UnauthenticatedPublicBindError",
+    "UnknownToolsetVersionError",
     "AutoMemoryQuotaError",
     "HighValueActionBlocked",
     "MemoryChainTooDeepError",
