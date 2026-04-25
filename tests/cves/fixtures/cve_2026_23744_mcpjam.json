@@ -1,0 +1,55 @@
+{
+  "cve": "CVE-2026-23744",
+  "disclosed_at": "2026-04",
+  "product": "mcpjam-inspector",
+  "fixed_in": "1.4.3",
+  "cvss_v3": 9.8,
+  "description": "MCPJam Inspector ≤ 1.4.2 bound to 0.0.0.0 by default with no authentication. Anyone on the same LAN could reach the inspector's RCE surface.",
+  "primary_source": "https://github.com/advisories/GHSA-232v-j27c-5pp6",
+  "secondary_sources": [
+    "https://www.sentinelone.com/vulnerability-database/cve-2026-23744/"
+  ],
+  "airlock_preset": "mcpjam_cve_2026_23744_defaults",
+  "payloads": [
+    {
+      "name": "mcpjam_default_zero_dot_zero_bind",
+      "tool_name": "mcpjam",
+      "addr": "0.0.0.0",
+      "auth_required": false,
+      "disclosed_at": "2026-04",
+      "expected": "blocked"
+    },
+    {
+      "name": "ipv6_unspecified_bind",
+      "tool_name": "inspector",
+      "addr": "::",
+      "auth_required": false,
+      "disclosed_at": "2026-04",
+      "expected": "blocked"
+    },
+    {
+      "name": "ipv6_bracketed_unspecified_bind",
+      "tool_name": "dev-server",
+      "addr": "[::]",
+      "auth_required": false,
+      "disclosed_at": "2026-04",
+      "expected": "blocked"
+    },
+    {
+      "name": "expanded_ipv6_zero_bind",
+      "tool_name": "studio",
+      "addr": "0:0:0:0:0:0:0:0",
+      "auth_required": false,
+      "disclosed_at": "2026-04",
+      "expected": "blocked"
+    },
+    {
+      "name": "loopback_no_auth_passes",
+      "tool_name": "mcpjam",
+      "addr": "127.0.0.1",
+      "auth_required": false,
+      "disclosed_at": "2026-04",
+      "expected": "allowed"
+    }
+  ]
+}

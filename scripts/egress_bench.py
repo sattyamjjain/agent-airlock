@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,6 +48,43 @@ class Row:
     unblocked: int
     status: str  # "pass" | "fail" | "skip"
     reason: str = ""
+    disclosed_at: str | None = None
+
+
+_ISO_DATE_RE = re.compile(r"^\d{4}(?:-\d{2}(?:-\d{2})?)?$")
+
+
+class FixtureValidationError(ValueError):
+    """Raised when a fixture is missing the required ``disclosed_at`` field."""
+
+
+def _parse_iso_date(value: str) -> date:
+    """Parse an ISO-format ``disclosed_at`` value into a comparable ``date``.
+
+    Accepts ``YYYY``, ``YYYY-MM``, or ``YYYY-MM-DD``. Month-only and
+    year-only values are normalised to the first day so they can be
+    compared with ``--since`` filters.
+    """
+    if not _ISO_DATE_RE.match(value):
+        raise FixtureValidationError(f"disclosed_at must be ISO YYYY[-MM[-DD]], got {value!r}")
+    parts = [int(p) for p in value.split("-")]
+    while len(parts) < 3:
+        parts.append(1)
+    return date(parts[0], parts[1], parts[2])
+
+
+def _require_disclosed_at(fixture: dict, fixture_name: str) -> str:
+    """Return ``fixture["disclosed_at"]`` or raise."""
+    val = fixture.get("disclosed_at")
+    if not val:
+        raise FixtureValidationError(
+            f"fixture {fixture_name} is missing required key 'disclosed_at'"
+        )
+    if not isinstance(val, str):
+        raise FixtureValidationError(f"fixture {fixture_name} has non-string disclosed_at: {val!r}")
+    # Validates format; raises if malformed.
+    _parse_iso_date(val)
+    return val
 
 
 def _run_ox_stdio(fixture: dict) -> Row:
@@ -120,22 +159,23 @@ _DISPATCH: dict[str, object] = {
 }
 
 
-def walk(fixture_dir: Path) -> list[Row]:
+def walk(fixture_dir: Path, *, since: date | None = None) -> list[Row]:
+    """Walk fixtures and run each registered handler.
+
+    Args:
+        fixture_dir: Directory holding ``*.json`` fixtures.
+        since: If supplied, fixtures whose ``disclosed_at`` is strictly
+            before this date are filtered out (a ``skip`` row is
+            emitted in their place so the report still accounts for
+            every file scanned). Fixtures missing ``disclosed_at``
+            raise :class:`FixtureValidationError` regardless of
+            ``since``.
+
+    Returns:
+        Per-fixture rows, in stable filesystem-sorted order.
+    """
     rows: list[Row] = []
     for path in sorted(fixture_dir.glob("*.json")):
-        handler = _DISPATCH.get(path.name)
-        if handler is None:
-            rows.append(
-                Row(
-                    cve_id="<unknown>",
-                    payload_count=0,
-                    blocked=0,
-                    unblocked=0,
-                    status="skip",
-                    reason=f"no dispatcher for {path.name}",
-                )
-            )
-            continue
         try:
             data = json.loads(path.read_text())
         except json.JSONDecodeError as exc:
@@ -150,7 +190,44 @@ def walk(fixture_dir: Path) -> list[Row]:
                 )
             )
             continue
-        rows.append(handler(data))  # type: ignore[operator]
+
+        # Validate disclosed_at — required since v0.5.6.
+        disclosed_raw = _require_disclosed_at(data, path.name)
+        disclosed = _parse_iso_date(disclosed_raw)
+
+        # Filter by --since.
+        if since is not None and disclosed < since:
+            rows.append(
+                Row(
+                    cve_id=path.stem,
+                    payload_count=0,
+                    blocked=0,
+                    unblocked=0,
+                    status="skip",
+                    reason=f"disclosed_at {disclosed_raw} < --since {since.isoformat()}",
+                    disclosed_at=disclosed_raw,
+                )
+            )
+            continue
+
+        handler = _DISPATCH.get(path.name)
+        if handler is None:
+            rows.append(
+                Row(
+                    cve_id="<unknown>",
+                    payload_count=0,
+                    blocked=0,
+                    unblocked=0,
+                    status="skip",
+                    reason=f"no dispatcher for {path.name}",
+                    disclosed_at=disclosed_raw,
+                )
+            )
+            continue
+
+        row = handler(data)  # type: ignore[operator]
+        row.disclosed_at = disclosed_raw
+        rows.append(row)
     return rows
 
 
@@ -170,9 +247,10 @@ def _emit_tap(rows: list[Row]) -> str:
     return "\n".join(lines)
 
 
-def _emit_json(rows: list[Row]) -> str:
-    return json.dumps(
-        [
+def _emit_json(rows: list[Row], *, since: date | None = None) -> str:
+    payload: dict = {
+        "filter": {"since": since.isoformat() if since else None},
+        "rows": [
             {
                 "cve_id": r.cve_id,
                 "payload_count": r.payload_count,
@@ -180,11 +258,12 @@ def _emit_json(rows: list[Row]) -> str:
                 "unblocked": r.unblocked,
                 "status": r.status,
                 "reason": r.reason,
+                "disclosed_at": r.disclosed_at,
             }
             for r in rows
         ],
-        indent=2,
-    )
+    }
+    return json.dumps(payload, indent=2)
 
 
 def _emit_md(rows: list[Row]) -> str:
@@ -205,6 +284,16 @@ def main() -> int:
         choices=["tap", "json", "md"],
         default="tap",
     )
+    parser.add_argument(
+        "--since",
+        type=str,
+        default=None,
+        help=(
+            "Filter fixtures whose disclosed_at is strictly before this "
+            "ISO date (YYYY-MM-DD). Useful for time-windowed CVE coverage "
+            "reports — e.g. 'what April 2026 CVEs are we now blocking?'"
+        ),
+    )
     args = parser.parse_args()
 
     sys.path.insert(0, str(ROOT / "src"))
@@ -213,9 +302,25 @@ def main() -> int:
         print(f"fixture dir not found: {args.fixture_dir}", file=sys.stderr)
         return 2
 
-    rows = walk(args.fixture_dir)
-    emitters = {"tap": _emit_tap, "json": _emit_json, "md": _emit_md}
-    print(emitters[args.format](rows))
+    since: date | None = None
+    if args.since is not None:
+        try:
+            since = _parse_iso_date(args.since)
+        except FixtureValidationError as exc:
+            print(f"invalid --since value: {exc}", file=sys.stderr)
+            return 2
+
+    try:
+        rows = walk(args.fixture_dir, since=since)
+    except FixtureValidationError as exc:
+        print(f"fixture validation: {exc}", file=sys.stderr)
+        return 2
+
+    if args.format == "json":
+        print(_emit_json(rows, since=since))
+    else:
+        emitters = {"tap": _emit_tap, "md": _emit_md}
+        print(emitters[args.format](rows))
 
     fail_count = sum(1 for r in rows if r.status == "fail")
     return 0 if fail_count == 0 else 1

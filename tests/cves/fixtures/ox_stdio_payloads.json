@@ -1,5 +1,6 @@
 {
   "$schema": "documented STDIO command-injection payloads from the 2026-04-16 Ox Security advisory and surrounding write-ups. Each entry is a distinct class of argv that our sanitizer MUST refuse. Sources cited per-entry.",
+  "disclosed_at": "2026-04-16",
   "references": {
     "ox_advisory": "https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem",
     "ox_mother_of_all": "https://www.ox.security/blog/the-mother-of-all-ai-supply-chains-critical-systemic-vulnerability-at-the-core-of-the-mcp/",
