@@ -915,9 +915,51 @@ def codebase_mcp_cve_2026_5023_defaults() -> dict[str, Any]:
 # Archived MCP server advisory gate (v0.5.6+, GitHub issue #3662 class)
 # -----------------------------------------------------------------------------
 
-# Default block-list seeded from the 2026-04 fixture. Loaded lazily so
-# the import cost only lands when callers actually use the preset.
-_ARCHIVED_MCP_FIXTURE_PATH = "tests/cves/fixtures/archived_mcp_servers_2026_04.json"
+# Default block-list — inline so it survives wheel packaging.
+#
+# v0.5.6 shipped this list via a JSON file under ``tests/cves/fixtures/``,
+# but ``tests/`` is not packaged in the wheel, so ``pip install``
+# users got an empty block-list and the preset silently failed open.
+# Fix landed in v0.5.6.1: list is hard-coded here; the JSON fixture
+# stays in ``tests/`` for parser / schema tests only.
+#
+# Source per row: GitHub modelcontextprotocol/servers issue #3662 +
+# the per-package archive notice. Kept short — three packages — to
+# keep the wheel small. Callers wanting a larger block-list pass it
+# via the ``block_list`` argument.
+_ARCHIVED_MCP_DEFAULT_BLOCKLIST: tuple[dict[str, Any], ...] = (
+    {
+        "package": "@modelcontextprotocol/server-puppeteer",
+        "registry": "npm",
+        "archived_at": "2026-04",
+        "monthly_downloads": 91000,
+        "disclosed_classes": (
+            "ssrf",
+            "indirect_prompt_injection",
+            "chromium_sandbox_bypass",
+        ),
+        "advisory_url": "https://github.com/modelcontextprotocol/servers/issues/3662",
+    },
+    {
+        "package": "@modelcontextprotocol/server-brave-search",
+        "registry": "npm",
+        "archived_at": "2026-03",
+        "monthly_downloads": 38000,
+        "disclosed_classes": (
+            "credential_passthrough",
+            "indirect_prompt_injection",
+        ),
+        "advisory_url": "https://github.com/modelcontextprotocol/servers/issues/3201",
+    },
+    {
+        "package": "@modelcontextprotocol/server-everart",
+        "registry": "npm",
+        "archived_at": "2026-02",
+        "monthly_downloads": 12000,
+        "disclosed_classes": ("ssrf",),
+        "advisory_url": "https://github.com/modelcontextprotocol/servers/issues/2812",
+    },
+)
 
 
 class ArchivedMcpServerBlocked(AirlockError):
@@ -957,18 +999,8 @@ def archived_mcp_server_advisory_defaults(
     Primary source:
       https://github.com/modelcontextprotocol/servers/issues/3662
     """
-    import json
-    from pathlib import Path
-
     if block_list is None:
-        # Look up via repo root — the fixture is always under tests/.
-        repo_root = Path(__file__).resolve().parent.parent.parent
-        fixture = repo_root / _ARCHIVED_MCP_FIXTURE_PATH
-        if fixture.exists():
-            data = json.loads(fixture.read_text(encoding="utf-8"))
-            block_list = data.get("packages") or []
-        else:
-            block_list = []
+        block_list = _ARCHIVED_MCP_DEFAULT_BLOCKLIST
 
     block_map: dict[str, dict[str, Any]] = {}
     for entry in block_list or []:

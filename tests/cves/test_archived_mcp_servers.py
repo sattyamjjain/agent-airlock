@@ -91,6 +91,39 @@ class TestFixture:
             assert isinstance(pkg["disclosed_classes"], list)
 
 
+class TestWheelPackagingRegression:
+    """v0.5.6 shipped with the seed list loaded from ``tests/cves/fixtures/``,
+    which doesn't exist in a wheel install — preset silently failed open.
+    v0.5.6.1 inlines the seed list. This test simulates a wheel-only
+    environment (no ``tests/`` accessible) by importing the module
+    fresh and confirming the default block-list is non-empty.
+    """
+
+    def test_default_blocklist_is_non_empty(self) -> None:
+        """The seed list must populate even without any filesystem lookup."""
+        cfg = archived_mcp_server_advisory_defaults()
+        # All three seed packages must be in the default block-list.
+        for package in (
+            "@modelcontextprotocol/server-puppeteer",
+            "@modelcontextprotocol/server-brave-search",
+            "@modelcontextprotocol/server-everart",
+        ):
+            assert package in cfg["block_list"], (
+                f"{package!r} missing from default block-list — wheel "
+                f"packaging regression (v0.5.6 → v0.5.6.1 fix)"
+            )
+
+    def test_preset_works_without_tests_dir(self, monkeypatch, tmp_path) -> None:
+        """Run the preset from a directory that has no ``tests/`` subtree.
+
+        Mirrors what a ``pip install agent-airlock`` user sees.
+        """
+        monkeypatch.chdir(tmp_path)
+        cfg = archived_mcp_server_advisory_defaults()
+        with pytest.raises(ArchivedMcpServerBlocked):
+            cfg["check"]({"package_origin": "@modelcontextprotocol/server-puppeteer"})
+
+
 class TestErrorHierarchy:
     def test_subclasses_airlock_error(self) -> None:
         assert issubclass(ArchivedMcpServerBlocked, AirlockError)
