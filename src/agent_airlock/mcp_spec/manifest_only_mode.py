@@ -260,9 +260,9 @@ def launch_from_manifest(
     *,
     signing_key: bytes | None = None,
     allowed_cwd_prefixes: tuple[str, ...] = (),
-    _popen_factory: type[subprocess.Popen] | None = None,
+    _popen_factory: type[subprocess.Popen[bytes]] | None = None,
     **forbidden_overrides: object,
-) -> subprocess.Popen:
+) -> subprocess.Popen[bytes]:
     """Spawn the manifest's command. Runtime callers cannot override argv.
 
     Args:
