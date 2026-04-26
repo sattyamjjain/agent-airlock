@@ -13,6 +13,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.7.1] - 2026-04-26 — "README LoC honesty fix"
+
+Tiny patch release. No new runtime code.
+
+### Honesty fix
+
+- **README "Lines of Code" row was wrong by ~20%.** Claimed
+  ``~27,400`` since v0.5.4; actual ``src/`` Python LoC is **22,670**.
+  The figure was carried over from a CLAUDE.md guess and never
+  re-checked across four releases. Rather than re-add a stale
+  number that will drift again, the row is **dropped entirely** —
+  the TEST-BADGE block + Complete Examples table are the only
+  hand-maintained sources of truth this README needs to keep alive.
+  New ``test_readme_does_not_hand_maintain_loc_count`` regression
+  prevents the row from sneaking back in.
+
+### Stats
+
+- Tests: **1,761 → 1,762** (+1 regression test)
+- Coverage: **83.15%** (unchanged)
+- No new runtime deps.
+
+---
+
 ## [0.5.7] - 2026-04-26 — "Manifest-only STDIO mode + 2 fresh CVE presets + stdio-taint CI gate"
 
 Driven by the OX Security 2026-04-15 deep-dive establishing that

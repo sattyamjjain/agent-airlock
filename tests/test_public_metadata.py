@@ -103,6 +103,24 @@ def test_readme_integration_count_matches_examples() -> None:
     )
 
 
+def test_readme_does_not_hand_maintain_loc_count() -> None:
+    """README must not re-introduce a hand-maintained ``Lines of Code`` row.
+
+    Honesty bug from v0.5.4–v0.5.7: the row claimed ``~27,400`` while
+    the actual ``src/`` Python LoC was 22,670 — a ~20% drift carried
+    across four releases without anyone noticing. v0.5.7.1 dropped
+    the row from the Performance table because LoC is the only row
+    that drifts naturally and isn't useful to package consumers
+    anyway. This test keeps it from sneaking back in.
+    """
+    text = README.read_text(encoding="utf-8")
+    assert "Lines of Code" not in text, (
+        "README.md re-introduced the hand-maintained 'Lines of Code' row. "
+        "Don't — it drifts and the TEST-BADGE block + Complete Examples "
+        "table are the only sources of truth this README hand-maintains."
+    )
+
+
 def test_python_version_matches_pyproject() -> None:
     """Sanity-check: the Python interpreter running the test suite meets the floor."""
     data = _load_pyproject()
