@@ -13,6 +13,119 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.7] - 2026-04-26 — "Manifest-only STDIO mode + 2 fresh CVE presets + stdio-taint CI gate"
+
+Driven by the OX Security 2026-04-15 deep-dive establishing that
+arbitrary strings reaching ``StdioServerParameters.command`` is
+"the" agent-supply-chain class of bug. Anthropic confirmed the
+behavior is "by design" and declined to patch — sanitization is
+now formally "the developer's responsibility." This release ships
+the developer's tools.
+
+### T1 — STDIO-taint static-analysis CI gate
+
+New ``tools/scan_stdio_remote_input_flow.py`` — AST taint analyzer
+flagging any flow from network / user input into an STDIO command
+construction site (``subprocess.Popen``, ``StdioServerParameters``,
+``stdio_client``). 9 default taint sources (``requests``, ``httpx``,
+``aiohttp``, ``urllib.request`` + 5 FastAPI/Flask request shapes).
+``# noqa: AIRLOCK-TAINT-OK <reason>`` pragma with required reason.
+CI sample at ``docs/security/stdio-taint-scan-ci.yml.sample``
+(automated PRs lack ``workflow`` scope). Repo scans clean today
+(170 files, 0 findings) — proving the gate isn't broken by our own
+code. **10 new tests.**
+
+### T2 — Manifest-only STDIO execution mode (highest-leverage change)
+
+New ``mcp_spec/manifest_only_mode.py`` shipping the design where
+**argv never originates from runtime input**. ``StdioManifest`` is
+registered once with a fixed ``command`` tuple under a stable
+``manifest_id``; HMAC-SHA256-signed at registration; resolved by
+ID at runtime. ``launch_from_manifest`` rejects any kwarg outside
+``manifest_id`` and ``runtime_env``. New
+``SecurityPolicy.stdio_mode`` field with three modes:
+``"allowlist"`` (default, v0.5.1 behaviour preserved),
+``"manifest_only"`` (this), ``"disabled"``. Five new top-level
+errors. HMAC key loaded from ``AIRLOCK_MANIFEST_SIGNING_KEY``;
+refused if shorter than 32 bytes. **20 new tests.**
+
+Latency baseline (locked into ``tests/benchmarks/test_bench_manifest_mode.py``,
+issue #4):
+
+- Manifest resolve+verify median: **~3 µs**
+- Manifest register median: **~20 µs**
+
+### T3 — CVE-2026-6980 GitPilot-MCP repo_path injection (CVSS 7.3)
+
+Disclosed 2026-04-25 by RedPacket Security. **Vendor unresponsive;
+project does not version.** New
+``gitpilot_mcp_cve_2026_6980_defaults()`` preset matches purely on
+tool-name regex (``r"^(repo_path|run_git_command|exec_in_repo)$"``).
+``shlex`` round-trip + absolute-path + safe-root checks. New
+``GitPilotRepoPathInjection`` error. **13 new tests + fixture.**
+
+### T4 — CVE-2026-30615 Windsurf zero-click MCP-config auto-load
+
+The only true zero-click in the OX-disclosure family — attacker
+HTML rewrites ``.windsurf/mcp.json`` from prompt injection alone.
+Patched in Windsurf latest. New ``mcp_spec/zero_click_config_guard.py``
+ships the diff-on-demand API: ``audit_config_diff(path,
+old_sha256, new_content, cfg)`` raises ``UnsignedMCPServerAdded``
+or ``MCPCommandMutationDetected``. Default seed of eight watched
+IDE locations (.vscode/.cursor/.windsurf/.claude/etc). New
+``windsurf_cve_2026_30615_defaults()`` preset. **11 new tests +
+fixture.**
+
+This is **diff-on-demand**, not a kernel watcher; the long-running
+daemon variant is queued for v0.5.8.
+
+### T5 — Declarative composite preset YAML
+
+New ``presets/ox-mcp-2026-04.yaml`` enables nine OX-disclosure
+class presets via a single line (``--preset-file ...``). Schema
+``schemas/preset_v1.json``. Loader at
+``src/agent_airlock/preset_loader.py`` uses a **stdlib-only**
+restricted-grammar parser — no PyYAML dependency added (keeps the
+3-runtime-dep baseline). ``compose_preset_factories`` resolves
+each entry's named factory against ``policy_presets``. **9 new
+tests.**
+
+### Bonus — issue #4 perf-gate baseline
+
+``tests/benchmarks/test_bench_manifest_mode.py`` locks the
+manifest-mode latency claim into CI. Median resolve must stay
+under 50 µs; register under 100 µs. Sample CI workflow at
+``docs/security/perf-gate-ci.yml.sample`` (workflow-scope-blocked
+again).
+
+### Stats
+
+- Tests: **1,698 → 1,761** (+63 net)
+- Coverage: **82.66% → 83.15%**
+- **No new runtime dependencies.**
+
+### Documentation
+
+- ``docs/mcp/manifest-only-mode.md`` (new)
+- ``docs/cves/cve-2026-6980.md`` (new)
+- ``docs/cves/cve-2026-30615.md`` (new)
+- ``docs/security/stdio-taint-scan.md`` (new)
+- ``docs/presets/yaml-format.md`` (new)
+- ``releases/v0.5.7.md`` (new)
+
+### Primary sources
+
+- [OX Security — Mother of All AI Supply Chains (2026-04-15)](https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20)
+- [The Hacker News (2026-04-16)](https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html)
+- [SecurityWeek — 'By Design' Flaw in MCP (2026-04-16)](https://www.securityweek.com/by-design-flaw-in-mcp/)
+- [Cloudflare enterprise MCP reference architecture (2026-04-22)](https://blog.cloudflare.com/enterprise-mcp/)
+- [VS Code 1.112 release notes — MCP server sandboxing](https://code.visualstudio.com/updates/v1_112)
+- [NVD CVE-2026-30615](https://nvd.nist.gov/vuln/detail/CVE-2026-30615)
+- [Tenable CVE-2026-30615](https://www.tenable.com/cve/CVE-2026-30615)
+- [RedPacket Security CVE-2026-6980 (2026-04-25)](https://www.redpacketsecurity.com/cve-alert-cve-2026-6980-divyanshu-hash-gitpilot-mcp/)
+
+---
+
 ## [0.5.6.1] - 2026-04-25 — "v0.5.6 doc backfill + archived-MCP wheel-packaging fix"
 
 Doc-and-fix patch on top of v0.5.6 — no new product surfaces. Two

@@ -175,6 +175,15 @@ from .mcp_spec.bind_address_guard import (
     BindAddressPublicError,
     UnauthenticatedPublicBindError,
 )
+from .mcp_spec.manifest_only_mode import (
+    ManifestNotRegisteredError,
+    ManifestRegistry,
+    ManifestRuntimeOverrideAttempted,
+    ManifestSignatureError,
+    ManifestSigningKeyError,
+    StdioManifest,
+    launch_from_manifest,
+)
 from .mcp_spec.oauth_audit import (
     OAuthAppBlocked,
     OAuthPolicyViolation,
@@ -185,6 +194,10 @@ from .mcp_spec.sampling_guard import (
     SamplingQuotaExceeded,
 )
 from .mcp_spec.session_guard import SnapshotIntegrityError
+from .mcp_spec.zero_click_config_guard import (
+    MCPCommandMutationDetected,
+    UnsignedMCPServerAdded,
+)
 
 # V0.3.0 Network egress control
 from .network import (
@@ -238,6 +251,7 @@ from .policy_presets import (
     OWASP_MCP_TOP_10_2026,
     STDIO_GUARD_OX_DEFAULTS,
     ArchivedMcpServerBlocked,
+    GitPilotRepoPathInjection,
     HighValueActionBlocked,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
@@ -343,7 +357,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.5.6.1"
+__version__ = "0.5.7"
 
 __all__ = [
     # Core
@@ -384,13 +398,23 @@ __all__ = [
     "ArchivedMcpServerBlocked",
     "ArgvStringConcatenationError",
     "AutoMemoryCrossTenantError",
+    "GitPilotRepoPathInjection",
     "BindAddressPublicError",
     "ManagedAgentBetaHeaderMissingError",
     "ManagedAgentToolBlocked",
+    "ManifestNotRegisteredError",
+    "ManifestRegistry",
+    "ManifestRuntimeOverrideAttempted",
+    "ManifestSignatureError",
+    "ManifestSigningKeyError",
+    "StdioManifest",
+    "launch_from_manifest",
     "UnauthenticatedPublicBindError",
     "UnknownToolsetVersionError",
+    "UnsignedMCPServerAdded",
     "AutoMemoryQuotaError",
     "HighValueActionBlocked",
+    "MCPCommandMutationDetected",
     "MemoryChainTooDeepError",
     "MemoryProvenanceError",
     "OAuthAppBlocked",

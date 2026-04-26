@@ -56,7 +56,9 @@ Primary sources (retrieved 2026-04-18):
 from __future__ import annotations
 
 import re
+import shlex as _shlex_for_gitpilot
 from collections.abc import Iterable
+from pathlib import Path as _Path_for_gitpilot
 from typing import TYPE_CHECKING, Any
 
 from .exceptions import AirlockError
@@ -912,6 +914,173 @@ def codebase_mcp_cve_2026_5023_defaults() -> dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
+# CVE-2026-30615 — Windsurf zero-click MCP-config auto-load (v0.5.7+)
+# -----------------------------------------------------------------------------
+
+
+def windsurf_cve_2026_30615_defaults(
+    signer_allowlist: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """CVE-2026-30615 zero-click mcp.json auto-load preset.
+
+    Composes :class:`ConfigFileWatchPolicy` with the Windsurf-specific
+    config path and the signer-required default. The class
+    generalises beyond Windsurf — VS Code, Cursor, Claude Code,
+    JetBrains all auto-read project-local MCP config — but the named
+    advisory triggered when ``.windsurf/mcp.json`` was rewritten by
+    a prompt-injected HTML page.
+
+    Args:
+        signer_allowlist: Trusted signer identifiers. Empty means
+            "any non-empty signer is acceptable" — adopt in stages.
+
+    Contract::
+
+        cfg = windsurf_cve_2026_30615_defaults(signer_allowlist=frozenset({"sre"}))
+        cfg["audit"](path, old_sha256, new_content, old_content=...)
+
+    Primary source:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-30615
+    """
+    from .mcp_spec.zero_click_config_guard import (
+        DEFAULT_WATCHED_PATHS,
+        ConfigFileWatchPolicy,
+        audit_config_diff,
+    )
+
+    policy = ConfigFileWatchPolicy(
+        watched_paths=DEFAULT_WATCHED_PATHS,
+        require_signer_for_new_servers=True,
+        quarantine_on_diff=True,
+        signer_allowlist=signer_allowlist,
+    )
+
+    def audit(
+        path: Any,  # pathlib.Path; kept loose to avoid an extra top-level import
+        old_sha256: str | None,
+        new_content: bytes,
+        *,
+        old_content: bytes | None = None,
+    ) -> Any:
+        return audit_config_diff(path, old_sha256, new_content, policy, old_content=old_content)
+
+    return {
+        "audit": audit,
+        "policy": policy,
+        "watched_paths": tuple(str(p) for p in policy.watched_paths),
+        "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30615",
+    }
+
+
+# -----------------------------------------------------------------------------
+# CVE-2026-6980 — Divyanshu-hash/GitPilot-MCP repo_path injection (v0.5.7+)
+# -----------------------------------------------------------------------------
+
+_GITPILOT_HANDLER_NAMES = re.compile(r"^(repo_path|run_git_command|exec_in_repo)$")
+
+
+class GitPilotRepoPathInjection(AirlockError):
+    """Raised when a GitPilot-MCP-style handler receives an unsafe repo_path."""
+
+    def __init__(self, *, handler_name: str, repo_path: str, reason: str) -> None:
+        self.handler_name = handler_name
+        self.repo_path = repo_path
+        self.reason = reason
+        super().__init__(
+            f"GitPilot-MCP handler {handler_name!r} refused repo_path "
+            f"{repo_path!r}: {reason} (CVE-2026-6980)"
+        )
+
+
+def gitpilot_mcp_cve_2026_6980_defaults(
+    safe_repo_roots: tuple[_Path_for_gitpilot, ...] = (),
+) -> dict[str, Any]:
+    """CVE-2026-6980 GitPilot-MCP repo_path regression preset.
+
+    Disclosed 2026-04-25 by RedPacket Security (CVSS 7.3). The
+    ``repo_path`` argument of ``Divyanshu-hash/GitPilot-MCP``'s
+    ``main.py`` flowed into OS command execution. Public PoC; vendor
+    unresponsive; project does not version — so the preset matches
+    purely on **tool name**, not upstream package pin.
+
+    Three handler names are caught: ``repo_path``, ``run_git_command``,
+    ``exec_in_repo``. For each, the value supplied as ``repo_path``
+    must:
+
+    1. Resolve to an absolute path under one of ``safe_repo_roots``.
+    2. Pass the ``shlex.quote(arg) == arg`` round-trip — i.e. contain
+       no shell metacharacters.
+
+    Args:
+        safe_repo_roots: Allowed prefixes for ``repo_path``. Empty
+            tuple means "any absolute path is acceptable" — but the
+            shell-safe-token check still applies.
+
+    Contract::
+
+        cfg = gitpilot_mcp_cve_2026_6980_defaults(safe_repo_roots=(Path("/var/repos"),))
+        cfg["check"]("repo_path", {"repo_path": "/var/repos/clean"})  # OK
+        cfg["check"]("repo_path", {"repo_path": "/var/repos/foo`id`"})  # raises
+
+    Primary source:
+      https://www.redpacketsecurity.com/cve-alert-cve-2026-6980-divyanshu-hash-gitpilot-mcp/
+    """
+    roots = tuple(_Path_for_gitpilot(r).resolve() for r in safe_repo_roots)
+
+    def check(handler_name: str, fields: dict[str, Any]) -> None:
+        if not _GITPILOT_HANDLER_NAMES.match(handler_name or ""):
+            return
+        repo_path = fields.get("repo_path")
+        if repo_path is None:
+            return
+        repo_path_str = str(repo_path)
+
+        # Shell-metachar check — same shlex round-trip the
+        # codebase-mcp preset uses, but applied to a single field.
+        if _shlex_for_gitpilot.quote(repo_path_str) != repo_path_str:
+            raise GitPilotRepoPathInjection(
+                handler_name=handler_name,
+                repo_path=repo_path_str,
+                reason="shell-metacharacter present (shlex round-trip failed)",
+            )
+
+        path = _Path_for_gitpilot(repo_path_str)
+        if not path.is_absolute():
+            raise GitPilotRepoPathInjection(
+                handler_name=handler_name,
+                repo_path=repo_path_str,
+                reason="repo_path must be absolute",
+            )
+
+        # Reject path traversal: resolved path must remain under a
+        # safe root if any are configured.
+        if roots:
+            try:
+                resolved = path.resolve()
+            except (OSError, RuntimeError):
+                raise GitPilotRepoPathInjection(
+                    handler_name=handler_name,
+                    repo_path=repo_path_str,
+                    reason="resolve() failed — path is unreachable",
+                ) from None
+            if not any(str(resolved).startswith(str(r) + "/") or resolved == r for r in roots):
+                raise GitPilotRepoPathInjection(
+                    handler_name=handler_name,
+                    repo_path=repo_path_str,
+                    reason=f"resolved path not under {roots}",
+                )
+
+    return {
+        "check": check,
+        "tool_name_pattern": _GITPILOT_HANDLER_NAMES.pattern,
+        "safe_repo_roots": roots,
+        "source": (
+            "https://www.redpacketsecurity.com/cve-alert-cve-2026-6980-divyanshu-hash-gitpilot-mcp/"
+        ),
+    }
+
+
+# -----------------------------------------------------------------------------
 # Archived MCP server advisory gate (v0.5.6+, GitHub issue #3662 class)
 # -----------------------------------------------------------------------------
 
@@ -1474,6 +1643,9 @@ __all__ = [
     "claude_managed_agents_safe_defaults",
     "archived_mcp_server_advisory_defaults",
     "ArchivedMcpServerBlocked",
+    "gitpilot_mcp_cve_2026_6980_defaults",
+    "GitPilotRepoPathInjection",
+    "windsurf_cve_2026_30615_defaults",
     "offensive_cyber_model_defaults",
     "mcpwn_cve_2026_33032_defaults",
     "mcpwn_cve_2026_33032_check",
