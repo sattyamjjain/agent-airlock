@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 
@@ -331,6 +331,12 @@ class SecurityPolicy:
     allowed_roles: list[str] = field(default_factory=list)
     # V0.4.0 capability gating
     capability_policy: CapabilityPolicy | None = None
+    # V0.5.7 STDIO subprocess execution mode. ``"allowlist"`` keeps the
+    # v0.5.1 ``validate_stdio_command`` behaviour. ``"manifest_only"``
+    # forces all spawns through ``launch_from_manifest`` (signed
+    # registry; runtime cannot construct argv). ``"disabled"`` blocks
+    # STDIO subprocesses entirely.
+    stdio_mode: Literal["allowlist", "manifest_only", "disabled"] = "allowlist"
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)

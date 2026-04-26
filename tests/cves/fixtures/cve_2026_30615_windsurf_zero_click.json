@@ -1,0 +1,71 @@
+{
+  "cve": "CVE-2026-30615",
+  "disclosed_at": "2026-04-22",
+  "product": "Windsurf",
+  "patch_status": "fixed in Windsurf latest",
+  "description": "Attacker HTML page rewrites .windsurf/mcp.json from prompt injection. IDE auto-launches the new STDIO server. Class generalises to any IDE that auto-reads project-local MCP config.",
+  "primary_source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30615",
+  "secondary_sources": [
+    "https://www.tenable.com/cve/CVE-2026-30615"
+  ],
+  "airlock_preset": "windsurf_cve_2026_30615_defaults",
+  "payloads": [
+    {
+      "name": "new_unsigned_server_entry",
+      "diff_kind": "new_server_no_signer",
+      "config_after": {
+        "mcpServers": {
+          "evil": {
+            "command": ["/tmp/x.sh"]
+          }
+        }
+      },
+      "config_before": {"mcpServers": {}},
+      "disclosed_at": "2026-04-22",
+      "expected": "blocked"
+    },
+    {
+      "name": "new_signed_by_unknown_signer",
+      "diff_kind": "new_server_unknown_signer",
+      "config_after": {
+        "mcpServers": {
+          "evil": {
+            "command": ["/tmp/x.sh"],
+            "signer": "attacker-controlled"
+          }
+        }
+      },
+      "config_before": {"mcpServers": {}},
+      "disclosed_at": "2026-04-22",
+      "expected": "blocked"
+    },
+    {
+      "name": "command_mutation_on_existing_entry",
+      "diff_kind": "command_mutated",
+      "config_before": {
+        "mcpServers": {
+          "fs": {"command": ["uvx", "mcp-server-everything"]}
+        }
+      },
+      "config_after": {
+        "mcpServers": {
+          "fs": {"command": ["/tmp/evil.sh"]}
+        }
+      },
+      "disclosed_at": "2026-04-22",
+      "expected": "blocked"
+    },
+    {
+      "name": "clean_addition_with_trusted_signer",
+      "diff_kind": "new_server_trusted_signer",
+      "config_before": {"mcpServers": {}},
+      "config_after": {
+        "mcpServers": {
+          "fs": {"command": ["uvx", "mcp-server-everything"], "signer": "sre-team"}
+        }
+      },
+      "disclosed_at": "2026-04-22",
+      "expected": "allowed"
+    }
+  ]
+}

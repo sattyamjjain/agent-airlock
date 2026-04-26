@@ -1,0 +1,51 @@
+schema_version: 1
+preset_id: ox-mcp-2026-04
+description: "OX Security 'Mother of All AI Supply Chains' composite preset.
+  Ten CVEs disclosed 2026-04-15..2026-04-25. Enable as a one-line opt-in for
+  any MCP integrator who wants the current week's defensive baseline."
+primary_source: https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20
+disclosed_at: 2026-04-15
+presets:
+  - id: stdio_guard_ox_defaults
+    factory: stdio_guard_ox_defaults
+    primary_source: https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20
+    disclosed_at: 2026-04-15
+  - id: manifest_only_mode
+    factory: manifest_only_mode
+    enabled: false
+    allowlist_fallback: true
+    primary_source: https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20
+    disclosed_at: 2026-04-15
+  - id: gitpilot_mcp_cve_2026_6980
+    factory: gitpilot_mcp_cve_2026_6980_defaults
+    cve_id: CVE-2026-6980
+    primary_source: https://www.redpacketsecurity.com/cve-alert-cve-2026-6980-divyanshu-hash-gitpilot-mcp/
+    disclosed_at: 2026-04-25
+  - id: windsurf_cve_2026_30615
+    factory: windsurf_cve_2026_30615_defaults
+    cve_id: CVE-2026-30615
+    primary_source: https://nvd.nist.gov/vuln/detail/CVE-2026-30615
+    disclosed_at: 2026-04-22
+  - id: mcpjam_cve_2026_23744
+    factory: mcpjam_cve_2026_23744_defaults
+    cve_id: CVE-2026-23744
+    primary_source: https://github.com/advisories/GHSA-232v-j27c-5pp6
+    disclosed_at: 2026-04
+  - id: flux159_mcp_kubernetes_cve_2026_39884
+    factory: flux159_mcp_kubernetes_cve_2026_39884_defaults
+    cve_id: CVE-2026-39884
+    primary_source: https://www.sentinelone.com/vulnerability-database/cve-2026-39884/
+    disclosed_at: 2026-04-14
+  - id: azure_mcp_cve_2026_32211
+    factory: azure_mcp_cve_2026_32211_defaults
+    cve_id: CVE-2026-32211
+    primary_source: https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211
+    disclosed_at: 2026-04-20
+  - id: unit42_mcp_sampling
+    factory: unit42_mcp_sampling_defaults
+    primary_source: https://unit42.paloaltonetworks.com/model-context-protocol-attack-vectors/
+    disclosed_at: 2026-04-24
+  - id: archived_mcp_server_advisory
+    factory: archived_mcp_server_advisory_defaults
+    primary_source: https://github.com/modelcontextprotocol/servers/issues/3662
+    disclosed_at: 2026-04
