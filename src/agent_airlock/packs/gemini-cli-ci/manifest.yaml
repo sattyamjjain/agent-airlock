@@ -1,0 +1,11 @@
+pack_id: gemini-cli-ci
+version: 2026.04
+description: Hardening bundle for Gemini CLI Action running in CI.
+primary_source: https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+presets:
+  - factory: gemini_cli_action_cnc_2026_04
+    primary_source: https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+  - factory: lan_unauth_mcp_guard
+    primary_source: https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html
+  - factory: archived_mcp_server_advisory_defaults
+    primary_source: https://github.com/modelcontextprotocol/servers/issues/3662

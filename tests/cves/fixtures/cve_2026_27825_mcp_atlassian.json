@@ -1,0 +1,54 @@
+{
+  "cve": "CVE-2026-27825",
+  "disclosed_at": "2026-04-24",
+  "product": "mcp-atlassian",
+  "cvss_v3": 9.1,
+  "description": "Same-LAN unauthenticated RCE — mcp-atlassian bound to 0.0.0.0 with no auth headers, exposing the MCP control surface to any device on the same network.",
+  "primary_source": "https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html",
+  "secondary_sources": [
+    "https://nvd.nist.gov/vuln/detail/CVE-2026-27825"
+  ],
+  "airlock_preset": "mcp_atlassian_cve_2026_27825",
+  "payloads": [
+    {
+      "name": "default_mcp_atlassian_zero_dot_zero_no_auth",
+      "spec": {
+        "name": "mcp-atlassian",
+        "bind_address": "0.0.0.0",
+        "auth_headers": {}
+      },
+      "expected": "block",
+      "disclosed_at": "2026-04-24"
+    },
+    {
+      "name": "rfc1918_no_auth",
+      "spec": {
+        "name": "mcp-atlassian",
+        "bind_address": "192.168.1.42",
+        "auth_headers": {}
+      },
+      "expected": "block",
+      "disclosed_at": "2026-04-24"
+    },
+    {
+      "name": "loopback_no_auth_passes_in_prod",
+      "spec": {
+        "name": "mcp-atlassian",
+        "bind_address": "127.0.0.1",
+        "auth_headers": {}
+      },
+      "expected": "allow",
+      "disclosed_at": "2026-04-24"
+    },
+    {
+      "name": "lan_with_auth_passes",
+      "spec": {
+        "name": "mcp-atlassian",
+        "bind_address": "10.0.0.5",
+        "auth_headers": {"Authorization": "Bearer abc"}
+      },
+      "expected": "allow",
+      "disclosed_at": "2026-04-24"
+    }
+  ]
+}

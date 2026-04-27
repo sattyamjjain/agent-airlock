@@ -1,0 +1,13 @@
+pack_id: claude-code-ci
+version: 2026.04
+description: Hardening bundle for Claude Code Security Review running in CI.
+primary_source: https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+presets:
+  - factory: claude_code_security_review_cnc_2026_04
+    primary_source: https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+  - factory: lan_unauth_mcp_guard
+    primary_source: https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html
+  - factory: archived_mcp_server_advisory_defaults
+    primary_source: https://github.com/modelcontextprotocol/servers/issues/3662
+  - factory: stdio_guard_ox_defaults
+    primary_source: https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20

@@ -918,6 +918,169 @@ def codebase_mcp_cve_2026_5023_defaults() -> dict[str, Any]:
 # -----------------------------------------------------------------------------
 
 
+# -----------------------------------------------------------------------------
+# Agent-commerce caps default preset (v0.5.8+, Anthropic Project Deal class)
+# -----------------------------------------------------------------------------
+
+
+def agent_commerce_default_caps(
+    *,
+    db_path: str = ":memory:",
+) -> dict[str, Any]:
+    """Default agent-commerce caps for Project Deal / Stripe Agentic flows.
+
+    Sane caps: $10/counterparty/day + hard-stop $200/agent/week. Tighten
+    or relax via the ``CapsConfig`` interface.
+
+    Primary source:
+      https://www.anthropic.com/features/project-deal
+    """
+    from .integrations.agent_commerce_caps import (
+        AgentCommerceCaps,
+        Cap,
+        CapsConfig,
+        SQLiteLedgerStore,
+    )
+
+    config = CapsConfig(
+        caps=(
+            Cap(amount_cents=1_000, window="day", scope="counterparty"),
+            Cap(amount_cents=20_000, window="week", scope="agent"),
+        )
+    )
+    caps = AgentCommerceCaps(config=config, store=SQLiteLedgerStore(db_path))
+    return {
+        "caps": caps,
+        "config": config,
+        "source": "https://www.anthropic.com/features/project-deal",
+    }
+
+
+# -----------------------------------------------------------------------------
+# CVE-2026-27825 / -27826 mcp-atlassian LAN-unauth-RCE preset (v0.5.8+)
+# -----------------------------------------------------------------------------
+
+
+def mcp_atlassian_cve_2026_27825(*, profile: str = "prod") -> dict[str, Any]:
+    """LAN-unauth-RCE guard preset for CVE-2026-27825 / -27826.
+
+    Disclosed [2026-04-24 by The Hacker News](https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html);
+    NVD entries CVE-2026-27825 (CVSS 9.1) and CVE-2026-27826 (CVSS 8.2).
+    ``mcp-atlassian`` bound to ``0.0.0.0`` and ``[::]`` with no auth
+    headers, exposing the control surface to any device on the same
+    network. Trivial in any office network.
+
+    The class generalises — see also
+    :func:`lan_unauth_mcp_guard` for the generic check.
+
+    Args:
+        profile: ``"prod"`` (default), ``"dev"``, or ``"strict"``
+            per :class:`LANUnauthRCEPolicy`.
+
+    Primary source:
+      https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html
+    """
+    from .mcp_spec.lan_unauth_rce_guard import (
+        LANUnauthRCEGuard,
+        LANUnauthRCEPolicy,
+    )
+
+    guard = LANUnauthRCEGuard(LANUnauthRCEPolicy(profile=profile))  # type: ignore[arg-type]
+    return {
+        "guard": guard,
+        "profile": profile,
+        "source": ("https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html"),
+        "covers": ("CVE-2026-27825", "CVE-2026-27826"),
+    }
+
+
+def lan_unauth_mcp_guard(*, profile: str = "prod") -> dict[str, Any]:
+    """Generic LAN-unauth-RCE guard preset (the class, not the named CVE).
+
+    Same machinery as :func:`mcp_atlassian_cve_2026_27825` but
+    intended as a default catch for any MCP server registration —
+    not scoped to atlassian-style names.
+    """
+    cfg = mcp_atlassian_cve_2026_27825(profile=profile)
+    cfg["covers"] = ("class:lan-unauth-rce",)
+    return cfg
+
+
+# -----------------------------------------------------------------------------
+# Comment-and-Control PR-metadata presets (v0.5.8+, Aonan Guan 2026-04-25)
+# -----------------------------------------------------------------------------
+
+
+def _build_pr_metadata_guard(*, dry_run: bool = False) -> Any:
+    from .mcp_spec.pr_metadata_guard import PRMetadataGuard
+
+    return PRMetadataGuard(
+        rewrite_threshold=0.0,
+        reject_threshold=0.9,
+        dry_run=dry_run,
+    )
+
+
+def claude_code_security_review_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
+    """Comment-and-Control preset for Claude Code Security Review.
+
+    Wires :class:`PRMetadataGuard` with conservative thresholds — every
+    PR-metadata field gets sentinel-wrapped before reaching the model
+    context, and any field with risk ≥ 0.9 raises
+    :class:`PRMetadataInjectionRejected`.
+
+    Set ``dry_run=True`` for the first deployment week to log without
+    rewriting; flip to ``False`` once your own audit logs show no
+    legitimate-PR false positives.
+
+    Primary source:
+      https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+    """
+    return {
+        "guard": _build_pr_metadata_guard(dry_run=dry_run),
+        "ci_runner": "claude-code-security-review",
+        "fields_in_scope": (
+            "pr_title",
+            "pr_body",
+            "commit_message",
+            "issue_title",
+            "issue_body",
+            "review_comment",
+        ),
+        "source": (
+            "https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/"
+        ),
+    }
+
+
+def gemini_cli_action_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
+    """Comment-and-Control preset for the Gemini CLI Action.
+
+    Same threat model as the Claude Code preset but tagged for the
+    Gemini CLI runner so audit logs distinguish them.
+
+    Primary source:
+      https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+    """
+    cfg = claude_code_security_review_cnc_2026_04(dry_run=dry_run)
+    cfg["ci_runner"] = "gemini-cli-action"
+    return cfg
+
+
+def copilot_agent_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
+    """Comment-and-Control preset for GitHub Copilot Agent.
+
+    Same threat model as the Claude Code preset but tagged for the
+    Copilot Agent runner so audit logs distinguish them.
+
+    Primary source:
+      https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+    """
+    cfg = claude_code_security_review_cnc_2026_04(dry_run=dry_run)
+    cfg["ci_runner"] = "copilot-agent"
+    return cfg
+
+
 def windsurf_cve_2026_30615_defaults(
     signer_allowlist: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
@@ -1646,6 +1809,12 @@ __all__ = [
     "gitpilot_mcp_cve_2026_6980_defaults",
     "GitPilotRepoPathInjection",
     "windsurf_cve_2026_30615_defaults",
+    "claude_code_security_review_cnc_2026_04",
+    "gemini_cli_action_cnc_2026_04",
+    "copilot_agent_cnc_2026_04",
+    "mcp_atlassian_cve_2026_27825",
+    "lan_unauth_mcp_guard",
+    "agent_commerce_default_caps",
     "offensive_cyber_model_defaults",
     "mcpwn_cve_2026_33032_defaults",
     "mcpwn_cve_2026_33032_check",
