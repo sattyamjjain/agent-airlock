@@ -142,6 +142,10 @@ from .honeypot import (
     should_soft_block,
     should_use_honeypot,
 )
+from .integrations.agent_commerce_caps import (
+    AgentCommerceCapExceeded,
+    AgentCommerceCaps,
+)
 
 # V0.5.3 Top-level re-exports of error classes introduced in v0.5.2 so
 # users can write `from agent_airlock import OAuthAppBlocked, ...`
@@ -175,6 +179,7 @@ from .mcp_spec.bind_address_guard import (
     BindAddressPublicError,
     UnauthenticatedPublicBindError,
 )
+from .mcp_spec.lan_unauth_rce_guard import LANUnauthMCPServerBlocked
 from .mcp_spec.manifest_only_mode import (
     ManifestNotRegisteredError,
     ManifestRegistry,
@@ -187,6 +192,10 @@ from .mcp_spec.manifest_only_mode import (
 from .mcp_spec.oauth_audit import (
     OAuthAppBlocked,
     OAuthPolicyViolation,
+)
+from .mcp_spec.pr_metadata_guard import (
+    PRMetadataGuard,
+    PRMetadataInjectionRejected,
 )
 from .mcp_spec.sampling_guard import (
     SamplingConsentMissingError,
@@ -357,7 +366,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.5.7.1"
+__version__ = "0.5.8"
 
 __all__ = [
     # Core
@@ -395,6 +404,8 @@ __all__ = [
     "STDIO_GUARD_OX_DEFAULTS",
     "stdio_guard_ox_defaults",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
+    "AgentCommerceCapExceeded",
+    "AgentCommerceCaps",
     "ArchivedMcpServerBlocked",
     "ArgvStringConcatenationError",
     "AutoMemoryCrossTenantError",
@@ -414,8 +425,11 @@ __all__ = [
     "UnsignedMCPServerAdded",
     "AutoMemoryQuotaError",
     "HighValueActionBlocked",
+    "LANUnauthMCPServerBlocked",
     "MCPCommandMutationDetected",
     "MemoryChainTooDeepError",
+    "PRMetadataGuard",
+    "PRMetadataInjectionRejected",
     "MemoryProvenanceError",
     "OAuthAppBlocked",
     "OAuthPolicyViolation",

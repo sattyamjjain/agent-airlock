@@ -1,0 +1,34 @@
+{
+  "cve": "CVE-2026-27826",
+  "disclosed_at": "2026-04-24",
+  "product": "mcp-atlassian",
+  "cvss_v3": 8.2,
+  "description": "Sister CVE to -27825 covering the IPv6 bind path — mcp-atlassian also accepted [::] binds with no auth.",
+  "primary_source": "https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html",
+  "secondary_sources": [
+    "https://nvd.nist.gov/vuln/detail/CVE-2026-27826"
+  ],
+  "airlock_preset": "mcp_atlassian_cve_2026_27825",
+  "payloads": [
+    {
+      "name": "ipv6_unspecified_no_auth",
+      "spec": {
+        "name": "mcp-atlassian",
+        "bind_address": "::",
+        "auth_headers": {}
+      },
+      "expected": "block",
+      "disclosed_at": "2026-04-24"
+    },
+    {
+      "name": "ipv6_link_local_no_auth",
+      "spec": {
+        "name": "mcp-atlassian",
+        "bind_address": "fe80::1",
+        "auth_headers": {}
+      },
+      "expected": "block",
+      "disclosed_at": "2026-04-24"
+    }
+  ]
+}

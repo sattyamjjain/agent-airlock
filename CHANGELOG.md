@@ -13,6 +13,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.8] - 2026-04-27 — "Comment-and-Control + Mesh wedge + behavioral baselines"
+
+Sunday cut. Eight new opt-in primitives + three net-new product
+surfaces, driven by 72 hours of fresh April 2026 industry signal.
+**Zero new runtime deps.**
+
+### Security presets
+
+- **Comment-and-Control PR-metadata guard** (Aonan Guan 2026-04-25,
+  CVSS 9.4 cross-vendor). New
+  ``mcp_spec/pr_metadata_guard.py`` with four-stage pipeline:
+  zero-width strip + model-targeting imperative detection +
+  sentinel-fenced quoting + risk score. Three CI-runner presets
+  (``claude_code_security_review_cnc_2026_04``,
+  ``gemini_cli_action_cnc_2026_04``,
+  ``copilot_agent_cnc_2026_04``). Sub-millisecond per 4 KB field.
+  26 tests including all 10 in-the-wild payloads + the original
+  Aonan PoC.
+  Source: <https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/>
+- **CVE-2026-27825 / -27826 mcp-atlassian LAN-unauth RCE** (CVSS
+  9.1 / 8.2). New ``mcp_spec/lan_unauth_rce_guard.py`` with three
+  profiles (prod / dev / strict). Two presets:
+  ``mcp_atlassian_cve_2026_27825`` and ``lan_unauth_mcp_guard``
+  (generic class). Two fixtures + 18 tests.
+  Source: <https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html>
+
+### Integrations
+
+- **Agent-commerce caps** for Anthropic Project Deal +
+  Stripe Agentic. New ``integrations/agent_commerce_caps.py`` with
+  per-agent / per-counterparty / per-window dollar + transaction
+  caps. SQLite-backed ledger survives ``SIGKILL`` (WAL journal mode).
+  Three adapters: Project Deal, Stripe Agentic, generic webhook.
+  ``agent_commerce_default_caps`` preset ($10/counterparty/day,
+  $200/agent/week). 14 tests including 100-thread concurrent-debit
+  no-overspend + restart-survival.
+  Source: <https://www.anthropic.com/features/project-deal>
+- **Cloudflare Mesh probe + dedupe**. New
+  ``integrations/cloudflare_mesh_probe.py`` detects upstream Mesh
+  via canonical headers (single versioned constant set) and
+  de-duplicates overlapping egress policies while keeping
+  airlock-only guards. 9 tests.
+  Source: <https://www.cloudflare.com/press/press-releases/2026/cloudflare-launches-mesh-to-secure-the-ai-agent-lifecycle/>
+
+### Tooling
+
+- **wild-2026-04 payload corpus + ``airlock replay`` CLI**.
+  10 SHA-256-pinned indirect-prompt-injection payloads from the
+  Help Net Security 2026-04-24 catalogue. Restricted-grammar YAML
+  loader (no PyYAML dep). ``airlock replay --corpus wild-2026-04``
+  emits TAP / JSON / table; exits 0 when every payload meets its
+  expected verdict. **Currently exits 0** (10 / 10 block on the
+  default guard chain). 10 tests.
+
+### Net-new product features
+
+- **Feature A — ``airlock baseline``**: per-agent 7-day rolling
+  profile (tool mix, egress hosts, token spend, latency). Drift
+  score per dimension via TVD + Jaccard. CLI subcommands
+  ``init`` / ``diff`` / ``show``. 8 tests.
+  Source: <https://venturebeat.com/security/rsac-2026-agentic-soc-agent-telemetry-security-gap>
+- **Feature B — ``airlock pack``**: signed, hash-pinned policy
+  bundles. HMAC-SHA256 manifest signing. Three v0 packs:
+  ``claude-code-ci@2026.04``, ``gemini-cli-ci@2026.04``,
+  ``copilot-agent-ci@2026.04``. CLI subcommands ``list`` /
+  ``install`` / ``verify``. 12 tests.
+- **Feature C — ``airlock attest``**: DSSE-style verdict
+  provenance envelopes. Pluggable signers
+  (``FileSigner`` / ``EnvSigner`` / ``KMSStubSigner``). The
+  Sigstore Fulcio adapter is queued for v0.5.9. CLI subcommand
+  ``verify``. 11 tests.
+
+### Open issue resolved
+
+- **Issue #3** — marketplace.json count regression. New
+  ``tests/test_marketplace_metadata.py`` ensures
+  ``.claude-plugin/marketplace.json`` proof_points never over-claim
+  CVE / preset counts vs reality. 5 tests.
+
+### Stats
+
+- Tests: **1,762 → 1,875** (+113)
+- Coverage: **83.15% → 83.52%**
+- New top-level errors: ``PRMetadataInjectionRejected``,
+  ``LANUnauthMCPServerBlocked``, ``AgentCommerceCapExceeded``.
+- New top-level classes: ``PRMetadataGuard``, ``AgentCommerceCaps``.
+- New CLI subcommands: ``airlock replay``, ``airlock baseline``,
+  ``airlock pack``, ``airlock attest``.
+- **No new runtime dependencies** (pydantic + structlog + tomli
+  baseline preserved).
+
+### Primary sources
+
+- Aonan Guan — Comment-and-Control disclosure (2026-04-25):
+  <https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/>
+- Help Net Security (2026-04-24):
+  <https://www.helpnetsecurity.com/2026/04/24/indirect-prompt-injection-in-the-wild/>
+- Cloudflare Mesh launch (2026-04-23):
+  <https://www.cloudflare.com/press/press-releases/2026/cloudflare-launches-mesh-to-secure-the-ai-agent-lifecycle/>
+- Anthropic Project Deal (2026-04-25):
+  <https://www.anthropic.com/features/project-deal>
+- VentureBeat RSAC 2026 (2026-04-22):
+  <https://venturebeat.com/security/rsac-2026-agentic-soc-agent-telemetry-security-gap>
+- The Hacker News — mcp-atlassian (2026-04-24):
+  <https://thehackernews.com/2026/04/anthropic-mcp-design-vulnerability.html>
+
+---
+
 ## [0.5.7.1] - 2026-04-26 — "README LoC honesty fix"
 
 Tiny patch release. No new runtime code.

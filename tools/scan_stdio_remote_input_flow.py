@@ -439,11 +439,7 @@ def scan_repo(
     for root in roots:
         if not root.exists():
             continue
-        files = (
-            [root]
-            if root.is_file() and root.suffix == ".py"
-            else sorted(root.rglob("*.py"))
-        )
+        files = [root] if root.is_file() and root.suffix == ".py" else sorted(root.rglob("*.py"))
         for path in files:
             result.files_scanned += 1
             result.findings.extend(_scan_file(path, user_input_decorators=user_input_decorators))
