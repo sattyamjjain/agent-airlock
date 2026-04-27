@@ -89,25 +89,28 @@ _MODEL_TARGETING_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 # Zero-width / bidi codepoints that hide instructions from human
 # reviewers but reach the model. The Trojan-Source class
-# (CVE-2021-42574) plus the standard ZWJ/ZWNJ family.
+# (CVE-2021-42574) plus the standard ZWJ/ZWNJ family. Codepoints
+# are written as \u-escapes so the file itself stays clean of bidi
+# control characters (bandit B613 / Trojan Source).
 _INVISIBLE_CODEPOINTS: frozenset[str] = frozenset(
-    {
-        "​",  # ZWSP
-        "‌",  # ZWNJ
-        "‍",  # ZWJ
-        "‎",  # LRM
-        "‏",  # RLM
-        "‪",  # LRE
-        "‫",  # RLE
-        "‬",  # PDF
-        "‭",  # LRO
-        "‮",  # RLO
-        "⁦",  # LRI
-        "⁧",  # RLI
-        "⁨",  # FSI
-        "⁩",  # PDI
-        "﻿",  # BOM / ZWNBSP
-    }
+    chr(c)
+    for c in (
+        0x200B,  # ZWSP
+        0x200C,  # ZWNJ
+        0x200D,  # ZWJ
+        0x200E,  # LRM
+        0x200F,  # RLM
+        0x202A,  # LRE
+        0x202B,  # RLE
+        0x202C,  # PDF
+        0x202D,  # LRO
+        0x202E,  # RLO
+        0x2066,  # LRI
+        0x2067,  # RLI
+        0x2068,  # FSI
+        0x2069,  # PDI
+        0xFEFF,  # BOM / ZWNBSP
+    )
 )
 
 

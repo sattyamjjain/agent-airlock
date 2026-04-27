@@ -17,6 +17,7 @@ from ..attest import (
     EnvSigner,
     FileSigner,
     KMSStubSigner,
+    Signer,
     verify_envelope,
 )
 
@@ -27,7 +28,7 @@ def _load(path: Path) -> AttestationEnvelope:
 
 def _cmd_verify(args: argparse.Namespace) -> int:
     envelope = _load(Path(args.envelope_path))
-    signers = []
+    signers: list[Signer] = []
     if args.key_file:
         signers.append(FileSigner(keyid=args.keyid or "file", key_path=Path(args.key_file)))
     if args.env_var:

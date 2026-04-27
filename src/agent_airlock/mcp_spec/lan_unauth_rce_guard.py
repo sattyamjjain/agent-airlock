@@ -125,8 +125,9 @@ def _is_lan_bound(addr: str) -> bool:
     if not addr:
         return False
     addr_clean = addr.strip("[]")
-    # Public-bind shapes from v0.5.6 bind_address_guard
-    if addr_clean in {"0.0.0.0", "::", "0:0:0:0:0:0:0:0"}:
+    # Public-bind shapes from v0.5.6 bind_address_guard. The 0.0.0.0
+    # literal here is a *blocklist* match, not a bind target.
+    if addr_clean in {"0.0.0.0", "::", "0:0:0:0:0:0:0:0"}:  # nosec B104
         return True
     try:
         ip = ipaddress.ip_address(addr_clean)

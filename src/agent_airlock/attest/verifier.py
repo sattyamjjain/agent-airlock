@@ -38,7 +38,7 @@ def verify_envelope(
             try:
                 if signer.verify(payload, stored.sig):
                     return signer
-            except Exception:
+            except Exception:  # nosec B112 - try next candidate signer; no signer is fatal below
                 continue
     raise AttestationVerificationError(
         f"no signer matched envelope keyids {[s.keyid for s in envelope.signatures]}"

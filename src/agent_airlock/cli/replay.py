@@ -45,6 +45,7 @@ def _run_pr_metadata_guard(entry: CorpusEntry) -> ReplayResult:
 
     guard = PRMetadataGuard(reject_threshold=0.9)
     sanitized = guard.sanitize(entry.payload, source="pr_body")
+    actual: Literal["block", "warn", "allow"]
     if sanitized.risk_score >= 0.9:
         actual = "block"
     elif sanitized.risk_score > 0.0:
