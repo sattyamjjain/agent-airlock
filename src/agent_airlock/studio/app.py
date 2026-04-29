@@ -46,9 +46,7 @@ class StudioState:
     bundle_id: str = "default"
     active_presets: list[str] = field(default_factory=list)
     runs: dict[str, RehearsalRun] = field(default_factory=dict)
-    verdict_fn: VerdictFn = field(
-        default_factory=lambda: _default_allow_fn
-    )
+    verdict_fn: VerdictFn = field(default_factory=lambda: _default_allow_fn)
 
     def rehearse(self, transcript_id: str, transcript: str) -> RehearsalRun:
         run = RehearsalRun(transcript_id=transcript_id)
