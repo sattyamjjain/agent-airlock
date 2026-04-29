@@ -189,8 +189,7 @@ def load_corpus(name: str, *, namespace: str | None = None) -> Corpus:
         ns_dir = sub / namespace
         if not ns_dir.is_dir():
             raise CorpusError(
-                f"corpus {name!r}: namespace {namespace!r} not found "
-                f"(expected dir at {ns_dir})"
+                f"corpus {name!r}: namespace {namespace!r} not found (expected dir at {ns_dir})"
             )
         for f in sorted(ns_dir.glob("*.yaml")):
             parsed = _parse_corpus_file(f)
@@ -210,9 +209,7 @@ def load_corpus(name: str, *, namespace: str | None = None) -> Corpus:
             if parsed.namespace == namespace:
                 entries.append(parsed)
     if not entries:
-        raise CorpusError(
-            f"corpus {name!r} (namespace={namespace!r}) is empty"
-        )
+        raise CorpusError(f"corpus {name!r} (namespace={namespace!r}) is empty")
     corpus_name = f"{name}/{namespace}" if namespace else name
     return Corpus(name=corpus_name, entries=tuple(entries))
 

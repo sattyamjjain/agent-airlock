@@ -80,9 +80,7 @@ class TestPreUpgradeShape:
         )
         assert out == two_messages
 
-    def test_dict_with_extra_keys(
-        self, two_messages: list[_FakeToolMessage]
-    ) -> None:
+    def test_dict_with_extra_keys(self, two_messages: list[_FakeToolMessage]) -> None:
         out = unwrap_toolnode_output(
             {"messages": two_messages, "metadata": {"k": "v"}},
             version="1.0.10",

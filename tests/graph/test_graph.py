@@ -56,16 +56,15 @@ class TestBuilder:
         snap = build_snapshot(sample_events)
         # agent-A -> fetch_url 'allow' should aggregate to count=2.
         match = [
-            e for e in snap.edges
+            e
+            for e in snap.edges
             if e.src == "agent-A" and e.dst == "fetch_url" and e.verdict == "allow"
         ]
         assert len(match) == 1
         assert match[0].count == 2
         assert match[0].last_envelope_id == "e2"
 
-    def test_blocks_kept_separate_from_allows(
-        self, sample_events: list[dict]
-    ) -> None:
+    def test_blocks_kept_separate_from_allows(self, sample_events: list[dict]) -> None:
         snap = build_snapshot(sample_events)
         block_edges = [e for e in snap.edges if e.verdict == "block"]
         assert len(block_edges) == 1
@@ -97,17 +96,11 @@ class TestSnapshotJSONStable:
 
 
 class TestHTTPServer:
-    def test_snapshot_endpoint_returns_json(
-        self, sample_events: list[dict]
-    ) -> None:
-        httpd, _ = serve_in_thread(
-            in_memory=sample_events, host="127.0.0.1", port=0
-        )
+    def test_snapshot_endpoint_returns_json(self, sample_events: list[dict]) -> None:
+        httpd, _ = serve_in_thread(in_memory=sample_events, host="127.0.0.1", port=0)
         try:
             port = httpd.server_address[1]
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/api/snapshot", timeout=2
-            ) as resp:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/snapshot", timeout=2) as resp:
                 assert resp.status == 200
                 payload = json.loads(resp.read().decode("utf-8"))
             assert payload["version"] == 1
@@ -119,9 +112,7 @@ class TestHTTPServer:
         httpd, _ = serve_in_thread(in_memory=[], host="127.0.0.1", port=0)
         try:
             port = httpd.server_address[1]
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/api/healthz", timeout=2
-            ) as resp:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/healthz", timeout=2) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             assert payload == {"status": "ok"}
         finally:
@@ -131,9 +122,7 @@ class TestHTTPServer:
         httpd, _ = serve_in_thread(in_memory=[], host="127.0.0.1", port=0)
         try:
             port = httpd.server_address[1]
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/", timeout=2
-            ) as resp:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as resp:
                 body = resp.read().decode("utf-8")
             assert "airlock graph" in body
             assert "/graph.js" in body
@@ -142,19 +131,13 @@ class TestHTTPServer:
 
 
 class TestJSONLSource:
-    def test_jsonl_round_trip(
-        self, tmp_path: Path, sample_events: list[dict]
-    ) -> None:
+    def test_jsonl_round_trip(self, tmp_path: Path, sample_events: list[dict]) -> None:
         log = tmp_path / "audit.jsonl"
-        log.write_text(
-            "\n".join(json.dumps(e) for e in sample_events), encoding="utf-8"
-        )
+        log.write_text("\n".join(json.dumps(e) for e in sample_events), encoding="utf-8")
         httpd, _ = serve_in_thread(jsonl_path=log, host="127.0.0.1", port=0)
         try:
             port = httpd.server_address[1]
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/api/snapshot", timeout=2
-            ) as resp:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/snapshot", timeout=2) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             ids = {n["id"] for n in payload["nodes"]}
             assert "agent-A" in ids and "fetch_url" in ids

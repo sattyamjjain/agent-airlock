@@ -87,9 +87,7 @@ def build_snapshot(events: Iterable[dict[str, Any]]) -> GraphSnapshot:
         key = (src, dst, verdict)
         prev = edges.get(key)
         if prev is None:
-            edges[key] = GraphEdge(
-                src=src, dst=dst, verdict=verdict, count=1, last_envelope_id=env
-            )
+            edges[key] = GraphEdge(src=src, dst=dst, verdict=verdict, count=1, last_envelope_id=env)
         else:
             edges[key] = GraphEdge(
                 src=src,

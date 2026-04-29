@@ -75,9 +75,7 @@ class TestTriggerListener:
         signer = HMACBroadcastSigner(keyid="op-1", key=key)
         listener_signer = HMACBroadcastSigner(keyid="op-1", key=key)
         transport = InMemoryTransport()
-        listener = KillSwitchListener(
-            signers=(listener_signer,), transport=transport
-        )
+        listener = KillSwitchListener(signers=(listener_signer,), transport=transport)
         broadcaster = KillSwitchBroadcast(signer=signer, transport=transport)
 
         broadcaster.trigger(reason="rogue spend detected")
@@ -98,7 +96,7 @@ class TestTriggerListener:
         broadcaster.trigger(reason="test")
         # Mutate the queued message.
         original = transport._queue.pop()  # type: ignore[attr-defined]
-        tampered = original.replace(b"\"reason\":\"test\"", b"\"reason\":\"FAKE\"")
+        tampered = original.replace(b'"reason":"test"', b'"reason":"FAKE"')
         transport._queue.append(tampered)  # type: ignore[attr-defined]
         assert listener.poll() == 0
         assert listener.is_frozen() is False
@@ -107,10 +105,7 @@ class TestTriggerListener:
 class TestQuorumReset:
     def test_one_signer_does_not_reset(self) -> None:
         keys = [_key() for _ in range(3)]
-        signers = [
-            HMACBroadcastSigner(keyid=f"op-{i}", key=k)
-            for i, k in enumerate(keys, 1)
-        ]
+        signers = [HMACBroadcastSigner(keyid=f"op-{i}", key=k) for i, k in enumerate(keys, 1)]
         transport = InMemoryTransport()
         listener = KillSwitchListener(
             signers=tuple(signers),
@@ -119,9 +114,7 @@ class TestQuorumReset:
             reset_quorum_total=3,
         )
         # Trigger first.
-        KillSwitchBroadcast(signer=signers[0], transport=transport).trigger(
-            "first"
-        )
+        KillSwitchBroadcast(signer=signers[0], transport=transport).trigger("first")
         listener.poll()
         # Single reset attempt — must not unfreeze.
         KillSwitchBroadcast(signer=signers[0], transport=transport).reset("op-1")
@@ -131,10 +124,7 @@ class TestQuorumReset:
 
     def test_two_of_three_resets(self) -> None:
         keys = [_key() for _ in range(3)]
-        signers = [
-            HMACBroadcastSigner(keyid=f"op-{i}", key=k)
-            for i, k in enumerate(keys, 1)
-        ]
+        signers = [HMACBroadcastSigner(keyid=f"op-{i}", key=k) for i, k in enumerate(keys, 1)]
         transport = InMemoryTransport()
         listener = KillSwitchListener(
             signers=tuple(signers),

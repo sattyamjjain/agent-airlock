@@ -84,16 +84,12 @@ class GPT55ToolShapeAdapter:
         message = self._extract_message(payload)
         raw_calls = message.get("tool_calls") or []
         if not isinstance(raw_calls, list):
-            raise ValueError(
-                f"tool_calls must be a list, got {type(raw_calls).__name__}"
-            )
+            raise ValueError(f"tool_calls must be a list, got {type(raw_calls).__name__}")
 
         normalized: list[NormalizedToolCall] = []
         for idx, raw in enumerate(raw_calls):
             if not isinstance(raw, dict):
-                raise ValueError(
-                    f"tool_calls[{idx}] must be a dict, got {type(raw).__name__}"
-                )
+                raise ValueError(f"tool_calls[{idx}] must be a dict, got {type(raw).__name__}")
             call_id = raw.get("id")
             call_type = raw.get("type", "function")
             fn = raw.get("function") or {}

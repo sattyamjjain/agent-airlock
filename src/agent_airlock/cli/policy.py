@@ -23,15 +23,11 @@ def _stub_backend(system_prompt: str, user_text: str) -> str:  # noqa: ARG001
     rules: list[str] = []
     if "0.0.0.0" in text or "public" in text:  # nosec B104 - keyword match in user text, not a bind target
         rules.append(
-            "  - rule_id: refuse_public_bind\n"
-            "    condition: bind_address_public\n"
-            "    action: block"
+            "  - rule_id: refuse_public_bind\n    condition: bind_address_public\n    action: block"
         )
     if "without auth" in text or "no auth" in text or "missing auth" in text:
         rules.append(
-            "  - rule_id: require_auth\n"
-            "    condition: missing_auth_header\n"
-            "    action: block"
+            "  - rule_id: require_auth\n    condition: missing_auth_header\n    action: block"
         )
     if "parallel" in text and "above" in text:
         # Pull a fan-out number if one is present, default 8.
@@ -47,11 +43,7 @@ def _stub_backend(system_prompt: str, user_text: str) -> str:  # noqa: ARG001
             f"    action: block"
         )
     if not rules:
-        rules.append(
-            "  - rule_id: catch_all\n"
-            "    condition: missing_auth_header\n"
-            "    action: warn"
-        )
+        rules.append("  - rule_id: catch_all\n    condition: missing_auth_header\n    action: warn")
     body = (
         "policy_id: compiled_user_policy\n"
         f"description: {user_text.strip().rstrip('.')}\n"

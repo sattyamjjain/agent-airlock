@@ -170,9 +170,7 @@ class TestTaintStep:
         ctx = {"source_paths": ["/path/to/server.py"]}
         verdict = guard.evaluate(spec, ctx)
         assert verdict.verdict == "block"
-        assert any(
-            f.guard_id == "scan_stdio_remote_input_flow" for f in verdict.findings
-        )
+        assert any(f.guard_id == "scan_stdio_remote_input_flow" for f in verdict.findings)
 
 
 class TestPerformance:
@@ -193,9 +191,7 @@ class TestPerformance:
             latencies.append((time.perf_counter() - start) * 1000.0)
         latencies.sort()
         p99 = latencies[98]
-        assert p99 < ceiling_ms, (
-            f"meta-chain p99 {p99:.3f}ms exceeds {ceiling_ms}ms ceiling"
-        )
+        assert p99 < ceiling_ms, f"meta-chain p99 {p99:.3f}ms exceeds {ceiling_ms}ms ceiling"
 
 
 class TestPresetWiring:
@@ -206,10 +202,7 @@ class TestPresetWiring:
         assert preset["preset_id"] == "mcp_stdio_meta_cve_2026_04"
         assert preset["default_action"] == "block"
         assert preset["severity"] == "critical"
-        assert (
-            "ox.security/blog/mother-of-all-ai-supply-chains"
-            in preset["advisory_url"]
-        )
+        assert "ox.security/blog/mother-of-all-ai-supply-chains" in preset["advisory_url"]
         guard = StdioMetaGuard(stdio_config=preset["stdio_config"])
         verdict = guard.evaluate(_POC_ARGV_STRING_CONCAT)
         assert verdict.verdict == "block"
@@ -218,9 +211,7 @@ class TestPresetWiring:
         preset = mcp_stdio_meta_cve_2026_04()
         # Every preset-listed variant must appear in __variants__ so the
         # public claim and the guard implementation cannot drift.
-        assert set(preset["covered_variants"]).issubset(
-            set(StdioMetaGuard.__variants__)
-        )
+        assert set(preset["covered_variants"]).issubset(set(StdioMetaGuard.__variants__))
 
 
 class TestErrorHierarchy:

@@ -57,12 +57,8 @@ class CiscoIDEScannerBridge:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         http_post: Callable[..., Any] | None = None,
     ) -> None:
-        self._api_base = api_base or os.environ.get(
-            "AIRLOCK_CISCO_SCANNER_API_BASE", ""
-        )
-        self._api_key = api_key or os.environ.get(
-            "AIRLOCK_CISCO_SCANNER_API_KEY", ""
-        )
+        self._api_base = api_base or os.environ.get("AIRLOCK_CISCO_SCANNER_API_BASE", "")
+        self._api_key = api_key or os.environ.get("AIRLOCK_CISCO_SCANNER_API_KEY", "")
         self._timeout_s = timeout_s
         self._http_post = http_post  # injected for tests
 
@@ -93,9 +89,7 @@ class CiscoIDEScannerBridge:
             try:
                 source = path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
-                logger.warning(
-                    "cisco_scanner_read_failed", path=str(path), error=str(exc)
-                )
+                logger.warning("cisco_scanner_read_failed", path=str(path), error=str(exc))
                 return []
 
         payload = {

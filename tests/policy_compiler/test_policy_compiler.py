@@ -45,6 +45,7 @@ class TestPromptHash:
 
     def test_hash_stable_within_session(self) -> None:
         from agent_airlock.policy_compiler.prompt import PROMPT_HASH as h2
+
         assert h2 == PROMPT_HASH
 
 
@@ -123,7 +124,9 @@ class TestParserRejectsBadYAML:
     def test_missing_policy_id(self) -> None:
         register_llm_backend(
             "broken",
-            lambda *_args: "description: x\nrules:\n  - rule_id: r\n    condition: x\n    action: block\n",
+            lambda *_args: (
+                "description: x\nrules:\n  - rule_id: r\n    condition: x\n    action: block\n"
+            ),
         )
         c2 = PolicyCompiler(backend="broken")
         with pytest.raises(PolicyCompileError, match="policy_id"):

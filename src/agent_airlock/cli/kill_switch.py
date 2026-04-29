@@ -17,8 +17,7 @@ def _load_key_from_env(env_var: str) -> bytes:
     val = os.environ.get(env_var, "")
     if not val:
         raise SystemExit(
-            f"environment variable {env_var!r} must hold the signing key "
-            "(>= 32 bytes, hex or raw)"
+            f"environment variable {env_var!r} must hold the signing key (>= 32 bytes, hex or raw)"
         )
     if all(c in "0123456789abcdefABCDEF" for c in val) and len(val) >= 64:
         try:
@@ -44,9 +43,7 @@ def _cmd_trigger(args: argparse.Namespace) -> int:
     # The InMemoryTransport is process-local; in production this is
     # replaced via airlock-config wiring. For the CLI smoke we surface
     # the queued message count.
-    print(
-        f"OK: trigger queued (reason={args.reason!r}, transport=InMemoryTransport)"
-    )
+    print(f"OK: trigger queued (reason={args.reason!r}, transport=InMemoryTransport)")
     return 0
 
 

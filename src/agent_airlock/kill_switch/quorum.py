@@ -28,9 +28,7 @@ class ResetQuorum:
         if self.threshold < 1:
             raise QuorumError("quorum threshold must be at least 1")
         if self.total < self.threshold:
-            raise QuorumError(
-                f"quorum threshold {self.threshold} cannot exceed total {self.total}"
-            )
+            raise QuorumError(f"quorum threshold {self.threshold} cannot exceed total {self.total}")
 
     def submit(self, keyid: str) -> bool:
         """Record one keyid's vote. Returns ``True`` once threshold reached."""

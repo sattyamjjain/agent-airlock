@@ -141,18 +141,14 @@ class TestDurability:
             )
         )
         # Engine 1 — append 5 use events, do not close.
-        e1 = CapabilityCapEngine(
-            cfg, store=SQLiteCapabilityLedgerStore(path=db)
-        )
+        e1 = CapabilityCapEngine(cfg, store=SQLiteCapabilityLedgerStore(path=db))
         for _ in range(5):
             e1.check_and_use("a", Capability.DELEGATE_TO_AGENT, "b")
         # Drop engine 1 entirely (simulates SIGKILL).
         del e1
 
         # Engine 2 — read the same DB.
-        e2 = CapabilityCapEngine(
-            cfg, store=SQLiteCapabilityLedgerStore(path=db)
-        )
+        e2 = CapabilityCapEngine(cfg, store=SQLiteCapabilityLedgerStore(path=db))
         d = e2.check_and_use("a", Capability.DELEGATE_TO_AGENT, "b")
         assert d.allowed  # still under the cap of 10
         assert d.already_used == 5  # WAL flushed all 5 prior events
@@ -172,9 +168,7 @@ class TestPreset:
         engine = CapabilityCapEngine(preset["rules_config"])
         # Default config grants 3 delegations / hour.
         for _ in range(3):
-            assert engine.check_and_use(
-                "a", Capability.DELEGATE_TO_AGENT, "b"
-            ).allowed
+            assert engine.check_and_use("a", Capability.DELEGATE_TO_AGENT, "b").allowed
         d = engine.check_and_use("a", Capability.DELEGATE_TO_AGENT, "b")
         assert not d.allowed
 
@@ -190,13 +184,9 @@ class TestAgentCommerceCapsRegression:
         )
 
         caps = AgentCommerceCaps(
-            CapsConfig(
-                caps=(Cap(amount_cents=500, window="day", scope="agent"),)
-            )
+            CapsConfig(caps=(Cap(amount_cents=500, window="day", scope="agent"),))
         )
-        d = caps.check_and_debit(
-            agent_id="a", counterparty="m", amount_cents=300
-        )
+        d = caps.check_and_debit(agent_id="a", counterparty="m", amount_cents=300)
         assert d.allowed
 
     def test_capability_caps_dont_affect_dollar_caps(self) -> None:
@@ -222,11 +212,7 @@ class TestAgentCommerceCapsRegression:
         )
 
         caps = AgentCommerceCaps(
-            CapsConfig(
-                caps=(Cap(amount_cents=500, window="day", scope="agent"),)
-            )
+            CapsConfig(caps=(Cap(amount_cents=500, window="day", scope="agent"),))
         )
-        decision = caps.check_and_debit(
-            agent_id="a", counterparty="m", amount_cents=100
-        )
+        decision = caps.check_and_debit(agent_id="a", counterparty="m", amount_cents=100)
         assert decision.allowed

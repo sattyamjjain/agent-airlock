@@ -68,9 +68,7 @@ def _parse_yaml(text: str) -> dict[str, Any]:  # noqa: C901 — straightforward 
             i += 1
             continue
         if line.startswith(" "):
-            raise ValueError(
-                f"line {i + 1}: unexpected indentation outside a list block: {raw!r}"
-            )
+            raise ValueError(f"line {i + 1}: unexpected indentation outside a list block: {raw!r}")
         if ":" not in line:
             raise ValueError(f"line {i + 1}: missing ':' separator: {raw!r}")
         key, _, rest = line.partition(":")
@@ -93,9 +91,7 @@ def _parse_yaml(text: str) -> dict[str, Any]:  # noqa: C901 — straightforward 
             if not sub.startswith("  "):
                 break
             if not stripped.startswith("- "):
-                raise ValueError(
-                    f"line {i + 1}: list item must start with '- ': {sub!r}"
-                )
+                raise ValueError(f"line {i + 1}: list item must start with '- ': {sub!r}")
             item, i = _parse_mapping(lines, i)
             items.append(item)
         out[key] = items
@@ -188,9 +184,7 @@ def load_coverage(path: Path | None = None) -> Coverage:
             "advisory_url",
         ):
             if not entry_raw.get(required):
-                raise ValueError(
-                    f"{target}: entries[{idx}] missing required key {required!r}"
-                )
+                raise ValueError(f"{target}: entries[{idx}] missing required key {required!r}")
         entries.append(
             CoverageEntry(
                 risk_id=str(entry_raw["risk_id"]),
@@ -263,9 +257,7 @@ def stale_entries(coverage: Coverage, max_age_days: int = 30) -> list[CoverageEn
         try:
             d = date.fromisoformat(e.last_verified)
         except ValueError as exc:
-            raise ValueError(
-                f"{e.risk_id}: invalid last_verified={e.last_verified!r}"
-            ) from exc
+            raise ValueError(f"{e.risk_id}: invalid last_verified={e.last_verified!r}") from exc
         age = (today - d).days
         if age > max_age_days:
             out.append(e)

@@ -34,9 +34,7 @@ class CompileCache:
         with self._lock:
             return self._entries.get(key)
 
-    def put(
-        self, prompt_hash: str, user_text: str, backend: str, yaml: str
-    ) -> None:
+    def put(self, prompt_hash: str, user_text: str, backend: str, yaml: str) -> None:
         key = _request_hash(prompt_hash, user_text, backend)
         with self._lock:
             self._entries[key] = yaml

@@ -86,16 +86,10 @@ class TestNormalize:
     def test_missing_id_raises(self, adapter: GPT55ToolShapeAdapter) -> None:
         with pytest.raises(ValueError, match="missing required"):
             adapter.normalize(
-                {
-                    "tool_calls": [
-                        {"type": "function", "function": {"name": "x", "arguments": "{}"}}
-                    ]
-                }
+                {"tool_calls": [{"type": "function", "function": {"name": "x", "arguments": "{}"}}]}
             )
 
-    def test_invalid_arguments_json_raises(
-        self, adapter: GPT55ToolShapeAdapter
-    ) -> None:
+    def test_invalid_arguments_json_raises(self, adapter: GPT55ToolShapeAdapter) -> None:
         with pytest.raises(ValueError, match="not valid JSON"):
             adapter.normalize(
                 {
@@ -109,9 +103,7 @@ class TestNormalize:
                 }
             )
 
-    def test_dict_arguments_passthrough(
-        self, adapter: GPT55ToolShapeAdapter
-    ) -> None:
+    def test_dict_arguments_passthrough(self, adapter: GPT55ToolShapeAdapter) -> None:
         # The SDK occasionally returns arguments as a pre-decoded dict
         # rather than the JSON-string form. Tolerate both.
         out = adapter.normalize(
@@ -167,9 +159,7 @@ class TestPresetDefaults:
         assert preset["schema_pinned_at"] == SCHEMA_PINNED_AT
         assert "openai.com" in preset["advisory_url"]
 
-    def test_preset_blocks_9_parallel_calls(
-        self, adapter: GPT55ToolShapeAdapter
-    ) -> None:
+    def test_preset_blocks_9_parallel_calls(self, adapter: GPT55ToolShapeAdapter) -> None:
         preset = gpt_5_5_spud_agent_defaults()
         nine_calls = {
             "tool_calls": [
@@ -184,9 +174,7 @@ class TestPresetDefaults:
         normalized = adapter.normalize(nine_calls)
         assert len(normalized) > preset["max_parallel_tool_calls"]
 
-    def test_preset_allows_8_parallel_calls(
-        self, adapter: GPT55ToolShapeAdapter
-    ) -> None:
+    def test_preset_allows_8_parallel_calls(self, adapter: GPT55ToolShapeAdapter) -> None:
         preset = gpt_5_5_spud_agent_defaults()
         normalized = adapter.normalize(_PARALLEL_CALLS_PAYLOAD)
         assert len(normalized) == preset["max_parallel_tool_calls"]
@@ -194,13 +182,7 @@ class TestPresetDefaults:
 
 class TestModelTierRow:
     def test_gpt_5_5_spud_classified_as_offensive_cyber(self) -> None:
-        assert (
-            classify_model("gpt-5-5-spud")
-            == ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE
-        )
+        assert classify_model("gpt-5-5-spud") == ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE
 
     def test_gpt_5_5_prefix_match(self) -> None:
-        assert (
-            classify_model("gpt-5-5")
-            == ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE
-        )
+        assert classify_model("gpt-5-5") == ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE

@@ -169,9 +169,7 @@ class CapabilityCapEngine:
             # Revoke check — most-recent revoke since the window start
             # blocks all use events for the rest of the window.
             if hasattr(self.store, "latest_revocation_ts"):
-                latest_revoke = self.store.latest_revocation_ts(
-                    agent_id, capability
-                )
+                latest_revoke = self.store.latest_revocation_ts(agent_id, capability)
                 if latest_revoke is not None and latest_revoke >= window_start:
                     return CapabilityDecision(
                         allowed=False,
@@ -280,9 +278,7 @@ class CapabilityCapEngine:
     # Internals
     # ------------------------------------------------------------------
 
-    def _match_rule(
-        self, capability: Capability, target: str
-    ) -> CapabilityRule | None:
+    def _match_rule(self, capability: Capability, target: str) -> CapabilityRule | None:
         """Return the most-specific rule for ``(capability, target)``.
 
         Specific target matches win over wildcard. First-write wins on

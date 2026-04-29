@@ -66,6 +66,7 @@ def _strip_invisible_codepoints(text: str) -> str:
             out.append(ch)
     return "".join(out)
 
+
 logger = structlog.get_logger("agent-airlock.mcp_spec.transcript_ingest_guard")
 
 Verdict = Literal["allow", "warn", "block"]
@@ -123,11 +124,7 @@ class TranscriptIngestGuard:
             ``risk_score`` against the same threshold the
             ``PRMetadataGuard`` uses for PR bodies.
         """
-        kind = (
-            source_kind
-            if isinstance(source_kind, SourceKind)
-            else SourceKind(source_kind)
-        )
+        kind = source_kind if isinstance(source_kind, SourceKind) else SourceKind(source_kind)
         # Substitute invisible codepoints with spaces *before* the
         # PR-metadata sanitiser so its word-boundary regexes still fire
         # on payloads that hide overrides between zero-width chars.
@@ -142,9 +139,7 @@ class TranscriptIngestGuard:
         # Transcript-specific imperative scan: catches "system override",
         # "execute the following", "post credentials", etc. — patterns
         # too aggressive for PR bodies but clear smuggle in video text.
-        transcript_matches = sum(
-            1 for pat in _TRANSCRIPT_IMPERATIVES if pat.search(normalised)
-        )
+        transcript_matches = sum(1 for pat in _TRANSCRIPT_IMPERATIVES if pat.search(normalised))
         boosted_score = sanitized.risk_score
         if transcript_matches > 0:
             # Same score-boost shape as PRMetadataGuard: 1 match -> 0.9,

@@ -26,9 +26,7 @@ class HMACBroadcastSigner:
 
     def __post_init__(self) -> None:
         if len(self.key) < 32:
-            raise InvalidBroadcastSignature(
-                "kill-switch signing key must be at least 32 bytes"
-            )
+            raise InvalidBroadcastSignature("kill-switch signing key must be at least 32 bytes")
 
     def sign(self, payload: bytes) -> str:
         """Return the canonical hex MAC for ``payload``."""

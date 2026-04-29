@@ -1256,8 +1256,7 @@ def mcp_stdio_meta_cve_2026_04(
         "severity": "critical",
         "default_action": "block",
         "advisory_url": (
-            "https://www.ox.security/blog/"
-            "mother-of-all-ai-supply-chains-anthropic-mcp-stdio"
+            "https://www.ox.security/blog/mother-of-all-ai-supply-chains-anthropic-mcp-stdio"
         ),
         "stdio_config": stdio_guard_ox_defaults(),
         "enable_manifest_drift_check": enable_manifest_drift_check,

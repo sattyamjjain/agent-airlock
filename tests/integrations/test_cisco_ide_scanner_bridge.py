@@ -38,24 +38,18 @@ class TestUnconfigured:
         bridge = CiscoIDEScannerBridge(api_base="", api_key="")
         assert bridge.is_configured() is False
 
-    def test_unconfigured_scan_returns_empty(
-        self, tmp_source: Path
-    ) -> None:
+    def test_unconfigured_scan_returns_empty(self, tmp_source: Path) -> None:
         bridge = CiscoIDEScannerBridge(api_base="", api_key="")
         assert bridge.scan_file(tmp_source) == []
 
-    def test_unconfigured_does_not_call_http(
-        self, tmp_source: Path
-    ) -> None:
+    def test_unconfigured_does_not_call_http(self, tmp_source: Path) -> None:
         calls: list[Any] = []
 
         def fake_post(*args: Any, **kwargs: Any) -> dict:
             calls.append((args, kwargs))
             return {"findings": []}
 
-        bridge = CiscoIDEScannerBridge(
-            api_base="", api_key="", http_post=fake_post
-        )
+        bridge = CiscoIDEScannerBridge(api_base="", api_key="", http_post=fake_post)
         bridge.scan_file(tmp_source)
         assert calls == []
 
@@ -108,9 +102,7 @@ class TestConfiguredHappyPath:
         assert findings[0].severity == "high"
         assert findings[0].line == 2
         # Headers carry bearer auth and identify the bridge.
-        assert (
-            captured["headers"]["Authorization"] == "Bearer dummy-token"
-        )
+        assert captured["headers"]["Authorization"] == "Bearer dummy-token"
         assert "agent-airlock" in captured["headers"]["User-Agent"]
         # Payload includes filename + source text but never the path.
         assert captured["payload"]["filename"] == "vulnerable.py"
@@ -119,9 +111,7 @@ class TestConfiguredHappyPath:
 
 class TestRegistry:
     def test_register_and_lookup(self) -> None:
-        bridge = CiscoIDEScannerBridge(
-            api_base="https://x", api_key="k"
-        )
+        bridge = CiscoIDEScannerBridge(api_base="https://x", api_key="k")
         register_scanner(bridge)
         assert get_scanner("cisco-ide-scanner") is bridge
         assert bridge in list_scanners()
@@ -132,9 +122,7 @@ class TestRegistry:
 
 
 class TestNetworkFailureGraceful:
-    def test_request_exception_logged_returns_empty(
-        self, tmp_source: Path
-    ) -> None:
+    def test_request_exception_logged_returns_empty(self, tmp_source: Path) -> None:
         def boom(*args: Any, **kwargs: Any) -> dict:
             raise ConnectionError("network down")
 

@@ -40,9 +40,7 @@ class _SnapshotSource:
         in_memory: list[dict[str, Any]] | None = None,
     ) -> None:
         if (jsonl_path is None) == (in_memory is None):
-            raise ValueError(
-                "exactly one of jsonl_path / in_memory must be provided"
-            )
+            raise ValueError("exactly one of jsonl_path / in_memory must be provided")
         self._jsonl_path = jsonl_path
         self._in_memory = in_memory
 

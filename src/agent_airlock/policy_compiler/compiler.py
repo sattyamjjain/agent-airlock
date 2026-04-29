@@ -32,9 +32,7 @@ def register_llm_backend(name: str, backend: LLMBackend) -> None:
 
 def _get_backend(name: str) -> LLMBackend:
     if name not in _REGISTRY:
-        raise PolicyCompileError(
-            f"unknown LLM backend: {name!r}. Registered: {sorted(_REGISTRY)}"
-        )
+        raise PolicyCompileError(f"unknown LLM backend: {name!r}. Registered: {sorted(_REGISTRY)}")
     return _REGISTRY[name]
 
 
@@ -158,13 +156,9 @@ def _parse_yaml_to_chain(yaml_text: str) -> PolicyChain:
                         current[k.strip()] = v.strip()
                 else:
                     if current is None:
-                        raise PolicyCompileError(
-                            f"line {i + 1}: rule body without leading '- '"
-                        )
+                        raise PolicyCompileError(f"line {i + 1}: rule body without leading '- '")
                     if ":" not in ss:
-                        raise PolicyCompileError(
-                            f"line {i + 1}: missing ':' in rule body"
-                        )
+                        raise PolicyCompileError(f"line {i + 1}: missing ':' in rule body")
                     k, _, v = ss.partition(":")
                     current[k.strip()] = v.strip()
                 i += 1

@@ -75,9 +75,7 @@ class SQLiteCapabilityLedgerStore:
     def __init__(self, path: str | Path = ":memory:") -> None:
         self._path = str(path)
         self._lock = threading.Lock()
-        self._conn = sqlite3.connect(
-            self._path, isolation_level=None, check_same_thread=False
-        )
+        self._conn = sqlite3.connect(self._path, isolation_level=None, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(self._SCHEMA)
@@ -127,9 +125,7 @@ class SQLiteCapabilityLedgerStore:
         )
         return int(cur.lastrowid or 0)
 
-    def latest_revocation_ts(
-        self, agent_id: str, capability: Capability
-    ) -> float | None:
+    def latest_revocation_ts(self, agent_id: str, capability: Capability) -> float | None:
         """Return the most recent revoke event ts for ``(agent, capability)``."""
         cur = self._conn.execute(
             "SELECT ts_epoch FROM capability_events "

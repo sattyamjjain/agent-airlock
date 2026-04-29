@@ -91,9 +91,7 @@ class TestIssue1BaselineThreshold:
         )
         # Drift between two disjoint distributions is high; threshold
         # 0.05 must trip exit code 2.
-        assert result.returncode == 2, (
-            f"exit={result.returncode}; stdout={result.stdout!r}"
-        )
+        assert result.returncode == 2, f"exit={result.returncode}; stdout={result.stdout!r}"
 
 
 class TestIssue2PackListSorted:

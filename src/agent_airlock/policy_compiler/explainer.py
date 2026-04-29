@@ -53,9 +53,7 @@ def explain_preset(preset: dict[str, Any]) -> str:
                         condition=str(r.get("condition", "")),  # type: ignore[arg-type]
                         action=str(r.get("action", "block")),  # type: ignore[arg-type]
                         threshold=(
-                            float(r["threshold"])
-                            if r.get("threshold") not in (None, "")
-                            else None
+                            float(r["threshold"]) if r.get("threshold") not in (None, "") else None
                         ),
                     )
                 )
