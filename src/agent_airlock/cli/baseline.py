@@ -84,6 +84,15 @@ def _cmd_diff(args: argparse.Namespace) -> int:
             bar = "█" * int(val * 20)
             print(f"  {dim:<14} {val:.2f} {bar}")
     store.close()
+    # ``--threshold`` exit semantics: any dimension >= threshold trips
+    # exit code 2 so a CI pipeline can pass a single integer to its
+    # alerting layer. ``threshold=None`` keeps the legacy behaviour
+    # (always exit 0 on a successful diff).
+    threshold = getattr(args, "threshold", None)
+    if threshold is not None:
+        worst = max(payload.values()) if payload else 0.0
+        if worst >= threshold:
+            return 2
     return 0
 
 
@@ -97,6 +106,16 @@ def main(argv: list[str] | None = None) -> int:
     p_init.set_defaults(func=_cmd_init)
     p_diff = sub.add_parser("diff")
     p_diff.add_argument("agent_id")
+    p_diff.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help=(
+            "Drift threshold in [0, 1]. When set, exit code 2 is returned "
+            "if any drift dimension >= threshold. Default: never trip on "
+            "drift."
+        ),
+    )
     p_diff.set_defaults(func=_cmd_diff)
     p_show = sub.add_parser("show")
     p_show.add_argument("agent_id")

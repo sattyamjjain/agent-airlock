@@ -1,0 +1,45 @@
+# OWASP Agentic Top-10 coverage gate (v0.5.9+).
+#
+# Copy to .github/workflows/owasp_coverage_gate.yml. The repo bot lacks
+# `workflow` OAuth scope, so this artefact ships as a sample for the
+# maintainer to install by hand. The Python entrypoint and tests are
+# already on main; only this YAML needs human placement.
+
+name: OWASP Coverage Gate
+on:
+  pull_request:
+    paths:
+      - "src/agent_airlock/owasp_agentic_coverage/**"
+      - "src/agent_airlock/policy_presets.py"
+      - "src/agent_airlock/mcp_spec/**"
+      - "src/agent_airlock/integrations/**"
+      - "src/agent_airlock/capability_caps/**"
+  schedule:
+    - cron: "11 7 * * 1"  # Monday 07:11 UTC — earlier than every other repo
+
+jobs:
+  coverage-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e .
+      - name: Run completeness check
+        run: |
+          python - <<'PY'
+          from agent_airlock.owasp_agentic_coverage import load_coverage
+          from agent_airlock.owasp_agentic_coverage.render import stale_entries
+
+          c = load_coverage()
+          assert len(c.entries) == 10, f"expected 10 OWASP risks, got {len(c.entries)}"
+          stale = stale_entries(c, max_age_days=30)
+          if stale:
+              print("Stale entries:")
+              for e in stale:
+                  print(f"  {e.risk_id} last_verified={e.last_verified}")
+              raise SystemExit(1)
+          print("OK: 10/10 risks mapped, no stale entries")
+          PY

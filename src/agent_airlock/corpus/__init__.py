@@ -41,6 +41,15 @@ class CorpusEntry:
     sha256: str
     expected_verdict: Literal["block", "warn", "allow"]
     description: str = ""
+    namespace: str = ""
+    """Namespace tag for filtering (e.g. ``"short_form_video"``).
+
+    Empty string means the payload belongs to the corpus root.
+    """
+    provisional: bool = False
+    """``True`` for payloads reconstructed from a talk abstract before
+    the official slide deck was posted. Refresh once the artefact is
+    public; do not auto-promote."""
 
 
 @dataclass
@@ -133,6 +142,10 @@ def _parse_corpus_file(path: Path) -> CorpusEntry:
             f"{path}: expected_verdict must be one of block/warn/allow, got {verdict!r}"
         )
 
+    namespace = fields.get("namespace", "").strip()
+    provisional_raw = fields.get("provisional", "false").strip().lower()
+    provisional = provisional_raw in {"true", "1", "yes"}
+
     return CorpusEntry(
         id=fields["id"].strip(),
         payload=fields["payload"],
@@ -140,16 +153,23 @@ def _parse_corpus_file(path: Path) -> CorpusEntry:
         sha256=fields["sha256"].strip(),
         expected_verdict=verdict,  # type: ignore[arg-type]
         description=fields.get("description", "").strip(),
+        namespace=namespace,
+        provisional=provisional,
     )
 
 
-def load_corpus(name: str) -> Corpus:
+def load_corpus(name: str, *, namespace: str | None = None) -> Corpus:
     """Load a named corpus (e.g. ``"wild-2026-04"``).
 
     Args:
         name: Corpus name. Must match a subdirectory under
             ``CORPUS_ROOT``. The current shipped corpus is
             ``"wild-2026-04"``.
+        namespace: Optional namespace filter. When supplied, only
+            entries whose ``namespace`` field matches are returned.
+            Namespaced entries also live in the corresponding
+            subdirectory (e.g. ``2026-04/short_form_video/``) so the
+            filter is both file-tree and metadata aware.
 
     Raises:
         CorpusError: Unknown corpus, malformed file, or SHA-256
@@ -160,11 +180,65 @@ def load_corpus(name: str) -> Corpus:
     if not sub.is_dir():
         raise CorpusError(f"unknown corpus: {name!r} (expected dir at {sub})")
     entries: list[CorpusEntry] = []
-    for f in sorted(sub.glob("*.yaml")):
-        entries.append(_parse_corpus_file(f))
+    if namespace is None:
+        # Default: only root-level YAMLs (backward-compat). Subdirs
+        # belong to namespaces that the caller must opt into.
+        for f in sorted(sub.glob("*.yaml")):
+            entries.append(_parse_corpus_file(f))
+    else:
+        ns_dir = sub / namespace
+        if not ns_dir.is_dir():
+            raise CorpusError(
+                f"corpus {name!r}: namespace {namespace!r} not found "
+                f"(expected dir at {ns_dir})"
+            )
+        for f in sorted(ns_dir.glob("*.yaml")):
+            parsed = _parse_corpus_file(f)
+            # The on-disk subdir is the source of truth for the
+            # namespace tag — fall back when the YAML omits it.
+            if not parsed.namespace:
+                parsed = CorpusEntry(
+                    id=parsed.id,
+                    payload=parsed.payload,
+                    source=parsed.source,
+                    sha256=parsed.sha256,
+                    expected_verdict=parsed.expected_verdict,
+                    description=parsed.description,
+                    namespace=namespace,
+                    provisional=parsed.provisional,
+                )
+            if parsed.namespace == namespace:
+                entries.append(parsed)
     if not entries:
-        raise CorpusError(f"corpus {name!r} is empty")
-    return Corpus(name=name, entries=tuple(entries))
+        raise CorpusError(
+            f"corpus {name!r} (namespace={namespace!r}) is empty"
+        )
+    corpus_name = f"{name}/{namespace}" if namespace else name
+    return Corpus(name=corpus_name, entries=tuple(entries))
 
 
-__all__ = ["Corpus", "CorpusEntry", "CorpusError", "CORPUS_ROOT", "load_corpus"]
+def list_namespaces(name: str) -> tuple[str, ...]:
+    """Return every distinct ``namespace`` present in the corpus.
+
+    A namespace is any subdirectory that contains at least one
+    ``*.yaml`` file; namespace tag inside the file is informational
+    but the subdir name is the canonical id.
+    """
+    sub = CORPUS_ROOT / "2026-04" if name == "wild-2026-04" else CORPUS_ROOT / name
+    if not sub.is_dir():
+        return ()
+    out: list[str] = []
+    for p in sorted(sub.iterdir()):
+        if p.is_dir() and any(p.glob("*.yaml")):
+            out.append(p.name)
+    return tuple(out)
+
+
+__all__ = [
+    "Corpus",
+    "CorpusEntry",
+    "CorpusError",
+    "CORPUS_ROOT",
+    "list_namespaces",
+    "load_corpus",
+]

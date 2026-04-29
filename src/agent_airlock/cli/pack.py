@@ -22,23 +22,27 @@ from ..pack.installer import discover_shipped_packs, find_shipped_pack
 
 def _cmd_list(args: argparse.Namespace) -> int:
     paths = discover_shipped_packs()
+    # Load each manifest once and sort by (pack_id, version) so the
+    # output order is deterministic regardless of filesystem listing
+    # order. Pinned by ``test_pack_list_sorted_by_pack_id_then_version``.
+    manifests = [(p, load_manifest(p)) for p in paths]
+    manifests.sort(key=lambda pair: (pair[1].pack_id, pair[1].version))
     if args.format == "json":
         print(
             json.dumps(
                 [
                     {
-                        "pack_id": load_manifest(p).pack_id,
-                        "version": load_manifest(p).version,
+                        "pack_id": m.pack_id,
+                        "version": m.version,
                         "manifest_path": str(p),
                     }
-                    for p in paths
+                    for p, m in manifests
                 ],
                 indent=2,
             )
         )
     else:
-        for p in paths:
-            m = load_manifest(p)
+        for _p, m in manifests:
             print(f"{m.pack_id}@{m.version} — {m.description}")
     return 0
 
@@ -102,6 +106,12 @@ def main(argv: list[str] | None = None) -> int:
     p_verify.set_defaults(func=_cmd_verify)
     args = parser.parse_args(argv)
     return int(args.func(args))
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import sys as _sys
+
+    _sys.exit(main())
 
 
 # Re-export for tests that don't want to import sign_manifest directly.

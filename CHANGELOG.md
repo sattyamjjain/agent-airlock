@@ -13,6 +13,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.9] - 2026-04-29 — "STDIO meta-guard + GPT-5.5 + capability caps + airlock graph / policy / kill-switch"
+
+Tuesday cut. Seven security primitives, three net-new product surfaces, three
+open-issue fixes, driven by 72 hours of fresh April 2026 industry signal.
+**Zero new runtime deps.**
+
+### Security primitives (T1–T7)
+
+- **`mcp_stdio_meta_cve_2026_04` + `StdioMetaGuard`** — bundles every airlock
+  STDIO defence (argv shape + per-arg metachar + path-traversal + Unicode bidi
+  + manifest-drift + AST-taint) into one chain. Block verdict deduplicated by
+  `(guard_id, finding_id)` so operators are not spammed. Recommended default
+  for any MCP server registered after 2026-04-26.
+  Source: <https://www.ox.security/blog/mother-of-all-ai-supply-chains-anthropic-mcp-stdio>
+- **`langgraph_toolnode_compat`** — `unwrap_toolnode_output` survives the
+  prebuilt 1.0.11 list-vs-dict shape break. Lazy version probe; pinned to
+  `langchain_core.messages.ToolMessage` (insulated from LangGraph namespace
+  churn).
+  Source: <https://github.com/langchain-ai/langgraph/releases/tag/prebuilt%401.0.11>
+- **`gpt_5_5_spud_agent_defaults` + `GPT55ToolShapeAdapter`** — preset caps
+  `max_parallel_tool_calls=8`, `per_call_egress_cap_kb=512`,
+  `context_window_budget_tokens=900_000`, `requires_baseline=True`. Adapter
+  round-trips OpenAI's homogenised tool-call shape (`SCHEMA_PINNED_AT =
+  "2026-04-23"`). `model_tier.classify_model("gpt-5-5-spud")` →
+  `OFFENSIVE_CYBER_CAPABLE`.
+  Source: <https://openai.com/index/gpt-5-5/>
+- **`capability_caps` package + `agent_capability_default_caps` preset** —
+  programmatic caps parallel to v0.5.8's dollar caps. `Capability` enum:
+  `SIGN_CONTRACT` (deny-by-default), `DELEGATE_TO_AGENT`, `INVOKE_TOOL`,
+  `WRITE_FILE`, `NETWORK_EGRESS`. SQLite WAL ledger; 50-thread test against a
+  1-grant cap yields exactly 1 grant; engine survives SIGKILL mid-grant.
+  Source: <https://www.anthropic.com/features/project-deal>
+- **`owasp_agentic_coverage` matrix + CI gate** — `coverage.yaml` maps every
+  OWASP Agentic 2026-Q1 risk (LLM01–LLM10) to guard module / preset / test /
+  `last_verified` ISO date. Renders to deterministic Markdown + JSON. CI gate
+  ships as `docs/security/owasp-coverage-gate-ci.yml.sample` (workflow scope
+  constraint).
+  Source: <https://opensource.microsoft.com/blog/2026/04/02/introducing-the-agent-governance-toolkit-open-source-runtime-security-for-ai-agents/>
+- **`wild-2026-04/short_form_video` corpus + `TranscriptIngestGuard`** — 5
+  hash-pinned BlackHat Asia 2026 PoCs (on-screen override, system-role
+  impersonation, zero-width caption, RTL title, creator-handle smuggle), all
+  marked `provisional: true` until slides are public. `airlock replay
+  --namespace short_form_video` auto-selects the transcript guard.
+  Source: <https://www.blackhat.com/asia-26/briefings/schedule/#tiktok-agent-attacks-zhong>
+- **`cisco_ide_scanner_bridge` + generic `Scanner` registry** — pluggable
+  protocol so VS Code policy-lens can mix airlock + Cisco scanners. Bridge is
+  opt-in; zero PII leaves the workstation when unconfigured. Stub default
+  returns `410 / configure when API published`.
+  Source: <https://blogs.cisco.com/security/ide-security-scanner-launch-2026-04>
+
+### Net-new product surfaces (Features A / B / C)
+
+- **`airlock graph serve` / `airlock graph dump`** — stdlib HTTP server +
+  vanilla HTML/JS/CSS bundle renders the live agent → tool → MCP-server graph
+  with allow / warn / block edge colouring. Reads JSONL audit logs or
+  in-memory event lists; 5-second client poll (WS deferred to v0.5.10).
+- **`airlock policy compile` / `airlock policy explain`** — natural-language
+  policy authoring. Hash-pinned compile prompt (`PROMPT_HASH`), deterministic
+  cache keyed on `(prompt_hash, request_hash, backend)`. Backend protocol is
+  pluggable; tests inject a deterministic stub. CLI ships with a stub
+  backend that recognises `0.0.0.0` / `without auth` / `parallel above N`.
+- **`airlock kill-switch arm / trigger / reset`** — HMAC-SHA256 signed
+  broadcast over a pluggable transport (in-memory plus NATS / Redis / S3
+  stubs). 2-of-3 quorum reset gate. Tampered envelopes are constant-time
+  rejected; short keys (<32 B) refuse to construct.
+
+### Open-issue fixes
+
+- **`airlock baseline diff --threshold <0..1>`** — exit code 2 when any drift
+  dimension ≥ threshold (CI-pluggable alerting).
+- **`airlock pack list`** — deterministic ordering by `(pack_id, version)`,
+  pinned by property test.
+- **`policy_presets.list_active() -> list[PresetMeta]`** — single source of
+  truth consumed by `airlock graph` and the OWASP coverage matrix.
+
+### Internal
+
+- `policy_presets.PresetMeta` dataclass + `list_active()` registry helper.
+- `corpus.load_corpus(name, namespace=...)` + `list_namespaces()` for
+  per-namespace replays.
+- `cli/replay.py` registers a `transcript_ingest` guard runner and
+  auto-selects it for `--namespace short_form_video`.
+- `marketplace.json` proof-points refreshed (≥ 2000 tests, 9 CVE fixtures, 29
+  presets) and pinned by `tests/test_marketplace_metadata.py`.
+
+### Test coverage
+
+`pytest -q` clean; coverage stays ≥ 80% (CI floor unchanged).
+
+---
+
 ## [0.5.8] - 2026-04-27 — "Comment-and-Control + Mesh wedge + behavioral baselines"
 
 Sunday cut. Eight new opt-in primitives + three net-new product

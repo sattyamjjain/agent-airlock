@@ -58,6 +58,7 @@ from __future__ import annotations
 import re
 import shlex as _shlex_for_gitpilot
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path as _Path_for_gitpilot
 from typing import TYPE_CHECKING, Any
 
@@ -1067,6 +1068,62 @@ def gemini_cli_action_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
     return cfg
 
 
+@dataclass(frozen=True)
+class PresetMeta:
+    """Metadata about a registered preset, returned by ``list_active``."""
+
+    preset_id: str
+    factory_name: str
+    """Top-level callable in :mod:`agent_airlock.policy_presets`."""
+    docstring_summary: str = ""
+
+
+def list_active() -> list[PresetMeta]:
+    """Return metadata for every preset factory in this module.
+
+    Single source of truth consumed by ``airlock graph``, the OWASP
+    coverage matrix, and any future tool that needs to enumerate
+    presets without re-walking the package.
+    """
+    import inspect
+    import sys
+
+    module = sys.modules[__name__]
+    out: list[PresetMeta] = []
+    for name, obj in inspect.getmembers(module, inspect.isfunction):
+        # Heuristics to filter out helpers + check predicates:
+        # only top-level zero-arg-or-kwargs-only callables that return
+        # dicts / SecurityPolicy / CapabilityPolicy / dataclasses.
+        if name.startswith("_"):
+            continue
+        if name in {"is_destructive_tool", "list_active", "list_presets"}:
+            continue
+        if not name.endswith(("_policy", "_defaults", "_caps", "_2026_04")):
+            continue
+        try:
+            sig = inspect.signature(obj)
+        except (TypeError, ValueError):
+            continue
+        if any(
+            p.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
+            and p.default is inspect.Parameter.empty
+            for p in sig.parameters.values()
+        ):
+            # Skip predicates that demand mandatory positional args
+            # (e.g. ``mcpwn_cve_2026_33032_check``).
+            continue
+        doc = (inspect.getdoc(obj) or "").splitlines()[0] if inspect.getdoc(obj) else ""
+        out.append(
+            PresetMeta(
+                preset_id=name,
+                factory_name=name,
+                docstring_summary=doc,
+            )
+        )
+    out.sort(key=lambda m: m.preset_id)
+    return out
+
+
 def copilot_agent_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
     """Comment-and-Control preset for GitHub Copilot Agent.
 
@@ -1079,6 +1136,144 @@ def copilot_agent_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
     cfg = claude_code_security_review_cnc_2026_04(dry_run=dry_run)
     cfg["ci_runner"] = "copilot-agent"
     return cfg
+
+
+def agent_capability_default_caps() -> dict[str, Any]:
+    """Conservative capability caps for agent-on-agent surfaces.
+
+    Mirrors the ``agent_commerce_default_caps`` preset shipped 2026-04-27
+    (dollar caps) for the capability layer added 2026-04-28. Defaults:
+
+    * ``SIGN_CONTRACT``: 0/agent without explicit grant (deny-by-default).
+    * ``DELEGATE_TO_AGENT``: 3/agent/hour.
+    * ``INVOKE_TOOL``: 100/agent/minute.
+    * ``WRITE_FILE``: 50/agent/hour.
+    * ``NETWORK_EGRESS``: 10_000_000 (10 MB) /agent/minute (counted in bytes).
+
+    Primary source:
+      https://www.anthropic.com/features/project-deal
+    """
+    from .capability_caps import Capability, CapabilityRule, CapabilityRulesConfig
+
+    return {
+        "preset_id": "agent_capability_default_caps",
+        "advisory_url": "https://www.anthropic.com/features/project-deal",
+        "rules_config": CapabilityRulesConfig(
+            rules=(
+                # SIGN_CONTRACT is deny-by-default; no rule = no grants.
+                CapabilityRule(
+                    capability=Capability.DELEGATE_TO_AGENT,
+                    amount=3,
+                    window="hour",
+                ),
+                CapabilityRule(
+                    capability=Capability.INVOKE_TOOL,
+                    amount=100,
+                    window="minute",
+                ),
+                CapabilityRule(
+                    capability=Capability.WRITE_FILE,
+                    amount=50,
+                    window="hour",
+                ),
+                CapabilityRule(
+                    capability=Capability.NETWORK_EGRESS,
+                    amount=10_000_000,
+                    window="minute",
+                ),
+            )
+        ),
+    }
+
+
+def gpt_5_5_spud_agent_defaults(
+    *,
+    max_parallel_tool_calls: int = 8,
+    per_call_egress_cap_kb: int = 512,
+    context_window_budget_tokens: int = 900_000,
+    requires_baseline: bool = True,
+) -> dict[str, Any]:
+    """Conservative defaults for the OpenAI GPT-5.5 ("Spud") agent surface.
+
+    GPT-5.5 GA'd 2026-04-23 with a 1M-token default context window and a
+    homogenised tool-call shape. Without a preset, airlock-protected
+    agents fall back to the model's own (zero) policy. These defaults
+    bind:
+
+    * ``max_parallel_tool_calls=8`` — refuse fan-out beyond 8 parallel
+      calls in a single turn.
+    * ``per_call_egress_cap_kb=512`` — cap per-tool-call outbound
+      payload size; trips the existing egress budget.
+    * ``context_window_budget_tokens=900_000`` — 10% headroom under the
+      published 1M context window so a runaway agent cannot
+      consume the entire window.
+    * ``requires_baseline=True`` — every protected agent must produce a
+      behavioural baseline (see ``airlock baseline init``) before
+      being granted production capability grants.
+
+    Primary source:
+      https://openai.com/index/gpt-5-5/
+    """
+    return {
+        "preset_id": "gpt_5_5_spud_agent_defaults",
+        "model_id": "openai.gpt-5.5-spud",
+        "schema_pinned_at": "2026-04-23",
+        "max_parallel_tool_calls": max_parallel_tool_calls,
+        "per_call_egress_cap_kb": per_call_egress_cap_kb,
+        "context_window_budget_tokens": context_window_budget_tokens,
+        "requires_baseline": requires_baseline,
+        "advisory_url": "https://openai.com/index/gpt-5-5/",
+    }
+
+
+def mcp_stdio_meta_cve_2026_04(
+    *,
+    enable_manifest_drift_check: bool = True,
+    enable_taint_check: bool = False,
+) -> dict[str, Any]:
+    """Bundled defense for the OX-disclosed STDIO RCE class (v0.5.9+).
+
+    OX Security 2026-04-26 disclosed that the Anthropic MCP STDIO
+    transport class is exploitable across 200K+ servers and Anthropic
+    has declined to patch ("expected behavior"). This preset wires
+    every airlock STDIO-defence into a single chain:
+
+    * argv shape enforcement (no shell-form smuggle)
+    * stdio_guard (per-arg metachar / unicode / allowlist)
+    * manifest drift check (signed manifest vs runtime argv) — opt-out
+    * AST taint scan for remote-input → stdin sinks — opt-in (filesystem)
+
+    The preset is the recommended default for any MCP server registered
+    after 2026-04-26.
+
+    Primary sources:
+      https://www.ox.security/blog/mother-of-all-ai-supply-chains-anthropic-mcp-stdio
+      https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem
+      https://www.theregister.com/2026/04/16/anthropic_mcp_design_flaw/
+    """
+    return {
+        "preset_id": "mcp_stdio_meta_cve_2026_04",
+        "severity": "critical",
+        "default_action": "block",
+        "advisory_url": (
+            "https://www.ox.security/blog/"
+            "mother-of-all-ai-supply-chains-anthropic-mcp-stdio"
+        ),
+        "stdio_config": stdio_guard_ox_defaults(),
+        "enable_manifest_drift_check": enable_manifest_drift_check,
+        "enable_taint_check": enable_taint_check,
+        "covered_variants": (
+            "argv_string_concat",
+            "argv_shell_metachar",
+            "argv_unicode_bidi",
+            "argv_absolute_path_smuggle",
+            "argv_basename_not_allowlisted",
+            "argv_env_path_traversal",
+            "manifest_runtime_drift",
+            "stdin_remote_input_taint",
+        ),
+        "recommended_for": "any MCP server registered after 2026-04-26",
+    }
 
 
 def windsurf_cve_2026_30615_defaults(
@@ -1825,6 +2020,11 @@ __all__ = [
     "FlowiseEvalTokenError",
     "high_value_action_deny_by_default",
     "HighValueActionBlocked",
+    "mcp_stdio_meta_cve_2026_04",
+    "gpt_5_5_spud_agent_defaults",
+    "agent_capability_default_caps",
+    "PresetMeta",
+    "list_active",
     # Eagerly constructed defaults
     "GTG_1002_DEFENSE",
     "MEX_GOV_2026",
