@@ -1,4 +1,4 @@
-.PHONY: help test coverage lint format bench test-badge egress-bench check-changelog check-changelog-release
+.PHONY: help test coverage lint format bench test-badge egress-bench check-changelog check-changelog-release verify-corpus
 
 help:
 	@echo "Targets:"
@@ -9,8 +9,12 @@ help:
 	@echo "  bench                   Run pytest-benchmark suite"
 	@echo "  test-badge              Regenerate the TEST-BADGE block in README.md"
 	@echo "  egress-bench            Run the CVE egress-bench walker against tests/cves/fixtures/"
+	@echo "  verify-corpus           Verify wild_payload_corpus MANIFEST.sha256"
 	@echo "  check-changelog         Post-release drift gate (fails if [Unreleased] has entries after a release)"
 	@echo "  check-changelog-release Pre-tag gate (fails if [Unreleased] is empty)"
+
+verify-corpus:
+	@python3 scripts/verify_corpus_manifest.py
 
 test:
 	python3 -m pytest tests/ -v --no-cov

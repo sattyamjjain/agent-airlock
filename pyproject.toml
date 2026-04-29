@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.5.9"
+version = "0.6.0"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -64,8 +64,14 @@ claude-agent = [
 model-armor = [
     "google-cloud-modelarmor>=0.2",
 ]
+# Textual TUI for ``airlock console`` (v0.6.0+).
+# Install with: pip install "agent-airlock[console]"
+# See: https://pypi.org/project/textual/
+console = [
+    "textual>=0.40",
+]
 all = [
-    "agent-airlock[sandbox,mcp,claude-agent,model-armor]",
+    "agent-airlock[sandbox,mcp,claude-agent,model-armor,console]",
 ]
 dev = [
     "pytest>=8.0",

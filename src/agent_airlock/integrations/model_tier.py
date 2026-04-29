@@ -33,6 +33,8 @@ _TIER_PREFIX_TABLE: tuple[tuple[str, ModelCapabilityTier], ...] = (
     ("claude-sonnet-4-6", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("gpt-5-5-spud", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("gpt-5-5", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
+    # Google Gemini 3 Agent Mode GA (2026-04-25)
+    ("gemini-3-agent", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("gpt-5-2-codex", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("gpt-5-2", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("o4", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),

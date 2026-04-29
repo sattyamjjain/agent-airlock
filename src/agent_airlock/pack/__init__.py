@@ -21,6 +21,19 @@ CLI: ``airlock.cli.pack``.
 from __future__ import annotations
 
 from .installer import InstalledPack, PackInstaller
+from .lock import (
+    LOCK_SCHEMA_VERSION,
+    LockEntry,
+    LockfileDriftError,
+    LockfileFormatError,
+    PolicyBundleLock,
+    build_lock,
+    hash_preset,
+    read_lock,
+    render_lock,
+    verify_lock,
+    write_lock,
+)
 from .manifest import PackManifest, load_manifest
 from .signer import (
     PackSignatureError,
@@ -31,11 +44,22 @@ from .signer import (
 
 __all__ = [
     "InstalledPack",
+    "LOCK_SCHEMA_VERSION",
+    "LockEntry",
+    "LockfileDriftError",
+    "LockfileFormatError",
     "PackInstaller",
     "PackManifest",
     "PackSignatureError",
     "PackVerificationError",
+    "PolicyBundleLock",
+    "build_lock",
+    "hash_preset",
     "load_manifest",
+    "read_lock",
+    "render_lock",
     "sign_manifest",
+    "verify_lock",
     "verify_manifest",
+    "write_lock",
 ]

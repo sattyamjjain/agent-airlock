@@ -13,6 +13,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-04-29 — "MCP elicitation + CVE-2026-31402 + Gemini 3 + airlock console / studio / receipts"
+
+Wednesday cut. Five security primitives, four net-new product surfaces,
+three open-issue fixes — all aligned with the v0.6.0 spec PR landing
+window. Minor bump because Task 1 (`PolicyBundle`-style elicitation
+verdicts) and Feature B (`policy_bundle.lock`) introduce new public
+surfaces. **Zero new runtime deps in the base install.**
+
+### Security primitives (T1–T5)
+
+- **`mcp_elicitation_guard_2026_04` + `ElicitationGuard`** — runtime
+  mitigation for MCP spec PR #1487's `tool/elicitation` round-trip.
+  Classifies payloads (benign / credential_request / policy_override
+  / destructive_confirmation) and blocks credential and policy-override
+  classes; benign relays carry an origin badge; destructive payloads
+  warn (or block in `strict=True`). p99 < 1.5 ms on a 4 KB payload.
+  Source: <https://github.com/modelcontextprotocol/specification/pull/1487>
+- **`mcp_config_path_traversal_cve_2026_31402` + `ConfigPathGuard`** —
+  config-time path-traversal mitigation for the Claude Desktop MCP-
+  server-registration loader (CVSS 8.8). Eight traversal classes
+  covered: POSIX `../`, Windows `..\\`, single + double URL-encoded,
+  UNC, NULL-byte, raw absolute outside `host_root`, symlink escape.
+  10K-fuzz harness records 0 escapes.
+  Source: <https://nvd.nist.gov/vuln/detail/CVE-2026-31402>
+- **`gemini_3_agent_defaults` + Gemini 3 tool-shape adapter** —
+  `function_call` carrier normalisation + `thought_signature`
+  redaction. Adapter normalises into the same `NormalizedToolCall`
+  the GPT-5.5 adapter exposes, so guards stay model-agnostic.
+  `SUPPORTED_VERSIONS` is pinned; unknown `gemini-3-*` ids raise
+  `UnsupportedModelVersion`.
+  Source: <https://blog.google/technology/google-deepmind/gemini-3-agent-mode-ga/>
+- **`airlock console`** — three-pane Textual TUI (live verdict
+  stream / active preset chain / replay-on-edit). Textual is gated
+  behind the `airlock[console]` extra; the CLI prints a clear
+  install hint when invoked without it. `--no-tui` snapshot mode is
+  CI-friendly.
+- **`oauth_state_injection_guard` + `OAuthStateEntropyGuard`** —
+  base64 / url-safe-base64 / hex / JSON decode + prompt-injection
+  trigger-phrase scan on the OAuth `state` parameter. JWT tri-segment
+  shapes and high-entropy random nonces short-circuit. p99 < 0.8 ms.
+  Source: <https://www.blackhat.com/asia-26/briefings/schedule/#oauth-state-injection>
+
+### Net-new product surfaces (Features A / B / C / D)
+
+- **`airlock attest receipt`** — Sigstore-compatible signed agent-
+  run receipts: `{run_id, policy_bundle_hash, verdicts[],
+  inputs_hash, model_id, ts}`. New CLI verbs `airlock attest receipt
+  emit / verify`. Tamper-detection via canonical-payload re-hash.
+  Source: <https://pillar.security/blog/agent-identity-attestation-2026-04>
+- **`policy_bundle.lock`** — hash-pinned policy bundles with
+  `Cargo.lock` semantics. `airlock pack lock` emits a TOML lockfile;
+  `airlock replay --bundle-lock <path> --bundle-manifest <yaml>`
+  refuses on any preset hash drift. Stdlib-only TOML parser keeps
+  the dep baseline at three.
+- **`airlock studio`** — stdlib `http.server` rehearsal sandbox
+  (`airlock studio --port 8765`). Paste-a-transcript form, per-line
+  verdicts inline, diff between named runs, `/api/snapshot` JSON
+  endpoint. FastAPI is queued for v0.6.1 behind `airlock[studio]`.
+- **smolagents wrapper** — `wrap_agent(agent, policy_bundle)` for
+  HuggingFace smolagents 1.18+ (which added native MCP transport
+  2026-04-29). Fourth first-class framework integration.
+  Source: <https://github.com/huggingface/smolagents/releases/tag/v1.18>
+
+### Open-issue fixes
+
+- **LangChain 0.4.0 `tool_call_id` migration helper** —
+  `lc_040_fixture_migration.migrate_messages` rewrites historical
+  fixtures that omit the now-mandatory field. Idempotent; pure-
+  Python; doesn't import LangChain.
+  Source: <https://github.com/langchain-ai/langchain/releases/tag/v0.4.0>
+- **`airlock replay` exit codes** — exit 2 on block / mismatch
+  (was 1); 3 reserved for hard error; 0 stays clean. CI pipelines
+  can now distinguish block from infra failure.
+- **`MANIFEST.sha256` + `make verify-corpus`** — top-level checksum
+  manifest for all 15 hash-pinned wild-payload entries; new
+  `scripts/verify_corpus_manifest.py` walks the manifest and re-
+  hashes; pinned by `tests/corpus/test_manifest.py`.
+
+### Internal
+
+- New `pack/lock.py` with `build_lock` / `verify_lock` / `parse_lock`.
+- New `attest/receipt.py` with `Receipt` / `build_receipt` /
+  `verify_receipt`.
+- New `studio/` package (stdlib HTTP server + paste-a-transcript UX).
+- New `cli/{console,studio}.py` entrypoints.
+- New `scripts/verify_corpus_manifest.py` consumed by `make verify-corpus`.
+- Marketplace proof-points refreshed (33 presets, 9 CVE classes
+  including CVE-2026-31402); pinned by `tests/test_marketplace_metadata.py`.
+
+### Test posture
+
+`pytest -q` clean; coverage stays ≥ 80% (CI floor unchanged). 17
+new test files; 12 new modules; 11 new CLI subcommands.
+
+---
+
 ## [0.5.9] - 2026-04-29 — "STDIO meta-guard + GPT-5.5 + capability caps + airlock graph / policy / kill-switch"
 
 Tuesday cut. Seven security primitives, three net-new product surfaces, three
