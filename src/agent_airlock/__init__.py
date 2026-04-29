@@ -186,6 +186,15 @@ from .mcp_spec.bind_address_guard import (
     BindAddressPublicError,
     UnauthenticatedPublicBindError,
 )
+from .mcp_spec.config_path_guard import (
+    ConfigPathGuard,
+    ConfigPathTraversalError,
+)
+from .mcp_spec.elicitation_guard import (
+    ElicitationClass,
+    ElicitationGuard,
+    ElicitationGuardError,
+)
 from .mcp_spec.lan_unauth_rce_guard import LANUnauthMCPServerBlocked
 from .mcp_spec.manifest_only_mode import (
     ManifestNotRegisteredError,
@@ -199,6 +208,10 @@ from .mcp_spec.manifest_only_mode import (
 from .mcp_spec.oauth_audit import (
     OAuthAppBlocked,
     OAuthPolicyViolation,
+)
+from .mcp_spec.oauth_state_entropy_guard import (
+    OAuthStateEntropyGuard,
+    OAuthStateInjectionError,
 )
 from .mcp_spec.pr_metadata_guard import (
     PRMetadataGuard,
@@ -377,7 +390,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.5.9"
+__version__ = "0.6.0"
 
 __all__ = [
     # Core
@@ -442,6 +455,13 @@ __all__ = [
     "PRMetadataGuard",
     "StdioMetaGuard",
     "StdioMetaGuardError",
+    "ElicitationClass",
+    "ElicitationGuard",
+    "ElicitationGuardError",
+    "ConfigPathGuard",
+    "ConfigPathTraversalError",
+    "OAuthStateEntropyGuard",
+    "OAuthStateInjectionError",
     "CapabilityCap",
     "CapabilityCapEngine",
     "CapabilityCapExceeded",

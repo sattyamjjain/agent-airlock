@@ -31,6 +31,19 @@ from .envelope import (
     AttestationVerificationError,
     build_envelope,
 )
+from .receipt import (
+    RECEIPT_SCHEMA_VERSION,
+    Receipt,
+    ReceiptFormatError,
+    ReceiptVerdict,
+    ReceiptVerificationError,
+    build_receipt,
+    hash_inputs,
+    receipt_from_dict,
+    receipt_from_json,
+    receipt_to_json,
+    verify_receipt,
+)
 from .signer import (
     EnvSigner,
     FileSigner,
@@ -45,7 +58,18 @@ __all__ = [
     "EnvSigner",
     "FileSigner",
     "KMSStubSigner",
+    "RECEIPT_SCHEMA_VERSION",
+    "Receipt",
+    "ReceiptFormatError",
+    "ReceiptVerdict",
+    "ReceiptVerificationError",
     "Signer",
     "build_envelope",
+    "build_receipt",
+    "hash_inputs",
+    "receipt_from_dict",
+    "receipt_from_json",
+    "receipt_to_json",
     "verify_envelope",
+    "verify_receipt",
 ]

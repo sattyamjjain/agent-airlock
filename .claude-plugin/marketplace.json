@@ -26,8 +26,8 @@
     ],
     "proof_points": [
       "2000 tests passing, 80% coverage floor enforced in CI",
-      "9 CVE regression tests covering CVE-2025-59528 / 59536 / 68143-68145 + 2026-23744 / 27825 / 27826 / 30615 / 30616 / 32211 / 33032 / 39884 / 41349 / 41361 / 6980",
-      "29 policy presets including v0.5.9 newcomers: mcp_stdio_meta_cve_2026_04, gpt_5_5_spud_agent_defaults, agent_capability_default_caps"
+      "9 CVE regression tests covering CVE-2025-59528 / 59536 / 68143-68145 + 2026-23744 / 27825 / 27826 / 30615 / 30616 / 31402 / 32211 / 33032 / 39884 / 41349 / 41361 / 6980",
+      "31 policy presets including v0.6.0 newcomers: mcp_elicitation_guard_2026_04, mcp_config_path_traversal_cve_2026_31402, oauth_state_injection_guard, gemini_3_agent_defaults"
     ],
     "audience": [
       "AI platform engineers",

@@ -1226,6 +1226,120 @@ def gpt_5_5_spud_agent_defaults(
     }
 
 
+def oauth_state_injection_guard(
+    *,
+    max_state_bytes: int = 2048,
+    entropy_skip_threshold: float = 3.0,
+) -> dict[str, Any]:
+    """Defence against OAuth ``state`` prompt-injection (BlackHat Asia 2026).
+
+    Injects prompt strings into the OAuth ``state`` parameter and the
+    callback handler decodes + relays them into a system message. This
+    preset wires :class:`OAuthStateEntropyGuard` with the recommended
+    defaults; high-entropy nonces and JWT tri-segments are ignored.
+
+    Primary source:
+      https://www.blackhat.com/asia-26/briefings/schedule/#oauth-state-injection
+    """
+    return {
+        "preset_id": "oauth_state_injection_guard",
+        "severity": "high",
+        "default_action": "block",
+        "advisory_url": (
+            "https://www.blackhat.com/asia-26/briefings/schedule/#oauth-state-injection"
+        ),
+        "max_state_bytes": max_state_bytes,
+        "entropy_skip_threshold": entropy_skip_threshold,
+    }
+
+
+def gemini_3_agent_defaults(
+    *,
+    redact_thought_signature: bool = True,
+    fan_out_cap: int = 8,
+    per_call_egress_cap_kb: int = 64,
+) -> dict[str, Any]:
+    """Conservative defaults for Google Gemini 3 Agent Mode.
+
+    Gemini 3 GA'd 2026-04-25 with a ``function_response`` carrier and
+    chain-of-thought ``thought_signature`` metadata. This preset wires
+    ``redact_thought_signature=True`` (the audit-log default), a
+    fan-out cap of 8 parallel calls, and a 64 KB per-call egress cap.
+
+    Primary source:
+      https://blog.google/technology/google-deepmind/gemini-3-agent-mode-ga/
+    """
+    return {
+        "preset_id": "gemini_3_agent_defaults",
+        "model_id": "gemini-3-agent",
+        "schema_pinned_at": "2026-04-25",
+        "redact_thought_signature": redact_thought_signature,
+        "fan_out_cap": fan_out_cap,
+        "per_call_egress_cap_kb": per_call_egress_cap_kb,
+        "advisory_url": ("https://blog.google/technology/google-deepmind/gemini-3-agent-mode-ga/"),
+    }
+
+
+def mcp_config_path_traversal_cve_2026_31402(
+    *,
+    platform: str = "auto",
+    allow_symlinks: bool = False,
+) -> dict[str, Any]:
+    """Path-traversal guard for MCP server-registration configs.
+
+    CVE-2026-31402 (CVSS 8.8, NVD 2026-04-27) is a path-traversal in
+    Claude Desktop's config loader that lets a hostile config write
+    outside the sandboxed MCP install dir on first launch. This preset
+    wires :class:`ConfigPathGuard` with the recommended defaults.
+
+    Primary source:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-31402
+    """
+    return {
+        "preset_id": "mcp_config_path_traversal_cve_2026_31402",
+        "severity": "critical",
+        "default_action": "block",
+        "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-31402",
+        "platform": platform,
+        "allow_symlinks": allow_symlinks,
+    }
+
+
+def mcp_elicitation_guard_2026_04(
+    *,
+    allowlist_origins: frozenset[str] = frozenset(),
+    strict: bool = False,
+) -> dict[str, Any]:
+    """Defence for MCP ``tool/elicitation`` (spec PR #1487, 2026-04-28).
+
+    Server-initiated elicitation round-trips can render hostile prompts
+    that look authoritative to the user. This preset wires the
+    ``ElicitationGuard`` with the recommended per-class actions and an
+    optional ``strict`` mode that downgrades the default
+    ``relay_with_warning`` for destructive confirmations to ``block``.
+
+    Primary source:
+      https://github.com/modelcontextprotocol/specification/pull/1487
+    """
+    from .mcp_spec.elicitation_guard import ElicitationClass
+
+    actions: dict[ElicitationClass, str] = {
+        ElicitationClass.BENIGN: "relay_with_origin_badge",
+        ElicitationClass.CREDENTIAL_REQUEST: "block",
+        ElicitationClass.POLICY_OVERRIDE: "block",
+        ElicitationClass.DESTRUCTIVE_CONFIRMATION: ("block" if strict else "relay_with_warning"),
+    }
+    return {
+        "preset_id": "mcp_elicitation_guard_2026_04",
+        "severity": "high",
+        "default_action": "block",
+        "advisory_url": "https://github.com/modelcontextprotocol/specification/pull/1487",
+        "actions": actions,
+        "allowlist_origins": allowlist_origins,
+        "strict": strict,
+    }
+
+
 def mcp_stdio_meta_cve_2026_04(
     *,
     enable_manifest_drift_check: bool = True,
@@ -2020,6 +2134,10 @@ __all__ = [
     "high_value_action_deny_by_default",
     "HighValueActionBlocked",
     "mcp_stdio_meta_cve_2026_04",
+    "mcp_elicitation_guard_2026_04",
+    "mcp_config_path_traversal_cve_2026_31402",
+    "gemini_3_agent_defaults",
+    "oauth_state_injection_guard",
     "gpt_5_5_spud_agent_defaults",
     "agent_capability_default_caps",
     "PresetMeta",

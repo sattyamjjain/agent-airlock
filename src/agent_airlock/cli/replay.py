@@ -183,7 +183,52 @@ def main(argv: list[str] | None = None) -> int:
             "When omitted, all entries are replayed."
         ),
     )
+    parser.add_argument(
+        "--bundle-lock",
+        default=None,
+        help=(
+            "Path to a policy_bundle.lock file (Feature B / v0.6.0). When "
+            "supplied alongside --bundle-manifest, the run refuses if any "
+            "preset content hash drifted from the lock."
+        ),
+    )
+    parser.add_argument(
+        "--bundle-manifest",
+        default=None,
+        help="Path to a pack manifest YAML used in tandem with --bundle-lock.",
+    )
     args = parser.parse_args(argv)
+
+    if (args.bundle_lock and not args.bundle_manifest) or (
+        args.bundle_manifest and not args.bundle_lock
+    ):
+        print(
+            "--bundle-lock and --bundle-manifest must be used together",
+            file=sys.stderr,
+        )
+        return 3
+
+    if args.bundle_lock and args.bundle_manifest:
+        from pathlib import Path as _Path
+
+        from ..pack import (
+            LockfileDriftError,
+            LockfileFormatError,
+            PackInstaller,
+            load_manifest,
+            read_lock,
+            verify_lock,
+        )
+
+        try:
+            manifest = load_manifest(_Path(args.bundle_manifest))
+            installed = PackInstaller().install(manifest)
+            preset_data = {pid: dict(data) for pid, data in installed.composed.items()}
+            lock = read_lock(_Path(args.bundle_lock))
+            verify_lock(lock, preset_data)
+        except (LockfileDriftError, LockfileFormatError) as exc:
+            print(f"bundle-lock check failed: {exc}", file=sys.stderr)
+            return 2
 
     try:
         corpus = load_corpus(args.corpus, namespace=args.namespace)
@@ -206,7 +251,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(_emit_table(results))
 
-    return 0 if all(r.matched for r in results) else 1
+    if any(not r.matched for r in results):
+        return 2  # Issue #2: block / mismatch -> exit 2
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
