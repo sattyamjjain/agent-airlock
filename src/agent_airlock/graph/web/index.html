@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>airlock graph</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>airlock graph</h1>
+    <p id="status">Loading…</p>
+  </header>
+  <main>
+    <section id="legend">
+      <span class="dot allow"></span>allow
+      <span class="dot warn"></span>warn
+      <span class="dot block"></span>block
+    </section>
+    <section id="graph">
+      <table id="edges">
+        <thead>
+          <tr><th>Source</th><th>Destination</th><th>Verdict</th><th>Count</th><th>Last envelope</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="/graph.js"></script>
+</body>
+</html>

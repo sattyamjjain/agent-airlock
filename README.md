@@ -701,6 +701,15 @@ Agent-Airlock secures AI agent systems in production:
 | [**API Reference**](./docs/API.md) | Every function, every parameter |
 | [**Egress Bench**](./docs/security/egress-bench.md) | CVE fixture walker — every payload previously blocked stays blocked |
 | [**OX MCP Supply-Chain preset**](./docs/presets/ox-mcp-supply-chain-2026-04.md) | Umbrella for the 2026-04-20 OX dossier (10 CVEs) |
+| [**STDIO meta-guard (`mcp_stdio_meta_cve_2026_04`)**](https://www.ox.security/blog/mother-of-all-ai-supply-chains-anthropic-mcp-stdio) | v0.5.9 — bundles every airlock STDIO defence into one chain; recommended default for any MCP server registered after 2026-04-26 |
+| [**LangGraph 1.0.11 ToolNode compat shim**](https://github.com/langchain-ai/langgraph/releases/tag/prebuilt%401.0.11) | v0.5.9 — silent unwrap survives the prebuilt 1.0.11 list-vs-dict shape break |
+| [**GPT-5.5 ("Spud") agent defaults + tool-shape adapter**](https://openai.com/index/gpt-5-5/) | v0.5.9 — caps fan-out at 8 / context at 900k / per-call egress at 512 KB |
+| [**Capability caps (`agent_capability_default_caps`)**](https://www.anthropic.com/features/project-deal) | v0.5.9 — programmatic caps for SIGN_CONTRACT / DELEGATE_TO_AGENT / INVOKE_TOOL / WRITE_FILE / NETWORK_EGRESS |
+| [**OWASP Agentic 2026-Q1 coverage matrix**](./docs/owasp-agentic-2026-coverage.md) | v0.5.9 — 10/10 mapping risk_id → guard + preset + test, CI gate fails on stale entries |
+| [**Short-form-video corpus (`wild-2026-04/short_form_video`)**](https://www.blackhat.com/asia-26/briefings/schedule/#tiktok-agent-attacks-zhong) | v0.5.9 — 5 transcript / on-screen / RTL PoCs; `airlock replay --namespace short_form_video` |
+| [**`airlock graph serve`**](./docs/graph.md) | v0.5.9 — local web UI of the live agent → tool → MCP-server topology with verdict overlay |
+| [**`airlock policy compile / explain`**](./docs/policy-as-prompt.md) | v0.5.9 — natural-language policy authoring with hash-pinned prompt + deterministic cache |
+| [**`airlock kill-switch`**](./docs/kill-switch.md) | v0.5.9 — HMAC-signed cluster-wide freeze with 2-of-3 quorum reset |
 | [**Comment-and-Control PR-metadata guard**](https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/) | v0.5.8 — neutralises CVSS 9.4 cross-vendor PR-title prompt injection |
 | [**`airlock pack`**](https://www.anthropic.com/features/project-deal) | v0.5.8 — signed policy bundles; `airlock pack install claude-code-ci@2026.04` |
 | [**`airlock baseline`**](https://venturebeat.com/security/rsac-2026-agentic-soc-agent-telemetry-security-gap) | v0.5.8 — per-agent 7-day rolling profile + drift score |

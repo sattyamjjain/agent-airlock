@@ -31,6 +31,8 @@ _TIER_PREFIX_TABLE: tuple[tuple[str, ModelCapabilityTier], ...] = (
     ("claude-opus-4-6", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("claude-opus-4", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("claude-sonnet-4-6", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
+    ("gpt-5-5-spud", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
+    ("gpt-5-5", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("gpt-5-2-codex", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("gpt-5-2", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),
     ("o4", ModelCapabilityTier.OFFENSIVE_CYBER_CAPABLE),

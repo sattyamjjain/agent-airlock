@@ -70,6 +70,13 @@ from .capabilities import (
     get_required_capabilities,
     requires,
 )
+from .capability_caps import (
+    Capability as CapabilityCap,
+)
+from .capability_caps import (
+    CapabilityCapEngine,
+    CapabilityCapExceeded,
+)
 
 # V0.4.0 Circuit Breaker
 from .circuit_breaker import (
@@ -203,6 +210,10 @@ from .mcp_spec.sampling_guard import (
     SamplingQuotaExceeded,
 )
 from .mcp_spec.session_guard import SnapshotIntegrityError
+from .mcp_spec.stdio_meta_guard import (
+    StdioMetaGuard,
+    StdioMetaGuardError,
+)
 from .mcp_spec.zero_click_config_guard import (
     MCPCommandMutationDetected,
     UnsignedMCPServerAdded,
@@ -366,7 +377,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.5.8"
+__version__ = "0.5.9"
 
 __all__ = [
     # Core
@@ -429,6 +440,11 @@ __all__ = [
     "MCPCommandMutationDetected",
     "MemoryChainTooDeepError",
     "PRMetadataGuard",
+    "StdioMetaGuard",
+    "StdioMetaGuardError",
+    "CapabilityCap",
+    "CapabilityCapEngine",
+    "CapabilityCapExceeded",
     "PRMetadataInjectionRejected",
     "MemoryProvenanceError",
     "OAuthAppBlocked",

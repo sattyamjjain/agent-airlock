@@ -1,0 +1,15 @@
+body { font: 14px system-ui, -apple-system, sans-serif; margin: 0; padding: 24px; color: #111; background: #fafafa; }
+header { border-bottom: 1px solid #ddd; padding-bottom: 12px; margin-bottom: 16px; }
+h1 { font-size: 18px; margin: 0; }
+#status { color: #666; margin: 4px 0 0; }
+#legend { margin-bottom: 12px; color: #444; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 6px 0 12px; vertical-align: middle; }
+.dot.allow { background: #2ca02c; }
+.dot.warn { background: #ff9900; }
+.dot.block { background: #d62728; }
+table { border-collapse: collapse; width: 100%; background: #fff; }
+th, td { border: 1px solid #e3e3e3; padding: 6px 10px; text-align: left; font-family: ui-monospace, monospace; font-size: 12px; }
+th { background: #f3f3f3; }
+.edge-allow td:nth-child(3) { color: #2ca02c; }
+.edge-warn  td:nth-child(3) { color: #ff9900; }
+.edge-block td:nth-child(3) { color: #d62728; font-weight: bold; }

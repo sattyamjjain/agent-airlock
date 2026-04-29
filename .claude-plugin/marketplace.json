@@ -25,9 +25,9 @@
       "Offline-capable. The CVE suite, policy presets, and validators all work air-gapped."
     ],
     "proof_points": [
-      "1362 tests, 81%+ coverage",
-      "7 CVE regression tests covering CVE-2025-59536, 68143, 68144, 68145, 2026-26118, 27825, 27826",
-      "5 policy presets (GTG_1002_DEFENSE, MEX_GOV_2026, OWASP_MCP_TOP_10_2026, EU_AI_ACT_ARTICLE_15, INDIA_DPDP_2023)"
+      "2000 tests passing, 80% coverage floor enforced in CI",
+      "9 CVE regression tests covering CVE-2025-59528 / 59536 / 68143-68145 + 2026-23744 / 27825 / 27826 / 30615 / 30616 / 32211 / 33032 / 39884 / 41349 / 41361 / 6980",
+      "29 policy presets including v0.5.9 newcomers: mcp_stdio_meta_cve_2026_04, gpt_5_5_spud_agent_defaults, agent_capability_default_caps"
     ],
     "audience": [
       "AI platform engineers",
