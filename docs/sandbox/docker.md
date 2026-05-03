@@ -53,22 +53,44 @@ def risky_thing(arg: str) -> str:
     ...
 ```
 
-## Known gaps (tracked)
+## v0.7.0 hardening flags (#37, #38)
 
-These are intentional scope cuts for v0.5.1 and are tracked as
-separate issues:
+Two opt-in fail-closed flags shipped together in v0.7.0:
 
-- **No rootless-by-default.** `DockerBackend` assumes the Docker
-  daemon it talks to is either rootless or accepts root-in-
-  container workloads. Tracked in
-  [#37 — rootless-required mode](https://github.com/sattyamjjain/agent-airlock/issues/37).
+- **`require_rootless=True`** — on `is_available()`, inspects
+  `docker info`'s `SecurityOptions` and refuses to report available
+  unless the daemon advertises `rootless` (legacy form) or
+  `name=rootless` (current form). Some threat models (multi-tenant
+  CI, shared dev hosts) want the call to fail-closed when the daemon
+  runs as root rather than silently downgrading.
+
+  ```python
+  backend = DockerBackend(image="python@sha256:...", require_rootless=True)
+  if not backend.is_available():
+      raise RuntimeError("daemon is not rootless — refusing to spawn")
+  ```
+
+- **`require_digest_pin=True`** — refuses tag-only image strings at
+  construction time. Closes the floating-tag supply-chain risk where
+  a tag's identity can change under you. The accepted form is
+  `<name>@sha256:<64-hex>` (validated by an explicit regex).
+
+  ```python
+  # OK
+  DockerBackend(image="python@sha256:" + "0" * 64, require_digest_pin=True)
+
+  # raises ValueError
+  DockerBackend(image="python:3.11-slim", require_digest_pin=True)
+  ```
+
+  Discover the digest of a tag with `docker pull --quiet <name>:<tag>`
+  or `docker inspect <name>:<tag> --format='{{.RepoDigests}}'`.
+
+## Known gaps (still tracked)
+
 - **No user-namespace remap helper.** Users who want
   `--userns=host-uid-remap` style isolation must configure Docker
   themselves; we don't offer a one-liner.
-- **No image-digest-pin enforcement.** `DockerBackend(image=...)`
-  accepts tags (`python:3.11-slim`) or digests
-  (`python@sha256:…`) but does not refuse tag-only form. Tracked in
-  [#38 — image-digest-pin enforcement](https://github.com/sattyamjjain/agent-airlock/issues/38).
 
 ## Relationship to E2B and Managed backends
 

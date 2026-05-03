@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -184,6 +184,82 @@ class TestDockerBackend:
         """Test Docker image can be configured."""
         backend = DockerBackend(image="python:3.11-slim")
         assert backend.image == "python:3.11-slim"
+
+
+class TestDockerBackendDigestPin:
+    """v0.7.0 #38 — DockerBackend(require_digest_pin=True) regression."""
+
+    @pytest.mark.parametrize(
+        "tag_only_image",
+        [
+            "python:3.11-slim",
+            "python:latest",
+            "alpine",
+            "ghcr.io/some/repo:v1.2.3",
+            "registry.local:5000/team/img:dev",
+        ],
+    )
+    def test_tag_only_image_rejected(self, tag_only_image: str) -> None:
+        with pytest.raises(ValueError, match="require_digest_pin=True"):
+            DockerBackend(image=tag_only_image, require_digest_pin=True)
+
+    @pytest.mark.parametrize(
+        "digest_pinned_image",
+        [
+            "python@sha256:" + "a" * 64,
+            "python@sha256:" + "0" * 64,
+            "alpine@sha256:" + "f" * 64,
+            "ghcr.io/some/repo@sha256:" + "1" * 64,
+            "registry.local:5000/team/img@sha256:" + "0123456789abcdef" * 4,
+        ],
+    )
+    def test_digest_pinned_image_accepted(self, digest_pinned_image: str) -> None:
+        backend = DockerBackend(image=digest_pinned_image, require_digest_pin=True)
+        assert backend.image == digest_pinned_image
+        assert backend.require_digest_pin is True
+
+    def test_default_unchanged_when_flag_false(self) -> None:
+        """Without ``require_digest_pin``, tag-only images stay valid."""
+        backend = DockerBackend(image="python:3.11-slim")
+        assert backend.require_digest_pin is False
+
+
+class TestDockerBackendRootless:
+    """v0.7.0 #37 — DockerBackend(require_rootless=True) regression."""
+
+    def test_rootless_required_blocks_when_security_options_lack_rootless(self) -> None:
+        backend = DockerBackend(require_rootless=True)
+        fake_client = MagicMock()
+        fake_client.ping.return_value = True
+        fake_client.info.return_value = {
+            "SecurityOptions": ["seccomp=default", "no-new-privileges"],
+        }
+        with patch("docker.from_env", return_value=fake_client):
+            assert backend.is_available() is False
+
+    def test_rootless_required_allows_when_security_options_advertise_rootless(self) -> None:
+        backend = DockerBackend(require_rootless=True)
+        fake_client = MagicMock()
+        fake_client.ping.return_value = True
+        fake_client.info.return_value = {
+            "SecurityOptions": ["seccomp=default", "name=rootless"],
+        }
+        with patch("docker.from_env", return_value=fake_client):
+            assert backend.is_available() is True
+
+    def test_rootless_required_accepts_legacy_rootless_value(self) -> None:
+        """Some Docker daemons advertise the bare string ``rootless``."""
+        backend = DockerBackend(require_rootless=True)
+        fake_client = MagicMock()
+        fake_client.ping.return_value = True
+        fake_client.info.return_value = {"SecurityOptions": ["rootless"]}
+        with patch("docker.from_env", return_value=fake_client):
+            assert backend.is_available() is True
+
+    def test_default_unchanged_when_flag_false(self) -> None:
+        """Without ``require_rootless``, the rootful path is still available."""
+        backend = DockerBackend()
+        assert backend.require_rootless is False
 
 
 class TestGetDefaultBackend:

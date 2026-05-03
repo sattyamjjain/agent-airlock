@@ -28,6 +28,7 @@ Usage:
 from __future__ import annotations
 
 import contextlib
+import re
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -257,6 +258,12 @@ class DockerBackend(SandboxBackend):
         cpu_limit: CPU limit for containers (e.g., 1.0).
     """
 
+    # Image identifier in canonical digest-pinned form:
+    #   <name>@sha256:<64-hex-chars>
+    # Both ``name`` (anchored to repository segment chars) and the digest
+    # length are checked. Used by ``require_digest_pin`` (v0.7.0+, #38).
+    _DIGEST_PIN_RE = re.compile(r"^[A-Za-z0-9._/\-:]+@sha256:[0-9a-f]{64}$")
+
     def __init__(
         self,
         image: str = "python:3.11-slim",
@@ -264,6 +271,9 @@ class DockerBackend(SandboxBackend):
         memory_limit: str = "512m",
         cpu_limit: float = 1.0,
         security_opt: list[str] | None = None,
+        *,
+        require_rootless: bool = False,
+        require_digest_pin: bool = False,
     ) -> None:
         """Initialize Docker backend.
 
@@ -279,24 +289,62 @@ class DockerBackend(SandboxBackend):
                 (e.g. ``["seccomp=/path/to/profile.json"]``) to tighten
                 further. Leave as ``None`` to rely on the dropped-caps
                 posture alone.
+            require_rootless: v0.7.0+ (#37). If ``True``, ``is_available()``
+                only reports the backend available when ``docker info``'s
+                SecurityOptions advertise ``rootless`` (or ``name=rootless``).
+                Some threat models (multi-tenant CI, shared dev hosts) want
+                to fail-closed when the daemon runs as root.
+            require_digest_pin: v0.7.0+ (#38). If ``True``, ``image``
+                must be ``<name>@sha256:<64-hex>``. Tag-only images
+                (e.g. ``"python:3.11-slim"``) are rejected at construction
+                time with :class:`ValueError`. Closes the floating-tag
+                supply-chain risk where an image's identity can change
+                under you.
+
+        Raises:
+            ValueError: ``require_digest_pin`` is set and ``image`` does
+                not match the canonical digest-pin form.
         """
+        if require_digest_pin and not self._DIGEST_PIN_RE.match(image):
+            raise ValueError(
+                f"DockerBackend(require_digest_pin=True) refuses tag-only "
+                f"image {image!r}. Use the form '<name>@sha256:<64-hex>' "
+                "(see `docker pull --quiet <name>:<tag>` to discover the "
+                "digest of the tag you currently use)."
+            )
         self.image = image
         self.network_mode = network_mode
         self.memory_limit = memory_limit
         self.cpu_limit = cpu_limit
         self.security_opt = security_opt or []
+        self.require_rootless = require_rootless
+        self.require_digest_pin = require_digest_pin
 
     @property
     def name(self) -> str:
         return "docker"
 
     def is_available(self) -> bool:
-        """Check if Docker is available."""
+        """Check if Docker is available.
+
+        v0.7.0+ (#37): when ``require_rootless`` is set, also inspect
+        ``docker info`` and refuse to report available unless the
+        daemon's ``SecurityOptions`` include ``rootless`` (or
+        ``name=rootless``). This is a fail-closed check — a
+        misconfigured daemon never silently downgrades to a rootful
+        execution path.
+        """
         try:
             import docker
 
             client = docker.from_env()
             client.ping()
+            if self.require_rootless and not self._daemon_is_rootless(client):
+                logger.warning(
+                    "docker_unavailable_not_rootless",
+                    require_rootless=True,
+                )
+                return False
             return True
         except Exception as e:
             logger.debug(
@@ -304,6 +352,25 @@ class DockerBackend(SandboxBackend):
                 error=str(e),
             )
             return False
+
+    @staticmethod
+    def _daemon_is_rootless(client: Any) -> bool:
+        """Return True iff ``docker info`` reports the daemon is rootless.
+
+        Docker's rootless mode advertises itself in ``SecurityOptions``
+        as either ``rootless`` (older) or ``name=rootless`` (newer).
+        Both shapes are accepted.
+        """
+        try:
+            info = client.info()
+        except Exception:
+            return False
+        opts = info.get("SecurityOptions") or []
+        for opt in opts:
+            opt_str = str(opt)
+            if opt_str == "rootless" or "name=rootless" in opt_str:
+                return True
+        return False
 
     def execute(
         self,
