@@ -187,6 +187,8 @@ module = [
     "langchain_core.*",
     "jwt",
     "jwt.*",
+    "claude_agent_sdk",
+    "claude_agent_sdk.*",
 ]
 ignore_missing_imports = true
 
