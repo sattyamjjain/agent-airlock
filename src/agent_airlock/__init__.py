@@ -154,6 +154,12 @@ from .integrations.agent_commerce_caps import (
     AgentCommerceCaps,
 )
 
+# V0.6.1 — Anthropic Claude Agent SDK canonical-leg trio.
+from .integrations.anthropic_claude_agent_sdk import (
+    AnthropicClaudeAgentSDKAdapter,
+    ClaudeAgentSDKMissingError,
+)
+
 # V0.5.3 Top-level re-exports of error classes introduced in v0.5.2 so
 # users can write `from agent_airlock import OAuthAppBlocked, ...`
 # instead of reaching into the submodule path. Canonical definitions
@@ -309,6 +315,13 @@ from .retry import (
     retry,
 )
 
+# V0.6.1 — runtime manifest-only allowlist primitives.
+from .runtime.manifest_only_allowlist import (
+    AllowlistVerdict,
+    AllowlistVerdictReason,
+    enforce_allowlist,
+)
+
 # V0.4.0 Safe types
 from .safe_types import (
     DEFAULT_PATH_DENY_PATTERNS,
@@ -390,7 +403,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 __all__ = [
     # Core
@@ -447,6 +460,13 @@ __all__ = [
     "UnauthenticatedPublicBindError",
     "UnknownToolsetVersionError",
     "UnsignedMCPServerAdded",
+    # V0.6.1 — Anthropic Claude Agent SDK canonical-leg trio
+    "AnthropicClaudeAgentSDKAdapter",
+    "ClaudeAgentSDKMissingError",
+    # V0.6.1 — runtime manifest-only allowlist
+    "AllowlistVerdict",
+    "AllowlistVerdictReason",
+    "enforce_allowlist",
     "AutoMemoryQuotaError",
     "HighValueActionBlocked",
     "LANUnauthMCPServerBlocked",

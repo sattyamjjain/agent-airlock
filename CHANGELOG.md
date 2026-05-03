@@ -13,6 +13,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.1] - 2026-05-03 — "Canonical-list trio + manifest-only allowlist CLI + AGENTS.md"
+
+Sunday cut. Patch bump — three additive ADD rows, two UPDATE rows
+that close honesty drifts, no breaking changes. Triggered by the
+2026-05-03 canonical-list audit (operator-flagged "Anthropic Claude
+Agent SDK is missing"), the 2026-05-01 OX/BackBox MCP-STDIO matrix
+re-publication, and the 2026-04-29 Mintlify collaborative-editor
+push for `AGENTS.md` as a first-class repo file.
+
+### ADD
+
+- **Anthropic Claude Agent SDK canonical-leg trio** —
+  `AnthropicClaudeAgentSDKAdapter.wrap_agent(agent, *, policy=...)`
+  is a thin facade that re-exports the v0.5.6 `claude_*.py` family
+  (managed-agents, auto-memory, task-budget) under a single canonical
+  module. The SDK is **not** imported at module load — calling
+  `wrap_agent` without `pip install "agent-airlock[claude-agent]"`
+  raises a clear `ClaudeAgentSDKMissingError` with the install hint
+  (never an opaque `ImportError` from deep in the call stack). Stub
+  agents (`hasattr(agent, "tools")`) bypass the SDK import — required
+  by tests and useful in CI without the optional dep. Pin tuple
+  `SUPPORTED_SDK_VERSIONS = ("0.1.58",)` so callers detect SDK drift
+  early. New module: `src/agent_airlock/integrations/anthropic_claude_agent_sdk.py`.
+  Tests: `tests/integrations/test_anthropic_claude_agent_sdk.py` (6).
+  Doc: `docs/integrations/anthropic-claude-agent-sdk.md`.
+  Primary source — Anthropic Claude Agent SDK docs:
+  https://docs.claude.com/en/agents-and-tools/agent-skills
+
+- **`airlock manifest enforce` runtime allowlist** —
+  `agent_airlock.runtime.manifest_only_allowlist.enforce_allowlist(server, argv, manifest_path)`
+  is the inverse of the v0.5.7 `launch_from_manifest`: a fail-closed
+  CLI gate that exits **0** on allow, **2** on deny, **3** on hard
+  error (signing key missing, unreadable manifest). Detects the
+  CVE-2026-30616 inline-code class (`--code` / `-c` / `--exec` /
+  `-e` outside the signed manifest is denied even with otherwise-
+  matching argv0). New modules: `src/agent_airlock/runtime/__init__.py`,
+  `runtime/manifest_only_allowlist.py`, `cli/manifest.py`. Tests:
+  `tests/runtime/test_manifest_only_allowlist.py` (6).
+  Primary source — BackBox/OX (2026-05-01):
+  https://news.backbox.org/2026/05/01/200000-mcp-servers-expose-a-command-execution-flaw-that-anthropic-calls-a-feature/
+
+- **`AGENTS.md` repo-root file** — deterministic entrypoint for
+  agentic IDEs (Cursor, Claude Code, Windsurf, Mintlify). Lists
+  build/test commands, forbidden patterns, and the project's
+  default safety posture (`STRICT_POLICY` + `sandbox_required=True`).
+  Primary source — Mintlify collaborative-editor blog (2026-04-29):
+  https://www.mintlify.com/blog/editor
+
+### UPDATE
+
+- **README framework-compatibility honesty fix** — the prior
+  perf-table claim of "Framework integrations | 10" was a
+  claim-vs-code drift. The split is now explicit: **9
+  adapter-shipped** (LangChain, LangGraph, OpenAI Agents SDK,
+  Anthropic Messages API, Anthropic Claude Agent SDK [v0.6.1],
+  smolagents, Gemini 3, GPT-5.5, FastMCP) **+ 4 example-only**
+  (PydanticAI, CrewAI, AutoGen, LlamaIndex). Regression test
+  `tests/test_readme_framework_claims.py` (24 cases) fails the
+  build when either side drifts.
+
+- **Python 3.13 in CI matrix + ruff target py311** — added
+  `Programming Language :: Python :: 3.13` classifier and a
+  best-effort 3.13 row in `.github/workflows/ci.yml` (`continue-on-error`
+  for one release cycle while we confirm no platform-wheel gaps in
+  optional extras like `textual`). `requires-python = ">=3.10"`
+  unchanged. Mypy `python_version = "3.10"` unchanged.
+
+### Tests + coverage
+
+- 6 new tests for the Anthropic Claude Agent SDK adapter
+- 6 new tests for the runtime manifest-only allowlist
+- 24 new tests for the README framework-claim regression
+- Net: **2,117 → 2,153** tests; coverage floor 82% (CI-enforced)
+
+### Honest scope
+
+- Bot lacks `workflow` OAuth scope to push `.github/workflows/*` —
+  if the workflow change cannot be force-merged via gh's auth, it
+  will land via direct push; the README claim correction and CLI
+  change are the operator-visible levers regardless.
+- The `parse_lock` re-export gap noticed during v0.6.0 smoke is **not**
+  closed in this patch — `read_lock` / `write_lock` are still the
+  public surface for round-tripping a `policy_bundle.lock`. Tracked
+  for v0.6.2.
+
+---
+
 ## [0.6.0] - 2026-04-29 — "MCP elicitation + CVE-2026-31402 + Gemini 3 + airlock console / studio / receipts"
 
 Wednesday cut. Five security primitives, four net-new product surfaces,
