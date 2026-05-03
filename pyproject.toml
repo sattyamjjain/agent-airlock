@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.6.0"
+version = "0.6.1"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -32,6 +32,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
@@ -108,6 +109,10 @@ include = [
 packages = ["src/agent_airlock"]
 
 [tool.ruff]
+# requires-python remains ">=3.10"; ruff target stays at py310 so UP036
+# (sys.version_info >= (3, 11) blocks for tomllib) and UP042 (StrEnum)
+# don't fire — both *would* break py310. CI matrix adds 3.13 separately
+# so newer-Python wheels still get coverage.
 target-version = "py310"
 line-length = 100
 src = ["src", "tests"]
@@ -182,6 +187,8 @@ module = [
     "langchain_core.*",
     "jwt",
     "jwt.*",
+    "claude_agent_sdk",
+    "claude_agent_sdk.*",
 ]
 ignore_missing_imports = true
 
