@@ -149,6 +149,17 @@ from .honeypot import (
     should_soft_block,
     should_use_honeypot,
 )
+
+# V0.7.0 — Signed agent identity (#33). The cryptography import is
+# lazy inside the module so callers without the [crypto] extra still
+# import agent_airlock cleanly.
+from .identity import (
+    IdentityVerificationError,
+    SignedAgentIdentity,
+    pubkey_fingerprint,
+    sign_identity,
+    verify_identity,
+)
 from .integrations.agent_commerce_caps import (
     AgentCommerceCapExceeded,
     AgentCommerceCaps,
@@ -476,6 +487,12 @@ __all__ = [
     # V0.7.0 — Redis-backed distributed rate limiter (#1)
     "RedisRateLimit",
     "RedisRateLimitUnavailable",
+    # V0.7.0 — Signed agent identity (#33)
+    "IdentityVerificationError",
+    "SignedAgentIdentity",
+    "pubkey_fingerprint",
+    "sign_identity",
+    "verify_identity",
     "AutoMemoryQuotaError",
     "HighValueActionBlocked",
     "LANUnauthMCPServerBlocked",
