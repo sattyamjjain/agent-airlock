@@ -13,6 +13,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-05-03 — "Backlog triage cut: Docker hardening + Redis distributed rate-limit + ed25519 signed identity"
+
+Sunday afternoon cut after the 2026-05-03 backlog triage. Three issues
+cleared, one minor bump because Issue #33 introduces new public
+surfaces (`SignedAgentIdentity`, `sign_identity`, `verify_identity`,
+`pubkey_fingerprint`, `IdentityVerificationError`).
+
+**No breaking changes.** Every new flag and module is opt-in. Existing
+callers see identical behaviour.
+
+### Closed issues
+
+- **#37 — DockerBackend rootless-required mode**
+
+  `DockerBackend(require_rootless=True)`: `is_available()` now
+  inspects `docker info`'s `SecurityOptions` and reports unavailable
+  unless the daemon advertises `rootless` or `name=rootless`. Closes
+  the multi-tenant-CI threat model where the daemon silently ran as
+  root.
+
+- **#38 — DockerBackend image-digest-pin enforcement**
+
+  `DockerBackend(require_digest_pin=True)`: construction-time regex
+  check refuses tag-only images. Accepts only `<name>@sha256:<64-hex>`.
+  Closes the floating-tag supply-chain risk where a tag's identity
+  could change under you. Both flags also documented in
+  [`docs/sandbox/docker.md`](docs/sandbox/docker.md).
+
+- **#1 — Redis-backed distributed rate limiter**
+
+  New `agent_airlock.redis_rate_limit.RedisRateLimit` subclass of
+  `policy.RateLimit`. Drop-in replacement that shares token-bucket
+  state across processes via a Redis hash + Lua script. Closes the
+  multi-worker burst hole. Optional dep behind `[redis]` extra
+  (`redis>=5.0,<7.0` + `fakeredis>=2.20`). `fail_mode="memory"`
+  (default) falls back to the in-memory parent on connect failure;
+  `fail_mode="closed"` raises `RedisRateLimitUnavailable`.
+
+- **#33 — Ed25519 SignedAgentIdentity** (semver-minor trigger)
+
+  Closes OWASP 2026 ASI03 — Identity and Privilege Abuse. New
+  `agent_airlock.identity` module with `sign_identity` /
+  `verify_identity` / `SignedAgentIdentity` / `pubkey_fingerprint` /
+  `IdentityVerificationError`. Optional dep behind `[crypto]` extra
+  (`cryptography>=42.0`). The `cryptography` import is lazy inside
+  the module — callers without the extra still import
+  `agent_airlock` cleanly. The `pubkey_fingerprint` helper returns a
+  32-character hex prefix usable as the `signer` field in downstream
+  Merkle-chained attestation envelopes (per @desiorac's comment on
+  issue #33; the boundary doesn't couple the two runtimes).
+
+- **#6 — v0.5.0 roadmap (closed: superseded)**
+
+  v0.5.x → v0.6.1 release stream shipped every umbrella bullet.
+  Outstanding items track individually as #1, #30–#38.
+
+### Tests + coverage
+
+- 6 new tests for Docker hardening (5 digest-pin + 4 rootless cases,
+  rootless cases skipped when `docker` package absent)
+- 12 new tests for Redis rate limit (round-trip, distributed
+  semantics, fallback paths, fail-closed)
+- 14 new tests for signed identity (round-trip, tamper detection,
+  wrong-key, fingerprint stability, invalid inputs, canonical-bytes
+  determinism)
+- Net test count increase: +32
+
+### Public-surface additions (semver-minor)
+
+```python
+from agent_airlock import (
+    # v0.7.0 — new public symbols
+    RedisRateLimit, RedisRateLimitUnavailable,        # #1
+    SignedAgentIdentity, IdentityVerificationError,    # #33
+    sign_identity, verify_identity, pubkey_fingerprint,
+)
+```
+
+### Honest scope
+
+- The cryptography dep is **not** imported at module load — the
+  symbol exports above resolve through a lazy submodule. Existing
+  callers without the `[crypto]` extra installed still `import
+  agent_airlock` cleanly.
+- 3.13 CI matrix row continues to be best-effort
+  (`continue-on-error`); no platform-wheel gaps observed in this cycle.
+- `parse_lock` re-export gap from v0.6.0 smoke is still **not**
+  closed; `read_lock` / `write_lock` remain the public round-trip
+  surface for `policy_bundle.lock`. Tracked for v0.7.1.
+
+---
+
 ## [0.6.1] - 2026-05-03 — "Canonical-list trio + manifest-only allowlist CLI + AGENTS.md"
 
 Sunday cut. Patch bump — three additive ADD rows, two UPDATE rows
