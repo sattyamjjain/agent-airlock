@@ -71,8 +71,16 @@ model-armor = [
 console = [
     "textual>=0.40",
 ]
+# Redis-backed distributed rate limiter (v0.7.0+, #1).
+# Install with: pip install "agent-airlock[redis]"
+# fakeredis ships in the same extra so the test suite runs without
+# a live Redis. redis-py 5.x is the supported floor.
+redis = [
+    "redis>=5.0,<7.0",
+    "fakeredis>=2.20",
+]
 all = [
-    "agent-airlock[sandbox,mcp,claude-agent,model-armor,console]",
+    "agent-airlock[sandbox,mcp,claude-agent,model-armor,console,redis]",
 ]
 dev = [
     "pytest>=8.0",
@@ -189,6 +197,10 @@ module = [
     "jwt.*",
     "claude_agent_sdk",
     "claude_agent_sdk.*",
+    "redis",
+    "redis.*",
+    "fakeredis",
+    "fakeredis.*",
 ]
 ignore_missing_imports = true
 

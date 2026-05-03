@@ -300,6 +300,12 @@ from .policy_presets import (
     stdio_guard_ox_defaults,
 )
 
+# V0.7.0 — Redis-backed distributed rate limiter (#1).
+from .redis_rate_limit import (
+    RedisRateLimit,
+    RedisRateLimitUnavailable,
+)
+
 # V0.4.0 Retry Policies
 from .retry import (
     AGGRESSIVE_RETRY,
@@ -467,6 +473,9 @@ __all__ = [
     "AllowlistVerdict",
     "AllowlistVerdictReason",
     "enforce_allowlist",
+    # V0.7.0 — Redis-backed distributed rate limiter (#1)
+    "RedisRateLimit",
+    "RedisRateLimitUnavailable",
     "AutoMemoryQuotaError",
     "HighValueActionBlocked",
     "LANUnauthMCPServerBlocked",
