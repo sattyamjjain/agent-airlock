@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -224,8 +225,22 @@ class TestDockerBackendDigestPin:
         assert backend.require_digest_pin is False
 
 
+_DOCKER_INSTALLED = importlib.util.find_spec("docker") is not None
+
+
+@pytest.mark.skipif(
+    not _DOCKER_INSTALLED,
+    reason="docker package not installed; rootless tests mock docker.from_env",
+)
 class TestDockerBackendRootless:
-    """v0.7.0 #37 — DockerBackend(require_rootless=True) regression."""
+    """v0.7.0 #37 — DockerBackend(require_rootless=True) regression.
+
+    These cases mock ``docker.from_env`` and need the ``docker``
+    package importable. CI's ``[dev]`` extra does not pull docker, so
+    we skip when the module is absent. The same code path is exercised
+    by the opt-in ``pytest -m docker`` integration suite where docker
+    is guaranteed.
+    """
 
     def test_rootless_required_blocks_when_security_options_lack_rootless(self) -> None:
         backend = DockerBackend(require_rootless=True)
