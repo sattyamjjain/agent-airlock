@@ -79,8 +79,14 @@ redis = [
     "redis>=5.0,<7.0",
     "fakeredis>=2.20",
 ]
+# Ed25519 SignedAgentIdentity (v0.7.0+, #33).
+# Install with: pip install "agent-airlock[crypto]"
+# `cryptography` is the canonical Python ed25519 implementation.
+crypto = [
+    "cryptography>=42.0",
+]
 all = [
-    "agent-airlock[sandbox,mcp,claude-agent,model-armor,console,redis]",
+    "agent-airlock[sandbox,mcp,claude-agent,model-armor,console,redis,crypto]",
 ]
 dev = [
     "pytest>=8.0",
@@ -201,6 +207,8 @@ module = [
     "redis.*",
     "fakeredis",
     "fakeredis.*",
+    "cryptography",
+    "cryptography.*",
 ]
 ignore_missing_imports = true
 
