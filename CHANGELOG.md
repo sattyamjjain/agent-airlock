@@ -13,6 +13,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.1] - 2026-05-04 — "PydanticAI canonical leg + parse_lock re-export + 3.13 CI required"
+
+Monday daily cut. Patch bump — three additive rows. v0.7.0's explicit
+carry-forward (`parse_lock` re-export gap) is closed; PydanticAI is
+promoted from example-only to adapter-shipped (10th adapter); the 3.13
+CI matrix row is promoted from best-effort to required after two clean
+release cycles.
+
+### ADD
+
+- **PydanticAI canonical-leg trio** (issue ADD-1, 2026-05-04 prompt) —
+  promotes the previously example-only PydanticAI integration to
+  adapter-shipped. New module
+  `src/agent_airlock/integrations/pydantic_ai.py` ships
+  `PydanticAIAdapter.wrap_agent(agent, *, policy=...)` that walks
+  `agent.toolsets`, replaces each function-tool's callable with the
+  Airlock-decorated version, and (when `attach_output_validate=True`,
+  the default) wires the v1.88.0+ `output_validate` hook to the
+  existing `agent_airlock.sanitizer`. Optional dep behind
+  `[pydantic-ai]` extra (`pydantic-ai>=1.88.0,<2.0`). New top-level
+  re-exports: `PydanticAIAdapter`, `PydanticAIMissingError`. The
+  `pydantic-ai` package is **not** imported at module load — callers
+  without the extra still `import agent_airlock` cleanly. Tests:
+  `tests/integrations/test_pydantic_ai_adapter.py` (7 cases incl.
+  version-drift `UserWarning` regression). Doc:
+  `docs/integrations/pydantic-ai.md`. Primary source —
+  https://github.com/pydantic/pydantic-ai/releases/tag/v1.89.1
+
+### UPDATE
+
+- **`parse_lock` top-level re-export** (carry-forward from v0.6.0/v0.6.1/v0.7.0).
+  `parse_lock` plus `LockEntry`, `LockfileDriftError`, `LockfileFormatError`,
+  `PolicyBundleLock`, `build_lock`, `read_lock`, `write_lock` are now reachable
+  directly from the top-level package. Closes the explicit "honest
+  scope" caveat that carried across three releases.
+  Tests: `tests/test_parse_lock_export.py` (6 cases incl.
+  write→parse and render→parse round-trips). Primary source —
+  https://github.com/sattyamjjain/agent-airlock/releases/tag/v0.7.0
+
+- **3.13 CI matrix row promoted to required.** v0.6.1 + v0.7.0 both
+  shipped with `continue-on-error: true` for 3.13. Two clean cycles
+  is the original promotion criterion; the row is now a hard-fail.
+  No platform-wheel gaps surfaced in the past two cycles.
+
+### Tests + coverage
+
+- 7 new tests for the PydanticAI adapter
+- 6 new tests for the `parse_lock` re-export gap closure
+- 1 new test in `tests/test_readme_framework_claims.py` for the
+  PydanticAI promotion regression (10 + 3 split)
+- Net: **2,236 → 2,250** tests; coverage above the 82% CI floor
+
+### Public-surface additions (semver-patch since all are additive)
+
+```python
+from agent_airlock import (
+    # v0.7.1 — PydanticAI adapter
+    PydanticAIAdapter, PydanticAIMissingError,
+    # v0.7.1 — pack/lock primitives at top level
+    LockEntry, LockfileDriftError, LockfileFormatError,
+    PolicyBundleLock, build_lock, parse_lock, read_lock, write_lock,
+)
+```
+
+### Honest scope
+
+- The `pydantic-ai` package is heavy (pulls `pydantic-graph`, `mcp`,
+  `eval-type-backport`); kept strictly opt-in.
+- README adapter/example split is now **10 adapter-shipped + 3
+  example-only** (v0.6.1 was 9 + 4). The README claim regression
+  test fails the build if either side drifts.
+
+---
+
 ## [0.7.0] - 2026-05-03 — "Backlog triage cut: Docker hardening + Redis distributed rate-limit + ed25519 signed identity"
 
 Sunday afternoon cut after the 2026-05-03 backlog triage. Three issues

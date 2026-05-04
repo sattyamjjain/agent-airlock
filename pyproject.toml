@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.7.0"
+version = "0.7.1"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -85,8 +85,15 @@ redis = [
 crypto = [
     "cryptography>=42.0",
 ]
+# PydanticAI canonical-leg adapter (v0.7.1+, ADD-1 2026-05-04).
+# Install with: pip install "agent-airlock[pydantic-ai]"
+# v1.88.0 floor pin: that's the release that introduced output_validate
+# / output_process hooks the adapter binds to (PR pydantic/pydantic-ai#4859).
+pydantic-ai = [
+    "pydantic-ai>=1.88.0,<2.0",
+]
 all = [
-    "agent-airlock[sandbox,mcp,claude-agent,model-armor,console,redis,crypto]",
+    "agent-airlock[sandbox,mcp,claude-agent,model-armor,console,redis,crypto,pydantic-ai]",
 ]
 dev = [
     "pytest>=8.0",
@@ -209,6 +216,8 @@ module = [
     "fakeredis.*",
     "cryptography",
     "cryptography.*",
+    "pydantic_ai",
+    "pydantic_ai.*",
 ]
 ignore_missing_imports = true
 

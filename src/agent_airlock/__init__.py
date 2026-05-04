@@ -187,6 +187,12 @@ from .integrations.claude_managed_agents import (
     UnknownToolsetVersionError,
 )
 
+# V0.7.1 — PydanticAI canonical-leg trio (ADD-1 2026-05-04).
+from .integrations.pydantic_ai import (
+    PydanticAIAdapter,
+    PydanticAIMissingError,
+)
+
 # V0.4.0 MCP Proxy Guard
 from .mcp_proxy_guard import (
     DEFAULT_PROXY_CONFIG,
@@ -276,6 +282,20 @@ from .observability import (
 )
 from .observability import (
     configure as configure_observability,
+)
+
+# V0.7.1 — close the parse_lock re-export gap (carried forward
+# from v0.6.0/v0.6.1/v0.7.0). Round-trip surface for policy_bundle.lock
+# now reachable directly off the top-level package.
+from .pack import (
+    LockEntry,
+    LockfileDriftError,
+    LockfileFormatError,
+    PolicyBundleLock,
+    build_lock,
+    parse_lock,
+    read_lock,
+    write_lock,
 )
 from .policy import (
     BUSINESS_HOURS_POLICY,
@@ -420,7 +440,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 __all__ = [
     # Core
@@ -484,6 +504,18 @@ __all__ = [
     "AllowlistVerdict",
     "AllowlistVerdictReason",
     "enforce_allowlist",
+    # V0.7.1 — top-level pack/lock primitives (closes the carry-forward gap)
+    "LockEntry",
+    "LockfileDriftError",
+    "LockfileFormatError",
+    "PolicyBundleLock",
+    "build_lock",
+    "parse_lock",
+    "read_lock",
+    "write_lock",
+    # V0.7.1 — PydanticAI canonical-leg trio (ADD-1)
+    "PydanticAIAdapter",
+    "PydanticAIMissingError",
     # V0.7.0 — Redis-backed distributed rate limiter (#1)
     "RedisRateLimit",
     "RedisRateLimitUnavailable",
