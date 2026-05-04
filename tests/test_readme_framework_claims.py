@@ -39,13 +39,13 @@ _ADAPTER_SHIPPED_MODULES: tuple[str, ...] = (
     "integrations/smolagents_wrapper.py",
     "integrations/gemini3_tool_shape_adapter.py",
     "integrations/gpt5_5_tool_shape_adapter.py",
+    "integrations/pydantic_ai.py",
     "mcp.py",
 )
 
 
 # Frameworks whose only integration path is `examples/<name>_integration.py`.
 _EXAMPLE_ONLY_FRAMEWORKS: tuple[str, ...] = (
-    "PydanticAI",
     "CrewAI",
     "AutoGen",
     "LlamaIndex",
@@ -95,7 +95,22 @@ class TestReadmeFrameworkClaims:
             f"README must say 'Adapter-shipped ({adapter_count})' to match the on-disk module set"
         )
         assert f"Example-only ({example_count})" in text, (
-            f"README must say 'Example-only ({example_count})' to match the four example frameworks"
+            f"README must say 'Example-only ({example_count})' to match the example frameworks"
+        )
+
+    def test_pydantic_ai_promoted_to_adapter_shipped(self) -> None:
+        """v0.7.1 ADD-1 — PydanticAI must show as adapter-shipped, not example-only."""
+        text = _readme_text()
+        # Adapter-shipped paragraph should mention pydantic_ai
+        assert "integrations/pydantic_ai.py" in text, (
+            "README must reference integrations/pydantic_ai.py in the adapter-shipped paragraph"
+        )
+        # Example-only paragraph should NOT list PydanticAI any more.
+        # The example-only prose lists frameworks comma-separated; we
+        # check that the canonical example-only paragraph does not lead
+        # with "PydanticAI, CrewAI" (the v0.6.1 string).
+        assert "**Example-only (4):** PydanticAI, CrewAI" not in text, (
+            "README still has the v0.6.1 example-only string with PydanticAI in it"
         )
 
     def test_no_stale_ten_framework_claim(self) -> None:

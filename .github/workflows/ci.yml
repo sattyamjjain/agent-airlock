@@ -12,15 +12,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # 3.13 promoted to required in v0.7.1 after two release cycles
+        # (v0.6.1 + v0.7.0) of green CI runs with continue-on-error.
+        # All four versions are now hard-failures.
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-        # 3.13 is best-effort for one release cycle (some optional
-        # extras like textual ship wheels late). Promote to required
-        # in v0.6.2+ once we confirm no platform-wheel gaps.
-        include:
-          - python-version: "3.13"
-            allow-failure: true
-
-    continue-on-error: ${{ matrix.allow-failure == true }}
 
     steps:
       - uses: actions/checkout@v4
