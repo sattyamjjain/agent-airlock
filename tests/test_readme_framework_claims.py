@@ -40,13 +40,13 @@ _ADAPTER_SHIPPED_MODULES: tuple[str, ...] = (
     "integrations/gemini3_tool_shape_adapter.py",
     "integrations/gpt5_5_tool_shape_adapter.py",
     "integrations/pydantic_ai.py",
+    "integrations/crewai.py",
     "mcp.py",
 )
 
 
 # Frameworks whose only integration path is `examples/<name>_integration.py`.
 _EXAMPLE_ONLY_FRAMEWORKS: tuple[str, ...] = (
-    "CrewAI",
     "AutoGen",
     "LlamaIndex",
 )
@@ -111,6 +111,18 @@ class TestReadmeFrameworkClaims:
         # with "PydanticAI, CrewAI" (the v0.6.1 string).
         assert "**Example-only (4):** PydanticAI, CrewAI" not in text, (
             "README still has the v0.6.1 example-only string with PydanticAI in it"
+        )
+
+    def test_crewai_promoted_to_adapter_shipped(self) -> None:
+        """v0.7.2 ADD-1 — CrewAI must show as adapter-shipped, not example-only."""
+        text = _readme_text()
+        assert "integrations/crewai.py" in text, (
+            "README must reference integrations/crewai.py in the adapter-shipped paragraph"
+        )
+        # The v0.7.1 example-only string ("CrewAI, AutoGen, LlamaIndex")
+        # must be gone now that CrewAI is adapter-shipped.
+        assert "**Example-only (3):** CrewAI, AutoGen" not in text, (
+            "README still has the v0.7.1 example-only string with CrewAI in it"
         )
 
     def test_no_stale_ten_framework_claim(self) -> None:

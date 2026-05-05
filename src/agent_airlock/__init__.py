@@ -187,6 +187,12 @@ from .integrations.claude_managed_agents import (
     UnknownToolsetVersionError,
 )
 
+# V0.7.2 — CrewAI canonical-leg trio (ADD-1 2026-05-05; closes #5).
+from .integrations.crewai import (
+    CrewAIAdapter,
+    CrewAIMissingError,
+)
+
 # V0.7.1 — PydanticAI canonical-leg trio (ADD-1 2026-05-04).
 from .integrations.pydantic_ai import (
     PydanticAIAdapter,
@@ -440,7 +446,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.7.1"
+__version__ = "0.7.2"
 
 __all__ = [
     # Core
@@ -516,6 +522,9 @@ __all__ = [
     # V0.7.1 — PydanticAI canonical-leg trio (ADD-1)
     "PydanticAIAdapter",
     "PydanticAIMissingError",
+    # V0.7.2 — CrewAI canonical-leg trio (ADD-1; closes #5)
+    "CrewAIAdapter",
+    "CrewAIMissingError",
     # V0.7.0 — Redis-backed distributed rate limiter (#1)
     "RedisRateLimit",
     "RedisRateLimitUnavailable",

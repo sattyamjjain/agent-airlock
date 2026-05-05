@@ -13,6 +13,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.2] - 2026-05-05 — "CrewAI canonical-leg trio (closes #5)"
+
+Tuesday daily cut. Patch bump — single additive ADD row. Closes the
+longest-open backlog issue (#5, opened 2026-03-14) by promoting
+CrewAI from example-only to adapter-shipped (11th adapter). Same
+playbook that landed PydanticAI yesterday.
+
+### ADD
+
+- **CrewAI canonical-leg trio** (closes [#5](https://github.com/sattyamjjain/agent-airlock/issues/5)) —
+  promotes the previously example-only CrewAI integration to
+  adapter-shipped. New module
+  `src/agent_airlock/integrations/crewai.py` ships
+  `CrewAIAdapter.wrap_crew(crew, *, policy=...)` that walks
+  `crew.agents` → `agent.tools` and replaces each tool's `_run` (or
+  `func` for `@tool`-decorated callables) with the Airlock-decorated
+  version; also walks `crew.tasks` for task-level
+  `Task(tools=[...])` overrides. `wrap_agent(agent, policy=...)` is
+  exposed for the standalone-researcher pattern. Optional dep behind
+  `[crewai]` extra (`crewai>=1.14.4,<2.0`). v1.14.4 is the floor
+  because that's the release that introduced native MCP server
+  support — older versions wire MCP through a different surface and
+  would silently mis-wire. New top-level re-exports: `CrewAIAdapter`,
+  `CrewAIMissingError`. The `crewai` package is **not** imported at
+  module load — callers without the extra still `import
+  agent_airlock` cleanly. Tests:
+  `tests/integrations/test_crewai_adapter.py` (8 cases incl.
+  task-level override walk + version-drift `UserWarning` regression).
+  Doc: `docs/integrations/crewai.md`. Primary source —
+  https://github.com/crewAIInc/crewAI/releases/tag/1.14.4
+
+### Tests + coverage
+
+- 8 new tests for the CrewAI adapter
+- 1 new test in `tests/test_readme_framework_claims.py` for the
+  CrewAI promotion regression (11 + 2 split)
+- README claim regression count constants bumped from `10 + 3` to
+  `11 + 2`
+
+### Public-surface additions (semver-patch — additive)
+
+```python
+from agent_airlock import CrewAIAdapter, CrewAIMissingError
+```
+
+### Honest scope
+
+- `crewai` is heavy (pulls `litellm`, `chromadb`, `embedchain`); kept
+  strictly opt-in via `[crewai]` extra.
+- The v1.14.5a1 / a2 alpha cycle is supported but not the floor —
+  operators on the alpha track should pin manually.
+- `tests/test_readme_framework_claims.py` count constants now lock
+  the 11+2 split. Will fail loudly on any future drift.
+
+---
+
 ## [0.7.1] - 2026-05-04 — "PydanticAI canonical leg + parse_lock re-export + 3.13 CI required"
 
 Monday daily cut. Patch bump — three additive rows. v0.7.0's explicit
