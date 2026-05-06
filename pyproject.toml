@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.7.2"
+version = "0.7.3"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -57,7 +57,7 @@ mcp = [
 # Install with: pip install "agent-airlock[claude-agent]"
 # See: https://pypi.org/project/claude-agent-sdk/
 claude-agent = [
-    "claude-agent-sdk>=0.1.58",
+    "claude-agent-sdk>=0.1.58,<0.2.0",
 ]
 # Google Cloud Model Armor — opt-in prompt/response classifier.
 # Install with: pip install "agent-airlock[model-armor]"
