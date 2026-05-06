@@ -13,6 +13,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.3] - 2026-05-06 — "Claude Agent SDK floor bump 0.1.58 → 0.1.73 + PostToolUse duration_ms hook regression"
+
+Wednesday daily cut. Patch bump — single UPDATE row. Closes the
+2-day operator-flagged TODO inside `anthropic_claude_agent_sdk.py`
+("Update this tuple when a new version has been verified") and
+forwards the SDK 0.1.73 `duration_ms` PostToolUse hook field into
+the audit-receipt body.
+
+### UPDATE
+
+- **Claude Agent SDK supported-version tuple bumped 0.1.58 → 0.1.58, 0.1.73.**
+  `SUPPORTED_SDK_VERSIONS` now lists both pins; the floor stays at
+  0.1.58 for backward compatibility with the v0.6.1-shipped trio.
+  `[claude-agent]` extra cap widened from `>=0.1.58` to
+  `>=0.1.58,<0.2.0` — the 0.2.x line (Opus 4.7 requires Agent SDK
+  >=0.2.111) is intentionally out of scope for this floor and is a
+  separate forward-bump candidate.
+
+- **`posttooluse_audit_payload(hook_input)` helper.** New function
+  that maps a Claude Agent SDK PostToolUse hook input to an Airlock
+  audit-receipt body. SDK v0.1.73 (released 2026-05-04) added
+  `duration_ms` (tool execution time, excluding permission prompts
+  and PreToolUse hooks); the helper forwards the field when present
+  and remains backward-compatible with 0.1.58 payloads where it's
+  absent. The body carries an explicit
+  `sdk_field_durations_present` boolean so downstream observability
+  can distinguish "0.1.58 payload" from "0.1.73 payload that
+  happened to be 0ms".
+
+### Tests
+
+- 3 new regression cases in
+  `tests/integrations/test_anthropic_claude_agent_sdk.py`:
+  - `duration_ms` propagates when SDK supplies it (0.1.73+ payload)
+  - `duration_ms` omitted for older 0.1.58 payloads (no synthesis)
+  - 0ms duration is preserved distinctly from absent
+    (regression against future conflation bugs)
+- Existing `test_pyproject_pins_extra_at_minimum_version` updated
+  to assert the new `>=0.1.58,<0.2.0` cap.
+
+### Public-surface additions (semver-patch — additive)
+
+```python
+from agent_airlock.integrations.anthropic_claude_agent_sdk import (
+    posttooluse_audit_payload,  # NEW
+)
+```
+
+No top-level re-export — the helper is opt-in at the integrations
+namespace, mirroring how `memory_helpers()` already lives.
+
+### Honest scope
+
+- The 0.2.x SDK line is **not** in scope today. Operators wanting
+  Opus 4.7 hosted-Claude-Code support will need a separate forward
+  bump (Sunday 2026-05-10 review candidate).
+- No README claim regression bump (UPDATE-1 doesn't move the 11+2
+  adapter/example split).
+
+### Primary sources
+
+- https://pypi.org/project/claude-agent-sdk/ — v0.1.73 (2026-05-04)
+- https://releasebot.io/updates/anthropic — Anthropic May 2026
+  release notes ("PostToolUse and PostToolUseFailure hook inputs
+  now include `duration_ms`")
+
+---
+
 ## [0.7.2] - 2026-05-05 — "CrewAI canonical-leg trio (closes #5)"
 
 Tuesday daily cut. Patch bump — single additive ADD row. Closes the

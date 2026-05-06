@@ -57,14 +57,24 @@ from .claude_task_budget import build_output_config, build_task_budget_headers
 logger = structlog.get_logger("agent-airlock.integrations.anthropic_claude_agent_sdk")
 
 
-SUPPORTED_SDK_VERSIONS: tuple[str, ...] = ("0.1.58",)
+SUPPORTED_SDK_VERSIONS: tuple[str, ...] = ("0.1.58", "0.1.73")
 """Pinned SDK versions this adapter has been smoke-tested against.
 
-The Claude Agent SDK has churned twice between Sep-2025 and Apr-2026
+The Claude Agent SDK has churned twice between Sep-2025 and May-2026
 — if a newer release renames ``Agent`` or shifts the tools dict's
 shape, ``wrap_agent`` emits a structlog ``UserWarning``-equivalent
 line but does not hard-fail. Update this tuple when a new version
 has been verified.
+
+v0.1.73 (released 2026-05-04) added ``duration_ms`` to PostToolUse
+and PostToolUseFailure hook inputs (tool execution time, excluding
+permission prompts and PreToolUse hooks). This adapter forwards the
+field into the audit-receipt body when present and remains backward-
+compatible with 0.1.58 payloads where ``duration_ms`` is absent.
+
+The 0.2.x line (Opus 4.7 requires Agent SDK v0.2.111+) is
+intentionally **out of scope** for this floor — that's a separate
+forward-bump candidate.
 """
 
 _INSTALL_HINT = (
@@ -242,10 +252,56 @@ def memory_helpers() -> dict[str, Callable[..., Any]]:
     return {"guarded_read": guarded_read, "guarded_write": guarded_write}
 
 
+def posttooluse_audit_payload(hook_input: dict[str, Any]) -> dict[str, Any]:
+    """Map a Claude Agent SDK PostToolUse hook input to an Airlock audit body.
+
+    v0.1.73 of ``claude-agent-sdk`` added ``duration_ms`` to PostToolUse
+    and PostToolUseFailure hook inputs (tool execution time, excluding
+    permission prompts and PreToolUse hooks). This helper forwards the
+    field into the audit-receipt body when present and remains
+    backward-compatible with 0.1.58 payloads where the field is absent.
+
+    Args:
+        hook_input: The raw hook input dict supplied by the SDK. Must
+            contain at least ``"tool_name"``; ``"tool_input"`` and
+            ``"duration_ms"`` are passed through when present.
+
+    Returns:
+        A dict suitable for inclusion in an Airlock audit receipt:
+
+        - ``tool_name`` (always)
+        - ``tool_input`` (when present in input)
+        - ``duration_ms`` (only when SDK >= 0.1.73 supplied it)
+        - ``sdk_field_durations_present`` (boolean — lets downstream
+          observability differentiate "0.1.58 payload" from "0.1.73
+          payload that happened to be 0ms")
+
+    Example::
+
+        # SDK 0.1.73+ payload
+        body = posttooluse_audit_payload({
+            "tool_name": "Bash",
+            "tool_input": {"command": "ls"},
+            "duration_ms": 142,
+        })
+        # body == {"tool_name": "Bash", "tool_input": {"command": "ls"},
+        #          "duration_ms": 142, "sdk_field_durations_present": True}
+    """
+    body: dict[str, Any] = {"tool_name": hook_input.get("tool_name")}
+    if "tool_input" in hook_input:
+        body["tool_input"] = hook_input["tool_input"]
+    has_duration = "duration_ms" in hook_input
+    body["sdk_field_durations_present"] = has_duration
+    if has_duration:
+        body["duration_ms"] = hook_input["duration_ms"]
+    return body
+
+
 __all__ = [
     "DEFAULT_HARNESS_TOOLS",
     "SUPPORTED_SDK_VERSIONS",
     "AnthropicClaudeAgentSDKAdapter",
     "ClaudeAgentSDKMissingError",
     "memory_helpers",
+    "posttooluse_audit_payload",
 ]

@@ -11,6 +11,7 @@ from agent_airlock.integrations.anthropic_claude_agent_sdk import (
     SUPPORTED_SDK_VERSIONS,
     AnthropicClaudeAgentSDKAdapter,
     ClaudeAgentSDKMissingError,
+    posttooluse_audit_payload,
 )
 from agent_airlock.policy import SecurityPolicy
 
@@ -93,13 +94,72 @@ class TestAnthropicClaudeAgentSDKAdapter:
         assert len(agent.tools) == 2
 
     def test_pyproject_pins_extra_at_minimum_version(self) -> None:
-        """The ``[claude-agent]`` extra must pin ``>=0.1.58``."""
+        """The ``[claude-agent]`` extra must pin ``>=0.1.58,<0.2.0``.
+
+        v0.7.3 widens the floor from a single-version pin to an
+        explicit cap-below-0.2 range. The 0.2.x line (Opus 4.7's
+        Agent SDK >=0.2.111 requirement) is intentionally out of
+        scope until a separate forward-bump.
+        """
         pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
         text = pyproject.read_text(encoding="utf-8")
-        assert "claude-agent-sdk>=0.1.58" in text, (
-            "[claude-agent] extra must keep claude-agent-sdk>=0.1.58 pin"
+        assert "claude-agent-sdk>=0.1.58,<0.2.0" in text, (
+            "[claude-agent] extra must pin claude-agent-sdk>=0.1.58,<0.2.0 (v0.7.3)"
         )
 
     def test_supported_versions_tuple_documented(self) -> None:
-        """``SUPPORTED_SDK_VERSIONS`` is exported and non-empty."""
+        """``SUPPORTED_SDK_VERSIONS`` is exported and includes 0.1.58 + 0.1.73."""
         assert "0.1.58" in SUPPORTED_SDK_VERSIONS
+        assert "0.1.73" in SUPPORTED_SDK_VERSIONS, (
+            "v0.7.3 must add 0.1.73 to SUPPORTED_SDK_VERSIONS (PostToolUse duration_ms support)"
+        )
+
+
+class TestPostToolUseDurationMsRegression:
+    """v0.7.3 regression — Claude Agent SDK 0.1.73 PostToolUse duration_ms.
+
+    The 0.1.73 release (2026-05-04) added ``duration_ms`` to
+    PostToolUse and PostToolUseFailure hook inputs. The adapter must
+    forward the field into the audit-receipt body when present and
+    remain backward-compatible with 0.1.58 payloads where it's absent.
+
+    Source — Anthropic May 2026 release notes:
+    https://pypi.org/project/claude-agent-sdk/
+    """
+
+    def test_duration_ms_propagates_when_sdk_supplies_it(self) -> None:
+        """SDK 0.1.73+ payloads carry duration_ms; the audit body forwards it."""
+        body = posttooluse_audit_payload(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "ls -l"},
+                "duration_ms": 142,
+            }
+        )
+        assert body["tool_name"] == "Bash"
+        assert body["tool_input"] == {"command": "ls -l"}
+        assert body["duration_ms"] == 142
+        assert body["sdk_field_durations_present"] is True
+
+    def test_missing_duration_ms_omitted_for_older_sdk_payloads(self) -> None:
+        """0.1.58 payloads have no duration_ms; the helper does NOT fabricate one."""
+        body = posttooluse_audit_payload(
+            {
+                "tool_name": "Read",
+                "tool_input": {"path": "/etc/hosts"},
+            }
+        )
+        assert body["tool_name"] == "Read"
+        assert "duration_ms" not in body, "must not synthesize duration_ms when absent"
+        assert body["sdk_field_durations_present"] is False
+
+    def test_zero_duration_ms_preserved_distinctly_from_absent(self) -> None:
+        """0ms tool execution is a real payload — must NOT be conflated with absent."""
+        body = posttooluse_audit_payload(
+            {
+                "tool_name": "Echo",
+                "duration_ms": 0,
+            }
+        )
+        assert body["duration_ms"] == 0
+        assert body["sdk_field_durations_present"] is True
