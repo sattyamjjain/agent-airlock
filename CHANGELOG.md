@@ -13,6 +13,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.4] - 2026-05-09 — "Managed Agents Outcomes-rubric guard (2026-05-06 anchor)"
+
+Saturday daily cut. Minor bump — single ADD row introducing four new
+public surfaces. **No breaking changes.** Operator-parallel to a
+LIFE-SAFETY DAY 3 SEV-1 hotfix on a sibling repo (mannsetu); ADD-1 is
+structurally pure (no SDK import, no shared registrar admin path).
+
+### ADD
+
+- **Managed Agents Outcomes-rubric guard.** Anthropic's 2026-05-06 SF
+  Code event shipped Managed Agents with a structured **Outcomes**
+  rubric (beta) — a rubric run produces a verdict identifier that
+  downstream tool calls should carry as a provenance anchor. New
+  module `src/agent_airlock/integrations/managed_agents_outcomes_guard.py`
+  ships `ManagedAgentsOutcomesGuard.evaluate(provenance)` returning a
+  frozen `OutcomesRubricDecision` with `allowed: bool` (mirrors
+  `AllowlistVerdict` for chain-friendly composition). Default
+  `allowlist=frozenset()` denies all calls — operators must explicitly
+  enrol the rubric IDs they trust. The provenance field name is
+  operator-overridable. The guard is **not** an Anthropic SDK
+  consumer — frozenset[str] lookup, no install cost.
+  Companion preset: `policy_presets.managed_agents_outcomes_2026_05_06_defaults()`
+  returns the recommended config dict. Tests:
+  `tests/integrations/test_managed_agents_outcomes_guard.py` (15 cases incl.
+  custom-field override + composability proof + bad-allowlist
+  construction-time rejection). Doc:
+  `docs/policies/managed-agents-outcomes-2026-05-06.md`.
+  Primary sources:
+    - https://platform.claude.com/docs/en/managed-agents/dreams (2026-05-06)
+    - https://code.claude.com/docs/en/routines (2026-05-06)
+
+### Public-surface additions (semver-minor — additive new symbols)
+
+```python
+from agent_airlock import (
+    MANAGED_AGENTS_OUTCOMES_2026_05_06_DEFAULT_FIELD,
+    ManagedAgentsOutcomesGuard,
+    OutcomesRubricDecision,
+    OutcomesRubricVerdict,
+)
+from agent_airlock.policy_presets import managed_agents_outcomes_2026_05_06_defaults
+```
+
+### Tests
+
+- 15 new cases in `tests/integrations/test_managed_agents_outcomes_guard.py`:
+  deny-all default; allowlisted permit; mismatched rubric deny; absent
+  provenance / absent key / empty-string ID / non-string ID; custom
+  field name (positive + negative); composability with
+  `manifest_only_allowlist.AllowlistVerdict`; bad-allowlist
+  construction rejection (non-frozenset, non-string member); preset
+  factory shape, default empty allowlist, provenance-field override.
+- Net: **2,264 → 2,279** tests; coverage stays above the 82% CI floor.
+
+### Honest scope
+
+- Anthropic's Managed Agents and Outcomes are **beta**. The rubric
+  ID format and the field name carrying the anchor in tool-call
+  payloads may shift between today (2026-05-06 anchor) and Q3 2026
+  GA. The allowlist is a frozenset of strings (no regex), and the
+  field name is operator-overridable.
+- **Dreaming** memory-curation payloads (the 2026-05-06 research
+  preview) are out-of-scope for this guard. Sunday 2026-05-10
+  weekly-review candidate for a separate preset.
+- The 0.2.x Claude Agent SDK forward bump (Opus 4.7 requires Agent
+  SDK ≥0.2.111) carries to Sunday's weekly review per v0.7.3's
+  explicit "Honest scope" — still NOT in scope here.
+
+---
+
 ## [0.7.3] - 2026-05-06 — "Claude Agent SDK floor bump 0.1.58 → 0.1.73 + PostToolUse duration_ms hook regression"
 
 Wednesday daily cut. Patch bump — single UPDATE row. Closes the

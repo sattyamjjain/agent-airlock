@@ -2084,6 +2084,51 @@ def flowise_cve_2025_59528_defaults() -> dict[str, Any]:
     }
 
 
+def managed_agents_outcomes_2026_05_06_defaults(
+    *,
+    allowlist: frozenset[str] = frozenset(),
+    provenance_field: str | None = None,
+) -> dict[str, Any]:
+    """Recommended config for the Managed Agents Outcomes-rubric guard (v0.7.4+).
+
+    Anthropic's 2026-05-06 SF Code event shipped Managed Agents with
+    a structured **Outcomes** rubric (beta). The rubric produces a
+    verdict identifier that downstream tool calls should carry as a
+    provenance anchor. This preset wires the operator-supplied
+    rubric-ID allowlist into a fail-closed gate via
+    :class:`agent_airlock.integrations.managed_agents_outcomes_guard.ManagedAgentsOutcomesGuard`.
+
+    Default ``allowlist=frozenset()`` denies all calls — operators
+    must explicitly enrol the rubric IDs they trust.
+
+    Honest scope: Managed Agents and Outcomes are beta. The rubric
+    ID format and the field name carrying the anchor in tool-call
+    payloads may shift between today (2026-05-06 anchor) and Q3 2026
+    GA. The allowlist is a frozenset of strings (no regex), and the
+    field name is operator-overridable.
+
+    Primary sources:
+      https://platform.claude.com/docs/en/managed-agents/dreams
+      https://code.claude.com/docs/en/routines
+    """
+    from .integrations.managed_agents_outcomes_guard import (
+        MANAGED_AGENTS_OUTCOMES_2026_05_06_DEFAULT_FIELD,
+    )
+
+    return {
+        "preset_id": "managed_agents_outcomes_2026_05_06",
+        "severity": "high",
+        "default_action": "deny",
+        "advisory_url": "https://platform.claude.com/docs/en/managed-agents/dreams",
+        "allowlist": allowlist,
+        "provenance_field": (
+            provenance_field
+            if provenance_field is not None
+            else MANAGED_AGENTS_OUTCOMES_2026_05_06_DEFAULT_FIELD
+        ),
+    }
+
+
 GTG_1002_DEFENSE = gtg_1002_defense_policy()
 MEX_GOV_2026 = mex_gov_2026_policy()
 OWASP_MCP_TOP_10_2026 = owasp_mcp_top_10_2026_policy()
@@ -2136,6 +2181,7 @@ __all__ = [
     "mcp_stdio_meta_cve_2026_04",
     "mcp_elicitation_guard_2026_04",
     "mcp_config_path_traversal_cve_2026_31402",
+    "managed_agents_outcomes_2026_05_06_defaults",
     "gemini_3_agent_defaults",
     "oauth_state_injection_guard",
     "gpt_5_5_spud_agent_defaults",

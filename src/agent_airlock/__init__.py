@@ -193,6 +193,14 @@ from .integrations.crewai import (
     CrewAIMissingError,
 )
 
+# V0.7.4 — Managed Agents Outcomes-rubric guard (ADD-1 2026-05-09).
+from .integrations.managed_agents_outcomes_guard import (
+    MANAGED_AGENTS_OUTCOMES_2026_05_06_DEFAULT_FIELD,
+    ManagedAgentsOutcomesGuard,
+    OutcomesRubricDecision,
+    OutcomesRubricVerdict,
+)
+
 # V0.7.1 — PydanticAI canonical-leg trio (ADD-1 2026-05-04).
 from .integrations.pydantic_ai import (
     PydanticAIAdapter,
@@ -446,7 +454,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.7.3"
+__version__ = "0.7.4"
 
 __all__ = [
     # Core
@@ -525,6 +533,11 @@ __all__ = [
     # V0.7.2 — CrewAI canonical-leg trio (ADD-1; closes #5)
     "CrewAIAdapter",
     "CrewAIMissingError",
+    # V0.7.4 — Managed Agents Outcomes-rubric guard (ADD-1 2026-05-09)
+    "MANAGED_AGENTS_OUTCOMES_2026_05_06_DEFAULT_FIELD",
+    "ManagedAgentsOutcomesGuard",
+    "OutcomesRubricDecision",
+    "OutcomesRubricVerdict",
     # V0.7.0 — Redis-backed distributed rate limiter (#1)
     "RedisRateLimit",
     "RedisRateLimitUnavailable",
