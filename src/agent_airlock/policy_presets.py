@@ -2084,6 +2084,51 @@ def flowise_cve_2025_59528_defaults() -> dict[str, Any]:
     }
 
 
+def semantic_kernel_filter_eval_rce_2026_25592_26030_defaults(
+    *,
+    suspect_fields: frozenset[str] | None = None,
+    scan_all_fields: bool = False,
+) -> dict[str, Any]:
+    """Recommended config for the Semantic-Kernel-class filter-eval RCE guard (v0.7.5+).
+
+    Microsoft's 2026-05-07 MSRC blog disclosed two CVEs in the
+    Semantic Kernel filter-evaluation pipeline:
+
+    - **CVE-2026-25592** — lambda-filter eval RCE (Python lambda
+      reaches a runtime ``compile()`` / ``eval()`` sink).
+    - **CVE-2026-26030** — template-expression eval RCE (C#
+      ``Expression.Lambda<>`` reaches a runtime expression
+      evaluator).
+
+    The exploit class is **not Semantic-Kernel-specific** — any
+    framework that compiles user-controlled filter expressions is
+    vulnerable. This preset wires
+    :class:`agent_airlock.mcp_spec.filter_eval_rce_guard.FilterEvalRCEGuard`
+    with a default vocabulary of suspect fields. ``scan_all_fields=True``
+    is the operator-defensive mode that inspects every value on the
+    payload regardless of field name.
+
+    Primary source:
+      https://www.microsoft.com/en-us/security/blog/2026/05/07/prompts-become-shells-rce-vulnerabilities-ai-agent-frameworks/
+    """
+    from .mcp_spec.filter_eval_rce_guard import DEFAULT_SUSPECT_FIELDS
+
+    return {
+        "preset_id": "semantic_kernel_filter_eval_rce_2026_25592_26030",
+        "severity": "critical",
+        "default_action": "deny",
+        "advisory_url": (
+            "https://www.microsoft.com/en-us/security/blog/2026/05/07/"
+            "prompts-become-shells-rce-vulnerabilities-ai-agent-frameworks/"
+        ),
+        "cves": ("CVE-2026-25592", "CVE-2026-26030"),
+        "suspect_fields": (
+            suspect_fields if suspect_fields is not None else DEFAULT_SUSPECT_FIELDS
+        ),
+        "scan_all_fields": scan_all_fields,
+    }
+
+
 def managed_agents_outcomes_2026_05_06_defaults(
     *,
     allowlist: frozenset[str] = frozenset(),
@@ -2182,6 +2227,7 @@ __all__ = [
     "mcp_elicitation_guard_2026_04",
     "mcp_config_path_traversal_cve_2026_31402",
     "managed_agents_outcomes_2026_05_06_defaults",
+    "semantic_kernel_filter_eval_rce_2026_25592_26030_defaults",
     "gemini_3_agent_defaults",
     "oauth_state_injection_guard",
     "gpt_5_5_spud_agent_defaults",

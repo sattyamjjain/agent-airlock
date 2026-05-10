@@ -232,6 +232,16 @@ from .mcp_spec.elicitation_guard import (
     ElicitationGuard,
     ElicitationGuardError,
 )
+
+# V0.7.5 — Filter-Eval RCE guard (CVE-2026-25592 + CVE-2026-26030).
+from .mcp_spec.filter_eval_rce_guard import (
+    DEFAULT_SUSPECT_FIELDS as FILTER_EVAL_RCE_DEFAULT_SUSPECT_FIELDS,
+)
+from .mcp_spec.filter_eval_rce_guard import (
+    FilterEvalRCEDecision,
+    FilterEvalRCEGuard,
+    FilterEvalRCEVerdict,
+)
 from .mcp_spec.lan_unauth_rce_guard import LANUnauthMCPServerBlocked
 from .mcp_spec.manifest_only_mode import (
     ManifestNotRegisteredError,
@@ -454,7 +464,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.7.4"
+__version__ = "0.7.5"
 
 __all__ = [
     # Core
@@ -538,6 +548,11 @@ __all__ = [
     "ManagedAgentsOutcomesGuard",
     "OutcomesRubricDecision",
     "OutcomesRubricVerdict",
+    # V0.7.5 — Filter-Eval RCE guard (CVE-2026-25592 + CVE-2026-26030)
+    "FILTER_EVAL_RCE_DEFAULT_SUSPECT_FIELDS",
+    "FilterEvalRCEDecision",
+    "FilterEvalRCEGuard",
+    "FilterEvalRCEVerdict",
     # V0.7.0 — Redis-backed distributed rate limiter (#1)
     "RedisRateLimit",
     "RedisRateLimitUnavailable",
