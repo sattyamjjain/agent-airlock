@@ -13,6 +13,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.5] - 2026-05-10 — "Filter-Eval RCE guard (CVE-2026-25592 + CVE-2026-26030)"
+
+Sunday daily cut. Minor bump — single ADD row introducing four new
+public surfaces. **No breaking changes.** Operator-parallel to a
+LIFE-SAFETY DAY 4 SEV-1 hotfix on a sibling repo (mannsetu); ADD-1 is
+structurally pure (regex-only, no SDK import, no shared registrar
+admin path).
+
+### ADD
+
+- **Filter-Eval RCE guard.** Microsoft's 2026-05-07 MSRC blog
+  ["When prompts become shells: RCE vulnerabilities in AI agent frameworks"][msrc]
+  disclosed two CVEs in the Semantic Kernel filter-evaluation
+  pipeline: **CVE-2026-25592** (Python lambda-filter eval RCE) and
+  **CVE-2026-26030** (C# template-expression eval RCE). The exploit
+  class is **not Semantic-Kernel-specific** — any agent framework
+  that compiles user-controlled filter expressions is vulnerable.
+  New module `src/agent_airlock/mcp_spec/filter_eval_rce_guard.py`
+  ships `FilterEvalRCEGuard.evaluate(args)` returning a frozen
+  `FilterEvalRCEDecision` with `allowed: bool` (mirrors
+  `AllowlistVerdict` and `OutcomesRubricDecision` for chain-friendly
+  composition). Detection is regex-based on a default vocabulary of
+  suspect fields (`filter`, `condition`, `predicate`, `template`,
+  `expression`, `where`, `lambda`) — operators on a non-default
+  vocabulary can override; the most defensive mode is
+  `scan_all_fields=True`. The guard is a **syntax-shape detector**:
+  it catches the disclosed CVE payload class and the obvious
+  obfuscation variants (multi-line, leading whitespace) without
+  evaluating the expression itself. No `semantic-kernel` dep.
+  Companion preset:
+  `policy_presets.semantic_kernel_filter_eval_rce_2026_25592_26030_defaults()`
+  returns the recommended config dict — parity with
+  `mcp_config_path_traversal_cve_2026_31402`. Tests:
+  `tests/mcp_spec/test_filter_eval_rce_guard.py` (19 cases). Doc:
+  `docs/policies/semantic-kernel-filter-eval-rce.md`.
+
+[msrc]: https://www.microsoft.com/en-us/security/blog/2026/05/07/prompts-become-shells-rce-vulnerabilities-ai-agent-frameworks/
+
+### Public-surface additions (semver-minor — additive new symbols)
+
+```python
+from agent_airlock import (
+    FILTER_EVAL_RCE_DEFAULT_SUSPECT_FIELDS,
+    FilterEvalRCEDecision,
+    FilterEvalRCEGuard,
+    FilterEvalRCEVerdict,
+)
+from agent_airlock.policy_presets import (
+    semantic_kernel_filter_eval_rce_2026_25592_26030_defaults,
+)
+```
+
+### Tests
+
+- 19 new cases in `tests/mcp_spec/test_filter_eval_rce_guard.py`:
+  - CVE-2026-25592 Python lambda in `filter` field
+  - lambda in `condition` field
+  - CVE-2026-26030 C# `Expression.Lambda<>` in `template`
+  - Mustache-style template-eval token
+  - benign equality filter NOT denied (no false positives)
+  - benign field with the substring "Lambda" in a string value NOT denied
+  - missing filter fields / `None` args → ALLOW
+  - multi-line lambda injection denied
+  - leading-whitespace lambda denied
+  - `scan_all_fields=True` catches lambdas in unknown fields
+  - default mode preserves the suspect-field allowlist
+  - custom suspect-fields (positive + negative)
+  - construction-time rejection (non-frozenset, non-string member)
+  - factory shape, `scan_all_fields` override, `suspect_fields` override
+- Net: **2,279 → 2,298** tests; coverage stays above the 82% CI floor.
+
+### Honest scope
+
+- The guard is a regex heuristic. It catches the disclosed CVE
+  payload class and the obvious obfuscation variants. A determined
+  attacker who controls the field name can hide the lambda outside
+  the default vocabulary — `scan_all_fields=True` is the
+  operator-defensive remedy.
+- The full Semantic Kernel adapter trio (lib + tests + docs) is
+  scoped as an M-effort future-day row, not today. Today's ship is
+  the policy preset; the adapter trio is the follow-up.
+- The 0.2.x Claude Agent SDK forward bump (Opus 4.7 ≥0.2.111)
+  carries to next Sunday's weekly review per v0.7.3's "Honest
+  scope" — still NOT in scope here.
+
+---
+
 ## [0.7.4] - 2026-05-09 — "Managed Agents Outcomes-rubric guard (2026-05-06 anchor)"
 
 Saturday daily cut. Minor bump — single ADD row introducing four new
