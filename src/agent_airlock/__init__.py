@@ -260,6 +260,14 @@ from .mcp_spec.oauth_state_entropy_guard import (
     OAuthStateEntropyGuard,
     OAuthStateInjectionError,
 )
+
+# V0.7.6 — OIDC publish-window guard (TanStack postmortem 2026-05-11).
+from .mcp_spec.oidc_publish_window_guard import (
+    OIDCPublishWindowDecision,
+    OIDCPublishWindowGuard,
+    OIDCPublishWindowVerdict,
+    load_blast_list_from_2026_05_11,
+)
 from .mcp_spec.pr_metadata_guard import (
     PRMetadataGuard,
     PRMetadataInjectionRejected,
@@ -270,6 +278,14 @@ from .mcp_spec.sampling_guard import (
     SamplingQuotaExceeded,
 )
 from .mcp_spec.session_guard import SnapshotIntegrityError
+
+# V0.7.6 — MCP STDIO command-injection guard (HelpNetSecurity 2026-05-05).
+from .mcp_spec.stdio_command_injection_guard import (
+    DEFAULT_SHELL_METACHARS,
+    StdioCommandInjectionDecision,
+    StdioCommandInjectionGuard,
+    StdioCommandInjectionVerdict,
+)
 from .mcp_spec.stdio_meta_guard import (
     StdioMetaGuard,
     StdioMetaGuardError,
@@ -464,7 +480,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.7.5"
+__version__ = "0.7.6"
 
 __all__ = [
     # Core
@@ -553,6 +569,16 @@ __all__ = [
     "FilterEvalRCEDecision",
     "FilterEvalRCEGuard",
     "FilterEvalRCEVerdict",
+    # V0.7.6 — OIDC publish-window guard (TanStack postmortem 2026-05-11)
+    "OIDCPublishWindowDecision",
+    "OIDCPublishWindowGuard",
+    "OIDCPublishWindowVerdict",
+    "load_blast_list_from_2026_05_11",
+    # V0.7.6 — MCP STDIO command-injection guard (HelpNetSecurity 2026-05-05)
+    "DEFAULT_SHELL_METACHARS",
+    "StdioCommandInjectionDecision",
+    "StdioCommandInjectionGuard",
+    "StdioCommandInjectionVerdict",
     # V0.7.0 — Redis-backed distributed rate limiter (#1)
     "RedisRateLimit",
     "RedisRateLimitUnavailable",
