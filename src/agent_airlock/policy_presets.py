@@ -2084,6 +2084,79 @@ def flowise_cve_2025_59528_defaults() -> dict[str, Any]:
     }
 
 
+def npm_oidc_publish_window_guard_defaults(
+    *,
+    blast_list: frozenset[tuple[str, str, str]] | None = None,
+) -> dict[str, Any]:
+    """Recommended config for the TanStack 2026-05-11 OIDC publish-window guard.
+
+    The TanStack 2026-05-11 postmortem disclosed that an attacker
+    extracted the runner's OIDC token directly from ``/proc/<pid>/maps``
+    and ``/proc/<pid>/mem`` of the Runner.Worker process and used it
+    to republish 42 packages × 84 versions outside the workflow's own
+    publish step. Airlock's runtime surface for this class is "agent
+    that fetches / runs just-mutated package versions should reject
+    blast-list pairs". This preset wires
+    :class:`agent_airlock.mcp_spec.oidc_publish_window_guard.OIDCPublishWindowGuard`
+    with the curated 2026-05-11 blast list (TanStack postmortem + Aikido
+    cross-ecosystem advisory).
+
+    The list is a frozenset of ``(ecosystem, name, version)`` tuples.
+    Operators on a non-default vocabulary can pass their own list.
+
+    Primary sources:
+      https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
+      https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised
+    """
+    from .mcp_spec.oidc_publish_window_guard import load_blast_list_from_2026_05_11
+
+    return {
+        "preset_id": "npm_oidc_publish_window_guard_2026_05_11",
+        "severity": "critical",
+        "default_action": "deny",
+        "advisory_url": ("https://tanstack.com/blog/npm-supply-chain-compromise-postmortem"),
+        "cross_ecosystem_url": (
+            "https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised"
+        ),
+        "incident_id": "tanstack-oidc-blast-2026-05-11",
+        "blast_list": (blast_list if blast_list is not None else load_blast_list_from_2026_05_11()),
+    }
+
+
+def mcp_stdio_command_injection_preset_defaults(
+    *,
+    cwd_allowlist: tuple[str, ...] = (),
+    extra_metachars: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """Recommended config for the MCP STDIO command-injection guard.
+
+    Snyk ToxicSkills disclosed via Help Net Security 2026-05-05 that
+    "1 in 4 MCP servers opens AI agent security to code execution
+    risk". MCP STDIO transport accepts an argv vector that often
+    arrives via the model's tool-call payload — a shell metachar in
+    any element opens an injection path.
+
+    This preset wires
+    :class:`agent_airlock.mcp_spec.stdio_command_injection_guard.StdioCommandInjectionGuard`
+    with a default block-list of shell metachars (``;``, ``&&``,
+    ``||``, ``|``, newline, backtick, ``$(``) plus a path-traversal
+    detector (``../`` outside an operator-supplied cwd allowlist).
+
+    Primary source:
+      https://www.helpnetsecurity.com/2026/05/05/ai-agent-security-skills-blind-spots/
+    """
+    return {
+        "preset_id": "mcp_stdio_command_injection_2026_05_05",
+        "severity": "critical",
+        "default_action": "deny",
+        "advisory_url": (
+            "https://www.helpnetsecurity.com/2026/05/05/ai-agent-security-skills-blind-spots/"
+        ),
+        "cwd_allowlist": cwd_allowlist,
+        "extra_metachars": extra_metachars,
+    }
+
+
 def semantic_kernel_filter_eval_rce_2026_25592_26030_defaults(
     *,
     suspect_fields: frozenset[str] | None = None,
@@ -2228,6 +2301,8 @@ __all__ = [
     "mcp_config_path_traversal_cve_2026_31402",
     "managed_agents_outcomes_2026_05_06_defaults",
     "semantic_kernel_filter_eval_rce_2026_25592_26030_defaults",
+    "npm_oidc_publish_window_guard_defaults",
+    "mcp_stdio_command_injection_preset_defaults",
     "gemini_3_agent_defaults",
     "oauth_state_injection_guard",
     "gpt_5_5_spud_agent_defaults",

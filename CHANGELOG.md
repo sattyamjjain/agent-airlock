@@ -13,6 +13,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.6] - 2026-05-12 — "OIDC publish-window guard (TanStack 2026-05-11) + MCP STDIO command-injection guard (Snyk ToxicSkills 2026-05-05)"
+
+Tuesday daily cut. Minor bump — two ADD rows, both structurally pure
+(no SDK imports). **No breaking changes.** Operator-parallel to a
+mannsetu DAY 6 SEV-1 hotfix; both guards are regex/string-set match
+over tool-call args.
+
+### ADD
+
+- **OIDC publish-window guard (TanStack postmortem 2026-05-11).**
+  An attacker extracted the GitHub Actions runner's OIDC token from
+  `/proc/<pid>/maps` and `/proc/<pid>/mem` of the Runner.Worker
+  process and used it to republish 42 packages × 84 versions
+  outside the workflow's own publish step. The npm trusted-publisher
+  binding has no per-publish review — once configured, any code path
+  in the workflow can mint a publish-capable token. New module
+  `src/agent_airlock/mcp_spec/oidc_publish_window_guard.py` ships
+  `OIDCPublishWindowGuard.evaluate(args) -> OIDCPublishWindowDecision`.
+  Detects: `(package, version)` arg pair on the operator-supplied
+  blast list, OR npm-registry tarball URLs
+  (`https://registry.npmjs.org/<pkg>/-/...-<ver>.tgz`) targeting any
+  pair. Ships with a curated 2026-05-11 fixture
+  (`data/oidc_publish_blast_2026_05_11.json`, 89 entries: 84 TanStack
+  npm packages + 5 cross-ecosystem entries per Aikido 2026-05-11)
+  loadable via `load_blast_list_from_2026_05_11()`. Companion factory
+  `policy_presets.npm_oidc_publish_window_guard_defaults()` returns
+  the recommended config dict — parity with v0.7.5's
+  `semantic_kernel_filter_eval_rce_2026_25592_26030_defaults`. 13
+  regression tests. Doc:
+  `docs/policies/npm-oidc-publish-window-guard.md`.
+
+- **MCP STDIO command-injection guard (carried from 2026-05-11
+  prompt).** Snyk ToxicSkills disclosed via Help Net Security
+  2026-05-05: "1 in 4 MCP servers opens AI agent security to code
+  execution risk." MCP STDIO transport accepts an argv vector that
+  often arrives via the model's tool-call payload — a shell metachar
+  opens an injection path. New module
+  `src/agent_airlock/mcp_spec/stdio_command_injection_guard.py`
+  ships `StdioCommandInjectionGuard.evaluate(args) ->
+  StdioCommandInjectionDecision`. Denies on default shell metachar
+  set (`;`, `&&`, `||`, `|`, newline, CR, backtick, `$(`) in any
+  argv element. **Opt-in** path-traversal check via
+  `cwd_allowlist=(...)` — empty allowlist (default) disables it so
+  operators who don't route through a fixed cwd see no false
+  positives. Operators can extend the metachar set via
+  `extra_metachars`. Companion factory
+  `policy_presets.mcp_stdio_command_injection_preset_defaults()`.
+  18 regression tests (incl. 7 parametrised metachar variants +
+  inside/outside-allowlist + extension). Doc:
+  `docs/policies/mcp-stdio-command-injection-guard.md`.
+
+### Public-surface additions (semver-minor — additive new symbols)
+
+```python
+from agent_airlock import (
+    # OIDC publish-window (TanStack 2026-05-11)
+    OIDCPublishWindowDecision,
+    OIDCPublishWindowGuard,
+    OIDCPublishWindowVerdict,
+    load_blast_list_from_2026_05_11,
+    # MCP STDIO command-injection (HelpNetSecurity 2026-05-05)
+    DEFAULT_SHELL_METACHARS,
+    StdioCommandInjectionDecision,
+    StdioCommandInjectionGuard,
+    StdioCommandInjectionVerdict,
+)
+from agent_airlock.policy_presets import (
+    npm_oidc_publish_window_guard_defaults,
+    mcp_stdio_command_injection_preset_defaults,
+)
+```
+
+### Tests
+
+- 13 new cases in `tests/mcp_spec/test_oidc_publish_window_guard.py`
+- 18 new cases in `tests/mcp_spec/test_stdio_command_injection_guard.py`
+- Net: **2,298 → 2,329** tests; coverage above the 82% CI floor.
+
+### TDD
+
+Strict red-green-refactor for both ADDs: tests written first, watched
+fail with `ModuleNotFoundError`, then minimal implementations, then
+watched all pass. No production code without a failing test first.
+
+### Honest scope
+
+- The OIDC blast-list guard is a **known-bad denier**, not a generic
+  OIDC anomaly detector. Architectural fix is npm's per-publish-
+  review (postmortem "Remediation Guidance"); the runtime side is
+  this guard.
+- The 2026-05-11 fixture is a point-in-time snapshot. Operators
+  regenerate the JSON when new blast-list extensions are confirmed.
+  Sunday weekly-review surfaces this as a checklist item.
+- The STDIO traversal check is opt-in (empty `cwd_allowlist`
+  disables it) so operators who don't route through a fixed cwd see
+  no false positives.
+- 0.2.x Claude Agent SDK forward bump (Opus 4.7 ≥0.2.111) still NOT
+  in scope — carries to next Sunday's weekly review per v0.7.3's
+  "Honest scope".
+
+### Primary sources
+
+- https://tanstack.com/blog/npm-supply-chain-compromise-postmortem (2026-05-11) — ADD-1 anchor
+- https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised (2026-05-11) — ADD-1 cross-ecosystem
+- https://www.helpnetsecurity.com/2026/05/05/ai-agent-security-skills-blind-spots/ (2026-05-05) — ADD-2 anchor
+
+---
+
 ## [0.7.5] - 2026-05-10 — "Filter-Eval RCE guard (CVE-2026-25592 + CVE-2026-26030)"
 
 Sunday daily cut. Minor bump — single ADD row introducing four new
