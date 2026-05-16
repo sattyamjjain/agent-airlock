@@ -220,15 +220,18 @@ class StdioCommandInjectionGuard:
         """
         if "/" not in value and "\\" not in value:
             return False
-        # Normalise the path against a synthetic root so relative paths
-        # like ``../../etc/passwd`` resolve to a definite location.
-        # Use ``/tmp`` as the synthetic base — what matters is whether
-        # the normalised path lies under any allowlist root, not the
-        # specific base.
+        # Normalise the path against a synthetic non-existent root so
+        # relative paths like ``../../etc/passwd`` resolve to a definite
+        # location for prefix-comparison. NO filesystem IO occurs — the
+        # base is never created, opened, or listed; it's only used as
+        # the leading component for ``os.path.normpath`` resolution of
+        # ``..`` segments. The literal string below is therefore not a
+        # "tmp directory usage" in the Bandit B108 sense.
+        _SYNTHETIC_BASE_FOR_NORMPATH = "/airlock-synthetic-base-for-normpath"  # nosec B108
         if os.path.isabs(value):
             normalised = os.path.normpath(value)
         else:
-            normalised = os.path.normpath(os.path.join("/tmp", value))
+            normalised = os.path.normpath(os.path.join(_SYNTHETIC_BASE_FOR_NORMPATH, value))
         return not any(
             normalised == root or normalised.startswith(root.rstrip("/") + "/")
             for root in self._cwd_allowlist
