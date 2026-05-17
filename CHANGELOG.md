@@ -13,6 +13,128 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.0] - 2026-05-17 — "Eval-RCE (CVE-2026-44717) + MCP Inspector runtime scan (CVE-2026-23744) + Agent SDK Credit pool budget"
+
+Sunday cut. **Minor bump** — three additive ADD rows, two CVE-anchored
+guards plus a new public budget primitive. No breaking changes.
+
+### ADD
+
+- **Eval-RCE guard (CVE-2026-44717).** NVD 2026-05-15: MCP Calculate
+  Server < 0.1.1 used `eval()` to evaluate user math expressions
+  without input sanitization (RCE; patched in 0.1.1 by pinning
+  `local_dict`). The exploit class is **not MCP-Calculate-specific** —
+  any tool reaching `eval()` / `exec()` / `compile()` /
+  `__import__()` / `getattr()` / `sympy.parsing.sympy_parser.parse_expr()`
+  with a model-derived string is vulnerable. New module
+  `src/agent_airlock/mcp_spec/eval_rce_guard.py` ships
+  `EvalRCEGuard.evaluate(args) -> EvalRCEDecision`. Detects bare-eval
+  invocations on any string-valued field (word-boundary regex avoids
+  false-positives on substrings like `'Eval Industries'`). Includes a
+  curated vulnerable-package denylist (`mcp-calculate-server`
+  `0.0.8`/`0.0.9`/`0.1.0`) and a `parse_expr` safe-form exemption
+  (`local_dict=` / `global_dict=` pinning is the upstream patch).
+  Companion factory:
+  `policy_presets.stdio_guard_eval_defaults_2026_05_15()`. Tests:
+  `tests/mcp_spec/test_eval_rce_guard.py` (21 cases). Doc:
+  `docs/policies/eval-rce-cve-2026-44717.md`. Complementary to v0.7.5
+  `FilterEvalRCEGuard` (lambda / Expression.Lambda syntax shapes).
+
+- **MCP Inspector exposure guard (CVE-2026-23744 runtime extension).**
+  v0.5.x ships `bind_address_guard.py` for the config-time check
+  (operator-supplied bind address is `0.0.0.0`); this is the runtime
+  complement that scans the process's actual LISTEN sockets via
+  stdlib `/proc/net/tcp`. New module
+  `src/agent_airlock/mcp_spec/inspector_exposure_guard.py` ships
+  `InspectorExposureGuard.scan_listeners() -> InspectorExposureDecision`.
+  Detects IPv4 `0.0.0.0` binds on the MCPJam inspector port range
+  (6274–6277). Operator opt-out via `MCP_INSPECTOR_REQUIRE_AUTH=1`.
+  **Linux-only** — fails-open on macOS / Windows with a dedicated
+  `UNKNOWN_PLATFORM_UNSUPPORTED` verdict so CI matrix runs on
+  non-Linux don't red-flag a Linux-only path. Companion factory:
+  `policy_presets.mcp_inspector_exposure_guard_defaults()`. Tests:
+  `tests/mcp_spec/test_inspector_exposure_guard.py` (11 cases, all
+  using stdlib `/proc/net/tcp` fixture files — no live socket
+  dependency). Doc:
+  `docs/policies/mcp-inspector-exposure-guard.md`.
+
+- **Agent SDK Credit pool budget primitive.** Anthropic's 2026-06-15
+  billing split (Zed blog 2026-05-14) decouples Claude subscriptions
+  from Claude Code usage when routed through tools like Zed / Agent
+  SDK, with per-month credit pools ($20 Pro / $100 Max 5x / $200
+  Max 20x). New module `src/agent_airlock/budget/agent_sdk_credit.py`
+  ships `AgentSDKCreditBudget(monthly_credit_usd, tier_label=None)`
+  with `register_call(model, input_tokens, output_tokens) ->
+  AgentSDKCreditDecision`. 90% `NEAR_LIMIT` (still
+  `allowed=True` — operator policy may convert), 100% `EXHAUSTED`
+  (`allowed=False`). Packaged pricing table
+  `data/anthropic_pricing_2026_06.json` covers Opus 4.6/4.7,
+  Sonnet 4.6, Haiku 4.5. Unknown models fail-closed
+  (`ValueError`). Tests:
+  `tests/budget/test_agent_sdk_credit.py` (11 cases). Doc:
+  `docs/budget/agent-sdk-credit.md`.
+
+### Public-surface additions (semver-minor — new namespace + new symbols)
+
+```python
+from agent_airlock import (
+    # Eval-RCE (CVE-2026-44717)
+    DEFAULT_EVAL_SINKS, DEFAULT_VULNERABLE_PACKAGES,
+    EvalRCEDecision, EvalRCEGuard, EvalRCEVerdict,
+    # MCP Inspector exposure (CVE-2026-23744 runtime)
+    DEFAULT_INSPECTOR_PORTS,
+    InspectorExposureDecision, InspectorExposureGuard, InspectorExposureVerdict,
+    # Agent SDK Credit pool budget
+    AGENT_SDK_TIER_USD,
+    AgentSDKCreditBudget, AgentSDKCreditDecision, AgentSDKCreditVerdict,
+    load_anthropic_pricing_2026_06,
+)
+from agent_airlock.policy_presets import (
+    stdio_guard_eval_defaults_2026_05_15,
+    mcp_inspector_exposure_guard_defaults,
+)
+```
+
+### Tests + coverage
+
+- 21 new cases for `EvalRCEGuard`
+- 11 new cases for `InspectorExposureGuard`
+- 11 new cases for `AgentSDKCreditBudget`
+- Net: **2,329 → 2,372** tests (+43); coverage above the 82% CI floor.
+
+### TDD
+
+Strict red-green-refactor for all three: 43 tests written first,
+watched fail with `ModuleNotFoundError`, then minimal implementations,
+then watched all 43 pass.
+
+### Honest scope
+
+- All three guards are heuristic / data-driven (regex shapes,
+  curated denylists, runtime listener scans). They catch the
+  disclosed CVE classes and obvious obfuscation variants, but they
+  are **not** complete static analyzers.
+- `EvalRCEGuard` vulnerable-package denylist is curated. Operators
+  keep it current as new CVEs in the class drop.
+- `InspectorExposureGuard` is Linux-only (stdlib `/proc/net/tcp`).
+  Non-Linux platforms fail-open. Operators on macOS / Windows who
+  want a runtime check should layer their own psutil-based scan.
+- `AgentSDKCreditBudget` is in-process only. Cross-process /
+  cross-restart persistence is out of scope; operators layer their
+  own sink (Redis / file / DB) if needed.
+- The 2026-06 pricing table is a snapshot. Operators on enterprise
+  / annual contracts override via the `override_pricing=` kwarg.
+- The 0.2.x Claude Agent SDK forward bump (Opus 4.7 ≥0.2.111)
+  still carries — separate Sunday-review candidate.
+
+### Primary sources
+
+- https://nvd.nist.gov/vuln/detail/CVE-2026-44717 (2026-05-15)
+- https://github.com/boroeurnprach/CVE-2026-23744-PoC
+- https://zed.dev/blog/anthropic-subscription-changes (2026-05-14)
+
+---
+
 ## [0.7.6] - 2026-05-12 — "OIDC publish-window guard (TanStack 2026-05-11) + MCP STDIO command-injection guard (Snyk ToxicSkills 2026-05-05)"
 
 Tuesday daily cut. Minor bump — two ADD rows, both structurally pure

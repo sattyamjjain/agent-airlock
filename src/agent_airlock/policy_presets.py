@@ -2084,6 +2084,69 @@ def flowise_cve_2025_59528_defaults() -> dict[str, Any]:
     }
 
 
+def mcp_inspector_exposure_guard_defaults(
+    *,
+    inspector_ports: frozenset[int] | None = None,
+) -> dict[str, Any]:
+    """Recommended config for the MCP Inspector exposure guard (v0.8.0+).
+
+    CVE-2026-23744: MCPJam Inspector ≤ 1.4.2 binds to 0.0.0.0 by
+    default with no auth, enabling remote install + execution of
+    malicious MCP servers. This preset wires
+    :class:`agent_airlock.mcp_spec.inspector_exposure_guard.InspectorExposureGuard`
+    with the curated inspector port range (6274-6277). Complementary
+    to v0.5.x ``bind_address_guard.py`` — that guard fires at config
+    time, this one runs a runtime listener-scan on ``/proc/net/tcp``.
+
+    Primary source:
+      https://github.com/boroeurnprach/CVE-2026-23744-PoC
+    """
+    from .mcp_spec.inspector_exposure_guard import DEFAULT_INSPECTOR_PORTS
+
+    return {
+        "preset_id": "mcp_inspector_exposure_guard_2026_23744",
+        "severity": "high",
+        "default_action": "deny",
+        "advisory_url": "https://github.com/boroeurnprach/CVE-2026-23744-PoC",
+        "cves": ("CVE-2026-23744",),
+        "inspector_ports": (
+            inspector_ports if inspector_ports is not None else DEFAULT_INSPECTOR_PORTS
+        ),
+    }
+
+
+def stdio_guard_eval_defaults_2026_05_15(
+    *,
+    extra_sinks: frozenset[str] = frozenset(),
+    extra_vulnerable_packages: tuple[tuple[str, str], ...] = (),
+) -> dict[str, Any]:
+    """Recommended config for the bare-eval RCE guard (CVE-2026-44717 anchor, v0.8.0+).
+
+    NVD 2026-05-15: MCP Calculate Server < 0.1.1 uses ``eval()`` to
+    evaluate mathematical expressions without input sanitization,
+    leading to RCE. Patched in 0.1.1 by pinning ``local_dict``.
+
+    Complementary to v0.7.5 ``semantic_kernel_filter_eval_rce_2026_25592_26030_defaults``:
+    that preset targets ``lambda`` / ``Expression.Lambda<>`` syntax;
+    this one targets bare ``eval(`` / ``parse_expr(`` calls.
+
+    Primary source:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-44717
+    """
+    from .mcp_spec.eval_rce_guard import DEFAULT_EVAL_SINKS, DEFAULT_VULNERABLE_PACKAGES
+
+    return {
+        "preset_id": "stdio_guard_eval_defaults_2026_05_15",
+        "severity": "critical",
+        "default_action": "deny",
+        "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-44717",
+        "cves": ("CVE-2026-44717",),
+        "sinks": DEFAULT_EVAL_SINKS | extra_sinks,
+        "extra_sinks": extra_sinks,
+        "vulnerable_packages": DEFAULT_VULNERABLE_PACKAGES + extra_vulnerable_packages,
+    }
+
+
 def npm_oidc_publish_window_guard_defaults(
     *,
     blast_list: frozenset[tuple[str, str, str]] | None = None,
@@ -2303,6 +2366,8 @@ __all__ = [
     "semantic_kernel_filter_eval_rce_2026_25592_26030_defaults",
     "npm_oidc_publish_window_guard_defaults",
     "mcp_stdio_command_injection_preset_defaults",
+    "stdio_guard_eval_defaults_2026_05_15",
+    "mcp_inspector_exposure_guard_defaults",
     "gemini_3_agent_defaults",
     "oauth_state_injection_guard",
     "gpt_5_5_spud_agent_defaults",

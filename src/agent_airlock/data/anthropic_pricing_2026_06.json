@@ -1,0 +1,24 @@
+{
+  "source": "https://www.anthropic.com/pricing",
+  "as_of": "2026-06-01T00:00:00Z",
+  "currency": "USD",
+  "note": "Anthropic API list rates per million tokens, effective 2026-06-01. Operators on enterprise / annual contracts should override with their own rate card.",
+  "models": {
+    "claude-opus-4-6": {
+      "input_usd_per_million": 15.0,
+      "output_usd_per_million": 75.0
+    },
+    "claude-opus-4-7": {
+      "input_usd_per_million": 15.0,
+      "output_usd_per_million": 75.0
+    },
+    "claude-sonnet-4-6": {
+      "input_usd_per_million": 3.0,
+      "output_usd_per_million": 15.0
+    },
+    "claude-haiku-4-5": {
+      "input_usd_per_million": 0.80,
+      "output_usd_per_million": 4.0
+    }
+  }
+}
