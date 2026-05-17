@@ -56,6 +56,15 @@ from .audit_otel import (
     get_otel_exporter,
 )
 
+# V0.8.0 — Agent SDK Credit pool budget (Anthropic 2026-06-15 billing split).
+from .budget.agent_sdk_credit import (
+    AGENT_SDK_TIER_USD,
+    AgentSDKCreditBudget,
+    AgentSDKCreditDecision,
+    AgentSDKCreditVerdict,
+    load_anthropic_pricing_2026_06,
+)
+
 # V0.4.0 Capability gating
 from .capabilities import (
     NO_NETWORK_CAPABILITY_POLICY,
@@ -233,6 +242,15 @@ from .mcp_spec.elicitation_guard import (
     ElicitationGuardError,
 )
 
+# V0.8.0 — Bare-eval RCE guard (CVE-2026-44717 anchor).
+from .mcp_spec.eval_rce_guard import (
+    DEFAULT_EVAL_SINKS,
+    DEFAULT_VULNERABLE_PACKAGES,
+    EvalRCEDecision,
+    EvalRCEGuard,
+    EvalRCEVerdict,
+)
+
 # V0.7.5 — Filter-Eval RCE guard (CVE-2026-25592 + CVE-2026-26030).
 from .mcp_spec.filter_eval_rce_guard import (
     DEFAULT_SUSPECT_FIELDS as FILTER_EVAL_RCE_DEFAULT_SUSPECT_FIELDS,
@@ -241,6 +259,14 @@ from .mcp_spec.filter_eval_rce_guard import (
     FilterEvalRCEDecision,
     FilterEvalRCEGuard,
     FilterEvalRCEVerdict,
+)
+
+# V0.8.0 — MCP Inspector exposure guard (CVE-2026-23744 runtime extension).
+from .mcp_spec.inspector_exposure_guard import (
+    DEFAULT_INSPECTOR_PORTS,
+    InspectorExposureDecision,
+    InspectorExposureGuard,
+    InspectorExposureVerdict,
 )
 from .mcp_spec.lan_unauth_rce_guard import LANUnauthMCPServerBlocked
 from .mcp_spec.manifest_only_mode import (
@@ -480,7 +506,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.7.6"
+__version__ = "0.8.0"
 
 __all__ = [
     # Core
@@ -579,6 +605,23 @@ __all__ = [
     "StdioCommandInjectionDecision",
     "StdioCommandInjectionGuard",
     "StdioCommandInjectionVerdict",
+    # V0.8.0 — Bare-eval RCE guard (CVE-2026-44717 anchor)
+    "DEFAULT_EVAL_SINKS",
+    "DEFAULT_VULNERABLE_PACKAGES",
+    "EvalRCEDecision",
+    "EvalRCEGuard",
+    "EvalRCEVerdict",
+    # V0.8.0 — MCP Inspector exposure guard (CVE-2026-23744 runtime extension)
+    "DEFAULT_INSPECTOR_PORTS",
+    "InspectorExposureDecision",
+    "InspectorExposureGuard",
+    "InspectorExposureVerdict",
+    # V0.8.0 — Agent SDK Credit pool budget (Anthropic 2026-06-15)
+    "AGENT_SDK_TIER_USD",
+    "AgentSDKCreditBudget",
+    "AgentSDKCreditDecision",
+    "AgentSDKCreditVerdict",
+    "load_anthropic_pricing_2026_06",
     # V0.7.0 — Redis-backed distributed rate limiter (#1)
     "RedisRateLimit",
     "RedisRateLimitUnavailable",
