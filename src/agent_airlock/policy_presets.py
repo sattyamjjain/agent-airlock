@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import re
 import shlex as _shlex_for_gitpilot
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path as _Path_for_gitpilot
 from typing import TYPE_CHECKING, Any
@@ -2147,6 +2147,136 @@ def stdio_guard_eval_defaults_2026_05_15(
     }
 
 
+# Default tool-name patterns for the MCP Calculate-Server class. Operators
+# extend via ``extra_tool_name_patterns`` on the factory below.
+_CALC_SERVER_TOOL_NAME_PATTERNS: tuple[str, ...] = (
+    "calc",
+    "calculate",
+    "evaluate",
+    "math_eval",
+    "sympy_eval",
+)
+
+
+def mcp_calc_server_bundle_defaults_2026_05_15(
+    *,
+    extra_sinks: frozenset[str] = frozenset(),
+    extra_metachars: frozenset[str] = frozenset(),
+    extra_tool_name_patterns: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Composition preset for the MCP Calculate-Server class (CVE-2026-44717 anchor, v0.8.1+).
+
+    Honest framing: this preset does **not** introduce a new runtime
+    detector. It composes two existing guards under a single
+    ``preset_id`` namespace so security teams cataloguing
+    CVE-2026-44717 coverage have one row to point to:
+
+    - v0.8.0 :class:`agent_airlock.mcp_spec.eval_rce_guard.EvalRCEGuard`
+      via :func:`stdio_guard_eval_defaults_2026_05_15` — catches the
+      bare-eval / parse_expr sinks.
+    - v0.7.6 :class:`agent_airlock.mcp_spec.stdio_command_injection_guard.StdioCommandInjectionGuard`
+      via :func:`mcp_stdio_command_injection_preset_defaults` —
+      catches shell metachars in argv vectors that often arrive at
+      ``calculate``-shaped tools that shell out for ``bc`` /
+      ``python -c``.
+
+    The bundle is scoped to a curated tool-name pattern set
+    (``calc``, ``calculate``, ``evaluate``, ``sympy_eval``,
+    ``math_eval``) — at the policy layer this scoping is how the
+    two underlying guards are applied selectively to calc-server
+    class tools.
+
+    Operators wanting bare-eval detection on every tool regardless
+    of name should keep using :func:`stdio_guard_eval_defaults_2026_05_15`
+    directly. This preset is the per-tool-class projection of that
+    surface.
+
+    Args:
+        extra_sinks: Additional eval-sink labels on top of
+            :data:`agent_airlock.mcp_spec.eval_rce_guard.DEFAULT_EVAL_SINKS`.
+        extra_metachars: Additional shell metachars on top of the
+            v0.7.6 default block-list.
+        extra_tool_name_patterns: Additional tool-name patterns on
+            top of the curated calc-server class set.
+
+    Raises:
+        TypeError: if any of the override args is not the documented
+            collection type.
+
+    Primary source:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-44717
+    """
+    from .mcp_spec.eval_rce_guard import DEFAULT_EVAL_SINKS, DEFAULT_VULNERABLE_PACKAGES
+
+    if not isinstance(extra_sinks, frozenset):
+        raise TypeError(f"extra_sinks must be a frozenset[str]; got {type(extra_sinks).__name__}")
+    if not isinstance(extra_metachars, frozenset):
+        raise TypeError(
+            f"extra_metachars must be a frozenset[str]; got {type(extra_metachars).__name__}"
+        )
+    if not isinstance(extra_tool_name_patterns, tuple):
+        raise TypeError(
+            "extra_tool_name_patterns must be a tuple of str; got "
+            f"{type(extra_tool_name_patterns).__name__}"
+        )
+
+    return {
+        "preset_id": "mcp_calc_server_bundle_2026_05_15",
+        "severity": "critical",
+        "default_action": "deny",
+        "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-44717",
+        "cves": ("CVE-2026-44717",),
+        "tool_name_patterns": _CALC_SERVER_TOOL_NAME_PATTERNS + extra_tool_name_patterns,
+        "eval_sinks": DEFAULT_EVAL_SINKS | extra_sinks,
+        "vulnerable_packages": DEFAULT_VULNERABLE_PACKAGES,
+        "extra_metachars": extra_metachars,
+        "composes": (
+            "stdio_guard_eval_defaults_2026_05_15",
+            "mcp_stdio_command_injection_preset_defaults",
+        ),
+    }
+
+
+def openapi_doc_drift_guard_defaults(
+    *,
+    spec: Mapping[str, Any],
+    drift_mode: str = "strict",
+) -> dict[str, Any]:
+    """Recommended config for the v0.8.1 OpenAPI Drift Guard.
+
+    Wires :class:`agent_airlock.mcp_spec.openapi_drift_guard.OpenAPIDriftGuard`
+    to the operator-supplied OpenAPI 3.x spec at the configured
+    drift mode. The Hermes paper (arXiv:2605.14312) finding maps to
+    a runtime body-shape gate one layer above the v0.7.x / v0.8.0
+    exploit-shape guards.
+
+    Args:
+        spec: Parsed OpenAPI document as a dict. The caller is
+            responsible for loading and parsing — agent-airlock does
+            not import PyYAML or any spec-loader.
+        drift_mode: ``"strict"`` (default) / ``"warn"`` / ``"shadow"``.
+
+    Raises:
+        TypeError: ``spec`` is not a mapping.
+        ValueError: ``drift_mode`` is unknown.
+
+    Primary source:
+      https://arxiv.org/abs/2605.14312
+    """
+    if not isinstance(spec, Mapping):
+        raise TypeError(f"spec must be a dict-like mapping; got {type(spec).__name__}")
+    if drift_mode not in ("strict", "warn", "shadow"):
+        raise ValueError(f"drift_mode must be 'strict'|'warn'|'shadow'; got {drift_mode!r}")
+    return {
+        "preset_id": "openapi_doc_drift_guard_2026_05_17",
+        "severity": "medium",
+        "default_action": "deny" if drift_mode == "strict" else "allow",
+        "advisory_url": "https://arxiv.org/abs/2605.14312",
+        "drift_mode": drift_mode,
+        "spec": dict(spec),
+    }
+
+
 def npm_oidc_publish_window_guard_defaults(
     *,
     blast_list: frozenset[tuple[str, str, str]] | None = None,
@@ -2368,6 +2498,8 @@ __all__ = [
     "mcp_stdio_command_injection_preset_defaults",
     "stdio_guard_eval_defaults_2026_05_15",
     "mcp_inspector_exposure_guard_defaults",
+    "mcp_calc_server_bundle_defaults_2026_05_15",
+    "openapi_doc_drift_guard_defaults",
     "gemini_3_agent_defaults",
     "oauth_state_injection_guard",
     "gpt_5_5_spud_agent_defaults",

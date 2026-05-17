@@ -294,6 +294,17 @@ from .mcp_spec.oidc_publish_window_guard import (
     OIDCPublishWindowVerdict,
     load_blast_list_from_2026_05_11,
 )
+
+# V0.8.1 — OpenAPI Drift Guard (Hermes 2026-05-13 paper anchor).
+from .mcp_spec.openapi_drift_guard import (
+    OpenAPIDivergence,
+    OpenAPIDivergenceKind,
+    OpenAPIDriftDecision,
+    OpenAPIDriftGuard,
+    OpenAPIDriftVerdict,
+    OpenAPIDriftViolation,
+    vaccinate_openapi,
+)
 from .mcp_spec.pr_metadata_guard import (
     PRMetadataGuard,
     PRMetadataInjectionRejected,
@@ -506,7 +517,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 
 __all__ = [
     # Core
@@ -616,6 +627,14 @@ __all__ = [
     "InspectorExposureDecision",
     "InspectorExposureGuard",
     "InspectorExposureVerdict",
+    # V0.8.1 — OpenAPI Drift Guard (Hermes 2026-05-13 paper anchor)
+    "OpenAPIDivergence",
+    "OpenAPIDivergenceKind",
+    "OpenAPIDriftDecision",
+    "OpenAPIDriftGuard",
+    "OpenAPIDriftVerdict",
+    "OpenAPIDriftViolation",
+    "vaccinate_openapi",
     # V0.8.0 — Agent SDK Credit pool budget (Anthropic 2026-06-15)
     "AGENT_SDK_TIER_USD",
     "AgentSDKCreditBudget",
