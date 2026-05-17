@@ -13,6 +13,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.1] - 2026-05-17 — "OpenAPI Drift Guard (Hermes 2026-05-13 paper) + MCP Calc-Server bundle preset"
+
+Sunday-evening cut on top of v0.8.0. **Minor bump** — one new public
+primitive (`OpenAPIDriftGuard`), one composition factory for the
+existing CVE-2026-44717 surface. No breaking changes.
+
+### ADD
+
+- **OpenAPI Drift Guard (Hermes paper anchor).** The Hermes paper
+  ([arXiv:2605.14312](https://arxiv.org/abs/2605.14312), 2026-05-13)
+  measured production OpenAPI-driven agent failures and found that
+  the dominant failure mode is **payload-shape drift**: missing
+  required fields, invented fields, type mismatches. The agent
+  emits a request body that violates the published schema; the
+  downstream service either rejects it (retry loop) or, worse,
+  dispatches on the malformed payload.
+
+  v0.8.1 ships `agent_airlock.mcp_spec.openapi_drift_guard.OpenAPIDriftGuard`
+  as the runtime gate one layer above the v0.7.x / v0.8.0 exploit-shape
+  guards. Three drift modes:
+
+  | Mode | Behaviour on drift |
+  |---|---|
+  | `strict` (default) | `allowed=False`, verdict `DENY_DRIFT` |
+  | `warn` | `allowed=True`, verdict `ALLOW_WARN`, structured log |
+  | `shadow` | `allowed=True`, verdict `ALLOW_SHADOW`, no log |
+
+  Per the 2026-05-17 operator decision, the caller supplies the
+  spec as a parsed dict — agent-airlock does not import PyYAML or
+  any spec-loader. Three divergence categories detected:
+  `missing_required`, `unknown_field` (when `additionalProperties:
+  false`), `type_mismatch` (incl. Python `bool` not accepted as
+  JSON `integer`).
+
+  Companion `vaccinate_openapi(spec, drift_mode=...)` decorator
+  factory wraps a tool function and raises `OpenAPIDriftViolation`
+  on a deny decision.
+
+  Decision dataclass mirrors the v0.7.x / v0.8.0 family —
+  `allowed: bool` for chain-friendly composition.
+
+  Factory: `policy_presets.openapi_doc_drift_guard_defaults(spec,
+  drift_mode="strict")`.
+
+  Doc: `docs/policies/openapi-drift-guard.md`.
+
+- **MCP Calc-Server bundle preset (CVE-2026-44717 composition).**
+  `policy_presets.mcp_calc_server_bundle_defaults_2026_05_15()` is
+  a **composition factory** that wires v0.8.0's `EvalRCEGuard` and
+  v0.7.6's `StdioCommandInjectionGuard` under a single preset_id
+  namespace (`mcp_calc_server_bundle_2026_05_15`) scoped to a
+  curated calc-server tool-name pattern set (`calc`, `calculate`,
+  `evaluate`, `sympy_eval`, `math_eval`).
+
+  **Honest scope:** this preset does NOT introduce a new runtime
+  detector. The eval-sink and shell-metachar detection ship in
+  v0.8.0 / v0.7.6. The bundle gives security teams cataloguing
+  CVE-2026-44717 coverage one row to point to and a `composes`
+  field naming both underlying guards.
+
+  Operators wanting bare-eval detection on every tool regardless
+  of name should keep using
+  `stdio_guard_eval_defaults_2026_05_15()` directly. The bundle
+  is the per-tool-class projection.
+
+### Tests
+
+- `tests/mcp_spec/test_openapi_drift_guard.py` — 21 cases covering
+  clean payload, missing required, unknown field, type mismatch
+  (including bool-vs-integer), unknown operation, drift modes,
+  construction validation, decision-shape invariants, and
+  `vaccinate_openapi` round-trips.
+- `tests/test_mcp_calc_server_bundle_preset.py` — 12 cases covering
+  factory shape, `composes` field enumeration, override
+  propagation, and construction validation.
+
+### Surface additions (`__all__`)
+
+- `OpenAPIDivergence`
+- `OpenAPIDivergenceKind`
+- `OpenAPIDriftDecision`
+- `OpenAPIDriftGuard`
+- `OpenAPIDriftVerdict`
+- `OpenAPIDriftViolation`
+- `vaccinate_openapi`
+- `policy_presets.openapi_doc_drift_guard_defaults`
+- `policy_presets.mcp_calc_server_bundle_defaults_2026_05_15`
+
+### Carry-over (unchanged from v0.8.0)
+
+- `EvalRCEGuard` / `EvalRCEDecision` / `EvalRCEVerdict` (CVE-2026-44717)
+- `InspectorExposureGuard` / `InspectorExposureDecision` / `InspectorExposureVerdict` (CVE-2026-23744 runtime)
+- `AgentSDKCreditBudget` / `AgentSDKCreditDecision` / `AgentSDKCreditVerdict` (Anthropic 2026-06-15 billing split)
+
+---
+
 ## [0.8.0] - 2026-05-17 — "Eval-RCE (CVE-2026-44717) + MCP Inspector runtime scan (CVE-2026-23744) + Agent SDK Credit pool budget"
 
 Sunday cut. **Minor bump** — three additive ADD rows, two CVE-anchored
