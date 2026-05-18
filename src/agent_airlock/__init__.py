@@ -414,6 +414,15 @@ from .redis_rate_limit import (
     RedisRateLimitUnavailable,
 )
 
+# V0.8.2 — Metis-inspired exploit-shape corpus block-rate regression.
+from .regression_corpus import (
+    CorpusEntry,
+    CorpusPromptOutcome,
+    MetisInspiredCorpusBlockRateDecision,
+    MetisInspiredCorpusBlockRateGuard,
+    MetisInspiredCorpusBlockRateVerdict,
+)
+
 # V0.4.0 Retry Policies
 from .retry import (
     AGGRESSIVE_RETRY,
@@ -517,7 +526,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.1"
+__version__ = "0.8.2"
 
 __all__ = [
     # Core
@@ -635,6 +644,12 @@ __all__ = [
     "OpenAPIDriftVerdict",
     "OpenAPIDriftViolation",
     "vaccinate_openapi",
+    # V0.8.2 — Metis-inspired exploit-shape corpus block-rate regression
+    "CorpusEntry",
+    "CorpusPromptOutcome",
+    "MetisInspiredCorpusBlockRateDecision",
+    "MetisInspiredCorpusBlockRateGuard",
+    "MetisInspiredCorpusBlockRateVerdict",
     # V0.8.0 — Agent SDK Credit pool budget (Anthropic 2026-06-15)
     "AGENT_SDK_TIER_USD",
     "AgentSDKCreditBudget",

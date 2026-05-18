@@ -144,3 +144,44 @@ Each policy ships with an explainer blog post — that is 6 posts of good conten
 ## 6. One-pager the CEO should be able to read
 
 > *Airlock* is a single Python decorator — `@Airlock(...)` — that sits between an MCP tool handler and the LLM that called it. It blocks hallucinated arguments before they execute, validates tool parameters against Pydantic V2 strict schemas, returns a self-healing `fix_hints` JSON so the LLM can retry correctly, runs dangerous calls in an E2B Firecracker MicroVM, masks 14 PII types (including Aadhaar / PAN / UPI / IFSC), enforces capability-based RBAC, and streams OpenTelemetry audit records — all in ~50 lines of configuration. It's the runtime layer to our static scanner (agent-audit-kit) and our output-quality judge (Verdict), and it ships policy presets for the OWASP MCP Top 10, OWASP Agentic Top 10, EU AI Act Article 15, and the thirty MCP CVEs disclosed since January 2026.
+
+---
+
+## Post-v0.8.2 strategic question (2026-05-18) — Microsoft Agent Governance Toolkit interop
+
+**Status:** open · logged · prompt deferred · no code lands until resolved.
+
+**Background:** Microsoft launched the Agent Governance Toolkit
+(MIT-licensed, integrations to LangChain / CrewAI / LangGraph /
+PydanticAI / LlamaIndex / Dify / OpenAI Agents SDK / Haystack) on
+2026-04-02 — the direct competitive surface in the runtime-policy
+lane. The 2026-05-18 Product Improvements doc proposed a
+`policy_presets.microsoft_agt_compat` interop preset that would
+emit agent-airlock `SecurityPolicy` specs in the Microsoft Agent
+OS YAML / OPA Rego format so customers running the Microsoft toolkit
+as their policy substrate could ingest agent-airlock policies.
+
+**Decision required:** Should agent-airlock ship interop-export to
+Microsoft's Agent OS YAML format, accepting that this implicitly
+endorses Microsoft as the policy substrate? OR keep agent-airlock
+standalone and compete head-to-head as the decorator-in-process
+choice?
+
+**Considerations:**
+- Section 1 of this roadmap explicitly names Microsoft Agent
+  Governance Toolkit as the head-to-head competitor agent-airlock
+  must out-differentiate on the decorator-in-process axis.
+- agent-airlock's anti-pivot rule: "Don't pivot to proxy / gateway /
+  sidecar (decorator-in-process is the differentiator)." A YAML-export
+  preset is not quite a pivot — it's interop. But shipping it without
+  reciprocal ingest from Microsoft would establish them as the centre
+  of gravity, which the section-1 positioning argues against.
+- Defensible middle ground: ship a one-shot config-export *helper* in
+  `agent_airlock.cli.policy export --target microsoft-agt-yaml` rather
+  than a `policy_presets.microsoft_agt_compat` runtime surface. That
+  signals interop without grafting the Microsoft format into the core
+  preset catalogue.
+
+**Decision owner:** Sattyam. Resolve before any code lands on this
+surface.
+

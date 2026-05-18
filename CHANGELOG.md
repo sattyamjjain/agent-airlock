@@ -13,6 +13,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.2] - 2026-05-18 — "Metis-inspired corpus block-rate regression + airlock corpus-bench CLI"
+
+Monday cut on top of v0.8.1. **Minor bump** — one new release-gate
+primitive (`MetisInspiredCorpusBlockRateGuard`), one CLI subcommand
+(`airlock corpus-bench`). No breaking changes.
+
+### Honest framing up front
+
+This release is *inspired by* the Metis paper (arXiv:2605.10067, ICML
+2026) but does **not** reproduce its POMDP attacker. Metis measures
+response-level Attack Success Rate (ASR) on a closed-loop LLM;
+agent-airlock validates tool-call arguments and never sees the
+model's response — the threat models do not compose. What we ship
+instead is a **deterministic exploit-shape corpus** and a
+**block-rate** (inverse of ASR) regression on the guard chain. The
+Metis paper is cited as motivation for adopting a structured failure-
+mode taxonomy as a release-gate input, not as a source of prompts.
+
+### ADD
+
+- **Metis-inspired corpus block-rate regression.** New runtime
+  primitive `agent_airlock.regression_corpus.MetisInspiredCorpusBlockRateGuard`
+  runs a fixed corpus of exploit-shape prompts through a guard chain
+  (default: `EvalRCEGuard` + `StdioCommandInjectionGuard`), computes
+  ``block_rate = blocked_count / total_prompts``, and denies the
+  release gate when block rate drops below
+  ``baseline_block_rate - drift_threshold`` (default threshold 5%).
+  Rising block rate (a new guard catching more) is fine — the gate
+  is one-sided downward.
+
+  Corpus fixture: `tests/cves/corpora/metis_inspired_corpus_2026_05_18.json`,
+  25 entries (17 exploit-shape + 8 benign), anchored to CVE-2026-44717
+  eval-RCE class + 2026-05-05 STDIO command-injection class.
+
+  Baseline locked at first run: **0.68** block rate (17/25). The
+  benign entries serve as false-positive sentinels.
+
+  Decision dataclass mirrors v0.7.x / v0.8.x family — `allowed: bool`
+  for chain-friendly composition.
+
+  Public surfaces:
+    - `MetisInspiredCorpusBlockRateGuard`
+    - `MetisInspiredCorpusBlockRateDecision`
+    - `MetisInspiredCorpusBlockRateVerdict`
+    - `CorpusEntry`, `CorpusPromptOutcome`
+    - `policy_presets.metis_inspired_corpus_block_rate_regression_defaults_2026_05_18`
+
+  Tests: 13 cases in `tests/test_regression_corpus.py` (math /
+  decision shape / construction / custom chain) + 10 cases in
+  `tests/cves/test_metis_inspired_corpus_2026_05_18.py` (fixture
+  load, gate pass, eval-shape blocked, benign not blocked, lenient
+  chain trips gate).
+
+- **`airlock corpus-bench` CLI.** New `python -m
+  agent_airlock.cli.corpus_bench` runs the corpus through the
+  guard chain and emits a report. Flags:
+
+  ```
+  --corpus-path PATH      # required
+  --report {text,json,md} # default: text
+  --baseline FLOAT        # override fixture baseline
+  --threshold FLOAT       # override fixture threshold
+  ```
+
+  Exit codes: `0` gate pass, `1` generic error, `2` argparse usage,
+  `3` gate FAILED (block rate regressed). structlog output is
+  routed to stderr so stdout stays clean for machine parsing.
+
+  Tests: 7 cases in `tests/cli/test_corpus_bench.py`.
+
+### NOTE — Suggestion 3 deferred
+
+The 2026-05-18 Product Improvements doc proposed an interop preset
+for the Microsoft Agent Governance Toolkit (launched 2026-04-02).
+The doc itself tagged the proposal `[major-needs-decision]` and
+deferred the prompt. v0.8.2 does not include it — the strategic
+question is logged at `ROADMAP_2026.md#post-v082-strategic-question-2026-05-18`
+for resolution before any code lands.
+
+### Surface additions (`__all__`)
+
+- `CorpusEntry`, `CorpusPromptOutcome`
+- `MetisInspiredCorpusBlockRateDecision`
+- `MetisInspiredCorpusBlockRateGuard`
+- `MetisInspiredCorpusBlockRateVerdict`
+- `policy_presets.metis_inspired_corpus_block_rate_regression_defaults_2026_05_18`
+
+### Carry-over (unchanged from v0.8.1)
+
+- `OpenAPIDriftGuard` / `OpenAPIDriftDecision` / `OpenAPIDriftVerdict` / `vaccinate_openapi` (Hermes 2026-05-13 paper anchor)
+- `mcp_calc_server_bundle_defaults_2026_05_15` composition factory
+- v0.8.0 surfaces: `EvalRCEGuard`, `InspectorExposureGuard`, `AgentSDKCreditBudget`
+
+---
+
 ## [0.8.1] - 2026-05-17 — "OpenAPI Drift Guard (Hermes 2026-05-13 paper) + MCP Calc-Server bundle preset"
 
 Sunday-evening cut on top of v0.8.0. **Minor bump** — one new public

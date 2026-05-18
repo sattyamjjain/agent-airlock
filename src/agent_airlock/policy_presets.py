@@ -2237,6 +2237,66 @@ def mcp_calc_server_bundle_defaults_2026_05_15(
     }
 
 
+def metis_inspired_corpus_block_rate_regression_defaults_2026_05_18(
+    *,
+    baseline_block_rate: float = 0.68,
+    drift_threshold: float = 0.05,
+) -> dict[str, Any]:
+    """Recommended config for the v0.8.2 Metis-inspired corpus block-rate regression.
+
+    Wires :class:`agent_airlock.regression_corpus.MetisInspiredCorpusBlockRateGuard`
+    against agent-airlock's deterministic exploit-shape corpus
+    (``tests/cves/corpora/metis_inspired_corpus_2026_05_18.json``).
+    The gate fires when block rate drops below
+    ``baseline_block_rate - drift_threshold``.
+
+    Honest framing
+    --------------
+    This preset does NOT reproduce the Metis paper's POMDP attacker.
+    Metis (arXiv:2605.10067, ICML 2026) is an adaptive attacker
+    against a closed-loop LLM measuring response-level ASR.
+    agent-airlock is a tool-call argument validator. The corpus
+    here is fixed, derived from agent-airlock's own CVE fixtures,
+    and measures **block rate** (inverse of ASR) on the guard chain
+    — the Metis citation is motivational, not a claim of metric
+    equivalence.
+
+    Args:
+        baseline_block_rate: Canonical first-run block rate locked
+            into CI. Default 0.68 reflects the v0.8.2 corpus + the
+            default (EvalRCEGuard + StdioCommandInjectionGuard) chain.
+        drift_threshold: Allowed downward drift before the gate fires.
+            Default 0.05 (5%).
+
+    Raises:
+        ValueError: ``baseline_block_rate`` outside ``[0.0, 1.0]`` or
+            ``drift_threshold`` negative.
+
+    Primary source:
+      https://arxiv.org/abs/2605.10067
+    """
+    if not (0.0 <= baseline_block_rate <= 1.0):
+        raise ValueError(f"baseline_block_rate must be in [0.0, 1.0]; got {baseline_block_rate!r}")
+    if drift_threshold < 0.0:
+        raise ValueError(f"drift_threshold must be non-negative; got {drift_threshold!r}")
+    return {
+        "preset_id": "metis_inspired_corpus_block_rate_regression_2026_05_18",
+        "severity": "high",
+        "default_action": "fail_release_gate",
+        "advisory_url": "https://arxiv.org/abs/2605.10067",
+        "anchor_paper": "Metis (arXiv:2605.10067, ICML 2026)",
+        "fixture_path": "tests/cves/corpora/metis_inspired_corpus_2026_05_18.json",
+        "guard_chain": "EvalRCEGuard + StdioCommandInjectionGuard",
+        "baseline_block_rate": float(baseline_block_rate),
+        "drift_threshold": float(drift_threshold),
+        "honest_scope": (
+            "Block-rate (inverse of ASR) regression on a deterministic "
+            "exploit-shape corpus. NOT a reproduction of the Metis POMDP "
+            "attacker — the paper is cited as motivation only."
+        ),
+    }
+
+
 def openapi_doc_drift_guard_defaults(
     *,
     spec: Mapping[str, Any],
@@ -2500,6 +2560,7 @@ __all__ = [
     "mcp_inspector_exposure_guard_defaults",
     "mcp_calc_server_bundle_defaults_2026_05_15",
     "openapi_doc_drift_guard_defaults",
+    "metis_inspired_corpus_block_rate_regression_defaults_2026_05_18",
     "gemini_3_agent_defaults",
     "oauth_state_injection_guard",
     "gpt_5_5_spud_agent_defaults",
