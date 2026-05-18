@@ -43,7 +43,7 @@ mode taxonomy as a release-gate input, not as a source of prompts.
   Rising block rate (a new guard catching more) is fine — the gate
   is one-sided downward.
 
-  Corpus fixture: `tests/cves/fixtures/metis_inspired_corpus_2026_05_18.json`,
+  Corpus fixture: `tests/cves/corpora/metis_inspired_corpus_2026_05_18.json`,
   25 entries (17 exploit-shape + 8 benign), anchored to CVE-2026-44717
   eval-RCE class + 2026-05-05 STDIO command-injection class.
 

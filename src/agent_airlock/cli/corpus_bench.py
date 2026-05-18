@@ -15,7 +15,7 @@ report on different surfaces.
 Usage::
 
     python -m agent_airlock.cli.corpus_bench \\
-        --corpus-path tests/cves/fixtures/metis_inspired_corpus_2026_05_18.json \\
+        --corpus-path tests/cves/corpora/metis_inspired_corpus_2026_05_18.json \\
         --report json
 
 Exit codes::

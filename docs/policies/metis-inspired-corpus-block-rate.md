@@ -42,7 +42,7 @@ downward.
 
 ## The corpus
 
-`tests/cves/fixtures/metis_inspired_corpus_2026_05_18.json` —
+`tests/cves/corpora/metis_inspired_corpus_2026_05_18.json` —
 25 entries:
 
 | Anchor | Entries | What it exercises |
@@ -67,7 +67,7 @@ from agent_airlock import (
     MetisInspiredCorpusBlockRateGuard,
 )
 
-raw = json.loads(Path("tests/cves/fixtures/metis_inspired_corpus_2026_05_18.json").read_text())
+raw = json.loads(Path("tests/cves/corpora/metis_inspired_corpus_2026_05_18.json").read_text())
 entries = [CorpusEntry(**e) for e in raw["entries"]]
 
 guard = MetisInspiredCorpusBlockRateGuard(
@@ -83,7 +83,7 @@ assert decision.allowed, decision.detail
 
 ```bash
 python -m agent_airlock.cli.corpus_bench \
-    --corpus-path tests/cves/fixtures/metis_inspired_corpus_2026_05_18.json \
+    --corpus-path tests/cves/corpora/metis_inspired_corpus_2026_05_18.json \
     --report json
 ```
 

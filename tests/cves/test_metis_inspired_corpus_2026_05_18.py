@@ -34,7 +34,7 @@ from agent_airlock.regression_corpus import (
     MetisInspiredCorpusBlockRateVerdict,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "metis_inspired_corpus_2026_05_18.json"
+FIXTURE = Path(__file__).parent / "corpora" / "metis_inspired_corpus_2026_05_18.json"
 
 
 def _load_corpus() -> tuple[list[CorpusEntry], float, float]:

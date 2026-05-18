@@ -2246,7 +2246,7 @@ def metis_inspired_corpus_block_rate_regression_defaults_2026_05_18(
 
     Wires :class:`agent_airlock.regression_corpus.MetisInspiredCorpusBlockRateGuard`
     against agent-airlock's deterministic exploit-shape corpus
-    (``tests/cves/fixtures/metis_inspired_corpus_2026_05_18.json``).
+    (``tests/cves/corpora/metis_inspired_corpus_2026_05_18.json``).
     The gate fires when block rate drops below
     ``baseline_block_rate - drift_threshold``.
 
@@ -2285,7 +2285,7 @@ def metis_inspired_corpus_block_rate_regression_defaults_2026_05_18(
         "default_action": "fail_release_gate",
         "advisory_url": "https://arxiv.org/abs/2605.10067",
         "anchor_paper": "Metis (arXiv:2605.10067, ICML 2026)",
-        "fixture_path": "tests/cves/fixtures/metis_inspired_corpus_2026_05_18.json",
+        "fixture_path": "tests/cves/corpora/metis_inspired_corpus_2026_05_18.json",
         "guard_chain": "EvalRCEGuard + StdioCommandInjectionGuard",
         "baseline_block_rate": float(baseline_block_rate),
         "drift_threshold": float(drift_threshold),
