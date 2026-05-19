@@ -415,7 +415,9 @@ from .redis_rate_limit import (
 )
 
 # V0.8.2 — Metis-inspired exploit-shape corpus block-rate regression.
+# V0.8.3 — CategoryCount added (HarnessAudit-Bench taxonomy adoption).
 from .regression_corpus import (
+    CategoryCount,
     CorpusEntry,
     CorpusPromptOutcome,
     MetisInspiredCorpusBlockRateDecision,
@@ -482,6 +484,15 @@ from .sanitizer import (
     sanitize_output,
     sanitize_with_workspace_config,
 )
+
+# V0.8.3 — Stainless SDK provenance classifier (Anthropic acquisition 2026-05-13).
+from .sdk_provenance import (
+    DEFAULT_STAINLESS_BODY_MARKERS,
+    DEFAULT_STAINLESS_UA_PATTERNS,
+    SDKLineage,
+    SDKLineageMatch,
+    classify_sdk_lineage,
+)
 from .self_heal import AirlockResponse, BlockReason
 from .streaming import (
     StreamingAirlock,
@@ -526,7 +537,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.2"
+__version__ = "0.8.3"
 
 __all__ = [
     # Core
@@ -650,6 +661,13 @@ __all__ = [
     "MetisInspiredCorpusBlockRateDecision",
     "MetisInspiredCorpusBlockRateGuard",
     "MetisInspiredCorpusBlockRateVerdict",
+    # V0.8.3 — HarnessAudit-Bench taxonomy adoption + Stainless SDK provenance
+    "CategoryCount",
+    "DEFAULT_STAINLESS_BODY_MARKERS",
+    "DEFAULT_STAINLESS_UA_PATTERNS",
+    "SDKLineage",
+    "SDKLineageMatch",
+    "classify_sdk_lineage",
     # V0.8.0 — Agent SDK Credit pool budget (Anthropic 2026-06-15)
     "AGENT_SDK_TIER_USD",
     "AgentSDKCreditBudget",

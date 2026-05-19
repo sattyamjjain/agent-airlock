@@ -72,6 +72,15 @@ class TestCorpusBenchInvocation:
             assert "blocked" in o
             assert "anchor" in o
             assert "expected_block" in o
+        # v0.8.3+: per-category counts present (the bundled corpus
+        # carries violation_category labels).
+        assert "category_counts" in payload
+        assert isinstance(payload["category_counts"], list)
+        assert len(payload["category_counts"]) >= 1
+        for c in payload["category_counts"]:
+            assert "category" in c
+            assert "total" in c
+            assert "blocked" in c
 
     def test_markdown_report_emits_table(self) -> None:
         buf = io.StringIO()
@@ -83,6 +92,9 @@ class TestCorpusBenchInvocation:
         assert "block_rate" in out
         assert "|" in out  # table separator
         assert "prompt_id" in out
+        # v0.8.3+: per-category coverage section
+        assert "Per-category coverage" in out
+        assert "resource_access" in out
 
     def test_default_report_is_text(self) -> None:
         """Without --report the CLI defaults to a one-line text summary."""
@@ -90,11 +102,14 @@ class TestCorpusBenchInvocation:
         with redirect_stdout(buf):
             rc = main(["--corpus-path", str(FIXTURE)])
         assert rc == 0
-        out = buf.getvalue().strip()
+        out = buf.getvalue()
         # One-line summary contains the key numbers and verdict.
         assert "block_rate=" in out
         assert "baseline=" in out
         assert "drift=" in out
+        # v0.8.3+: per-category line follows when categories present
+        assert "by_category:" in out
+        assert "resource_access=" in out
 
 
 class TestCorpusBenchGateExitCodes:

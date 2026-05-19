@@ -69,7 +69,11 @@ _GATE_FAILED_EXIT = 3
 
 
 def _load_corpus(path: Path) -> tuple[list[CorpusEntry], float, float]:
-    """Parse the JSON corpus fixture into typed entries + baseline/threshold."""
+    """Parse the JSON corpus fixture into typed entries + baseline/threshold.
+
+    ``violation_category`` is optional (v0.8.3+); entries without it
+    default to ``None`` and are excluded from per-category counts.
+    """
     raw = json.loads(path.read_text(encoding="utf-8"))
     entries = [
         CorpusEntry(
@@ -78,6 +82,7 @@ def _load_corpus(path: Path) -> tuple[list[CorpusEntry], float, float]:
             args=e["args"],
             anchor=e["anchor"],
             expected_block=e["expected_block"],
+            violation_category=e.get("violation_category"),
         )
         for e in raw["entries"]
     ]
@@ -99,6 +104,7 @@ def _decision_payload(decision: MetisInspiredCorpusBlockRateDecision) -> dict[st
         "total_prompts": decision.total_prompts,
         "blocked_count": decision.blocked_count,
         "outcomes": [dataclasses.asdict(o) for o in decision.outcomes],
+        "category_counts": [dataclasses.asdict(c) for c in decision.category_counts],
     }
 
 
@@ -111,6 +117,11 @@ def _emit_text(decision: MetisInspiredCorpusBlockRateDecision) -> None:
         f"verdict={decision.verdict.value} "
         f"({decision.blocked_count}/{decision.total_prompts} blocked)"
     )
+    # v0.8.3+: per-category coverage line, emitted only when the
+    # corpus carries violation_category labels.
+    if decision.category_counts:
+        cats = " ".join(f"{c.category}={c.blocked}/{c.total}" for c in decision.category_counts)
+        print(f"by_category: {cats}")
 
 
 def _emit_json(decision: MetisInspiredCorpusBlockRateDecision) -> None:
@@ -128,6 +139,15 @@ def _emit_markdown(decision: MetisInspiredCorpusBlockRateDecision) -> None:
     print(f"- verdict: `{decision.verdict.value}`")
     print(f"- detail: {decision.detail}")
     print()
+    if decision.category_counts:
+        print("## Per-category coverage")
+        print()
+        print("| category | blocked | total | coverage |")
+        print("|---|---|---|---|")
+        for c in decision.category_counts:
+            pct = (c.blocked / c.total * 100.0) if c.total else 0.0
+            print(f"| `{c.category}` | {c.blocked} | {c.total} | {pct:.1f}% |")
+        print()
     print("## Per-prompt outcomes")
     print()
     print("| prompt_id | blocked | expected_block | anchor |")

@@ -83,6 +83,12 @@ class CorpusEntry:
         expected_block: True if a correct guard chain SHOULD block
             this prompt (eval-shape, command-injection, etc.).
             False for benign baseline prompts.
+        violation_category: Optional category label (v0.8.3+) for
+            per-category coverage reporting. The HarnessAudit-Bench
+            paper (arXiv:2605.14271) uses ``resource_access`` and
+            ``info_transfer`` as its top-level taxonomy; operators
+            can adopt those labels or use their own. ``None`` means
+            the entry is excluded from per-category counts.
     """
 
     prompt_id: str
@@ -90,6 +96,35 @@ class CorpusEntry:
     args: dict[str, Any]
     anchor: str
     expected_block: bool
+    violation_category: str | None = None
+
+
+@dataclass(frozen=True)
+class CategoryCount:
+    """Per-category total + blocked count for a corpus run (v0.8.3+).
+
+    The HarnessAudit-Bench paper (arXiv:2605.14271, 2026-05-14)
+    identified ``resource_access`` and ``info_transfer`` as the two
+    violation categories that concentrate most observed failures in
+    production agent harnesses. agent-airlock adopts that taxonomy
+    as a corpus schema extension: each :class:`CorpusEntry` may carry
+    a ``violation_category`` label, and the decision dataclass
+    exposes one :class:`CategoryCount` per distinct category seen.
+
+    Attributes:
+        category: The category label (e.g. ``"resource_access"``).
+        total: Number of corpus entries carrying this category.
+        blocked: Number of those entries the guard chain refused.
+
+    NOTE: This is NOT a HarnessAudit-Bench scoring surface — the
+    benchmark's artifacts have not been published as of 2026-05-19.
+    The dataclass adopts the paper's taxonomy without claiming
+    metric equivalence.
+    """
+
+    category: str
+    total: int
+    blocked: int
 
 
 @dataclass(frozen=True)
@@ -143,6 +178,7 @@ class MetisInspiredCorpusBlockRateDecision:
     total_prompts: int
     blocked_count: int
     outcomes: tuple[CorpusPromptOutcome, ...]
+    category_counts: tuple[CategoryCount, ...] = ()
 
 
 def _default_guard_chain(entry: CorpusEntry) -> bool:
@@ -229,6 +265,11 @@ class MetisInspiredCorpusBlockRateGuard:
         """Run the corpus through the chain and produce a decision."""
         outcomes: list[CorpusPromptOutcome] = []
         blocked_count = 0
+        # Per-category counters (v0.8.3+). Entries with ``violation_category=None``
+        # are excluded from the category counts; legacy corpora that
+        # carry no category labels yield an empty ``category_counts`` tuple.
+        category_totals: dict[str, int] = {}
+        category_blocked: dict[str, int] = {}
         for entry in self._corpus:
             try:
                 blocked = bool(self._guard_chain(entry))
@@ -253,6 +294,20 @@ class MetisInspiredCorpusBlockRateGuard:
             )
             if blocked:
                 blocked_count += 1
+            if entry.violation_category is not None:
+                cat = entry.violation_category
+                category_totals[cat] = category_totals.get(cat, 0) + 1
+                if blocked:
+                    category_blocked[cat] = category_blocked.get(cat, 0) + 1
+
+        category_counts = tuple(
+            CategoryCount(
+                category=cat,
+                total=category_totals[cat],
+                blocked=category_blocked.get(cat, 0),
+            )
+            for cat in sorted(category_totals)
+        )
 
         total = len(self._corpus)
         block_rate = blocked_count / total
@@ -292,10 +347,12 @@ class MetisInspiredCorpusBlockRateGuard:
             total_prompts=total,
             blocked_count=blocked_count,
             outcomes=tuple(outcomes),
+            category_counts=category_counts,
         )
 
 
 __all__ = [
+    "CategoryCount",
     "CorpusEntry",
     "CorpusPromptOutcome",
     "GuardChain",
