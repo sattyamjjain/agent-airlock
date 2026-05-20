@@ -361,6 +361,18 @@ from .observability import (
     configure as configure_observability,
 )
 
+# V0.8.4 — Human-oversight decorator (Code-as-Harness arXiv:2605.18747 anchor).
+from .oversight import (
+    Approver,
+    InProcessRecordedApprover,
+    OversightDeniedError,
+    OversightRequest,
+    OversightResponse,
+    OversightTimeoutError,
+    OversightVerdict,
+    requires_human_oversight,
+)
+
 # V0.7.1 — close the parse_lock re-export gap (carried forward
 # from v0.6.0/v0.6.1/v0.7.0). Round-trip surface for policy_bundle.lock
 # now reachable directly off the top-level package.
@@ -537,7 +549,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.3"
+__version__ = "0.8.4"
 
 __all__ = [
     # Core
@@ -668,6 +680,15 @@ __all__ = [
     "SDKLineage",
     "SDKLineageMatch",
     "classify_sdk_lineage",
+    # V0.8.4 — Human-oversight decorator (Code-as-Harness arXiv:2605.18747)
+    "Approver",
+    "InProcessRecordedApprover",
+    "OversightDeniedError",
+    "OversightRequest",
+    "OversightResponse",
+    "OversightTimeoutError",
+    "OversightVerdict",
+    "requires_human_oversight",
     # V0.8.0 — Agent SDK Credit pool budget (Anthropic 2026-06-15)
     "AGENT_SDK_TIER_USD",
     "AgentSDKCreditBudget",

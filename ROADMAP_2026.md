@@ -185,3 +185,54 @@ choice?
 **Decision owner:** Sattyam. Resolve before any code lands on this
 surface.
 
+
+---
+
+## Post-v0.8.4 strategic question (2026-05-20) — Multi-agent topology adapter shape
+
+**Status:** open · logged · prompt deferred · no code lands until resolved.
+
+**Background:** The Co-Scientist Nature paper (2026-05-19) ships a
+public multi-agent supervisor topology — Generation / Reflection /
+Ranking / Evolution / Meta-review agents orchestrated by a
+Supervisor agent. The 2026-05-20 Product Improvements doc proposed
+adding a "Co-Scientist-shape adapter" and framed the strategic
+question as "per-vendor vs per-framework adapters".
+
+**Doc's framing was inaccurate:** agent-airlock already ships
+vendor-specific adapters
+(`gemini3_tool_shape_adapter.py`, `gpt5_5_tool_shape_adapter.py`,
+`anthropic_claude_agent_sdk.py`, `claude_managed_agents.py`). The
+per-vendor vs per-framework dimension is already settled — we do
+both.
+
+**The real question:** all existing adapters are **single-agent
+tool-shape adapters** — they wrap a single agent's tool-call
+emission. A Co-Scientist-style adapter would be a **multi-agent
+topology adapter** — wrapping a supervisor orchestrating N sub-agents.
+That's a fundamentally different surface shape.
+
+**Decision required:** Should agent-airlock add a multi-agent-topology
+adapter shape (distinct from tool-shape adapters) — and if so, what
+does the API look like? Per-agent tool-shape guards composed by the
+supervisor? A new `AirlockSupervisor` wrapper class? Per-subagent
+oversight gates?
+
+**Considerations:**
+- The Co-Scientist topology is one of N — Anthropic's CMA, OpenAI's
+  Swarm, LangGraph's multi-agent patterns, CrewAI's role-based
+  agents all have different supervisor shapes. A `CoScientistAdapter`
+  would be one entry in a wider family.
+- Section 1 of this roadmap names "ghost-argument tri-mode +
+  Pydantic V2 strict validation + sandbox isolation + capability
+  gating + multi-framework vaccination" as the differentiator.
+  Multi-agent topology is orthogonal to all of these.
+- Defensible middle ground: ship a **per-subagent** decorator
+  composition pattern (each subagent's tool calls go through
+  `@Airlock(...) @requires_human_oversight(...)`) and document
+  that as the supported way to harness a Co-Scientist topology,
+  rather than building a topology-aware wrapper.
+
+**Decision owner:** Sattyam. Resolve before any code lands on this
+surface.
+

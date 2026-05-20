@@ -13,6 +13,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.4] - 2026-05-20 — "Human-oversight decorator (Code-as-Harness anchor)"
+
+Wednesday cut on top of v0.8.3. **Patch bump** — one new public
+decorator + protocol shapes. No breaking changes.
+
+### Honest framing up front
+
+The 2026-05-20 Product Improvements doc proposed an
+``@requires_human_oversight`` decorator backed by a new
+``audit_emitter.await_response(request_id, timeout=...)``
+**bidirectional RPC channel**. agent-airlock's existing audit
+emitter is one-way (emit-only, sinks to log/OTel/file). Grafting a
+request/response channel onto a sink would have invented a new
+transport abstraction inside the library.
+
+Honest reframe: **operator-supplied approver callable**, identical
+in shape to the v0.8.1 `vaccinate_openapi(spec)`, v0.8.3
+`classify_sdk_lineage(...)` building-block pattern. agent-airlock
+ships the decorator + protocol shapes; the operator wires the
+transport (Slack, PagerDuty, CLI prompt, whatever).
+
+### ADD
+
+- **`@requires_human_oversight` decorator** in
+  `agent_airlock.oversight`. Gates a sync tool function on an
+  operator-supplied approver callable:
+
+  ```python
+  @requires_human_oversight(approver=my_approver, channel="prod-deploys")
+  def deploy_to_prod(version: str) -> str: ...
+  ```
+
+  Behaviour:
+  - Approver returns `GRANT` → wrapped function called.
+  - Approver returns `DENY` → `OversightDeniedError` raised
+    (carrying the request + response for audit).
+  - Approver returns `TIMEOUT` → `OversightTimeoutError` raised.
+  - Approver returns response with mismatched `request_id` →
+    `ValueError` (protocol fault, catches buggy approvers loudly).
+
+  Composes with `@Airlock(policy=...)` — stack the oversight gate
+  outside the airlock decorator so human approval fires before
+  policy validation.
+
+- **Pure data shapes (frozen dataclasses):**
+  - `OversightRequest` — request_id (UUID4), tool_name, args
+    (`{"args": tuple, "kwargs": dict}`), channel, timeout_seconds,
+    requested_at (ISO 8601 UTC).
+  - `OversightResponse` — request_id (must echo), verdict, detail,
+    optional approver identifier.
+  - `OversightVerdict` enum — `GRANT` / `DENY` / `TIMEOUT`.
+
+- **Exception types:** `OversightDeniedError`,
+  `OversightTimeoutError` (both carry the originating request).
+
+- **`InProcessRecordedApprover` testing helper.** Returns pre-set
+  verdicts per tool name; unrecorded tools default to `TIMEOUT` so
+  tests fail loudly. Records every request received on a `calls`
+  list for assertion.
+
+- **Audit events.** When `audit_emitter` is supplied (one-way sink
+  matching the existing API shape), the decorator emits
+  `oversight.request|grant|deny|timeout` events with structured
+  payloads. The same events also flow through the module's
+  structlog logger regardless of `audit_emitter` wiring.
+
+  Doc: `docs/policies/human-oversight-decorator.md`.
+
+  Tests: 21 cases in `tests/test_oversight.py` covering grant/deny/
+  timeout, kwargs passing, request_id round-trip, protocol-fault
+  detection, approver context (tool_name, args, channel,
+  timeout_seconds, requested_at), audit-emitter event types,
+  data-shape invariants, decorator hygiene (functools.wraps),
+  `InProcessRecordedApprover` behaviour, construction-time
+  validation.
+
+### NOTE — Suggestion 2 logged to ROADMAP
+
+The 2026-05-20 doc proposed a Co-Scientist-style multi-agent
+supervisor adapter (anchored on Nature 2026-05-19). The doc itself
+tagged it `[major-needs-decision]` and deferred the prompt. v0.8.4
+does not include it — the strategic question is logged at
+`ROADMAP_2026.md#post-v084-strategic-question-2026-05-20`.
+
+The doc's framing of S2 as a "per-vendor vs per-framework" question
+was inaccurate — agent-airlock already ships vendor-specific
+adapters (`gemini3_tool_shape_adapter.py`, `gpt5_5_tool_shape_adapter.py`,
+`anthropic_claude_agent_sdk.py`). The real question reframed in the
+roadmap log: **"should we add a multi-agent-topology adapter shape
+distinct from the existing single-agent tool-shape adapters?"**
+
+### Surface additions (`__all__`)
+
+- `requires_human_oversight`, `Approver`, `InProcessRecordedApprover`
+- `OversightRequest`, `OversightResponse`, `OversightVerdict`
+- `OversightDeniedError`, `OversightTimeoutError`
+
+### Carry-over (unchanged from v0.8.3)
+
+- v0.8.3: `classify_sdk_lineage`, `CategoryCount`
+- v0.8.2: `MetisInspiredCorpusBlockRateGuard`, `airlock corpus-bench`
+- v0.8.1: `OpenAPIDriftGuard`, `vaccinate_openapi`
+- v0.8.0: `EvalRCEGuard`, `InspectorExposureGuard`, `AgentSDKCreditBudget`
+
+---
+
 ## [0.8.3] - 2026-05-19 — "Stainless SDK provenance classifier + corpus per-category coverage (HarnessAudit-Bench taxonomy)"
 
 Tuesday cut on top of v0.8.2. **Minor bump** — one new public
