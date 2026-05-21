@@ -21,6 +21,7 @@ from ..attest import (
     ReceiptVerificationError,
     Signer,
     build_receipt,
+    derive_contract_from_verdicts,
     receipt_from_json,
     receipt_to_json,
     verify_envelope,
@@ -66,6 +67,15 @@ def _build_signers(args: argparse.Namespace) -> list[Signer]:
 
 
 def _cmd_receipt_emit(args: argparse.Namespace) -> int:
+    # ``--assumes`` only makes sense alongside ``--contract``; reject
+    # combinations that imply intent without the opt-in flag.
+    if getattr(args, "assumes", None) and not getattr(args, "contract", False):
+        print(
+            "--assumes requires --contract (the assumes list is part of the LayerContract block)",
+            file=sys.stderr,
+        )
+        return 1
+
     signers = _build_signers(args)
     verdicts: list[ReceiptVerdict] = []
     if args.verdicts_json:
@@ -83,6 +93,14 @@ def _cmd_receipt_emit(args: argparse.Namespace) -> int:
                         detail=str(v.get("detail", "")),
                     )
                 )
+
+    contract = None
+    if getattr(args, "contract", False):
+        assumes: tuple[str, ...] = ()
+        if getattr(args, "assumes", None):
+            assumes = tuple(s.strip() for s in str(args.assumes).split(",") if s.strip())
+        contract = derive_contract_from_verdicts(verdicts, assumes=assumes)
+
     receipt = build_receipt(
         policy_bundle_hash=args.policy_bundle_hash,
         inputs=None,
@@ -91,6 +109,7 @@ def _cmd_receipt_emit(args: argparse.Namespace) -> int:
         verdicts=verdicts,
         signer=signers[0],
         run_id=args.run_id,
+        contract=contract,
     )
     text = receipt_to_json(receipt)
     if args.output:
@@ -139,6 +158,21 @@ def main(argv: list[str] | None = None) -> int:
     p_emit.add_argument("--run-id", help="run id (default: random)")
     p_emit.add_argument("--verdicts-json", help="path to verdicts JSON list")
     p_emit.add_argument("--output", help="write receipt to file (default: stdout)")
+    p_emit.add_argument(
+        "--contract",
+        action="store_true",
+        help=(
+            "embed a derived LayerContract (assume/guarantee) block in "
+            "the receipt (v0.8.5+; opt-in)"
+        ),
+    )
+    p_emit.add_argument(
+        "--assumes",
+        help=(
+            "comma-separated list of upstream-guarantee identifiers to "
+            "embed in the contract's `assumes` list (requires --contract)"
+        ),
+    )
     _add_signer_args(p_emit)
     p_emit.set_defaults(func=_cmd_receipt_emit)
 

@@ -13,6 +13,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.5] - 2026-05-21 — "Opt-in `LayerContract` (assume/guarantee) block on attest receipts"
+
+Thursday cut on top of v0.8.4. **Patch bump** — one optional field on
+the existing receipt schema + one new CLI flag. Schema version stays
+at **v1** (the field is additive; legacy receipts deserialise
+unchanged). No breaking changes.
+
+### Honest framing up front
+
+The 2026-05-21 prompt asked for the `guarantees` list to be
+"populated automatically from the policy outcomes already tracked
+this window (deny-by-default hits, ghost-arg strips, PII masks,
+validation failures)". **That counter store does not exist** in
+agent-airlock. There is no central sliding-window aggregator of
+policy outcomes by category.
+
+Inventing one would have been a substantial new abstraction
+(threading, persistence semantics, what counts as a "window"). v0.8.5
+ships the **derived** path instead: per-guard `pass_rate` is computed
+from the `verdicts: list[ReceiptVerdict]` the operator already
+supplies to `build_receipt`. Same source of truth as today's
+receipts; zero new infrastructure. The window-counter approach can
+be added later and would compose with the same `LayerContract` shape.
+
+### ADD
+
+- **`LayerContract` dataclass + `Guarantee` line item** in
+  `agent_airlock.attest.receipt`. Frozen dataclasses. `Guarantee`
+  carries `name`, `pass_rate` (validated to `[0.0, 1.0]`), and
+  `sample_size` so verifiers can weight low-sample-size guarantees
+  appropriately. `LayerContract` carries `guarantees: tuple[Guarantee, ...]`
+  (sorted by name for canonical-payload stability) and `assumes:
+  tuple[str, ...]` (free-form upstream-guarantee identifiers).
+- **`derive_contract_from_verdicts(verdicts, *, assumes=())`** pure
+  function: per-guard `pass_rate = count(verdict == "allow") /
+  total_for_that_guard`. Verdict kinds other than `"allow"` (`warn` /
+  `block` / `error`) all count as non-pass.
+- **`Receipt.contract: LayerContract | None`** optional field. When
+  None, `to_dict()` emits no `contract` key — byte-identical to a
+  v0.8.4 receipt; legacy verifiers continue to work.
+- **`build_receipt(..., contract=...)`** new kwarg.
+- **`receipt_from_dict`** tolerates the new optional field; legacy
+  receipts deserialise unchanged.
+- **CLI `airlock attest receipt emit --contract`** new opt-in flag
+  derives the contract block from the verdicts JSON and embeds it
+  in the signed payload.
+- **CLI `--assumes id1,id2,...`** comma-separated upstream-guarantee
+  identifiers; rejected with non-zero exit if supplied without
+  `--contract`.
+
+### Anchor
+
+arXiv:2605.18672 — "assume-guarantee layer contract" framing. Cited
+in the README and the new doc page; this release does not make
+claims about the paper's specific content beyond adopting the
+terminology.
+
+### Doc
+
+`docs/attest/layer-contract.md` — full surface description with the
+honest-scope section called out (window-counter store does not exist;
+`pass_rate` is a measured statistic, not a proof; signature attests
+the operator's declaration, not the verdicts' truth).
+
+### Tests
+
+- `tests/attest/test_layer_contract.py` — 17 cases (Guarantee +
+  LayerContract shape, derive math, sorted-name canonical ordering,
+  Receipt round-trip with + without contract, signature verifies
+  with contract, JSON round-trip, back-compat on legacy receipts).
+- `tests/attest/test_cli_contract.py` — 6 cases (CLI emit with/
+  without flag, signature round-trips through verify subcommand,
+  `--assumes` propagates, `--assumes` without `--contract` is a
+  usage error, legacy emit still parseable).
+
+### Surface additions (`agent_airlock.attest.__all__`)
+
+- `Guarantee`
+- `LayerContract`
+- `derive_contract_from_verdicts`
+
+### Carry-over (unchanged from v0.8.4)
+
+- v0.8.4: `requires_human_oversight`, `InProcessRecordedApprover`,
+  oversight protocol shapes
+- v0.8.3: `classify_sdk_lineage`, `CategoryCount`
+- v0.8.2: `MetisInspiredCorpusBlockRateGuard`, `airlock corpus-bench`
+- v0.8.1: `OpenAPIDriftGuard`, `vaccinate_openapi`
+- v0.8.0: `EvalRCEGuard`, `InspectorExposureGuard`, `AgentSDKCreditBudget`
+
+---
+
 ## [0.8.4] - 2026-05-20 — "Human-oversight decorator (Code-as-Harness anchor)"
 
 Wednesday cut on top of v0.8.3. **Patch bump** — one new public
