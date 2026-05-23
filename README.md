@@ -245,12 +245,21 @@ timeout enforced, opt-in `pytest -m docker` integration tests. See
 
 ### 📜 Security Policies
 
+| Preset | Use case | Key posture |
+|---|---|---|
+| `PERMISSIVE_POLICY` | Dev / sandbox | No restrictions |
+| `STRICT_POLICY` | Prod | Rate-limited, requires agent identity, denies dangerous capabilities |
+| `READ_ONLY_POLICY` | Analytics / RAG | `read_*` / `get_*` / `list_*` / `search_*` only |
+| `BUSINESS_HOURS_POLICY` | Compliance windows | `delete_*` / `drop_*` / `*_production` only 09:00–17:00 |
+| `CAMOUFLAGE_RESISTANT_POLICY` *(v0.8.6)* | Detector-independent defense vs. domain-camouflaged injection | Deny-by-default allowlist, ghost-arg BLOCK, output cap, per-call reauthorization |
+
 ```python
 from agent_airlock import (
-    PERMISSIVE_POLICY,      # Dev - no restrictions
-    STRICT_POLICY,          # Prod - rate limited, agent ID required
-    READ_ONLY_POLICY,       # Analytics - query only
-    BUSINESS_HOURS_POLICY,  # Dangerous ops 9-5 only
+    PERMISSIVE_POLICY,
+    STRICT_POLICY,
+    READ_ONLY_POLICY,
+    BUSINESS_HOURS_POLICY,
+    CAMOUFLAGE_RESISTANT_POLICY,  # v0.8.6
 )
 
 # Or build your own:
@@ -263,6 +272,51 @@ MY_POLICY = SecurityPolicy(
     time_restrictions={"deploy_*": "09:00-17:00"},
 )
 ```
+
+#### CAMOUFLAGE_RESISTANT — detector-independent injection defense (v0.8.6)
+
+[arXiv:2605.22001](https://arxiv.org/abs/2605.22001) ("Blind Spots in
+the Guard", Pai, May 2026) shows that production injection detectors —
+**Llama Guard 3 included** — drop to **IDR = 0.000** on payloads that
+mimic the target document's domain vocabulary and authority structure.
+Per the paper, detection rates collapse from 93.8% to 9.7% on Llama 3.1
+8B and from 100% to 55.6% on Gemini 2.0 Flash.
+
+`CAMOUFLAGE_RESISTANT_POLICY` does not rely on payload-content
+signatures at all. It blocks at four structural seams an attacker has
+to ride regardless of phrasing:
+
+1. **Deny-by-default tool allowlist.** Empty `allowed_tools` means
+   *nothing* is callable; deployments opt every tool in by name. A
+   camouflaged directive targeting an unlisted tool is blocked on
+   allowlist grounds without ever invoking a detector.
+2. **Ghost-argument BLOCK.** A camouflaged directive cannot smuggle
+   undeclared parameters past validation.
+3. **Hard output cap + sanitization.** Tool output that re-enters the
+   model context is truncated and PII/secret-masked so a camouflaged
+   directive embedded in tool output can't carry into a downstream
+   agent at full length.
+4. **Per-call reauthorization (debate-amplification guard).** Once a
+   tool's output has flowed back into the model, any reinvocation
+   requires an explicit `context.authorize_once(tool)` grant from the
+   harness — breaking the multi-agent fan-out path the paper identifies.
+
+```python
+from agent_airlock import Airlock, apply_camouflage_resistant
+
+bundle = apply_camouflage_resistant(allowed_tools=["read_file", "search"])
+
+@Airlock(config=bundle.config, policy=bundle.policy)
+def read_file(path: str) -> str:
+    ...
+```
+
+`apply_camouflage_resistant()` composes the matching `AirlockConfig`
+(unknown-args BLOCK, sanitization on, output cap 4000 chars) with a
+`SecurityPolicy` carrying your explicit allowlist. The preset is
+deliberately incomplete on its own — the config-level knobs and the
+policy-level knobs span two seams, so the factory returns both as a
+`CamouflageResistantBundle`.
 
 > **Running an MCP server with STDIO transport?** Also wire the
 > [Ox MCP STDIO sanitizer](#️-owasp-compliance) via

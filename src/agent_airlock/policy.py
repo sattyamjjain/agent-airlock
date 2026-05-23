@@ -81,6 +81,7 @@ class ViolationType(str, Enum):
     TOOL_NOT_ALLOWED = "tool_not_allowed"
     TIME_RESTRICTED = "time_restricted"
     RATE_LIMITED = "rate_limited"
+    REAUTH_REQUIRED = "reauth_required"
 
 
 @dataclass
@@ -331,6 +332,20 @@ class SecurityPolicy:
     allowed_roles: list[str] = field(default_factory=list)
     # V0.4.0 capability gating
     capability_policy: CapabilityPolicy | None = None
+    # V0.8.6 debate-amplification guard (camouflage-resistant preset).
+    # When True, any tool reinvocation past the threshold within a context
+    # whose origin includes untrusted tool output requires a fresh
+    # authorize_once() grant on the AirlockContext. Treats tool output that
+    # re-enters the model as potentially camouflage-laden directives
+    # (arXiv:2605.22001).
+    reauth_on_untrusted_reinvocation: bool = False
+    untrusted_reinvocation_threshold: int = 1
+    # V0.8.6 deny-by-default allowlist. The classic SecurityPolicy
+    # semantic treats an empty ``allowed_tools`` as "allow all" — kept
+    # for backwards compatibility with PERMISSIVE_POLICY and existing
+    # users. When ``default_deny=True``, an empty allowlist becomes
+    # deny-all (camouflage-resistant posture).
+    default_deny: bool = False
     # V0.5.7 STDIO subprocess execution mode. ``"allowlist"`` keeps the
     # v0.5.1 ``validate_stdio_command`` behaviour. ``"manifest_only"``
     # forces all spawns through ``launch_from_manifest`` (signed
@@ -388,8 +403,10 @@ class SecurityPolicy:
                     details={"tool": tool_name, "pattern": pattern},
                 )
 
-        # Check allowed list (if specified)
-        if self.allowed_tools:
+        # Check allowed list. With default_deny=True (camouflage-resistant
+        # posture), an empty allowlist is deny-all. Without it, an empty
+        # allowlist preserves the legacy "allow all" semantic.
+        if self.allowed_tools or self.default_deny:
             allowed = any(
                 self._matches_pattern(tool_name, pattern) for pattern in self.allowed_tools
             )
@@ -494,6 +511,61 @@ class SecurityPolicy:
                     },
                 )
 
+    def check_reauthorization(
+        self,
+        tool_name: str,
+        context: Any | None,
+    ) -> None:
+        """V0.8.6 debate-amplification guard.
+
+        When ``reauth_on_untrusted_reinvocation`` is True, this method
+        blocks any tool reinvocation past ``untrusted_reinvocation_threshold``
+        unless the calling harness has issued ``context.authorize_once(tool_name)``
+        on the current ``AirlockContext`` since the last untrusted-marked
+        tool output. Threat model: arXiv:2605.22001 ("Blind Spots in the
+        Guard", Pai 2026) found Llama Guard 3 IDR drops to 0.000 on
+        domain-camouflaged payloads, so any tool output flowing back into
+        the model context can carry an undetectable directive that
+        amplifies across sub-agents on reinvocation.
+
+        Args:
+            tool_name: Tool being invoked.
+            context: AirlockContext for the current call (or None — no-op).
+
+        Raises:
+            PolicyViolation: If reauthorization is required but not granted.
+        """
+        if not self.reauth_on_untrusted_reinvocation:
+            return
+        if context is None:
+            return
+        # Duck-typed: avoid a hard import cycle with context.py
+        counts: dict[str, int] = getattr(context, "untrusted_reinvocation_count", {})
+        authorized: set[str] = getattr(context, "_authorized_once", set())
+        prior = counts.get(tool_name, 0)
+        if prior < self.untrusted_reinvocation_threshold:
+            return
+        if tool_name in authorized:
+            # Consume the one-shot grant
+            authorized.discard(tool_name)
+            return
+        raise PolicyViolation(
+            (
+                f"Tool '{tool_name}' reinvocation requires re-authorization "
+                f"(camouflage-resistant guard: {prior} prior call(s), "
+                f"threshold {self.untrusted_reinvocation_threshold}). "
+                "Call context.authorize_once(tool_name) to grant one more invocation. "
+                "Rationale: tool output may carry a domain-camouflaged directive "
+                "(arXiv:2605.22001)."
+            ),
+            violation_type=ViolationType.REAUTH_REQUIRED.value,
+            details={
+                "tool": tool_name,
+                "prior_invocations": prior,
+                "threshold": self.untrusted_reinvocation_threshold,
+            },
+        )
+
     def check(
         self,
         tool_name: str,
@@ -556,6 +628,9 @@ class SecurityPolicy:
             "require_agent_id": self.require_agent_id,
             "allowed_roles": sorted(self.allowed_roles),
             "capability_policy": cap_tuple,
+            "reauth_on_untrusted_reinvocation": self.reauth_on_untrusted_reinvocation,
+            "untrusted_reinvocation_threshold": self.untrusted_reinvocation_threshold,
+            "default_deny": self.default_deny,
         }
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -589,6 +664,9 @@ class SecurityPolicy:
             require_agent_id=self.require_agent_id,
             allowed_roles=list(self.allowed_roles),
             capability_policy=self.capability_policy,
+            reauth_on_untrusted_reinvocation=self.reauth_on_untrusted_reinvocation,
+            untrusted_reinvocation_threshold=self.untrusted_reinvocation_threshold,
+            default_deny=self.default_deny,
         )
         frozen._frozen_digest = frozen._compute_policy_digest()
         return frozen
@@ -704,3 +782,61 @@ BUSINESS_HOURS_POLICY = SecurityPolicy(
     },
 )
 """Restricts dangerous operations to business hours."""
+
+
+def _get_camouflage_resistant_capability_policy() -> CapabilityPolicy | None:
+    """Lazy capability policy for CAMOUFLAGE_RESISTANT_POLICY.
+
+    Denies the long tail of dangerous capabilities outright; granted set
+    is empty so the caller must opt in per deployment.
+    """
+    try:
+        from .capabilities import Capability, CapabilityPolicy
+
+        return CapabilityPolicy(
+            granted=Capability(0),
+            denied=Capability.PROCESS_SHELL
+            | Capability.PROCESS_EXEC
+            | Capability.FILESYSTEM_DELETE
+            | Capability.FILESYSTEM_WRITE,
+            require_sandbox_for=Capability.DANGEROUS,
+        )
+    except ImportError:
+        return None
+
+
+CAMOUFLAGE_RESISTANT_POLICY = SecurityPolicy(
+    allowed_tools=[],
+    require_agent_id=True,
+    capability_policy=_get_camouflage_resistant_capability_policy(),
+    reauth_on_untrusted_reinvocation=True,
+    untrusted_reinvocation_threshold=1,
+    default_deny=True,
+)
+"""V0.8.6 preset: detector-independent defense against camouflaged prompt injection.
+
+Targets the failure mode documented in arXiv:2605.22001 ("Blind Spots in
+the Guard", Pai 2026): production detectors including Llama Guard 3 drop
+to IDR=0.000 on domain-camouflaged injection payloads. Rather than rely
+on payload-content signatures, this preset denies-by-default at every
+seam an attacker would need to ride:
+
+- Empty ``allowed_tools`` — caller MUST opt every tool in by name; no
+  glob shortcuts. A camouflaged directive targeting an unregistered
+  tool is blocked on allowlist grounds regardless of detector score.
+- ``require_agent_id=True`` — calls without an attributable agent are
+  rejected before any content scan.
+- Dangerous capabilities (process exec/shell, filesystem write/delete)
+  are denied; ``DANGEROUS`` requires sandbox.
+- ``reauth_on_untrusted_reinvocation=True`` with threshold 1 — once a
+  tool has run once and its output has flowed into the model context,
+  any reinvocation requires an explicit ``context.authorize_once(tool)``
+  grant from the harness. This breaks the multi-agent debate
+  amplification path: a camouflaged directive embedded in tool output
+  cannot fan out into repeated downstream invocations.
+
+This preset is intentionally incomplete on its own: ``AirlockConfig``
+also needs ``unknown_args=UnknownArgsMode.BLOCK``, ``sanitize_output=True``,
+and a tight ``max_output_chars``. Use ``apply_camouflage_resistant()``
+from :mod:`agent_airlock.camouflage_resistant` to compose both.
+"""

@@ -65,6 +65,13 @@ from .budget.agent_sdk_credit import (
     load_anthropic_pricing_2026_06,
 )
 
+# V0.8.6 — camouflage-resistant composition (config + policy bundle).
+from .camouflage_resistant import (
+    CamouflageResistantBundle,
+    apply_camouflage_resistant,
+    build_camouflage_resistant_policy,
+)
+
 # V0.4.0 Capability gating
 from .capabilities import (
     NO_NETWORK_CAPABILITY_POLICY,
@@ -388,6 +395,7 @@ from .pack import (
 )
 from .policy import (
     BUSINESS_HOURS_POLICY,
+    CAMOUFLAGE_RESISTANT_POLICY,
     PERMISSIVE_POLICY,
     READ_ONLY_POLICY,
     STRICT_POLICY,
@@ -549,7 +557,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.5"
+__version__ = "0.8.6"
 
 __all__ = [
     # Core
@@ -571,6 +579,11 @@ __all__ = [
     "STRICT_POLICY",
     "READ_ONLY_POLICY",
     "BUSINESS_HOURS_POLICY",
+    # V0.8.6 camouflage-resistant preset
+    "CAMOUFLAGE_RESISTANT_POLICY",
+    "CamouflageResistantBundle",
+    "apply_camouflage_resistant",
+    "build_camouflage_resistant_policy",
     # V0.5.0 2026 policy presets
     "GTG_1002_DEFENSE",
     "MEX_GOV_2026",

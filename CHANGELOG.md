@@ -9,7 +9,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(no entries yet)
+### Added — `CAMOUFLAGE_RESISTANT` preset + debate-amplification guard (v0.8.6)
+
+Detector-independent defense against domain-camouflaged prompt
+injection. Motivated by [arXiv:2605.22001](https://arxiv.org/abs/2605.22001)
+("Blind Spots in the Guard", Pai, May 2026): Llama Guard 3 IDR collapses
+to **0.000** on payloads that mimic the target document's domain
+vocabulary and authority structures, with overall detection dropping
+from 93.8% → 9.7% (Llama 3.1 8B) and 100% → 55.6% (Gemini 2.0 Flash).
+
+- **`CAMOUFLAGE_RESISTANT_POLICY`** (`agent_airlock.policy`): empty
+  deny-by-default `allowed_tools`, `require_agent_id=True`, capability
+  policy denying `PROCESS_SHELL` / `PROCESS_EXEC` / `FILESYSTEM_WRITE` /
+  `FILESYSTEM_DELETE`, `reauth_on_untrusted_reinvocation=True` with
+  threshold 1, and `default_deny=True` so the empty allowlist behaves
+  as deny-all instead of the legacy "allow all" semantic.
+- **`apply_camouflage_resistant(config=None, *, allowed_tools=None,
+  max_output_chars=4000)`** (`agent_airlock.camouflage_resistant`):
+  composition factory that returns a `CamouflageResistantBundle` with
+  both the matching `AirlockConfig` (unknown-args BLOCK, sanitization
+  on, output cap) and the `SecurityPolicy` carrying your deployment's
+  explicit allowlist.
+- **`SecurityPolicy.reauth_on_untrusted_reinvocation`** (new field) +
+  **`SecurityPolicy.check_reauthorization(tool, context)`** (new method):
+  the debate-amplification guard. After a tool's output has flowed back
+  into the model context, the next invocation past the threshold
+  requires an explicit `AirlockContext.authorize_once(tool)` grant from
+  the harness — closing the multi-agent fan-out path the paper
+  identifies.
+- **`SecurityPolicy.default_deny`** (new field): opt-in flag that makes
+  an empty `allowed_tools` behave as deny-all. Off by default to
+  preserve `PERMISSIVE_POLICY` behaviour; on under the camouflage-
+  resistant preset.
+- **`AirlockContext.untrusted_reinvocation_count`** +
+  **`mark_untrusted_output(tool)`** + **`authorize_once(tool)`**: state
+  + helpers for the debate-amplification guard.
+- **`ViolationType.REAUTH_REQUIRED`**: new violation type emitted when
+  the guard blocks a reinvocation without a fresh `authorize_once` grant.
+- **`build_camouflage_resistant_policy(allowed_tools)`**: builder for
+  callers who want the policy alone (without the config bundle).
+- New `tests/test_camouflage_resistant.py` (23 cases): preset shape,
+  composition factory, camouflaged-injection fixtures blocked on
+  structural grounds, ghost-arg BLOCK, reauthorization grant/consume
+  semantics, output truncation re-entry, and freeze-digest integrity
+  for the two new policy fields (CVE-2026-41349 contract preserved).
+
+The camouflage fixtures in the test suite are local and minimal — the
+paper's payload generator is **not** vendored.
 
 ---
 

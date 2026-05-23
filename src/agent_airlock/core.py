@@ -467,6 +467,15 @@ class Airlock:
                 session_id=context.session_id if context else None,
             )
 
+            # V0.8.6 camouflage-resistant guard: tool output flowing back
+            # into the model context is treated as potentially untrusted.
+            # Increment the counter so a SecurityPolicy with
+            # reauth_on_untrusted_reinvocation=True can require a fresh
+            # authorize_once() grant on the next call (arXiv:2605.22001).
+            if context is not None and isinstance(self.policy, SecurityPolicy):
+                if self.policy.reauth_on_untrusted_reinvocation:
+                    context.mark_untrusted_output(func_name)
+
             return result, warnings, sanitized_count, was_truncated
 
         def _handle_error(
@@ -976,6 +985,7 @@ class Airlock:
                     return resolved_policy, response
 
             try:
+                resolved_policy.check_reauthorization(func_name, context)
                 resolved_policy.check(func_name)
             except PolicyViolation as e:
                 if e.violation_type == ViolationType.RATE_LIMITED.value:

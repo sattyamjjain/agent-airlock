@@ -73,6 +73,12 @@ class AirlockContext(Generic[T]):
     roles: list[str] = field(default_factory=list)
     user_context: T | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    # V0.8.6 camouflage-resistant guard. Counter of completed invocations
+    # whose output has flowed back into the model context (each one a
+    # potential domain-camouflaged injection vector per arXiv:2605.22001).
+    # SecurityPolicy.check_reauthorization() reads these.
+    untrusted_reinvocation_count: dict[str, int] = field(default_factory=dict)
+    _authorized_once: set[str] = field(default_factory=set, repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
 
     def __enter__(self) -> AirlockContext[T]:
@@ -104,7 +110,7 @@ class AirlockContext(Generic[T]):
             New context with merged metadata.
         """
         new_metadata = {**self.metadata, **kwargs}
-        return AirlockContext(
+        clone: AirlockContext[T] = AirlockContext(
             agent_id=self.agent_id,
             session_id=self.session_id,
             workspace_id=self.workspace_id,
@@ -112,6 +118,29 @@ class AirlockContext(Generic[T]):
             roles=list(self.roles),
             user_context=self.user_context,
             metadata=new_metadata,
+            untrusted_reinvocation_count=dict(self.untrusted_reinvocation_count),
+        )
+        clone._authorized_once = set(self._authorized_once)
+        return clone
+
+    def authorize_once(self, tool_name: str) -> None:
+        """Grant a single subsequent invocation of ``tool_name`` past the
+        camouflage-resistant reauthorization threshold.
+
+        The grant is consumed by the next ``SecurityPolicy.check_reauthorization``
+        for this tool. Use when the harness has independently verified that
+        the next call's arguments did NOT originate from prior tool output.
+        """
+        self._authorized_once.add(tool_name)
+
+    def mark_untrusted_output(self, tool_name: str) -> None:
+        """Record that ``tool_name`` produced output that flows back into
+        the model context, so any subsequent invocation past threshold
+        requires a fresh ``authorize_once`` grant under
+        ``reauth_on_untrusted_reinvocation``.
+        """
+        self.untrusted_reinvocation_count[tool_name] = (
+            self.untrusted_reinvocation_count.get(tool_name, 0) + 1
         )
 
     def to_dict(self) -> dict[str, Any]:
