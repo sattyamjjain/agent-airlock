@@ -54,6 +54,7 @@ class CamouflageResistantBundle:
     config: AirlockConfig
     policy: SecurityPolicy
 
+
 # Modest re-entry cap: large enough for typical tool output, small enough
 # that a long injection prompt embedded in output gets truncated. Tunable
 # per deployment via apply_camouflage_resistant(max_output_chars=...).
