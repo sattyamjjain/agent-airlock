@@ -28,6 +28,11 @@ from .exceptions import AirlockError
 
 if TYPE_CHECKING:
     from .capabilities import CapabilityPolicy
+    from .cost_tracking import (
+        BudgetEstimate,
+        CostTracker,
+        ModelTierBudget,
+    )
 
 logger = structlog.get_logger("agent-airlock.policy")
 
@@ -352,6 +357,16 @@ class SecurityPolicy:
     # registry; runtime cannot construct argv). ``"disabled"`` blocks
     # STDIO subprocesses entirely.
     stdio_mode: Literal["allowlist", "manifest_only", "disabled"] = "allowlist"
+    # V0.8.7 per-model-tier cost budgets. When set, the @Airlock seam
+    # runs a worst-case cost estimate against the resolved tier's cap
+    # BEFORE execution (block over-budget calls with a structured
+    # AirlockBudgetExceeded). Reconciliation of estimated vs actual cost
+    # happens AFTER execution. Untagged calls fall back to the budget's
+    # ``strict_tier`` (deny-by-default). The check is invoked from
+    # ``core.py``'s ``_pre_execution`` rather than ``SecurityPolicy.check()``
+    # because it needs runtime args (input token counts) that ``check()``
+    # does not see.
+    model_tier_budget: ModelTierBudget | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -602,6 +617,57 @@ class SecurityPolicy:
 
         logger.debug("policy_check_passed", tool=tool_name)
 
+    # -- v0.8.7 per-model-tier cost budget --
+
+    def check_model_tier_budget(
+        self,
+        *,
+        tier_label: str | None,
+        input_tokens: int,
+        cost_tracker: CostTracker,
+        model_id: str | None = None,
+    ) -> BudgetEstimate | None:
+        """Run the per-model-tier budget pre-execute check.
+
+        No-op when ``model_tier_budget`` is None. When set, resolves the
+        tier (caller-supplied ``tier_label`` wins; otherwise the budget's
+        ``tier_resolver`` is tried with ``model_id``; otherwise the
+        budget's ``strict_tier`` is used) and runs the worst-case cost
+        estimate. Raises :class:`AirlockBudgetExceeded` on cap breach.
+
+        Args:
+            tier_label: Explicit tier label (e.g. from a router-supplied
+                ``_airlock_tier`` kwarg). May be None — the budget will
+                fall back via resolver or to ``strict_tier``.
+            input_tokens: Caller's best estimate of input tokens for the
+                call. Pass 0 if unknown.
+            cost_tracker: Cost tracker carrying the pricing table.
+            model_id: Optional model identifier, surfaced in telemetry
+                and threaded to the resolver.
+
+        Returns:
+            The :class:`BudgetEstimate` to thread into post-execute
+            reconciliation, or None when no budget is configured.
+
+        Raises:
+            AirlockBudgetExceeded: If the worst-case estimate exceeds
+                the resolved tier's cap.
+            UnknownTierError: If ``tier_label`` is explicitly supplied
+                but not a configured tier.
+        """
+        if self.model_tier_budget is None:
+            return None
+        resolved = self.model_tier_budget.resolve_tier(
+            explicit=tier_label,
+            model_id=model_id,
+        )
+        return self.model_tier_budget.check_pre_execute(
+            tier_label=resolved,
+            input_tokens=input_tokens,
+            cost_tracker=cost_tracker,
+            model_id=model_id,
+        )
+
     # -- v0.5.5 policy freezing (CVE-2026-41349 consent-bypass guard) --
 
     def _canonical_bytes(self) -> bytes:
@@ -611,6 +677,10 @@ class SecurityPolicy:
         ``_frozen_digest``) are deliberately excluded so the digest only
         covers user-visible configuration. A ``CapabilityPolicy`` is
         reduced to the integer values of its three ``Capability`` flags.
+        A :class:`ModelTierBudget` is serialized via its
+        ``canonical_payload()`` (tier_resolver callback is reduced to a
+        boolean — callable identity is non-deterministic across processes
+        and ``freeze()`` covers config, not behavior).
         """
         cap = self.capability_policy
         cap_tuple: tuple[int, int, int] | None = None
@@ -620,6 +690,11 @@ class SecurityPolicy:
                 int(cap.denied.value),
                 int(cap.require_sandbox_for.value),
             )
+        tier_budget_payload = (
+            self.model_tier_budget.canonical_payload()
+            if self.model_tier_budget is not None
+            else None
+        )
         payload = {
             "allowed_tools": sorted(self.allowed_tools),
             "denied_tools": sorted(self.denied_tools),
@@ -631,6 +706,7 @@ class SecurityPolicy:
             "reauth_on_untrusted_reinvocation": self.reauth_on_untrusted_reinvocation,
             "untrusted_reinvocation_threshold": self.untrusted_reinvocation_threshold,
             "default_deny": self.default_deny,
+            "model_tier_budget": tier_budget_payload,
         }
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -667,6 +743,7 @@ class SecurityPolicy:
             reauth_on_untrusted_reinvocation=self.reauth_on_untrusted_reinvocation,
             untrusted_reinvocation_threshold=self.untrusted_reinvocation_threshold,
             default_deny=self.default_deny,
+            model_tier_budget=self.model_tier_budget,
         )
         frozen._frozen_digest = frozen._compute_policy_digest()
         return frozen

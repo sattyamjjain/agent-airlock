@@ -62,6 +62,7 @@ from dataclasses import dataclass
 from pathlib import Path as _Path_for_gitpilot
 from typing import TYPE_CHECKING, Any
 
+from .cost_tracking import ModelTierBudget, TierBudget
 from .exceptions import AirlockError
 from .policy import SecurityPolicy, StdioGuardConfig
 
@@ -2577,6 +2578,63 @@ EU_AI_ACT_ARTICLE_15 = eu_ai_act_article_15_policy()
 INDIA_DPDP_2023 = india_dpdp_2023_policy()
 
 
+# -----------------------------------------------------------------------------
+# V0.8.7 — Per-model-tier cost budget preset
+# -----------------------------------------------------------------------------
+
+
+STRICT_MODEL_TIER_BUDGET = ModelTierBudget(
+    tiers={
+        "frontier": TierBudget(max_cost_cents=50, max_output_tokens=4000),
+        "mid": TierBudget(max_cost_cents=10, max_output_tokens=2000),
+        "small": TierBudget(max_cost_cents=2, max_output_tokens=1000),
+    },
+    strict_tier="small",
+)
+"""Conservative per-call budget split across three tiers (v0.8.7).
+
+Caps per call:
+- ``frontier`` — 50¢ / 4000 output tokens.
+- ``mid``      — 10¢ / 2000 output tokens.
+- ``small``    —  2¢ / 1000 output tokens.
+
+Untagged calls fall back to ``small`` (deny-by-default — the cheapest tier).
+Combine with :func:`strict_tier_budget_policy` for a ready-to-use policy,
+or assemble your own :class:`~agent_airlock.policy.SecurityPolicy` with
+``model_tier_budget=STRICT_MODEL_TIER_BUDGET``.
+"""
+
+
+def strict_tier_budget_policy(
+    tier_resolver: Any | None = None,
+) -> SecurityPolicy:
+    """Return a SecurityPolicy seeded with :data:`STRICT_MODEL_TIER_BUDGET`.
+
+    No allow/deny lists — this preset focuses on cost protection. Layer it
+    on top of an existing policy (e.g. ``OWASP_MCP_TOP_10_2026``) by
+    constructing a :class:`SecurityPolicy` directly with both
+    ``allowed_tools`` and ``model_tier_budget`` set.
+
+    Args:
+        tier_resolver: Optional callback mapping model_id strings to tier
+            labels. When supplied, untagged calls that ship a ``model_id``
+            in ``context.metadata`` can be routed to the correct tier
+            without an explicit ``_airlock_tier`` kwarg. The router stays
+            in the caller's code — agent-airlock just invokes the callback.
+
+    Returns:
+        A fresh :class:`SecurityPolicy` instance with the strict budget.
+    """
+    budget = STRICT_MODEL_TIER_BUDGET
+    if tier_resolver is not None:
+        budget = ModelTierBudget(
+            tiers=dict(STRICT_MODEL_TIER_BUDGET.tiers),
+            strict_tier=STRICT_MODEL_TIER_BUDGET.strict_tier,
+            tier_resolver=tier_resolver,
+        )
+    return SecurityPolicy(model_tier_budget=budget)
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -2646,4 +2704,7 @@ __all__ = [
     "INDIA_DPDP_2023",
     "STDIO_GUARD_OX_DEFAULTS",
     "OAUTH_AUDIT_VERCEL_2026_DEFAULTS",
+    # V0.8.7 per-model-tier cost budget
+    "STRICT_MODEL_TIER_BUDGET",
+    "strict_tier_budget_policy",
 ]

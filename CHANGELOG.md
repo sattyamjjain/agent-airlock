@@ -9,6 +9,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Per-model-tier cost budgets with deny-by-default fallback (v0.8.7)
+
+`ModelTierBudget` — a new policy primitive that caps per-call cost AND/OR
+output tokens per **model tier label** (e.g. `"frontier"` / `"mid"` /
+`"small"`), evaluated **before** the tool executes. Distinct from the
+existing flat `BudgetConfig` (no tier dimension), `ModelCapabilityTier`
+(capability gating, not cost), and `AgentSDKCreditBudget` (monthly
+subscription credits, not per-call). Closes the gap routers had when
+fanning calls across tiers: a runaway agent can no longer burn frontier
+tokens against a small-tier cap.
+
+- **`ModelTierBudget`** (`agent_airlock.cost_tracking`): mapping
+  `{tier_label → TierBudget}` plus a mandatory `strict_tier` that serves
+  as the deny-by-default fallback for untagged calls. Optional
+  `tier_resolver: Callable[[str], str]` callback maps model IDs to tier
+  labels — the router stays in the caller's code; airlock just invokes
+  the callback. Includes `resolve_tier()`, `check_pre_execute()` (raises
+  `AirlockBudgetExceeded` on cap breach), and `reconcile_post_execute()`
+  (observability-only — logs the actual-vs-estimated delta but never
+  raises).
+- **`TierBudget`** (frozen dataclass): per-tier `max_cost_cents` and/or
+  `max_output_tokens` caps. Worst-case cost estimate is
+  `input_tokens × input_price + max_output_tokens × output_price` —
+  reuses `CostTracker.calculate_cost()` for pricing (no duplicate
+  pricing table).
+- **`AirlockBudgetExceeded`** (subclasses `AirlockError`): pre-execute
+  block carrying `tier`, `cap`, `estimated_cost_cents`,
+  `estimated_output_tokens`, `budget_type`, `model_id`. Surfaced as a
+  structured `AirlockResponse` with `block_reason="budget_exceeded"`.
+- **`SecurityPolicy.model_tier_budget`** (new field) +
+  **`SecurityPolicy.check_model_tier_budget()`**: optional wiring point.
+  The `@Airlock` seam invokes it as Step 6 of `_pre_execution()` (after
+  RBAC / capability / filesystem / endpoint checks, before execute), and
+  threads the resulting `BudgetEstimate` into `_post_execution()` for
+  actual-vs-estimated reconciliation when the tool result carries a
+  `token_usage` attribute / dict key. Frozen-policy digest covers the
+  budget so frozen policies don't drift on mutation.
+- **Tier extraction** at the call site, in priority order:
+  `_airlock_tier` kwarg (stripped before ghost-arg validation) →
+  arg-extracted `context.metadata["airlock_tier"]` →
+  contextvar-stored context's metadata → `tier_resolver(model_id)` →
+  `strict_tier`. The strict-tier fallback is the deny-by-default
+  guarantee — untagged calls hit the tightest cap.
+- **`STRICT_MODEL_TIER_BUDGET`** preset (`policy_presets`): three-tier
+  configuration with caps 50¢ / 10¢ / 2¢ (frontier / mid / small) and
+  `strict_tier="small"`.
+- **`strict_tier_budget_policy(tier_resolver=None)`**: factory returning
+  a `SecurityPolicy` seeded with the strict preset.
+- New example at `examples/model_tier_budget.py` demonstrating four
+  routing patterns: explicit `_airlock_tier` kwarg, `context.metadata`
+  tagging via contextvar, `model_id` → `tier_resolver` callback, and
+  composition with allow/deny lists.
+- `BlockReason.BUDGET_EXCEEDED` and `handle_budget_exceeded()` in
+  `self_heal.py` for structured response building.
+- 39 new tests in `tests/test_model_tier_budget.py` covering
+  construction, tier resolution priority, worst-case cost estimation,
+  cap-exceeded blocks, reconciliation observability, full `@Airlock`
+  integration (sync + async), and digest stability.
+
+Reconciliation never raises — a call that estimates 5¢ and actually costs
+50¢ logs `delta_cents=+45` but doesn't retroactively block. Users who
+want a hard session cap should layer `BudgetConfig.max_cost_per_session`
+on top of the global `CostTracker`.
+
 ### Added — `CAMOUFLAGE_RESISTANT` preset + debate-amplification guard (v0.8.6)
 
 Detector-independent defense against domain-camouflaged prompt

@@ -346,6 +346,54 @@ def query_logs(query: str) -> str:
 
 **ROI:** 10MB logs = ~2.5M tokens = $25/response. Truncated = ~1.25K tokens = $0.01. **99.96% savings.**
 
+#### Per-model-tier budgets (v0.8.7)
+
+The flat `max_output_*` caps above apply uniformly to every call. **`ModelTierBudget`** caps per-call cost and output tokens **per model tier label** (e.g. `"frontier"` / `"mid"` / `"small"`), evaluated *before* the tool runs. Untagged calls fall back to a configurable `strict_tier` (deny-by-default — the cheapest tier).
+
+```python
+from agent_airlock import (
+    Airlock, ModelTierBudget, SecurityPolicy, TierBudget,
+)
+
+policy = SecurityPolicy(
+    model_tier_budget=ModelTierBudget(
+        tiers={
+            "frontier": TierBudget(max_cost_cents=50, max_output_tokens=4000),
+            "mid":      TierBudget(max_cost_cents=10, max_output_tokens=2000),
+            "small":    TierBudget(max_cost_cents=2,  max_output_tokens=1000),
+        },
+        strict_tier="small",  # untagged → cheapest tier (deny-by-default)
+    ),
+)
+
+@Airlock(policy=policy, return_dict=True)
+def call_model(prompt: str, **_extra):
+    return run_my_router(prompt)
+
+# The router tags each call. Airlock blocks before the model fires.
+call_model("Draft a tweet",  _airlock_tier="small",    _airlock_input_tokens=50)
+call_model("Deep analysis", _airlock_tier="frontier", _airlock_input_tokens=200_000)
+# →  AIRLOCK_BLOCK: Tier 'frontier' budget exceeded (worst-case 66¢ > cap 50¢)
+```
+
+Routing logic stays in the user's router. Three tagging routes are supported:
+
+1. **`_airlock_tier` kwarg** — stripped before the tool sees it.
+2. **`context.metadata["airlock_tier"]`** — set on a contextvar-stored
+   `AirlockContext` by the router's session middleware.
+3. **`tier_resolver` callback** — `ModelTierBudget(tier_resolver=fn)`
+   where `fn(model_id: str) -> tier_label` lives in the caller's code.
+   Airlock invokes the callback when `context.metadata["model_id"]`
+   is set; it carries no vendor-specific model→tier table.
+
+After execution, actual vs estimated cost is reconciled into the global
+`CostTracker` (observability — never blocks). See
+[`examples/model_tier_budget.py`](./examples/model_tier_budget.py) for
+all four patterns including composition with allow/deny lists.
+
+A ready-to-use `strict_tier_budget_policy()` preset returns a
+`SecurityPolicy` seeded with the table above.
+
 ---
 
 ### 🔐 PII & Secret Masking

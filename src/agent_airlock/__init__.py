@@ -127,16 +127,22 @@ from .conversation import (
 )
 from .core import Airlock, SandboxExecutionError, SandboxUnavailableError, airlock
 
-# V0.4.0 Cost Tracking
+# V0.4.0 Cost Tracking + V0.8.7 Per-model-tier budgets
 from .cost_tracking import (
+    AirlockBudgetExceeded,
     BudgetConfig,
+    BudgetEstimate,
     BudgetExceededError,
     CostCallback,
     CostContext,
     CostRecord,
     CostSummary,
     CostTracker,
+    ModelTierBudget,
+    ReconciliationRecord,
+    TierBudget,
     TokenUsage,
+    UnknownTierError,
     get_global_tracker,
     set_global_tracker,
 )
@@ -417,6 +423,7 @@ from .policy_presets import (
     MEX_GOV_2026,
     OWASP_MCP_TOP_10_2026,
     STDIO_GUARD_OX_DEFAULTS,
+    STRICT_MODEL_TIER_BUDGET,
     ArchivedMcpServerBlocked,
     GitPilotRepoPathInjection,
     HighValueActionBlocked,
@@ -426,6 +433,7 @@ from .policy_presets import (
     mex_gov_2026_policy,
     owasp_mcp_top_10_2026_policy,
     stdio_guard_ox_defaults,
+    strict_tier_budget_policy,
 )
 
 # V0.7.0 — Redis-backed distributed rate limiter (#1).
@@ -557,7 +565,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.6"
+__version__ = "0.8.7"
 
 __all__ = [
     # Core
@@ -905,6 +913,15 @@ __all__ = [
     "BudgetExceededError",
     "get_global_tracker",
     "set_global_tracker",
+    # V0.8.7 Per-model-tier cost budgets
+    "ModelTierBudget",
+    "TierBudget",
+    "BudgetEstimate",
+    "ReconciliationRecord",
+    "AirlockBudgetExceeded",
+    "UnknownTierError",
+    "STRICT_MODEL_TIER_BUDGET",
+    "strict_tier_budget_policy",
     # V0.4.0 Retry Policies
     "RetryPolicy",
     "RetryConfig",
