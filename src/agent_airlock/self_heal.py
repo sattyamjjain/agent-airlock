@@ -32,6 +32,8 @@ class BlockReason(str, Enum):
     # V0.4.1 security reasons
     ENDPOINT_BLOCKED = "endpoint_blocked"
     ANOMALY_DETECTED = "anomaly_detected"
+    # V0.8.7 cost-budget reasons
+    BUDGET_EXCEEDED = "budget_exceeded"
 
 
 @dataclass
@@ -339,6 +341,65 @@ def handle_endpoint_violation(
             "hostname": hostname,
             "block_reason": reason,
             "allowed_endpoints": allowed_endpoints or [],
+        },
+    )
+
+
+def handle_budget_exceeded(
+    func_name: str,
+    *,
+    tier: str,
+    cap_cost_cents: int | None,
+    cap_output_tokens: int | None,
+    estimated_cost_cents: int,
+    estimated_output_tokens: int,
+    budget_type: str,
+    model_id: str | None = None,
+) -> AirlockResponse:
+    """Create a response for per-model-tier budget violations (v0.8.7).
+
+    Args:
+        func_name: Name of the function that was blocked.
+        tier: Resolved tier label (e.g. "frontier").
+        cap_cost_cents: The tier's per-call cost cap in cents (if set).
+        cap_output_tokens: The tier's per-call output-token cap (if set).
+        estimated_cost_cents: Worst-case estimated cost that triggered the block.
+        estimated_output_tokens: Worst-case output assumed by the estimate.
+        budget_type: "cost" or "tokens" — which cap was breached.
+        model_id: Optional model identifier for telemetry.
+
+    Returns:
+        AirlockResponse with ``block_reason=BUDGET_EXCEEDED`` and the tier,
+        cap, and estimate in ``metadata``.
+    """
+    fix_hints: list[str] = []
+    if cap_cost_cents is not None:
+        fix_hints.append(
+            f"Tier {tier!r} caps per-call cost at {cap_cost_cents}¢ "
+            f"(this call estimated {estimated_cost_cents}¢)."
+        )
+    if cap_output_tokens is not None:
+        fix_hints.append(f"Tier {tier!r} caps per-call output at {cap_output_tokens} tokens.")
+    fix_hints.append("Reduce input_tokens, route to a cheaper tier, or raise the cap on this tier.")
+
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.BUDGET_EXCEEDED,
+        error=(
+            f"AIRLOCK_BLOCK: Tier {tier!r} budget exceeded for '{func_name}' "
+            f"(budget_type={budget_type})"
+        ),
+        fix_hints=fix_hints,
+        metadata={
+            "function": func_name,
+            "tier": tier,
+            "cap": {
+                "max_cost_cents": cap_cost_cents,
+                "max_output_tokens": cap_output_tokens,
+            },
+            "estimated_cost_cents": estimated_cost_cents,
+            "estimated_output_tokens": estimated_output_tokens,
+            "budget_type": budget_type,
+            "model_id": model_id,
         },
     )
 

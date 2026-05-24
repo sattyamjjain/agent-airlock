@@ -66,6 +66,13 @@ from .capabilities import (
 )
 from .config import DEFAULT_CONFIG, AirlockConfig
 from .context import AirlockContext, ContextExtractor, reset_context, set_current_context
+from .cost_tracking import (
+    AirlockBudgetExceeded,
+    BudgetEstimate,
+    TokenUsage,
+    UnknownTierError,
+    get_global_tracker,
+)
 from .filesystem import PathValidationError, validate_path
 from .honeypot import (
     create_honeypot_response,
@@ -79,6 +86,7 @@ from .sanitizer import sanitize_output
 from .self_heal import (
     AirlockResponse,
     BlockReason,
+    handle_budget_exceeded,
     handle_endpoint_violation,
     handle_ghost_argument_error,
     handle_network_blocked,
@@ -245,6 +253,48 @@ def _looks_like_url(key: str, value: Any) -> bool:
     return value.startswith("http://") or value.startswith("https://")
 
 
+def _extract_token_usage(result: Any) -> TokenUsage | None:
+    """Best-effort extraction of TokenUsage from a tool result (v0.8.7).
+
+    Tries, in order:
+      1. ``result.token_usage`` attribute (direct TokenUsage or dict-like).
+      2. ``result["token_usage"]`` key (dict-style result envelopes).
+      3. ``result.usage`` attribute with ``input_tokens`` / ``output_tokens``
+         (OpenAI / Anthropic SDK convention).
+    Returns None on any failure or absence — reconciliation is best-effort.
+    """
+    if result is None:
+        return None
+    candidate: Any = None
+    # 1. Direct attribute
+    candidate = getattr(result, "token_usage", None)
+    # 2. Dict-style envelope
+    if candidate is None and isinstance(result, dict):
+        candidate = result.get("token_usage")
+    # 3. LLM SDK ``usage`` attribute
+    if candidate is None:
+        candidate = getattr(result, "usage", None)
+    if candidate is None:
+        return None
+    # Coerce to TokenUsage
+    if isinstance(candidate, TokenUsage):
+        return candidate
+    try:
+        if isinstance(candidate, dict):
+            return TokenUsage(
+                input_tokens=int(candidate.get("input_tokens", 0)),
+                output_tokens=int(candidate.get("output_tokens", 0)),
+            )
+        # Duck-typed: read attributes
+        input_tokens = int(getattr(candidate, "input_tokens", 0))
+        output_tokens = int(getattr(candidate, "output_tokens", 0))
+        if input_tokens == 0 and output_tokens == 0:
+            return None
+        return TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens)
+    except (TypeError, ValueError):
+        return None
+
+
 class Airlock:
     """Decorator that secures function calls with validation, sandboxing, and policies.
 
@@ -341,20 +391,36 @@ class Airlock:
             func_name: str,
             args: tuple[Any, ...],
             kwargs: dict[str, Any],
-        ) -> tuple[dict[str, Any], float, AirlockContext[Any], AirlockResponse | None]:
+        ) -> tuple[
+            dict[str, Any],
+            float,
+            AirlockContext[Any],
+            AirlockResponse | None,
+            BudgetEstimate | None,
+        ]:
             """Shared pre-execution logic for sync and async wrappers.
 
-            Orchestrates 5 validation steps:
+            Orchestrates 6 validation steps:
             1. Ghost argument validation (strip/reject hallucinated params)
             2. Security policy resolution and checking
             3. Filesystem path validation
             4. Capability gating
             5. Endpoint policy validation (V0.4.1)
+            6. Per-model-tier budget check (V0.8.7)
 
             Returns:
-                Tuple of (cleaned_kwargs, start_time, context, error_response or None)
+                Tuple of (cleaned_kwargs, start_time, context, error_response or None,
+                          budget_estimate or None). The budget_estimate is threaded to
+                ``_post_execution`` for actual-vs-estimated reconciliation.
             """
             start_time = time.time()
+
+            # V0.8.7: pop airlock control kwargs BEFORE ghost-arg validation
+            # so the tool's signature isn't required to declare them. The
+            # router supplies these to tag a call; they are not part of the
+            # tool's contract.
+            tier_kwarg = kwargs.pop("_airlock_tier", None)
+            input_tokens_kwarg = kwargs.pop("_airlock_input_tokens", None)
 
             # Extract context from function arguments
             context = ContextExtractor.extract_from_args(args, kwargs)
@@ -372,29 +438,40 @@ class Airlock:
             # Step 1: Validate and handle ghost arguments
             cleaned_kwargs, _, ghost_error = self._validate_ghost_arguments(func, func_name, kwargs)
             if ghost_error is not None:
-                return kwargs, start_time, context, ghost_error
+                return kwargs, start_time, context, ghost_error, None
 
             # Step 2: Resolve and check security policy
             resolved_policy, policy_error = self._resolve_and_check_policy(func_name, context)
             if policy_error is not None:
-                return kwargs, start_time, context, policy_error
+                return kwargs, start_time, context, policy_error, None
 
             # Step 3: Validate filesystem paths
             fs_error = self._validate_filesystem_paths(func_name, cleaned_kwargs)
             if fs_error is not None:
-                return kwargs, start_time, context, fs_error
+                return kwargs, start_time, context, fs_error, None
 
             # Step 4: Check capability requirements
             cap_error = self._check_capabilities(func, func_name, resolved_policy)
             if cap_error is not None:
-                return kwargs, start_time, context, cap_error
+                return kwargs, start_time, context, cap_error, None
 
             # Step 5: Validate endpoint policies (V0.4.1)
             ep_error = self._validate_endpoint_policies(func_name, cleaned_kwargs)
             if ep_error is not None:
-                return kwargs, start_time, context, ep_error
+                return kwargs, start_time, context, ep_error, None
 
-            return cleaned_kwargs, start_time, context, None
+            # Step 6: Per-model-tier budget check (V0.8.7)
+            budget_estimate, budget_error = self._check_model_tier_budget(
+                func_name=func_name,
+                resolved_policy=resolved_policy,
+                tier_kwarg=tier_kwarg,
+                input_tokens_kwarg=input_tokens_kwarg,
+                context=context,
+            )
+            if budget_error is not None:
+                return kwargs, start_time, context, budget_error, None
+
+            return cleaned_kwargs, start_time, context, None, budget_estimate
 
         def _post_execution(
             func_name: str,
@@ -402,6 +479,7 @@ class Airlock:
             start_time: float,
             kwargs: dict[str, Any],
             context: AirlockContext[Any] | None = None,
+            budget_estimate: BudgetEstimate | None = None,
         ) -> tuple[Any, list[str], int, bool]:
             """Shared post-execution logic for sync and async wrappers.
 
@@ -476,6 +554,17 @@ class Airlock:
                 if self.policy.reauth_on_untrusted_reinvocation:
                     context.mark_untrusted_output(func_name)
 
+            # V0.8.7: reconcile actual vs estimated cost for the tier
+            # budget. Never raises — reconciliation is observability, not
+            # a second gate. Users who want a hard session cap should layer
+            # ``BudgetConfig.max_cost_per_session`` on top.
+            if budget_estimate is not None and isinstance(self.policy, SecurityPolicy):
+                self._reconcile_tier_budget(
+                    func_name=func_name,
+                    result=result,
+                    budget_estimate=budget_estimate,
+                )
+
             return result, warnings, sanitized_count, was_truncated
 
         def _handle_error(
@@ -523,9 +612,13 @@ class Airlock:
             @functools.wraps(func)
             async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R | dict[str, Any]:
                 func_name = func.__name__
-                cleaned_kwargs, start_time, context, error_response = _pre_execution(
-                    func_name, args, dict(kwargs)
-                )
+                (
+                    cleaned_kwargs,
+                    start_time,
+                    context,
+                    error_response,
+                    budget_estimate,
+                ) = _pre_execution(func_name, args, dict(kwargs))
 
                 if error_response is not None:
                     # Check for honeypot response before returning error
@@ -619,7 +712,7 @@ class Airlock:
                     reset_context(token)
 
                 result, warnings, _, _ = _post_execution(
-                    func_name, result, start_time, cleaned_kwargs, context
+                    func_name, result, start_time, cleaned_kwargs, context, budget_estimate
                 )
 
                 if self.return_dict:
@@ -635,9 +728,13 @@ class Airlock:
             @functools.wraps(func)
             def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R | dict[str, Any]:
                 func_name = func.__name__
-                cleaned_kwargs, start_time, context, error_response = _pre_execution(
-                    func_name, args, dict(kwargs)
-                )
+                (
+                    cleaned_kwargs,
+                    start_time,
+                    context,
+                    error_response,
+                    budget_estimate,
+                ) = _pre_execution(func_name, args, dict(kwargs))
 
                 if error_response is not None:
                     # Check for honeypot response before returning error
@@ -721,7 +818,7 @@ class Airlock:
                     reset_context(token)
 
                 result, warnings, _, _ = _post_execution(
-                    func_name, result, start_time, cleaned_kwargs, context
+                    func_name, result, start_time, cleaned_kwargs, context, budget_estimate
                 )
 
                 if self.return_dict:
@@ -1112,6 +1209,163 @@ class Airlock:
                     )
 
         return None
+
+    def _check_model_tier_budget(
+        self,
+        *,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        tier_kwarg: str | None,
+        input_tokens_kwarg: int | None,
+        context: AirlockContext[Any],
+    ) -> tuple[BudgetEstimate | None, AirlockResponse | None]:
+        """Run the per-model-tier budget pre-execute check (v0.8.7).
+
+        No-op when ``resolved_policy.model_tier_budget`` is None. When set,
+        resolves the tier (priority: ``tier_kwarg`` from caller >
+        ``context.metadata['airlock_tier']`` > ``tier_resolver(model_id)``
+        > ``strict_tier``) and computes a worst-case cost estimate via
+        the global :class:`CostTracker`. On cap breach, returns a structured
+        blocked response with ``block_reason=BUDGET_EXCEEDED``.
+
+        Args:
+            func_name: Tool being invoked (for telemetry).
+            resolved_policy: The resolved SecurityPolicy (may be None or
+                a non-SecurityPolicy if the caller wired in a stub).
+            tier_kwarg: Caller-supplied ``_airlock_tier`` value (popped
+                from kwargs before ghost-arg validation).
+            input_tokens_kwarg: Caller-supplied ``_airlock_input_tokens``.
+                Falls back to ``context.metadata['input_tokens']``, then 0.
+            context: The current AirlockContext.
+
+        Returns:
+            ``(BudgetEstimate, None)`` on pass, ``(None, AirlockResponse)``
+            on block, ``(None, None)`` when no budget is configured.
+        """
+        if not isinstance(resolved_policy, SecurityPolicy):
+            return None, None
+        if resolved_policy.model_tier_budget is None:
+            return None, None
+
+        # Collect candidate metadata: the arg-extracted context's metadata
+        # is the primary source. If the arg-extracted context carries no
+        # useful tagging, we fall back to the contextvar-stored context
+        # (set by routers via ``set_current_context``) so the same router
+        # can scope tags across multiple tool calls in one turn without
+        # threading context through every function signature.
+        from .context import get_current_context
+
+        cv_context = get_current_context()
+        cv_metadata: dict[str, Any] = cv_context.metadata if cv_context is not None else {}
+
+        def _meta_get(key: str) -> Any:
+            value = context.metadata.get(key)
+            if value is not None:
+                return value
+            return cv_metadata.get(key)
+
+        # Resolve tier from kwarg → arg-extracted metadata → contextvar metadata.
+        explicit_tier = tier_kwarg
+        if explicit_tier is None:
+            ctx_tier = _meta_get("airlock_tier")
+            if isinstance(ctx_tier, str):
+                explicit_tier = ctx_tier
+        # Resolve input_tokens from kwarg → metadata → 0.
+        input_tokens = input_tokens_kwarg if input_tokens_kwarg is not None else 0
+        if input_tokens == 0:
+            meta_input = _meta_get("input_tokens")
+            if isinstance(meta_input, int):
+                input_tokens = meta_input
+        # Model ID from metadata only — not a control kwarg.
+        meta_model_id = _meta_get("model_id")
+        model_id = meta_model_id if isinstance(meta_model_id, str) else None
+
+        cost_tracker = get_global_tracker()
+        try:
+            estimate = resolved_policy.check_model_tier_budget(
+                tier_label=explicit_tier,
+                input_tokens=input_tokens,
+                cost_tracker=cost_tracker,
+                model_id=model_id,
+            )
+        except AirlockBudgetExceeded as exc:
+            logger.info(
+                "tier_budget_blocked",
+                function=func_name,
+                tier=exc.tier,
+                estimated_cost_cents=exc.estimated_cost_cents,
+                cap_cents=exc.cap.max_cost_cents,
+                budget_type=exc.budget_type,
+                model_id=exc.model_id,
+            )
+            return None, handle_budget_exceeded(
+                func_name,
+                tier=exc.tier,
+                cap_cost_cents=exc.cap.max_cost_cents,
+                cap_output_tokens=exc.cap.max_output_tokens,
+                estimated_cost_cents=exc.estimated_cost_cents,
+                estimated_output_tokens=exc.estimated_output_tokens,
+                budget_type=exc.budget_type,
+                model_id=exc.model_id,
+            )
+        except UnknownTierError as exc:
+            logger.warning(
+                "tier_budget_unknown_tier",
+                function=func_name,
+                tier_label=exc.tier_label,
+                known=exc.known,
+            )
+            return None, handle_policy_violation(
+                func_name,
+                policy_name="ModelTierBudget",
+                reason=str(exc),
+            )
+        return estimate, None
+
+    def _reconcile_tier_budget(
+        self,
+        *,
+        func_name: str,
+        result: Any,
+        budget_estimate: BudgetEstimate,
+    ) -> None:
+        """Reconcile actual vs estimated cost for a tier budget (v0.8.7).
+
+        Best-effort extraction of :class:`TokenUsage` from the tool result:
+        looks for ``result.token_usage`` (attribute), ``result["token_usage"]``
+        (dict key), or the LLM-SDK-style ``result.usage`` with
+        ``input_tokens`` / ``output_tokens`` fields. If none of those are
+        present, reconciliation is a no-op (the budget was a pre-execute
+        gate only — observability of actuals is opt-in via the convention).
+
+        Never raises; failures log a structlog warning. Reconciliation is
+        observability, not a second gate.
+        """
+        policy = self.policy if isinstance(self.policy, SecurityPolicy) else None
+        if policy is None or policy.model_tier_budget is None:
+            return
+
+        usage = _extract_token_usage(result)
+        if usage is None:
+            logger.debug(
+                "tier_budget_no_usage_to_reconcile",
+                function=func_name,
+                tier=budget_estimate.tier,
+            )
+            return
+
+        try:
+            policy.model_tier_budget.reconcile_post_execute(
+                estimate=budget_estimate,
+                actual=usage,
+                cost_tracker=get_global_tracker(),
+            )
+        except Exception:
+            logger.exception(
+                "tier_budget_reconcile_error",
+                function=func_name,
+                tier=budget_estimate.tier,
+            )
 
     def _check_capabilities(
         self,
