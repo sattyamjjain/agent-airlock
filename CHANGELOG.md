@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — CVE-2026-35394 Mobile MCP intent-URL guard preset (v0.8.8)
+
+`mobile_mcp_intent_guard_2026_05` — defensive bundle for **CVE-2026-35394**
+([SentinelOne](https://www.sentinelone.com/vulnerability-database/cve-2026-35394/)).
+Mobilenexthq Mobile MCP releases prior to **0.0.50** ship a
+`mobile_open_url` tool that forwards user-supplied URLs to Android's
+intent system without scheme validation, letting attackers fire
+`intent:` URIs, USSD codes, phone calls, SMS, and content-provider reads.
+The upstream fix is a scheme allowlist; this preset is the agent-airlock
+equivalent so callers don't have to wait for an upstream bump.
+
+- **`mobile_mcp_intent_guard_2026_05()`** + eagerly-constructed
+  `MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS` (`agent_airlock.policy_presets`):
+  returns a dict containing a pre-configured
+  `SafeURLValidator(allowed_schemes=["http", "https"])`, a `check_url`
+  callable, an `AirlockConfig(unknown_args=UnknownArgsMode.BLOCK)`, the
+  canonical Mobile MCP tool-name list
+  (`mobile_open_url`, `open_url`, `mobile_launch_url`), the documented
+  `blocked_schemes` tuple (`intent`, `content`, `file`, `app`, `data`,
+  `javascript`, `vbscript`), and the SentinelOne source link.
+- **DIFF-COMPATIBLE with `SafeURL`** — the preset reuses the existing
+  `SafeURLValidator` (no new validator invented). `SafeURLAllowHttp` would
+  also work; the preset adds the canonical tool-name corpus, the
+  `UnknownArgsMode.BLOCK` pairing, and the CVE citation.
+- New typed exception **`MobileMcpIntentBlocked`** (subclass of
+  `AirlockError`) for decorator-side wrapping.
+- 34 new regression tests in `tests/test_mobile_mcp_intent_guard_2026_05.py`
+  — every URL in the CVE-2026-35394 weaponization corpus (intent/content/
+  file/app/data/javascript/vbscript schemes) blocks; benign http(s) URLs
+  pass; SSRF defense-in-depth blocks private IPs (10.x/127.x/192.168.x)
+  and cloud metadata; end-to-end `@Airlock` integration verifies the
+  `UnknownArgsMode.BLOCK` seam closes hallucinated-kwarg smuggling.
+
+### Fixed — `SafeURLValidator.block_private_ips=True` was a no-op for RFC1918 ranges
+
+The validator's `except ValueError: pass` silently swallowed its own
+`SafeURLValidationError` raise (which subclasses `ValueError`), so
+`block_private_ips=True` only caught the four hard-coded localhost
+aliases — not actual private IPs like `10.0.0.5` / `172.16.x.x` /
+`192.168.x.x`. Surfaced by the CVE-2026-35394 regression corpus.
+One-line fix: hoist the IP-parse out of the `try/except` so the raise
+isn't caught. No public API change; tightens an existing SSRF gate.
+
 ### Added — Per-model-tier cost budgets with deny-by-default fallback (v0.8.7)
 
 `ModelTierBudget` — a new policy primitive that caps per-call cost AND/OR

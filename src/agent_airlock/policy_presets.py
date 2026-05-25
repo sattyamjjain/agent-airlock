@@ -65,6 +65,7 @@ from typing import TYPE_CHECKING, Any
 from .cost_tracking import ModelTierBudget, TierBudget
 from .exceptions import AirlockError
 from .policy import SecurityPolicy, StdioGuardConfig
+from .safe_types import SafeURLValidator
 
 if TYPE_CHECKING:
     from .capabilities import CapabilityPolicy
@@ -2635,6 +2636,135 @@ def strict_tier_budget_policy(
     return SecurityPolicy(model_tier_budget=budget)
 
 
+# -----------------------------------------------------------------------------
+# V0.8.8 — CVE-2026-35394 Mobile MCP intent-URL RCE guard
+# -----------------------------------------------------------------------------
+
+
+class MobileMcpIntentBlocked(AirlockError):
+    """Raised when a CVE-2026-35394 disallowed URL scheme is observed.
+
+    Subclass of :class:`AirlockError` so callers can ``except AirlockError:``
+    once across the agent-airlock surface. The preset's ``check_url``
+    helper raises the underlying :class:`SafeURLValidationError` (which
+    already carries ``url`` and ``reason``); this class exists for
+    decorator-side wrapping that wants a typed "blocked by this CVE preset"
+    distinction.
+    """
+
+
+# Schemes the Mobile MCP CVE-2026-35394 disclosure proves are
+# weaponizable when forwarded to Android's intent system. The preset
+# implements scheme-allowlisting (http + https only) — these names are
+# documented for visibility, not used as a blocklist (allowlists are
+# strictly safer).
+_MOBILE_MCP_BLOCKED_SCHEMES: tuple[str, ...] = (
+    "intent",  # Android intent: URI — the CVE's direct attack vector
+    "content",  # content-provider access (file read, SMS, contacts)
+    "file",  # local file disclosure
+    "app",  # deep-link to arbitrary installed app
+    "data",  # embedded payload (data:text/html,...)
+    "javascript",  # XSS-class via WebView
+    "vbscript",  # legacy IE — defense in depth
+)
+
+
+# Canonical tool names known to forward URLs to the Android intent system.
+# The vulnerable upstream is Mobilenexthq Mobile MCP < 0.0.50; ``open_url``
+# / ``mobile_launch_url`` are included for defensive coverage when callers
+# rename or wrap the original tool.
+_MOBILE_MCP_TOOL_NAMES: tuple[str, ...] = (
+    "mobile_open_url",
+    "open_url",
+    "mobile_launch_url",
+)
+
+
+# Pre-configured validator. ``allowed_schemes=["http", "https"]`` is the
+# entire fix — any other scheme is rejected at the validator boundary.
+# Block private IPs and metadata endpoints as defense in depth so an
+# allowlisted https URL still can't pivot to SSRF.
+_MOBILE_MCP_INTENT_VALIDATOR = SafeURLValidator(
+    allowed_schemes=["http", "https"],
+    block_private_ips=True,
+    block_metadata_urls=True,
+)
+
+
+def mobile_mcp_intent_guard_2026_05() -> dict[str, Any]:
+    """Defensive bundle for CVE-2026-35394 (Mobile MCP intent-URL RCE).
+
+    Mobilenexthq Mobile MCP releases prior to **0.0.50** ship a
+    ``mobile_open_url`` tool that forwards user-supplied URLs to
+    Android's intent system without any scheme validation. Attackers
+    weaponize this by sending ``intent:``/``content:``/``app:`` URLs
+    that fire arbitrary Android intents — USSD codes, phone calls,
+    SMS sends, content-provider reads. The upstream fix is a scheme
+    allowlist; this preset is the agent-airlock-side equivalent so
+    callers don't have to wait for an upstream bump.
+
+    The preset is **DIFF-COMPATIBLE** with the existing
+    :class:`~agent_airlock.SafeURLValidator` (it reuses it directly,
+    configured with ``allowed_schemes=["http", "https"]``) — no new
+    validator is introduced. It also returns an
+    :class:`~agent_airlock.AirlockConfig` with
+    ``unknown_args=UnknownArgsMode.BLOCK`` so an attacker can't smuggle
+    a hallucinated kwarg past the validator.
+
+    Returns:
+        ``dict[str, Any]`` with:
+
+        - ``validator`` — the pre-configured :class:`SafeURLValidator`.
+        - ``check_url`` — convenience callable; raises
+          :class:`~agent_airlock.SafeURLValidationError` on a denied
+          scheme / private IP / metadata host.
+        - ``airlock_config`` — an :class:`AirlockConfig` with
+          ``unknown_args=UnknownArgsMode.BLOCK``. Compose with your
+          tool's existing policy by passing ``config=...`` to
+          ``@Airlock``.
+        - ``tool_names`` — canonical Mobile MCP tool names this preset
+          targets.
+        - ``blocked_schemes`` — documented list of schemes the
+          allowlist denies (for telemetry / audit narrative).
+        - ``source`` — SentinelOne CVE database link.
+
+    Usage::
+
+        from agent_airlock import Airlock
+        from agent_airlock.policy_presets import mobile_mcp_intent_guard_2026_05
+
+        guard = mobile_mcp_intent_guard_2026_05()
+
+        @Airlock(config=guard["airlock_config"])
+        def mobile_open_url(url: str) -> str:
+            guard["check_url"](url)  # raises SafeURLValidationError on intent:
+            return open_url_native(url)
+
+    Primary source:
+      https://www.sentinelone.com/vulnerability-database/cve-2026-35394/
+    """
+    from .config import AirlockConfig
+    from .unknown_args import UnknownArgsMode
+
+    return {
+        "validator": _MOBILE_MCP_INTENT_VALIDATOR,
+        "check_url": _MOBILE_MCP_INTENT_VALIDATOR,  # __call__ raises on denied scheme
+        "airlock_config": AirlockConfig(unknown_args=UnknownArgsMode.BLOCK),
+        "tool_names": _MOBILE_MCP_TOOL_NAMES,
+        "blocked_schemes": _MOBILE_MCP_BLOCKED_SCHEMES,
+        "source": "https://www.sentinelone.com/vulnerability-database/cve-2026-35394/",
+    }
+
+
+MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS = mobile_mcp_intent_guard_2026_05()
+"""Eagerly-constructed defaults for :func:`mobile_mcp_intent_guard_2026_05`.
+
+Use the constant when you want a shared singleton (same ``validator``
+across call sites); call the factory when you need a fresh
+``AirlockConfig`` to mutate without aliasing.
+"""
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -2707,4 +2837,8 @@ __all__ = [
     # V0.8.7 per-model-tier cost budget
     "STRICT_MODEL_TIER_BUDGET",
     "strict_tier_budget_policy",
+    # V0.8.8 CVE-2026-35394 Mobile MCP intent guard
+    "mobile_mcp_intent_guard_2026_05",
+    "MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS",
+    "MobileMcpIntentBlocked",
 ]
