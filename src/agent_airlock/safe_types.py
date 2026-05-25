@@ -393,19 +393,25 @@ class SafeURLValidator:
                         reason="metadata_url",
                     )
 
-        # Check private IPs
+        # Check private IPs. NOTE: ``SafeURLValidationError`` is a
+        # ``ValueError`` subclass, so the IP-parse step is isolated to
+        # its own try/except — otherwise an ``except ValueError`` would
+        # silently swallow our own raise (CVE-2026-35394 regression
+        # corpus surfaced this — ``block_private_ips=True`` was a no-op
+        # for 10.x / 172.16-31.x / 192.168.x addresses).
         if self.block_private_ips:
             try:
-                ip = ipaddress.ip_address(hostname)
-                if ip.is_private or ip.is_loopback or ip.is_link_local:
-                    raise SafeURLValidationError(
-                        f"URL points to private/loopback/link-local IP: {hostname}",
-                        url=value,
-                        reason="private_ip",
-                    )
+                ip: ipaddress.IPv4Address | ipaddress.IPv6Address | None = ipaddress.ip_address(
+                    hostname
+                )
             except ValueError:
-                # Not an IP address, that's fine
-                pass
+                ip = None  # Not an IP literal — fine, fall through to host checks
+            if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local):
+                raise SafeURLValidationError(
+                    f"URL points to private/loopback/link-local IP: {hostname}",
+                    url=value,
+                    reason="private_ip",
+                )
 
             # Check for localhost aliases
             if hostname in ["localhost", "127.0.0.1", "::1", "0.0.0.0"]:  # nosec B104 - checking not binding

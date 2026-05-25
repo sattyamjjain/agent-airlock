@@ -421,16 +421,19 @@ from .policy_presets import (
     GTG_1002_DEFENSE,
     INDIA_DPDP_2023,
     MEX_GOV_2026,
+    MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS,
     OWASP_MCP_TOP_10_2026,
     STDIO_GUARD_OX_DEFAULTS,
     STRICT_MODEL_TIER_BUDGET,
     ArchivedMcpServerBlocked,
     GitPilotRepoPathInjection,
     HighValueActionBlocked,
+    MobileMcpIntentBlocked,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
     mex_gov_2026_policy,
+    mobile_mcp_intent_guard_2026_05,
     owasp_mcp_top_10_2026_policy,
     stdio_guard_ox_defaults,
     strict_tier_budget_policy,
@@ -565,7 +568,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.7"
+__version__ = "0.8.8"
 
 __all__ = [
     # Core
@@ -607,6 +610,10 @@ __all__ = [
     "StdioGuardConfig",
     "STDIO_GUARD_OX_DEFAULTS",
     "stdio_guard_ox_defaults",
+    # V0.8.8 CVE-2026-35394 Mobile MCP intent guard
+    "mobile_mcp_intent_guard_2026_05",
+    "MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS",
+    "MobileMcpIntentBlocked",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
     "AgentCommerceCapExceeded",
     "AgentCommerceCaps",
