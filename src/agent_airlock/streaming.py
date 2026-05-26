@@ -131,6 +131,7 @@ class StreamingAirlock:
             mask_pii=self.config.mask_pii,
             mask_secrets=self.config.mask_secrets,
             max_chars=None,  # Don't truncate individual chunks
+            pii_locales=self.config.pii_locales or None,
         )
 
         self._state.sanitized_count += result.detection_count

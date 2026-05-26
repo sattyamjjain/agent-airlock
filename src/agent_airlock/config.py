@@ -117,6 +117,14 @@ class AirlockConfig:
     # V0.4.1 Anomaly detection
     anomaly_config: AnomalyDetectorConfig | None = None
 
+    # V0.8.9 — opt-in locale tags for region-specific PII detection.
+    # An empty list (default) keeps the historical PII surface unchanged
+    # (US-shape email/phone/SSN/CC/IP). ``["in"]`` adds Aadhaar / PAN /
+    # UPI / IFSC / Devanagari name detection AND gates Aadhaar matches
+    # through a Verhoeff checksum (cuts false positives on random
+    # 12-digit numbers). Locale codes are lowercase ISO-3166-1 alpha-2.
+    pii_locales: list[str] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         """Apply environment variable overrides after initialization."""
         # E2B API key priority: env var > constructor > config file
@@ -234,6 +242,8 @@ class AirlockConfig:
             "endpoints",
             "anomaly",
             "credentials",
+            # V0.8.9 opt-in locale tags for region-specific PII
+            "pii_locales",
         }
 
         # SECURITY: Warn about unknown keys (likely typos)
@@ -289,6 +299,21 @@ class AirlockConfig:
         # Path fields
         if "audit_log_path" in data:
             result["audit_log_path"] = Path(data["audit_log_path"])
+
+        # V0.8.9 List-of-strings: opt-in PII locale tags.
+        if "pii_locales" in data:
+            raw_locales = data["pii_locales"]
+            if isinstance(raw_locales, (list, tuple)):
+                result["pii_locales"] = [str(x) for x in raw_locales]
+            elif isinstance(raw_locales, str):
+                # Permit a comma-separated string for convenience.
+                result["pii_locales"] = [s.strip() for s in raw_locales.split(",") if s.strip()]
+            else:
+                logger.warning(
+                    "invalid_pii_locales_type",
+                    type=type(raw_locales).__name__,
+                    hint="pii_locales must be a list of strings or comma-separated string.",
+                )
 
         # V0.3.0 nested config sections
         if "filesystem" in data:

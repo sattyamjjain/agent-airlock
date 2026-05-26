@@ -9,6 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Opt-in Indic PII masking: Verhoeff + Devanagari (v0.8.9)
+
+A new `pii_locales` opt-in tag on `sanitize_output()` / `mask_sensitive_data()`
+/ `detect_sensitive_data()` / `AirlockConfig`. Defaults to `[]` so the
+zero-dep, US-default PII surface is unchanged for existing callers. When
+`pii_locales=["in"]` is supplied, three things activate:
+
+1. **Aadhaar Verhoeff checksum gate.** The existing Aadhaar regex
+   (`\b[2-9][0-9]{3}[\s-]?[0-9]{4}[\s-]?[0-9]{4}\b`) is permissive —
+   any 12-digit number starting 2-9 matches. With the opt-in, each
+   match is validated against the UIDAI Verhoeff checksum (the same
+   algorithm UIDAI uses to compute the last digit). Cuts the FP rate
+   ~10x on random 12-digit IDs / phone numbers.
+2. **Devanagari personal-name detection** — new
+   `SensitiveDataType.PERSONAL_NAME_DEVANAGARI` enum member. Regex
+   matches sequences of 2+ Devanagari word characters (Unicode block
+   `U+0900–U+097F`), optionally joined by whitespace. A small
+   common-noun allowlist (greetings, pronouns, interrogatives, basic
+   connectives, copulas) filters obvious false positives — multi-word
+   spans where every token is in the allowlist are dropped. This is a
+   conservative heuristic, not NER; production callers who need precise
+   name extraction should layer a proper NER on top.
+3. **India PII auto-include in `sanitize_output(mask_pii=True)`**:
+   Aadhaar / PAN / UPI / IFSC / Devanagari are added to the default
+   masked types. Without the locale tag, callers must still pass
+   `types=[...]` explicitly to mask India-locale PII — that
+   behavior is unchanged.
+
+The existing Aadhaar / PAN / UPI / IFSC enum members, regex patterns,
+default mask strategies, and tests are **untouched** — the new gate
+is purely additive. Reuses the existing four masking strategies
+(`FULL` / `PARTIAL` / `TYPE_ONLY` / `HASH`); no new strategy.
+
+New public exports: `SensitiveDataType.PERSONAL_NAME_DEVANAGARI`,
+`AirlockConfig.pii_locales` field. The new `pii_locales` parameter on
+`detect_sensitive_data` / `mask_sensitive_data` / `sanitize_output` is
+keyword-only by convention (positional callers from before are unaffected).
+
+`pii_locales` is also accepted in TOML config (`pii_locales = ["in"]`
+or `pii_locales = "in,us"`).
+
+32 new tests in `tests/test_indic_pii_masking.py` cover: Verhoeff
+helper (valid / invalid / non-digit / mutation), Aadhaar locale gate
+(opt-in passes valid + drops invalid; no-opt-in keeps permissive
+behavior + separator normalization), Devanagari detection (single +
+multi-word names; common-noun allowlist FP filtering; mixed
+greeting+name spans), `sanitize_output` end-to-end with the locale
+extending the default PII set, full `@Airlock` integration via
+`AirlockConfig.pii_locales`, and backwards-compatibility (all old
+call shapes still work).
+
 ### Added — CVE-2026-35394 Mobile MCP intent-URL guard preset (v0.8.8)
 
 `mobile_mcp_intent_guard_2026_05` — defensive bundle for **CVE-2026-35394**
