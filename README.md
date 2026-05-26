@@ -413,6 +413,44 @@ def get_user(user_id: str) -> dict:
 
 **12 PII types detected** · **4 masking strategies** · **Zero data leakage**
 
+#### Opt-in regional PII (`pii_locales`)
+
+Aadhaar / PAN / UPI / IFSC have always shipped as `SensitiveDataType` members,
+but are not added to the default `mask_pii=True` set — to keep the surface
+zero-dep and US-shaped by default. **v0.8.9** adds a `pii_locales` opt-in
+that pulls them in *and* tightens detection:
+
+```python
+config = AirlockConfig(
+    mask_pii=True,
+    pii_locales=["in"],   # opt in to India-locale detection
+)
+
+@Airlock(config=config)
+def lookup(query: str) -> str:
+    return (
+        "User: राम कुमार, "
+        "Aadhaar: 234567890124, "       # → "23********24" (PARTIAL)
+        "PAN: ABCDE1234F, "             # → "AB******4F" (PARTIAL)
+        "phone: 555-123-4567"           # still masked by existing PHONE regex
+    )
+```
+
+Two things activate when `"in" in pii_locales`:
+
+- **Aadhaar Verhoeff checksum gate** — the existing Aadhaar regex is
+  permissive (any 12-digit number starting 2-9 matches). With the opt-in,
+  each match must also pass the UIDAI Verhoeff checksum, cutting the FP
+  rate ~10x on random IDs / phone numbers.
+- **Devanagari personal-name detection** — `PERSONAL_NAME_DEVANAGARI` runs
+  against the Unicode block `U+0900–U+097F`, with a small allowlist of
+  common Hindi greetings / pronouns / interrogatives to keep ordinary
+  prose from being masked. Conservative heuristic — production callers
+  who need precise extraction should layer NER on top.
+
+The flag is **additive and reversible** — `pii_locales=[]` (the default)
+preserves the prior behavior bit-for-bit.
+
 ---
 
 ### 🌐 Network Airgap (V0.3.0)

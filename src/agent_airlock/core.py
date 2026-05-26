@@ -500,6 +500,7 @@ class Airlock:
                     mask_pii=self.config.mask_pii,
                     mask_secrets=self.config.mask_secrets,
                     max_chars=max_chars,
+                    pii_locales=self.config.pii_locales or None,
                 )
 
                 sanitized_count = sanitization.detection_count

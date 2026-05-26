@@ -32,6 +32,7 @@ class SensitiveDataType(str, Enum):
     PAN = "pan"  # Indian Permanent Account Number
     UPI_ID = "upi_id"  # Unified Payments Interface ID
     IFSC = "ifsc"  # Indian Financial System Code
+    PERSONAL_NAME_DEVANAGARI = "personal_name_devanagari"  # v0.8.9 — Indic-script names
 
     # Secrets
     API_KEY = "api_key"
@@ -105,6 +106,11 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     SensitiveDataType.IFSC: re.compile(
         r"\b[A-Z]{4}0[A-Z0-9]{6}\b"  # 4 letters + 0 + 6 alphanumeric
     ),
+    # V0.8.9 Devanagari (Unicode U+0900–U+097F) personal-name span heuristic.
+    # Matches 2+ Devanagari word characters surrounded by word boundaries.
+    # The Hindi-noun allowlist further down filters common non-name words
+    # (greetings, pronouns, interrogatives) to cut false positives.
+    SensitiveDataType.PERSONAL_NAME_DEVANAGARI: re.compile(r"[ऀ-ॿ]{2,}(?:\s+[ऀ-ॿ]{2,})*"),
     # Secret Patterns
     SensitiveDataType.API_KEY: re.compile(
         r"\b(?:"
@@ -149,6 +155,7 @@ DEFAULT_MASK_CONFIG: dict[SensitiveDataType, MaskingStrategy] = {
     SensitiveDataType.PAN: MaskingStrategy.PARTIAL,  # Show first 2 + last 2
     SensitiveDataType.UPI_ID: MaskingStrategy.PARTIAL,  # Show @bank suffix
     SensitiveDataType.IFSC: MaskingStrategy.TYPE_ONLY,  # Bank codes are semi-public
+    SensitiveDataType.PERSONAL_NAME_DEVANAGARI: MaskingStrategy.PARTIAL,  # v0.8.9
     # Secrets
     SensitiveDataType.API_KEY: MaskingStrategy.PARTIAL,
     SensitiveDataType.AWS_KEY: MaskingStrategy.PARTIAL,
@@ -214,20 +221,187 @@ def _mask_value(
     return value[:3] + "***" + value[-3:]
 
 
+# --- V0.8.9 Indic PII helpers --------------------------------------------
+# The two arrays below are the standard Verhoeff dihedral-group tables.
+# Provided in canonical form so the algorithm reads identically to the
+# reference; no symmetry shortcuts. Verhoeff is the algorithm UIDAI uses
+# to generate Aadhaar's last digit — a checksum gate cuts the regex's
+# false-positive rate (any 12-digit number starting 2-9 currently passes
+# the bare regex; only ~1 in 10 of those pass Verhoeff).
+_VERHOEFF_D: tuple[tuple[int, ...], ...] = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+    (1, 2, 3, 4, 0, 6, 7, 8, 9, 5),
+    (2, 3, 4, 0, 1, 7, 8, 9, 5, 6),
+    (3, 4, 0, 1, 2, 8, 9, 5, 6, 7),
+    (4, 0, 1, 2, 3, 9, 5, 6, 7, 8),
+    (5, 9, 8, 7, 6, 0, 4, 3, 2, 1),
+    (6, 5, 9, 8, 7, 1, 0, 4, 3, 2),
+    (7, 6, 5, 9, 8, 2, 1, 0, 4, 3),
+    (8, 7, 6, 5, 9, 3, 2, 1, 0, 4),
+    (9, 8, 7, 6, 5, 4, 3, 2, 1, 0),
+)
+_VERHOEFF_P: tuple[tuple[int, ...], ...] = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+    (1, 5, 7, 6, 2, 8, 3, 0, 9, 4),
+    (5, 8, 0, 3, 7, 9, 6, 1, 4, 2),
+    (8, 9, 1, 6, 0, 4, 3, 5, 2, 7),
+    (9, 4, 5, 3, 1, 2, 6, 8, 7, 0),
+    (4, 2, 8, 6, 5, 7, 3, 9, 0, 1),
+    (2, 7, 9, 3, 8, 0, 6, 4, 1, 5),
+    (7, 0, 4, 6, 9, 1, 3, 2, 5, 8),
+)
+
+
+def _verhoeff_check(num: str) -> bool:
+    """Return True if ``num`` (a digits-only string) passes Verhoeff.
+
+    Reference: Verhoeff, J. (1969) "Error Detecting Decimal Codes".
+    Used by UIDAI for Aadhaar's last-digit checksum. The function is
+    deliberately tolerant of input length — Aadhaar is 12 digits but
+    the algorithm itself works for any length.
+    """
+    if not num.isdigit():
+        return False
+    c = 0
+    for i, ch in enumerate(reversed(num)):
+        c = _VERHOEFF_D[c][_VERHOEFF_P[i % 8][int(ch)]]
+    return c == 0
+
+
+# Common high-frequency Devanagari tokens that are NOT personal names.
+# This list is intentionally small — it covers the most-likely false
+# positives (greetings, pronouns, common interrogatives, basic
+# connectives) so the heuristic doesn't mask every line of Hindi prose.
+# Production callers who need a proper NER should layer one on top.
+_DEVANAGARI_NON_NAME_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # Greetings / pleasantries
+        "नमस्ते",
+        "नमस्कार",
+        "धन्यवाद",
+        "शुभ",
+        "स्वागत",
+        # Yes/no
+        "हाँ",
+        "हां",
+        "जी",
+        "नहीं",
+        # Pronouns
+        "मैं",
+        "हम",
+        "तुम",
+        "आप",
+        "वह",
+        "वे",
+        "यह",
+        "ये",
+        # Interrogatives
+        "क्या",
+        "कौन",
+        "कब",
+        "कहाँ",
+        "कैसे",
+        "क्यों",
+        "कितना",
+        "कितने",
+        # Connectives / particles
+        "और",
+        "या",
+        "लेकिन",
+        "किन्तु",
+        "परन्तु",
+        "अगर",
+        "तो",
+        "भी",
+        "ही",
+        # Common verbs / copulas
+        "है",
+        "हैं",
+        "था",
+        "थी",
+        "थे",
+        "होगा",
+        "होगी",
+        "होंगे",
+        # Common nouns
+        "नाम",
+        "घर",
+        "देश",
+        "दिन",
+        "रात",
+        "समय",
+        "साल",
+        "महीना",
+        # Quality adjectives
+        "अच्छा",
+        "अच्छी",
+        "बुरा",
+        "बुरी",
+        "बड़ा",
+        "बड़ी",
+        "छोटा",
+        "छोटी",
+    }
+)
+
+
+def _filter_devanagari_non_names(value: str) -> bool:
+    """Return True if a Devanagari match should be KEPT as a name.
+
+    Filters out tokens whose every word is in the common-noun allowlist;
+    a multi-word span keeps if even one word is unrecognized (likely a
+    proper noun). Single-word matches are kept unless they're in the
+    allowlist.
+    """
+    words = value.split()
+    if not words:
+        return False
+    # Drop if every word is a known non-name token
+    return not all(w in _DEVANAGARI_NON_NAME_ALLOWLIST for w in words)
+
+
+def _normalize_pii_locales(locales: list[str] | None) -> frozenset[str]:
+    """Coerce ``pii_locales`` to a normalized frozenset of lowercase codes."""
+    if not locales:
+        return frozenset()
+    return frozenset(loc.strip().lower() for loc in locales if loc)
+
+
+# India-locale types that ``sanitize_output`` adds to the default PII set
+# when ``pii_locales=["in"]`` is supplied. Existing callers who manually
+# pass ``types=[...]`` continue to work unchanged.
+_INDIA_LOCALE_PII_TYPES: tuple[SensitiveDataType, ...] = (
+    SensitiveDataType.AADHAAR,
+    SensitiveDataType.PAN,
+    SensitiveDataType.UPI_ID,
+    SensitiveDataType.IFSC,
+    SensitiveDataType.PERSONAL_NAME_DEVANAGARI,
+)
+
+
 def detect_sensitive_data(
     content: str,
     types: list[SensitiveDataType] | None = None,
+    pii_locales: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Detect sensitive data in content.
 
     Args:
         content: Text content to scan.
         types: Types of sensitive data to detect. If None, detect all.
+        pii_locales: V0.8.9 opt-in locale tags. When ``"in"`` is included,
+            Aadhaar matches are filtered through a Verhoeff checksum
+            (cuts false positives) and Devanagari name matches are
+            filtered against the common-noun allowlist. Locale-gating is
+            additive and does NOT change behavior for callers that pass
+            ``types`` explicitly without the locale flag.
 
     Returns:
         List of detection dictionaries with type, value, and position.
     """
     types = types or list(SensitiveDataType)
+    locales = _normalize_pii_locales(pii_locales)
+    indic_gate = "in" in locales
     detections: list[dict[str, Any]] = []
 
     for data_type in types:
@@ -241,6 +415,23 @@ def detect_sensitive_data(
                 value = match.group(1) if match.lastindex else match.group(0)
             else:
                 value = match.group(0)
+
+            # V0.8.9: Aadhaar Verhoeff gate (opt-in). When the caller
+            # signals India locale, drop matches that don't pass
+            # the UIDAI Verhoeff checksum.
+            if indic_gate and data_type == SensitiveDataType.AADHAAR:
+                digits_only = re.sub(r"[\s-]", "", value)
+                if not _verhoeff_check(digits_only):
+                    continue
+
+            # V0.8.9: Devanagari name allowlist (opt-in). Drop matches
+            # that are entirely common Hindi non-name tokens.
+            if (
+                indic_gate
+                and data_type == SensitiveDataType.PERSONAL_NAME_DEVANAGARI
+                and not _filter_devanagari_non_names(value)
+            ):
+                continue
 
             detections.append(
                 {
@@ -261,6 +452,7 @@ def mask_sensitive_data(
     content: str,
     types: list[SensitiveDataType] | None = None,
     mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
+    pii_locales: list[str] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Mask sensitive data in content.
 
@@ -268,12 +460,16 @@ def mask_sensitive_data(
         content: Text content to sanitize.
         types: Types of sensitive data to mask. If None, mask all.
         mask_config: Masking strategy per type. Uses defaults if not provided.
+        pii_locales: V0.8.9 opt-in locale tags (forwarded to
+            :func:`detect_sensitive_data`). When ``"in"`` is present,
+            Aadhaar matches are Verhoeff-validated and Devanagari name
+            matches are filtered through the common-noun allowlist.
 
     Returns:
         Tuple of (masked_content, list of detections).
     """
     mask_config = mask_config or DEFAULT_MASK_CONFIG
-    detections = detect_sensitive_data(content, types)
+    detections = detect_sensitive_data(content, types, pii_locales=pii_locales)
 
     if not detections:
         return content, []
@@ -349,6 +545,7 @@ def sanitize_output(
     mask_secrets: bool = True,
     max_chars: int | None = None,
     mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
+    pii_locales: list[str] | None = None,
 ) -> SanitizationResult:
     """Sanitize output content.
 
@@ -360,6 +557,14 @@ def sanitize_output(
         mask_secrets: If True, mask secrets (API keys, passwords, etc.).
         max_chars: Maximum output length. None for no limit.
         mask_config: Custom masking strategies per type.
+        pii_locales: V0.8.9 opt-in locale tags. When ``"in"`` is present
+            and ``mask_pii=True``, Aadhaar / PAN / UPI / IFSC / Devanagari
+            name detection is added to the default PII set. The Aadhaar
+            regex is gated with a Verhoeff checksum (cuts false positives
+            on random 12-digit numbers) and Devanagari matches are
+            filtered against a small common-noun allowlist. Existing
+            callers that did not pass this argument get exactly the
+            previous behavior — defaults are unchanged.
 
     Returns:
         SanitizationResult with sanitized content and metadata.
@@ -391,6 +596,12 @@ def sanitize_output(
                 SensitiveDataType.IP_ADDRESS,
             ]
         )
+        # V0.8.9: India locale opt-in. ``pii_locales=["in"]`` extends
+        # the default PII set with Aadhaar / PAN / UPI / IFSC and the
+        # new Devanagari name detector. Aadhaar matches are then
+        # Verhoeff-gated inside ``detect_sensitive_data``.
+        if "in" in _normalize_pii_locales(pii_locales):
+            types_to_mask.extend(_INDIA_LOCALE_PII_TYPES)
 
     if mask_secrets:
         types_to_mask.extend(
@@ -406,7 +617,9 @@ def sanitize_output(
 
     # Mask sensitive data
     if types_to_mask:
-        text, detections = mask_sensitive_data(text, types_to_mask, mask_config)
+        text, detections = mask_sensitive_data(
+            text, types_to_mask, mask_config, pii_locales=pii_locales
+        )
 
         if detections:
             logger.info(
