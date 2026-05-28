@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.8.10"
+version = "0.8.11"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -47,6 +47,14 @@ dependencies = [
 [project.optional-dependencies]
 sandbox = [
     "e2b>=1.0,<2.0",
+    "cloudpickle>=3.0",
+]
+# Modal-backed sandbox (v0.8.11+, issue #30).
+# Install with: pip install "agent-airlock[modal]"
+# Pulls the Modal Python SDK + cloudpickle (the latter is also in
+# [sandbox]; pip dedupes when both extras are requested).
+modal = [
+    "modal>=0.65",
     "cloudpickle>=3.0",
 ]
 mcp = [
@@ -123,6 +131,11 @@ dev = [
     "safety>=3.0",
     # SBOM generation
     "cyclonedx-bom>=4.0",
+    # Required by the sandbox-backend test paths (E2B happy-path,
+    # ModalBackend mocked-execute). Without this, the post-import
+    # branches in sandbox_backend.execute() get skipped on bare
+    # `[dev]` installs and CI loses real coverage on them.
+    "cloudpickle>=3.0",
 ]
 docs = [
     "mkdocs>=1.5",
@@ -236,6 +249,8 @@ module = [
     "pydantic_ai.*",
     "crewai",
     "crewai.*",
+    "modal",
+    "modal.*",
 ]
 ignore_missing_imports = true
 
