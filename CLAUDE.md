@@ -13,11 +13,11 @@
 - RBAC policy engine (rate limits, time windows, role-based access)
 - PII/secret detection and masking (12 types including India PII)
 - FastMCP integration with `@secure_tool` decorator
-- V0.3.0: Filesystem validation, network egress control, honeypot deception, framework vaccination
-- V0.4.0: Circuit breaker, cost tracking, retry policies, OpenTelemetry observability, capability gating
-
-**Stats:** ~27,400 lines of code | 1362 tests | 81%+ coverage (enforced at 80% in CI)
-**Version:** 0.5.0 "April 2026"
+- Filesystem validation, network egress control, honeypot deception, framework vaccination ("Vaccine")
+- Circuit breaker, cost tracking, retry policies, OpenTelemetry observability, capability gating ("Enterprise")
+- Anomaly detection, human-oversight gating, identity/attestation, SDK provenance classification
+- Curated security presets (`policy_presets.py` + `preset_loader.py`) and a regression corpus block-rate harness
+- Redis-backed distributed rate limiting and per-model-tier cost budgets
 
 <!-- END AUTO-MANAGED -->
 
@@ -59,55 +59,79 @@ python examples/fastmcp_integration.py
 
 ```
 src/agent_airlock/
-├── __init__.py         # Public API exports (200+ symbols)
-├── core.py             # @Airlock decorator - main entry point (1003 lines)
+├── __init__.py         # Public API exports
+├── core.py             # @Airlock decorator — main entry point
 │                       └─ Ghost args, validation, sandbox, policies, capabilities
 │                       └─ Full async/await support, context propagation
+├── config.py           # Config loading (env > constructor > airlock.toml)
+├── exceptions.py       # Custom exception hierarchy
 │
 ├── ── VALIDATION LAYER ──
 ├── validator.py        # Ghost argument detection + Pydantic strict validation
-├── unknown_args.py     # V0.4.0 BLOCK/STRIP_AND_LOG/STRIP_SILENT modes
+├── unknown_args.py     # BLOCK / STRIP_AND_LOG / STRIP_SILENT modes
 ├── safe_types.py       # SafePath, SafeURL with auto-validation
+├── self_heal.py        # Self-healing error responses with fix_hints
 │
 ├── ── POLICY LAYER ──
 ├── policy.py           # SecurityPolicy, RBAC, RateLimit (token bucket)
-├── capabilities.py     # V0.4.0 Capability gating (Flag enum)
+├── policy_presets.py   # Curated security presets (e.g. CAMOUFLAGE_RESISTANT,
+│                       │   mobile_mcp_intent_guard, MCP_STDIO_INJECTION_GUARD)
+├── preset_loader.py    # Loader for versioned YAML/TOML preset bundles
+├── capabilities.py     # Capability gating (Flag enum, @requires decorator)
+├── oversight.py        # @requires_human_oversight (Code-as-Harness anchor)
+├── identity.py         # Agent identity + attestation receipts
+├── redis_rate_limit.py # Redis-backed distributed rate limiting
 │
 ├── ── EXECUTION LAYER ──
 ├── sandbox.py          # E2B Firecracker MicroVM integration
-├── sandbox_backend.py  # V0.4.0 Pluggable backends (E2B/Docker/Local)
-├── streaming.py        # StreamingAirlock for generators
+├── sandbox_backend.py  # Pluggable backends (E2B / Docker / Local)
+├── streaming.py        # StreamingAirlock for generators (sync + async)
 ├── context.py          # AirlockContext with contextvars
-├── conversation.py     # Multi-turn state tracking
-│
-├── ── SANITIZATION LAYER ──
-├── sanitizer.py        # PII/secret detection (12 types, 4 strategies)
-│
-├── ── V0.3.0 "VACCINE" FEATURES ──
-├── filesystem.py       # Path validation (CVE-resistant)
-├── network.py          # Egress control (socket monkeypatch)
-├── honeypot.py         # Deception protocol (fake success data)
-├── vaccine.py          # Framework injection (LangChain/OpenAI auto-wrap)
-│
-├── ── V0.4.0 "ENTERPRISE" FEATURES ──
-├── circuit_breaker.py  # Fault tolerance pattern (CLOSED/OPEN/HALF_OPEN)
-├── cost_tracking.py    # Token usage + budget limits
+├── conversation.py     # Multi-turn state + conversation constraints
+├── circuit_breaker.py  # Fault tolerance (CLOSED / OPEN / HALF_OPEN)
 ├── retry.py            # Exponential backoff + jitter
-├── observability.py    # OpenTelemetry spans/metrics
-├── audit_otel.py       # OTel audit export
-├── mcp_proxy_guard.py  # Token passthrough prevention
 │
-├── ── INTEGRATIONS ──
-├── integrations/
-│   ├── langchain.py    # LangChain @tool wrapper
-│   ├── anthropic.py    # Anthropic SDK ToolRegistry
-│   └── openai_guardrails.py # OpenAI Agents SDK bridge
+├── ── SANITIZATION / OBSERVABILITY ──
+├── sanitizer.py        # PII / secret detection + masking (incl. Indic PII)
+├── audit.py            # JSON Lines audit log (thread-safe)
+├── audit_otel.py       # OpenTelemetry audit exporter
+├── observability.py    # OTel spans + metrics
+├── cost_tracking.py    # Token usage + per-model-tier budget limits
 │
-├── mcp.py              # FastMCP integration
+├── ── "VACCINE" FEATURES ──
+├── filesystem.py       # CVE-resistant path validation
+├── network.py          # Egress control (socket monkeypatch, thread-local)
+├── honeypot.py         # Deception protocol (fake-success responses)
+├── vaccine.py          # Framework auto-wrap (LangChain / OpenAI @tool)
+├── camouflage_resistant.py  # Debate-amplification + camouflage guard
 │
-└── cli/                # CLI tools
-    ├── doctor.py       # airlock doctor command
-    └── verify.py       # airlock verify command
+├── ── ADVERSARIAL / CORPUS ──
+├── anomaly.py          # Behavioral anomaly detection
+├── regression_corpus.py # Block-rate regression corpus (Metis-inspired)
+├── sdk_provenance.py   # Stainless SDK provenance classifier
+├── a2a.py              # Agent-to-Agent protocol guard
+├── mcp_proxy_guard.py  # Token-passthrough prevention
+├── testing.py          # Test helpers / fixtures
+│
+├── mcp.py              # FastMCP @secure_tool integration
+│
+├── integrations/       # Framework adapters
+│   ├── langchain.py, langgraph_toolnode_compat.py, lc_040_fixture_migration.py
+│   ├── anthropic.py, anthropic_claude_agent_sdk.py
+│   ├── claude_managed_agents.py, managed_agents_outcomes_guard.py
+│   ├── claude_task_budget.py, claude_auto_memory.py
+│   ├── openai_guardrails.py, gpt5_5_tool_shape_adapter.py
+│   ├── gemini3_tool_shape_adapter.py, pydantic_ai.py
+│   ├── crewai.py, smolagents_wrapper.py
+│   ├── model_armor.py, model_tier.py, log_redaction.py
+│   ├── agent_commerce_caps.py
+│   ├── cisco_ide_scanner_bridge.py, cloudflare_mesh_probe.py
+│
+└── cli/                # `airlock <subcommand>` CLI surface
+    ├── doctor.py, verify.py, console.py
+    ├── attest.py, manifest.py, baseline.py, policy.py
+    ├── pack.py, graph.py, replay.py, studio.py
+    ├── corpus_bench.py, egress_bench.py, kill_switch.py
 ```
 
 **Data Flow:**
@@ -161,10 +185,15 @@ src/agent_airlock/
 - **Policy Resolver:** Dynamic policies via `Callable[[AirlockContext], SecurityPolicy]`
 - **Streaming Sanitization:** Per-chunk validation with cumulative truncation
 - **Conversation State:** Multi-turn tracking with budget management (ConversationConstraints)
-- **Circuit Breaker:** CLOSED → OPEN → HALF_OPEN states for fault tolerance (V0.4.0)
-- **Framework Vaccination:** Monkeypatch `@tool` decorators via `vaccinate()` (V0.3.0)
-- **Honeypot Deception:** Return fake success data instead of errors (V0.3.0)
+- **Circuit Breaker:** CLOSED → OPEN → HALF_OPEN states for fault tolerance
+- **Framework Vaccination:** Monkeypatch `@tool` decorators via `vaccinate()`
+- **Honeypot Deception:** Return fake success data instead of errors
 - **Signature Preservation:** Copy `__signature__`, `__annotations__` for framework introspection
+- **Curated Presets:** CVE-targeted bundles loaded via `preset_loader` (e.g. `mobile_mcp_intent_guard_2026_05`)
+- **Human Oversight Anchor:** `@requires_human_oversight` gates tool execution on out-of-band approval
+- **Attestation Receipts:** Identity + LayerContract (assume/guarantee) receipts on `airlock attest`
+- **Regression Corpus:** Block-rate harness with per-category coverage (`airlock corpus-bench`)
+- **Tier-Aware Budgets:** Per-model-tier cost limits with deny-by-default fallback
 
 <!-- END AUTO-MANAGED -->
 
@@ -172,22 +201,31 @@ src/agent_airlock/
 ## Git Insights
 
 Recent commits:
-- `3f02298` fix: resolve additional mypy errors (jwt, langchain)
-- `d754b28` fix: resolve all mypy type errors for CI
-- `c253dd5` fix: resolve all ruff lint errors for CI
-- `1c47174` fix: resolve CI failures - bandit security warnings and import sorting
-- `8a3939e` feat: v0.4.0 "Enterprise" - Production-ready security platform
-- `4b5fe16` feat: v0.2.0 - Security hardening and production roadmap
+- `0be2e57` feat(sanitizer): opt-in Indic PII masking (Verhoeff + Devanagari) (#69)
+- `d7be9ff` feat(presets): mobile_mcp_intent_guard_2026_05 for CVE-2026-35394 (#68)
+- `e98f724` feat(policy): per-model-tier cost budgets with deny-by-default fallback (#67)
+- `7c37e83` feat: CAMOUFLAGE_RESISTANT preset + debate-amplification guard
+- `757f0d7` feat: opt-in LayerContract (assume/guarantee) block on attest receipts (#66)
+- `0d26f98` feat: @requires_human_oversight decorator (Code-as-Harness anchor) (#65)
+- `7a7c17b` feat: Stainless SDK provenance classifier + corpus per-category coverage (#64)
+- `ac7cce2` feat: Metis-inspired corpus block-rate regression + `airlock corpus-bench` CLI (#63)
+- `802f4f9` feat: OpenAPI Drift Guard (Hermes 2026-05-13) + MCP Calc-Server bundle preset (#62)
+- `1c63eae` feat: Eval-RCE (CVE-2026-44717) + MCP Inspector runtime scan (CVE-2026-23744) (#61)
 
 Key security additions:
-- `sandbox_required=True` parameter prevents unsafe local execution fallback
+- `sandbox_required=True` prevents unsafe local execution fallback
 - Sensitive parameter names filtered from debug logs
-- Path validation (CVE-resistant using `os.path.commonpath()`)
+- Path validation (CVE-resistant via `os.path.commonpath()`)
 - Network egress control via socket monkeypatch with thread-local storage
 - Capability gating with `@requires(Capability.*)` decorator
-- Circuit breaker for fault tolerance
-- MCP Proxy Guard for token passthrough prevention
-- OpenTelemetry observability integration
+- `@requires_human_oversight` decorator as a Code-as-Harness anchor
+- Circuit breaker for fault tolerance; MCP Proxy Guard for token passthrough
+- OpenTelemetry observability + audit exporter
+- Curated CVE-targeted presets (mobile MCP intent guard, MCP STDIO injection, OpenAPI drift, MCP Inspector runtime scan, Eval-RCE)
+- Regression corpus block-rate harness (per-category coverage) via `airlock corpus-bench`
+- LayerContract (assume/guarantee) attestation receipts
+- Per-model-tier cost budgets with deny-by-default fallback
+- Stainless SDK provenance classifier
 
 <!-- END AUTO-MANAGED -->
 
