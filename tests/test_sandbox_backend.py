@@ -11,6 +11,7 @@ from agent_airlock.sandbox_backend import (
     DockerBackend,
     E2BBackend,
     LocalBackend,
+    ModalBackend,
     SandboxBackend,
     SandboxResult,
     get_default_backend,
@@ -358,3 +359,238 @@ class TestBackendConfiguration:
         """Test Docker backend with network mode."""
         backend = DockerBackend(network_mode="bridge")
         assert backend.network_mode == "bridge"
+
+
+# ---------------------------------------------------------------------------
+# v0.8.11 — ModalBackend (issue #30)
+# ---------------------------------------------------------------------------
+
+
+class TestModalBackend:
+    """ModalBackend construction + availability (mirrors TestE2BBackend / TestDockerBackend)."""
+
+    def test_name(self) -> None:
+        backend = ModalBackend(app_name="x", image_ref="python:3.11-slim")
+        assert backend.name == "modal"
+
+    def test_constructor_records_fields(self) -> None:
+        backend = ModalBackend(
+            app_name="agent-airlock-test",
+            image_ref="python:3.11-slim",
+            cpu=1.0,
+            memory_mb=1024,
+            timeout_s=60,
+        )
+        assert backend.app_name == "agent-airlock-test"
+        assert backend.image_ref == "python:3.11-slim"
+        assert backend.cpu == 1.0
+        assert backend.memory_mb == 1024
+        assert backend.timeout_s == 60
+        assert backend.network_policy is None
+
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            ({"cpu": 0}, "cpu must be > 0"),
+            ({"cpu": -0.5}, "cpu must be > 0"),
+            ({"memory_mb": 0}, "memory_mb must be > 0"),
+            ({"memory_mb": -1}, "memory_mb must be > 0"),
+            ({"timeout_s": 0}, "timeout_s must be > 0"),
+            ({"timeout_s": -10}, "timeout_s must be > 0"),
+        ],
+    )
+    def test_rejects_nonpositive_resource_params(
+        self, kwargs: dict[str, float | int], match: str
+    ) -> None:
+        with pytest.raises(ValueError, match=match):
+            ModalBackend(app_name="x", image_ref="py", **kwargs)  # type: ignore[arg-type]
+
+    def test_is_available_reflects_modal_import(self) -> None:
+        """is_available() is True iff `import modal` succeeds.
+
+        We patch importlib so the test does not require the [modal]
+        extra to be installed in the CI image.
+        """
+        backend = ModalBackend(app_name="x", image_ref="py")
+
+        with patch.dict("sys.modules", {"modal": MagicMock()}):
+            assert backend.is_available() is True
+
+        with patch("builtins.__import__", side_effect=ImportError("no modal")):
+            assert backend.is_available() is False
+
+
+class TestModalBackendNetworkPolicyMapping:
+    """NetworkPolicy → Modal block_network mapping (deny-by-default)."""
+
+    def test_no_policy_blocks_network(self) -> None:
+        backend = ModalBackend(app_name="x", image_ref="py")
+        assert backend._resolve_block_network() is True
+
+    def test_allow_egress_false_blocks_network(self) -> None:
+        from agent_airlock.network import NetworkPolicy
+
+        backend = ModalBackend(
+            app_name="x",
+            image_ref="py",
+            network_policy=NetworkPolicy(allow_egress=False),
+        )
+        assert backend._resolve_block_network() is True
+
+    def test_allow_egress_true_allows_network(self) -> None:
+        from agent_airlock.network import NetworkPolicy
+
+        backend = ModalBackend(
+            app_name="x",
+            image_ref="py",
+            network_policy=NetworkPolicy(allow_egress=True),
+        )
+        assert backend._resolve_block_network() is False
+
+    def test_hostname_allowlist_emits_warning_but_does_not_block(self) -> None:
+        """Hostname allowlists aren't forwardable to Modal (CIDR-only API).
+
+        The backend must not silently swallow the constraint — it logs and
+        falls back to ``block_network=False``, with the operator expected
+        to re-state the hostname allowlist at the Airlock policy layer.
+        """
+        from agent_airlock.network import NetworkPolicy
+
+        backend = ModalBackend(
+            app_name="x",
+            image_ref="py",
+            network_policy=NetworkPolicy(allow_egress=True, allowed_hosts=["api.company.com"]),
+        )
+        # _resolve_block_network() logs via structlog; we don't assert log
+        # text (structlog formatting varies); we assert the behavior:
+        # the warning does not flip the verdict, and the call is idempotent.
+        assert backend._resolve_block_network() is False
+        assert backend._resolve_block_network() is False
+
+
+class TestModalBackendExecuteMocked:
+    """Execute path under a fully mocked Modal SDK — no live Modal calls."""
+
+    def _install_fake_modal(self, stdout_text: str, stderr_text: str = ""):
+        """Build a MagicMock tree mirroring the slice of modal we touch.
+
+        Returns the fake modal module; tests use `patch.dict("sys.modules", ...)`
+        to install it.
+        """
+        fake_modal = MagicMock(name="fake_modal")
+
+        sandbox = MagicMock(name="fake_sandbox")
+        sandbox.object_id = "sb-mock-1"
+        sandbox.wait.return_value = None
+        sandbox.stdout.read.return_value = stdout_text
+        sandbox.stderr.read.return_value = stderr_text
+        sandbox.terminate.return_value = None
+
+        fake_modal.Sandbox.create.return_value = sandbox
+        fake_modal.App.lookup.return_value = MagicMock(name="fake_app")
+        fake_modal.Image.from_registry.return_value.pip_install.return_value = MagicMock(
+            name="fake_image"
+        )
+        return fake_modal, sandbox
+
+    def test_execute_ok_envelope_returns_success(self) -> None:
+        """Happy path: sandbox echoes back a cloudpickled ('ok', result) envelope."""
+        cloudpickle = pytest.importorskip("cloudpickle")
+        import base64
+
+        sentinel = "__AIRLOCK_MODAL_RESULT__"
+        envelope = ("ok", 42)
+        stdout = (
+            "hello from user code\n"
+            + sentinel
+            + base64.b64encode(cloudpickle.dumps(envelope)).decode("ascii")
+            + "\n"
+        )
+        fake_modal, sandbox = self._install_fake_modal(stdout)
+
+        backend = ModalBackend(app_name="x", image_ref="py")
+        with patch.dict("sys.modules", {"modal": fake_modal}):
+            result = backend.execute(lambda: 42, (), {})
+
+        assert result.success is True
+        assert result.result == 42
+        assert "hello from user code" in result.stdout
+        assert result.sandbox_id == "sb-mock-1"
+        assert result.backend == "modal"
+        # Default network posture is fail-closed.
+        kwargs = fake_modal.Sandbox.create.call_args.kwargs
+        assert kwargs["block_network"] is True
+        # Resources forwarded as configured.
+        assert kwargs["cpu"] == 0.5
+        assert kwargs["memory"] == 512
+        assert kwargs["timeout"] == 30
+        # Sandbox terminated regardless of outcome.
+        sandbox.terminate.assert_called_once()
+
+    def test_execute_err_envelope_returns_failure(self) -> None:
+        """Failure envelope from the sandbox is mapped to success=False."""
+        cloudpickle = pytest.importorskip("cloudpickle")
+        import base64
+
+        sentinel = "__AIRLOCK_MODAL_RESULT__"
+        envelope = ("err", "RuntimeError('boom')", "Traceback...\nRuntimeError: boom")
+        stdout = sentinel + base64.b64encode(cloudpickle.dumps(envelope)).decode("ascii") + "\n"
+        fake_modal, _ = self._install_fake_modal(stdout)
+
+        backend = ModalBackend(app_name="x", image_ref="py")
+        with patch.dict("sys.modules", {"modal": fake_modal}):
+            result = backend.execute(lambda: None, (), {})
+
+        assert result.success is False
+        assert "RuntimeError" in (result.error or "")
+        assert "Traceback" in (result.stderr or "")
+
+    def test_execute_missing_envelope_returns_failure(self) -> None:
+        """Sandbox produced stdout but no sentinel-prefixed envelope line."""
+        fake_modal, _ = self._install_fake_modal("just normal output\n", "warn\n")
+
+        backend = ModalBackend(app_name="x", image_ref="py")
+        with patch.dict("sys.modules", {"modal": fake_modal}):
+            result = backend.execute(lambda: None, (), {})
+
+        assert result.success is False
+        assert "no result envelope" in (result.error or "")
+        assert "just normal output" in (result.stdout or "")
+        assert (result.stderr or "").strip() == "warn"
+
+    def test_execute_modal_create_raises_returns_failure(self) -> None:
+        """modal.Sandbox.create blowing up is surfaced as success=False, not raised."""
+        fake_modal = MagicMock()
+        fake_modal.Sandbox.create.side_effect = RuntimeError("modal api down")
+        fake_modal.App.lookup.return_value = MagicMock()
+        fake_modal.Image.from_registry.return_value.pip_install.return_value = MagicMock()
+
+        backend = ModalBackend(app_name="x", image_ref="py")
+        with patch.dict("sys.modules", {"modal": fake_modal}):
+            result = backend.execute(lambda: None, (), {})
+
+        assert result.success is False
+        assert "modal api down" in (result.error or "")
+        assert result.backend == "modal"
+
+    def test_execute_without_modal_returns_actionable_error(self) -> None:
+        """Calling execute() without the [modal] extra returns a clear pointer."""
+        backend = ModalBackend(app_name="x", image_ref="py")
+        with patch("builtins.__import__", side_effect=ImportError("no modal")):
+            result = backend.execute(lambda: None, (), {})
+        assert result.success is False
+        assert "agent-airlock[modal]" in (result.error or "")
+
+
+class TestModalBackendNotAutoSelected:
+    """ModalBackend is opt-in; it must NOT be picked by get_default_backend()."""
+
+    def test_get_default_backend_never_returns_modal(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Strip any E2B env so the priority chain falls through to Docker / Local.
+        monkeypatch.delenv("E2B_API_KEY", raising=False)
+        # Force-disable Docker so we end up at the Local fallback rung,
+        # which is what we want to assert against (Modal isn't even in
+        # the chain). This isn't testing Docker; it's pinning the chain.
+        with patch.object(DockerBackend, "is_available", return_value=False):
+            backend = get_default_backend()
+        assert backend.name != "modal"

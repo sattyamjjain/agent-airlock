@@ -39,6 +39,7 @@ import structlog
 
 if TYPE_CHECKING:
     from .config import AirlockConfig
+    from .network import NetworkPolicy
 
 logger = structlog.get_logger("agent-airlock.sandbox_backend")
 
@@ -708,6 +709,324 @@ class ManagedSandboxBackend(SandboxBackend):
         )
 
 
+class ModalBackend(SandboxBackend):
+    """Modal-backed sandbox (issue #30, v0.8.11+).
+
+    Wraps `modal.Sandbox.create()` so callers can run airlocked tools inside
+    Modal's hosted sandboxes — useful when the operator already runs the
+    rest of their agent workload on Modal and wants a single billing /
+    observability surface instead of mixing E2B and Modal.
+
+    ## Isolation model — read this before you reach for ``cap_drop``
+
+    Modal sandboxes run under gVisor (kernel-syscall filtering); container
+    escape is mitigated at the syscall layer, *not* at the Linux-capability
+    layer. The Modal Python SDK therefore does **not** expose ``cap_drop``,
+    ``cap_add``, ``seccomp``, ``no-new-privileges``, or any other
+    Docker-style capability primitive — there is nothing to map. Network
+    egress is the only isolation knob the SDK surfaces, and this backend
+    sets ``block_network=True`` by default so a freshly-constructed
+    ``ModalBackend`` is air-gapped at the network layer.
+
+    If your threat model requires Linux-capability dropping at the
+    container level, use :class:`DockerBackend` — which *does* expose it —
+    not this backend.
+
+    ## NetworkPolicy → Modal mapping
+
+    The :class:`agent_airlock.network.NetworkPolicy` shape is
+    hostname-oriented, while Modal's allowlist is CIDR-oriented. The mapping
+    this backend implements is intentionally narrow:
+
+    - ``network_policy is None`` → ``block_network=True`` (fail-closed
+      default; matches the rest of agent-airlock's deny-by-default ethos).
+    - ``network_policy.allow_egress is False`` → ``block_network=True``.
+    - ``network_policy.allow_egress is True`` → ``block_network=False``.
+      Hostname allowlists in ``NetworkPolicy.allowed_hosts`` are **not**
+      forwarded to Modal (Modal expects CIDRs); the backend emits a
+      structlog warning when a hostname allowlist is supplied, and the
+      operator is responsible for re-stating the constraint via
+      ``policy.allowed_hosts`` enforcement inside ``Airlock`` itself.
+
+    ## Availability
+
+    ``is_available()`` returns ``True`` iff ``import modal`` succeeds — i.e.
+    iff the operator installed the ``[modal]`` extra. The SDK import is
+    lazy (inside ``is_available`` / ``execute``) so the base install of
+    ``agent-airlock`` does not pay for it.
+
+    Attributes:
+        app_name: Modal app identifier. Resolved at execute-time via
+            ``modal.App.lookup(app_name, create_if_missing=True)``.
+        image_ref: Image reference for the sandbox container. Forwarded to
+            ``modal.Image.from_registry(image_ref)``.
+        cpu: Fractional CPU-core request. Modal accepts ``float`` or
+            ``(request, limit)`` tuples; this backend only models the
+            single-value request form to keep the surface narrow.
+        memory_mb: Memory request in **MB**. Modal's parameter is named
+            ``memory`` and is in **MiB**; the value is forwarded as-is
+            (the < 5% MB/MiB delta is below the noise floor of any
+            useful memory request).
+        timeout_s: Sandbox lifetime in seconds. Forwarded to Modal's
+            ``timeout`` parameter.
+        network_policy: Optional :class:`NetworkPolicy`. See "NetworkPolicy
+            → Modal mapping" above.
+
+    Example:
+        from agent_airlock.sandbox_backend import ModalBackend
+        from agent_airlock import AirlockConfig
+
+        backend = ModalBackend(
+            app_name="my-airlock-sandbox",
+            image_ref="python:3.11-slim",
+            cpu=0.5,
+            memory_mb=512,
+            timeout_s=30,
+        )
+        config = AirlockConfig(sandbox_backend=backend)
+    """
+
+    def __init__(
+        self,
+        app_name: str,
+        image_ref: str,
+        cpu: float = 0.5,
+        memory_mb: int = 512,
+        timeout_s: int = 30,
+        network_policy: NetworkPolicy | None = None,
+    ) -> None:
+        """Initialize Modal backend.
+
+        Args:
+            app_name: Modal app name. Created on first use if missing.
+            image_ref: Container image reference forwarded to
+                ``modal.Image.from_registry``.
+            cpu: Fractional CPU-core request. Default 0.5.
+            memory_mb: Memory request in MB (forwarded as MiB to Modal).
+                Default 512.
+            timeout_s: Sandbox lifetime in seconds. Default 30.
+            network_policy: Optional :class:`NetworkPolicy`. Default
+                ``None`` means ``block_network=True`` (fail-closed).
+
+        Raises:
+            ValueError: ``cpu``, ``memory_mb``, or ``timeout_s`` is not
+                strictly positive.
+        """
+        if cpu <= 0:
+            raise ValueError(f"cpu must be > 0; got {cpu!r}")
+        if memory_mb <= 0:
+            raise ValueError(f"memory_mb must be > 0; got {memory_mb!r}")
+        if timeout_s <= 0:
+            raise ValueError(f"timeout_s must be > 0; got {timeout_s!r}")
+
+        self.app_name = app_name
+        self.image_ref = image_ref
+        self.cpu = cpu
+        self.memory_mb = memory_mb
+        self.timeout_s = timeout_s
+        self.network_policy = network_policy
+
+    @property
+    def name(self) -> str:
+        return "modal"
+
+    def is_available(self) -> bool:
+        """Check whether the ``modal`` SDK is importable.
+
+        Returns ``True`` iff the operator installed the ``[modal]`` extra.
+        """
+        try:
+            import modal  # noqa: F401
+
+            return True
+        except ImportError:
+            return False
+
+    def _resolve_block_network(self) -> bool:
+        """Map :class:`NetworkPolicy` → Modal's ``block_network`` boolean.
+
+        See the class docstring's "NetworkPolicy → Modal mapping" section
+        for the rationale. Default (no policy supplied) is the fail-closed
+        ``block_network=True``.
+        """
+        policy = self.network_policy
+        if policy is None:
+            return True
+        if not policy.allow_egress:
+            return True
+        if policy.allowed_hosts:
+            logger.warning(
+                "modal_backend.hostname_allowlist_not_enforced",
+                hint=(
+                    "Modal's outbound allowlist is CIDR-based; the "
+                    "NetworkPolicy.allowed_hosts entries are not "
+                    "forwarded to Modal. Enforce the hostname allowlist "
+                    "at the Airlock policy layer instead."
+                ),
+                allowed_hosts=list(policy.allowed_hosts),
+            )
+        return False
+
+    def execute(
+        self,
+        func: Callable[..., R],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        timeout: int | None = None,
+    ) -> SandboxResult:
+        """Run ``func(*args, **kwargs)`` inside a Modal sandbox.
+
+        The function is cloudpickled, base64-encoded, and shipped to a
+        freshly-created Modal sandbox running ``image_ref``. The sandbox
+        decodes the payload, invokes the function, prints a base64-encoded
+        cloudpickled result envelope on a sentinel line, and exits.
+
+        Args:
+            func: The function to execute. Must be cloudpickle-able.
+            args: Positional arguments for ``func``.
+            kwargs: Keyword arguments for ``func``.
+            timeout: Per-call execution-time override. Falls back to
+                ``self.timeout_s`` when ``None``.
+        """
+        start = time.monotonic()
+        sandbox_id: str | None = None
+
+        try:
+            import modal  # local: keep optional
+        except ImportError:
+            return SandboxResult(
+                success=False,
+                error=(
+                    "modal SDK is not installed; "
+                    "run `pip install agent-airlock[modal]` to enable "
+                    "the Modal sandbox backend"
+                ),
+                backend=self.name,
+            )
+
+        try:
+            import cloudpickle
+        except ImportError:
+            return SandboxResult(
+                success=False,
+                error=(
+                    "cloudpickle is required for the Modal backend; "
+                    "run `pip install agent-airlock[sandbox]` "
+                    "(or pip install cloudpickle directly)"
+                ),
+                backend=self.name,
+            )
+
+        import base64
+        import textwrap
+
+        payload = base64.b64encode(cloudpickle.dumps((func, args, kwargs))).decode("ascii")
+        # The sandbox harness: decode → call → print sentinel result.
+        # Kept as a string template (not a heredoc file) so the backend
+        # has no on-disk artefact dependencies. The sentinel banner lets
+        # us distinguish the cloudpickled result from any incidental
+        # stdout produced by the user code itself.
+        sentinel = "__AIRLOCK_MODAL_RESULT__"
+        harness = textwrap.dedent(
+            f"""
+            import base64, sys, traceback
+            import cloudpickle
+            try:
+                fn, _args, _kwargs = cloudpickle.loads(
+                    base64.b64decode({payload!r}.encode("ascii"))
+                )
+                _out = fn(*_args, **_kwargs)
+                _envelope = ("ok", _out)
+            except BaseException as _exc:  # noqa: BLE001
+                _envelope = ("err", repr(_exc), traceback.format_exc())
+            sys.stdout.write(
+                "{sentinel}"
+                + base64.b64encode(cloudpickle.dumps(_envelope)).decode("ascii")
+                + "\\n"
+            )
+            sys.stdout.flush()
+            """
+        ).strip()
+
+        effective_timeout = timeout if timeout is not None else self.timeout_s
+        block_network = self._resolve_block_network()
+
+        sandbox = None
+        try:
+            app = modal.App.lookup(self.app_name, create_if_missing=True)
+            image = modal.Image.from_registry(self.image_ref).pip_install("cloudpickle>=3.0")
+            sandbox = modal.Sandbox.create(
+                "python",
+                "-c",
+                harness,
+                app=app,
+                image=image,
+                cpu=self.cpu,
+                memory=self.memory_mb,
+                timeout=effective_timeout,
+                block_network=block_network,
+            )
+            sandbox_id = getattr(sandbox, "object_id", None)
+            sandbox.wait()
+            stdout = sandbox.stdout.read()
+            stderr = sandbox.stderr.read()
+        except Exception as exc:  # noqa: BLE001
+            return SandboxResult(
+                success=False,
+                error=f"modal sandbox failed: {exc}",
+                execution_time_ms=(time.monotonic() - start) * 1000.0,
+                sandbox_id=sandbox_id,
+                backend=self.name,
+            )
+        finally:
+            if sandbox is not None:
+                with contextlib.suppress(Exception):
+                    sandbox.terminate()
+
+        # Extract the sentinel-wrapped envelope from the user's stdout.
+        envelope_b64: str | None = None
+        user_stdout_lines: list[str] = []
+        for line in stdout.splitlines():
+            if line.startswith(sentinel):
+                envelope_b64 = line[len(sentinel) :]
+            else:
+                user_stdout_lines.append(line)
+        elapsed_ms = (time.monotonic() - start) * 1000.0
+
+        if envelope_b64 is None:
+            return SandboxResult(
+                success=False,
+                error="modal sandbox produced no result envelope",
+                stdout="\n".join(user_stdout_lines),
+                stderr=stderr,
+                execution_time_ms=elapsed_ms,
+                sandbox_id=sandbox_id,
+                backend=self.name,
+            )
+
+        envelope = cloudpickle.loads(base64.b64decode(envelope_b64))
+        if envelope[0] == "ok":
+            return SandboxResult(
+                success=True,
+                result=envelope[1],
+                stdout="\n".join(user_stdout_lines),
+                stderr=stderr,
+                execution_time_ms=elapsed_ms,
+                sandbox_id=sandbox_id,
+                backend=self.name,
+            )
+        # Failure envelope: ("err", repr_exc, traceback_str)
+        return SandboxResult(
+            success=False,
+            error=envelope[1],
+            stdout="\n".join(user_stdout_lines),
+            stderr=(envelope[2] if len(envelope) > 2 else "") or stderr,
+            execution_time_ms=elapsed_ms,
+            sandbox_id=sandbox_id,
+            backend=self.name,
+        )
+
+
 # Default backend factory
 def get_default_backend(config: AirlockConfig | None = None) -> SandboxBackend:
     """Get the default sandbox backend based on availability.
@@ -751,4 +1070,4 @@ def get_default_backend(config: AirlockConfig | None = None) -> SandboxBackend:
 
 
 # Type alias for backend configuration
-BackendType = E2BBackend | DockerBackend | LocalBackend | ManagedSandboxBackend
+BackendType = E2BBackend | DockerBackend | LocalBackend | ManagedSandboxBackend | ModalBackend

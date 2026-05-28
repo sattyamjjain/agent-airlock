@@ -241,6 +241,54 @@ Air-gapped / on-prem? `DockerBackend` is the supported alternative
 timeout enforced, opt-in `pytest -m docker` integration tests. See
 [`docs/sandbox/docker.md`](docs/sandbox/docker.md).
 
+#### ModalBackend — Modal-hosted sandbox *(v0.8.11+, issue #30)*
+
+Already running the rest of your agent on [Modal](https://modal.com/)?
+`ModalBackend` lets you keep airlocked tool execution on the same
+substrate instead of mixing E2B and Modal billing / observability.
+
+```bash
+pip install "agent-airlock[modal]"
+```
+
+```python
+from agent_airlock import Airlock, STRICT_POLICY, AirlockConfig
+from agent_airlock.sandbox_backend import ModalBackend
+
+backend = ModalBackend(
+    app_name="my-airlock-sandbox",
+    image_ref="python:3.11-slim",
+    cpu=0.5,
+    memory_mb=512,
+    timeout_s=30,
+    # network_policy=None  → block_network=True (fail-closed default)
+)
+
+@Airlock(sandbox=True, sandbox_required=True, policy=STRICT_POLICY,
+         config=AirlockConfig(sandbox_backend=backend))
+def execute_code(code: str) -> str:
+    exec(code)
+    return "executed"
+```
+
+**Isolation model — read before you reach for `cap_drop`.** Modal
+sandboxes run under **gVisor** (kernel-syscall filtering), not under
+Docker-style capability dropping. The Modal Python SDK does not
+expose `cap_drop` / `cap_add` / `seccomp` / `no-new-privileges` —
+there is no equivalent knob to map. If your threat model needs
+Linux-capability dropping at the container layer, keep using
+`DockerBackend`. The network posture *is* configurable: `ModalBackend`
+defaults to `block_network=True` (deny-by-default), and a supplied
+`NetworkPolicy` maps to Modal's `block_network` flag (`allow_egress=False`
+→ blocked, `True` → allowed). Hostname allowlists in `NetworkPolicy.allowed_hosts`
+do **not** forward to Modal (their API is CIDR-only); the backend logs
+a structlog warning and the operator is expected to re-state hostname
+constraints at the `Airlock` policy layer.
+
+`ModalBackend` is **opt-in only** — it is NOT added to the
+`get_default_backend()` priority chain (E2B → Docker → Local stays the
+default flow). Existing callers see no behavior change.
+
 ---
 
 ### 📜 Security Policies

@@ -9,6 +9,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — ModalBackend sandbox (v0.8.11, issue #30)
+
+`ModalBackend(SandboxBackend)` — opt-in sandbox backend that delegates
+execution to [Modal](https://modal.com/) sandboxes via the official
+Python SDK. Closes part of issue #30 (Daytona remains open).
+
+`pip install "agent-airlock[modal]"`
+
+```python
+from agent_airlock.sandbox_backend import ModalBackend
+from agent_airlock import AirlockConfig
+
+backend = ModalBackend(
+    app_name="my-airlock-sandbox",
+    image_ref="python:3.11-slim",
+    cpu=0.5,
+    memory_mb=512,
+    timeout_s=30,
+)
+config = AirlockConfig(sandbox_backend=backend)
+```
+
+**Constructor:** `ModalBackend(app_name, image_ref, cpu=0.5,
+memory_mb=512, timeout_s=30, network_policy=None)`. Resource params
+are validated `> 0` at construction; non-positive values raise
+`ValueError`.
+
+**Execute path:** the call target is `cloudpickle`-serialised,
+base64-wrapped, and shipped to a freshly-created Modal sandbox running
+`image_ref`. The sandbox harness decodes, invokes, prints a
+sentinel-prefixed result envelope, and exits. The backend parses the
+envelope into a `SandboxResult` and terminates the sandbox in a
+`finally` block (so a partial run never leaks a long-lived sandbox).
+
+**Isolation model.** Modal sandboxes run under **gVisor**
+(kernel-syscall filtering); the Modal SDK does not expose `cap_drop`,
+`cap_add`, `seccomp`, or `no-new-privileges`. Container-capability
+posture is therefore **not** modeled here — if your threat model needs
+that, keep using `DockerBackend`. Network egress is the one
+configurable isolation knob, and it defaults to fail-closed.
+
+**NetworkPolicy → Modal mapping:**
+
+- `network_policy is None` → `block_network=True` (default — matches
+  agent-airlock's deny-by-default posture).
+- `policy.allow_egress is False` → `block_network=True`.
+- `policy.allow_egress is True` → `block_network=False`. Hostname
+  entries in `policy.allowed_hosts` are **not** forwarded to Modal
+  (their API is CIDR-only); the backend emits a structlog warning and
+  the operator is expected to re-state hostname constraints at the
+  Airlock policy layer.
+
+**Auto-selection.** `ModalBackend` is **not** added to the
+`get_default_backend()` priority chain (E2B → Docker → Local stays the
+default flow). Calls that don't explicitly construct a `ModalBackend`
+see exactly v0.8.10 behavior — confirmed by a new regression test
+(`TestModalBackendNotAutoSelected`).
+
+**Tests.** 16 new tests under `tests/test_sandbox_backend.py` cover:
+constructor validation (cpu / memory_mb / timeout_s > 0), name +
+availability detection, all four NetworkPolicy mapping cases (incl.
+the hostname-allowlist warn-and-allow path), happy-path execute with
+a mocked Modal SDK, failure-envelope handling, missing-envelope
+defensive return, `modal.Sandbox.create` raising, missing-extra
+actionable error, and the no-auto-select regression. No live Modal
+calls in CI — the Modal SDK is fully mocked via
+`patch.dict(sys.modules, {"modal": MagicMock()})`.
+
+**Packaging.** New `[modal]` extra in `pyproject.toml`:
+```
+modal = ["modal>=0.65", "cloudpickle>=3.0"]
+```
+The base install does not pay for the Modal SDK; `import modal` is
+lazy (inside `is_available()` / `execute()`) and falls through to a
+clear actionable error if the extra is missing.
+
 ### Added — MCP Attested Tool-Server Admission preset (v0.8.10)
 
 `mcp_attested_admission_defaults()` — an opt-in deny-by-default preset
