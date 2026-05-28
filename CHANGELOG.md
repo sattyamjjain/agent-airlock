@@ -9,6 +9,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — MCP Attested Tool-Server Admission preset (v0.8.10)
+
+`mcp_attested_admission_defaults()` — an opt-in deny-by-default preset
+that closes the host-side trust gap left by the MCP spec, per
+[arXiv:2605.24248](https://arxiv.org/abs/2605.24248) ("Attested
+Tool-Server Admission", Metere, May 2026). Before any MCP tool is
+dispatched, the host:
+
+1. **Fetches** a JWS-compact clearance assertion from
+   `{server_url}/.well-known/mcp-clearance` (path configurable via
+   `clearance_well_known_path`). Stdlib `urllib` by default; operators
+   inject a custom `fetcher` callable for mTLS / IPC / on-disk
+   transports.
+2. **Verifies** the offline signature against an **operator-pinned
+   trust root** — Ed25519 PEM, RSA-PSS PEM, or a JWKS (OKP/RSA). The
+   trust root is supplied to `AttestedAdmissionConfig` at process
+   startup and **never network-fetched on the hot path**.
+3. **Admits** the call iff the tool name is in the verified per-server
+   allowlist AND the clearance `sub` matches the dispatched
+   `server_id` — admitting a server is not the same as trusting its
+   every tool. Stale-`iat` and past-`exp` clearances are rejected.
+4. **Emits** every admission decision as a
+   `ReceiptVerdict(guard="mcp_attested_admission", ...)` so the
+   existing `airlock attest` DSSE pipeline picks decisions up
+   unchanged — this preset does **not** invent a new log.
+
+Flavor-gated enforcement: `ENFORCE` (default) hard-denies on missing /
+invalid / expired clearance; `WARN` logs and admits, for staged
+turn-up against real traffic.
+
+Surfaces:
+
+- `agent_airlock.mcp_spec.attested_admission` — new module:
+  - `AttestedAdmissionConfig` dataclass (config surface
+    `clearance_well_known_path`, `trust_root`, `enforcement_mode`,
+    `max_clearance_age`, `fetcher`, `clock`).
+  - `TrustRoot` with `ed25519_pem` / `rsa_pem` / `jwks` (exactly one).
+  - `verify_clearance(blob, cfg) -> AdmittedClearance` — pure-offline
+    JWS verifier.
+  - `admit_tool(...) -> AdmissionDecision` — pure decision function.
+  - `admit_server_tool(...) -> AdmissionDecision` — orchestrator
+    (fetch → verify → admit).
+  - `ClearanceVerificationError` hierarchy
+    (`MissingClearance` / `InvalidClearanceSignature` / `ExpiredClearance` /
+    `MalformedClearance` / `ToolNotAdmitted`).
+- `agent_airlock.policy_presets.mcp_attested_admission_defaults(...)` —
+  named factory, deny-by-default. Listed by `policy_presets.list_active()`.
+- `agent_airlock.mcp_proxy_guard.MCPProxyConfig.attested_admission:
+  AttestedAdmissionConfig | None = None` — new optional field;
+  default `None` preserves v0.8.9 behavior exactly.
+- `MCPProxyGuard.audit_tool_admission(*, server_url, server_id, tool_name)
+  -> AdmissionDecision` — chokepoint that mirrors `audit_response_headers`
+  / `audit_oauth_exchange`: never raises on a deny, always returns the
+  decision.
+
+Failure model: **fail closed.** ENFORCE denies on any verification
+error. Tests cover signed-valid (admit allowlisted / deny
+non-allowlisted), tampered signature, stale `iat`, explicit `exp` in
+past, missing well-known doc, and subject mismatch — under both
+ENFORCE and WARN — plus RSA-PSS and JWKS trust roots and the
+`MCPProxyGuard` integration path.
+
+Packaging:
+
+- New `[attested]` extra in `pyproject.toml`:
+  `pip install "agent-airlock[attested]"` pulls in `cryptography>=42.0`
+  for offline Ed25519 / RSA-PSS verification. The base install stays
+  zero-runtime-dep — the `cryptography` import inside
+  `attested_admission` is lazy and raises a clear actionable error if
+  the extra is missing.
+
+This preset is **strictly opt-in**: existing default presets are
+unchanged. No-pivot: deny-by-default posture stays, zero-runtime-dep
+core stays.
+
 ### Added — Opt-in Indic PII masking: Verhoeff + Devanagari (v0.8.9)
 
 A new `pii_locales` opt-in tag on `sanitize_output()` / `mask_sensitive_data()`

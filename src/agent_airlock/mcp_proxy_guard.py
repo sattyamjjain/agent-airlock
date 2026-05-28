@@ -32,6 +32,7 @@ import structlog
 from .policy import StdioGuardConfig
 
 if TYPE_CHECKING:
+    from .mcp_spec.attested_admission import AdmissionDecision, AttestedAdmissionConfig
     from .mcp_spec.header_audit import ResponseHeaderAuditConfig
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig, OAuthAuditReport
 
@@ -152,6 +153,14 @@ class MCPProxyConfig:
     # delegates to ``agent_airlock.mcp_spec.header_audit.audit_response_headers``.
     # Default None preserves v0.5.2 behavior.
     response_header_audit: ResponseHeaderAuditConfig | None = None
+
+    # V0.8.10 MCP Attested Tool-Server Admission (RFC arXiv:2605.24248).
+    # When set, ``MCPProxyGuard.audit_tool_admission()`` runs the
+    # fetch → verify → admit pipeline against ``cfg.trust_root`` before
+    # any tool dispatch. Deny-by-default per-server allowlist; the
+    # ``WARN``/``ENFORCE`` flavor gate is carried on the config. Default
+    # None preserves v0.8.9 behavior — no admission check, no new logs.
+    attested_admission: AttestedAdmissionConfig | None = None
 
 
 @dataclass
@@ -699,6 +708,53 @@ class MCPProxyGuard:
         from .mcp_spec.stdio_guard import validate_stdio_command
 
         validate_stdio_command(cmd, self.config.stdio_guard)
+
+    def audit_tool_admission(
+        self,
+        *,
+        server_url: str,
+        server_id: str,
+        tool_name: str,
+    ) -> AdmissionDecision:
+        """Run the MCP attested-admission pipeline before tool dispatch.
+
+        Mirrors the pattern of :meth:`audit_response_headers` /
+        :meth:`audit_oauth_exchange`: never raises on a deny, always
+        returns the :class:`AdmissionDecision`. Callers decide whether
+        to dispatch the tool based on :attr:`AdmissionDecision.admitted`.
+
+        The returned decision carries a :class:`ReceiptVerdict` ready to
+        be appended to the existing ``airlock attest`` DSSE pipeline; no
+        new log file is created here.
+
+        Args:
+            server_url: Origin of the MCP server (used to fetch the
+                clearance from ``cfg.clearance_well_known_path``).
+            server_id: Expected ``sub`` claim of the verified clearance.
+            tool_name: MCP tool being invoked.
+
+        Returns:
+            :class:`AdmissionDecision` from
+            :func:`agent_airlock.mcp_spec.attested_admission.admit_server_tool`.
+
+        Raises:
+            MCPSecurityError: If no ``attested_admission`` is configured.
+        """
+        if self.config.attested_admission is None:
+            raise MCPSecurityError(
+                "attested_admission is not configured on this MCPProxyGuard",
+                violation_type="attested_admission_not_configured",
+            )
+        # Local import to keep the new feature opt-in (avoids pulling
+        # in the [attested] extra at module import time).
+        from .mcp_spec.attested_admission import admit_server_tool
+
+        return admit_server_tool(
+            server_url=server_url,
+            server_id=server_id,
+            tool_name=tool_name,
+            cfg=self.config.attested_admission,
+        )
 
     def cleanup_expired_sessions(self) -> int:
         """Remove expired sessions.

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.8.9"
+version = "0.8.10"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -83,6 +83,14 @@ redis = [
 # Install with: pip install "agent-airlock[crypto]"
 # `cryptography` is the canonical Python ed25519 implementation.
 crypto = [
+    "cryptography>=42.0",
+]
+# MCP Attested Tool-Server Admission (v0.8.10+, RFC arXiv:2605.24248).
+# Install with: pip install "agent-airlock[attested]"
+# Pulls `cryptography` for offline Ed25519 / RSA-PSS verification of
+# JWS-compact clearance assertions. Same lower bound as [crypto]; the
+# two extras can be installed independently or together — pip dedupes.
+attested = [
     "cryptography>=42.0",
 ]
 # PydanticAI canonical-leg adapter (v0.7.1+, ADD-1 2026-05-04).

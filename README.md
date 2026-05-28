@@ -327,6 +327,76 @@ policy-level knobs span two seams, so the factory returns both as a
 
 ---
 
+### 🪪 MCP server attestation (v0.8.10)
+
+[arXiv:2605.24248](https://arxiv.org/abs/2605.24248) ("Attested
+Tool-Server Admission", Metere, May 2026) calls out a gap MCP itself
+does not close: the protocol standardises *message exchange* between
+LLM agents and tool servers but says nothing about *trust*. Anybody who
+can answer on the wire can declare themselves a tool server.
+
+`mcp_attested_admission_defaults()` is a deny-by-default opt-in preset
+that closes the gap host-side, mirroring the paper's three additive
+mechanisms:
+
+1. **Offline-signed clearance assertion.** Before any tool from an MCP
+   server is dispatched, the host fetches a JWS-compact clearance from
+   `{server_url}/.well-known/mcp-clearance` (path is configurable) and
+   verifies its signature against an **operator-pinned trust root**.
+   The trust root is supplied to `AttestedAdmissionConfig` at process
+   startup — never network-fetched on the hot path.
+2. **Deny-by-default per-server tool allowlist.** Admitting a server
+   is not the same as trusting its every tool. The verified clearance
+   carries an explicit list of tool names the host will permit;
+   everything else is denied. The `sub` claim is matched against the
+   server identity the host is about to dispatch to (so a stolen
+   clearance from server A can't admit a tool call to server B).
+3. **Flavor-gated enforcement.** `ENFORCE` (default) hard-denies on
+   missing / invalid / expired clearance; `WARN` logs and admits — the
+   staged turn-up an operator wants when introducing the gate against
+   real traffic.
+
+Every admission decision emits a
+[`ReceiptVerdict`](./docs/attest/receipt.md) on the
+`guard="mcp_attested_admission"` channel, so the existing `airlock attest`
+DSSE pipeline picks decisions up unchanged — this preset does **not**
+invent a new log.
+
+```python
+from agent_airlock.mcp_proxy_guard import MCPProxyConfig, MCPProxyGuard
+from agent_airlock.mcp_spec.attested_admission import TrustRoot
+from agent_airlock.policy_presets import mcp_attested_admission_defaults
+
+# Operator pins the trust root at startup. Never fetched at runtime.
+with open("/etc/airlock/mcp-clearance-root.pem", "rb") as fh:
+    pinned_pem = fh.read()
+
+cfg = mcp_attested_admission_defaults(
+    trust_root=TrustRoot(key_id="ops-2026Q2", ed25519_pem=pinned_pem),
+    enforcement_mode="ENFORCE",       # deny-by-default
+    max_clearance_age_days=30,
+)
+guard = MCPProxyGuard(MCPProxyConfig(attested_admission=cfg))
+
+decision = guard.audit_tool_admission(
+    server_url="https://mcp.example.com",
+    server_id="srv-alpha",            # expected `sub` claim
+    tool_name="read",
+)
+if not decision.admitted:
+    raise RuntimeError(decision.reason)
+```
+
+Signature verification needs the `[attested]` extra (pulls in
+`cryptography` for offline Ed25519 / RSA-PSS / JWKS verification); the
+base install stays zero-runtime-dep.
+
+> Install with `pip install "agent-airlock[attested]"`. Opt-in only —
+> existing callers that don't set `attested_admission` get exactly
+> v0.8.9 behavior.
+
+---
+
 ### 💰 Cost Control
 
 A runaway agent can burn $500 in API costs before you notice.
@@ -787,7 +857,7 @@ actually prevent the risk.
 |------|------------------------------|-----------------|----------|
 | **ASI01 Agent Goal Hijack** | Pydantic strict validation + ghost-arg rejection + `UnknownArgsMode.BLOCK` | `validator`, `unknown_args`, `core` | Partial |
 | **ASI02 Tool Misuse and Exploitation** | Deny-by-default `SecurityPolicy`, RBAC, rate limits, `SafePath` / `SafeURL`, Flowise `Function()`/`eval` token ban ([CVE-2025-59528](https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/)), MCPwn destructive-auth check ([CVE-2026-33032](https://nvd.nist.gov/vuln/detail/CVE-2026-33032)), Mobile MCP intent-URL guard ([CVE-2026-35394](https://www.sentinelone.com/vulnerability-database/cve-2026-35394/)) | `policy`, `safe_types`, `filesystem`, `network`, `policy_presets.flowise_cve_2025_59528_defaults`, `policy_presets.mcpwn_cve_2026_33032_defaults`, `policy_presets.mobile_mcp_intent_guard_2026_05` | **Full** |
-| **ASI03 Identity and Privilege Abuse** | `AgentIdentity`, `MCPProxyGuard` token-passthrough prevention, `CredentialScope`, OAuth-app audit ([Vercel 2026-04-19](https://vercel.com/kb/bulletin/vercel-april-2026-security-incident)) | `policy`, `mcp_proxy_guard`, `mcp_spec.oauth_audit`, `policy_presets.oauth_audit_vercel_2026_defaults` | Partial |
+| **ASI03 Identity and Privilege Abuse** | `AgentIdentity`, `MCPProxyGuard` token-passthrough prevention, `CredentialScope`, OAuth-app audit ([Vercel 2026-04-19](https://vercel.com/kb/bulletin/vercel-april-2026-security-incident)), MCP Attested Tool-Server Admission ([arXiv:2605.24248](https://arxiv.org/abs/2605.24248)) | `policy`, `mcp_proxy_guard`, `mcp_spec.oauth_audit`, `mcp_spec.attested_admission`, `policy_presets.oauth_audit_vercel_2026_defaults`, `policy_presets.mcp_attested_admission_defaults` | Partial |
 | **ASI04 Agentic Supply Chain Vulnerabilities** | Ox MCP STDIO sanitizer + CVE regression suite (10+ CVEs tracked) + session-snapshot integrity guard | `mcp_spec.stdio_guard`, `mcp_spec.session_guard`, `policy_presets.stdio_guard_ox_defaults`, `tests/cves/` | Partial |
 | **ASI05 Unexpected Code Execution (RCE)** | E2B Firecracker sandbox, pluggable `SandboxBackend`, capability gating for `PROCESS_SHELL`, Flowise eval-token ban ([CVE-2025-59528](https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/)) | `sandbox`, `sandbox_backend`, `capabilities`, `policy_presets.flowise_cve_2025_59528_defaults` | **Full** |
 | **ASI06 Memory & Context Poisoning** | `AirlockContext` `contextvars` isolation, `ConversationConstraints` budget caps, audit logging | `context`, `conversation`, `sanitizer` | Partial |
@@ -879,6 +949,7 @@ Agent-Airlock secures AI agent systems in production:
 | [**Stainless SDK provenance classifier**](./docs/policies/stainless-provenance-probe.md) | v0.8.3 — pure-function `classify_sdk_lineage(user_agent, response_body_head)` building block flags MCP servers generated by the deprecated Stainless SDK toolchain (Anthropic acquired Stainless 2026-05-13, hosted generator winding down); operator-callable from own audit hooks — **NOT an automatic HTTP probe** (decorator-in-process architecture, see ROADMAP §1); `stainless_provenance_probe_defaults()` preset is `default_action=tag_only`, visibility not enforcement |
 | [**Human-oversight decorator**](./docs/policies/human-oversight-decorator.md) | v0.8.4 — `@requires_human_oversight(approver=...)` gates a tool function on an operator-supplied approval callable (Code-as-Harness arXiv:2605.18747 anchor); `GRANT` → call wrapped fn, `DENY` → `OversightDeniedError`, `TIMEOUT` → `OversightTimeoutError`; composes with `@Airlock(...)`; protocol shapes + `InProcessRecordedApprover` testing helper; **NOT a bidirectional audit-emitter RPC channel** — operator owns the transport (Slack/PagerDuty/CLI), agent-airlock owns the gate + the protocol |
 | [**Layer-contract receipt block**](./docs/attest/layer-contract.md) | v0.8.5 — opt-in `LayerContract` (assume/guarantee) block on signed `airlock attest receipt` payloads (arXiv:2605.18672 anchor); `--contract` derives per-guard `pass_rate` from the verdicts list, `--assumes id1,id2` declares upstream-layer dependencies; receipt schema v1 unchanged (additive field); `pass_rate` is a measured statistic over the sample (not a proof) — every Guarantee carries `sample_size` so verifiers can weight low-N appropriately; **NOT backed by a window-counter store** (that infrastructure doesn't exist yet — derived from the operator-supplied verdicts list, no new abstraction) |
+| [**MCP Attested Tool-Server Admission (arXiv:2605.24248)**](https://arxiv.org/abs/2605.24248) | v0.8.10 — opt-in admission gate for MCP tool servers per Metere (May 2026). Host fetches a JWS-compact clearance from `{server_url}/.well-known/mcp-clearance`, verifies its signature against an **operator-pinned trust root** (Ed25519 / RSA-PSS / JWKS — never network-fetched on the hot path), and enforces a **deny-by-default per-server tool allowlist** parsed from the verified clearance. Flavor-gated `ENFORCE` (hard-deny) / `WARN` (log only) modes. Every decision emits a `ReceiptVerdict` on the `guard="mcp_attested_admission"` channel — reuses the existing `airlock attest` DSSE path, does **not** invent a new log. `mcp_attested_admission_defaults()` factory + `MCPProxyGuard.audit_tool_admission()` integration; signature verification gated behind `pip install agent-airlock[attested]`. |
 | [**Mobile MCP intent-URL guard (CVE-2026-35394)**](https://www.sentinelone.com/vulnerability-database/cve-2026-35394/) | v0.8.8 — defensive bundle for the Mobilenexthq Mobile MCP `mobile_open_url` intent-injection RCE class (< 0.0.50). `mobile_mcp_intent_guard_2026_05()` returns a pre-configured `SafeURLValidator(allowed_schemes=["http", "https"])` (blocks `intent:`, `content:`, `file:`, `app:`, `data:`, `javascript:`, `vbscript:`), an `AirlockConfig(unknown_args=UnknownArgsMode.BLOCK)`, and the canonical Mobile MCP tool-name corpus (`mobile_open_url`, `open_url`, `mobile_launch_url`). DIFF-COMPATIBLE with the existing `SafeURL` type — no new validator invented. Also fixes a pre-existing `block_private_ips=True` no-op in `SafeURLValidator` (RFC1918 ranges were not actually blocked because the validator's own `SafeURLValidationError` raise was caught by `except ValueError`). |
 | [**Examples**](./examples/) | 13 framework integrations (11 adapter-shipped + 2 example-only) with copy-paste code |
 | [**Security Guide**](./docs/SECURITY.md) | Production deployment checklist |

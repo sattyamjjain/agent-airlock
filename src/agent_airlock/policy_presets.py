@@ -513,6 +513,76 @@ STDIO_GUARD_OX_DEFAULTS = stdio_guard_ox_defaults()
 constant unless you need dynamic overrides (then call the factory)."""
 
 
+def mcp_attested_admission_defaults(
+    *,
+    trust_root: Any = None,
+    enforcement_mode: str = "ENFORCE",
+    max_clearance_age_days: int = 30,
+    clearance_well_known_path: str = "/.well-known/mcp-clearance",
+) -> Any:
+    """MCP Attested Tool-Server Admission preset (RFC arXiv:2605.24248).
+
+    Returns a deny-by-default ``AttestedAdmissionConfig`` that gates
+    every MCP tool dispatch on a clearance assertion fetched from
+    ``{server_url}{clearance_well_known_path}`` and verified offline
+    against ``trust_root``. The verified clearance carries a per-server
+    tool allowlist; tools outside the allowlist are denied — admitting
+    a server is not the same as trusting its every tool.
+
+    Failure model: **fail closed.** In ``ENFORCE`` mode (default), a
+    missing / invalid / expired clearance denies. In ``WARN`` mode the
+    same case is logged and admitted, so operators can stage the
+    enforcement turn-up against real traffic.
+
+    Every admission decision emits a
+    :class:`agent_airlock.attest.ReceiptVerdict` on the
+    ``guard="mcp_attested_admission"`` channel, so the existing
+    ``airlock attest`` DSSE pipeline picks decisions up unchanged.
+
+    This preset is **opt-in**: pass the returned config to
+    :class:`agent_airlock.mcp_proxy_guard.MCPProxyConfig` via the
+    ``attested_admission`` field, then call
+    :meth:`MCPProxyGuard.audit_tool_admission` before each tool dispatch.
+    Existing callers are unaffected.
+
+    Signature verification requires the ``[attested]`` extra
+    (``pip install agent-airlock[attested]``). The extra pulls in
+    ``cryptography`` for offline Ed25519 / RSA-PSS verification; the
+    base install stays zero-runtime-dep.
+
+    Args:
+        trust_root: A
+            :class:`agent_airlock.mcp_spec.attested_admission.TrustRoot`
+            holding pinned public-key material. ``None`` produces a
+            placeholder config that will refuse to verify anything —
+            operators are expected to supply a real trust root.
+        enforcement_mode: ``"ENFORCE"`` (deny on missing/invalid/expired)
+            or ``"WARN"`` (log only, admit).
+        max_clearance_age_days: Clearance is considered fresh iff
+            ``now() - iat <= max_clearance_age_days``. Defaults to 30
+            days, matching the RFC's recommended rotation window.
+        clearance_well_known_path: URI path relative to each MCP server's
+            origin. Defaults to ``/.well-known/mcp-clearance``.
+
+    Primary source:
+      https://arxiv.org/abs/2605.24248
+      (Metere, *Attested Tool-Server Admission*, May 2026)
+    """
+    # Local import: keep `policy_presets` importable without the
+    # [attested] extra. The `cryptography` import inside
+    # `attested_admission` itself is also lazy.
+    from datetime import timedelta
+
+    from .mcp_spec.attested_admission import AttestedAdmissionConfig
+
+    return AttestedAdmissionConfig(
+        trust_root=trust_root,
+        clearance_well_known_path=clearance_well_known_path,
+        enforcement_mode=enforcement_mode,  # type: ignore[arg-type]
+        max_clearance_age=timedelta(days=max_clearance_age_days),
+    )
+
+
 def oauth_audit_vercel_2026_defaults() -> OAuthAppAuditConfig:
     """OAuth app audit defaults driven by the 2026-04-19 Vercel breach.
 
