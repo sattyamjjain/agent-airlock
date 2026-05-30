@@ -445,6 +445,19 @@ class Airlock:
             if policy_error is not None:
                 return kwargs, start_time, context, policy_error, None
 
+            # Step 2.5: Behavioral tool-call sequence guard (V0.8.12).
+            # Runs after the standard policy check so a denied tool never
+            # gets recorded in the sequence trace in the first place.
+            seq_error = self._check_sequence_guard(
+                func_name=func_name,
+                resolved_policy=resolved_policy,
+                args=args,
+                kwargs=cleaned_kwargs,
+                context=context,
+            )
+            if seq_error is not None:
+                return kwargs, start_time, context, seq_error, None
+
             # Step 3: Validate filesystem paths
             fs_error = self._validate_filesystem_paths(func_name, cleaned_kwargs)
             if fs_error is not None:
@@ -1163,6 +1176,97 @@ class Airlock:
                             {"path": e.path, "violation_type": e.violation_type},
                         )
                         return response
+
+        return None
+
+    def _check_sequence_guard(
+        self,
+        *,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        context: AirlockContext[Any],
+    ) -> AirlockResponse | None:
+        """Behavioral tool-call sequence guard (V0.8.12, arXiv:2605.27901).
+
+        Calls ``policy.sequence_guard.record_and_check(...)`` if configured.
+        Per-session ordered transitions are flagged against either a
+        declared DAG or a learned Markov baseline. See
+        :mod:`agent_airlock.sequence_guard` for the contract.
+
+        Args:
+            func_name: Name of the function being called.
+            resolved_policy: The resolved :class:`SecurityPolicy` (or None).
+            args: Positional args — used only for the shape hash; values
+                never leave the guard's memory.
+            kwargs: Cleaned keyword args — same shape-only treatment.
+            context: Current :class:`AirlockContext`. Used to derive the
+                session key (``agent_id`` or ``session_id``).
+
+        Returns:
+            Error response if the transition is blocked, None otherwise.
+            Returns None on warn-mode flags too — the guard already
+            logged + emitted the OTel attribute.
+        """
+        if resolved_policy is None or resolved_policy.sequence_guard is None:
+            return None
+
+        guard = resolved_policy.sequence_guard
+
+        # Resolve the session key from context per the guard's preference.
+        # Falls back to '__anonymous__' if both ids are absent — the
+        # guard logs a warning in that case but does not error, so
+        # deployments without identity still record (just all into one
+        # bucket).
+        if guard.session_key_kind == "session_id":
+            session_key = context.session_id or context.agent_id or "__anonymous__"
+        else:
+            session_key = context.agent_id or context.session_id or "__anonymous__"
+        if session_key == "__anonymous__":
+            logger.warning(
+                "sequence_guard.anonymous_session_key",
+                function=func_name,
+                hint=(
+                    "AirlockContext has no agent_id or session_id; all "
+                    "calls without identity collapse into a single "
+                    "'__anonymous__' bucket and the guard's "
+                    "per-session semantics degrade."
+                ),
+            )
+
+        # Lazy import to avoid the module-level cycle (sequence_guard
+        # imports PolicyViolation from policy.py).
+        from .sequence_guard import SequenceViolation
+
+        try:
+            guard.record_and_check(
+                session_key=session_key,
+                tool_name=func_name,
+                args=args,
+                kwargs=kwargs,
+            )
+        except SequenceViolation as e:
+            response = handle_policy_violation(
+                func_name,
+                policy_name="SequenceGuard",
+                reason=e.message,
+            )
+            self._safe_invoke_callback(
+                self.config.on_blocked,
+                "on_blocked",
+                func_name,
+                e.message,
+                {
+                    "violation_type": "sequence_violation",
+                    "guard_mode": e.mode,
+                    "from_tool": e.from_tool,
+                    "to_tool": e.to_tool,
+                    "session_key": e.session_key,
+                    "observed_probability": e.observed_probability,
+                },
+            )
+            return response
 
         return None
 

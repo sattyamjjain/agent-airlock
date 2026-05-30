@@ -445,6 +445,84 @@ base install stays zero-runtime-dep.
 
 ---
 
+### 🧭 Behavioral sequence guard (v0.8.12)
+
+Watches the **ordered stream of tool calls** in a session and flags
+divergence from a declared expected order — *not* the model's stated
+reasoning trace.
+
+[arXiv:2605.27901](https://arxiv.org/abs/2605.27901) ("The Fragility
+of Chain-of-Thought Monitoring", Onyame, Zhou, Thopalli, Kailkhura
+& Agarwal, May 2026) reports an average **95.9% CoT unfaithfulness
+across 8B–120B-parameter models** — including answer-switching,
+post-hoc rationalisation, and procedural exploitation of hints.
+Trusting the model's stated reasoning to detect misbehavior is
+therefore not viable. Trusting its **behavior** — the sequence of
+tools it actually invokes — is.
+
+`SequenceGuard` is an opt-in field on `SecurityPolicy` that runs in
+the `@Airlock` seam **right after** the standard policy check, in two
+modes:
+
+**DECLARED mode** — operator supplies a permitted-transition DAG.
+Any transition not in the DAG is a `SequenceViolation`. Deny-by-default.
+
+```python
+from agent_airlock import Airlock, SecurityPolicy
+from agent_airlock.sequence_guard import SequenceGuard, ENTRY_SENTINEL
+
+policy = SecurityPolicy(
+    sequence_guard=SequenceGuard(
+        mode="declared",
+        action="block",                       # or "warn"
+        dag={
+            ENTRY_SENTINEL: {"read"},         # only `read` may start a session
+            "read": {"read", "summarize"},    # after read, either re-read or summarize
+            "summarize": {"send"},            # after summarize, only send
+            "send": set(),                    # send is terminal
+        },
+    ),
+)
+```
+
+**BASELINE mode** — guard maintains a per-session-key Markov transition
+profile in a local JSON file (no cloud, no PII — only tool names and
+SHA-256 *shape hashes* of `(arg types, kwarg names+types)`, **never
+argument values**) and flags transitions with observed
+`P(curr | prev) < threshold` once the sample size from `prev` reaches
+`min_baseline_samples`.
+
+```python
+from pathlib import Path
+from agent_airlock.sequence_guard import SequenceGuard
+
+policy = SecurityPolicy(
+    sequence_guard=SequenceGuard(
+        mode="baseline",
+        baseline_path=Path("/var/lib/airlock/sequence-baseline.json"),
+        low_probability_threshold=0.05,   # flag the bottom 5%
+        min_baseline_samples=50,          # don't flag until 50 obs from `prev`
+    ),
+)
+```
+
+Every flagged transition emits OTel span attributes on the current
+span (`airlock.sequence_guard.mode`, `.from_tool`, `.to_tool`,
+`.session_key`, `.observed_probability`) via the existing
+`observability` provider — telemetry failures are swallowed so they
+cannot break enforcement.
+
+**Not** `AnomalyDetector` (that's rate / endpoint-diversity /
+error-rate / consecutive-blocked over sliding windows). `SequenceGuard`
+is per-transition ORDER signal. Run both for layered coverage. **Not**
+a chain-of-thought monitor — by construction.
+
+> Strictly opt-in. The new `SecurityPolicy.sequence_guard` field
+> defaults to `None`; callers that don't set it get exactly v0.8.11
+> behavior. Zero new runtime deps — Pydantic-only core stays intact.
+
+---
+
 ### 💰 Cost Control
 
 A runaway agent can burn $500 in API costs before you notice.

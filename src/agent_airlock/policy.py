@@ -33,6 +33,7 @@ if TYPE_CHECKING:
         CostTracker,
         ModelTierBudget,
     )
+    from .sequence_guard import SequenceGuard
 
 logger = structlog.get_logger("agent-airlock.policy")
 
@@ -367,6 +368,14 @@ class SecurityPolicy:
     # because it needs runtime args (input token counts) that ``check()``
     # does not see.
     model_tier_budget: ModelTierBudget | None = None
+    # V0.8.12 behavioral tool-call sequence guard (arXiv:2605.27901).
+    # When set, the @Airlock seam calls ``sequence_guard.record_and_check(...)``
+    # after the standard ``check()`` returns, recording per-session ordered
+    # tool transitions and flagging divergence from a declared DAG or a
+    # learned Markov baseline. Default None preserves v0.8.11 behavior
+    # exactly — no recording, no flagging, no on-disk state. See
+    # ``agent_airlock.sequence_guard`` for the full contract.
+    sequence_guard: SequenceGuard | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
