@@ -9,6 +9,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Behavioral tool-call sequence guard (v0.8.12)
+
+`SequenceGuard` — an opt-in behavioral-only sequence anomaly guard that
+watches the **ordered stream of tool calls** within a session and flags
+divergence from a declared expected order. By construction it does
+**not** read the model's reasoning trace — Onyame et al.
+*The Fragility of Chain-of-Thought Monitoring Across Typologically
+Diverse Languages* ([arXiv:2605.27901](https://arxiv.org/abs/2605.27901),
+May 2026) reports an average **95.9% CoT unfaithfulness across 8B–120B
+models**, so trusting the model's stated reasoning to detect
+misbehavior is not viable; trusting its behavior is.
+
+Two modes:
+
+- **DECLARED.** Operator supplies a permitted-transition DAG
+  (`{from_tool: {allowed_next_tools}}`, with `"__entry__"` listing
+  tool names permitted as the first call). Any transition not in the
+  DAG is a `SequenceViolation`. Deny-by-default.
+- **BASELINE.** Guard maintains a per-session-key Markov transition
+  profile in a local JSON file (no cloud, no PII — only tool names
+  and SHA-256 *shape hashes* of `(arg types, kwarg names+types)`,
+  **never argument values**) and flags transitions with observed
+  `P(curr | prev) < low_probability_threshold` once the sample size
+  from `prev` reaches `min_baseline_samples`. Atomic temp-file +
+  rename on persist.
+
+Per-call `action`: `"block"` (default — raises `SequenceViolation`,
+routed through the existing `handle_policy_violation` path so existing
+deployments see no new error shape) or `"warn"` (logs via structlog +
+emits the OTel attribute, lets the call proceed).
+
+OTel: every flagged transition sets attributes on the current span via
+the existing `observability` provider —
+`airlock.sequence_guard.mode`, `.from_tool`, `.to_tool`,
+`.session_key`, and (baseline mode) `.observed_probability`.
+Telemetry failures are swallowed so they cannot break enforcement.
+
+Surfaces:
+
+- `agent_airlock.sequence_guard` — new module:
+  - `SequenceGuard` (`@dataclass`, thread-safe, `threading.Lock`).
+  - `SequenceViolation(PolicyViolation)` — preserves the existing
+    error-handler chain.
+  - `args_shape_hash(args, kwargs) -> str` — privacy-preserving stable
+    hash of `(arg types, kwarg names+types)`.
+  - `ENTRY_SENTINEL`, `PREV_NONE_SENTINEL`, mode/action enums.
+- `agent_airlock.policy.SecurityPolicy.sequence_guard: SequenceGuard | None = None`
+  — new optional field; default `None` preserves v0.8.11 behavior
+  exactly.
+- `agent_airlock.core.Airlock._check_sequence_guard(...)` — new private
+  Step 2.5 in the `@Airlock` pre-execution pipeline. Runs right after
+  the standard policy check; routes a block decision through the
+  existing `handle_policy_violation` → `on_blocked` callback chain.
+
+Disambiguation: this is **not** `agent_airlock.anomaly.AnomalyDetector`
+(which monitors call **rate** / endpoint **diversity** / **error rate** /
+**consecutive blocked** over sliding windows). `SequenceGuard` is a
+per-transition **ORDER** signal; `AnomalyDetector` is an aggregate
+per-window signal. They are complementary — an attacker who keeps the
+rate flat but reorders calls slips past `AnomalyDetector`; an attacker
+who hammers a single permitted transition slips past `SequenceGuard`.
+
+Tests: 36 tests in `tests/test_sequence_guard.py` covering
+`args_shape_hash` invariants (value invariance, arity/type/keyword
+sensitivity, order-independence), construction validation (mode,
+action, DAG entry-sentinel, threshold range, min-samples positivity),
+declared-DAG semantics (entry, transitions, per-session isolation,
+warn vs block), baseline cold-start (no flag below min-samples),
+baseline flagging (rare transition post warmup), baseline non-flag for
+the high-probability path, baseline JSON privacy guarantee (no
+argument values on disk), baseline round-trip from disk, OTel
+attribute emission, OTel failure swallowed, thread-safe concurrent
+record_and_check, and `@Airlock` end-to-end (clean run / block-mode
+DAG violation / warn-mode no-block).
+
+Zero new runtime deps. Pydantic-only core stays intact.
+
 ### Added — ModalBackend sandbox (v0.8.11, issue #30)
 
 `ModalBackend(SandboxBackend)` — opt-in sandbox backend that delegates
