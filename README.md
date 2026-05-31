@@ -523,6 +523,64 @@ a chain-of-thought monitor — by construction.
 
 ---
 
+### 🔎 Privilege right-sizing — `airlock-explain --unused-scopes` (v0.8.13)
+
+A read-only CLI that surfaces **over-permissioning**: it diffs the
+`SecurityPolicy`'s **granted** tool scopes against the tools the agent
+**actually called** (from an OTLP export OR a native audit JSONL),
+per `AgentIdentity`, and prints the dead-weight set plus a *suggested*
+tightened allow-list.
+
+```bash
+# Install the v0.8.13 wheel; airlock-explain becomes available
+pip install "agent-airlock>=0.8.13"
+
+# Diff granted vs used; print a table
+airlock-explain --unused-scopes \
+    --policy ./security-policy.toml \
+    --trace  ./agent.audit.jsonl
+
+# Same, machine-readable, plus a proposed tightened policy preview
+airlock-explain --unused-scopes \
+    --policy ./security-policy.toml \
+    --trace  ./otel-export.json \
+    --format json \
+    --suggest-policy
+```
+
+**Observability-only.** This command **never mutates** the
+`SecurityPolicy`, **never writes** the policy file, and **never
+auto-applies** the suggestion. The deny-by-default posture is
+unchanged — the right-size CLI is a *review aid*, not an enforcement
+primitive. The `--suggest-policy` output is intentionally a stdout
+preview so a human reviews the tightened allow-list before adopting
+it by hand.
+
+**Trace formats** (auto-detected by inspecting the file head):
+
+- **Audit JSONL** — the format `AuditLogger` already emits. One JSON
+  object per line, with `tool_name` / `agent_id` / `blocked`. Blocked
+  calls are excluded from the "actually called" set — a blocked call
+  is not an exercise of a granted scope.
+- **OTLP JSON** — the format `opentelemetry-exporter-otlp` writes.
+  Span `name` is the tool name; `attributes.agent_id` keys the per-
+  agent diff. If a span carries `airlock.blocked=true` it is skipped,
+  same as JSONL.
+
+**Diff semantics.** The matcher is `fnmatch` — the same glob semantics
+`SecurityPolicy.check_tool_allowed` uses internally, so the suggested
+tightened allow-list admits exactly the tools the agent was observed
+calling (no surprises at adoption time). Denied-list patterns are
+forwarded unchanged to the suggestion: denials are *intent*, not
+usage data.
+
+> Strictly observability. No new runtime deps. The new console-script
+> entry `airlock-explain` is the project's first installable CLI;
+> existing `python -m agent_airlock.cli.<name>` invocations are
+> unaffected.
+
+---
+
 ### 💰 Cost Control
 
 A runaway agent can burn $500 in API costs before you notice.

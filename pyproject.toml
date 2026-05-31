@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.8.12"
+version = "0.8.13"
 description = "The Pydantic-based Firewall for MCP Servers. Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations."
 readme = "README.md"
 license = "MIT"
@@ -144,6 +144,14 @@ docs = [
     "pymdown-extensions>=10.0",
 ]
 
+[project.scripts]
+# v0.8.13+ — read-only privilege right-sizing reporter. NOTE: this is
+# the project's first installable console-script entry; the existing
+# `airlock <subcommand>` invocations (baseline / attest / corpus-bench
+# / etc.) remain invocable only via `python -m
+# agent_airlock.cli.<name>`. Wiring those is a separate, larger PR.
+airlock-explain = "agent_airlock.cli.explain:main"
+
 [project.urls]
 Homepage = "https://github.com/sattyamjjain/agent-airlock"
 Documentation = "https://github.com/sattyamjjain/agent-airlock#readme"
@@ -229,6 +237,7 @@ module = [
     "mcp.*",
     "tomli",
     "tomli.*",
+    "tomllib",
     "docker",
     "docker.*",
     "opentelemetry",
