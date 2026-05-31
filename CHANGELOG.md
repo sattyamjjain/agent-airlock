@@ -9,6 +9,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `airlock-explain --unused-scopes` privilege right-sizing reporter (v0.8.13)
+
+`airlock-explain` — a new **read-only** CLI that surfaces
+over-permissioning by diffing `SecurityPolicy.allowed_tools` (granted
+scopes) against the tools an agent actually called (extracted from a
+run trace), per `AgentIdentity`. Prints, per agent: granted-but-never-
+used scopes (the dead-weight set), the observed tool set, and (with
+`--suggest-policy`) a *proposed* tightened allow-list as a stdout
+preview.
+
+```bash
+pip install "agent-airlock>=0.8.13"
+airlock-explain --unused-scopes \
+    --policy ./security-policy.toml \
+    --trace  ./agent.audit.jsonl \
+    --format json \
+    --suggest-policy
+```
+
+**Read-only contract.** This command **never** mutates a
+`SecurityPolicy`, **never** writes the policy file, and **never**
+installs itself into the deny-by-default enforcement path. The
+`--suggest-policy` output is intentionally a stdout preview so a human
+reviews the tightened allow-list before adopting it by hand. A
+regression test (`test_read_only_contract_policy_file_unchanged`)
+asserts byte-equality of the policy file before and after a
+`--suggest-policy` run.
+
+**Trace formats** — auto-detected by inspecting the file head:
+
+- **Audit JSONL** — the format `agent_airlock.audit.AuditLogger` already
+  emits. Lines starting with `#` are header-skipped; lines with
+  `blocked: true` are excluded (a blocked call is not an exercise of
+  a granted scope); missing `agent_id` falls back to `__anonymous__`.
+- **OTLP JSON** — the format `opentelemetry-exporter-otlp` writes
+  (top-level `resourceSpans[*].scopeSpans[*].spans[*]`). Span `name`
+  is the tool name; the OTLP `AnyValue` union (`stringValue` /
+  `boolValue` / `intValue` / `doubleValue`) is decoded for attribute
+  lookup. `agent_id` is resolved span-attrs → resource-attrs →
+  `__anonymous__`. Spans carrying `airlock.blocked=true` are skipped.
+
+**Diff semantics.** The matcher is `fnmatch.fnmatch` — the same glob
+semantics `SecurityPolicy.check_tool_allowed` uses internally, so the
+suggested tightened allow-list admits exactly the tools the agent was
+observed calling (asserted by
+`test_glob_matching_matches_securitypolicy_semantics`). Denied-list
+patterns are forwarded unchanged to the suggestion — denials are
+*intent*, not usage data.
+
+Surfaces:
+
+- `agent_airlock.cli.explain` — new module:
+  - `main(argv) -> int` argparse entrypoint with `--unused-scopes`,
+    `--policy <file>`, `--trace <file>`, `--format {table,json}`,
+    `--suggest-policy`.
+  - `CallObservation`, `AgentUsageReport`, `PolicySnapshot` dataclasses.
+  - `load_trace(path)`, `load_policy(path)`,
+    `diff_granted_vs_used(policy, observations)`,
+    `suggest_tightened_policy(report, denied_tools)` as testable
+    pure-function building blocks.
+- `pyproject.toml` — **new** `[project.scripts]` block. This is the
+  project's first installable console-script; it wires **only**
+  `airlock-explain`. Existing `airlock <subcommand>` invocations
+  (baseline / attest / corpus-bench / etc.) remain invocable only via
+  `python -m agent_airlock.cli.<name>` — wiring those is a separate
+  larger PR.
+
+**Tests.** 28 new tests in `tests/cli/test_explain.py` cover format
+detection (JSONL vs OTLP auto-detect, including the
+"starts-with-`{`-but-isn't-OTLP" edge case), policy loader (TOML +
+JSON, root + nested `[policy]` section, schema rejection), trace
+loader (JSONL header / blank skip, missing agent_id fallback, OTLP
+attribute kinds, blocked-call exclusion under both formats), the
+per-agent unused-set diff (incl. parity with
+`SecurityPolicy.check_tool_allowed`), the suggested-policy shape, and
+the CLI end-to-end (table format, JSON format, OTLP-vs-JSONL output
+parity, `--suggest-policy` appends without truncating, **read-only
+contract: policy file is byte-identical before and after**, error
+paths for missing files / missing flag).
+
+Zero new runtime deps. The base install grows by one optional dep
+nothing — Python 3.10 falls back to `tomli` via the existing
+`[project.dependencies]` entry; 3.11+ uses stdlib `tomllib`.
+
+Version bump 0.8.12 → 0.8.13 (additive new CLI surface; no API break).
+
 ### Added — Behavioral tool-call sequence guard (v0.8.12)
 
 `SequenceGuard` — an opt-in behavioral-only sequence anomaly guard that
