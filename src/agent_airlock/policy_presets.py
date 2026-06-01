@@ -2835,6 +2835,228 @@ across call sites); call the factory when you need a fresh
 """
 
 
+# -----------------------------------------------------------------------------
+# Capsule Security: CVE-2026-21520 (ShareLeak / PipeLeak) — indirect prompt
+# injection in Copilot Studio + Salesforce Agentforce (v0.8.14+).
+# -----------------------------------------------------------------------------
+
+# Canonical exfil-sink tool-name globs. These are the OUTBOUND channels an
+# attacker reaches when ShareLeak / PipeLeak succeeds: Copilot Studio →
+# Outlook ``send_email`` etc.; Agentforce → ``create_case`` /
+# ``post_to_chatter`` / outbound ``email`` actions; generic agentic tools →
+# ``share_*`` / ``export_*`` / ``post_to_*`` / ``webhook_*``. The list is
+# intentionally broad — operators who run a tighter surface can override
+# ``denied_tools`` on the factory call, but the deny-by-default posture
+# means missing-an-exfil-tool fails CLOSED, not open.
+_CAPSULE_INDIRECT_INJECTION_EXFIL_SINKS: tuple[str, ...] = (
+    # Copilot Studio + Outlook surface
+    "send_email",
+    "send_mail",
+    "outlook_*",
+    "email_send",
+    "smtp_*",
+    # Salesforce Agentforce surface
+    "create_case",
+    "create_lead",
+    "create_contact",
+    "post_to_chatter",
+    "salesforce_send_email",
+    "send_message",
+    # Generic exfil / sharing / webhook surface
+    "share_*",
+    "export_*",
+    "post_to_*",
+    "webhook_*",
+    "publish_*",
+    "upload_*",
+    "external_*",
+    "http_request",
+    "http_post",
+    "fetch_url",
+)
+
+
+# Canonical Capsule-disclosed tool-name corpus this preset targets.
+_CAPSULE_INDIRECT_INJECTION_TOOL_CORPUS: tuple[str, ...] = (
+    # ShareLeak: Copilot Studio agents triggered by SharePoint forms
+    # querying SharePoint and exfiltrating via Outlook.
+    "sharepoint_query",
+    "sharepoint_search",
+    "outlook_send_email",
+    # PipeLeak: Salesforce Agentforce Web-to-Lead form vector with
+    # outbound case / email channels.
+    "agentforce_web_to_lead_handler",
+    "agentforce_create_case",
+    "agentforce_send_email",
+)
+
+
+def capsule_indirect_injection_cve_2026_21520_defaults(
+    *,
+    extra_denied_tools: tuple[str, ...] = (),
+    allowed_tools: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Defensive bundle for CVE-2026-21520 (ShareLeak) + PipeLeak.
+
+    Capsule Security's January 2026 disclosure of two parallel
+    indirect-prompt-injection vulnerabilities:
+
+    - **ShareLeak** — `CVE-2026-21520`_ (CVSS v3.1 7.5 HIGH; CWE-77;
+      Microsoft Copilot Studio; patched 2026-01-15, published
+      2026-01-22). NVD verbatim: *"Exposure of Sensitive Information
+      to an Unauthorized Actor in Copilot Studio allows a
+      unauthenticated attacker to view sensitive information through
+      network attack vector"*. Capsule's named scenario: untrusted
+      SharePoint form fields are concatenated into the agent system
+      prompt with no input sanitisation; the agent then queries
+      SharePoint and exfiltrates via Outlook.
+    - **PipeLeak** — Capsule's name for the parallel vulnerability in
+      Salesforce Agentforce. No separate CVE in public NVD as of this
+      writing; same architectural pattern targeting Web-to-Lead form
+      inputs with outbound case / lead / email actions.
+
+    Threat-shape — the architectural pattern Capsule documents:
+
+    1. Attacker plants malicious instructions in an untrusted form
+       (SharePoint form / Web-to-Lead form).
+    2. Agent reads form data and concatenates it directly into its
+       context window — no boundary between untrusted form content
+       and the agent's own system instructions.
+    3. Agent holds **simultaneous** access to (a) the untrusted form
+       content and (b) outbound communication tools (Outlook send,
+       Salesforce case / email).
+    4. The injected instructions steer the agent to query a sensitive
+       data source (SharePoint / Salesforce records) and exfiltrate
+       via the outbound tool.
+
+    Patching the prompt-injection input alone does not close the
+    architectural gap — the same agent / sink / form pattern persists
+    across re-architected prompts. The defence has to live at the
+    *boundary* between untrusted context and privileged action.
+
+    This preset is the boundary. It composes existing agent-airlock
+    primitives — it does **not** invent a new validator:
+
+    - :attr:`SecurityPolicy.default_deny` ``= True``. Empty
+      ``allowed_tools`` means **nothing** is callable; deployments opt
+      every tool in by name. Closes the "any tool the agent dreamed
+      up is callable" path.
+    - :attr:`SecurityPolicy.denied_tools` — the canonical exfil-sink
+      glob set. Deny-by-default at the sink level, so even if an
+      operator forgets to tighten ``allowed_tools``, the outbound
+      channels stay closed.
+    - :attr:`SecurityPolicy.reauth_on_untrusted_reinvocation` ``=
+      True`` with ``untrusted_reinvocation_threshold=1``. The v0.8.6
+      debate-amplification guard: any tool reinvocation within a
+      context whose origin includes untrusted tool output requires a
+      fresh ``authorize_once()`` grant on the
+      :class:`AirlockContext`. Directly addresses the
+      untrusted-content-reaches-privileged-action exfil pattern.
+    - :class:`AirlockConfig` with
+      ``unknown_args=UnknownArgsMode.BLOCK``. Closes the smuggle-a-
+      hallucinated-arg-past-the-validator escape hatch the model uses
+      when the indirect injection asks it to pass an undeclared
+      ``to``/``recipient``/``url`` kwarg.
+
+    Diff-compatibility — this preset is **opt-in only**:
+
+    - The new factory is not added to any default priority chain.
+      Callers that don't opt in see exactly v0.8.13 behavior.
+    - The denied-list defaults are extendable via ``extra_denied_tools``
+      so an operator with additional vendor-specific sinks
+      (e.g. Slack webhooks, ServiceNow record updates) can extend
+      without forking the preset.
+    - ``allowed_tools`` defaults to ``()`` (deny-all) — operators name
+      the *read-side* tools their agent legitimately uses. Without
+      this opt-in step the preset would block the agent entirely; the
+      design pairs with ``airlock-explain --unused-scopes`` (v0.8.13)
+      so operators populate the allow-list from a real trace.
+
+    Args:
+        extra_denied_tools: Tool-name globs to deny on top of the
+            canonical exfil-sink set. Vendor-specific sinks
+            (e.g. ``"slack_webhook_*"``, ``"servicenow_create_*"``)
+            go here.
+        allowed_tools: Read-side tool-name globs the operator
+            explicitly admits. **Empty = deny-all** (the strictest
+            posture and the default). The operator is expected to
+            populate this after reviewing their agent's actual
+            read surface — e.g. via ``airlock-explain --unused-scopes``
+            against a representative trace.
+
+    Returns:
+        ``dict[str, Any]`` with:
+
+        - ``policy`` — the :class:`SecurityPolicy` carrying the
+          deny-by-default + reauth-on-untrusted + denied-sinks posture.
+        - ``airlock_config`` — an :class:`AirlockConfig` with
+          ``unknown_args=UnknownArgsMode.BLOCK``.
+        - ``denied_sinks`` — the canonical exfil-sink glob set used
+          (for audit / telemetry narrative).
+        - ``tool_corpus`` — the Capsule-disclosed tool-name corpus
+          this preset targets (for documentation / regression-test
+          fixture reuse).
+        - ``source`` — primary NVD link.
+        - ``capsule_disclosure`` — Capsule blog link covering the
+          ShareLeak / PipeLeak architecture analysis.
+
+    Usage::
+
+        from agent_airlock import Airlock
+        from agent_airlock.policy_presets import (
+            capsule_indirect_injection_cve_2026_21520_defaults,
+        )
+
+        guard = capsule_indirect_injection_cve_2026_21520_defaults(
+            # Read-side tools your Agentforce / Copilot Studio agent
+            # legitimately needs. Anything not in this set is denied.
+            allowed_tools=("sharepoint_query", "sharepoint_search"),
+            # Vendor-specific exfil sinks not in the canonical set:
+            extra_denied_tools=("slack_webhook_*", "datadog_log_*"),
+        )
+
+        @Airlock(policy=guard["policy"], config=guard["airlock_config"])
+        def outlook_send_email(to: str, body: str) -> None:
+            ...  # Will be DENIED at the policy layer.
+
+    .. _CVE-2026-21520: https://nvd.nist.gov/vuln/detail/CVE-2026-21520
+    """
+    from .config import AirlockConfig
+    from .unknown_args import UnknownArgsMode
+
+    denied_tools = list(_CAPSULE_INDIRECT_INJECTION_EXFIL_SINKS) + list(extra_denied_tools)
+    policy = SecurityPolicy(
+        allowed_tools=list(allowed_tools),
+        denied_tools=denied_tools,
+        default_deny=True,
+        reauth_on_untrusted_reinvocation=True,
+        untrusted_reinvocation_threshold=1,
+    )
+    return {
+        "policy": policy,
+        "airlock_config": AirlockConfig(unknown_args=UnknownArgsMode.BLOCK),
+        "denied_sinks": _CAPSULE_INDIRECT_INJECTION_EXFIL_SINKS,
+        "tool_corpus": _CAPSULE_INDIRECT_INJECTION_TOOL_CORPUS,
+        "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-21520",
+        "capsule_disclosure": (
+            "https://www.capsulesecurity.io/blog-post/"
+            "shareleak-taking-the-wheel-of-microsofts-copilot-studio-cve-2026-21520"
+        ),
+    }
+
+
+CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS = (
+    capsule_indirect_injection_cve_2026_21520_defaults()
+)
+"""Eagerly-constructed defaults for
+:func:`capsule_indirect_injection_cve_2026_21520_defaults`.
+
+Use the constant when you want the canonical deny-by-default posture
+without per-operator extensions; call the factory when you need to
+extend ``extra_denied_tools`` or admit read-side ``allowed_tools``.
+"""
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -2911,4 +3133,7 @@ __all__ = [
     "mobile_mcp_intent_guard_2026_05",
     "MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS",
     "MobileMcpIntentBlocked",
+    # V0.8.14 CVE-2026-21520 (Capsule ShareLeak / PipeLeak) indirect injection
+    "capsule_indirect_injection_cve_2026_21520_defaults",
+    "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
 ]

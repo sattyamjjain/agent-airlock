@@ -9,6 +9,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Capsule ShareLeak / PipeLeak preset (v0.8.14, CVE-2026-21520)
+
+`capsule_indirect_injection_cve_2026_21520_defaults()` — a deny-by-
+default preset for the
+[Capsule Security](https://www.capsulesecurity.io/blog-post/shareleak-taking-the-wheel-of-microsofts-copilot-studio-cve-2026-21520)-disclosed
+indirect-prompt-injection class:
+
+- **ShareLeak — [CVE-2026-21520](https://nvd.nist.gov/vuln/detail/CVE-2026-21520)**
+  (CVSS v3.1 7.5 HIGH, CWE-77, Microsoft Copilot Studio, patched
+  2026-01-15, published 2026-01-22). NVD verbatim: *"Exposure of
+  Sensitive Information to an Unauthorized Actor in Copilot Studio
+  allows a unauthenticated attacker to view sensitive information
+  through network attack vector"*. Capsule's named scenario:
+  untrusted SharePoint form fields are concatenated into the agent
+  system prompt with no input sanitisation; the agent then queries
+  SharePoint and exfiltrates via Outlook.
+- **PipeLeak** — Capsule's name for the parallel vulnerability in
+  Salesforce Agentforce. No separate CVE in public NVD; same
+  architectural pattern targeting Web-to-Lead form inputs with
+  outbound case / lead / email actions.
+
+**Architectural pattern.** Untrusted form input → agent context (no
+boundary) → agent holds simultaneous access to (a) the untrusted
+content and (b) outbound exfil tools → injected instructions steer
+the agent to query a sensitive data source and exfiltrate via the
+outbound tool. Patching the prompt-injection input alone does not
+close the gap.
+
+**Defence.** The preset composes existing agent-airlock primitives —
+**no new validator invented**:
+
+- `SecurityPolicy(default_deny=True, allowed_tools=())` — empty
+  allow-list under default_deny means nothing is callable; operators
+  opt every read-side tool in by name (pairs with
+  `airlock-explain --unused-scopes` v0.8.13 for trace-driven
+  allow-list authoring).
+- `denied_tools` — the canonical exfil-sink glob set across Copilot
+  Studio / Outlook (`send_email`, `outlook_*`, `smtp_*`), Salesforce
+  Agentforce (`create_case`, `create_lead`, `post_to_chatter`,
+  `salesforce_send_email`), and generic agentic sinks (`share_*`,
+  `export_*`, `post_to_*`, `webhook_*`, `publish_*`, `upload_*`,
+  `external_*`, `http_request`, `http_post`, `fetch_url`).
+  Deny-list precedence — even with an operator-set read-side
+  allow-list, exfil sinks remain DENIED.
+- `reauth_on_untrusted_reinvocation=True` +
+  `untrusted_reinvocation_threshold=1` — the v0.8.6 debate-
+  amplification guard at its strictest setting. Any tool
+  reinvocation within a context whose origin includes untrusted
+  tool output requires a fresh `authorize_once()` grant on the
+  `AirlockContext`.
+- `AirlockConfig(unknown_args=UnknownArgsMode.BLOCK)` — closes the
+  smuggle-a-hallucinated-arg-past-the-validator escape hatch.
+
+**Surfaces:**
+
+- `agent_airlock.policy_presets.capsule_indirect_injection_cve_2026_21520_defaults(*, extra_denied_tools=(), allowed_tools=()) -> dict[str, Any]`
+  — the factory. Discoverable via `policy_presets.list_active()`.
+- `agent_airlock.policy_presets.CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS`
+  — the eagerly-constructed default singleton (canonical posture, no
+  operator extensions).
+- Both re-exported from the top-level `agent_airlock` namespace.
+
+**Diff-compatibility.** Strictly opt-in. Not added to any default
+priority chain. Callers that don't construct the preset see exactly
+v0.8.13 behavior.
+
+**Tests.** 39 new tests under
+`tests/cves/test_cve_2026_21520_capsule_indirect_injection.py` cover
+structure (NVD source / Capsule blog link / canonical corpus / both
+the ShareLeak and PipeLeak tool-name surfaces),
+posture (`default_deny=True`, empty `allowed_tools`,
+`reauth_on_untrusted_reinvocation` at the strictest setting,
+`UnknownArgsMode.BLOCK`), parametrized denial across all 19
+canonical exfil sinks under default-only AND with read-side
+allow-list set (deny-list precedence), operator extensions
+(`extra_denied_tools`, fresh factory instances no aliasing), and
+end-to-end `@Airlock` admit + block (read tool admitted, exfil
+returns a blocked `AirlockResponse`).
+
+**Version housekeeping (drift fix).** `src/agent_airlock/__init__.py`
+`__version__` was stale at `"0.8.9"` (4 versions behind
+`pyproject.toml = "0.8.13"`). Aligned to `"0.8.14"` in this PR.
+
+Version bump 0.8.13 → 0.8.14 (additive preset; no API break; zero
+new runtime deps).
+
 ### Added — `airlock-explain --unused-scopes` privilege right-sizing reporter (v0.8.13)
 
 `airlock-explain` — a new **read-only** CLI that surfaces

@@ -417,6 +417,7 @@ from .policy import (
 
 # V0.5.0 2026 policy presets + V0.5.1 Ox STDIO sanitizer preset
 from .policy_presets import (
+    CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS,
     EU_AI_ACT_ARTICLE_15,
     GTG_1002_DEFENSE,
     INDIA_DPDP_2023,
@@ -429,6 +430,7 @@ from .policy_presets import (
     GitPilotRepoPathInjection,
     HighValueActionBlocked,
     MobileMcpIntentBlocked,
+    capsule_indirect_injection_cve_2026_21520_defaults,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
@@ -568,7 +570,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.9"
+__version__ = "0.8.14"
 
 __all__ = [
     # Core
@@ -614,6 +616,9 @@ __all__ = [
     "mobile_mcp_intent_guard_2026_05",
     "MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS",
     "MobileMcpIntentBlocked",
+    # V0.8.14 CVE-2026-21520 (Capsule ShareLeak / PipeLeak) indirect injection
+    "capsule_indirect_injection_cve_2026_21520_defaults",
+    "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
     "AgentCommerceCapExceeded",
     "AgentCommerceCaps",
