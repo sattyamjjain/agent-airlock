@@ -9,6 +9,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Action-time contradiction gate (v0.8.15, arXiv:2605.27157)
+
+`ActionContradictionGate` — an opt-in, off-by-default policy hook that
+gates privileged / irreversible actions when the session has signalled
+acknowledged-contradiction evidence. Closes the "detecting is not
+resolving" monitoring-control gap reported by Yu et al.,
+[*Detecting Is Not Resolving: The Monitoring Control Gap in
+Retrieval Augmented LLMs*](https://arxiv.org/abs/2605.27157) (2026):
+*"Models exhibit a monitoring-control gap: they readily acknowledge
+contradictory evidence, yet this awareness fails to constrain their
+final recommendations."* The paper localises the deficit at action
+selection; this module is the action-time control.
+
+**Three pluggable, orthogonal detectors** (any one trips the gate):
+
+- `signal_field_key`: a key into `AirlockContext.metadata`; the gate
+  trips iff the value at that key is **strict `True`** (the
+  unambiguous boolean-flag shape).
+- `marker_regex`: a pre-compiled regex run against the value at the
+  same key **when that value is a string** (operator's narrative
+  marker shape). Reads only operator-supplied marker strings — never
+  the model's full reasoning trace.
+- `predicate`: a fully pluggable `Callable[[AirlockContext], bool]`.
+  A predicate that raises is swallowed (the gate logs
+  `predicate_error` and treats as no-vote — telemetry never breaks
+  enforcement).
+
+**Privileged-sink glob set.** Default canonical set covers send /
+publish / dispatch (`send_*`, `publish_*`, `post_to_*`, `webhook_*`,
+`dispatch_*`), export / share / upload (`export_*`, `share_*`,
+`upload_*`), state-mutating commits and transfers (`commit_*`,
+`transfer_*`, `wire_*`, `pay_*`, `create_payment_*`), irreversible
+deletes (`delete_*`, `drop_*`, `destroy_*`, `purge_*`), and the
+v0.8.14 outbound-integration set (`outlook_*`, `smtp_*`,
+`salesforce_send_email`, `create_case`, `create_lead`). Operators can
+narrow via `privileged_sinks=(...)`.
+
+**Explicit-allow primitive reused, not duplicated.** The gate's
+allow path is the existing `AirlockContext.authorize_once(tool_name)`
+introduced for the v0.8.6 reauth flow. After a one-shot is consumed
+the gate **re-locks** (sticky-trip invariant) — the harness must mint
+a fresh `authorize_once` for each privileged action.
+
+**Off-by-default invariant.** `SecurityPolicy.action_contradiction_gate`
+defaults to `None`; non-RAG flows pay **zero false-positive tax** (no
+detector runs, no log lines, no metadata reads). Even when wired, the
+gate is **inert until at least one detector is configured** — a
+partial roll-out (gate attached but detectors flipped off) admits
+everything.
+
+**Fail-closed `action`.** `action="block"` (default) raises
+`ActionContradictionViolation` — a `PolicyViolation` subclass, so the
+existing `handle_policy_violation` chain in `core.py` picks it up
+unchanged. `action="warn"` logs via structlog + admits, for staged
+turn-up against real traffic.
+
+Disambiguation:
+
+- **Not** `agent_airlock.sequence_guard.SequenceGuard` (v0.8.12) —
+  that flags unusual call **order**.
+- **Not** `SecurityPolicy.reauth_on_untrusted_reinvocation` (v0.8.6)
+  — that's **count-driven** on a per-tool counter once any untrusted
+  output has flowed back.
+- This gate is **signal-driven** and targets a specific **privileged-
+  sink glob set**. The three compose; run all three for layered
+  coverage.
+
+Surfaces:
+
+- `agent_airlock.action_contradiction_gate` — new module:
+  - `ActionContradictionGate` (`@dataclass`, thread-safe,
+    `threading.Lock`-protected sticky state).
+  - `ActionContradictionViolation(PolicyViolation)`.
+  - `DEFAULT_PRIVILEGED_SINKS: tuple[str, ...]` — the canonical set.
+  - `ContradictionGateAction = Literal["block", "warn"]`.
+- `agent_airlock.policy.SecurityPolicy.action_contradiction_gate:
+  ActionContradictionGate | None = None` — new optional field;
+  default `None` preserves v0.8.14 behavior exactly.
+- `agent_airlock.core.Airlock._check_action_contradiction_gate(...)`
+  — new private **Step 2.6** in the `@Airlock` pre-execution
+  pipeline. Runs right after the v0.8.12 sequence-guard hook (Step
+  2.5) so a transition-blocked tool never advances the
+  contradiction state.
+
+Tests: 53 in `tests/test_action_contradiction_gate.py` covering
+construction validation (action / privileged_sinks /
+no-detectors-inert), all 3 detector kinds (incl. predicate-raise
+swallowed + any-detector-trips), 22 default privileged-sink globs
+parametrized blocked when tripped, 4 non-sink tools admitted under
+tripped state, operator override of `privileged_sinks`,
+authorize_once one-shot flow, sticky-trip invariant after one-shot
+consumed, per-tool grant isolation, warn vs block, reset
+(per-session + global), exception payload shape (subclass of
+`PolicyViolation`, audit-friendly `details`), thread safety (20
+concurrent calls all blocked), and `@Airlock` end-to-end (privileged
+sink blocked via the positional-context-wrapper pattern, non-sink
+admitted under contradiction, clean session admits).
+
+Smoke
+
+`scripts/smoke_action_contradiction_gate.py` builds the wheel,
+installs into a fresh venv with **no extras**, imports the gate from
+the *installed* package, simulates an "acknowledged contradiction"
+trace by passing a `RunContextWrapper`-shaped wrapper carrying
+`metadata={"evidence_contradiction": True}`, asserts a dummy
+`send_email` tool returns a blocked `AirlockResponse`, asserts a
+dummy `read_kb` (non-sink) is admitted, asserts a clean session
+(`evidence_contradiction=False`) admits the privileged tool, and
+asserts `__version__ == "0.8.15"` on the installed package.
+
+Version bump 0.8.14 → 0.8.15 (additive new module + additive
+optional `SecurityPolicy` field; no API break; zero new runtime
+deps).
+
 ### Added — Capsule ShareLeak / PipeLeak preset (v0.8.14, CVE-2026-21520)
 
 `capsule_indirect_injection_cve_2026_21520_defaults()` — a deny-by-

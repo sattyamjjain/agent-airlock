@@ -27,6 +27,7 @@ import structlog
 from .exceptions import AirlockError
 
 if TYPE_CHECKING:
+    from .action_contradiction_gate import ActionContradictionGate
     from .capabilities import CapabilityPolicy
     from .cost_tracking import (
         BudgetEstimate,
@@ -376,6 +377,14 @@ class SecurityPolicy:
     # exactly — no recording, no flagging, no on-disk state. See
     # ``agent_airlock.sequence_guard`` for the full contract.
     sequence_guard: SequenceGuard | None = None
+    # V0.8.15 action-time contradiction gate (arXiv:2605.27157).
+    # When set, the @Airlock seam runs the gate as Step 2.6, right
+    # after the v0.8.12 sequence guard. The gate is OFF by default
+    # (None preserves v0.8.14 behavior exactly) and even when wired
+    # is inert until at least one detector slot is configured — so
+    # non-RAG flows pay no false-positive tax. See
+    # :mod:`agent_airlock.action_contradiction_gate` for the contract.
+    action_contradiction_gate: ActionContradictionGate | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
