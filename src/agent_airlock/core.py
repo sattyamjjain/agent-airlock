@@ -458,6 +458,18 @@ class Airlock:
             if seq_error is not None:
                 return kwargs, start_time, context, seq_error, None
 
+            # Step 2.6: Action-time contradiction gate (V0.8.15,
+            # arXiv:2605.27157). Runs after the sequence guard so a
+            # transition-blocked tool never advances the contradiction
+            # state. Inert when policy.action_contradiction_gate is None.
+            acg_error = self._check_action_contradiction_gate(
+                func_name=func_name,
+                resolved_policy=resolved_policy,
+                context=context,
+            )
+            if acg_error is not None:
+                return kwargs, start_time, context, acg_error, None
+
             # Step 3: Validate filesystem paths
             fs_error = self._validate_filesystem_paths(func_name, cleaned_kwargs)
             if fs_error is not None:
@@ -1264,6 +1276,83 @@ class Airlock:
                     "to_tool": e.to_tool,
                     "session_key": e.session_key,
                     "observed_probability": e.observed_probability,
+                },
+            )
+            return response
+
+        return None
+
+    def _check_action_contradiction_gate(
+        self,
+        *,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        context: AirlockContext[Any],
+    ) -> AirlockResponse | None:
+        """Action-time contradiction gate (V0.8.15, arXiv:2605.27157).
+
+        Calls ``policy.action_contradiction_gate.check_action(...)`` if
+        configured. The gate's pluggable detectors (signal field,
+        marker regex, predicate) decide whether the session has
+        signalled acknowledged-contradiction evidence; if so AND the
+        dispatched tool is a privileged sink, the gate raises
+        :class:`ActionContradictionViolation` unless the caller has
+        issued :meth:`AirlockContext.authorize_once` for this tool.
+
+        See :mod:`agent_airlock.action_contradiction_gate` for the
+        full contract.
+
+        Args:
+            func_name: Name of the function being called.
+            resolved_policy: The resolved :class:`SecurityPolicy` (or None).
+            context: Current :class:`AirlockContext` — read for the
+                detector inputs (``metadata``) and the explicit-allow
+                grant (``_authorized_once``).
+
+        Returns:
+            Error response if the action is blocked, None otherwise.
+            Returns None on warn-mode flags too — the gate has already
+            logged the warn event.
+        """
+        if resolved_policy is None or resolved_policy.action_contradiction_gate is None:
+            return None
+
+        gate = resolved_policy.action_contradiction_gate
+
+        # Resolve the session key the same way the sequence guard does:
+        # caller-preferred id first, fall back, fall back to anonymous.
+        if gate.session_key_kind == "session_id":
+            session_key = context.session_id or context.agent_id or "__anonymous__"
+        else:
+            session_key = context.agent_id or context.session_id or "__anonymous__"
+
+        # Lazy import to avoid the module-level cycle
+        # (action_contradiction_gate imports PolicyViolation from
+        # policy.py).
+        from .action_contradiction_gate import ActionContradictionViolation
+
+        try:
+            gate.check_action(
+                context=context,
+                tool_name=func_name,
+                session_key=session_key,
+            )
+        except ActionContradictionViolation as e:
+            response = handle_policy_violation(
+                func_name,
+                policy_name="ActionContradictionGate",
+                reason=e.message,
+            )
+            self._safe_invoke_callback(
+                self.config.on_blocked,
+                "on_blocked",
+                func_name,
+                e.message,
+                {
+                    "violation_type": "action_contradiction_violation",
+                    "tool_name": e.tool_name,
+                    "detector_kind": e.detector_kind,
+                    "session_key": e.session_key,
                 },
             )
             return response

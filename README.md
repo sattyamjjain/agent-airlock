@@ -523,6 +523,78 @@ a chain-of-thought monitor — by construction.
 
 ---
 
+### 🛑 Action-time contradiction gate (v0.8.15)
+
+[arXiv:2605.27157](https://arxiv.org/abs/2605.27157) ("Detecting Is
+Not Resolving: The Monitoring Control Gap in Retrieval Augmented
+LLMs", Yu et al., 2026) shows that LLMs **readily acknowledge
+contradictory evidence** in their reasoning trace yet "this awareness
+fails to constrain their final recommendations". The deficit is at
+*action selection* — single-turn diagnostics overestimate RAG safety,
+and detection alone is not a control.
+
+`ActionContradictionGate` is an opt-in policy hook that wraps three
+**pluggable detectors** (any one trips) and a **privileged-sink glob
+set**. When a detector trips AND the dispatched tool matches a
+privileged sink AND the harness has not issued an explicit allow,
+the gate blocks the call (or warns, depending on `action=`).
+
+The explicit-allow primitive **is not new** — the gate reuses the
+existing `AirlockContext.authorize_once(tool_name)` (introduced for
+the v0.8.6 reauth flow). Same one-shot grant, same semantics. After
+a one-shot is consumed the gate **re-locks** — the harness must mint
+a fresh `authorize_once` for each privileged action.
+
+```python
+import re
+from agent_airlock import Airlock, SecurityPolicy
+from agent_airlock.action_contradiction_gate import ActionContradictionGate
+
+policy = SecurityPolicy(
+    action_contradiction_gate=ActionContradictionGate(
+        # Detector 1: a boolean flag the RAG pipeline flips on after
+        # it sees an evidence-vs-claim conflict the agent discussed.
+        signal_field_key="evidence_contradiction",
+        # Detector 2: pluggable regex against the SAME key when its
+        # value is a string (operator-controlled marker — never the
+        # model's full reasoning trace).
+        marker_regex=re.compile(r"contradict|conflict|disagree", re.I),
+        # Detector 3: fully pluggable callable; receives the context.
+        # predicate=lambda ctx: ctx.metadata.get("conflict_count", 0) > 1,
+        # Default privileged sinks: send_* / export_* / commit_* /
+        # transfer_* / delete_* + the v0.8.14 outbound-integration set.
+        # Operators can narrow via `privileged_sinks=(...)`.
+        action="block",  # or "warn" for staged turn-up
+    ),
+)
+```
+
+**Off-by-default invariant.** `SecurityPolicy.action_contradiction_gate`
+defaults to `None`; non-RAG flows pay **zero false-positive tax**
+(no detector runs, no log lines, no metadata reads). Even when wired,
+the gate is **inert until at least one detector slot is configured**
+— so a partial roll-out (gate attached but detectors flipped off)
+admits everything.
+
+**Not a chain-of-thought monitor.** The gate reads **operator-
+controlled signals** only (a metadata field, an operator regex, an
+operator predicate). It never reads the model's own claim that it
+has or has not noticed a contradiction — the paper's whole point is
+that those claims do not gate behavior.
+
+**Not** `sequence_guard` (v0.8.12) — that flags unusual call ORDER.
+**Not** `reauth_on_untrusted_reinvocation` (v0.8.6) — that's
+count-driven on a per-tool counter. This gate is signal-driven and
+targets a specific privileged-sink glob set. They compose; run all
+three for layered coverage.
+
+> Strictly opt-in. Zero new runtime deps — Pydantic-only core stays
+> intact. The new `SecurityPolicy.action_contradiction_gate` field
+> defaults to `None`; callers that don't set it get exactly v0.8.14
+> behavior.
+
+---
+
 ### 🔎 Privilege right-sizing — `airlock-explain --unused-scopes` (v0.8.13)
 
 A read-only CLI that surfaces **over-permissioning**: it diffs the
