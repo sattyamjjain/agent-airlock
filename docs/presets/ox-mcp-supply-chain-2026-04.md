@@ -22,7 +22,7 @@ micro-checks.
 | CVE-2026-30625 | Claude Desktop MCP | tool-def tamper | `ToolDefinitionRegistry` (new) |
 | CVE-2026-26015 | OpenAI MCP Bridge | SSRF | `check_mcp_bridge_target()` (new) |
 | CVE-2026-33224 | LlamaIndex MCP adapter | unsafe deserialization | `check_tool_response_content_type()` (new) |
-| CVE-2026-40933 | Semantic Kernel MCP | auth-header leak | pre-existing `header_audit` (Azure preset) |
+| CVE-2026-40933 | Flowise MCP-stdio adapter | unsafe stdio command serialization → RCE (CVSS 9.9) | `flowise_mcp_stdio_guard_2026_defaults()` → `flowise_stdio_check` (v0.8.16; composes `StdioCommandInjectionGuard`) |
 
 ## Usage
 
