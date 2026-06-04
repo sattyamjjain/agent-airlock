@@ -9,6 +9,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Flowise MCP-stdio adapter RCE preset (v0.8.16, CVE-2026-40933)
+
+`flowise_mcp_stdio_guard_2026_defaults()` — a per-CVE preset for the
+Flowise authenticated-RCE-via-MCP-stdio-adapter class
+([CVE-2026-40933](https://advisories.gitlab.com/npm/flowise-components/CVE-2026-40933/),
+CVSS 9.9, fixed upstream in Flowise 3.1.0).
+
+Flowise ≤ 3.0.x lets an authenticated user define a CustomMCP server
+with the **stdio** transport, supplying an arbitrary `command` + `args`
+that Flowise serialises straight into a child-process spawn on the
+server — no sandbox, no argv sanitisation. Importing a crafted chatflow
+is a one-click path to OS-level RCE with the Flowise process's
+privileges (often root in containers). Advisory excerpt: *"Due to
+unsafe serialization of stdio commands in the MCP adapter, an
+authenticated attacker can add an MCP stdio server with an arbitrary
+command, achieving command execution."*
+
+**Honest framing — no new detector.** The preset is a per-tool-class
+projection of the existing v0.7.6
+`agent_airlock.mcp_spec.stdio_command_injection_guard.StdioCommandInjectionGuard`
+(the same primitive `mcp_stdio_command_injection_preset_defaults` wires),
+scoped to the Flowise CustomMCP stdio tool-name surface (`customMCP`,
+`custom_mcp`, `mcp_stdio`, `stdio_mcp`, `flowise_mcp`,
+`mcp_server_stdio`). It uses the established per-CVE preset registration
+shape (a `dict[str, Any]` with `preset_id` / `severity` /
+`default_action` / `advisory_url` / `cves` / config knobs) — no new
+registration mechanism invented — and is discoverable via
+`policy_presets.list_active()`.
+
+Fail-closed posture:
+
+- Shell-metachar / unsanitised-arg construction in the stdio command
+  path (`command` field OR any `args` element) → blocked
+  (`deny_shell_metachar`). Default metachar set is the v0.7.6
+  `;`, `&&`, `||`, `|`, newline, carriage return, backtick, `$(`;
+  extend via `extra_metachars`.
+- Path traversal outside an operator-supplied `cwd_allowlist` →
+  blocked (`deny_path_traversal`; opt-in, empty allowlist disables it).
+- The `check(args)` convenience callable raises
+  `FlowiseMcpStdioInjectionError` (an `AirlockError` subclass carrying
+  the verdict + matched token) on a denied argv shape, returns `None`
+  on a benign one.
+
+OWASP mapping: **MCP05 Command Injection** (OWASP MCP Top-10 2026,
+beta).
+
+**Fixes a prior mis-attribution.** `ox_mcp_supply_chain_2026_04_defaults()`
+and `docs/presets/ox-mcp-supply-chain-2026-04.md` previously recorded
+CVE-2026-40933 as a *"Semantic Kernel MCP auth-header leak"* covered by
+`header_audit` — a factual error (no such CVE exists; CVE-2026-40933 is
+the Flowise stdio RCE). This release corrects both: the Ox bundle now
+exposes a `flowise_stdio_check` callable backed by the new guard, so
+CVE-2026-40933 is covered by the correct primitive, and the doc table
+row is fixed.
+
+Surfaces:
+
+- `agent_airlock.policy_presets.flowise_mcp_stdio_guard_2026_defaults(*, cwd_allowlist=(), extra_metachars=frozenset(), extra_tool_name_patterns=())`
+  — the factory; `preset_id="flowise_mcp_stdio_guard_2026"`.
+- `agent_airlock.policy_presets.FlowiseMcpStdioInjectionError`
+  — `AirlockError` subclass with `verdict` / `matched_metachar` /
+  `matched_path` attributes.
+- `ox_mcp_supply_chain_2026_04_defaults()["flowise_stdio_check"]`
+  — the corrected coverage wiring.
+
+Tests: 24 in `tests/cves/test_cve_2026_40933_flowise_mcp_stdio.py` —
+benign argv admitted (incl. no-args + `None` payload), 6 parametrized
+malicious metachar shapes blocked with the expected verdict + matched
+token, path-traversal blocked with `cwd_allowlist` (and within-allowlist
+admitted), `extra_metachars` extension, the canonical preset-shape keys,
+`composes` provenance, tool-name-pattern coverage + extension, type
+validation, `list_active` discovery, and the Ox-bundle correction
+(wires `flowise_stdio_check`, blocks injection, admits benign, CVE still
+listed).
+
+Version bump 0.8.15 → 0.8.16 (additive per-CVE preset + drive-by
+mis-attribution fix; no API break; zero new runtime deps).
+
 ### Added — Action-time contradiction gate (v0.8.15, arXiv:2605.27157)
 
 `ActionContradictionGate` — an opt-in, off-by-default policy hook that
