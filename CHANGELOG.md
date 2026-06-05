@@ -9,6 +9,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Adversarial-negotiation regression harness (v0.8.17)
+
+`agent_airlock.negotiation_bench` — a deterministic regression harness
+that benchmarks the deny-by-default governance layer on a fixed set of
+adversarial buyer-seller negotiation actions, reporting two metrics
+named to line up with the external OCL paper:
+
+- `unsafe_execution_rate` — fraction of adversarial scenarios whose
+  unsafe action actually executed.
+- `valid_task_success_rate` — fraction of valid (policy-compliant)
+  tasks that completed.
+
+Each scenario carries a **concrete, checkable unsafe action** and is
+run twice: **baseline** (no airlock — the unsafe event lands) and
+**governed** (the *same* action routed through the **real** `@Airlock`
+intercept-before-execute path — no policy-layer mocking). Three
+unsafe-action classes each exercise a different real interception
+mechanism:
+
+- `PRICE_BELOW_FLOOR` → Pydantic strict-validation (a constrained
+  `amount` field rejects below-floor values).
+- `SECRET_LEAK` → the output sanitizer (the secret is masked before it
+  leaves the boundary).
+- `TRANSFER_OUTSIDE_POLICY` → deny-by-default `SecurityPolicy` (the
+  out-of-allowlist tool name is blocked).
+
+Benign scenarios are included so the harness also measures that
+governance does **not** over-block legitimate deals. On the default
+scenario set the harness reports baseline `unsafe_execution_rate` 100% →
+governed **0%**, and governed `valid_task_success_rate` **100%** — a
+**regression gate**: weaken the policy layer and governed unsafe rate
+rises above zero (or valid-success drops below one) and the test fails.
+
+**External comparison baseline — clearly labeled, NOT airlock's.**
+The harness records the OCL paper's headline numbers
+([arXiv:2606.04306](https://arxiv.org/abs/2606.04306),
+"Organizational Control Layer", evaluated on AgenticPay-adapted
+negotiation,
+[arXiv:2602.06008](https://arxiv.org/abs/2602.06008)) as a labeled
+comparison row: unsafe executions **88% → near-zero**, valid success
+**12% → 96%**. These are **external** results measured on **live frontier
+LLM agents** and are **not** an agent-airlock measurement. agent-airlock
+is a deterministic execution-boundary validator, not an LLM; the harness
+does not call a model. The OCL row is shown only for directional
+comparison (both put governance at the execution boundary), with that
+distinction stated in the module docstring, the `OCL_EXTERNAL_BASELINE`
+note field, and the rendered report.
+
+**CLI:** `python -m agent_airlock.cli.negotiation_bench --report
+{text,json,markdown}`. The `markdown` mode emits a blog-pasteable table
+(scenario, baseline/governed unsafe%, baseline/governed success%) with
+the agent-airlock rows next to the labeled OCL row. A
+`--fail-if-governed-unsafe` flag turns the harness into a CI regression
+gate. structlog diagnostics are routed to stderr so stdout stays clean
+for `| jq` (mirrors `cli/corpus_bench`).
+
+Surfaces:
+
+- `agent_airlock.negotiation_bench` — `run_benchmark()`,
+  `BenchmarkReport`, `ScenarioRun`, `NegotiationScenario`,
+  `UnsafeActionKind`, `DEFAULT_SCENARIOS`, `OCL_EXTERNAL_BASELINE`,
+  `OCLExternalBaseline`.
+- `agent_airlock.cli.negotiation_bench` — `main(argv)` CLI.
+
+Tests: 25 in `tests/test_negotiation_bench.py` — the regression-gate
+guarantee (governed unsafe 0.0 / valid-success 1.0, baseline unsafe
+1.0), per-mechanism coverage (price / secret / transfer each block when
+governed and land at baseline), benign-not-over-blocked, the real-path
+assertion (the governed price run actually hits the `@Airlock`
+validator), external-baseline labeling, JSON/markdown/text CLI render,
+the CI gate flag, and edge cases (kind=None and custom-floor mismatch
+raise).
+
+Version bump 0.8.16 → 0.8.17 (additive harness + CLI; no API break;
+zero new runtime deps).
+
 ### Added — Flowise MCP-stdio adapter RCE preset (v0.8.16, CVE-2026-40933)
 
 `flowise_mcp_stdio_guard_2026_defaults()` — a per-CVE preset for the

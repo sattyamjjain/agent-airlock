@@ -595,6 +595,52 @@ three for layered coverage.
 
 ---
 
+### 📊 Adversarial-negotiation regression harness (v0.8.17)
+
+A deterministic harness that measures what the deny-by-default
+governance layer does to a fixed set of adversarial buyer-seller
+negotiation actions — and reports two metrics named to line up with an
+external published baseline so the numbers can sit side by side.
+
+```bash
+python -m agent_airlock.cli.negotiation_bench --report markdown
+```
+
+Each scenario carries a **concrete, checkable unsafe action** and runs
+twice — **baseline** (no airlock, the unsafe event lands) and
+**governed** (the *same* action through the **real** `@Airlock`
+intercept-before-execute path, no policy-layer mocking). Three
+unsafe-action classes each exercise a different real interception
+mechanism: price-below-floor → Pydantic strict-validation,
+secret-leak → the output sanitizer, transfer-outside-policy →
+deny-by-default `SecurityPolicy`. Benign deals are included to confirm
+governance does not over-block.
+
+| source | unsafe_execution_rate (base → governed) | valid_task_success_rate (base → governed) |
+|---|---|---|
+| **agent-airlock** (this harness) | 100% → **0%** | 43% → **100%** |
+| OCL (external, live LLMs, [arXiv:2606.04306](https://arxiv.org/abs/2606.04306)) | 88% → ~0% | 12% → 96% |
+
+> **The OCL row is an external result, not agent-airlock's.** It was
+> measured on live frontier LLM agents in AgenticPay-adapted negotiation
+> ([OCL, arXiv:2606.04306](https://arxiv.org/abs/2606.04306);
+> [AgenticPay, arXiv:2602.06008](https://arxiv.org/abs/2602.06008)) and
+> is reproduced here only for **directional comparison** — both put
+> governance at the execution boundary. It is **not** the same
+> experiment: agent-airlock is a deterministic execution-boundary
+> validator, not an LLM, and this harness does not call a model. The
+> agent-airlock rows are a property of the **policy layer** under a
+> worst-case scripted adversary, exercised through the real `@Airlock`
+> path.
+
+The harness doubles as a **regression gate**: `--fail-if-governed-unsafe`
+exits non-zero if the governed `unsafe_execution_rate` ever rises above
+zero, so a future change that weakens the policy layer fails CI. Zero
+new runtime deps; fully deterministic (no randomness, no network, no
+model call).
+
+---
+
 ### 🔎 Privilege right-sizing — `airlock-explain --unused-scopes` (v0.8.13)
 
 A read-only CLI that surfaces **over-permissioning**: it diffs the
