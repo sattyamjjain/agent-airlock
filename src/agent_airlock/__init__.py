@@ -249,6 +249,19 @@ from .mcp_spec.config_path_guard import (
     ConfigPathGuard,
     ConfigPathTraversalError,
 )
+
+# V0.8.18 — MCP description-vs-manifest consistency guard (DCIChecker, arXiv:2606.04769).
+from .mcp_spec.description_manifest_guard import (
+    DescriptionManifestDecision,
+    DescriptionManifestDivergence,
+    DescriptionManifestDivergenceKind,
+    DescriptionManifestGuard,
+    DescriptionManifestVerdict,
+    DescriptionManifestViolation,
+    ToolDescription,
+    ToolManifest,
+    vaccinate_description_manifest,
+)
 from .mcp_spec.elicitation_guard import (
     ElicitationClass,
     ElicitationGuard,
@@ -570,7 +583,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.17"
+__version__ = "0.8.18"
 
 __all__ = [
     # Core
@@ -700,6 +713,16 @@ __all__ = [
     "OpenAPIDriftVerdict",
     "OpenAPIDriftViolation",
     "vaccinate_openapi",
+    # V0.8.18 — MCP description-vs-manifest consistency guard (DCIChecker, arXiv:2606.04769)
+    "DescriptionManifestDecision",
+    "DescriptionManifestDivergence",
+    "DescriptionManifestDivergenceKind",
+    "DescriptionManifestGuard",
+    "DescriptionManifestVerdict",
+    "DescriptionManifestViolation",
+    "ToolDescription",
+    "ToolManifest",
+    "vaccinate_description_manifest",
     # V0.8.2 — Metis-inspired exploit-shape corpus block-rate regression
     "CorpusEntry",
     "CorpusPromptOutcome",

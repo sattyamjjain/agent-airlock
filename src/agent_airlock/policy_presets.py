@@ -3245,6 +3245,107 @@ extend ``extra_denied_tools`` or admit read-side ``allowed_tools``.
 """
 
 
+def mcp_description_manifest_guard_defaults(
+    *,
+    manifests: Iterable[Any],
+    drift_mode: str = "strict",
+) -> dict[str, Any]:
+    """Recommended config for the v0.8.18 MCP description-vs-manifest guard.
+
+    Wires
+    :class:`agent_airlock.mcp_spec.description_manifest_guard.DescriptionManifestGuard`
+    to the operator-supplied manifest registry at the configured drift
+    mode. The guard asserts that each tool's **model-facing description**
+    (declared input schema + advertised capability/security boundary)
+    is internally consistent with the tool's **registered manifest** —
+    *before* the tool is admitted — and fails closed on a mismatch per
+    the deny-by-default posture.
+
+    This composes **above** the existing ghost-arg stripping
+    (``unknown_args``) and Pydantic strict type-validation
+    (``validator``): those govern the observed call payload, while this
+    preset adds the semantic *description-vs-declared-contract*
+    assertion. It does not replace them.
+
+    Anchor: the DCIChecker study (arXiv:2606.04769) measured
+    **Description-Code Inconsistency** at **9.93% of 19,200 tool
+    pairs across 2,214 MCP servers** — the description the model
+    consumes does not match the tool's actual contract ~1 in 10 times.
+
+    OWASP mapping: **MCP03 Tool Poisoning** (OWASP MCP Top-10 2026,
+    beta) — the under-disclosed-side-effect direction. Composes cleanly
+    with :func:`owasp_mcp_top_10_2026_policy`.
+
+    Args:
+        manifests: Iterable of
+            :class:`agent_airlock.mcp_spec.description_manifest_guard.ToolManifest`
+            — the authoritative registered contracts. The caller owns
+            sourcing these (server ``tools/list``, a checked-in
+            manifest, a reviewed catalogue); agent-airlock imports no
+            MCP SDK.
+        drift_mode: ``"strict"`` (default) / ``"warn"`` / ``"shadow"``.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity``
+        / ``default_action`` / ``advisory_url`` keys, plus:
+
+        - ``guard`` — a pre-built ``DescriptionManifestGuard`` ready to
+          ``evaluate(description)``.
+        - ``check`` — convenience callable; ``check(description)`` raises
+          :class:`DescriptionManifestViolation` on an inconsistent
+          description and returns ``None`` on a consistent one.
+        - ``owasp`` — ``"MCP03"``.
+        - ``drift_mode`` — echo of the configured mode.
+
+    Raises:
+        ValueError: ``drift_mode`` is unknown.
+
+    Usage::
+
+        from agent_airlock.policy_presets import mcp_description_manifest_guard_defaults
+        from agent_airlock.mcp_spec.description_manifest_guard import (
+            ToolManifest,
+            ToolDescription,
+        )
+
+        preset = mcp_description_manifest_guard_defaults(
+            manifests=[ToolManifest(name="read_file", declared_args={"path"})],
+        )
+        preset["check"](ToolDescription(name="read_file", described_args={"path"}))  # ok
+        preset["check"](ToolDescription(name="read_file", described_args={"path", "url"}))  # raises
+
+    Primary source:
+      https://arxiv.org/abs/2606.04769
+    """
+    from .mcp_spec.description_manifest_guard import (
+        DescriptionManifestGuard,
+        DescriptionManifestViolation,
+        ToolDescription,
+    )
+
+    if drift_mode not in ("strict", "warn", "shadow"):
+        raise ValueError(f"drift_mode must be 'strict'|'warn'|'shadow'; got {drift_mode!r}")
+
+    guard = DescriptionManifestGuard(manifests=manifests, drift_mode=drift_mode)
+
+    def _check(description: ToolDescription) -> None:
+        """Raise :class:`DescriptionManifestViolation` on an inconsistent description."""
+        decision = guard.evaluate(description)
+        if not decision.allowed:
+            raise DescriptionManifestViolation(decision)
+
+    return {
+        "preset_id": "mcp_description_manifest_guard",
+        "severity": "high",
+        "default_action": "deny" if drift_mode == "strict" else "allow",
+        "guard": guard,
+        "check": _check,
+        "owasp": "MCP03",
+        "drift_mode": drift_mode,
+        "advisory_url": "https://arxiv.org/abs/2606.04769",
+    }
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -3327,4 +3428,6 @@ __all__ = [
     # V0.8.16 CVE-2026-40933 (Flowise MCP-stdio adapter RCE)
     "flowise_mcp_stdio_guard_2026_defaults",
     "FlowiseMcpStdioInjectionError",
+    # V0.8.18 DCIChecker (arXiv:2606.04769) description-vs-manifest guard
+    "mcp_description_manifest_guard_defaults",
 ]

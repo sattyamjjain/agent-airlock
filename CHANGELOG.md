@@ -9,6 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — MCP description-vs-manifest consistency guard (v0.8.18)
+
+`agent_airlock.mcp_spec.description_manifest_guard.DescriptionManifestGuard`
+— a runtime consistency gate that asserts a tool's **model-facing
+description** (its declared input schema + advertised capability /
+security boundary) is internally consistent with the tool's
+**registered manifest** *before* the tool is admitted, failing closed
+per the deny-by-default posture.
+
+Anchored on the DCIChecker study
+([arXiv:2606.04769](https://arxiv.org/abs/2606.04769)), which measured
+**Description-Code Inconsistency at 9.93% of 19,200 tool
+description/implementation pairs across 2,214 MCP servers** — the
+description a model consumes does not match the tool's actual contract
+roughly 1 call in 10.
+
+The guard detects three divergence classes:
+
+- `described_arg_not_in_manifest` — the description advertises an
+  argument the manifest never declares (a model following the
+  description faithfully would invent a ghost argument).
+- `undisclosed_side_effect` — the manifest declares a side effect /
+  capability the description does not disclose (the under-disclosure /
+  tool-poisoning direction).
+- `overclaimed_capability` — the description advertises a capability
+  absent from the manifest.
+
+A manifest arg the description omits is intentionally **not** flagged:
+benign under-documentation of an input is governed by the ghost-arg /
+Pydantic layer at call time, not by this semantic guard.
+
+This composes **above** the existing ghost-argument stripping
+(`unknown_args`) and Pydantic strict type-validation (`validator`):
+those govern the observed call payload, while this guard asserts the
+declared contract itself is honest. It does **not** replace them.
+
+Three drift modes mirror the v0.8.1 `OpenAPIDriftGuard`: `strict`
+(default — deny on any inconsistency), `warn` (allow + structured log),
+`shadow` (allow + record, no log). `vaccinate_description_manifest(manifests)`
+returns a wrap-seam decorator that raises `DescriptionManifestViolation`
+**before** the underlying tool executes; the violation carries the
+decision and LLM-actionable `fix_hints`. Inputs (`ToolManifest`,
+`ToolDescription`) are caller-supplied — agent-airlock imports no MCP
+SDK and adds no runtime dependency (Pydantic-only core).
+
+**Preset:** `mcp_description_manifest_guard_defaults(manifests=..., drift_mode=...)`
+returns the canonical `preset_id` / `severity` / `default_action` /
+`advisory_url` dict plus a pre-built `guard` and a `check(description)`
+convenience callable. OWASP **MCP03 Tool Poisoning**; composes with
+`owasp_mcp_top_10_2026_policy`. Discoverable via `policy_presets.list_active()`.
+
 ### Added — Adversarial-negotiation regression harness (v0.8.17)
 
 `agent_airlock.negotiation_bench` — a deterministic regression harness
