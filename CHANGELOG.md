@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing unreleased — every entry below is a tagged release._
+
+---
+
+## [0.8.18] - 2026-06-06 — "MCP description-vs-manifest consistency guard (DCIChecker)"
+
 ### Added — MCP description-vs-manifest consistency guard (v0.8.18)
 
 `agent_airlock.mcp_spec.description_manifest_guard.DescriptionManifestGuard`
@@ -59,6 +65,10 @@ returns the canonical `preset_id` / `severity` / `default_action` /
 `advisory_url` dict plus a pre-built `guard` and a `check(description)`
 convenience callable. OWASP **MCP03 Tool Poisoning**; composes with
 `owasp_mcp_top_10_2026_policy`. Discoverable via `policy_presets.list_active()`.
+
+---
+
+## [0.8.17] - 2026-06-05 — "Adversarial-negotiation regression harness"
 
 ### Added — Adversarial-negotiation regression harness (v0.8.17)
 
@@ -135,6 +145,10 @@ raise).
 
 Version bump 0.8.16 → 0.8.17 (additive harness + CLI; no API break;
 zero new runtime deps).
+
+---
+
+## [0.8.16] - 2026-06-04 — "Flowise MCP-stdio adapter RCE preset (CVE-2026-40933)"
 
 ### Added — Flowise MCP-stdio adapter RCE preset (v0.8.16, CVE-2026-40933)
 
@@ -213,6 +227,10 @@ listed).
 
 Version bump 0.8.15 → 0.8.16 (additive per-CVE preset + drive-by
 mis-attribution fix; no API break; zero new runtime deps).
+
+---
+
+## [0.8.15] - 2026-06-03 — "Action-time contradiction gate (arXiv:2605.27157)"
 
 ### Added — Action-time contradiction gate (v0.8.15, arXiv:2605.27157)
 
@@ -328,6 +346,10 @@ Version bump 0.8.14 → 0.8.15 (additive new module + additive
 optional `SecurityPolicy` field; no API break; zero new runtime
 deps).
 
+---
+
+## [0.8.14] - 2026-06-01 — "Capsule ShareLeak / PipeLeak preset (CVE-2026-21520)"
+
 ### Added — Capsule ShareLeak / PipeLeak preset (v0.8.14, CVE-2026-21520)
 
 `capsule_indirect_injection_cve_2026_21520_defaults()` — a deny-by-
@@ -413,6 +435,10 @@ returns a blocked `AirlockResponse`).
 
 Version bump 0.8.13 → 0.8.14 (additive preset; no API break; zero
 new runtime deps).
+
+---
+
+## [0.8.13] - 2026-05-31 — "`airlock explain --unused-scopes` privilege right-sizing"
 
 ### Added — `airlock-explain --unused-scopes` privilege right-sizing reporter (v0.8.13)
 
@@ -500,6 +526,10 @@ nothing — Python 3.10 falls back to `tomli` via the existing
 
 Version bump 0.8.12 → 0.8.13 (additive new CLI surface; no API break).
 
+---
+
+## [0.8.12] - 2026-05-30 — "Behavioral tool-call sequence guard (arXiv:2605.27901)"
+
 ### Added — Behavioral tool-call sequence guard (v0.8.12)
 
 `SequenceGuard` — an opt-in behavioral-only sequence anomaly guard that
@@ -577,6 +607,10 @@ DAG violation / warn-mode no-block).
 
 Zero new runtime deps. Pydantic-only core stays intact.
 
+---
+
+## [0.8.11] - 2026-05-28 — "ModalBackend sandbox (#30)"
+
 ### Added — ModalBackend sandbox (v0.8.11, issue #30)
 
 `ModalBackend(SandboxBackend)` — opt-in sandbox backend that delegates
@@ -653,6 +687,10 @@ The base install does not pay for the Modal SDK; `import modal` is
 lazy (inside `is_available()` / `execute()`) and falls through to a
 clear actionable error if the extra is missing.
 
+---
+
+## [0.8.10] - 2026-05-28 — "MCP Attested Tool-Server Admission preset (arXiv:2605.24248)"
+
 ### Added — MCP Attested Tool-Server Admission preset (v0.8.10)
 
 `mcp_attested_admission_defaults()` — an opt-in deny-by-default preset
@@ -728,6 +766,10 @@ This preset is **strictly opt-in**: existing default presets are
 unchanged. No-pivot: deny-by-default posture stays, zero-runtime-dep
 core stays.
 
+---
+
+## [0.8.9] - 2026-05-26 — "Opt-in Indic PII masking (Verhoeff + Devanagari)"
+
 ### Added — Opt-in Indic PII masking: Verhoeff + Devanagari (v0.8.9)
 
 A new `pii_locales` opt-in tag on `sanitize_output()` / `mask_sensitive_data()`
@@ -779,6 +821,10 @@ extending the default PII set, full `@Airlock` integration via
 `AirlockConfig.pii_locales`, and backwards-compatibility (all old
 call shapes still work).
 
+---
+
+## [0.8.8] - 2026-05-25 — "CVE-2026-35394 Mobile MCP intent-URL guard"
+
 ### Added — CVE-2026-35394 Mobile MCP intent-URL guard preset (v0.8.8)
 
 `mobile_mcp_intent_guard_2026_05` — defensive bundle for **CVE-2026-35394**
@@ -821,6 +867,10 @@ aliases — not actual private IPs like `10.0.0.5` / `172.16.x.x` /
 `192.168.x.x`. Surfaced by the CVE-2026-35394 regression corpus.
 One-line fix: hoist the IP-parse out of the `try/except` so the raise
 isn't caught. No public API change; tightens an existing SSRF gate.
+
+---
+
+## [0.8.7] - 2026-05-24 — "Per-model-tier cost budgets"
 
 ### Added — Per-model-tier cost budgets with deny-by-default fallback (v0.8.7)
 
@@ -885,6 +935,10 @@ Reconciliation never raises — a call that estimates 5¢ and actually costs
 50¢ logs `delta_cents=+45` but doesn't retroactively block. Users who
 want a hard session cap should layer `BudgetConfig.max_cost_per_session`
 on top of the global `CostTracker`.
+
+---
+
+## [0.8.6] - 2026-05-23 — "`CAMOUFLAGE_RESISTANT` preset + debate-amplification guard"
 
 ### Added — `CAMOUFLAGE_RESISTANT` preset + debate-amplification guard (v0.8.6)
 
