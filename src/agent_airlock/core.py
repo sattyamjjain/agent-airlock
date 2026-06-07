@@ -470,6 +470,19 @@ class Airlock:
             if acg_error is not None:
                 return kwargs, start_time, context, acg_error, None
 
+            # Step 2.7: Unsafe-deserialization content guard (V0.8.19,
+            # CVE-2026-25874). Inspects argument VALUES for pickle /
+            # marshal / dill / jsonpickle payloads (and serialized-object
+            # args over an unauthenticated channel). Inert when
+            # policy.deserialization_guard is None.
+            deser_error = self._check_deserialization_guard(
+                func_name=func_name,
+                resolved_policy=resolved_policy,
+                kwargs=cleaned_kwargs,
+            )
+            if deser_error is not None:
+                return kwargs, start_time, context, deser_error, None
+
             # Step 3: Validate filesystem paths
             fs_error = self._validate_filesystem_paths(func_name, cleaned_kwargs)
             if fs_error is not None:
@@ -1358,6 +1371,68 @@ class Airlock:
             return response
 
         return None
+
+    def _check_deserialization_guard(
+        self,
+        *,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        kwargs: dict[str, Any],
+    ) -> AirlockResponse | None:
+        """Unsafe-deserialization content guard (V0.8.19, CVE-2026-25874).
+
+        Calls ``policy.deserialization_guard.evaluate(kwargs)`` if
+        configured. Inspects the call's argument values for serialized-
+        object payloads (pickle magic bytes, base64-encoded pickle,
+        serializer marker tokens) and, when the guard requires it,
+        serialized-object args sent over an unauthenticated transport.
+        See :class:`agent_airlock.safe_types.UnsafeDeserializationGuard`.
+
+        Args:
+            func_name: Name of the function being called.
+            resolved_policy: The resolved :class:`SecurityPolicy` (or None).
+            kwargs: Cleaned keyword args — inspected by value.
+
+        Returns:
+            A blocked :class:`AirlockResponse` carrying the guard's
+            ``fix_hints`` (which include the advisory / CVE reference)
+            when a payload is detected, else None.
+        """
+        if resolved_policy is None or resolved_policy.deserialization_guard is None:
+            return None
+
+        decision = resolved_policy.deserialization_guard.evaluate(kwargs)
+        if decision.allowed:
+            return None
+
+        response = AirlockResponse.blocked_response(
+            reason=BlockReason.POLICY_VIOLATION,
+            error=(
+                f"AIRLOCK_BLOCK: Tool '{func_name}' blocked by "
+                f"UnsafeDeserializationGuard. {decision.detail}"
+            ),
+            fix_hints=decision.fix_hints,
+            metadata={
+                "function": func_name,
+                "policy": "UnsafeDeserializationGuard",
+                "verdict": decision.verdict.value,
+                "matched_field": decision.matched_field,
+                "matched_pattern": decision.matched_pattern,
+            },
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            decision.detail,
+            {
+                "violation_type": "unsafe_deserialization",
+                "verdict": decision.verdict.value,
+                "matched_field": decision.matched_field,
+                "matched_pattern": decision.matched_pattern,
+            },
+        )
+        return response
 
     def _validate_endpoint_policies(
         self,

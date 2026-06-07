@@ -34,6 +34,7 @@ if TYPE_CHECKING:
         CostTracker,
         ModelTierBudget,
     )
+    from .safe_types import UnsafeDeserializationGuard
     from .sequence_guard import SequenceGuard
 
 logger = structlog.get_logger("agent-airlock.policy")
@@ -385,6 +386,14 @@ class SecurityPolicy:
     # non-RAG flows pay no false-positive tax. See
     # :mod:`agent_airlock.action_contradiction_gate` for the contract.
     action_contradiction_gate: ActionContradictionGate | None = None
+    # V0.8.19 unsafe-deserialization guard (CVE-2026-25874 anchor).
+    # When set, the @Airlock seam runs the guard as Step 2.7, right
+    # after the v0.8.15 action-contradiction gate. It is a CONTENT gate
+    # on argument values (pickle/marshal/dill/jsonpickle payloads), OFF
+    # by default (None preserves prior behavior exactly) so tools that
+    # never deserialize network payloads pay no cost. See
+    # :class:`agent_airlock.safe_types.UnsafeDeserializationGuard`.
+    deserialization_guard: UnsafeDeserializationGuard | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)

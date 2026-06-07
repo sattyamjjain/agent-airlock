@@ -434,6 +434,7 @@ from .policy_presets import (
     EU_AI_ACT_ARTICLE_15,
     GTG_1002_DEFENSE,
     INDIA_DPDP_2023,
+    LEROBOT_CVE_2026_25874_DEFAULTS,
     MEX_GOV_2026,
     MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS,
     OWASP_MCP_TOP_10_2026,
@@ -447,6 +448,7 @@ from .policy_presets import (
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
+    lerobot_cve_2026_25874_defaults,
     mex_gov_2026_policy,
     mobile_mcp_intent_guard_2026_05,
     owasp_mcp_top_10_2026_policy,
@@ -495,6 +497,7 @@ from .runtime.manifest_only_allowlist import (
 
 # V0.4.0 Safe types
 from .safe_types import (
+    DEFAULT_DESERIALIZATION_MARKERS,
     DEFAULT_PATH_DENY_PATTERNS,
     SafePath,
     SafePathInTmp,
@@ -505,6 +508,9 @@ from .safe_types import (
     SafeURLAllowHttp,
     SafeURLValidationError,
     SafeURLValidator,
+    UnsafeDeserializationDecision,
+    UnsafeDeserializationGuard,
+    UnsafeDeserializationVerdict,
     create_safe_path_type,
     create_safe_url_type,
 )
@@ -583,7 +589,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.18"
+__version__ = "0.8.19"
 
 __all__ = [
     # Core
@@ -631,6 +637,8 @@ __all__ = [
     "MobileMcpIntentBlocked",
     # V0.8.14 CVE-2026-21520 (Capsule ShareLeak / PipeLeak) indirect injection
     "capsule_indirect_injection_cve_2026_21520_defaults",
+    "lerobot_cve_2026_25874_defaults",
+    "LEROBOT_CVE_2026_25874_DEFAULTS",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
     "AgentCommerceCapExceeded",
@@ -892,6 +900,11 @@ __all__ = [
     "create_safe_path_type",
     "create_safe_url_type",
     "DEFAULT_PATH_DENY_PATTERNS",
+    # V0.8.19 — Unsafe-deserialization guard (CVE-2026-25874 anchor)
+    "UnsafeDeserializationGuard",
+    "UnsafeDeserializationDecision",
+    "UnsafeDeserializationVerdict",
+    "DEFAULT_DESERIALIZATION_MARKERS",
     # V0.4.0 Capabilities
     "Capability",
     "CapabilityPolicy",
