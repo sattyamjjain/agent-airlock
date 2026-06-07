@@ -3346,6 +3346,102 @@ def mcp_description_manifest_guard_defaults(
     }
 
 
+# Tool-name globs denied by the LeRobot deserialization preset. These are
+# the wrapper-name shapes that route a network payload to a pickle/marshal
+# sink. Deny-by-name complements the value-level content guard: a tool that
+# never even surfaces its payload to the guard (e.g. it reads bytes off a
+# socket itself) is still refused by name.
+_LEROBOT_DESERIALIZATION_DENIED_TOOLS: tuple[str, ...] = (
+    "*deserialize*",
+    "*unpickle*",
+    "*pickle_load*",
+    "*pickle.loads*",
+    "load_pickle*",
+    "*from_pickle*",
+    "*marshal_load*",
+    "*dill_load*",
+    "torch_load",
+    "torch_load_*",
+    "send_observations",
+    "send_policy_instructions",
+    "get_actions",
+)
+
+
+def lerobot_cve_2026_25874_defaults() -> SecurityPolicy:
+    """Deny-by-default posture for the LeRobot pickle-deserialization RCE class.
+
+    CVE-2026-25874 (CVSS 9.3): HuggingFace LeRobot's async-inference
+    PolicyServer / robot-client call ``pickle.loads()`` on payloads
+    received over an **unauthenticated, non-TLS** gRPC channel
+    (``SendObservations`` / ``SendPolicyInstructions`` / ``GetActions``).
+    An unauthenticated, network-reachable attacker reaches arbitrary OS
+    command execution by sending a crafted pickle blob. LeRobot runs on
+    GPU-backed inference hosts that are often privileged and on internal
+    networks, so the blast radius is severe.
+
+    What this preset does (three layers, all fail-closed):
+
+    1. **Content gate on argument values.** Wires
+       :class:`agent_airlock.safe_types.UnsafeDeserializationGuard` so any
+       call argument carrying a pickle payload (raw ``0x80`` magic bytes,
+       base64-encoded pickle, or a ``pickle.loads`` / ``marshal.loads`` /
+       ``dill.loads`` / ``jsonpickle.decode`` marker token) is blocked at
+       the ``@Airlock`` seam *before* the tool body runs. The block
+       response carries a ``fix_hint`` naming **CVE-2026-25874**.
+    2. **Deny-by-name.** Tool names matching the deserialize / unpickle /
+       ``torch_load`` / gRPC-method globs in
+       :data:`_LEROBOT_DESERIALIZATION_DENIED_TOOLS` are denied unless the
+       operator explicitly re-admits them via ``allowed_tools``.
+    3. **Network-airgap pairing.** ``require_authenticated_transport=True``
+       — a serialized-object (``bytes``) argument is refused unless the
+       call declares an authenticated **and** TLS transport in its
+       ``transport`` metadata argument. This is the direct mitigation for
+       the CVE's root cause: pickle over an unauthenticated, non-TLS
+       channel.
+
+    The guard is the reusable, CVE-agnostic primitive; this preset is the
+    LeRobot-specific projection (no new detector invented). It composes
+    cleanly above ghost-argument stripping + Pydantic strict
+    type-validation, which govern argument *shape*; this preset governs
+    argument *content*.
+
+    Returns:
+        A :class:`SecurityPolicy` with ``denied_tools`` globs and a wired
+        ``deserialization_guard``. Pair it with ``@Airlock`` directly::
+
+            from agent_airlock import Airlock
+            from agent_airlock.policy_presets import lerobot_cve_2026_25874_defaults
+
+            @Airlock(policy=lerobot_cve_2026_25874_defaults())
+            def send_observations(payload: bytes, transport: dict) -> bytes:
+                ...
+
+    Primary sources (retrieved 2026-06-07):
+      https://www.sentinelone.com/vulnerability-database/cve-2026-25874/
+      https://labs.cloudsecurityalliance.org/research/csa-research-note-lerobot-cve-2026-25874-unauth-rce-20260429/
+    """
+    from .safe_types import UnsafeDeserializationGuard
+
+    return SecurityPolicy(
+        denied_tools=list(_LEROBOT_DESERIALIZATION_DENIED_TOOLS),
+        deserialization_guard=UnsafeDeserializationGuard(
+            require_authenticated_transport=True,
+            advisory="CVE-2026-25874",
+            advisory_url="https://www.sentinelone.com/vulnerability-database/cve-2026-25874/",
+        ),
+    )
+
+
+LEROBOT_CVE_2026_25874_DEFAULTS = lerobot_cve_2026_25874_defaults()
+"""Eagerly-constructed defaults for :func:`lerobot_cve_2026_25874_defaults`.
+
+Use the constant for the canonical deny-by-default posture; call the
+factory when you need a fresh, independently-mutable :class:`SecurityPolicy`
+(e.g. to extend ``allowed_tools`` for a vetted read-side tool).
+"""
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -3430,4 +3526,7 @@ __all__ = [
     "FlowiseMcpStdioInjectionError",
     # V0.8.18 DCIChecker (arXiv:2606.04769) description-vs-manifest guard
     "mcp_description_manifest_guard_defaults",
+    # V0.8.19 CVE-2026-25874 (LeRobot pickle-over-unauthenticated-channel RCE)
+    "lerobot_cve_2026_25874_defaults",
+    "LEROBOT_CVE_2026_25874_DEFAULTS",
 ]

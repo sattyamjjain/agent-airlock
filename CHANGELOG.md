@@ -13,6 +13,60 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.19] - 2026-06-07 — "LeRobot pickle-deserialization RCE guard (CVE-2026-25874)"
+
+### Added — Unsafe-deserialization guard + LeRobot CVE preset (v0.8.19)
+
+Defensive control for **CVE-2026-25874** (HuggingFace LeRobot, CVSS 9.3):
+the async-inference PolicyServer / robot-client call `pickle.loads()` on
+payloads received over an **unauthenticated, non-TLS** gRPC channel
+(`SendObservations` / `SendPolicyInstructions` / `GetActions`), so an
+unauthenticated, network-reachable attacker reaches arbitrary OS command
+execution by sending a crafted pickle blob.
+
+- **`agent_airlock.safe_types.UnsafeDeserializationGuard`** — a reusable,
+  CVE-agnostic content gate on tool-argument **values**, living next to
+  the `SafePath` / `SafeURL` CVE-resistant types. Fails closed on:
+  - raw pickle magic bytes (`0x80` PROTO opcode + protocol 0–5),
+  - base64-encoded pickle (decodes to the same magic),
+  - serializer marker tokens in string args (`pickle.loads`,
+    `marshal.loads`, `shelve.open`, `dill.loads`, `jsonpickle.decode`,
+    `yaml.unsafe_load`, …), and
+  - serialized-object (`bytes`) args over an **unauthenticated** channel
+    when `require_authenticated_transport=True` — the airgap pairing that
+    maps to the CVE's root cause (pickle over an unauthenticated, non-TLS
+    transport). The guard never deserializes anything (magic-byte + token
+    inspection only); it imports no `pickle`/`marshal`/`dill`.
+  Exposes the standard decision family
+  (`UnsafeDeserializationDecision.allowed` + a stable verdict enum) and
+  carries the advisory / CVE reference in its `fix_hints`.
+- **`SecurityPolicy.deserialization_guard`** — a new optional field wired
+  into the `@Airlock` pipeline as **Step 2.7** (after the v0.8.15
+  action-contradiction gate). When set, a detected payload is blocked
+  **before** the tool body runs, returning an `AirlockResponse` whose
+  `fix_hints` name **CVE-2026-25874**. `None` by default — tools that
+  never deserialize pay no cost.
+- **`policy_presets.lerobot_cve_2026_25874_defaults()`** — the per-CVE
+  projection: a `SecurityPolicy` with deny-by-name globs
+  (`*deserialize*`, `*unpickle*`, `*pickle.loads*`, `torch_load`, and the
+  three exploited gRPC method names) **plus** the wired content guard at
+  `require_authenticated_transport=True`. Eager constant
+  `LEROBOT_CVE_2026_25874_DEFAULTS`; discoverable via
+  `policy_presets.list_active()`.
+
+Composes **above** ghost-argument stripping + Pydantic strict
+type-validation (which govern argument *shape*); this guard governs
+argument *content*. Pydantic-only core, **no new runtime dependency**.
+Regression suite: `tests/cves/test_cve_2026_25874_lerobot.py` (29 tests)
+sends crafted pickle / base64-pickle / marker payloads through a guarded
+`@Airlock` tool and asserts BLOCK + a CVE-naming `fix_hint`, plus the
+deny-by-name and transport-airgap axes.
+
+Primary sources: [SentinelOne vuln DB](https://www.sentinelone.com/vulnerability-database/cve-2026-25874/),
+[CSA research note](https://labs.cloudsecurityalliance.org/research/csa-research-note-lerobot-cve-2026-25874-unauth-rce-20260429/).
+
+---
+
 ## [0.8.18] - 2026-06-06 — "MCP description-vs-manifest consistency guard (DCIChecker)"
 
 ### Added — MCP description-vs-manifest consistency guard (v0.8.18)
