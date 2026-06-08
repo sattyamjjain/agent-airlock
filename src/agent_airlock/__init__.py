@@ -268,6 +268,14 @@ from .mcp_spec.elicitation_guard import (
     ElicitationGuardError,
 )
 
+# V0.8.20 — MCP server-config env-interpolation guard (CVE-2026-32625).
+from .mcp_spec.env_interpolation_guard import (
+    MCPEnvInterpolationDecision,
+    MCPEnvInterpolationVerdict,
+    MCPServerEnvInterpolationError,
+    MCPServerEnvInterpolationGuard,
+)
+
 # V0.8.0 — Bare-eval RCE guard (CVE-2026-44717 anchor).
 from .mcp_spec.eval_rce_guard import (
     DEFAULT_EVAL_SINKS,
@@ -449,6 +457,7 @@ from .policy_presets import (
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
     lerobot_cve_2026_25874_defaults,
+    mcp_server_env_interpolation_guard_defaults,
     mex_gov_2026_policy,
     mobile_mcp_intent_guard_2026_05,
     owasp_mcp_top_10_2026_policy,
@@ -589,7 +598,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.19"
+__version__ = "0.8.20"
 
 __all__ = [
     # Core
@@ -639,6 +648,7 @@ __all__ = [
     "capsule_indirect_injection_cve_2026_21520_defaults",
     "lerobot_cve_2026_25874_defaults",
     "LEROBOT_CVE_2026_25874_DEFAULTS",
+    "mcp_server_env_interpolation_guard_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
     "AgentCommerceCapExceeded",
@@ -731,6 +741,11 @@ __all__ = [
     "ToolDescription",
     "ToolManifest",
     "vaccinate_description_manifest",
+    # V0.8.20 — MCP server-config env-interpolation guard (CVE-2026-32625)
+    "MCPEnvInterpolationDecision",
+    "MCPEnvInterpolationVerdict",
+    "MCPServerEnvInterpolationError",
+    "MCPServerEnvInterpolationGuard",
     # V0.8.2 — Metis-inspired exploit-shape corpus block-rate regression
     "CorpusEntry",
     "CorpusPromptOutcome",
