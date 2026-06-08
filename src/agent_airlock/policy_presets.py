@@ -3442,6 +3442,89 @@ factory when you need a fresh, independently-mutable :class:`SecurityPolicy`
 """
 
 
+def mcp_server_env_interpolation_guard_defaults(
+    *,
+    allowed_vars: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    """Recommended config for the MCP server-config env-interpolation guard (v0.8.20+).
+
+    CVE-2026-32625 (LibreChat ≤ 0.8.3, CVSS 9.6, CWE-200): the MCP
+    integration expands ``${VAR}`` placeholders in a **user-supplied**
+    MCP server URL against the host ``process.env`` during schema
+    validation, so an authenticated user can exfiltrate server-side
+    secrets (``JWT_SECRET`` / ``CREDS_KEY`` / ``MONGO_URI`` / ...) by
+    embedding them in a URL that dials an attacker-controlled host.
+
+    Wires
+    :class:`agent_airlock.mcp_spec.env_interpolation_guard.MCPServerEnvInterpolationGuard`
+    deny-by-default: any ``${VAR}`` / ``$VAR`` / ``%VAR%`` token in the
+    connection URL / headers / args is refused unless the referenced
+    variable is on ``allowed_vars`` (explicitly-declared non-secret
+    variables). An empty allowlist denies every interpolation token.
+
+    OWASP mapping: **MCP01 Token Mismanagement and Secret Exposure**
+    (OWASP MCP Top-10). Composes with :func:`owasp_mcp_top_10_2026_policy`.
+
+    Args:
+        allowed_vars: Variable names permitted in an interpolation token
+            (e.g. a non-secret ``REGION``). Empty / None (default) denies
+            all interpolation.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity``
+        / ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — a pre-built ``MCPServerEnvInterpolationGuard`` ready
+          to ``evaluate(config)``.
+        - ``check`` — convenience callable; ``check(config)`` raises
+          :class:`MCPServerEnvInterpolationError` on a denied config and
+          returns ``None`` on a clean one.
+        - ``owasp`` — ``"MCP01"``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import mcp_server_env_interpolation_guard_defaults
+
+        preset = mcp_server_env_interpolation_guard_defaults()
+        preset["check"]("https://api.example.com/mcp")            # ok
+        preset["check"]("https://evil.example/?t=${JWT_SECRET}")  # raises
+
+    Primary source:
+      https://github.com/danny-avila/LibreChat/security/advisories/GHSA-6vqg-rgpm-qvf9
+    """
+    from .mcp_spec.env_interpolation_guard import (
+        MCPEnvInterpolationDecision,
+        MCPServerEnvInterpolationError,
+        MCPServerEnvInterpolationGuard,
+    )
+
+    advisory_url = (
+        "https://github.com/danny-avila/LibreChat/security/advisories/GHSA-6vqg-rgpm-qvf9"
+    )
+    guard = MCPServerEnvInterpolationGuard(
+        allowed_vars=allowed_vars,
+        advisory="CVE-2026-32625",
+        advisory_url=advisory_url,
+    )
+
+    def _check(config: Mapping[str, Any] | str | None) -> None:
+        """Raise :class:`MCPServerEnvInterpolationError` on a denied config."""
+        decision: MCPEnvInterpolationDecision = guard.evaluate(config)
+        if not decision.allowed:
+            raise MCPServerEnvInterpolationError(decision)
+
+    return {
+        "preset_id": "mcp_server_env_interpolation_guard",
+        "severity": "critical",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "MCP01",
+        "cves": ("CVE-2026-32625",),
+        "advisory_url": advisory_url,
+    }
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -3529,4 +3612,6 @@ __all__ = [
     # V0.8.19 CVE-2026-25874 (LeRobot pickle-over-unauthenticated-channel RCE)
     "lerobot_cve_2026_25874_defaults",
     "LEROBOT_CVE_2026_25874_DEFAULTS",
+    # V0.8.20 CVE-2026-32625 (MCP server-URL env-interpolation secret leak)
+    "mcp_server_env_interpolation_guard_defaults",
 ]

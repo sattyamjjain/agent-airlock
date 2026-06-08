@@ -13,6 +13,56 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.20] - 2026-06-08 — "MCP server-URL env-interpolation secret-leak guard (CVE-2026-32625)"
+
+### Added — MCP server-config env-interpolation guard (v0.8.20)
+
+Defensive control for **CVE-2026-32625** (LibreChat ≤ 0.8.3, CVSS 9.6,
+CWE-200, published 2026-06-02): the MCP integration expands `${VAR}`
+placeholders in a **user-supplied** MCP server URL against the host
+`process.env` during schema validation, so an authenticated user
+exfiltrates server-side secrets (`JWT_SECRET` / `CREDS_KEY` /
+`MONGO_URI`) by embedding them in a URL that dials an attacker-controlled
+host. Patched upstream in 0.8.4-rc1.
+
+- **`agent_airlock.mcp_spec.env_interpolation_guard.MCPServerEnvInterpolationGuard`**
+  — a reusable, CVE-agnostic, **deny-by-default** gate on MCP server
+  connection configs. `evaluate(config)` accepts a URL string or a
+  connection mapping and recursively scans the URL / headers / args for
+  env-interpolation tokens in all three forms — `${VAR}` /
+  `${VAR:-default}` (POSIX brace), bare `$VAR` (POSIX), and `%VAR%`
+  (Windows). Any token is refused unless its variable is on an
+  operator-declared `allowed_vars` allowlist of explicitly non-secret
+  variables; an empty allowlist (the default) denies every token.
+  Escaped (`\$`) and doubled (`$$`) forms are not flagged. The guard
+  **never reads `os.environ` and never expands anything** — it
+  token-matches and refuses, so it cannot itself leak a secret and
+  behaves identically regardless of which variables are set on the host.
+  Exposes the standard decision family
+  (`MCPEnvInterpolationDecision.allowed` + a stable verdict enum) and
+  carries the advisory / CVE reference in its `fix_hints`;
+  `MCPServerEnvInterpolationError` is the raise-form for the
+  registration / dial-out boundary.
+- **`policy_presets.mcp_server_env_interpolation_guard_defaults(allowed_vars=...)`**
+  — wires the guard with the CVE advisory metadata and a `check(config)`
+  convenience callable. Canonical `preset_id` /
+  `severity="critical"` / `default_action="deny"` / `owasp="MCP01"` /
+  `cves=("CVE-2026-32625",)` dict; discoverable via
+  `policy_presets.list_active()`. OWASP **MCP01 Token Mismanagement and
+  Secret Exposure**.
+
+Pydantic-only core, **no new runtime dependency**. Regression suite:
+`tests/cves/test_cve_2026_32625_mcp_env_interpolation.py` (18 tests)
+pins the brief's three core cases (`${JWT_SECRET}` URL blocked, clean URL
+passes, allowlisted non-secret var passes) plus all three token forms,
+header/arg scanning, escape handling, per-variable allowlisting, and
+preset wiring.
+
+Primary sources: [LibreChat GHSA-6vqg-rgpm-qvf9](https://github.com/danny-avila/LibreChat/security/advisories/GHSA-6vqg-rgpm-qvf9),
+[The Hacker Wire](https://www.thehackerwire.com/librechat-critical-credential-disclosure-via-mcp-server-url/).
+
+---
+
 ## [0.8.19] - 2026-06-07 — "LeRobot pickle-deserialization RCE guard (CVE-2026-25874)"
 
 ### Added — Unsafe-deserialization guard + LeRobot CVE preset (v0.8.19)
