@@ -13,6 +13,59 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.21] - 2026-06-09 — "Codegen triple-quote / delimiter break-out guard (CVE-2026-11393)"
+
+### Added — Codegen string-delimiter-injection guard (v0.8.21)
+
+Defensive control for **CVE-2026-11393** (AWS AgentCore CLI < 0.14.2,
+CVSS 9, CWE-94, published 2026-06-08): the CLI generates Python source by
+interpolating a model-/user-controlled `collaborationInstruction` into a
+code string **without neutralising triple-quote characters**, so a
+crafted instruction containing `"""` closes the generated literal and
+injects statements that execute when another account user imports the
+agent — RCE on the AgentCore Runtime (inheriting the agent's IAM role)
+and the importer's machine. Patched upstream in 0.14.2.
+
+- **`agent_airlock.mcp_spec.codegen_delimiter_guard.CodegenDelimiterInjectionGuard`**
+  — a reusable, CVE-agnostic, **deny-by-default** gate on arguments that
+  flow toward a code-generation / template-render / `exec` / `eval`
+  sink. `evaluate(args)` accepts a candidate string or a mapping (values
+  may nest dicts / lists) and recursively scans for string-delimiter
+  break-out tokens:
+  - **triple-quote** delimiters (`"""` / `'''`) — the CVE-2026-11393
+    primitive,
+  - **quote break-out** tokens (a closing quote followed by a statement
+    separator / continuation: `");`, `')`, `" +`, `']`, ...),
+  - **raw newlines** bound for a single-line code string (toggle via
+    `check_newline`).
+  Any token denies **unless** the argument's field name is on an
+  operator-declared `allowed_literal_fields` allowlist of explicitly safe
+  literal contexts. The guard **never generates or executes code** — it
+  token-matches the break-out delimiters and refuses, so it carries no
+  execution risk itself. Exposes the standard decision family
+  (`CodegenDelimiterDecision.allowed` + a stable verdict enum) and
+  carries the advisory / CVE reference in its `fix_hints`;
+  `CodegenDelimiterInjectionError` is the raise-form.
+- **`policy_presets.codegen_delimiter_injection_guard_defaults(allowed_literal_fields=..., check_newline=...)`**
+  — wires the guard with the CVE advisory metadata + a `check(args)`
+  convenience callable. Canonical `preset_id` /
+  `severity="critical"` / `default_action="deny"` / `owasp="ASI05"` /
+  `cves=("CVE-2026-11393",)` dict; discoverable via
+  `policy_presets.list_active()`. OWASP **ASI05 Unexpected Code Execution
+  (RCE)**; composes one layer above the v0.8.0
+  `EvalRCEGuard` (which gates the sink itself).
+
+Pydantic-only core, **no new runtime dependency**. Regression suite:
+`tests/cves/test_cve_2026_11393_codegen_delimiter.py` (19 tests) pins the
+brief's three core cases (`"""` break-out blocked, clean arg passes,
+allowlisted literal context passes) plus the other break-out forms,
+nested mapping/list scanning, per-field allowlisting, and preset wiring.
+
+Primary sources: [The Hacker Wire](https://www.thehackerwire.com/agentcore-cli-rce-via-triple-quote-neutralization-bypass-cve-2026-11393/),
+[CWE-94](https://cwe.mitre.org/data/definitions/94.html).
+
+---
+
 ## [0.8.20] - 2026-06-08 — "MCP server-URL env-interpolation secret-leak guard (CVE-2026-32625)"
 
 ### Added — MCP server-config env-interpolation guard (v0.8.20)
