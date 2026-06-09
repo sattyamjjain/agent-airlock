@@ -3525,6 +3525,100 @@ def mcp_server_env_interpolation_guard_defaults(
     }
 
 
+def codegen_delimiter_injection_guard_defaults(
+    *,
+    allowed_literal_fields: Iterable[str] | None = None,
+    check_newline: bool = True,
+) -> dict[str, Any]:
+    """Recommended config for the codegen string-delimiter-injection guard (v0.8.21+).
+
+    CVE-2026-11393 (AWS AgentCore CLI < 0.14.2, CVSS 9, CWE-94): the CLI
+    generates Python source by interpolating a model-/user-controlled
+    ``collaborationInstruction`` into a code string **without neutralising
+    triple-quote characters**, so a crafted instruction containing
+    ``\"\"\"`` closes the generated literal and injects statements that
+    execute when another account user imports the agent — RCE on the
+    AgentCore Runtime and the importer's machine.
+
+    Wires
+    :class:`agent_airlock.mcp_spec.codegen_delimiter_guard.CodegenDelimiterInjectionGuard`
+    deny-by-default: any argument flowing toward a codegen / template /
+    ``exec`` / ``eval`` sink that contains a triple-quote (``\"\"\"`` /
+    ``'''``), a quote break-out token (``");`` / ``')`` / ...), or a raw
+    newline is refused — unless the field name is on
+    ``allowed_literal_fields`` (an explicitly-declared safe literal
+    context).
+
+    OWASP mapping: **ASI05 Unexpected Code Execution (RCE)** (OWASP Top-10
+    for Agentic Applications); CWE-94. Composes with the v0.8.0
+    :class:`agent_airlock.mcp_spec.eval_rce_guard.EvalRCEGuard` (which
+    gates the sink itself) — this preset gates the *argument* one layer
+    earlier.
+
+    Args:
+        allowed_literal_fields: Field names that are safe literal contexts
+            and therefore NOT scanned. Empty / None (default) scans every
+            field.
+        check_newline: Treat a raw newline as a break-out token (default
+            True).
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity``
+        / ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — a pre-built ``CodegenDelimiterInjectionGuard`` ready
+          to ``evaluate(args)``.
+        - ``check`` — convenience callable; ``check(args)`` raises
+          :class:`CodegenDelimiterInjectionError` on a denied arg and
+          returns ``None`` on a clean one.
+        - ``owasp`` — ``"ASI05"``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import codegen_delimiter_injection_guard_defaults
+
+        preset = codegen_delimiter_injection_guard_defaults()
+        preset["check"]({"instruction": "Summarise the report."})        # ok
+        preset["check"]({"instruction": '\"\"\"\\nimport os\\n\"\"\"'})  # raises
+
+    Primary source:
+      https://www.thehackerwire.com/agentcore-cli-rce-via-triple-quote-neutralization-bypass-cve-2026-11393/
+    """
+    from .mcp_spec.codegen_delimiter_guard import (
+        CodegenDelimiterDecision,
+        CodegenDelimiterInjectionError,
+        CodegenDelimiterInjectionGuard,
+    )
+
+    advisory_url = (
+        "https://www.thehackerwire.com/"
+        "agentcore-cli-rce-via-triple-quote-neutralization-bypass-cve-2026-11393/"
+    )
+    guard = CodegenDelimiterInjectionGuard(
+        allowed_literal_fields=allowed_literal_fields,
+        check_newline=check_newline,
+        advisory="CVE-2026-11393",
+        advisory_url=advisory_url,
+    )
+
+    def _check(args: Mapping[str, Any] | str | None) -> None:
+        """Raise :class:`CodegenDelimiterInjectionError` on a denied argument."""
+        decision: CodegenDelimiterDecision = guard.evaluate(args)
+        if not decision.allowed:
+            raise CodegenDelimiterInjectionError(decision)
+
+    return {
+        "preset_id": "codegen_delimiter_injection_guard",
+        "severity": "critical",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "ASI05",
+        "cves": ("CVE-2026-11393",),
+        "advisory_url": advisory_url,
+    }
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -3614,4 +3708,6 @@ __all__ = [
     "LEROBOT_CVE_2026_25874_DEFAULTS",
     # V0.8.20 CVE-2026-32625 (MCP server-URL env-interpolation secret leak)
     "mcp_server_env_interpolation_guard_defaults",
+    # V0.8.21 CVE-2026-11393 (codegen triple-quote / delimiter break-out RCE)
+    "codegen_delimiter_injection_guard_defaults",
 ]

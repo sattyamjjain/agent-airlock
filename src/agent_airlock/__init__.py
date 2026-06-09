@@ -245,6 +245,14 @@ from .mcp_spec.bind_address_guard import (
     BindAddressPublicError,
     UnauthenticatedPublicBindError,
 )
+
+# V0.8.21 — Codegen string-delimiter-injection guard (CVE-2026-11393).
+from .mcp_spec.codegen_delimiter_guard import (
+    CodegenDelimiterDecision,
+    CodegenDelimiterInjectionError,
+    CodegenDelimiterInjectionGuard,
+    CodegenDelimiterVerdict,
+)
 from .mcp_spec.config_path_guard import (
     ConfigPathGuard,
     ConfigPathTraversalError,
@@ -453,6 +461,7 @@ from .policy_presets import (
     HighValueActionBlocked,
     MobileMcpIntentBlocked,
     capsule_indirect_injection_cve_2026_21520_defaults,
+    codegen_delimiter_injection_guard_defaults,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
@@ -598,7 +607,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.20"
+__version__ = "0.8.21"
 
 __all__ = [
     # Core
@@ -649,6 +658,7 @@ __all__ = [
     "lerobot_cve_2026_25874_defaults",
     "LEROBOT_CVE_2026_25874_DEFAULTS",
     "mcp_server_env_interpolation_guard_defaults",
+    "codegen_delimiter_injection_guard_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
     "AgentCommerceCapExceeded",
@@ -746,6 +756,11 @@ __all__ = [
     "MCPEnvInterpolationVerdict",
     "MCPServerEnvInterpolationError",
     "MCPServerEnvInterpolationGuard",
+    # V0.8.21 — Codegen string-delimiter-injection guard (CVE-2026-11393)
+    "CodegenDelimiterDecision",
+    "CodegenDelimiterInjectionError",
+    "CodegenDelimiterInjectionGuard",
+    "CodegenDelimiterVerdict",
     # V0.8.2 — Metis-inspired exploit-shape corpus block-rate regression
     "CorpusEntry",
     "CorpusPromptOutcome",
