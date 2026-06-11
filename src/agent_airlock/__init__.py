@@ -379,7 +379,11 @@ from .mcp_spec.subprocess_arg_guard import (
 )
 from .mcp_spec.zero_click_config_guard import (
     MCPCommandMutationDetected,
+    McpConfigPinSet,
+    McpConfigPinViolation,
+    McpServerPin,
     UnsignedMCPServerAdded,
+    fingerprint_mcp_server,
 )
 
 # V0.3.0 Network egress control
@@ -474,6 +478,7 @@ from .policy_presets import (
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
     lerobot_cve_2026_25874_defaults,
+    mcp_config_pin,
     mcp_server_env_interpolation_guard_defaults,
     mcp_subprocess_arg_injection_guard_defaults,
     mex_gov_2026_policy,
@@ -616,7 +621,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.22"
+__version__ = "0.8.23"
 
 __all__ = [
     # Core
@@ -817,6 +822,12 @@ __all__ = [
     "HighValueActionBlocked",
     "LANUnauthMCPServerBlocked",
     "MCPCommandMutationDetected",
+    # V0.8.23 — CVE-2026-30615 spawn-time MCP config pin
+    "McpConfigPinSet",
+    "McpConfigPinViolation",
+    "McpServerPin",
+    "fingerprint_mcp_server",
+    "mcp_config_pin",
     "MemoryChainTooDeepError",
     "PRMetadataGuard",
     "StdioMetaGuard",

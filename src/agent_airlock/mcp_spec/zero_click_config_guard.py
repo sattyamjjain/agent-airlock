@@ -32,6 +32,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -282,11 +283,281 @@ def _emit_otel_span(*, path: Path, old_sha256: str, new_sha256: str) -> None:
         end_span(ctx)
 
 
+# -----------------------------------------------------------------------------
+# Spawn-time config pin (v0.8.23+, CVE-2026-30615 zero-click class)
+# -----------------------------------------------------------------------------
+#
+# :func:`audit_config_diff` above is the *config-file* defence: it diffs the
+# bytes of an ``mcp.json`` between two reads and refuses unsigned new entries
+# / mutated command arrays. That guards the write path. The pin below is the
+# complementary *spawn-time* defence: at the moment an MCP client is about to
+# spawn a STDIO server, it fingerprints the **resolved** spawn config and
+# refuses anything that does not match an operator-pinned known-good
+# fingerprint — fail-closed (raises, never warns). This catches the
+# zero-click pattern even when the mutation never touched a watched file
+# (e.g. the host resolved the config from memory, an env override, or a
+# launcher), which is exactly the gap a config-file diff cannot see.
+#
+# The fingerprint covers ``{name, command, args, env-keys}``. Env *values*
+# are deliberately excluded — they legitimately rotate (tokens, secrets) and
+# pinning them would force a re-pin on every rotation; the *keys* are what an
+# injection adds (e.g. a new ``LD_PRELOAD``), so the key set is pinned.
+
+
+class McpConfigPinViolation(AirlockError):
+    """A STDIO MCP server spawn config does not match its pinned fingerprint.
+
+    Raised **fail-closed** (never warned) by :meth:`McpConfigPinSet.check`
+    for the CVE-2026-30615 zero-click class — either the server name is not
+    in the pin set at all (an injected entry), or a previously-pinned
+    server's ``command`` / ``args`` / ``env``-keys changed between
+    registration and spawn (a mutated entry).
+
+    Attributes:
+        server_name: The offending STDIO server name.
+        reason: ``"unpinned"`` (not in the pin set) or ``"mutated"``
+            (fingerprint mismatch).
+        expected_fingerprint: The pinned fingerprint, or ``None`` when
+            the server was unpinned.
+        actual_fingerprint: The fingerprint of the resolved spawn config.
+    """
+
+    def __init__(
+        self,
+        *,
+        server_name: str,
+        reason: str,
+        expected_fingerprint: str | None,
+        actual_fingerprint: str,
+    ) -> None:
+        self.server_name = server_name
+        self.reason = reason
+        self.expected_fingerprint = expected_fingerprint
+        self.actual_fingerprint = actual_fingerprint
+        if reason == "unpinned":
+            msg = (
+                f"STDIO MCP server {server_name!r} is not in the config pin set — "
+                f"refusing to spawn an unpinned server (CVE-2026-30615 zero-click "
+                f"class); fingerprint={actual_fingerprint}"
+            )
+        else:
+            msg = (
+                f"STDIO MCP server {server_name!r} spawn config does not match its "
+                f"pinned fingerprint — refusing (CVE-2026-30615 mutation class); "
+                f"expected={expected_fingerprint} actual={actual_fingerprint}"
+            )
+        super().__init__(msg)
+
+
+@dataclass(frozen=True)
+class McpServerPin:
+    """A pinned known-good STDIO MCP server fingerprint.
+
+    Attributes:
+        name: The MCP server name (the join key).
+        fingerprint: SHA-256 hex of the canonical
+            ``{name, command, args, env-keys}`` payload.
+    """
+
+    name: str
+    fingerprint: str
+
+
+def fingerprint_mcp_server(
+    *,
+    name: str,
+    command: str,
+    args: Iterable[str] = (),
+    env_keys: Iterable[str] = (),
+) -> str:
+    """Compute the canonical fingerprint of a STDIO MCP server spawn config.
+
+    The payload is order-stable: ``args`` order is significant (it's the
+    argv), ``env_keys`` are sorted (a mapping has no order), and the JSON is
+    emitted with sorted keys + tight separators so the hash is reproducible
+    across processes.
+
+    Args:
+        name: The MCP server name.
+        command: The program/launcher (e.g. ``"uvx"``).
+        args: The argument vector (order significant).
+        env_keys: The environment variable **names** the server is allowed
+            to receive (values are intentionally not pinned).
+
+    Returns:
+        SHA-256 hex digest string.
+    """
+    payload = json.dumps(
+        {
+            "name": name,
+            "command": command,
+            "args": list(args),
+            "env_keys": sorted(env_keys),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _env_keys_of(entry: Mapping[str, Any]) -> list[str]:
+    """Resolve env-key names from a config entry (``env`` dict or ``env_keys`` list)."""
+    env = entry.get("env")
+    if isinstance(env, Mapping):
+        return [str(k) for k in env]
+    env_keys = entry.get("env_keys")
+    if isinstance(env_keys, (list, tuple, set, frozenset)):
+        return [str(k) for k in env_keys]
+    return []
+
+
+class McpConfigPinSet:
+    """Fail-closed spawn-time pin for known-good STDIO MCP server configs.
+
+    Built from an operator-supplied known-good manifest, this rejects any
+    STDIO server whose resolved spawn config does not match a pinned
+    ``{name, command, args, env-keys}`` fingerprint — covering both the
+    *injected* (unpinned name) and *mutated* (fingerprint changed) cases of
+    the CVE-2026-30615 zero-click pattern. :meth:`check` raises
+    :class:`McpConfigPinViolation` (it never warns) and emits an audit event
+    on the existing structlog + JSON-Lines audit channels.
+
+    Args:
+        pins: The known-good :class:`McpServerPin` set.
+        audit_path: Optional path for the JSON-Lines audit logger. When
+            ``None`` the JSONL channel is a no-op; the structlog channel
+            still fires.
+
+    Raises:
+        ValueError: Two pins share a ``name``.
+    """
+
+    def __init__(
+        self,
+        pins: Iterable[McpServerPin],
+        *,
+        audit_path: Path | str | None = None,
+    ) -> None:
+        index: dict[str, str] = {}
+        for pin in pins:
+            if pin.name in index:
+                raise ValueError(f"duplicate pin for MCP server {pin.name!r}")
+            index[pin.name] = pin.fingerprint
+        self._pins = index
+        self._audit_path = audit_path
+
+    @classmethod
+    def from_manifest(
+        cls,
+        manifest: Iterable[Mapping[str, Any]],
+        *,
+        audit_path: Path | str | None = None,
+    ) -> McpConfigPinSet:
+        """Build a pin set from a known-good manifest.
+
+        Args:
+            manifest: Iterable of entries, each with ``name`` + ``command``
+                and optional ``args`` and ``env`` (dict) / ``env_keys``
+                (list). Env values are ignored; only the key set is pinned.
+            audit_path: Forwarded to the constructor.
+
+        Returns:
+            A :class:`McpConfigPinSet`.
+        """
+        pins = [
+            McpServerPin(
+                name=str(entry["name"]),
+                fingerprint=fingerprint_mcp_server(
+                    name=str(entry["name"]),
+                    command=str(entry["command"]),
+                    args=entry.get("args", ()),
+                    env_keys=_env_keys_of(entry),
+                ),
+            )
+            for entry in manifest
+        ]
+        return cls(pins, audit_path=audit_path)
+
+    @property
+    def pinned_names(self) -> tuple[str, ...]:
+        """The names of every pinned server (sorted)."""
+        return tuple(sorted(self._pins))
+
+    def check(self, server_config: Mapping[str, Any]) -> None:
+        """Fail-closed: raise unless the resolved spawn config matches a pin.
+
+        Args:
+            server_config: The resolved STDIO spawn config — ``name`` +
+                ``command`` and optional ``args`` and ``env`` / ``env_keys``.
+
+        Raises:
+            McpConfigPinViolation: The server is unpinned (injected) or its
+                fingerprint does not match the pin (mutated).
+            KeyError: ``server_config`` is missing ``name`` or ``command``.
+        """
+        name = str(server_config["name"])
+        actual = fingerprint_mcp_server(
+            name=name,
+            command=str(server_config["command"]),
+            args=server_config.get("args", ()),
+            env_keys=_env_keys_of(server_config),
+        )
+        expected = self._pins.get(name)
+        if expected is None:
+            self._emit_audit(server_name=name, reason="unpinned", actual=actual)
+            raise McpConfigPinViolation(
+                server_name=name,
+                reason="unpinned",
+                expected_fingerprint=None,
+                actual_fingerprint=actual,
+            )
+        if actual != expected:
+            self._emit_audit(server_name=name, reason="mutated", actual=actual)
+            raise McpConfigPinViolation(
+                server_name=name,
+                reason="mutated",
+                expected_fingerprint=expected,
+                actual_fingerprint=actual,
+            )
+
+    def _emit_audit(self, *, server_name: str, reason: str, actual: str) -> None:
+        """Emit the block on the existing structlog + JSON-Lines audit channels."""
+        logger.warning(
+            "mcp_config_pin_blocked",
+            server_name=server_name,
+            reason=reason,
+            actual_fingerprint=actual,
+            cve="CVE-2026-30615",
+        )
+        # JSON-Lines audit record on the canonical channel. Only the
+        # file-write is best-effort suppressed (a no-op logger when no
+        # audit_path is configured, or an unwritable path) — the call
+        # shape itself is verified by the test suite, not swallowed.
+        from ..audit import get_audit_logger
+
+        with contextlib.suppress(OSError):
+            get_audit_logger(self._audit_path).log(
+                tool_name=f"mcp_server:{server_name}",
+                blocked=True,
+                block_reason=f"mcp_config_pin:{reason}",
+                args={
+                    "guard": "mcp_config_pin",
+                    "cve": "CVE-2026-30615",
+                    "reason": reason,
+                    "actual_fingerprint": actual,
+                },
+            )
+
+
 __all__ = [
     "DEFAULT_WATCHED_PATHS",
     "ConfigDiffReport",
     "ConfigFileWatchPolicy",
     "MCPCommandMutationDetected",
+    "McpConfigPinSet",
+    "McpConfigPinViolation",
+    "McpServerPin",
     "UnsignedMCPServerAdded",
     "audit_config_diff",
+    "fingerprint_mcp_server",
 ]

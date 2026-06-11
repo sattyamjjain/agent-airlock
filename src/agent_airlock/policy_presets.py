@@ -1520,6 +1520,73 @@ def windsurf_cve_2026_30615_defaults(
     }
 
 
+def mcp_config_pin(
+    manifest: Iterable[Mapping[str, Any]],
+    *,
+    audit_path: str | None = None,
+) -> dict[str, Any]:
+    """CVE-2026-30615 spawn-time STDIO MCP config pin (v0.8.23+).
+
+    The complementary, **spawn-time** half of the v0.5.7
+    :func:`windsurf_cve_2026_30615_defaults` config-file watcher. Where the
+    watcher diffs ``mcp.json`` bytes to catch unsigned/mutated entries on the
+    *write* path, this pin fingerprints the **resolved** STDIO spawn config at
+    *invocation* time and refuses anything that does not match an
+    operator-supplied known-good fingerprint — fail-closed (raises, never
+    warns). It catches the zero-click pattern even when the injection never
+    touched a watched file (env override, in-memory resolution, a launcher).
+
+    The fingerprint covers ``{name, command, args, env-keys}`` (env *values*
+    are excluded — they rotate; the *keys* are what an injection adds). Two
+    failure modes both raise :class:`McpConfigPinViolation` and emit an audit
+    event on the existing structlog + JSON-Lines channels:
+
+    - **injected** — a server name not in the pin set (``reason="unpinned"``);
+    - **mutated** — a pinned server whose ``command`` / ``args`` / ``env``-keys
+      changed between registration and spawn (``reason="mutated"``).
+
+    Args:
+        manifest: Known-good entries, each with ``name`` + ``command`` and
+            optional ``args`` and ``env`` (dict) / ``env_keys`` (list).
+        audit_path: Optional JSON-Lines audit log path. ``None`` leaves the
+            JSONL channel a no-op; the structlog channel still fires.
+
+    Returns:
+        ``dict[str, Any]`` with:
+
+        - ``pin_set`` — the :class:`McpConfigPinSet`.
+        - ``check`` — ``check(server_config)`` raising
+          :class:`McpConfigPinViolation` on an injected/mutated spawn config.
+        - ``pinned_names`` — the pinned server names.
+        - ``cves`` — ``("CVE-2026-30615",)``.
+        - ``owasp`` — ``"ASI04"`` (Agentic Supply-Chain).
+        - ``source`` — NVD URL.
+
+    Contract::
+
+        pin = mcp_config_pin([{"name": "fs", "command": "uvx",
+                               "args": ["mcp-server-filesystem", "/data"]}])
+        pin["check"]({"name": "fs", "command": "uvx",
+                      "args": ["mcp-server-filesystem", "/data"]})   # ok
+        pin["check"]({"name": "fs", "command": "/tmp/evil"})         # raises
+
+    Primary source:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-30615
+    """
+    from .mcp_spec.zero_click_config_guard import McpConfigPinSet
+
+    pin_set = McpConfigPinSet.from_manifest(manifest, audit_path=audit_path)
+
+    return {
+        "pin_set": pin_set,
+        "check": pin_set.check,
+        "pinned_names": pin_set.pinned_names,
+        "cves": ("CVE-2026-30615",),
+        "owasp": "ASI04",
+        "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-30615",
+    }
+
+
 # -----------------------------------------------------------------------------
 # CVE-2026-6980 — Divyanshu-hash/GitPilot-MCP repo_path injection (v0.5.7+)
 # -----------------------------------------------------------------------------
@@ -3741,6 +3808,7 @@ __all__ = [
     "gitpilot_mcp_cve_2026_6980_defaults",
     "GitPilotRepoPathInjection",
     "windsurf_cve_2026_30615_defaults",
+    "mcp_config_pin",
     "claude_code_security_review_cnc_2026_04",
     "gemini_cli_action_cnc_2026_04",
     "copilot_agent_cnc_2026_04",
