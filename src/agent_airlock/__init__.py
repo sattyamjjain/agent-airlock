@@ -369,6 +369,14 @@ from .mcp_spec.stdio_meta_guard import (
     StdioMetaGuard,
     StdioMetaGuardError,
 )
+
+# V0.8.22 — MCP-bridge subprocess-arg injection guard (CVE-2026-42271, CISA KEV).
+from .mcp_spec.subprocess_arg_guard import (
+    McpSubprocessArgDecision,
+    McpSubprocessArgInjectionError,
+    McpSubprocessArgInjectionGuard,
+    McpSubprocessArgVerdict,
+)
 from .mcp_spec.zero_click_config_guard import (
     MCPCommandMutationDetected,
     UnsignedMCPServerAdded,
@@ -467,6 +475,7 @@ from .policy_presets import (
     india_dpdp_2023_policy,
     lerobot_cve_2026_25874_defaults,
     mcp_server_env_interpolation_guard_defaults,
+    mcp_subprocess_arg_injection_guard_defaults,
     mex_gov_2026_policy,
     mobile_mcp_intent_guard_2026_05,
     owasp_mcp_top_10_2026_policy,
@@ -607,7 +616,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.21"
+__version__ = "0.8.22"
 
 __all__ = [
     # Core
@@ -659,6 +668,7 @@ __all__ = [
     "LEROBOT_CVE_2026_25874_DEFAULTS",
     "mcp_server_env_interpolation_guard_defaults",
     "codegen_delimiter_injection_guard_defaults",
+    "mcp_subprocess_arg_injection_guard_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
     "AgentCommerceCapExceeded",
@@ -761,6 +771,11 @@ __all__ = [
     "CodegenDelimiterInjectionError",
     "CodegenDelimiterInjectionGuard",
     "CodegenDelimiterVerdict",
+    # V0.8.22 — MCP-bridge subprocess-arg injection guard (CVE-2026-42271, CISA KEV)
+    "McpSubprocessArgDecision",
+    "McpSubprocessArgInjectionError",
+    "McpSubprocessArgInjectionGuard",
+    "McpSubprocessArgVerdict",
     # V0.8.2 — Metis-inspired exploit-shape corpus block-rate regression
     "CorpusEntry",
     "CorpusPromptOutcome",
