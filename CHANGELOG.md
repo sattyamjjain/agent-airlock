@@ -13,6 +13,63 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.22] - 2026-06-11 — "MCP-bridge subprocess command/args/env guard (CVE-2026-42271, CISA KEV)"
+
+### Added — MCP-bridge subprocess-arg injection guard (v0.8.22)
+
+Defensive control for **CVE-2026-42271** (LiteLLM 1.74.2–1.83.6, CVSS
+8.7, CWE-78, **added to the CISA Known Exploited Vulnerabilities catalog
+on 2026-06-09 — confirmed active exploitation in the wild**): the MCP
+server preview endpoints `POST /mcp-rest/test/connection` and
+`POST /mcp-rest/test/tools/list` accepted a full MCP server configuration
+(stdio-transport `command` / `args` / `env`) in the request body and
+spawned it as a subprocess on the proxy host with the proxy's privileges
+and **no validation or sandboxing** — any authenticated low-privilege API
+key reached arbitrary command execution; chained with CVE-2026-48710
+(Starlette Host-header bypass) it becomes unauthenticated RCE. Fixed in
+LiteLLM 1.83.7.
+
+- **`agent_airlock.mcp_spec.subprocess_arg_guard.McpSubprocessArgInjectionGuard`**
+  — a reusable, CVE-agnostic, **deny-by-default** gate. `evaluate(config)`
+  treats a model-/request-controlled MCP-bridge config as untrusted and
+  refuses it when it carries spawn-shaped fields (`command` / `cmd` /
+  `args` / `argv` / `env`) unless the resolved program (command/cmd, else
+  `argv[0]`/`args[0]`, matched by basename or absolute path) is on an
+  operator-declared `allowed_commands` allowlist of explicitly-safe
+  *static* commands. An empty allowlist (the default) denies every
+  spawn-shaped config. An `env` mapping carrying a code-loading variable
+  (`LD_PRELOAD` / `LD_LIBRARY_PATH` / `PATH` / `PYTHONPATH` /
+  `NODE_OPTIONS` / `BASH_ENV` / ...) is refused regardless of the
+  command, since those turn even an allowlisted binary into an execution
+  primitive. A config with **no** spawn-shaped fields (a plain data
+  argument) passes — this guard gates the spawn surface only. It **never
+  spawns anything** — config inspection only. Exposes the standard
+  decision family (`McpSubprocessArgDecision.allowed` + a stable verdict
+  enum) and carries the advisory / CVE reference in its `fix_hints`;
+  `McpSubprocessArgInjectionError` is the raise-form.
+- **`policy_presets.mcp_subprocess_arg_injection_guard_defaults(allowed_commands=...)`**
+  — wires the guard with the CVE advisory metadata + a `check(config)`
+  convenience callable. Canonical `preset_id` /
+  `severity="high"` / `default_action="deny"` / `owasp="ASI05"` /
+  `cves=("CVE-2026-42271",)` dict, plus a `cisa_kev=True` flag;
+  discoverable via `policy_presets.list_active()`. OWASP **ASI05
+  Unexpected Code Execution (RCE)** (also MCP05 Command Injection);
+  composes one layer above the v0.7.6 `StdioCommandInjectionGuard` (which
+  scans an *allowed* argv for shell metachars) — this guard decides
+  whether the command may spawn at all.
+
+Pydantic-only core, **no new runtime dependency**. Regression suite:
+`tests/cves/test_cve_2026_42271_mcp_subprocess_arg.py` (18 tests) pins the
+brief's three core cases (`command="/bin/sh -c ..."` reaching a spawn
+blocked, static allowlisted command passes, non-spawn data arg passes)
+plus `args`/`argv` program resolution, the `env` code-loading-var vector,
+deny-by-default, and preset wiring (including the CISA-KEV flag).
+
+Primary sources: [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271),
+[The Hacker News](https://thehackernews.com/2026/06/litellm-flaw-cve-2026-42271-exploited.html).
+
+---
+
 ## [0.8.21] - 2026-06-09 — "Codegen triple-quote / delimiter break-out guard (CVE-2026-11393)"
 
 ### Added — Codegen string-delimiter-injection guard (v0.8.21)

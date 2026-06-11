@@ -3619,6 +3619,102 @@ def codegen_delimiter_injection_guard_defaults(
     }
 
 
+def mcp_subprocess_arg_injection_guard_defaults(
+    *,
+    allowed_commands: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    """Recommended config for the MCP-bridge subprocess-arg injection guard (v0.8.22+).
+
+    CVE-2026-42271 (LiteLLM 1.74.2–1.83.6, CVSS 8.7, CWE-78, **CISA KEV
+    2026-06-09**, actively exploited): the MCP server preview endpoints
+    ``POST /mcp-rest/test/connection`` and ``POST /mcp-rest/test/tools/list``
+    accepted a full MCP server configuration (stdio-transport ``command``
+    / ``args`` / ``env``) in the request body and spawned it as a
+    subprocess on the proxy host with no validation or sandboxing — any
+    low-privilege API key reached arbitrary command execution; chained
+    with CVE-2026-48710 (Starlette Host-header bypass) it becomes
+    unauthenticated RCE. Fixed in LiteLLM 1.83.7.
+
+    Wires
+    :class:`agent_airlock.mcp_spec.subprocess_arg_guard.McpSubprocessArgInjectionGuard`
+    deny-by-default: a model-/request-controlled config carrying
+    spawn-shaped fields (``command`` / ``cmd`` / ``args`` / ``argv`` /
+    ``env``) is refused unless its resolved program is on
+    ``allowed_commands`` (explicitly-safe static commands), and an
+    ``env`` carrying a code-loading variable (``LD_PRELOAD`` / ``PATH`` /
+    ``PYTHONPATH`` / ...) is refused regardless. A config with no
+    spawn-shaped fields (a plain data argument) is allowed.
+
+    OWASP mapping: **ASI05 Unexpected Code Execution (RCE)** (OWASP Top-10
+    for Agentic Applications); also OWASP MCP05 Command Injection; CWE-78.
+    Composes one layer above the v0.7.6
+    :class:`agent_airlock.mcp_spec.stdio_command_injection_guard.StdioCommandInjectionGuard`
+    (which scans an *allowed* argv for shell metachars) — this preset
+    decides whether the command is allowed to spawn at all.
+
+    Args:
+        allowed_commands: Program names (basename or absolute path) that
+            may be spawned. Empty / None (default) denies every
+            spawn-shaped config.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity``
+        / ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — a pre-built ``McpSubprocessArgInjectionGuard`` ready
+          to ``evaluate(config)``.
+        - ``check`` — convenience callable; ``check(config)`` raises
+          :class:`McpSubprocessArgInjectionError` on a denied config and
+          returns ``None`` on a safe one.
+        - ``owasp`` — ``"ASI05"``.
+        - ``cisa_kev`` — ``True`` (on the CISA Known Exploited
+          Vulnerabilities catalog as of 2026-06-09).
+
+    Usage::
+
+        from agent_airlock.policy_presets import mcp_subprocess_arg_injection_guard_defaults
+
+        preset = mcp_subprocess_arg_injection_guard_defaults(allowed_commands={"uvx"})
+        preset["check"]({"command": "uvx", "args": ["mcp-server-foo"]})        # ok
+        preset["check"]({"command": "/bin/sh", "args": ["-c", "curl evil"]})   # raises
+
+    Primary source:
+      https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271
+    """
+    from .mcp_spec.subprocess_arg_guard import (
+        McpSubprocessArgDecision,
+        McpSubprocessArgInjectionError,
+        McpSubprocessArgInjectionGuard,
+    )
+
+    advisory_url = (
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271"
+    )
+    guard = McpSubprocessArgInjectionGuard(
+        allowed_commands=allowed_commands,
+        advisory="CVE-2026-42271",
+        advisory_url=advisory_url,
+    )
+
+    def _check(config: Mapping[str, Any] | None) -> None:
+        """Raise :class:`McpSubprocessArgInjectionError` on a denied spawn config."""
+        decision: McpSubprocessArgDecision = guard.evaluate(config)
+        if not decision.allowed:
+            raise McpSubprocessArgInjectionError(decision)
+
+    return {
+        "preset_id": "mcp_subprocess_arg_injection_guard",
+        "severity": "high",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "ASI05",
+        "cves": ("CVE-2026-42271",),
+        "cisa_kev": True,
+        "advisory_url": advisory_url,
+    }
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -3710,4 +3806,6 @@ __all__ = [
     "mcp_server_env_interpolation_guard_defaults",
     # V0.8.21 CVE-2026-11393 (codegen triple-quote / delimiter break-out RCE)
     "codegen_delimiter_injection_guard_defaults",
+    # V0.8.22 CVE-2026-42271 (LiteLLM MCP-bridge subprocess command/args/env RCE; CISA KEV)
+    "mcp_subprocess_arg_injection_guard_defaults",
 ]
