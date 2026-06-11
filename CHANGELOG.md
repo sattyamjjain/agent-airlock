@@ -13,6 +13,49 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.23] - 2026-06-11 — "Spawn-time MCP config pin (CVE-2026-30615 zero-click)"
+
+### Added — `mcp_config_pin` spawn-time STDIO config pin (v0.8.23)
+
+Extends the v0.5.7 CVE-2026-30615 (Windsurf zero-click) defence rather than
+duplicating it. The existing `windsurf_cve_2026_30615_defaults` /
+`audit_config_diff` guard works on the **config-file write path** (it diffs
+`mcp.json` bytes and refuses unsigned/mutated entries). This adds the
+complementary **spawn-time** half — for the cases a config-file diff can't
+see (an env override, in-memory resolution, or a launcher injecting the
+config).
+
+- **`agent_airlock.mcp_spec.zero_click_config_guard.McpConfigPinSet`** — at
+  invocation time, fingerprints the **resolved** STDIO spawn config and
+  refuses anything that does not match an operator-pinned known-good
+  fingerprint, **fail-closed (raises `McpConfigPinViolation`, never warns)**.
+  The fingerprint covers `{name, command, args, env-keys}` — env *values*
+  are intentionally excluded (they rotate; the *keys* are what an injection
+  adds, e.g. a new `LD_PRELOAD`). Two failure modes both raise and emit an
+  audit event on the existing structlog + JSON-Lines (`get_audit_logger`)
+  channels:
+  - **injected** — a server name not in the pin set (`reason="unpinned"`);
+  - **mutated** — a pinned server whose `command` / `args` / `env`-keys
+    changed between registration and spawn (`reason="mutated"`).
+  Helpers: `fingerprint_mcp_server(...)`, `McpServerPin`,
+  `McpConfigPinSet.from_manifest(...)`.
+- **`policy_presets.mcp_config_pin(manifest, *, audit_path=None)`** — builds
+  the pin set from a known-good manifest and returns a dict with `pin_set`,
+  a `check(server_config)` callable, `pinned_names`, `cves=("CVE-2026-30615",)`,
+  and `owasp="ASI04"`. Diff-compatible with the existing STDIO/manifest
+  surface — a new preset, not a new top-level API.
+
+Regression suite: `tests/cves/test_cve_2026_30615_mcp_config_pin.py` (12
+tests) simulates an injected/mutated STDIO MCP server config and asserts the
+guard raises fail-closed (tagged CVE-2026-30615), plus env-value-rotation is
+allowed, env-key injection is caught, the JSON-Lines audit record is written,
+and the fingerprint is argv-order-sensitive / env-key-order-stable.
+Pydantic-only core, **no new runtime dependency**.
+
+Primary source: [NVD CVE-2026-30615](https://nvd.nist.gov/vuln/detail/CVE-2026-30615).
+
+---
+
 ## [0.8.22] - 2026-06-11 — "MCP-bridge subprocess command/args/env guard (CVE-2026-42271, CISA KEV)"
 
 ### Added — MCP-bridge subprocess-arg injection guard (v0.8.22)
