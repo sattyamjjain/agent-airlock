@@ -296,12 +296,13 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     out.append(
         "- **Maximal-coverage config, not a tuned deployment.** Every guard runs on every "
         "argument value. This *maximises detection* — overlapping guards catch obfuscations "
-        "(e.g. the codegen guard's quote/breakout check catches `eval` indirection the eval "
-        "guard alone misses) — but it also **over-blocks benign code-like strings** "
-        "(dict access such as `data['key']`, embedded JSON). The false-positive rate above "
-        "reflects that. In production, scope guards to their intended fields "
-        "(`CodegenDelimiterInjectionGuard(allowed_literal_fields=...)`, "
-        "`MCPServerEnvInterpolationGuard(scanned_keys=...)`) to cut false positives."
+        "(e.g. the codegen guard's break-out check catches `eval` indirection the eval guard "
+        "alone misses). The codegen guard is balance-aware, so complete structured literals "
+        "(`data['key']`, `{\"a\": \"b\"}`, `[\"x\", \"y\"]`) are treated as benign data rather "
+        "than break-outs; it still flags top-level break-out fragments and raw quotes in "
+        "free-text bound for a codegen sink. For free-text fields, scope guards to their "
+        "intended targets (`CodegenDelimiterInjectionGuard(allowed_literal_fields=...)`, "
+        "`MCPServerEnvInterpolationGuard(scanned_keys=...)`)."
     )
     out.append(
         "- **Signature/syntax-based, not semantic.** Individual guards match known sink/token "

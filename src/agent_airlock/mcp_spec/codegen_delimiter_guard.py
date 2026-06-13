@@ -73,6 +73,40 @@ _QUOTE_BREAKOUT_RE = re.compile(r"""["'][ \t]*[);,\]}+]""")
 # Raw newline embedded in a value bound for a single-line code string.
 _NEWLINE_RE = re.compile(r"[\r\n]")
 
+
+def _bracket_depth(text: str, pos: int) -> int:
+    """Net ``([{`` minus ``)]}`` nesting depth of ``text[:pos]`` (clamped >= 0)."""
+    depth = 0
+    for ch in text[:pos]:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+    return max(depth, 0)
+
+
+def _first_breakout(text: str) -> re.Match[str] | None:
+    """First quote break-out match that is *not* inside a balanced bracket region.
+
+    A break-out token (closing quote + separator / bracket) is benign when it
+    sits *inside* an open ``(`` / ``[`` / ``{`` region within the same value —
+    i.e. it is part of a complete subscript / call / object / array literal
+    (``data['key']``, ``{"a": "b", "c": "d"}``, ``["x", "y"]``). A token at
+    bracket-depth zero is a fragment designed to terminate a delimiter in the
+    *surrounding* generated code, and denies.
+
+    This narrows only the delimiter-break-out net: actual code sinks
+    (``eval`` / ``exec`` / ``__import__`` ...) are caught by the eval-RCE
+    guards, so balancing brackets to slip past this check does not open an RCE
+    hole the suite would otherwise catch.
+    """
+    for match in _QUOTE_BREAKOUT_RE.finditer(text):
+        if _bracket_depth(text, match.start()) > 0:
+            continue  # inside a balanced structure → benign structured data
+        return match
+    return None
+
+
 # Connection/codegen arg keys are not assumed — every string value is
 # scanned by default. Operators narrow via ``allowed_literal_fields``.
 
@@ -239,7 +273,7 @@ class CodegenDelimiterInjectionGuard:
                 f"{triple.group(0)!r} that would close a generated string literal "
                 f"and inject code",
             )
-        breakout = _QUOTE_BREAKOUT_RE.search(text)
+        breakout = _first_breakout(text)
         if breakout is not None:
             return self._deny(
                 CodegenDelimiterVerdict.DENY_QUOTE_BREAKOUT,

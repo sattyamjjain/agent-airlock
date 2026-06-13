@@ -76,6 +76,49 @@ class TestCoreCases:
 # ---------------------------------------------------------------------------
 
 
+class TestBalancedDelimitersAllowed:
+    """Balanced subscripts / object literals are benign data, not break-outs.
+
+    The quote-break-out check formerly fired on any closing quote+bracket, which
+    over-blocked legitimate code-like argument values (dict access, embedded
+    JSON). A closing bracket whose matching opener is present in the same value
+    is balanced structured data and is now allowed; an *unbalanced* close (the
+    real CVE-2026-11393 break-out shape) still denies. Actual code sinks remain
+    caught by the eval-RCE guards, so this does not open an RCE hole.
+    """
+
+    @pytest.mark.parametrize(
+        "benign",
+        [
+            "data['key']",
+            "config['db']['host']",
+            '{"status": "ok"}',
+            '{"a": "b", "c": "d"}',
+            '["x", "y", "z"]',
+            'lookup("k")',
+        ],
+    )
+    def test_balanced_structured_value_allowed(self, benign: str) -> None:
+        d = CodegenDelimiterInjectionGuard().evaluate({"expression": benign})
+        assert d.allowed is True, f"balanced value should be benign: {benign!r}"
+
+    @pytest.mark.parametrize("breakout", ["x']", 'evil")', "evil')", 'x"]'])
+    def test_unbalanced_close_still_denied(self, breakout: str) -> None:
+        # No matching opener in the value → a fragment that closes a delimiter
+        # in the surrounding generated code → still a break-out.
+        d = CodegenDelimiterInjectionGuard().evaluate({"arg": breakout})
+        assert d.allowed is False
+        assert d.verdict is CodegenDelimiterVerdict.DENY_QUOTE_BREAKOUT
+
+    @pytest.mark.parametrize("payload", ['x";', 'x",', 'x" +'])
+    def test_separator_continuation_still_denied(self, payload: str) -> None:
+        # ';' / ',' / '+' after a quote are statement separators / continuations,
+        # not balanced brackets — they always deny regardless of balance.
+        d = CodegenDelimiterInjectionGuard().evaluate({"arg": payload})
+        assert d.allowed is False
+        assert d.verdict is CodegenDelimiterVerdict.DENY_QUOTE_BREAKOUT
+
+
 class TestBreakoutForms:
     def test_single_triple_quote_form_blocked(self) -> None:
         d = CodegenDelimiterInjectionGuard().evaluate({"x": "name = '''" + "\ninject"})
