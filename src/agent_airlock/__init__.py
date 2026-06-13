@@ -597,6 +597,16 @@ from .testing import (
     reset_sandbox_pool,
 )
 
+# V0.8.24 — Skill-resistant trace redaction + per-tenant watermark (RedAct-style).
+from .trace_redaction import (
+    ProtectedFieldClass,
+    RedactionReport,
+    TraceRedactionPolicy,
+    WatermarkVerdict,
+    trace_redact,
+    verify_watermark,
+)
+
 # Note: reset_context is imported from .context above
 # Note: reset_conversation_tracker is imported from .conversation above
 # V0.4.0 Unknown args handling
@@ -621,7 +631,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.23"
+__version__ = "0.8.24"
 
 __all__ = [
     # Core
@@ -863,6 +873,13 @@ __all__ = [
     # Response types
     "AirlockResponse",
     "BlockReason",
+    # V0.8.24 — Trace redaction + per-tenant watermark (RedAct-style)
+    "TraceRedactionPolicy",
+    "RedactionReport",
+    "WatermarkVerdict",
+    "ProtectedFieldClass",
+    "trace_redact",
+    "verify_watermark",
     # Exceptions
     "GhostArgumentError",
     "SandboxExecutionError",

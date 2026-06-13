@@ -13,6 +13,57 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.24] - 2026-06-13 — "Skill-resistant trace redaction + per-tenant watermark (RedAct-style)"
+
+### Added — Trace-redaction guard + per-tenant behavioural watermark (v0.8.24)
+
+An agent's emitted trace/receipt is an extraction surface: recorded tuned
+thresholds, tool-call args, and recovered intermediate formulas/strategies
+hand a competitor the *recipe*, while a verifier needs only the *evidence*
+(the gate ran / the policy fired / pass-fail). This adds the RedAct-style
+answer — redact the recipe at the non-local sink and watermark what leaks.
+
+- **`agent_airlock.trace_redaction`** (stdlib-only — `hashlib`/`hmac`/`json`,
+  no new runtime dependency):
+  - `TraceRedactionPolicy` — opt-in, **OFF by default** (existing deployments
+    byte-for-byte unchanged), **ON under `STRICT_POLICY`**. Composes with the
+    existing `SecurityPolicy` pipeline as an additive optional field
+    (`SecurityPolicy.trace_redaction`).
+  - `trace_redact(trace, policy)` — (a) **localizes** protected fields with a
+    configurable field-classifier (tuned thresholds, tool-call args, recovered
+    formulas/strategies; default substring table + optional custom
+    `classifier`), (b) **rewrites** them to a verifier-evidence stub that keeps
+    a pass/fail bit but drops the recipe, preserving verifier-critical fields
+    (`blocked` / `block_reason` / `policy_id` / `verdict` / `passed` / ...)
+    verbatim, and (c) embeds a **per-tenant behavioural watermark** — a keyed
+    HMAC binding the watermark-free payload to the tenant — so a leaked trace
+    is provably yours. Returns a `RedactionReport` (localized / rewritten /
+    preserved + the watermark token).
+  - `verify_watermark(trace, policy)` — cryptographic detection (constant-time
+    HMAC compare): a genuine watermark detects deterministically (high
+    true-detection); an unrelated trace, wrong tenant, wrong key, or tampered
+    trace does not (low false-alarm). Returns a `WatermarkVerdict`.
+- **Emit path** — `OTelAuditExporter` gains an opt-in `redaction_policy`; the
+  OTel collector is a non-local sink, so when the policy is enabled the record
+  is run through `trace_redact` before any span attribute leaves the process,
+  and the watermark token + `airlock.trace_redacted` are attached. The local
+  JSON-Lines audit keeps full fidelity.
+- **CLI** — `python -m agent_airlock.cli.trace verify-watermark <trace.json>`
+  (`--tenant` / `--secret` / `$AIRLOCK_TRACE_SECRET`) detects the watermark;
+  `--redaction-report` prints what was localized / rewritten / preserved.
+
+Design is a RedAct-style composition of published behavioural-watermarking
+work — [Agent Guide (arXiv:2504.05871)](https://arxiv.org/abs/2504.05871),
+[CoTGuard (arXiv:2505.19405)](https://arxiv.org/abs/2505.19405),
+[Distilling the Thought (arXiv:2601.05144)](https://arxiv.org/abs/2601.05144);
+agent-airlock does not reproduce any paper's benchmark. Tests
+(`tests/test_trace_redaction.py`, 23) pin: a tuned threshold that leaks
+pre-redaction does NOT leak post-redaction while the verifier-evidence field
+survives; the watermark round-trips and resists wrong-tenant / wrong-key /
+tampered / unwatermarked false alarms; OFF-by-default + ON-under-STRICT.
+
+---
+
 ## [0.8.23] - 2026-06-11 — "Spawn-time MCP config pin (CVE-2026-30615 zero-click)"
 
 ### Added — `mcp_config_pin` spawn-time STDIO config pin (v0.8.23)

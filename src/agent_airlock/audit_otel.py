@@ -31,6 +31,8 @@ import structlog
 if TYPE_CHECKING:
     from opentelemetry.trace import Tracer
 
+    from .trace_redaction import TraceRedactionPolicy
+
 logger = structlog.get_logger("agent-airlock.audit_otel")
 
 
@@ -114,6 +116,8 @@ class OTelAuditExporter:
         endpoint: OTel collector endpoint (e.g., "http://localhost:4317").
         service_name: Name of the service for OTel traces.
         enabled: Whether export is enabled.
+        redaction_policy: Optional trace-redaction + watermark policy applied
+            because the OTel collector is a non-local sink.
     """
 
     def __init__(
@@ -121,6 +125,7 @@ class OTelAuditExporter:
         endpoint: str | None = None,
         service_name: str = "agent-airlock",
         enabled: bool = True,
+        redaction_policy: TraceRedactionPolicy | None = None,
     ) -> None:
         """Initialize OTel exporter.
 
@@ -128,10 +133,18 @@ class OTelAuditExporter:
             endpoint: OTel collector endpoint. If None, uses OTEL_EXPORTER_OTLP_ENDPOINT env var.
             service_name: Service name for traces.
             enabled: Whether to enable export.
+            redaction_policy: Optional :class:`TraceRedactionPolicy`. The OTel
+                collector is a NON-LOCAL sink, so when this is set and
+                ``enabled`` the record is run through ``trace_redact`` before
+                any attribute leaves the process — protected fields are dropped
+                (recipe gone), verifier-critical evidence is kept, and the
+                per-tenant watermark token is attached. ``None`` (default)
+                preserves prior behavior exactly.
         """
         self.endpoint = endpoint
         self.service_name = service_name
         self.enabled = enabled
+        self.redaction_policy = redaction_policy
         self._tracer: Tracer | None = None
         self._initialized = False
 
@@ -195,10 +208,30 @@ class OTelAuditExporter:
         if self._tracer is None:
             return
 
+        # The OTel collector is a non-local sink: redact + watermark the
+        # record before any attribute leaves the process. The redaction
+        # operates on the serialized trace dict (what would ship to the sink);
+        # verifier-critical evidence — tool_name, blocked, block_reason,
+        # policy_id — is in the preserved set and survives. Local JSON-Lines
+        # audit (audit.py) is untouched and keeps full fidelity.
+        watermark_token = ""  # nosec B105 - empty init, not a secret (name trips B105)
+        watermark_tenant_fp = ""
+        if self.redaction_policy is not None and self.redaction_policy.enabled:
+            from .trace_redaction import trace_redact
+
+            _, report = trace_redact(record.to_dict(), self.redaction_policy)
+            watermark_token = report.watermark_token
+            watermark_tenant_fp = report.tenant_fp
+
         try:
             from opentelemetry.trace import StatusCode
 
             with self._tracer.start_span(f"airlock.{record.tool_name}") as span:
+                if watermark_token:
+                    span.set_attribute("airlock.trace_redacted", True)
+                    span.set_attribute("airlock.watermark.scheme", "redact-hmac-v1")
+                    span.set_attribute("airlock.watermark.tenant_fp", watermark_tenant_fp)
+                    span.set_attribute("airlock.watermark.token", watermark_token)
                 # Core attributes
                 span.set_attribute("airlock.tool_name", record.tool_name)
                 span.set_attribute("airlock.blocked", record.blocked)

@@ -699,6 +699,42 @@ usage data.
 
 ---
 
+### 🩹 Skill-resistant trace redaction + watermark (v0.8.24)
+
+**Why traces are an extraction surface:** an agent's emitted trace/receipt is
+a distillation target, not just an audit artifact. A trace that records the
+tuned thresholds a policy fired on, the exact tool-call arguments, and the
+recovered intermediate formulas/strategies hands a competitor the *recipe* —
+enough to clone the behaviour without paying for the search that found it. The
+verifier, by contrast, needs only the *evidence* (the gate ran / the policy
+fired / pass-fail), never the recipe. This is the RedAct-style threat model —
+a composition of published behavioural-watermarking work
+([Agent Guide, arXiv:2504.05871](https://arxiv.org/abs/2504.05871);
+[CoTGuard, arXiv:2505.19405](https://arxiv.org/abs/2505.19405);
+[Distilling the Thought, arXiv:2601.05144](https://arxiv.org/abs/2601.05144)).
+agent-airlock does not reproduce any paper's benchmark.
+
+`TraceRedactionPolicy` (opt-in, **OFF by default** for backward compat, **ON
+under `STRICT_POLICY`**) runs at the non-local sink (e.g. the OTel exporter):
+it (a) **localizes** protected fields with a configurable field-classifier
+(tuned thresholds, tool-call args, recovered formulas/strategies), (b)
+**rewrites** them to keep verifier-critical evidence while dropping the recipe,
+and (c) embeds a **per-tenant behavioural watermark** so a leaked trace is
+provably yours. Detect it with `airlock trace verify-watermark <trace.json>`
+(cryptographic keyed-HMAC match → high true-detection, low false-alarm); add
+`--redaction-report` to see what was localized / rewritten / preserved.
+Stdlib-only — no new runtime dependency.
+
+```python
+from agent_airlock import TraceRedactionPolicy, trace_redact, verify_watermark
+
+pol = TraceRedactionPolicy(enabled=True, tenant_id="acme-co", watermark_secret="...")
+redacted, report = trace_redact(trace, pol)   # tuned_threshold → evidence stub; recipe dropped
+assert verify_watermark(redacted, pol).detected   # provably yours
+```
+
+---
+
 ### 💰 Cost Control
 
 A runaway agent can burn $500 in API costs before you notice.
