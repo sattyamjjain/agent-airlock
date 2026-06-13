@@ -14,9 +14,9 @@
 | metric | value |
 |---|---|
 | **Detection rate** (malicious blocked) | **100.0%** (21/21) |
-| **False-positive rate** (benign blocked) | **13.3%** (2/15) |
-| Overall accuracy | 94.4% (34/36) |
-| Corpus size | 36 entries (21 malicious, 15 benign) |
+| **False-positive rate** (benign blocked) | **0.0%** (0/17) |
+| Overall accuracy | 100.0% (38/38) |
+| Corpus size | 38 entries (21 malicious, 17 benign) |
 | Missed attacks (false negatives) | 0 |
 
 ## By attack class
@@ -24,7 +24,7 @@
 | attack class | CWE | OWASP (indicative) | detection | false positives |
 |---|---|---|---|---|
 | `code_execution_eval` | CWE-94 | ASI05 | 5/5 | 0/3 |
-| `codegen_delimiter_breakout` | CWE-94 | ASI05 | 3/3 | 2/4 |
+| `codegen_delimiter_breakout` | CWE-94 | ASI05 | 3/3 | 0/6 |
 | `command_injection_stdio` | CWE-78 | MCP05 | 4/4 | 0/2 |
 | `env_interpolation_leak` | CWE-200 | MCP01 | 3/3 | 0/2 |
 | `subprocess_arg_injection` | CWE-88 | MCP05 | 3/3 | 0/2 |
@@ -63,8 +63,10 @@
 | `codegen-triple-quote-assign` | `codegen_delimiter_breakout` | malicious | ✅ blocked | `CVE-2026-11393` |
 | `codegen-benign-instruction` | `codegen_delimiter_breakout` | benign | ✅ allowed | `benign-instruction` |
 | `codegen-benign-arg` | `codegen_delimiter_breakout` | benign | ✅ allowed | `benign-instruction` |
-| `codegen-benign-dict-access` | `codegen_delimiter_breakout` | benign | ⚠️ false-positive | `benign-code-like (known FP)` |
-| `codegen-benign-json-string` | `codegen_delimiter_breakout` | benign | ⚠️ false-positive | `benign-code-like (known FP)` |
+| `codegen-benign-dict-access` | `codegen_delimiter_breakout` | benign | ✅ allowed | `benign-code-like (balanced)` |
+| `codegen-benign-json-string` | `codegen_delimiter_breakout` | benign | ✅ allowed | `benign-code-like (balanced)` |
+| `codegen-benign-multikey-json` | `codegen_delimiter_breakout` | benign | ✅ allowed | `benign-code-like (balanced)` |
+| `codegen-benign-list` | `codegen_delimiter_breakout` | benign | ✅ allowed | `benign-code-like (balanced)` |
 | `subproc-shell-string` | `subprocess_arg_injection` | malicious | ✅ blocked | `CVE-2026-42271` |
 | `subproc-bash-argv` | `subprocess_arg_injection` | malicious | ✅ blocked | `CVE-2026-42271` |
 | `subproc-ld-preload` | `subprocess_arg_injection` | malicious | ✅ blocked | `CVE-2026-42271` |
@@ -81,7 +83,7 @@
 
 ### Known limitations (read before trusting the headline)
 
-- **Maximal-coverage config, not a tuned deployment.** Every guard runs on every argument value. This *maximises detection* — overlapping guards catch obfuscations (e.g. the codegen guard's quote/breakout check catches `eval` indirection the eval guard alone misses) — but it also **over-blocks benign code-like strings** (dict access such as `data['key']`, embedded JSON). The false-positive rate above reflects that. In production, scope guards to their intended fields (`CodegenDelimiterInjectionGuard(allowed_literal_fields=...)`, `MCPServerEnvInterpolationGuard(scanned_keys=...)`) to cut false positives.
+- **Maximal-coverage config, not a tuned deployment.** Every guard runs on every argument value. This *maximises detection* — overlapping guards catch obfuscations (e.g. the codegen guard's break-out check catches `eval` indirection the eval guard alone misses). The codegen guard is balance-aware, so complete structured literals (`data['key']`, `{"a": "b"}`, `["x", "y"]`) are treated as benign data rather than break-outs; it still flags top-level break-out fragments and raw quotes in free-text bound for a codegen sink. For free-text fields, scope guards to their intended targets (`CodegenDelimiterInjectionGuard(allowed_literal_fields=...)`, `MCPServerEnvInterpolationGuard(scanned_keys=...)`).
 - **Signature/syntax-based, not semantic.** Individual guards match known sink/token shapes; in isolation several are evadable (e.g. aliasing `eval`). Detection here is a property of the *suite* (defense-in-depth), not of any single guard.
 - **Self-corpus.** Payloads derive from agent-airlock's own CVE fixtures, so a high detection number is expected and is **not** evidence of robustness against novel or adaptive attackers. Treat this as a coverage / regression baseline, not an ASR result.
 

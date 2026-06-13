@@ -13,6 +13,47 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.26] - 2026-06-13 — "Balance-aware codegen break-out + public guard benchmark"
+
+### Fixed
+
+- **fix(codegen-guard): treat balanced structured literals as benign data**
+
+  `CodegenDelimiterInjectionGuard`'s quote-break-out check fired on any closing
+  quote + bracket/separator, over-blocking legitimate code-like argument values:
+  dict access (`data['key']`), embedded JSON (`{"a": "b", "c": "d"}`), and lists
+  (`["x", "y"]`). It is now **balance-aware** — a break-out token *inside* an open
+  `(` / `[` / `{` region (a complete subscript / call / object / array literal)
+  is treated as benign structured data; a top-level (bracket-depth-zero) fragment
+  with no enclosing opener — the real CVE-2026-11393 break-out shape — still
+  denies. Triple-quote and raw-newline detection are unchanged. Defense-in-depth
+  is preserved: actual code sinks (`eval` / `exec` / `__import__`) are caught by
+  the eval-RCE guards, so balancing brackets cannot slip an RCE past the suite.
+  The benchmark's false-positive rate on code-like benign inputs dropped from
+  13.3% to 0% as a result.
+
+### Added
+
+- **feat(bench): reproducible guard-suite benchmark + `make benchmark`**
+
+  `scripts/generate_benchmark.py` runs the full guard suite (block-iff-any) over a
+  deterministic, OWASP-tagged corpus
+  (`tests/cves/corpora/airlock_guard_benchmark_2026_06_13.json`) and writes
+  `BENCHMARK.md` with honest **detection** *and* **false-positive** rates.
+  `make benchmark` regenerates it; `python3 scripts/generate_benchmark.py --check`
+  is a drift gate. Current result: **100% detection (21/21), 0% false-positives
+  (0/17)**. It is a *self-corpus* — a coverage / regression baseline, not a
+  competitive or adaptive-attacker (ASR) result.
+
+### Changed
+
+- **docs: reposition README hero + package description** around the differentiated
+  wedge — in-process, per-argument tool-call validation (ghost-argument stripping,
+  strict Pydantic, self-healing retries) — away from the crowded "firewall for AI
+  agents" framing. `BENCHMARK.md` is linked from the README nav.
+
+---
+
 ## [0.8.25] - 2026-06-13 — "Fail-closed terminal-claim guard (Goal-Autopilot)"
 
 ### Added
