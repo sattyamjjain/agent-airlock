@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     )
     from .safe_types import UnsafeDeserializationGuard
     from .sequence_guard import SequenceGuard
+    from .trace_redaction import TraceRedactionPolicy
 
 logger = structlog.get_logger("agent-airlock.policy")
 
@@ -394,6 +395,14 @@ class SecurityPolicy:
     # never deserialize network payloads pay no cost. See
     # :class:`agent_airlock.safe_types.UnsafeDeserializationGuard`.
     deserialization_guard: UnsafeDeserializationGuard | None = None
+    # V0.8.24 trace-redaction + per-tenant watermark policy (RedAct-style).
+    # When set and ``enabled``, traces/receipts emitted to a NON-LOCAL sink
+    # are redacted (protected fields localized + rewritten to keep
+    # verifier-critical evidence, recipe dropped) and watermarked. OFF by
+    # default (None preserves prior behavior exactly); the STRICT preset
+    # turns it ON. The local JSON-Lines audit keeps full fidelity. See
+    # :class:`agent_airlock.trace_redaction.TraceRedactionPolicy`.
+    trace_redaction: TraceRedactionPolicy | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -853,10 +862,25 @@ def _get_read_only_capability_policy() -> CapabilityPolicy | None:
         return None
 
 
+def _get_strict_trace_redaction() -> TraceRedactionPolicy:
+    """Trace-redaction ON for the STRICT preset (RedAct-style, v0.8.24+).
+
+    Enabled with an empty tenant id by default — operators set their own
+    ``tenant_id`` / ``watermark_secret`` by constructing a
+    :class:`~agent_airlock.trace_redaction.TraceRedactionPolicy` and assigning
+    it to their policy's ``trace_redaction`` field. STRICT turning it ON means
+    a non-local sink gets redacted + watermarked traces by default.
+    """
+    from .trace_redaction import TraceRedactionPolicy
+
+    return TraceRedactionPolicy(enabled=True)
+
+
 STRICT_POLICY = SecurityPolicy(
     require_agent_id=True,
     rate_limits={"*": "100/hour"},
     capability_policy=_get_strict_capability_policy(),
+    trace_redaction=_get_strict_trace_redaction(),
 )
 """Requires agent identity, applies global rate limit, and enforces strict capabilities.
 
