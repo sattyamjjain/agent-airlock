@@ -126,8 +126,12 @@ dev = [
     "pytest-benchmark>=4.0",
     "mypy>=1.8",
     "ruff>=0.2",
-    # Security tools
-    "bandit>=1.7",
+    # Security tools. bandit floor pinned to 1.9.4 to match the CI image:
+    # 1.9.x is stricter than 1.8.x (e.g. flags dict keys / vars named like
+    # secrets as B105), so a lower local floor caused "passes locally, fails
+    # CI" skew (hit during the v0.8.17 cycle). Pinning the floor keeps a fresh
+    # `[dev]` install in lockstep with CI.
+    "bandit>=1.9.4",
     "safety>=3.0",
     # SBOM generation
     "cyclonedx-bom>=4.0",
