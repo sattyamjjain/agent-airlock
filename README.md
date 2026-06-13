@@ -5,9 +5,9 @@
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=28&duration=3000&pause=1000&color=00D4FF&center=true&vCenter=true&multiline=true&repeat=true&width=700&height=100&lines=%F0%9F%9B%A1%EF%B8%8F+Agent-Airlock;Your+AI+Agent+Just+Tried+rm+-rf+%2F.+We+Stopped+It." alt="Agent-Airlock Typing Animation" />
 </a>
 
-### The Open-Source Firewall for AI Agents
+### A type-checker for AI tool calls
 
-**One decorator. Zero trust. Full control.**
+**Strict validation, ghost-argument stripping, and self-healing retries — one decorator, any agent or MCP server.**
 
 <!-- Primary Badges Row -->
 [![PyPI version](https://img.shields.io/pypi/v/agent-airlock?style=for-the-badge&logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/agent-airlock/)
@@ -28,7 +28,7 @@
 
 <br/>
 
-[**Get Started in 30 Seconds**](#-30-second-quickstart) · [**Why Airlock?**](#-the-problem-no-one-talks-about) · [**All Frameworks**](#-framework-compatibility) · [**Docs**](#-documentation)
+[**Get Started in 30 Seconds**](#-30-second-quickstart) · [**Why Airlock?**](#-the-problem-no-one-talks-about) · [**All Frameworks**](#-framework-compatibility) · [**Benchmark**](BENCHMARK.md) · [**Docs**](#-documentation)
 
 <br/>
 

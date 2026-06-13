@@ -1,4 +1,4 @@
-.PHONY: help test coverage lint format bench test-badge egress-bench check-changelog check-changelog-release verify-corpus
+.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-changelog check-changelog-release verify-corpus
 
 help:
 	@echo "Targets:"
@@ -7,6 +7,7 @@ help:
 	@echo "  lint                    Run ruff + mypy"
 	@echo "  format                  Apply ruff format"
 	@echo "  bench                   Run pytest-benchmark suite"
+	@echo "  benchmark               Regenerate BENCHMARK.md (guard-suite block-rate corpus)"
 	@echo "  test-badge              Regenerate the TEST-BADGE block in README.md"
 	@echo "  egress-bench            Run the CVE egress-bench walker against tests/cves/fixtures/"
 	@echo "  verify-corpus           Verify wild_payload_corpus MANIFEST.sha256"
@@ -33,6 +34,9 @@ format:
 
 bench:
 	python3 -m pytest tests/benchmarks/ --benchmark-only --no-cov
+
+benchmark:
+	python3 scripts/generate_benchmark.py
 
 test-badge:
 	python3 scripts/update_test_badge.py
