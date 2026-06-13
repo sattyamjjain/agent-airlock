@@ -735,6 +735,35 @@ assert verify_watermark(redacted, pol).detected   # provably yours
 
 ---
 
+### ✅ Fail-closed terminal-claim guard — `no_false_success` (v0.8.25)
+
+**An honest stall is recoverable; a confident wrong `done` is not.** The
+dominant failure mode of unattended long-horizon agents isn't crashing — it's
+*confidently reporting success they never verified*
+([Goal-Autopilot, arXiv:2606.11688](https://arxiv.org/abs/2606.11688)). The
+`no_false_success` preset enforces that paper's No-False-Success floor: a
+terminal/`done` claim is admitted **only if a named, falsifiable check actually
+executed and passed THIS run**. No receipt, a failed check, or a forged/replayed
+receipt → the guard fails closed to a **recoverable honest stall** (run the
+named check and retry), never a fabricated success.
+
+Forgery resistance is structural: the guard mints a per-run token and only
+trusts a receipt it stamped by executing the check this run — a receipt that's
+merely *present* (hand-built, or replayed from a prior run) is rejected. Opt in
+per-agent with `AirlockConfig(require_done_receipt=True)` (or
+`require_done_receipt = true` under `[airlock]` in `airlock.toml`); OFF by
+default. Stdlib-only — no new runtime dependency.
+
+```python
+from agent_airlock import no_false_success_defaults, NoFalseSuccessStall
+
+preset = no_false_success_defaults({"tests_green": run_pytest})  # falsifiable check
+preset["guard"].run("tests_green")        # actually execute the check this run
+preset["check"]("tests_green")            # raises NoFalseSuccessStall unless it passed
+```
+
+---
+
 ### 💰 Cost Control
 
 A runaway agent can burn $500 in API costs before you notice.

@@ -125,6 +125,14 @@ class AirlockConfig:
     # 12-digit numbers). Locale codes are lowercase ISO-3166-1 alpha-2.
     pii_locales: list[str] = field(default_factory=list)
 
+    # V0.8.25 — opt-in fail-closed terminal-claim guard (Goal-Autopilot
+    # arXiv:2606.11688). OFF by default for backward compat. When True, an
+    # agent's terminal/"done" claim is admitted only if a named falsifiable
+    # check executed and passed THIS run; otherwise the guard returns a
+    # recoverable honest stall. Wire the per-claim checks via the
+    # ``no_false_success_defaults`` preset. ON under STRICT deployments.
+    require_done_receipt: bool = False
+
     def __post_init__(self) -> None:
         """Apply environment variable overrides after initialization."""
         # E2B API key priority: env var > constructor > config file
@@ -244,6 +252,8 @@ class AirlockConfig:
             "credentials",
             # V0.8.9 opt-in locale tags for region-specific PII
             "pii_locales",
+            # V0.8.25 opt-in fail-closed terminal-claim guard
+            "require_done_receipt",
         }
 
         # SECURITY: Warn about unknown keys (likely typos)
@@ -264,6 +274,7 @@ class AirlockConfig:
             "enable_audit_log",
             "audit_otel_enabled",  # V0.4.0
             "audit_include_args_hash",  # V0.4.0
+            "require_done_receipt",  # V0.8.25
         ):
             if key in data:
                 result[key] = bool(data[key])

@@ -13,6 +13,48 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.25] - 2026-06-13 — "Fail-closed terminal-claim guard (Goal-Autopilot)"
+
+### Added
+
+- **feat(guard): no_false_success terminal-claim guard (Goal-Autopilot 2606.11688)**
+
+  A fail-closed guard that rejects an agent's terminal/`done` claim unless a
+  named, falsifiable check actually executed and passed in this run. Anchored
+  on Goal-Autopilot ([arXiv:2606.11688](https://arxiv.org/abs/2606.11688)),
+  whose No-False-Success floor admits no terminal claim whose falsifiable gate
+  did not execute and pass, degrading worst-case to an *honest stall, never a
+  fabricated success*.
+
+  - **`agent_airlock.done_receipt_guard.DoneReceiptGuard`** (stdlib-only —
+    `secrets`/`hmac`/`time`, no new runtime dependency): holds a registry of
+    falsifiable checks keyed by claim. `run(claim)` executes a check and records
+    a receipt stamped with the guard's per-run token; `check_done(claim)` admits
+    the terminal claim only if a receipt exists, was executed THIS run, and
+    passed. Verdicts: `ALLOW`, `STALL_NO_RECEIPT`, `STALL_CHECK_FAILED`,
+    `STALL_FORGED_RECEIPT`, `STALL_UNKNOWN_CLAIM`. Every stall is
+    `recoverable=True` (run the named check and retry, don't abort). Forgery
+    resistance is structural: a receipt that is merely present — hand-built
+    (`executed=False`), or replayed from another run (foreign token) — is
+    rejected; only a receipt the guard stamped by executing the check this run
+    is trusted. A check that raises counts as a fail, not a crash.
+  - **`policy_presets.no_false_success_defaults(checks, *, run_token=None)`** —
+    canonical `preset_id="no_false_success"` / `severity="high"` /
+    `default_action="deny"` / `owasp="ASI06"` dict + a pre-built `guard` and a
+    `check(claim)` callable that raises `NoFalseSuccessStall` (carrying the
+    decision + `recoverable`) on a fail-closed stall. Diff-compatible with the
+    existing preset-registration shape — a new preset, not a breaking change.
+  - **Opt-in per agent** — `AirlockConfig.require_done_receipt` (OFF by default
+    for backward compat; settable via constructor or `require_done_receipt =
+    true` under `[airlock]` in `airlock.toml`).
+
+  Tests (`tests/test_done_receipt_guard.py`, 20): a terminal claim with a
+  passing receipt is allowed; no receipt / a non-executed check / a failed check
+  / an unknown claim fail-closed to a recoverable stall; a forged receipt
+  (present but never executed) and a replayed cross-run receipt are rejected.
+
+---
+
 ## [0.8.24] - 2026-06-13 — "Skill-resistant trace redaction + per-tenant watermark (RedAct-style)"
 
 ### Added — Trace-redaction guard + per-tenant behavioural watermark (v0.8.24)
