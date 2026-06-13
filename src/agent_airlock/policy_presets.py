@@ -3782,6 +3782,80 @@ def mcp_subprocess_arg_injection_guard_defaults(
     }
 
 
+def no_false_success_defaults(
+    checks: Mapping[str, Any],
+    *,
+    run_token: str | None = None,
+) -> dict[str, Any]:
+    """Fail-closed terminal-claim guard preset (v0.8.25+, Goal-Autopilot).
+
+    Goal-Autopilot (arXiv:2606.11688) enforces a hard floor for unattended
+    long-horizon agents: **no terminal "done" claim is admitted unless its
+    falsifiable gate actually executed and passed**, and the worst case
+    degrades to an *honest stall, never a fabricated success*. This preset
+    wires :class:`agent_airlock.done_receipt_guard.DoneReceiptGuard` with an
+    operator-supplied registry of falsifiable checks keyed by claim.
+
+    Honest stall is recoverable; a confident wrong ``done`` is not — so a
+    failed verification returns ``allowed=False`` with ``recoverable=True``
+    (run the named check and retry), it does not abort.
+
+    Args:
+        checks: Mapping of claim → falsifiable check (zero-arg ``() -> bool``).
+            A check must be able to FAIL; one that can only return True is not
+            falsifiable and provides no evidence.
+        run_token: The per-run execution token. Defaults to a fresh random
+            token; pass a fixed value only for deterministic tests.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, plus:
+
+        - ``guard`` — a pre-built ``DoneReceiptGuard``. Call ``guard.run(claim)``
+          to execute a check this run, then ``guard.check_done(claim)``.
+        - ``check`` — convenience callable; ``check(claim)`` raises
+          :class:`NoFalseSuccessStall` on a fail-closed stall and returns the
+          :class:`DoneClaimDecision` on an admitted claim.
+        - ``owasp`` — ``"ASI06"`` (excessive agency / unverified autonomy).
+        - ``advisory_url`` — the Goal-Autopilot paper.
+
+    Usage::
+
+        from agent_airlock.policy_presets import no_false_success_defaults
+
+        preset = no_false_success_defaults({"tests_green": run_pytest})
+        preset["guard"].run("tests_green")          # execute the check this run
+        preset["check"]("tests_green")              # raises if it didn't pass
+
+    Primary source:
+      https://arxiv.org/abs/2606.11688
+    """
+    from .done_receipt_guard import (
+        DoneClaimDecision,
+        DoneReceiptGuard,
+        NoFalseSuccessStall,
+    )
+
+    guard = DoneReceiptGuard(checks, run_token=run_token)
+
+    def _check(claim: str) -> DoneClaimDecision:
+        """Raise :class:`NoFalseSuccessStall` on a fail-closed honest stall."""
+        decision = guard.check_done(claim)
+        if not decision.allowed:
+            raise NoFalseSuccessStall(decision)
+        return decision
+
+    return {
+        "preset_id": "no_false_success",
+        "severity": "high",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "ASI06",
+        "advisory_url": "https://arxiv.org/abs/2606.11688",
+    }
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -3876,4 +3950,6 @@ __all__ = [
     "codegen_delimiter_injection_guard_defaults",
     # V0.8.22 CVE-2026-42271 (LiteLLM MCP-bridge subprocess command/args/env RCE; CISA KEV)
     "mcp_subprocess_arg_injection_guard_defaults",
+    # V0.8.25 Goal-Autopilot (arXiv:2606.11688) fail-closed terminal-claim guard
+    "no_false_success_defaults",
 ]

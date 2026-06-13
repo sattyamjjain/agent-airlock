@@ -147,6 +147,15 @@ from .cost_tracking import (
     set_global_tracker,
 )
 
+# V0.8.25 — Fail-closed terminal-claim guard (Goal-Autopilot arXiv:2606.11688).
+from .done_receipt_guard import (
+    CheckReceipt,
+    DoneClaimDecision,
+    DoneClaimVerdict,
+    DoneReceiptGuard,
+    NoFalseSuccessStall,
+)
+
 # V0.3.0 Filesystem security
 from .filesystem import (
     RESTRICTIVE_FILESYSTEM_POLICY,
@@ -483,6 +492,7 @@ from .policy_presets import (
     mcp_subprocess_arg_injection_guard_defaults,
     mex_gov_2026_policy,
     mobile_mcp_intent_guard_2026_05,
+    no_false_success_defaults,
     owasp_mcp_top_10_2026_policy,
     stdio_guard_ox_defaults,
     strict_tier_budget_policy,
@@ -631,7 +641,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.24"
+__version__ = "0.8.25"
 
 __all__ = [
     # Core
@@ -684,6 +694,7 @@ __all__ = [
     "mcp_server_env_interpolation_guard_defaults",
     "codegen_delimiter_injection_guard_defaults",
     "mcp_subprocess_arg_injection_guard_defaults",
+    "no_false_success_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
     # V0.5.3 top-level error re-exports (canonical defs in submodules)
     "AgentCommerceCapExceeded",
@@ -873,6 +884,12 @@ __all__ = [
     # Response types
     "AirlockResponse",
     "BlockReason",
+    # V0.8.25 — Fail-closed terminal-claim guard (Goal-Autopilot arXiv:2606.11688)
+    "DoneReceiptGuard",
+    "DoneClaimDecision",
+    "DoneClaimVerdict",
+    "CheckReceipt",
+    "NoFalseSuccessStall",
     # V0.8.24 — Trace redaction + per-tenant watermark (RedAct-style)
     "TraceRedactionPolicy",
     "RedactionReport",
