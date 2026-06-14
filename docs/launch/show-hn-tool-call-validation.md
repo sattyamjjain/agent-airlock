@@ -6,9 +6,9 @@ every honest caveat in (self-corpus, the false-positive rate, "complements gatew
 That honesty is the point: this audience punishes overclaiming and rewards reproducibility.
 
 Pick the channels in this order (per the distribution research): build the benchmark
-asset (done) → submit to MCP registry + awesome-lists (evergreen) → publish the blog post
-on your own domain + dev.to (SEO) → Show HN / r/LocalLLaMA / r/Python (the spike). Lead
-every one of them with the benchmark, not the tool.
+asset (done) → submit to security/utility awesome-lists (evergreen) → publish the blog
+post on your own domain + dev.to (SEO) → Show HN / r/LocalLLaMA / r/Python (the spike).
+Lead every one of them with the benchmark, not the tool.
 
 ---
 
@@ -51,11 +51,12 @@ every one of them with the benchmark, not the tool.
 > ```
 >
 > I didn't want to just claim it works, so there's a reproducible benchmark
-> (`make benchmark`): the full guard suite over a 36-entry corpus of real CVE-shaped
-> payloads + benign controls. Current result: **100% detection (21/21), 13.3%
-> false-positives (2/15)**. I'm deliberately reporting the false positives — running
-> every guard on every argument (max coverage) over-blocks benign code-like strings like
-> `data['key']`; in production you scope guards to the fields they're for. It's a
+> (`make benchmark`): the full guard suite over a 38-entry corpus of real CVE-shaped
+> payloads + benign controls. It reports **100% detection (21/21), 0% false-positives
+> (0/17)** — but the honest part is how it got there. The first run flagged ~13% false
+> positives, because one guard over-blocked benign code-like strings like `data['key']`.
+> The benchmark caught my own gap; I made that guard balance-aware (a complete
+> `data['key']` is structured data, not a delimiter break-out) and it's 0% now. It's a
 > *self-corpus* (my own fixtures), so treat it as a coverage/regression baseline, not an
 > adaptive-attacker score.
 >
@@ -135,19 +136,21 @@ of real CVE-shaped payloads plus benign controls, and writes
 | metric | value |
 |---|---|
 | Detection (malicious blocked) | **100% (21/21)** |
-| False-positives (benign blocked) | **13.3% (2/15)** |
+| False-positives (benign blocked) | **0% (0/17)** |
 | Missed attacks | 0 |
 
-**And here's the honest part.** That 13.3% is real and I'm reporting it on purpose. The
-benchmark runs *every guard on every argument* (maximum coverage). That catches even
-obfuscated eval — the codegen guard's quote-breakout check is a safety net the eval guard
-alone misses — but it also over-blocks benign code-like strings such as `data['key']` or
-an embedded JSON snippet. In production you scope each guard to the fields it's meant for,
-which trades a little coverage for far fewer false positives. And it's a *self-corpus*:
-it grades the guards against their own CVE fixtures, so 100% detection is expected and is
+**And here's the honest part — how it got to 0%.** The first version of this benchmark
+scored ~13% false positives, and that's the useful part of the story. Running *every
+guard on every argument* (maximum coverage) catches even obfuscated eval — the codegen
+guard's quote-breakout check is a safety net the eval guard alone misses — but it also
+over-blocked benign code-like strings such as `data['key']` or an embedded JSON snippet.
+The benchmark caught my own gap; I made that guard balance-aware (a complete `data['key']`
+is structured data, not a delimiter break-out) and the false-positive rate dropped to 0%.
+That is exactly what a reproducible benchmark is for. It's still a *self-corpus*: it
+grades the guards against their own CVE fixtures, so 100% detection is expected and is
 **not** a claim of robustness against novel or adaptive attackers. It's a coverage and
-regression baseline — the kind of thing you put in CI so your block rate can't silently
-rot, not a competitive ASR number.
+regression baseline — the kind of thing you put in CI (it has a drift gate) so your block
+rate can't silently rot, not a competitive ASR number.
 
 ### Where it fits
 
@@ -175,8 +178,9 @@ be blocked), that's exactly the issue I want.
   honest hook that isn't "please look at my tool."
 - **Keep the FP number in.** Deleting it to show a clean 100% is the fastest way to lose
   this audience — and it would be dishonest. The trade-off *is* the interesting finding.
-- **Evergreen submissions first** (cost ~an afternoon, pay off for months): the MCP
-  registry (registry.modelcontextprotocol.io), `punkpeye/awesome-mcp-servers`,
-  `mcpservers.org`, and any `awesome-llm-security` lists.
+- **Evergreen submissions first** (cost ~an afternoon, pay off for months): the
+  security / utility sections of `punkpeye/awesome-mcp-servers`, `awesome-llm-security`,
+  and `awesome-mcp-security`. Ready-to-paste entries are in `distribution-submissions.md`.
+  NOT the MCP server registry — agent-airlock is a library, not a server.
 - **Don't hardcode the benchmark number into the README** — it's linked, and the number
   lives in `BENCHMARK.md` (single source of truth) so it can't go stale.
