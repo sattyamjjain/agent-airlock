@@ -42,6 +42,11 @@ jobs:
         run: |
           pytest tests/ -v --cov=agent_airlock --cov-report=xml --cov-report=term-missing --cov-fail-under=80
 
+      - name: Benchmark drift gate
+        if: matrix.python-version == '3.11'
+        run: |
+          python3 scripts/generate_benchmark.py --check
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
