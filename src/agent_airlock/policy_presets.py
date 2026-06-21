@@ -3769,6 +3769,86 @@ def cline_cve_2026_44211_defaults(
     }
 
 
+def ssrf_egress_guard_defaults(
+    *,
+    allow_internal_hosts: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    """Recommended (STANDARD) config for the SSRF egress guard (v0.8.29+).
+
+    CVE-2026-47390 (CWE-918, SSRF-protection bypass): an egress filter that
+    validates the *literal hostname string* of an outbound URL — instead of
+    the **resolved IP** — is bypassed by encoding a loopback / link-local /
+    metadata address in a form the naive check misses but the HTTP client
+    connects to anyway: `127.1`, decimal `2130706433`, octal `0177.0.0.1`,
+    hex `0x7f000001`, `::ffff:127.0.0.1`, or a public hostname whose DNS
+    record points at `169.254.169.254` (rebinding).
+
+    Wires :class:`agent_airlock.ssrf_egress_guard.SSRFEgressGuard`
+    deny-by-default: every candidate target is reduced to its canonical IP(s)
+    — decoding the alternate encodings and **resolving hostnames at check
+    time** — and any loopback / link-local / metadata / unspecified address,
+    or an RFC1918 private range not on ``allow_internal_hosts``, is refused
+    *before* the fetch, with a 3-line ``explain`` audit trace. This is the
+    STANDARD egress posture; enable it by default on any agent with a
+    network-capable tool.
+
+    OWASP mapping: **ASI02 Tool Misuse** (a fetch tool driven at an internal
+    target); CWE-918 (Server-Side Request Forgery).
+
+    Args:
+        allow_internal_hosts: Hosts (hostname or IP string) that legitimate
+            internal tools may reach — the escape hatch for RFC1918 targets.
+            Empty / None (default) allows no internal target.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — a pre-built ``SSRFEgressGuard`` exposing
+          ``check_url(url)`` / ``check(args)`` / ``enforce(url)``.
+        - ``check`` — convenience callable; ``check(url)`` raises
+          :class:`SSRFEgressBlocked` on a denied target and returns ``None``
+          on a safe one.
+        - ``owasp`` — ``"ASI02"``; ``cwe`` — ``("CWE-918",)``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import ssrf_egress_guard_defaults
+
+        preset = ssrf_egress_guard_defaults()
+        preset["check"]("http://0x7f000001/")       # raises (hex loopback)
+        preset["check"]("http://169.254.169.254/")  # raises (cloud metadata)
+
+    Primary source:
+      https://www.cve.org/CVERecord?id=CVE-2026-47390
+    """
+    from .ssrf_egress_guard import SSRFEgressBlocked, SSRFEgressGuard
+
+    advisory_url = "https://www.cve.org/CVERecord?id=CVE-2026-47390"
+    guard = SSRFEgressGuard(
+        allow_internal_hosts=allow_internal_hosts,
+        advisory="CVE-2026-47390",
+    )
+
+    def _check(url: str) -> None:
+        """Raise :class:`SSRFEgressBlocked` on a denied outbound target."""
+        decision = guard.check_url(url)
+        if not decision.allowed:
+            raise SSRFEgressBlocked(decision)
+
+    return {
+        "preset_id": "ssrf_egress_guard",
+        "severity": "high",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "ASI02",
+        "cwe": ("CWE-918",),
+        "cves": ("CVE-2026-47390",),
+        "advisory_url": advisory_url,
+    }
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -4033,6 +4113,8 @@ __all__ = [
     "codegen_delimiter_injection_guard_defaults",
     # V0.8.27 CVE-2026-44211 (Cline cross-origin WebSocket hijack; CWE-1385/CWE-306)
     "cline_cve_2026_44211_defaults",
+    # V0.8.29 CVE-2026-47390 (SSRF-protection bypass via alt-encoding / rebinding; CWE-918)
+    "ssrf_egress_guard_defaults",
     # V0.8.22 CVE-2026-42271 (LiteLLM MCP-bridge subprocess command/args/env RCE; CISA KEV)
     "mcp_subprocess_arg_injection_guard_defaults",
     # V0.8.25 Goal-Autopilot (arXiv:2606.11688) fail-closed terminal-claim guard

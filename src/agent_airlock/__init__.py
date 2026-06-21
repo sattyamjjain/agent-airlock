@@ -501,6 +501,7 @@ from .policy_presets import (
     mobile_mcp_intent_guard_2026_05,
     no_false_success_defaults,
     owasp_mcp_top_10_2026_policy,
+    ssrf_egress_guard_defaults,
     stdio_guard_ox_defaults,
     strict_tier_budget_policy,
 )
@@ -595,6 +596,12 @@ from .sdk_provenance import (
     classify_sdk_lineage,
 )
 from .self_heal import AirlockResponse, BlockReason
+from .ssrf_egress_guard import (
+    SSRFEgressBlocked,
+    SSRFEgressDecision,
+    SSRFEgressGuard,
+    SSRFEgressVerdict,
+)
 from .streaming import (
     StreamingAirlock,
     StreamingState,
@@ -648,7 +655,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.28"
+__version__ = "0.8.29"
 
 __all__ = [
     # Core
@@ -701,6 +708,7 @@ __all__ = [
     "mcp_server_env_interpolation_guard_defaults",
     "codegen_delimiter_injection_guard_defaults",
     "cline_cve_2026_44211_defaults",
+    "ssrf_egress_guard_defaults",
     "mcp_subprocess_arg_injection_guard_defaults",
     "no_false_success_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
@@ -810,6 +818,11 @@ __all__ = [
     "WebSocketOriginGuard",
     "WebSocketOriginHijackError",
     "WebSocketOriginVerdict",
+    # V0.8.29 — SSRF egress guard (CVE-2026-47390 / CWE-918)
+    "SSRFEgressBlocked",
+    "SSRFEgressDecision",
+    "SSRFEgressGuard",
+    "SSRFEgressVerdict",
     # V0.8.22 — MCP-bridge subprocess-arg injection guard (CVE-2026-42271, CISA KEV)
     "McpSubprocessArgDecision",
     "McpSubprocessArgInjectionError",
