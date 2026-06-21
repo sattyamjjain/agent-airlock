@@ -13,6 +13,57 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.34] - 2026-06-21 — "DNS-rebinding-safe SafeURL egress guard (GHSA-mrvx-jmjw-vggc)"
+
+### Added
+
+- **fix(safeurl): resolve + re-validate at call time to defeat DNS-rebinding SSRF (GHSA-mrvx-jmjw-vggc)**
+
+  Makes the `SafeURL` egress guard DNS-rebinding-safe. GHSA-mrvx-jmjw-vggc
+  (SearXNG MCP Server, High, disclosed 2026-06-19): `assertUrlAllowed()`
+  validated only the **syntactic** hostname string against a private-IP/host
+  blocklist **without resolving DNS**, so an attacker-controlled domain that
+  resolves to a private/loopback IP (wildcard DNS like `nip.io`, or a custom
+  record) passed the string check and the server then read arbitrary internal
+  HTTP services — SSRF via DNS rebinding.
+
+  - `SafeURLValidator` gains a **`dns_rebinding_guard: bool = False`** flag
+    (additive; default off preserves existing behaviour) plus an injectable
+    `resolver`. When ON, after the syntactic allowlist/blocklist checks the
+    validator **resolves the hostname at call time** (`getaddrinfo`) and
+    re-validates **every** resolved A/AAAA address against the private /
+    loopback / link-local / cloud-metadata blocklist (`169.254.169.254`, `::1`,
+    `127/8`, `10/8`, `172.16/12`, `192.168/16`, `fc00::/7` — via
+    `_resolved_ip_is_internal`, which also folds in the v0.8.32 metadata
+    canonicalization so a resolved `::ffff:169.254.169.254` is caught). A
+    resolved internal IP raises `SafeURLValidationError(reason="dns_rebinding")`;
+    an unresolvable host fails closed.
+  - New **`SafeURLValidator.resolve_and_pin(url) -> (url, pinned_ips)`**:
+    resolves **once** and returns the validated URL plus the pinned IP list the
+    caller should connect to directly — so a rebind cannot flip the record
+    between the check and the connect (TOCTOU-safe).
+  - **`policy_presets.dns_rebinding_safe_url_defaults(...)`** — the
+    OWASP-MCP-aligned egress posture with `dns_rebinding_guard=True` **ON by
+    default** (`preset_id="dns_rebinding_safe_url"`, `severity="high"`,
+    `owasp="MCP06"`, `ghsa=("GHSA-mrvx-jmjw-vggc",)`), plus the
+    `validate_safe_url_dns_rebinding_safe(url)` convenience validator. The
+    public `SafeURL` type and `SafeURLValidator` call signature are unchanged
+    (diff-compatible / additive). Complements the v0.8.29 `SSRFEgressGuard`,
+    which already resolves egress targets — this brings the same call-time
+    resolution to the `SafeURL` allowlist path the GHSA targets.
+
+  Tests (`tests/cves/test_ghsa_mrvx_jmjw_vggc_dns_rebinding.py`, 21): a
+  wildcard-DNS host whose string passes the syntactic allowlist but resolves to
+  127.0.0.1 / 169.254.169.254 / RFC1918 / IPv6 ULA+link-local+mapped-metadata is
+  **blocked post-resolution** (`reason="dns_rebinding"`); the same host passes
+  with the guard off (proving the block is post-resolution, the GHSA gap);
+  multi-record round-robin blocks if any IP is internal; unresolvable fails
+  closed; public resolution + literal public IP pass; `resolve_and_pin` returns
+  pinned IPs and blocks rebinding; preset metadata + default-on. Pydantic-only
+  core, no new runtime deps.
+
+---
+
 ## [0.8.33] - 2026-06-21 — "Tool-output trust-boundary guard (Agentjacking class)"
 
 ### Added

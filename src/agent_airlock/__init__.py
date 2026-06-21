@@ -502,6 +502,7 @@ from .policy_presets import (
     capsule_indirect_injection_cve_2026_21520_defaults,
     cline_cve_2026_44211_defaults,
     codegen_delimiter_injection_guard_defaults,
+    dns_rebinding_safe_url_defaults,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
     india_dpdp_2023_policy,
@@ -579,6 +580,7 @@ from .safe_types import (
     create_safe_path_type,
     create_safe_url_type,
     metadata_ip_candidates,
+    validate_safe_url_dns_rebinding_safe,
 )
 
 # V0.4.0 Sandbox backends (V0.5.0 adds ManagedSandboxBackend stub)
@@ -678,7 +680,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.33"
+__version__ = "0.8.34"
 
 __all__ = [
     # Core
@@ -732,6 +734,8 @@ __all__ = [
     "codegen_delimiter_injection_guard_defaults",
     "cline_cve_2026_44211_defaults",
     "ssrf_egress_guard_defaults",
+    "dns_rebinding_safe_url_defaults",
+    "validate_safe_url_dns_rebinding_safe",
     "mcp_origin_host_guard_defaults",
     "openclaw_cve_2026_53820_defaults",
     "untrusted_tool_output_defaults",

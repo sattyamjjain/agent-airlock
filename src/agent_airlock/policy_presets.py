@@ -3849,6 +3849,84 @@ def ssrf_egress_guard_defaults(
     }
 
 
+def dns_rebinding_safe_url_defaults(
+    *,
+    allowed_hosts: list[str] | None = None,
+    allowed_schemes: list[str] | None = None,
+) -> dict[str, Any]:
+    """OWASP-MCP-aligned egress URL validator with the DNS-rebinding guard ON.
+
+    GHSA-mrvx-jmjw-vggc (SearXNG MCP Server, High, disclosed 2026-06-19): the
+    server's ``assertUrlAllowed()`` validated only the **syntactic** hostname
+    string against a private-IP/host blocklist, **without resolving DNS**. An
+    attacker-controlled domain that resolves to a private/loopback IP (wildcard
+    DNS such as ``nip.io``, or a custom record) passes the string check and the
+    server then reads arbitrary internal HTTP services — SSRF via DNS rebinding.
+
+    This preset returns a :class:`agent_airlock.safe_types.SafeURLValidator`
+    with **``dns_rebinding_guard=True`` ON by default** (the OWASP MCP Top-10
+    SSRF egress posture): after the syntactic allowlist/blocklist check it
+    resolves the hostname at call time and re-validates **every** resolved
+    A/AAAA address against the private / loopback / link-local / metadata
+    blocklist (169.254.169.254, ::1, 127/8, 10/8, 172.16/12, 192.168/16,
+    fc00::/7). Use ``guard.resolve_and_pin(url)`` to also pin the resolved IP
+    for the connection (resolve once, connect to that IP — TOCTOU-safe).
+
+    OWASP mapping: **MCP06 / ASI02 SSRF**; the rebinding bypass of an egress
+    allowlist.
+
+    Args:
+        allowed_hosts: Optional syntactic host allowlist (still enforced first).
+        allowed_schemes: Allowed URL schemes (default ``["http", "https"]``).
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` keys, plus:
+
+        - ``guard`` — a pre-built ``SafeURLValidator`` with
+          ``dns_rebinding_guard=True``; call ``guard(url)`` to validate or
+          ``guard.resolve_and_pin(url)`` to validate + pin.
+        - ``check`` — convenience callable; ``check(url)`` returns the validated
+          URL and raises :class:`SafeURLValidationError` (reason
+          ``"dns_rebinding"``) when the host resolves to an internal IP.
+        - ``owasp`` — ``"MCP06"``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import dns_rebinding_safe_url_defaults
+
+        preset = dns_rebinding_safe_url_defaults()
+        preset["check"]("https://api.example.com/")   # ok (public)
+        preset["check"]("http://wildcard.nip.io/")    # raises if it resolves internal
+
+    Primary source:
+      https://github.com/advisories/GHSA-mrvx-jmjw-vggc
+    """
+    from .safe_types import SafeURLValidator
+
+    advisory_url = "https://github.com/advisories/GHSA-mrvx-jmjw-vggc"
+    guard = SafeURLValidator(
+        allowed_schemes=allowed_schemes or ["http", "https"],
+        allowed_hosts=allowed_hosts,
+        dns_rebinding_guard=True,
+    )
+
+    def _check(url: str) -> str:
+        """Validate ``url``; raises SafeURLValidationError on a rebinding target."""
+        return guard(url)
+
+    return {
+        "preset_id": "dns_rebinding_safe_url",
+        "severity": "high",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "MCP06",
+        "ghsa": ("GHSA-mrvx-jmjw-vggc",),
+        "advisory_url": advisory_url,
+    }
+
+
 def mcp_origin_host_guard_defaults(
     *,
     allowed_origins: Iterable[str] | None = None,
@@ -4391,6 +4469,8 @@ __all__ = [
     "cline_cve_2026_44211_defaults",
     # V0.8.29 CVE-2026-47390 (SSRF-protection bypass via alt-encoding / rebinding; CWE-918)
     "ssrf_egress_guard_defaults",
+    # V0.8.34 GHSA-mrvx-jmjw-vggc (SafeURL DNS-rebinding: resolve + re-validate at call time)
+    "dns_rebinding_safe_url_defaults",
     # V0.8.30 CVE-2026-11624 (MCP HTTP-transport Origin/Host DNS-rebinding; CWE-346)
     "mcp_origin_host_guard_defaults",
     # V0.8.31 CVE-2026-53820 (OpenClaw exec-denylist bypass at MCP loopback session-spawn; CWE-693)
