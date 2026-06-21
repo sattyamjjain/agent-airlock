@@ -13,6 +13,54 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.28] - 2026-06-21 — "Cross-origin WebSocket-hijack guard (CVE-2026-44211)"
+
+### Added
+
+- **feat(guard): cross-origin WebSocket-hijack guard for CVE-2026-44211 (Cline Kanban)**
+
+  Deny-by-default guard for the Cline Kanban cross-origin WebSocket-hijack
+  class (npm `kanban` < 2.13.0, CVSS 9.7, **CWE-1385** Missing Origin
+  Validation in WebSockets + **CWE-306** Missing Authentication, OWASP
+  **ASI05**). Cline runs a control WebSocket server on `127.0.0.1:3484` that
+  accepts every upgrade **without validating the `Origin` header**; since
+  browsers do not apply same-origin/CORS to `ws://`, any website the
+  developer visits can drive the agent — leak workspace data, inject prompts
+  into the agent terminal (RCE), or kill tasks. Binding to loopback is **not**
+  a mitigation. Fixed upstream in 2.13.0.
+
+  - **`agent_airlock.mcp_spec.ws_origin_guard.WebSocketOriginGuard`** with two
+    surfaces: `audit_endpoint(host=…, port=…, origin_allowlist_enforced=…)`
+    flags an agent-exposed control endpoint that enforces no `Origin`
+    allow-list (the misconfiguration); `check_upgrade(origin)` /
+    `enforce_upgrade(origin)` / `wrap_handler(handler)` form a runtime gate
+    that rejects a WebSocket upgrade whose `Origin` is missing or outside an
+    explicit allow-list (empty allow-list = deny all). `wrap_handler` wraps a
+    sync **or** async upgrade handler and rejects before it runs; `Origin`
+    comparison is case-insensitive on scheme/host with the port preserved.
+    The guard never opens a socket — descriptor / single-`Origin` inspection
+    only, so it carries no listening surface of its own.
+  - New `WebSocketOriginDecision` / `WebSocketOriginVerdict` /
+    `WebSocketOriginHijackError`, exported from the package root next to the
+    other v0.8.x guard families.
+  - **`policy_presets.cline_cve_2026_44211_defaults(allowed_origins=…)`** —
+    canonical `preset_id="ws_origin_hijack_guard"` / `severity="critical"` /
+    `default_action="deny"` / `owasp="ASI05"` / `cwe=("CWE-1385","CWE-306")` /
+    `cves=("CVE-2026-44211",)`, with `guard` + a `check(origin)` callable that
+    raises `WebSocketOriginHijackError` on a rejected upgrade. DIFF-COMPATIBLE
+    with the existing `*_guard_defaults()` preset shape — no new preset
+    contract invented.
+
+  Tests (`tests/cves/test_cve_2026_44211_ws_origin.py`, 17): the brief's
+  no-Origin-validation case (forged-Origin upgrade rejected, allow-listed
+  Origin passes), the static exposure audit, the sync + async runtime
+  wrapper (handler does not run on a forged Origin; ASGI-scope Origin
+  extraction), missing-Origin rejection, empty-allow-list deny-all, the
+  bare-str allow-list footgun guard, and the preset metadata. Pydantic-only
+  core, no new runtime deps.
+
+---
+
 ## [0.8.27] - 2026-06-21 — "Version self-report fix"
 
 ### Fixed

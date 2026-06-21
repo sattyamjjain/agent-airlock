@@ -3686,6 +3686,89 @@ def codegen_delimiter_injection_guard_defaults(
     }
 
 
+def cline_cve_2026_44211_defaults(
+    *,
+    allowed_origins: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    """Recommended config for the cross-origin WebSocket-hijack guard (v0.8.27+).
+
+    CVE-2026-44211 (Cline Kanban server, npm ``kanban`` < 2.13.0, CVSS 9.7,
+    CWE-1385 + CWE-306): the Cline agent runs a control WebSocket server on
+    ``127.0.0.1:3484`` and accepts every upgrade **without validating the
+    ``Origin`` header**. Browsers do not apply same-origin/CORS to ``ws://``
+    the way they do to HTTP, so any website the developer visits can open a
+    WebSocket to the loopback control server and drive the agent — leak
+    workspace data, inject prompts into the agent terminal (RCE), or kill
+    tasks. Binding to loopback is **not** a mitigation. Fixed in 2.13.0.
+
+    Wires
+    :class:`agent_airlock.mcp_spec.ws_origin_guard.WebSocketOriginGuard`
+    deny-by-default: an upgrade whose ``Origin`` is missing or outside the
+    explicit ``allowed_origins`` allow-list is refused. The same guard's
+    :meth:`~agent_airlock.mcp_spec.ws_origin_guard.WebSocketOriginGuard.audit_endpoint`
+    flags a control endpoint that enforces no allow-list at all.
+
+    OWASP mapping: **ASI05 Unexpected Code Execution (RCE)** (the documented
+    impact); CWE-1385 (Missing Origin Validation in WebSockets) + CWE-306
+    (Missing Authentication for Critical Function).
+
+    Args:
+        allowed_origins: Explicitly trusted Origins (``scheme://host[:port]``).
+            Empty / None (default) rejects every cross-origin upgrade.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — a pre-built ``WebSocketOriginGuard`` exposing
+          ``audit_endpoint(...)`` (static exposure audit) and
+          ``check_upgrade(origin)`` / ``wrap_handler(handler)`` (runtime gate).
+        - ``check`` — convenience callable; ``check(origin)`` raises
+          :class:`WebSocketOriginHijackError` on a rejected upgrade and
+          returns ``None`` on an allow-listed one.
+        - ``owasp`` — ``"ASI05"``; ``cwe`` — ``("CWE-1385", "CWE-306")``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import cline_cve_2026_44211_defaults
+
+        preset = cline_cve_2026_44211_defaults(allowed_origins=["vscode-webview://*"])
+        preset["check"]("https://evil.example")   # raises (forged Origin)
+
+    Primary source:
+      https://advisories.gitlab.com/npm/cline/CVE-2026-44211/
+    """
+    from .mcp_spec.ws_origin_guard import (
+        WebSocketOriginGuard,
+        WebSocketOriginHijackError,
+    )
+
+    advisory_url = "https://advisories.gitlab.com/npm/cline/CVE-2026-44211/"
+    guard = WebSocketOriginGuard(
+        allowed_origins=allowed_origins,
+        advisory="CVE-2026-44211",
+        advisory_url=advisory_url,
+    )
+
+    def _check(origin: str | None) -> None:
+        """Raise :class:`WebSocketOriginHijackError` on a rejected WS upgrade."""
+        decision = guard.check_upgrade(origin)
+        if not decision.allowed:
+            raise WebSocketOriginHijackError(decision)
+
+    return {
+        "preset_id": "ws_origin_hijack_guard",
+        "severity": "critical",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "ASI05",
+        "cwe": ("CWE-1385", "CWE-306"),
+        "cves": ("CVE-2026-44211",),
+        "advisory_url": advisory_url,
+    }
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -3948,6 +4031,8 @@ __all__ = [
     "mcp_server_env_interpolation_guard_defaults",
     # V0.8.21 CVE-2026-11393 (codegen triple-quote / delimiter break-out RCE)
     "codegen_delimiter_injection_guard_defaults",
+    # V0.8.27 CVE-2026-44211 (Cline cross-origin WebSocket hijack; CWE-1385/CWE-306)
+    "cline_cve_2026_44211_defaults",
     # V0.8.22 CVE-2026-42271 (LiteLLM MCP-bridge subprocess command/args/env RCE; CISA KEV)
     "mcp_subprocess_arg_injection_guard_defaults",
     # V0.8.25 Goal-Autopilot (arXiv:2606.11688) fail-closed terminal-claim guard
