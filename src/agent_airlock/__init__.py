@@ -386,6 +386,12 @@ from .mcp_spec.subprocess_arg_guard import (
     McpSubprocessArgInjectionGuard,
     McpSubprocessArgVerdict,
 )
+from .mcp_spec.ws_origin_guard import (
+    WebSocketOriginDecision,
+    WebSocketOriginGuard,
+    WebSocketOriginHijackError,
+    WebSocketOriginVerdict,
+)
 from .mcp_spec.zero_click_config_guard import (
     MCPCommandMutationDetected,
     McpConfigPinSet,
@@ -482,6 +488,7 @@ from .policy_presets import (
     HighValueActionBlocked,
     MobileMcpIntentBlocked,
     capsule_indirect_injection_cve_2026_21520_defaults,
+    cline_cve_2026_44211_defaults,
     codegen_delimiter_injection_guard_defaults,
     eu_ai_act_article_15_policy,
     gtg_1002_defense_policy,
@@ -641,7 +648,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.27"
+__version__ = "0.8.28"
 
 __all__ = [
     # Core
@@ -693,6 +700,7 @@ __all__ = [
     "LEROBOT_CVE_2026_25874_DEFAULTS",
     "mcp_server_env_interpolation_guard_defaults",
     "codegen_delimiter_injection_guard_defaults",
+    "cline_cve_2026_44211_defaults",
     "mcp_subprocess_arg_injection_guard_defaults",
     "no_false_success_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
@@ -797,6 +805,11 @@ __all__ = [
     "CodegenDelimiterInjectionError",
     "CodegenDelimiterInjectionGuard",
     "CodegenDelimiterVerdict",
+    # V0.8.27 — Cross-origin WebSocket-hijack guard (CVE-2026-44211)
+    "WebSocketOriginDecision",
+    "WebSocketOriginGuard",
+    "WebSocketOriginHijackError",
+    "WebSocketOriginVerdict",
     # V0.8.22 — MCP-bridge subprocess-arg injection guard (CVE-2026-42271, CISA KEV)
     "McpSubprocessArgDecision",
     "McpSubprocessArgInjectionError",
