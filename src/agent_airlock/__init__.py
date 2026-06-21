@@ -329,6 +329,12 @@ from .mcp_spec.manifest_only_mode import (
     StdioManifest,
     launch_from_manifest,
 )
+from .mcp_spec.mcp_origin_host_guard import (
+    McpOriginHostDecision,
+    McpOriginHostGuard,
+    McpOriginHostRebindingError,
+    McpOriginHostVerdict,
+)
 from .mcp_spec.oauth_audit import (
     OAuthAppBlocked,
     OAuthPolicyViolation,
@@ -495,6 +501,7 @@ from .policy_presets import (
     india_dpdp_2023_policy,
     lerobot_cve_2026_25874_defaults,
     mcp_config_pin,
+    mcp_origin_host_guard_defaults,
     mcp_server_env_interpolation_guard_defaults,
     mcp_subprocess_arg_injection_guard_defaults,
     mex_gov_2026_policy,
@@ -655,7 +662,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.29"
+__version__ = "0.8.30"
 
 __all__ = [
     # Core
@@ -709,6 +716,7 @@ __all__ = [
     "codegen_delimiter_injection_guard_defaults",
     "cline_cve_2026_44211_defaults",
     "ssrf_egress_guard_defaults",
+    "mcp_origin_host_guard_defaults",
     "mcp_subprocess_arg_injection_guard_defaults",
     "no_false_success_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
@@ -823,6 +831,11 @@ __all__ = [
     "SSRFEgressDecision",
     "SSRFEgressGuard",
     "SSRFEgressVerdict",
+    # V0.8.30 — MCP Origin/Host DNS-rebinding guard (CVE-2026-11624 / CWE-346)
+    "McpOriginHostDecision",
+    "McpOriginHostGuard",
+    "McpOriginHostRebindingError",
+    "McpOriginHostVerdict",
     # V0.8.22 — MCP-bridge subprocess-arg injection guard (CVE-2026-42271, CISA KEV)
     "McpSubprocessArgDecision",
     "McpSubprocessArgInjectionError",
