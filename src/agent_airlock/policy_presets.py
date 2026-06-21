@@ -4030,6 +4030,101 @@ def openclaw_cve_2026_53820_defaults(
     }
 
 
+def untrusted_tool_output_defaults(
+    *,
+    envelope: bool = True,
+    envelope_only_when_flagged: bool = False,
+) -> dict[str, Any]:
+    """Recommended config for the tool-OUTPUT trust-boundary guard (v0.8.33+).
+
+    Opt-in, per-tool defense for the **Agentjacking** untrusted-output injection
+    class — where a tool/MCP result that flows back into the agent's context
+    carries attacker-controlled text shaped like instructions, and a credulous
+    agent follows it.
+
+    Threat model (two reference cases):
+
+    - **Agentjacking** (Tenet Security, disclosed 2026-06-12; Sentry mitigation
+      2026-06-18). **No CVE — it is a vulnerability class, not a single bug.**
+      A fake Sentry error event (injected via a public DSN) is fed to an AI
+      coding agent by the Sentry MCP server; the agent runs the attacker's
+      "resolution steps" (shell commands) with the developer's privileges.
+    - **CVE-2026-42824 "SearchLeak"** (Microsoft 365 Copilot Enterprise,
+      Varonis, disclosed 2026-06-15, CVSS critical): a Parameter-to-Prompt
+      injection where model-facing output carries attacker markup that fires
+      before the sanitizer — the same untrusted-output-as-instruction failure.
+
+    Wires :class:`agent_airlock.tool_output_trust_guard.ToolOutputTrustGuard`
+    in the STRICT posture: a result about to return into context is scanned for
+    override directives ("ignore previous instructions"), imperative command
+    directives, fenced shell commands (the Agentjacking "resolution steps"
+    shape), and tool-call-shaped JSON smuggled inside diagnostic/error fields;
+    flagged output is recorded (structured event, bridged to OTel by the audit
+    exporter) and — like all output — wrapped in a clearly-delimited
+    untrusted-data envelope so the model treats it as data, never instruction.
+    It never executes output and never silently drops it.
+
+    OWASP mapping: **MCP08 Indirect / Tool-Result Injection**; the
+    untrusted-output trust-boundary failure.
+
+    Args:
+        envelope: Wrap output in the untrusted-data envelope (default True).
+        envelope_only_when_flagged: Only envelope when a signal fired (lighter
+            touch). Default False = STRICT (always envelope).
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` keys, plus:
+
+        - ``guard`` — a pre-built ``ToolOutputTrustGuard`` exposing
+          ``inspect(output)`` / ``process(output)`` / ``envelope_output(output)``.
+        - ``check`` — convenience callable; ``check(output)`` returns the safe
+          (enveloped) output, flagging via the structured event but never
+          raising (output-trust is fail-safe, not fail-closed-by-block).
+        - ``owasp`` — ``"MCP08"``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import untrusted_tool_output_defaults
+
+        preset = untrusted_tool_output_defaults()
+        safe = preset["check"](sentry_mcp_result)  # enveloped untrusted data
+
+    Primary source:
+      https://labs.cloudsecurityalliance.org/research/csa-research-note-agentjacking-mcp-sentry-injection-20260612/
+    """
+    from .tool_output_trust_guard import ToolOutputTrustGuard
+
+    advisory_url = (
+        "https://labs.cloudsecurityalliance.org/research/"
+        "csa-research-note-agentjacking-mcp-sentry-injection-20260612/"
+    )
+    guard = ToolOutputTrustGuard(
+        envelope=envelope,
+        envelope_only_when_flagged=envelope_only_when_flagged,
+        advisory="Agentjacking / CVE-2026-42824",
+    )
+
+    def _check(output: Any) -> Any:
+        """Return the safe (enveloped) output; flags via the structured event."""
+        safe, _decision = guard.process(output)
+        return safe
+
+    return {
+        "preset_id": "untrusted_tool_output",
+        "severity": "high",
+        "default_action": "flag_and_envelope",
+        "guard": guard,
+        "check": _check,
+        "owasp": "MCP08",
+        "advisory_url": advisory_url,
+    }
+
+
+# Named preset constant for ergonomic opt-in (``policy_presets.UNTRUSTED_TOOL_OUTPUT``).
+UNTRUSTED_TOOL_OUTPUT = untrusted_tool_output_defaults()
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -4300,6 +4395,9 @@ __all__ = [
     "mcp_origin_host_guard_defaults",
     # V0.8.31 CVE-2026-53820 (OpenClaw exec-denylist bypass at MCP loopback session-spawn; CWE-693)
     "openclaw_cve_2026_53820_defaults",
+    # V0.8.33 Agentjacking / CVE-2026-42824 (untrusted tool-OUTPUT instruction injection)
+    "untrusted_tool_output_defaults",
+    "UNTRUSTED_TOOL_OUTPUT",
     # V0.8.22 CVE-2026-42271 (LiteLLM MCP-bridge subprocess command/args/env RCE; CISA KEV)
     "mcp_subprocess_arg_injection_guard_defaults",
     # V0.8.25 Goal-Autopilot (arXiv:2606.11688) fail-closed terminal-claim guard

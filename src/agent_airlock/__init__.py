@@ -518,6 +518,7 @@ from .policy_presets import (
     ssrf_egress_guard_defaults,
     stdio_guard_ox_defaults,
     strict_tier_budget_policy,
+    untrusted_tool_output_defaults,
 )
 
 # V0.7.0 — Redis-backed distributed rate limiter (#1).
@@ -635,6 +636,13 @@ from .testing import (
     reset_observability,
     reset_sandbox_pool,
 )
+from .tool_output_trust_guard import (
+    ToolOutputTrustDecision,
+    ToolOutputTrustError,
+    ToolOutputTrustGuard,
+    ToolOutputTrustSignal,
+    ToolOutputTrustVerdict,
+)
 
 # V0.8.24 — Skill-resistant trace redaction + per-tenant watermark (RedAct-style).
 from .trace_redaction import (
@@ -670,7 +678,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.32"
+__version__ = "0.8.33"
 
 __all__ = [
     # Core
@@ -726,6 +734,7 @@ __all__ = [
     "ssrf_egress_guard_defaults",
     "mcp_origin_host_guard_defaults",
     "openclaw_cve_2026_53820_defaults",
+    "untrusted_tool_output_defaults",
     "mcp_subprocess_arg_injection_guard_defaults",
     "no_false_success_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
@@ -850,6 +859,12 @@ __all__ = [
     "LoopbackSessionSpawnGuard",
     "LoopbackSpawnDecision",
     "LoopbackSpawnVerdict",
+    # V0.8.33 — tool-OUTPUT trust-boundary guard (Agentjacking / CVE-2026-42824)
+    "ToolOutputTrustDecision",
+    "ToolOutputTrustError",
+    "ToolOutputTrustGuard",
+    "ToolOutputTrustSignal",
+    "ToolOutputTrustVerdict",
     # V0.8.22 — MCP-bridge subprocess-arg injection guard (CVE-2026-42271, CISA KEV)
     "McpSubprocessArgDecision",
     "McpSubprocessArgInjectionError",
