@@ -13,6 +13,64 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.33] - 2026-06-21 — "Tool-output trust-boundary guard (Agentjacking class)"
+
+### Added
+
+- **feat(policy): add tool-output trust-boundary guard for Agentjacking-class untrusted-output injection**
+
+  Every existing Airlock layer guards the **input** side of the tool seam (the
+  arguments a model sends into a tool). This adds the mirror: an opt-in,
+  per-tool guard on the **output** side, for when a tool / MCP result flows back
+  into the agent's context carrying attacker-controlled text shaped like
+  instructions.
+
+  Threat model — two reference cases:
+  - **Agentjacking** (Tenet Security Threat Labs, disclosed 2026-06-12; Sentry
+    mitigation 2026-06-18). **No CVE — it is a vulnerability class, not a single
+    patchable bug.** A fake Sentry error event (injected via a public DSN) is
+    fed to an AI coding agent by the Sentry MCP server; the agent runs the
+    attacker's "resolution steps" (shell commands) with the developer's
+    privileges. Explicit system-prompt instructions to distrust external data
+    did **not** stop it in testing — which is why the defense belongs at the
+    output trust boundary, in code.
+  - **CVE-2026-42824 "SearchLeak"** (Microsoft 365 Copilot Enterprise, Varonis
+    Threat Labs, disclosed 2026-06-15, CVSS critical): a Parameter-to-Prompt
+    injection where model-facing output carries attacker markup that fires
+    before the sanitizer — the same untrusted-output-as-instruction failure.
+
+  - **`agent_airlock.tool_output_trust_guard.ToolOutputTrustGuard`** —
+    `inspect(output)` scans a result for override directives ("ignore previous
+    instructions"), imperative command directives ("run the following"), fenced
+    shell commands (the Agentjacking "resolution steps" shape), and
+    tool-call-shaped JSON (`tool`/`function` + `arguments`) smuggled inside
+    diagnostic/error fields. `process(output)` returns `(safe_output, decision)`
+    — in the **default STRICT** posture the output is always wrapped in a
+    clearly-delimited untrusted-data envelope (a preamble telling the model to
+    treat the enclosed text as data, never instructions), and flagged output
+    additionally carries the matched signals. The guard **never executes**
+    output and **never silently drops** it; flags are emitted as a structured
+    `tool_output_trust_flagged` event (bridged to OpenTelemetry by the existing
+    `audit_otel` exporter). New `ToolOutputTrustDecision` / `…Signal` /
+    `…Verdict` / `…Error`, exported from the package root.
+  - **`policy_presets.untrusted_tool_output_defaults(...)`** + the named
+    **`UNTRUSTED_TOOL_OUTPUT`** preset constant — opt in per tool;
+    `preset_id="untrusted_tool_output"`, `severity="high"`,
+    `default_action="flag_and_envelope"`, `owasp="MCP08"`. The preset's
+    `check(output)` is fail-safe (envelopes and returns; never raises).
+    DIFF-COMPATIBLE with the existing preset shape.
+
+  Tests (`tests/test_tool_output_trust_guard.py`, 18): the forged Agentjacking
+  Sentry-error fixture is flagged (override + imperative + fenced-command
+  signals) and enveloped with the payload preserved as data; tool-call-shaped
+  JSON in a diagnostic field is flagged; a benign query result and benign prose
+  ("query executed successfully", a JSON fenced block) are **not** flagged (no
+  false positive); STRICT still envelopes un-flagged output while
+  `envelope_only_when_flagged=True` passes it through; `raise_on_flag` blocks.
+  Pydantic-only, zero-dep core.
+
+---
+
 ## [0.8.32] - 2026-06-21 — "SafeURL IPv6-transition cloud-metadata SSRF (CVE-2026-48782)"
 
 ### Added
