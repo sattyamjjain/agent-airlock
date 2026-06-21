@@ -35,7 +35,7 @@ import enum
 import fnmatch
 import ipaddress
 import socket
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any
@@ -144,6 +144,50 @@ def _decode_int_encoded_ipv4(host: str) -> ipaddress.IPv4Address | None:
         return ipaddress.IPv4Address(socket.inet_aton(host))
     except (OSError, ipaddress.AddressValueError):
         return None
+
+
+# A resolver maps a hostname to a list of IP strings (its A/AAAA records).
+# Injected into SafeURLValidator for deterministic DNS-rebinding tests;
+# defaults to the system resolver via _default_host_resolver.
+HostResolver = Callable[[str], list[str]]
+
+
+def _default_host_resolver(host: str) -> list[str]:
+    """Resolve ``host`` to its A/AAAA addresses via the system resolver."""
+    import socket
+
+    infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    out: list[str] = []
+    for info in infos:
+        addr = info[4][0]
+        if isinstance(addr, str):
+            out.append(addr.split("%", 1)[0])  # strip IPv6 scope id
+    return out
+
+
+def _resolved_ip_is_internal(addr: str) -> str | None:
+    """Return a reason string if ``addr`` is an internal IP, else ``None``.
+
+    Covers loopback (127/8, ::1), RFC1918 private (10/8, 172.16/12, 192.168/16),
+    link-local (169.254/16, fe80::/10), IPv6 ULA (fc00::/7 — flagged by
+    ``ipaddress.is_private``), and the cloud-metadata IP set (incl. its
+    IPv6-transition encodings via :func:`metadata_ip_candidates`).
+    """
+    if _CANONICAL_METADATA_IPS.intersection(metadata_ip_candidates(addr)):
+        return "cloud metadata"
+    try:
+        ip = ipaddress.ip_address(addr.strip().strip("[]"))
+    except ValueError:
+        return None
+    if ip.is_loopback:
+        return "loopback"
+    if ip.is_link_local:
+        return "link-local"
+    if ip.is_private:  # RFC1918 + IPv6 ULA fc00::/7
+        return "private"
+    if ip.is_unspecified:
+        return "unspecified"
+    return None
 
 
 def metadata_ip_candidates(
@@ -403,6 +447,8 @@ class SafeURLValidator:
         block_private_ips: bool = True,
         block_metadata_urls: bool = True,
         extra_blocked_hosts: list[str] | None = None,
+        dns_rebinding_guard: bool = False,
+        resolver: HostResolver | None = None,
     ) -> None:
         """Initialize the URL validator.
 
@@ -412,6 +458,18 @@ class SafeURLValidator:
             block_private_ips: Block private/link-local IP addresses.
             block_metadata_urls: Block cloud metadata endpoints.
             extra_blocked_hosts: Additional hosts to block.
+            dns_rebinding_guard: When True (default False for backward compat),
+                **resolve the hostname at call time** and re-validate every
+                resolved A/AAAA address against the private/loopback/link-local/
+                metadata blocklist — defeating the DNS-rebinding bypass where a
+                public-looking hostname resolves to an internal IP
+                (GHSA-mrvx-jmjw-vggc). Requires ``block_private_ips`` to have
+                anything to enforce. Use :meth:`resolve_and_pin` to also pin the
+                resolved IP for the connection (TOCTOU-safe: resolve once,
+                connect to that IP).
+            resolver: Hostname → list-of-IP-strings resolver used by the
+                rebinding guard. Defaults to the system resolver; inject a stub
+                in tests to drive deterministic rebinding cases.
         """
         self.allowed_schemes = allowed_schemes or ["https"]
         self.allowed_hosts = allowed_hosts
@@ -420,6 +478,8 @@ class SafeURLValidator:
         self.blocked_hosts = BLOCKED_HOSTS.copy()
         if extra_blocked_hosts:
             self.blocked_hosts.extend(extra_blocked_hosts)
+        self.dns_rebinding_guard = dns_rebinding_guard
+        self._resolver = resolver or _default_host_resolver
 
     def __call__(self, value: str) -> str:
         """Validate and return safe URL.
@@ -524,7 +584,81 @@ class SafeURLValidator:
                     reason="localhost",
                 )
 
+            # DNS-rebinding guard (GHSA-mrvx-jmjw-vggc): the checks above only
+            # see the *syntactic* host string. A public-looking hostname can
+            # resolve to an internal IP (wildcard-DNS like nip.io, or attacker
+            # DNS), bypassing them. Resolve the host at CALL TIME and re-validate
+            # every resolved address; skip when the host is already an IP literal
+            # (handled above) since there is nothing to resolve.
+            if self.dns_rebinding_guard:
+                self._check_resolved_ips(hostname, value)
+
         return value
+
+    def _check_resolved_ips(self, hostname: str, value: str) -> None:
+        """Resolve ``hostname`` and reject if any resolved IP is internal.
+
+        Raises ``SafeURLValidationError(reason="dns_rebinding")`` when a
+        resolved A/AAAA address falls in the private / loopback / link-local /
+        cloud-metadata space.
+        """
+        try:
+            ipaddress.ip_address(hostname)
+            return  # already an IP literal — the literal checks covered it
+        except ValueError:
+            pass
+        try:
+            resolved = self._resolver(hostname)
+        except OSError as exc:
+            # Fail closed: an egress guard refuses an unresolvable target.
+            raise SafeURLValidationError(
+                f"Host {hostname!r} could not be resolved for DNS-rebinding check",
+                url=value,
+                reason="dns_rebinding",
+            ) from exc
+        for addr in resolved:
+            blocked = _resolved_ip_is_internal(addr)
+            if blocked is not None:
+                raise SafeURLValidationError(
+                    f"Host {hostname!r} resolves to internal IP {addr} ({blocked}) "
+                    "— blocked post-resolution (DNS rebinding)",
+                    url=value,
+                    reason="dns_rebinding",
+                )
+
+    def resolve_and_pin(self, value: str) -> tuple[str, list[str]]:
+        """Validate ``value`` and return ``(url, pinned_ips)`` for a TOCTOU-safe connect.
+
+        Resolves the hostname **once**, validates every resolved address, and
+        returns the validated URL plus the pinned IP list the caller should
+        connect to directly (instead of re-resolving, which a rebinding attacker
+        could flip between the check and the connect). Honours the validator's
+        configuration; raises ``SafeURLValidationError`` on any unsafe target.
+        """
+        validated = self(value)
+        hostname = urlparse(validated).hostname or ""
+        try:
+            ipaddress.ip_address(hostname)
+            return validated, [hostname]  # literal IP — already safe + pinned
+        except ValueError:
+            pass
+        try:
+            pinned = self._resolver(hostname)
+        except OSError as exc:
+            raise SafeURLValidationError(
+                f"Host {hostname!r} could not be resolved to pin",
+                url=value,
+                reason="dns_rebinding",
+            ) from exc
+        for addr in pinned:
+            blocked = _resolved_ip_is_internal(addr)
+            if blocked is not None:
+                raise SafeURLValidationError(
+                    f"Host {hostname!r} resolves to internal IP {addr} ({blocked})",
+                    url=value,
+                    reason="dns_rebinding",
+                )
+        return validated, pinned
 
 
 # Pre-configured validators
@@ -533,6 +667,19 @@ _strict_path_validator = SafePathValidator(allow_absolute=False)
 _tmp_path_validator = SafePathValidator(root_dir=Path("/tmp/airlock"))  # nosec B108 - intentional
 _default_url_validator = SafeURLValidator()
 _http_url_validator = SafeURLValidator(allowed_schemes=["http", "https"])
+
+# OWASP-MCP-aligned egress posture: DNS-rebinding guard ON by default
+# (GHSA-mrvx-jmjw-vggc). Resolves the host and re-validates every resolved IP
+# at call time. Exposed via ``policy_presets`` for opt-in.
+_dns_rebinding_safe_url_validator = SafeURLValidator(
+    allowed_schemes=["http", "https"],
+    dns_rebinding_guard=True,
+)
+
+
+def validate_safe_url_dns_rebinding_safe(value: str) -> str:
+    """URL validator that also resolves the host and blocks rebinding to internal IPs."""
+    return _dns_rebinding_safe_url_validator(value)
 
 
 def validate_safe_path(value: str | Path) -> Path:
