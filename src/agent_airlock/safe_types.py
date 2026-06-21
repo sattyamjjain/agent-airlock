@@ -34,6 +34,7 @@ import binascii
 import enum
 import fnmatch
 import ipaddress
+import socket
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -110,9 +111,94 @@ BLOCKED_HOSTS = [
     "169.254.169.253",
     # Azure metadata
     "169.254.169.253",
+    # Alibaba Cloud / GCP secondary metadata hostnames (CVE-2026-48782)
+    "metadata.aliyuncs.com",
+    "metadata",
     # Link-local
     "169.254.0.0/16",
 ]
+
+# Canonical packed forms of every cloud-metadata IP. A hostname is blocked if
+# *any* encoding it could resolve to collapses to one of these. Kept as parsed
+# ``ipaddress`` objects so comparison is on the packed address, never the
+# string — defeating the alternate-encoding bypass class (CVE-2026-48782).
+_CANONICAL_METADATA_IPS: frozenset[ipaddress.IPv4Address | ipaddress.IPv6Address] = frozenset(
+    {
+        ipaddress.ip_address("169.254.169.254"),  # AWS / GCP / Azure IMDS
+        ipaddress.ip_address("169.254.169.253"),  # AWS / Azure secondary
+        ipaddress.ip_address("100.100.100.200"),  # Alibaba Cloud ECS metadata
+        ipaddress.ip_address("fd00:ec2::254"),  # AWS IMDS IPv6
+    }
+)
+
+
+def _decode_int_encoded_ipv4(host: str) -> ipaddress.IPv4Address | None:
+    """Decode a decimal / octal / hex integer IPv4 literal, else ``None``.
+
+    ``ipaddress.ip_address`` rejects ``2852039166`` / ``0xa9fea9fe`` /
+    ``0251.0376.0251.0376``, but ``socket.inet_aton`` (and the OS resolver /
+    HTTP client) accept them and connect to the decoded address. We mirror
+    that so an integer-encoded metadata IP cannot slip past the blocklist.
+    """
+    try:
+        return ipaddress.IPv4Address(socket.inet_aton(host))
+    except (OSError, ipaddress.AddressValueError):
+        return None
+
+
+def metadata_ip_candidates(
+    hostname: str,
+) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """Every canonical IP a hostname could resolve to, across encodings.
+
+    Normalizes the host to packed-address form **before** any blocklist
+    comparison, so all of the CVE-2026-48782 bypass encodings collapse to the
+    same value:
+
+    - the literal address itself (IPv4 or IPv6);
+    - the embedded IPv4 of IPv6-transition forms — IPv4-mapped
+      (``::ffff:a.b.c.d``), IPv4-compatible (``::a.b.c.d``), 6to4
+      (``2002::/16``), and Teredo (``2001::/32``);
+    - decimal / octal / hex integer IPv4 encodings.
+
+    Returns an empty set for a non-IP hostname (a DNS name) — those are handled
+    by the string blocklist / allowlist paths.
+    """
+    host = hostname.strip().strip("[]")
+    candidates: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+
+    parsed: ipaddress.IPv4Address | ipaddress.IPv6Address | None
+    try:
+        parsed = ipaddress.ip_address(host)
+    except ValueError:
+        parsed = None
+
+    if parsed is None:
+        # Not canonical — try the integer-encoded IPv4 forms.
+        decoded = _decode_int_encoded_ipv4(host)
+        if decoded is not None:
+            candidates.add(decoded)
+        return candidates
+
+    candidates.add(parsed)
+
+    if isinstance(parsed, ipaddress.IPv6Address):
+        # IPv4-mapped (::ffff:a.b.c.d) and 6to4 (2002::/16) expose the embedded
+        # IPv4 directly; Teredo (2001::/32) exposes (server, client) — the
+        # client is the tunnelled endpoint.
+        for embedded in (parsed.ipv4_mapped, parsed.sixtofour):
+            if embedded is not None:
+                candidates.add(embedded)
+        if parsed.teredo is not None:
+            candidates.add(parsed.teredo[1])
+        # IPv4-compatible (::a.b.c.d): address sits in ::/96 with a non-trivial
+        # low 32 bits (excludes :: and ::1). Python has no attribute for this
+        # deprecated form, so derive it from the packed integer.
+        packed = int(parsed)
+        if packed >> 32 == 0 and packed not in (0, 1):
+            candidates.add(ipaddress.IPv4Address(packed & 0xFFFFFFFF))
+
+    return candidates
 
 
 class SafePathValidationError(ValueError):
@@ -397,6 +483,18 @@ class SafeURLValidator:
                         url=value,
                         reason="metadata_url",
                     )
+
+            # Canonical-form metadata check (CVE-2026-48782): collapse every
+            # IPv6-transition / integer encoding of the hostname to its packed
+            # address(es) and compare against the canonical metadata IP set, so
+            # a bypass like ``::ffff:169.254.169.254`` or ``0xa9fea9fe`` cannot
+            # slip past the string blocklist above.
+            if _CANONICAL_METADATA_IPS.intersection(metadata_ip_candidates(hostname)):
+                raise SafeURLValidationError(
+                    f"URL points to cloud-metadata IP via an alternate encoding: {hostname}",
+                    url=value,
+                    reason="metadata_url",
+                )
 
         # Check private IPs. NOTE: ``SafeURLValidationError`` is a
         # ``ValueError`` subclass, so the IP-parse step is isolated to
