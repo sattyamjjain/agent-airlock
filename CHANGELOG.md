@@ -13,6 +13,58 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.29] - 2026-06-21 — "SSRF egress guard (CVE-2026-47390)"
+
+### Added
+
+- **feat(guard): deny-by-default SSRF egress guard for the alternate-encoding / rebinding bypass class (CVE-2026-47390)**
+
+  Motivated by the SSRF-protection-bypass class behind **CVE-2026-47390**
+  (CWE-918, OWASP **ASI02**): an agent egress filter that validates the
+  *literal hostname string* of an outbound URL — instead of the **resolved
+  IP** — is trivially bypassed. A target can encode a loopback / link-local /
+  cloud-metadata address in a form `ipaddress.ip_address` rejects (so a
+  string check waves it through) but `socket.inet_aton` / the HTTP client /
+  the kernel resolve straight back to an internal address — or hide behind a
+  public hostname whose DNS record points inward (rebinding).
+
+  - **`agent_airlock.ssrf_egress_guard.SSRFEgressGuard`** runs on every
+    tool-call argument that resolves to a URL/host. It reduces each target to
+    its canonical IP(s) — decoding `127.1` / decimal `2130706433` / octal
+    `0177.0.0.1` / hex `0x7f000001` / `0.0.0.0` and IPv6 `::1` /
+    `::ffff:127.0.0.1` / `0:0:0:0:0:0:0:1`, **and resolving hostnames via DNS
+    at check time** so a rebind to loopback/metadata is caught at connect
+    time, not just at parse time — and **fails closed** on any loopback,
+    link-local (incl. `169.254.169.254` IMDS), cloud-metadata, unspecified
+    (`0.0.0.0`/`::`), or RFC1918 private range (10/8, 172.16/12, 192.168/16)
+    not on `allow_internal_hosts`. An unresolvable host is refused by default.
+    Composes with the v0.5.5 `network.is_blocked_ipv6_range` set (IPv4-mapped
+    / NAT64 / 6to4 / ULA / documentation) so the IPv6 coverage stays
+    single-sourced. The guard never opens a socket.
+  - **3-line `explain` audit trace** on every denial — `rule=<verdict>`,
+    `resolved_ip=<ip> (from host …)`, `encoding=<hex_ipv4|decimal_ipv4|…|dns>`
+    — surfaced on the decision and on `SSRFEgressBlocked`.
+  - New `SSRFEgressDecision` / `SSRFEgressVerdict` / `SSRFEgressBlocked`,
+    exported from the package root.
+  - **`policy_presets.ssrf_egress_guard_defaults(allow_internal_hosts=…)`** —
+    the STANDARD egress posture (enable by default on any network-capable
+    agent), canonical `preset_id="ssrf_egress_guard"` / `severity="high"` /
+    `default_action="deny"` / `owasp="ASI02"` / `cwe=("CWE-918",)` /
+    `cves=("CVE-2026-47390",)`, with `guard` + a `check(url)` raiser.
+    DIFF-COMPATIBLE with the existing `*_guard_defaults()` preset shape.
+
+  Tests (`tests/cves/test_cve_2026_47390_ssrf_egress.py`, 34): **each**
+  alternate-loopback encoding denied (short / decimal / octal / hex /
+  unspecified / IPv6 loopback / IPv4-mapped), link-local + IMDS + ULA +
+  fe80::/10 denied, RFC1918 denied-by-default with an allow-listed internal
+  host passing (and not leaking to siblings), DNS-rebinding (resolved loopback
+  / metadata denied; resolved public allowed), fail-closed on unresolvable
+  (and the opt-out), the 3-line explain trace, nested-arg scan, `enforce`
+  raising, the bare-str footgun guard, and preset metadata. Pydantic-only
+  core, no new runtime deps.
+
+---
+
 ## [0.8.28] - 2026-06-21 — "Cross-origin WebSocket-hijack guard (CVE-2026-44211)"
 
 ### Added
