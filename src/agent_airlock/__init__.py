@@ -320,6 +320,12 @@ from .mcp_spec.inspector_exposure_guard import (
     InspectorExposureVerdict,
 )
 from .mcp_spec.lan_unauth_rce_guard import LANUnauthMCPServerBlocked
+from .mcp_spec.loopback_spawn_guard import (
+    LoopbackSessionSpawnError,
+    LoopbackSessionSpawnGuard,
+    LoopbackSpawnDecision,
+    LoopbackSpawnVerdict,
+)
 from .mcp_spec.manifest_only_mode import (
     ManifestNotRegisteredError,
     ManifestRegistry,
@@ -507,6 +513,7 @@ from .policy_presets import (
     mex_gov_2026_policy,
     mobile_mcp_intent_guard_2026_05,
     no_false_success_defaults,
+    openclaw_cve_2026_53820_defaults,
     owasp_mcp_top_10_2026_policy,
     ssrf_egress_guard_defaults,
     stdio_guard_ox_defaults,
@@ -662,7 +669,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.30"
+__version__ = "0.8.31"
 
 __all__ = [
     # Core
@@ -717,6 +724,7 @@ __all__ = [
     "cline_cve_2026_44211_defaults",
     "ssrf_egress_guard_defaults",
     "mcp_origin_host_guard_defaults",
+    "openclaw_cve_2026_53820_defaults",
     "mcp_subprocess_arg_injection_guard_defaults",
     "no_false_success_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
@@ -836,6 +844,11 @@ __all__ = [
     "McpOriginHostGuard",
     "McpOriginHostRebindingError",
     "McpOriginHostVerdict",
+    # V0.8.31 — MCP loopback session-spawn exec-resolution guard (CVE-2026-53820 / CWE-693)
+    "LoopbackSessionSpawnError",
+    "LoopbackSessionSpawnGuard",
+    "LoopbackSpawnDecision",
+    "LoopbackSpawnVerdict",
     # V0.8.22 — MCP-bridge subprocess-arg injection guard (CVE-2026-42271, CISA KEV)
     "McpSubprocessArgDecision",
     "McpSubprocessArgInjectionError",

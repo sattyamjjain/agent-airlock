@@ -13,6 +13,57 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.31] - 2026-06-21 — "MCP loopback session-spawn exec-resolution guard (CVE-2026-53820)"
+
+### Added
+
+- **Add runtime preset for CVE-2026-53820 (OpenClaw exec-denylist bypass at MCP loopback session-spawn)**
+
+  OpenClaw < 2026.5.12 (exec-denylist bypass, CVSS 6.9, CWE-693 Protection
+  Mechanism Failure): the bundled MCP loopback session-spawn path let an
+  authenticated caller reach a denylisted command because the **surface**
+  command checked against the exec restriction differs from the **effective**
+  command actually spawned — a name that passes the surface check resolves, via
+  an alias / wrapper binary (`env` / `sudo` / `timeout` / `nice` / …) / shell,
+  to a denied executable. The restriction is bypassed at the spawn boundary,
+  not at config time.
+
+  - **`agent_airlock.mcp_spec.loopback_spawn_guard.LoopbackSessionSpawnGuard`**
+    re-resolves the effective program immediately before spawn —
+    `check_spawn(command)` takes an argv list or a shell string, unwraps
+    operator/bundle `aliases` and wrapper binaries
+    (`DEFAULT_WRAPPER_COMMANDS`: `env` / `sudo` / `doas` / `nice` / `nohup` /
+    `timeout` / `setsid` / `stdbuf` / `xargs` / `ionice` / `chrt` / `command` /
+    `proot`) to the effective program, then re-checks it deny-by-default: a
+    resolved program on `denied_commands` (defaults to a shell set) is refused,
+    and any resolved program not in `allowed_commands` is refused. Shells are
+    treated as terminal (a `bash -c '<denied>'` resolves to `bash`, never
+    unwrapped to its script). The full unwrap is reported on
+    `decision.resolution_chain` so the "effective ≠ surface" bypass is
+    auditable. The guard never spawns anything — name resolution only.
+  - New `LoopbackSpawnDecision` / `LoopbackSpawnVerdict` /
+    `LoopbackSessionSpawnError`, exported from the package root.
+  - **`policy_presets.openclaw_cve_2026_53820_defaults(allowed_commands=…, aliases=…, denied_commands=…)`**
+    — granular CVE-pinned preset (existing presets unchanged), canonical
+    `preset_id="openclaw_cve_2026_53820_loopback_spawn_guard"` /
+    `severity="high"` / `default_action="deny"` / `owasp="MCP05"` /
+    `cwe=("CWE-693",)` / `cves=("CVE-2026-53820",)`, with `guard` + a
+    `check(command)` callable that raises `LoopbackSessionSpawnError` on a
+    refused spawn. DIFF-COMPATIBLE with the existing `*_defaults()` preset
+    shape.
+
+  Tests (`tests/cves/test_cve_2026_53820_loopback_spawn.py`, 22): the brief's
+  headline case (an allow-listed surface command that resolves to a denied
+  shell is blocked, with the resolution chain proving effective ≠ surface),
+  wrapper vectors (`env` / `timeout` / `sudo` / `nice` / `nohup` / chained
+  wrappers, and a shell-string spawn), legitimate spawns passing (direct,
+  alias→allowed, wrapper→allowed, path-qualified by basename), deny-by-default
+  (unknown / empty allow-list / empty command), bounded alias-cycle handling,
+  `enforce` raising, the bare-str footgun guard, and preset metadata.
+  Pydantic-only core, no new runtime deps.
+
+---
+
 ## [0.8.30] - 2026-06-21 — "MCP Origin/Host DNS-rebinding guard (CVE-2026-11624)"
 
 ### Added
