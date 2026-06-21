@@ -13,6 +13,53 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.30] - 2026-06-21 — "MCP Origin/Host DNS-rebinding guard (CVE-2026-11624)"
+
+### Added
+
+- **Add Origin/Host DNS-rebinding guard for MCP HTTP transports (CVE-2026-11624, CWE-346)**
+
+  Deny-by-default Origin/Host validation for MCP servers on an HTTP / SSE /
+  streamable-HTTP transport. Google MCP Toolbox for Databases < 0.25.0
+  (CWE-346 Origin Validation Error, CVSS 9.4) served a local HTTP transport
+  that **did not validate the `Origin` or `Host` header**, so a browser the
+  developer visits can DNS-rebind to `127.0.0.1` and script MCP tool calls at
+  the local server (file reads, command execution, database access). Fixed
+  upstream in 0.25.0 with a new `--allowed-hosts` flag alongside
+  `--allowed-origins`, warning when either is left at the `*` wildcard; the MCP
+  spec likewise directs servers to validate `Origin` on all incoming
+  connections.
+
+  - **`agent_airlock.mcp_spec.mcp_origin_host_guard.McpOriginHostGuard`**
+    validates the inbound `Host` (always present on HTTP/1.1) and `Origin`
+    (when present — a browser always sends one) against explicit
+    `allowed_origins` / `allowed_hosts` allow-lists. With none configured it
+    falls back to **loopback-only** (`localhost` / `127.0.0.0/8` / `::1`); a
+    `*` wildcard allows all. Either weakened posture (unset → loopback-only, or
+    `*` → disabled) records a startup warning on `guard.startup_warnings` and
+    via the logger, mirroring the upstream "warn on `*`" behaviour. A
+    non-browser client with no `Origin` is judged on `Host` alone. stdio
+    transports have no Origin and are out of scope. The guard never opens a
+    socket — header inspection only.
+  - New `McpOriginHostDecision` / `McpOriginHostVerdict` /
+    `McpOriginHostRebindingError`, exported from the package root.
+  - **`policy_presets.mcp_origin_host_guard_defaults(allowed_origins=…, allowed_hosts=…)`**
+    — canonical `preset_id="mcp_origin_host_guard"` / `severity="critical"` /
+    `default_action="deny"` / `owasp="MCP07"` / `cwe=("CWE-346",)` /
+    `cves=("CVE-2026-11624",)`, with `guard` + a `check(headers)` callable that
+    raises `McpOriginHostRebindingError` on a refused request. DIFF-COMPATIBLE
+    with the existing `*_guard_defaults()` preset shape.
+
+  Tests (`tests/cves/test_cve_2026_11624_mcp_origin_host.py`, 16): a forged
+  `Host`/`Origin` denied (incl. the canonical rebinding shape), allow-listed +
+  loopback (host/origin, IPv6 `[::1]`) passing, no-Origin client judged on
+  Host, case-insensitive header lookup, the startup warning firing on unset
+  and on `*` (and not on an explicit allow-list, and only on the unset axis),
+  the bare-str footgun guard, and preset metadata. Pydantic-only core, no new
+  runtime deps.
+
+---
+
 ## [0.8.29] - 2026-06-21 — "SSRF egress guard (CVE-2026-47390)"
 
 ### Added

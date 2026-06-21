@@ -3849,6 +3849,94 @@ def ssrf_egress_guard_defaults(
     }
 
 
+def mcp_origin_host_guard_defaults(
+    *,
+    allowed_origins: Iterable[str] | None = None,
+    allowed_hosts: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    """Recommended config for the MCP Origin/Host DNS-rebinding guard (v0.8.30+).
+
+    CVE-2026-11624 (Google MCP Toolbox for Databases < 0.25.0, CWE-346 Origin
+    Validation Error, CVSS 9.4): the MCP server exposed an HTTP/SSE transport
+    that did **not validate the `Origin` (or `Host`) header**, so a browser the
+    developer visits can DNS-rebind to `127.0.0.1` and script MCP tool calls at
+    the local server (file reads, command execution, database access). Fixed in
+    0.25.0 with an `--allowed-hosts` flag alongside `--allowed-origins`, and a
+    warning when either is left at the `*` wildcard.
+
+    Wires :class:`agent_airlock.mcp_spec.mcp_origin_host_guard.McpOriginHostGuard`
+    deny-by-default for any MCP server on an HTTP / SSE / streamable transport:
+    the inbound `Host` (always) and `Origin` (when present) are validated
+    against explicit allow-lists; with none configured the guard falls back to
+    loopback-only and records a startup warning, and a `*` wildcard allows all
+    but also warns — mirroring the upstream fix. (stdio transports have no
+    Origin and are out of scope.)
+
+    OWASP mapping: **MCP07 Insufficient Authentication** (the transport fails to
+    authenticate the request origin); CWE-346 (Origin Validation Error).
+
+    Args:
+        allowed_origins: Trusted request `Origin` values
+            (`scheme://host[:port]`). `["*"]` allows all (with a warning);
+            empty / None falls back to loopback-only.
+        allowed_hosts: Trusted request `Host` values (`host` or `host:port`).
+            `["*"]` allows all (with a warning); empty / None falls back to
+            loopback-only.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — a pre-built ``McpOriginHostGuard`` exposing
+          ``check_headers(headers)`` / ``validate(headers)`` and a
+          ``startup_warnings`` list.
+        - ``check`` — convenience callable; ``check(headers)`` raises
+          :class:`McpOriginHostRebindingError` on a refused request and returns
+          ``None`` on a trusted one.
+        - ``owasp`` — ``"MCP07"``; ``cwe`` — ``("CWE-346",)``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import mcp_origin_host_guard_defaults
+
+        preset = mcp_origin_host_guard_defaults(allowed_hosts=["app.example.com"])
+        preset["check"]({"Host": "evil.example", "Origin": "https://evil.example"})  # raises
+
+    Primary source:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-11624
+    """
+    from .mcp_spec.mcp_origin_host_guard import (
+        McpOriginHostGuard,
+        McpOriginHostRebindingError,
+    )
+
+    advisory_url = "https://nvd.nist.gov/vuln/detail/CVE-2026-11624"
+    guard = McpOriginHostGuard(
+        allowed_origins=allowed_origins,
+        allowed_hosts=allowed_hosts,
+        advisory="CVE-2026-11624",
+        advisory_url=advisory_url,
+    )
+
+    def _check(headers: Mapping[str, str]) -> None:
+        """Raise :class:`McpOriginHostRebindingError` on a refused request."""
+        decision = guard.check_headers(headers)
+        if not decision.allowed:
+            raise McpOriginHostRebindingError(decision)
+
+    return {
+        "preset_id": "mcp_origin_host_guard",
+        "severity": "critical",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "MCP07",
+        "cwe": ("CWE-346",),
+        "cves": ("CVE-2026-11624",),
+        "advisory_url": advisory_url,
+    }
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -4115,6 +4203,8 @@ __all__ = [
     "cline_cve_2026_44211_defaults",
     # V0.8.29 CVE-2026-47390 (SSRF-protection bypass via alt-encoding / rebinding; CWE-918)
     "ssrf_egress_guard_defaults",
+    # V0.8.30 CVE-2026-11624 (MCP HTTP-transport Origin/Host DNS-rebinding; CWE-346)
+    "mcp_origin_host_guard_defaults",
     # V0.8.22 CVE-2026-42271 (LiteLLM MCP-bridge subprocess command/args/env RCE; CISA KEV)
     "mcp_subprocess_arg_injection_guard_defaults",
     # V0.8.25 Goal-Autopilot (arXiv:2606.11688) fail-closed terminal-claim guard
