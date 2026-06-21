@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import re
 import shlex as _shlex_for_gitpilot
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path as _Path_for_gitpilot
 from typing import TYPE_CHECKING, Any
@@ -3937,6 +3937,99 @@ def mcp_origin_host_guard_defaults(
     }
 
 
+def openclaw_cve_2026_53820_defaults(
+    *,
+    allowed_commands: Iterable[str] | None = None,
+    aliases: Mapping[str, Sequence[str]] | None = None,
+    denied_commands: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    """Recommended config for the MCP loopback session-spawn guard (v0.8.31+).
+
+    CVE-2026-53820 (OpenClaw < 2026.5.12, exec-denylist bypass, CVSS 6.9,
+    CWE-693 Protection Mechanism Failure): the bundled MCP loopback
+    session-spawn path let an authenticated caller reach a denylisted command
+    because the **surface** command checked against the exec restriction
+    differs from the **effective** command actually spawned — a name that
+    passes the surface check resolves, via an alias / wrapper binary (`env`,
+    `sudo`, `timeout`, `nice`, ...) / shell, to a denied executable. The
+    restriction is bypassed at the spawn boundary, not at config time.
+
+    Wires
+    :class:`agent_airlock.mcp_spec.loopback_spawn_guard.LoopbackSessionSpawnGuard`
+    deny-by-default: at the spawn seam the *resolved effective program* (after
+    unwrapping aliases + wrappers) is re-checked against the policy — a
+    resolved shell / denylisted exec is refused, and any resolved program not
+    in ``allowed_commands`` is refused. The full unwrap is reported on
+    ``decision.resolution_chain``.
+
+    OWASP mapping: **MCP05 Command Injection** (exec-restriction bypass at the
+    spawn boundary); CWE-693 (Protection Mechanism Failure).
+
+    Args:
+        allowed_commands: The allow set (deny-by-default). Empty / None denies
+            every spawn — pass the bundle's genuinely-permitted programs.
+        aliases: Operator/bundle ``name -> argv`` expansions applied during
+            resolution (the alias-redirection bypass vector).
+        denied_commands: Explicit exec denylist (the restriction being
+            bypassed). Defaults to a shell set.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — a pre-built ``LoopbackSessionSpawnGuard`` exposing
+          ``check_spawn(command)`` / ``enforce(command)``.
+        - ``check`` — convenience callable; ``check(command)`` raises
+          :class:`LoopbackSessionSpawnError` on a refused spawn and returns
+          ``None`` on an allowed one.
+        - ``owasp`` — ``"MCP05"``; ``cwe`` — ``("CWE-693",)``.
+
+    Usage::
+
+        from agent_airlock.policy_presets import openclaw_cve_2026_53820_defaults
+
+        preset = openclaw_cve_2026_53820_defaults(
+            allowed_commands=["safe-wrapper", "python3"],
+            aliases={"safe-wrapper": ["bash", "-c", "..."]},
+        )
+        preset["check"](["safe-wrapper"])   # raises: surface ok, resolves to bash
+
+    Primary source:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-53820
+    """
+    from .mcp_spec.loopback_spawn_guard import (
+        LoopbackSessionSpawnError,
+        LoopbackSessionSpawnGuard,
+    )
+
+    advisory_url = "https://nvd.nist.gov/vuln/detail/CVE-2026-53820"
+    guard = LoopbackSessionSpawnGuard(
+        allowed_commands=allowed_commands,
+        aliases=aliases,
+        denied_commands=denied_commands,
+        advisory="CVE-2026-53820",
+        advisory_url=advisory_url,
+    )
+
+    def _check(command: str | Sequence[str]) -> None:
+        """Raise :class:`LoopbackSessionSpawnError` on a refused spawn."""
+        decision = guard.check_spawn(command)
+        if not decision.allowed:
+            raise LoopbackSessionSpawnError(decision)
+
+    return {
+        "preset_id": "openclaw_cve_2026_53820_loopback_spawn_guard",
+        "severity": "high",
+        "default_action": "deny",
+        "guard": guard,
+        "check": _check,
+        "owasp": "MCP05",
+        "cwe": ("CWE-693",),
+        "cves": ("CVE-2026-53820",),
+        "advisory_url": advisory_url,
+    }
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -4205,6 +4298,8 @@ __all__ = [
     "ssrf_egress_guard_defaults",
     # V0.8.30 CVE-2026-11624 (MCP HTTP-transport Origin/Host DNS-rebinding; CWE-346)
     "mcp_origin_host_guard_defaults",
+    # V0.8.31 CVE-2026-53820 (OpenClaw exec-denylist bypass at MCP loopback session-spawn; CWE-693)
+    "openclaw_cve_2026_53820_defaults",
     # V0.8.22 CVE-2026-42271 (LiteLLM MCP-bridge subprocess command/args/env RCE; CISA KEV)
     "mcp_subprocess_arg_injection_guard_defaults",
     # V0.8.25 Goal-Autopilot (arXiv:2606.11688) fail-closed terminal-claim guard
