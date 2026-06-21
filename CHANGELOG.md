@@ -13,6 +13,52 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.32] - 2026-06-21 — "SafeURL IPv6-transition cloud-metadata SSRF (CVE-2026-48782)"
+
+### Added
+
+- **feat(safeurl): block IPv6-transition-form cloud-metadata SSRF (CVE-2026-48782)**
+
+  Extends the existing `SafeURL` / `SafeURLValidator` cloud-metadata blocklist
+  (motivated by CVE-2026-48782, CWE-918, an incomplete-fix follow-up to
+  CVE-2026-46678) to canonicalize the host to its packed `ipaddress` form(s)
+  **before** the blocklist comparison, so every alternate encoding of a
+  metadata IP collapses to the same value instead of being compared as a raw
+  string. Previously a metadata IP encoded as IPv4-mapped IPv6
+  (`::ffff:169.254.169.254`), IPv4-compatible (`::169.254.169.254`), 6to4
+  (`2002:a9fe:a9fe::`), Teredo, or a decimal / octal / hex integer
+  (`2852039166` / `0xa9fea9fe` / `0251.0376.0251.0376`) slipped past the
+  string blocklist while the HTTP client still reached the IMDS endpoint —
+  exposing cloud IAM credentials. **Closes the IPv6-transition gap left by the
+  upstream fix of CVE-2026-46678.**
+
+  - New `agent_airlock.safe_types.metadata_ip_candidates(host)` helper returns
+    every canonical IP a hostname could resolve to — the literal address plus
+    the embedded IPv4 of each IPv6-transition form (IPv4-mapped via
+    `.ipv4_mapped`, 6to4 via `.sixtofour`, Teredo via `.teredo[1]`,
+    IPv4-compatible via the `::/96` low-32 bits) plus decimal/octal/hex
+    integer IPv4 via `socket.inet_aton`. The validator blocks the request if
+    any candidate is in the canonical metadata-IP set (AWS/GCP/Azure
+    `169.254.169.254` / `169.254.169.253`, AWS IPv6 `fd00:ec2::254`, Alibaba
+    `100.100.100.200`). Added the Alibaba / generic metadata hostnames to the
+    string blocklist.
+  - **Additive only** — the public `SafeURL` signature is unchanged, and the
+    canonical check lives inside the default-on `block_metadata_urls=True`
+    branch, so every `SafeURLValidator`, the `SafeURL` / `SafeURLAllowHttp`
+    Pydantic types, and presets that use them (e.g.
+    `mobile_mcp_intent_guard_2026_05`) inherit it under deny-by-default with no
+    wiring change. `metadata_ip_candidates` re-exported from the package root.
+
+  Tests (`tests/cves/test_cve_2026_48782_safeurl_ipv6_metadata.py`, 23): a
+  parametrized set of all the IPv6-transition / integer-encoded metadata-IP
+  bypass vectors (each MUST be rejected), the GCP/Alibaba metadata hostnames,
+  metadata blocked even when `block_private_ips=False`, a regression that
+  legitimate public IPv6 hosts (Cloudflare / Google / Quad9 DNS) still pass,
+  and direct coverage of the `metadata_ip_candidates` normalizer. Pydantic-only
+  core, no new runtime deps.
+
+---
+
 ## [0.8.31] - 2026-06-21 — "MCP loopback session-spawn exec-resolution guard (CVE-2026-53820)"
 
 ### Added

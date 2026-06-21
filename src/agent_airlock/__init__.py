@@ -577,6 +577,7 @@ from .safe_types import (
     UnsafeDeserializationVerdict,
     create_safe_path_type,
     create_safe_url_type,
+    metadata_ip_candidates,
 )
 
 # V0.4.0 Sandbox backends (V0.5.0 adds ManagedSandboxBackend stub)
@@ -669,7 +670,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.31"
+__version__ = "0.8.32"
 
 __all__ = [
     # Core
@@ -1039,6 +1040,7 @@ __all__ = [
     "SafeURLValidator",
     "SafePathValidationError",
     "SafeURLValidationError",
+    "metadata_ip_candidates",
     "create_safe_path_type",
     "create_safe_url_type",
     "DEFAULT_PATH_DENY_PATTERNS",
