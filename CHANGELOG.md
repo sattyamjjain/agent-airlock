@@ -13,6 +13,23 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.27] - 2026-06-21 — "Version self-report fix"
+
+### Fixed
+
+- **fix(version): self-report the real version + lockstep regression guard**
+
+  The 0.8.26 release bumped `pyproject.toml` but not
+  `agent_airlock.__version__`, so the published 0.8.26 wheel reported
+  `import agent_airlock; agent_airlock.__version__ == "0.8.25"`. Both are now
+  pinned to `0.8.27`, and a new regression test
+  (`tests/test_version_consistency.py`) asserts `__version__` equals
+  `pyproject.toml` `[project].version` — a future one-sided bump fails CI here
+  instead of shipping a wheel that lies about its own version. No runtime
+  behavior change.
+
+---
+
 ## [0.8.26] - 2026-06-13 — "Balance-aware codegen break-out + public guard benchmark"
 
 ### Fixed
