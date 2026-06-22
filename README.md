@@ -28,7 +28,9 @@
 
 <br/>
 
-[**Get Started in 30 Seconds**](#-30-second-quickstart) · [**Why Airlock?**](#-the-problem-no-one-talks-about) · [**All Frameworks**](#-framework-compatibility) · [**Benchmark**](BENCHMARK.md) · [**Docs**](#-documentation)
+[**Get Started in 30 Seconds**](#-30-second-quickstart) · [**Why Airlock?**](#-the-problem-no-one-talks-about) · [**All Frameworks**](#-framework-compatibility) · [**Benchmark**](BENCHMARK.md) · [**Least-Privilege Benchmark**](benchmarks/toolprivbench/RESULTS.md) · [**Docs**](#-documentation)
+
+> **Benchmarks** — guard-suite block-rate: [`BENCHMARK.md`](BENCHMARK.md); least-privilege / over-privileged-tool-selection block-rate vs ToolPrivBench ([arXiv:2606.20023](https://arxiv.org/abs/2606.20023)), OWASP-Agentic-mapped, reproducible via `python -m benchmarks.toolprivbench`: [`benchmarks/toolprivbench/RESULTS.md`](benchmarks/toolprivbench/RESULTS.md).
 
 <br/>
 

@@ -1,0 +1,121 @@
+"""Render a :class:`BenchmarkReport` to the RESULTS.md markdown table."""
+
+from __future__ import annotations
+
+from .harness import BenchmarkReport
+from .scenarios import RISK_PATTERNS
+
+_OWASP_TITLES = {
+    "ASI01": "Agent Control / Authorization Hijacking",
+    "ASI02": "Tool Misuse",
+    "ASI03": "Privilege Compromise",
+    "ASI04": "Resource / Persistence Abuse",
+    "ASI06": "Sensitive-Information Exposure",
+}
+
+
+def _pct(x: float) -> str:
+    return f"{x * 100:.1f}%"
+
+
+def render_results_md(report: BenchmarkReport, run_date: str) -> str:
+    """Render the full RESULTS.md content for ``report`` stamped with ``run_date``."""
+    label = (
+        "official ToolPrivBench dataset"
+        if report.source == "official"
+        else ("**subset harness** (~20 scenarios/pattern; pending full-dataset wiring)")
+    )
+    lines: list[str] = []
+    lines.append("# ToolPrivBench-style least-privilege block-rate — results")
+    lines.append("")
+    lines.append(
+        f"Scenario source: {label}. Total scenarios: **{report.total}**. Last run: **{run_date}**."
+    )
+    lines.append("")
+    lines.append(
+        "**Method note.** Each scenario is wrapped in agent-airlock's "
+        "deny-by-default least-privilege `SecurityPolicy` "
+        "(`default_deny=True`, allowlist = only the low-privilege tool the task "
+        "needs). The over-privileged tool call is recorded as BLOCKED iff "
+        "`SecurityPolicy.check_tool_allowed` raises `PolicyViolation`; the "
+        "low-privilege call must remain ALLOWED (so this is not a blunt "
+        "deny-all). The transient-failure column re-runs the over-privileged "
+        "decision after an injected low-privilege-tool failure — ToolPrivBench's "
+        "amplifier — under the same fixed policy."
+    )
+    lines.append("")
+
+    # Headline
+    lines.append("## Headline")
+    lines.append("")
+    lines.append(
+        f"- Over-privileged calls **blocked**: **{_pct(report.overall_block_rate)}** "
+        f"({report.total} scenarios)"
+    )
+    lines.append(
+        f"- Over-privileged calls blocked **after transient failure**: "
+        f"**{_pct(report.overall_block_rate_after_failure)}**"
+    )
+    lines.append(
+        f"- Legitimate low-privilege calls **allowed** (precision, not deny-all): "
+        f"**{_pct(report.overall_low_priv_allow_rate)}**"
+    )
+    lines.append("")
+
+    # Per risk pattern
+    lines.append("## Block-rate per ToolPrivBench risk pattern")
+    lines.append("")
+    lines.append(
+        "| Risk pattern | OWASP-Agentic | Scenarios | Domains | Over-priv blocked | "
+        "After transient failure | Low-priv allowed |"
+    )
+    lines.append("|---|---|---|---|---|---|---|")
+    for pattern, stats in report.by_pattern.items():
+        owasp = RISK_PATTERNS[pattern]
+        lines.append(
+            f"| {pattern} | {owasp} | {stats.total} | {len(stats.domains)} | "
+            f"{_pct(stats.block_rate)} | {_pct(stats.block_rate_after_failure)} | "
+            f"{_pct(stats.low_priv_allow_rate)} |"
+        )
+    lines.append("")
+
+    # Per OWASP id
+    lines.append("## Block-rate per OWASP Agentic Top-10 id")
+    lines.append("")
+    lines.append(
+        "| OWASP-Agentic id | Title (best-effort crosswalk) | Scenarios | Over-priv blocked |"
+    )
+    lines.append("|---|---|---|---|")
+    for owasp, stats in report.by_owasp.items():
+        title = _OWASP_TITLES.get(owasp, "—")
+        lines.append(f"| {owasp} | {title} | {stats.total} | {_pct(stats.block_rate)} |")
+    lines.append("")
+
+    # Crosswalk + caveat
+    lines.append("## Risk-pattern → OWASP-Agentic crosswalk")
+    lines.append("")
+    lines.append("| ToolPrivBench risk pattern | OWASP Agentic Top-10 (2026) |")
+    lines.append("|---|---|")
+    for pattern, owasp in RISK_PATTERNS.items():
+        lines.append(f"| {pattern} | {owasp} {_OWASP_TITLES.get(owasp, '')} |")
+    lines.append("")
+    lines.append(
+        "> The crosswalk is this harness's **best-effort alignment**, not an "
+        "official OWASP designation."
+    )
+    lines.append("")
+    lines.append("## Honest caveat")
+    lines.append("")
+    lines.append(
+        "This benchmark measures **runtime BLOCK behaviour under fixed presets** "
+        "— not model behaviour. A 100% block-rate means deny-by-default "
+        "mechanically refuses any tool not on the least-privilege allowlist "
+        "(including under the transient-failure amplifier where ToolPrivBench "
+        "shows prompt-level controls degrade); it is **not** a claim that the "
+        "agent stopped *choosing* over-privileged tools. The complementary "
+        "low-privilege allow-rate shows the policy is precise, not a blunt "
+        "deny-all. Anchor: ToolPrivBench / "
+        "[arXiv:2606.20023](https://arxiv.org/abs/2606.20023)."
+    )
+    lines.append("")
+    return "\n".join(lines)
