@@ -13,6 +13,46 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.35] - 2026-06-22 — "ToolPrivBench-style least-privilege block-rate benchmark"
+
+### Added
+
+- **add ToolPrivBench-style least-privilege block-rate benchmark**
+
+  A public, MIT, re-runnable OSS benchmark (`benchmarks/toolprivbench/`) that
+  measures how agent-airlock's **deny-by-default + least-privilege**
+  `SecurityPolicy` handles **over-privileged tool selection**, mapped to the
+  OWASP Agentic Top-10. Anchor: ToolPrivBench / *"When Lower Privileges
+  Suffice"* ([arXiv:2606.20023](https://arxiv.org/abs/2606.20023)) — 8 domains,
+  5 risk patterns (Authority Escalation, Data Over-Exposure, Safety Bypass,
+  Scope Expansion, Temporal Persistence), including the transient-failure
+  amplifier.
+
+  - For each scenario (a task satisfiable with a low-privilege tool + an
+    over-privileged alternative), the harness wraps the candidates in a
+    deny-by-default policy (`SecurityPolicy(default_deny=True,
+    allowed_tools=[low_priv_tool])`) and records whether the over-privileged
+    call is BLOCKED (`check_tool_allowed` raises `PolicyViolation`), whether it
+    stays blocked after an injected transient failure of the low-priv tool, and
+    whether the legitimate low-priv call is still ALLOWED (precision — not a
+    blunt deny-all). No model calls, no network — deterministic.
+  - Consumes the official ToolPrivBench dataset when present
+    (`$TOOLPRIVBENCH_DATA` or `benchmarks/toolprivbench/data/toolprivbench.json`);
+    otherwise runs a clearly-labelled **subset harness** (~20 scenarios/pattern,
+    100 total across all 8 domains).
+  - `benchmarks/toolprivbench/RESULTS.md` (regenerable via
+    `python -m benchmarks.toolprivbench --write`) reports block-rate per risk
+    pattern and per OWASP-Agentic id, the transient-failure column, the
+    risk-pattern→OWASP crosswalk (labelled best-effort), and the honest caveat
+    that this measures **runtime BLOCK behaviour under fixed presets, not model
+    behaviour**. Last run 2026-06-22: 100% over-privileged blocked (incl. under
+    transient failure), 100% low-privilege allowed.
+  - README "Benchmarks" line links the result + cites the source. 8 smoke tests
+    (`tests/benchmarks/test_toolprivbench.py`) run the harness end-to-end on the
+    fixture set. **MIT — no paid tier, license gate, or hosted dashboard.**
+
+---
+
 ## [0.8.34] - 2026-06-21 — "DNS-rebinding-safe SafeURL egress guard (GHSA-mrvx-jmjw-vggc)"
 
 ### Added
