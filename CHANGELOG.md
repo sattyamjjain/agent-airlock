@@ -13,6 +13,37 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.36] - 2026-06-23 — "Placeholder-CVE CI guard + type-checker/contract-layer wedge"
+
+### Fixed
+
+- **fix: remove placeholder CVE ids from preset registry (add CI guard)**
+
+  Replaced the one synthetic placeholder id in the repo — `CVE-2026-99999`
+  (a `tests/cli/test_egress_bench_since.py` date-filter fixture, source
+  `example.com`) — with a real disclosed CVE (`CVE-2025-59528`, Flowise) and
+  its NVD URL. The preset registry itself (`policy_presets.py`) was already
+  free of placeholder / reserved / example ids; this adds a regression guard so
+  it stays that way. New `tests/test_no_placeholder_cves.py` scans the registry
+  source for every `CVE-…` id and fails on placeholder sequence numbers
+  (`99999` / `00000` / `12345` …), non-numeric stubs (`CVE-XXXX-…`), or any id
+  not matching the canonical `CVE-YYYY-NNNN` shape — and asserts the known-real
+  anchors are present so the guard can't silently pass on an empty match set.
+  (Structural invariant only — live nvd.nist.gov resolution is not a
+  deterministic offline unit test.)
+
+### Changed
+
+- **docs: lead with the type-checker / contract-layer wedge**
+
+  README hero and the PyPI/`pyproject` description now lead with *"A
+  type-checker and contract layer for AI agent tool calls — deny-by-default,
+  in-process, zero-dep."* Wording only — the `@Airlock` decorator surface, the
+  deny-by-default posture, and the Pydantic-only / zero-runtime-dep core claim
+  are all unchanged.
+
+---
+
 ## [0.8.35] - 2026-06-22 — "ToolPrivBench-style least-privilege block-rate benchmark"
 
 ### Added
