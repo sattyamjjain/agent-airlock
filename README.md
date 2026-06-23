@@ -5,7 +5,7 @@
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=28&duration=3000&pause=1000&color=00D4FF&center=true&vCenter=true&multiline=true&repeat=true&width=700&height=100&lines=%F0%9F%9B%A1%EF%B8%8F+Agent-Airlock;Your+AI+Agent+Just+Tried+rm+-rf+%2F.+We+Stopped+It." alt="Agent-Airlock Typing Animation" />
 </a>
 
-### A type-checker for AI tool calls
+### A type-checker and contract layer for AI agent tool calls — deny-by-default, in-process, zero-dep
 
 **Strict validation, ghost-argument stripping, and self-healing retries — one decorator, any agent or MCP server.**
 

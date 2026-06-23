@@ -55,7 +55,14 @@ def tmp_fixture_dir(tmp_path: Path) -> Path:
         d / "fresh_cve.json",
         {
             "disclosed_at": "2026-04-24",
-            "cves": [{"id": "CVE-2026-99999", "source": "https://example.com"}],
+            # Real disclosed CVE used as fixture data (no placeholder ids in-repo).
+            # CVE-2025-59528 — Flowise custom-tool RCE. https://nvd.nist.gov/vuln/detail/CVE-2025-59528
+            "cves": [
+                {
+                    "id": "CVE-2025-59528",
+                    "source": "https://nvd.nist.gov/vuln/detail/CVE-2025-59528",
+                }
+            ],
         },
     )
     return d
