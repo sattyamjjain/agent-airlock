@@ -99,8 +99,30 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     SensitiveDataType.PAN: re.compile(
         r"\b[A-Z]{5}[0-9]{4}[A-Z]\b"  # ABCDE1234F format
     ),
+    # NPCI UPI handle (PSP/bank) allowlist. Curated to real, widely-used
+    # handles; expanded in v0.8.37 to cover WhatsApp Pay, the major private
+    # banks, Paytm Payments Bank, Slice and CRED. Each is anchored to a word
+    # boundary so longer handles (e.g. @axisbank) win over shorter prefixes.
     SensitiveDataType.UPI_ID: re.compile(
-        r"\b[a-zA-Z0-9._-]+@(?:ybl|paytm|oksbi|okaxis|okicici|okhdfcbank|phonepe|gpay|apl|axl|ibl|sbi|pnb|boi|cnrb|upi|airtel|jio|freecharge|mobikwik|amazonpay)\b",
+        r"\b[a-zA-Z0-9._-]+@(?:"
+        # PhonePe / Google Pay / Paytm / Amazon / wallets
+        r"ybl|ibl|axl|apl|paytm|okaxis|okicici|okhdfcbank|oksbi|phonepe|gpay|"
+        r"airtel|jio|freecharge|mobikwik|amazonpay|"
+        # WhatsApp Pay
+        r"waicici|wahdfcbank|waaxis|wasbi|"
+        # Axis Bank ecosystem
+        r"axisbank|axisb|okbizaxis|naviaxis|"
+        # HDFC / ICICI / IDFC / Kotak
+        r"hdfcbank|payzapp|icici|pockets|idfcbank|idfcfirst|kotak|kmbl|kmb|"
+        # Yes / Federal / IndusInd / RBL / DBS / AU / BoB
+        r"yesbank|yapl|yesg|fbl|federal|indus|indusind|rbl|dbs|aubank|barodampay|"
+        # Paytm Payments Bank handles
+        r"ptsbi|ptaxis|pthdfc|ptyes|"
+        # Slice / CRED
+        r"superyes|timecosmos|cred|"
+        # PSU / generic
+        r"sbi|pnb|boi|cnrb|upi"
+        r")\b",
         re.IGNORECASE,
     ),
     SensitiveDataType.IFSC: re.compile(
@@ -197,8 +219,10 @@ def _mask_value(
     if len(value) <= 8:
         return "*" * len(value)
 
-    if data_type == SensitiveDataType.EMAIL:
-        # Show first char of local part and domain
+    if data_type in (SensitiveDataType.EMAIL, SensitiveDataType.UPI_ID):
+        # Show first char of local part and keep the domain / @bank suffix
+        # (the bank handle is semi-public; the VPA / mailbox local part is the
+        # identifying value, so it is masked).
         parts = value.split("@")
         if len(parts) == 2:
             local, domain = parts
@@ -208,6 +232,21 @@ def _mask_value(
     if data_type == SensitiveDataType.CREDIT_CARD:
         # Show last 4 digits only
         return "**** **** **** " + value[-4:]
+
+    if data_type == SensitiveDataType.AADHAAR:
+        # UIDAI masked-Aadhaar standard: reveal only the last 4 digits
+        # (the first 8 are never shown). The default first-3 + last-3 fall-
+        # through would leak 6 of the 12 digits — too much for an Aadhaar.
+        # Operate on the digit characters so separators (spaces / hyphens)
+        # don't change the revealed count.
+        digits = re.sub(r"\D", "", value)
+        if len(digits) >= 4:
+            return "*" * (len(digits) - 4) + digits[-4:]
+
+    if data_type == SensitiveDataType.PAN:
+        # Reveal first 2 + last 2 (PAN is ABCDE1234F; the 5-letter prefix and
+        # the digits are the identifying part, so keep the revealed span minimal).
+        return value[:2] + "*" * (len(value) - 4) + value[-2:]
 
     if data_type in (SensitiveDataType.API_KEY, SensitiveDataType.AWS_KEY):
         # Show prefix and last 4 chars
