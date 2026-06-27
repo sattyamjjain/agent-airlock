@@ -13,6 +13,53 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.37] - 2026-06-27 — "India-PII masking hardening (DPDP bundle, UIDAI-standard Aadhaar mask, fresh UPI handles)"
+
+### Added
+
+- **`apply_india_dpdp_2023()` config+policy bundle.** Until now
+  `india_dpdp_2023_policy()` gated tools but its own docstring told operators to
+  *separately* enable the PII sanitizer — so a single call didn't deliver the
+  "DPDP-aware masking" it implied. New `apply_india_dpdp_2023()` returns an
+  `IndiaDPDP2023Bundle(config, policy)` (mirroring `apply_camouflage_resistant`):
+  the policy plus an `AirlockConfig` with `mask_pii` / `mask_secrets` /
+  `sanitize_output` on and `"in"` added to `pii_locales`, so one call wires both
+  seams. Exported from the package root (`IndiaDPDP2023Bundle`,
+  `apply_india_dpdp_2023`).
+
+### Changed
+
+- **Aadhaar / PAN / UPI PARTIAL masking now matches its documented (and safer)
+  intent.** The India PII maskers previously fell through to the generic
+  first-3 + last-3 render despite inline comments and the README claiming
+  otherwise. Implemented the documented behavior, which is also stronger:
+  - **Aadhaar → last-4 only** (`234567890124` → `********0124`), the UIDAI
+    masked-Aadhaar standard — the prior generic render leaked 6 of 12 digits.
+    Operates on digit characters so spaced/hyphenated forms reveal the same count.
+  - **PAN → first-2 + last-2** (`ABCDE1234F` → `AB******4F`).
+  - **UPI → mask local part, keep the `@bank` suffix** (`alice@oksbi` →
+    `a***@oksbi`), since the handle is semi-public and the VPA local part is the
+    identifying value.
+
+  The README example block (which previously showed fabricated outputs like
+  `23********24`) and the inline strategy comments are corrected to match. This
+  is a behavior change on the opt-in `pii_locales=["in"]` surface only; no
+  existing test pinned the old output, and the change is strictly more private.
+
+- **Refreshed the UPI handle allowlist.** Expanded `SensitiveDataType.UPI_ID`
+  detection to current NPCI handles — WhatsApp Pay (`waicici`/`wahdfcbank`/
+  `waaxis`/`wasbi`), the major private banks (Axis/HDFC/ICICI/IDFC/Kotak/Yes/
+  Federal/IndusInd/RBL/DBS/AU/BoB), Paytm Payments Bank (`pt*`), Slice
+  (`superyes`/`timecosmos`), and CRED — anchored so longer handles win over
+  shorter prefixes. Existing handles unchanged.
+
+Tests: `tests/test_indic_pii_masking.py` grows to 56 — pinning the exact
+Aadhaar (last-4) / PAN / UPI masked renders across FULL/PARTIAL/HASH strategies,
+the new handle coverage, and the longer-handle-wins / non-UPI-domain edge cases.
+Pydantic-only zero-dep core preserved; deny-by-default posture unchanged.
+
+---
+
 ## [0.8.36] - 2026-06-23 — "Placeholder-CVE CI guard + type-checker/contract-layer wedge"
 
 ### Fixed

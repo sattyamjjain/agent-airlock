@@ -869,8 +869,9 @@ config = AirlockConfig(
 def lookup(query: str) -> str:
     return (
         "User: राम कुमार, "
-        "Aadhaar: 234567890124, "       # → "23********24" (PARTIAL)
-        "PAN: ABCDE1234F, "             # → "AB******4F" (PARTIAL)
+        "Aadhaar: 234567890124, "       # → "********0124" (last-4 only, UIDAI standard)
+        "PAN: ABCDE1234F, "             # → "AB******4F"  (first-2 + last-2)
+        "UPI: alice@oksbi, "            # → "a***@oksbi"  (mask local part, keep @bank)
         "phone: 555-123-4567"           # still masked by existing PHONE regex
     )
 ```

@@ -19,6 +19,7 @@ import pytest
 
 from agent_airlock import Airlock, AirlockConfig
 from agent_airlock.sanitizer import (
+    MaskingStrategy,
     SensitiveDataType,
     _verhoeff_check,
     detect_sensitive_data,
@@ -329,3 +330,97 @@ class TestBackwardsCompat:
         detections = detect_sensitive_data(content, [SensitiveDataType.AADHAAR])
         # No locale → permissive match (the historical contract).
         assert len(detections) == 1
+
+
+class TestIndiaPiiMaskOutput:
+    """Pin the exact PARTIAL masked render for Aadhaar / PAN / UPI.
+
+    Aadhaar follows the UIDAI masked-Aadhaar standard: only the last 4 digits
+    are revealed (the first 8 are never shown), instead of the generic
+    first-3 + last-3 fall-through that would leak 6 of 12 digits.
+    """
+
+    @pytest.mark.parametrize("aadhaar", VALID_AADHAAR_NUMBERS)
+    def test_aadhaar_reveals_only_last_4(self, aadhaar: str) -> None:
+        out = sanitize_output(f"Aadhaar: {aadhaar}", mask_pii=True, pii_locales=["in"]).content
+        expected = "*" * 8 + aadhaar[-4:]  # UIDAI standard: 8 masked + last 4
+        assert expected in out, f"{aadhaar} -> {out!r}, expected to contain {expected!r}"
+        # the first 8 digits must NOT appear in the output
+        assert aadhaar[:8] not in out
+
+    def test_aadhaar_masks_spaced_form_by_digit_count(self) -> None:
+        # Separators (spaces / hyphens) must not change the revealed count.
+        out = sanitize_output("id 2345 6789 0124 ok", mask_pii=True, pii_locales=["in"]).content
+        assert "********0124" in out
+        assert "2345" not in out  # leading group fully masked
+
+    def test_pan_reveals_first_2_and_last_2(self) -> None:
+        out = sanitize_output("PAN: ABCDE1234F", mask_pii=True, pii_locales=["in"]).content
+        assert "AB******4F" in out  # first 2 + 6 masked + last 2
+        assert "ABCDE" not in out
+
+    def test_upi_partial_keeps_bank_suffix(self) -> None:
+        out = sanitize_output(
+            "pay alice.kumar@oksbi now", mask_pii=True, pii_locales=["in"]
+        ).content
+        # The @bank handle is kept (semi-public); the VPA local part is masked.
+        assert "@oksbi" in out
+        assert "a***@oksbi" in out
+        assert "alice.kumar" not in out
+
+    def test_full_strategy_overrides_to_redacted(self) -> None:
+        out, _ = mask_sensitive_data(
+            f"Aadhaar: {VALID_AADHAAR_NUMBERS[0]}",
+            [SensitiveDataType.AADHAAR],
+            mask_config={SensitiveDataType.AADHAAR: MaskingStrategy.FULL},
+            pii_locales=["in"],
+        )
+        assert "[REDACTED]" in out
+        assert VALID_AADHAAR_NUMBERS[0][-4:] not in out
+
+    def test_hash_strategy_emits_sha_prefix(self) -> None:
+        out, _ = mask_sensitive_data(
+            "PAN: ABCDE1234F",
+            [SensitiveDataType.PAN],
+            mask_config={SensitiveDataType.PAN: MaskingStrategy.HASH},
+            pii_locales=["in"],
+        )
+        assert "[SHA256:" in out
+        assert "ABCDE1234F" not in out
+
+
+class TestUpiHandleCoverage:
+    """v0.8.37 expanded the UPI handle allowlist to current NPCI handles."""
+
+    @pytest.mark.parametrize(
+        "vpa",
+        [
+            "alice@waicici",  # WhatsApp Pay
+            "bob@axisbank",
+            "cara@hdfcbank",
+            "dev@idfcfirst",
+            "eve@kotak",
+            "fay@yesbank",
+            "gita@fbl",  # Federal
+            "hari@indusind",
+            "ina@rbl",
+            "jay@ptsbi",  # Paytm Payments Bank
+            "kim@superyes",  # Slice
+            "leo@cred",
+            "max@paytm",  # existing handles still match
+            "old@ybl",
+        ],
+    )
+    def test_handle_detected(self, vpa: str) -> None:
+        det = detect_sensitive_data(f"pay {vpa} now", pii_locales=["in"])
+        assert any(x["type"] == SensitiveDataType.UPI_ID.value for x in det), vpa
+
+    def test_longer_handle_wins_over_prefix(self) -> None:
+        # @axisbank must match in full, not stop at a shorter alternative.
+        det = detect_sensitive_data("pay bob@axisbank now", pii_locales=["in"])
+        vals = [x["value"] for x in det if x["type"] == SensitiveDataType.UPI_ID.value]
+        assert "bob@axisbank" in vals
+
+    def test_non_upi_domain_not_flagged(self) -> None:
+        det = detect_sensitive_data("mail alice@gmail.com", pii_locales=["in"])
+        assert not any(x["type"] == SensitiveDataType.UPI_ID.value for x in det)

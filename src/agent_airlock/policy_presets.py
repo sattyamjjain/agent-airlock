@@ -434,6 +434,61 @@ def india_dpdp_2023_policy() -> SecurityPolicy:
     )
 
 
+@dataclass
+class IndiaDPDP2023Bundle:
+    """Composite handle returned by :func:`apply_india_dpdp_2023`.
+
+    Bundles the two seams DPDP alignment spans so a caller gets both in one
+    call: ``policy`` (the :func:`india_dpdp_2023_policy` tool/capability gate)
+    and ``config`` (an :class:`~agent_airlock.config.AirlockConfig` with India
+    PII masking pre-enabled — ``mask_pii`` / ``mask_secrets`` /
+    ``sanitize_output`` on and ``"in"`` in ``pii_locales``). Without this the
+    policy alone gates tools but the Aadhaar / PAN / UPI / IFSC maskers still
+    need separate opt-in (the gap the policy's own docstring names).
+    """
+
+    config: Any
+    policy: SecurityPolicy
+
+
+def apply_india_dpdp_2023(config: Any | None = None) -> IndiaDPDP2023Bundle:
+    """Return a config+policy bundle pre-wired for India DPDP 2023 alignment.
+
+    One call delivers what :func:`india_dpdp_2023_policy` alone cannot: the
+    DPDP tool/capability gate **plus** an :class:`AirlockConfig` that actually
+    turns on the India PII maskers (Aadhaar Verhoeff-gated, PAN, UPI, IFSC,
+    Devanagari names). The Aadhaar masker reveals only the last 4 digits
+    (UIDAI masked-Aadhaar standard).
+
+    Args:
+        config: Optional starting :class:`AirlockConfig`. If None, a fresh one
+            is created. Existing fields are preserved unless they conflict with
+            the DPDP masking posture, in which case the stricter setting wins
+            (masking is forced on and the ``"in"`` locale is added).
+
+    Returns:
+        :class:`IndiaDPDP2023Bundle` with the configured ``config`` + ``policy``.
+
+    Example:
+        >>> from agent_airlock import Airlock, apply_india_dpdp_2023
+        >>> bundle = apply_india_dpdp_2023()
+        >>> @Airlock(config=bundle.config, policy=bundle.policy)
+        ... def lookup(q: str) -> str: ...
+    """
+    from .config import AirlockConfig
+
+    if config is None:
+        config = AirlockConfig()
+
+    config.sanitize_output = True
+    config.mask_pii = True
+    config.mask_secrets = True
+    if "in" not in config.pii_locales:
+        config.pii_locales = [*config.pii_locales, "in"]
+
+    return IndiaDPDP2023Bundle(config=config, policy=india_dpdp_2023_policy())
+
+
 # -----------------------------------------------------------------------------
 # Module-level eager instances for readability
 # -----------------------------------------------------------------------------
@@ -4380,6 +4435,8 @@ __all__ = [
     "owasp_mcp_top_10_2026_policy",
     "eu_ai_act_article_15_policy",
     "india_dpdp_2023_policy",
+    "apply_india_dpdp_2023",
+    "IndiaDPDP2023Bundle",
     "stdio_guard_ox_defaults",
     "oauth_audit_vercel_2026_defaults",
     "azure_mcp_cve_2026_32211_defaults",

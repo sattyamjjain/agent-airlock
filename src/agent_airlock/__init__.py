@@ -498,7 +498,9 @@ from .policy_presets import (
     ArchivedMcpServerBlocked,
     GitPilotRepoPathInjection,
     HighValueActionBlocked,
+    IndiaDPDP2023Bundle,
     MobileMcpIntentBlocked,
+    apply_india_dpdp_2023,
     capsule_indirect_injection_cve_2026_21520_defaults,
     cline_cve_2026_44211_defaults,
     codegen_delimiter_injection_guard_defaults,
@@ -680,7 +682,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.36"
+__version__ = "0.8.37"
 
 __all__ = [
     # Core
@@ -713,6 +715,8 @@ __all__ = [
     "OWASP_MCP_TOP_10_2026",
     "EU_AI_ACT_ARTICLE_15",
     "INDIA_DPDP_2023",
+    "IndiaDPDP2023Bundle",
+    "apply_india_dpdp_2023",
     "gtg_1002_defense_policy",
     "mex_gov_2026_policy",
     "owasp_mcp_top_10_2026_policy",
