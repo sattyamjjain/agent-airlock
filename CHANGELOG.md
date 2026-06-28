@@ -13,6 +13,31 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.38] - 2026-06-28 — "CVE-2026-42271 KEV regression fixture (LiteLLM MCP command injection)"
+
+### Added
+
+- **Add CVE-2026-42271 KEV regression fixture (LiteLLM MCP command injection).**
+  The guard (`McpSubprocessArgInjectionGuard` / `mcp_subprocess_arg_injection_guard_defaults`)
+  shipped in v0.8.22; this adds a dedicated regression test
+  (`tests/cves/test_cve_2026_42271_kev_regression.py`, 8 tests) that reproduces
+  the **actual LiteLLM `/mcp-rest/test/connection` and `/mcp-rest/test/tools/list`
+  request bodies** — the stdio-transport `command` / `args` / `env` shape NVD
+  describes — and proves the deny-by-default preset blocks them end-to-end
+  (injected `command`, `args[0]`-smuggled program, and the `LD_PRELOAD` env
+  vector), while a benign allow-listed launcher passes. Also pins the scope
+  boundary: a nested `mcpServers` config map (a different format, not the
+  mcp-rest request body) is not auto-recursed, so callers iterate server
+  entries — documented as an explicit contract.
+
+### Fixed
+
+- **Corrected the CVE-2026-42271 metadata** in the README CVE table to match
+  NVD: CVSS **8.8** (was 8.7), CWE-**77 + 78** (was 78 only), and CISA KEV date
+  added **2026-06-08** (was 2026-06-09). No behavior change.
+
+---
+
 ## [0.8.37] - 2026-06-27 — "India-PII masking hardening (DPDP bundle, UIDAI-standard Aadhaar mask, fresh UPI handles)"
 
 ### Added
