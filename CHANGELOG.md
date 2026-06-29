@@ -13,6 +13,37 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.39] - 2026-06-29 — "block-rate comparison vs LlamaFirewall + Invariant; fix test-badge version drift"
+
+### Added
+
+- **bench: block-rate comparison vs LlamaFirewall + Invariant.** New
+  `benchmarks/blockrate/` module — a reproducible cross-tool block-rate
+  comparison on one shared tool-call corpus (210 calls: ToolPrivBench-derived
+  over-privileged tool selection + a public set of injected tool-call
+  arguments + benign controls). agent-airlock's deny-by-default presets are
+  **re-run** deterministically (block-rate + p50/p95 latency); **Meta
+  LlamaFirewall** and **Invariant Guardrails** are model-in-the-loop systems
+  this in-process harness does not execute, so their coverage is reported as a
+  **scope claim, cited, not re-run** — never a fabricated competitor number.
+  Headline: 100% block / 0% false-positive on the self-curated corpus at p50
+  ~2µs/decision, contrasted (categorically, not as a head-to-head score) with
+  model-in-the-loop detection. The deterministic block-rate table is folded
+  into the drift-gated `BENCHMARK.md`; p50/p95 latency (wall-clock) lives in
+  `benchmarks/blockrate/RESULTS.md`. Run: `python -m benchmarks.blockrate`.
+
+### Fixed
+
+- **fix: test-badge version drift.** The README test-badge sat at `v0.8.5`
+  while the package shipped `v0.8.39`. `scripts/update_test_badge.py` already
+  read the live `__version__` — it had simply never been re-run since v0.8.5 —
+  so the badge is refreshed and a new CI guard (`tests/test_badge_version.py`,
+  mirroring the placeholder-CVE guard) now fails if the badge version ever
+  diverges from the package version again. The guard checks the version only
+  (not the test count / coverage, which change every commit).
+
+---
+
 ## [0.8.38] - 2026-06-28 — "CVE-2026-42271 KEV regression fixture (LiteLLM MCP command injection)"
 
 ### Added

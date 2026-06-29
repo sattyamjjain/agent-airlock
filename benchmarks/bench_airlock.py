@@ -8,13 +8,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 
 from agent_airlock import (
+    PERMISSIVE_POLICY,
     Airlock,
     AirlockConfig,
-    PERMISSIVE_POLICY,
     SecurityPolicy,
 )
 
@@ -211,7 +210,7 @@ class TestComplexValidation:
             return f"{a}-{b}-{c}-{d}"
 
         result = benchmark(simple_types, a=1, b="test", c=3.14, d=True)
-        assert "1-test-3.14-True" == result
+        assert result == "1-test-3.14-True"
 
     def test_complex_types(self, benchmark: BenchmarkFixture) -> None:
         """Complex nested types."""

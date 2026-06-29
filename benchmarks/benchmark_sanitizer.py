@@ -5,15 +5,12 @@ Run with: pytest benchmarks/benchmark_sanitizer.py --benchmark-only
 
 from __future__ import annotations
 
-import pytest
-
 from agent_airlock.sanitizer import (
     SensitiveDataType,
     detect_sensitive_data,
     mask_sensitive_data,
     sanitize,
 )
-
 
 # Sample content with varying PII density
 CONTENT_MINIMAL = "This is a simple message with no sensitive data."
