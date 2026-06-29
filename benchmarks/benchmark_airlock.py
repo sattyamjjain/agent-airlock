@@ -5,11 +5,9 @@ Run with: pytest benchmarks/benchmark_airlock.py --benchmark-only
 
 from __future__ import annotations
 
-import pytest
-
 from agent_airlock import Airlock
 from agent_airlock.config import AirlockConfig
-from agent_airlock.policy import PERMISSIVE_POLICY, STRICT_POLICY
+from agent_airlock.policy import STRICT_POLICY
 
 
 # Simple function for baseline

@@ -40,6 +40,7 @@ from typing import Any
 # Make ``src/`` importable when run from the repo root without an install.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "src"))
+sys.path.insert(0, str(_REPO_ROOT))  # for `benchmarks.*` (cross-tool comparison)
 
 from agent_airlock import (  # noqa: E402
     CodegenDelimiterInjectionGuard,
@@ -237,7 +238,9 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
         f"({m['fp']}/{m['n_benign']}) |"
     )
     out.append(f"| Overall accuracy | {_pct(m['accuracy'])} ({m['tp'] + m['tn']}/{m['total']}) |")
-    out.append(f"| Corpus size | {m['total']} entries ({m['n_exploit']} malicious, {m['n_benign']} benign) |")
+    out.append(
+        f"| Corpus size | {m['total']} entries ({m['n_exploit']} malicious, {m['n_benign']} benign) |"
+    )
     out.append(f"| Missed attacks (false negatives) | {m['fn']} |")
     out.append("")
     out.append("## By attack class")
@@ -275,7 +278,9 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     out.append("## Methodology")
     out.append("")
     out.append(f"- **Guard suite:** {meta.get('guard_chain', 'comprehensive')}")
-    out.append("- **Decision rule:** an entry is *blocked* iff **any** guard in the suite refuses it.")
+    out.append(
+        "- **Decision rule:** an entry is *blocked* iff **any** guard in the suite refuses it."
+    )
     out.append(
         "- **`expected_block`:** an independent malicious/benign label per entry. "
         "Detection counts agreements on malicious entries; false positives count "
@@ -296,7 +301,7 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
         "argument value. This *maximises detection* — overlapping guards catch obfuscations "
         "(e.g. the codegen guard's break-out check catches `eval` indirection the eval guard "
         "alone misses). The codegen guard is balance-aware, so complete structured literals "
-        "(`data['key']`, `{\"a\": \"b\"}`, `[\"x\", \"y\"]`) are treated as benign data rather "
+        '(`data[\'key\']`, `{"a": "b"}`, `["x", "y"]`) are treated as benign data rather '
         "than break-outs; it still flags top-level break-out fragments and raw quotes in "
         "free-text bound for a codegen sink. For free-text fields, scope guards to their "
         "intended targets (`CodegenDelimiterInjectionGuard(allowed_literal_fields=...)`, "
@@ -313,12 +318,25 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
         "adaptive attackers. Treat this as a coverage / regression baseline, not an ASR result."
     )
     out.append("")
+    # Deterministic cross-tool comparison (block-rate + cited incumbent scope,
+    # NO latency — latency is wall-clock and lives in
+    # benchmarks/blockrate/RESULTS.md so this file's --check stays a stable gate).
+    out.append("---")
+    out.append("")
+    from benchmarks.blockrate import render_comparison_section, run_blockrate
+
+    out.append(render_comparison_section(run_blockrate(measure_latency=False)))
+    out.append("---")
+    out.append("")
     out.append("### Reproduce")
     out.append("")
     out.append("```bash")
     out.append("make benchmark        # regenerates this file")
     out.append("# or:")
     out.append("python3 scripts/generate_benchmark.py")
+    out.append(
+        "python -m benchmarks.blockrate           # the cross-tool comparison (+ latency in its RESULTS.md)"
+    )
     out.append("```")
     out.append("")
     out.append(

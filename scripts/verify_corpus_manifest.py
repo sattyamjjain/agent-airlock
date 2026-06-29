@@ -14,9 +14,7 @@ import sys
 
 
 def main() -> int:
-    root = pathlib.Path(
-        "src/agent_airlock/corpus/wild_payload_corpus/2026-04"
-    ).resolve()
+    root = pathlib.Path("src/agent_airlock/corpus/wild_payload_corpus/2026-04").resolve()
     if not root.is_dir():
         # The script is also runnable from inside the 2026-04 dir.
         if pathlib.Path("MANIFEST.sha256").exists():

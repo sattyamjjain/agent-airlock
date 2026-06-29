@@ -89,12 +89,8 @@ def write_fixtures(workdir: Path) -> tuple[Path, Path]:
     trace = workdir / "trace.jsonl"
     records = [
         "# Agent-Airlock Audit Log",
-        json.dumps(
-            {"tool_name": "read_file", "blocked": False, "agent_id": "ag1"}
-        ),
-        json.dumps(
-            {"tool_name": "search_kb", "blocked": False, "agent_id": "ag1"}
-        ),
+        json.dumps({"tool_name": "read_file", "blocked": False, "agent_id": "ag1"}),
+        json.dumps({"tool_name": "search_kb", "blocked": False, "agent_id": "ag1"}),
         json.dumps(
             {
                 "tool_name": "delete_user",  # blocked — must be ignored
@@ -103,9 +99,7 @@ def write_fixtures(workdir: Path) -> tuple[Path, Path]:
                 "block_reason": "denylisted",
             }
         ),
-        json.dumps(
-            {"tool_name": "read_file", "blocked": False, "agent_id": "ag2"}
-        ),
+        json.dumps({"tool_name": "read_file", "blocked": False, "agent_id": "ag2"}),
     ]
     trace.write_text("\n".join(records) + "\n", encoding="utf-8")
     return policy, trace
@@ -174,17 +168,12 @@ def assert_unused_sets(stdout: str) -> int:
             return 1
         if sorted(r["used_patterns"]) != expected[agent]["used"]:
             print(
-                f"FAIL: {agent} used={r['used_patterns']!r} "
-                f"expected={expected[agent]['used']!r}",
+                f"FAIL: {agent} used={r['used_patterns']!r} expected={expected[agent]['used']!r}",
                 file=sys.stderr,
             )
             return 1
-    print(
-        f"OK: ag1 unused={expected['ag1']['unused']!r}, used={expected['ag1']['used']!r}"
-    )
-    print(
-        f"OK: ag2 unused={expected['ag2']['unused']!r}, used={expected['ag2']['used']!r}"
-    )
+    print(f"OK: ag1 unused={expected['ag1']['unused']!r}, used={expected['ag1']['used']!r}")
+    print(f"OK: ag2 unused={expected['ag2']['unused']!r}, used={expected['ag2']['used']!r}")
     return 0
 
 
