@@ -30,7 +30,17 @@
 
 [**Get Started in 30 Seconds**](#-30-second-quickstart) · [**Why Airlock?**](#-the-problem-no-one-talks-about) · [**All Frameworks**](#-framework-compatibility) · [**Benchmark**](BENCHMARK.md) · [**Cross-tool comparison**](benchmarks/blockrate/RESULTS.md) · [**Least-Privilege Benchmark**](benchmarks/toolprivbench/RESULTS.md) · [**Docs**](#-documentation)
 
-> **Benchmarks** — _deterministic, in-process, zero-dep._ Guard-suite block-rate + the **cross-tool comparison vs Meta LlamaFirewall & Invariant Guardrails** (block-rate + p50/p95 latency contrasted with model-in-the-loop approaches; incumbents cited, **not re-run** — no fabricated competitor number): [`BENCHMARK.md`](BENCHMARK.md), full results + latency in [`benchmarks/blockrate/RESULTS.md`](benchmarks/blockrate/RESULTS.md) (reproduce: `python -m benchmarks.blockrate`). Least-privilege / over-privileged-tool-selection block-rate vs ToolPrivBench ([arXiv:2606.20023](https://arxiv.org/abs/2606.20023)), OWASP-Agentic-mapped: [`benchmarks/toolprivbench/RESULTS.md`](benchmarks/toolprivbench/RESULTS.md).
+**⬛ Reproducible block-rate — deterministic, in-process, deny-by-default**
+
+| Benchmark (one command to reproduce) | agent-airlock | Compared with |
+|---|---|---|
+| **Cross-tool block-rate** · 210 tool calls · `python -m benchmarks.blockrate` | **100% blocked · 0% false-positive · p50 ~2µs/decision** | Meta LlamaFirewall · Invariant Guardrails — _model-in-the-loop; scope-claimed, **not re-run**_ |
+| **Least-privilege / over-privileged tool selection** · ToolPrivBench, 100 scenarios, OWASP-Agentic mapped (ASI03 / ASI06) | **100% over-priv blocked · 100% low-priv allowed** | — |
+| **Guard-suite CVE corpus** · MCP Top-10 tagged | **100% detection · 0% false-positive** | — |
+
+[`BENCHMARK.md`](BENCHMARK.md) · [`benchmarks/blockrate/RESULTS.md`](benchmarks/blockrate/RESULTS.md) · [`benchmarks/toolprivbench/RESULTS.md`](benchmarks/toolprivbench/RESULTS.md) ([ToolPrivBench: arXiv:2606.20023](https://arxiv.org/abs/2606.20023))
+
+> _Self-curated corpora: a **coverage / regression baseline**, not an adaptive-attacker (ASR) score. Incumbents are cited from their published detection scope and **not re-run** here — no fabricated competitor number. (AgentDojo integration is roadmap, not yet wired.)_
 
 <br/>
 
@@ -58,6 +68,16 @@
 ```
 
 </div>
+
+---
+
+## 🧩 Where this fits (vs native MCP gateways)
+
+MCP gateways and platform firewalls — **Docker MCP Gateway, Cloudflare, Azure API Management, AWS**, and the MCP spec's **OAuth resource-server mandate** — secure the *transport and identity* layer: who is allowed to connect, over what channel, with which token. That is necessary and they do it well.
+
+agent-airlock sits **one layer in**, at the execution boundary *after* auth: it validates the **actual tool-call payload** the model produced — argument types (strict Pydantic, no coercion), hallucinated / ghost arguments, deny-by-default tool and capability scope, and output sanitization — then returns a self-healing error the model can retry against. A gateway can confirm the caller is authenticated; it does not check that `transfer(amount=-1)` is type-valid or that the agent picked the least-privileged tool for the task.
+
+**Use both.** Gateway/OAuth for the connection; airlock as the in-process call-contract layer for the payload. It's a decorator, not a proxy — zero new network hops, runs wherever your tool runs.
 
 ---
 
