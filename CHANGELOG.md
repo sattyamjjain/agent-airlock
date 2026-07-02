@@ -9,7 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Docs / positioning (docs-only — no behavior change, version held at 0.8.39)
+_Nothing unreleased — every entry below is a tagged release._
+
+---
+
+## [0.8.40] - 2026-07-03 — "EU AI Act Art. 12 tamper-evident decision log"
+
+### Added
+
+- **EU AI Act Art. 12-style record-keeping for the tool-call decision layer.**
+  New `agent_airlock.conformance` subpackage: an **append-only, hash-chained,
+  restart-surviving decision log** (`DecisionLog`) that records every
+  `validate → policy → execute → sanitize` decision to JSON Lines, where each
+  record's `record_hash = SHA-256(canonical(fields incl. prev_hash))` — so any
+  edit, deletion, or reorder of an earlier record breaks every subsequent hash
+  and is detected at its exact sequence number. The chain reloads and
+  re-verifies across a process restart and **fails closed** on a broken chain.
+  Reuses the `attest/receipt.py` canonical-JSON hashing convention; carries
+  **decision metadata only** (never raw tool args/results); **no network, no
+  cloud**.
+  - `export_evidence_bundle()` — an **offline** Art. 12 record-keeping evidence
+    bundle (JSON + `render_coverage_table()`) mapping each Art. 12 record-keeping
+    expectation to the airlock field that satisfies it, with an explicit
+    out-of-scope list (no over-claiming).
+  - **`airlock-conformance`** console script — `record` / `verify` / `export`
+    (matches the existing `airlock-explain` entry-point convention; the unified
+    `airlock <subcommand>` dispatcher remains deferred).
+  - Restart-survival + tamper/delete/reorder-evidence pinned by
+    `tests/test_conformance_decision_log.py` — the reproducible credibility asset.
+  - Honest scope in [`docs/compliance/EU-AI-ACT-ART12.md`](docs/compliance/EU-AI-ACT-ART12.md):
+    Art. 12-style record-keeping evidence for the tool-call layer, **not** a full
+    quality management system (Art. 17) and **not** a substitute for the
+    provider's conformity assessment (high-risk obligations apply **2026-08-02**).
+
+### Docs / positioning (docs-only — no behavior change)
 
 - **Sharpened the wedge.** README and the GitHub repo description now lead with
   the positioning — a **deny-by-default contract / type-checker layer for AI
