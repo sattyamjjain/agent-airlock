@@ -9,7 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing unreleased — every entry below is a tagged release._
+### Docs / positioning (docs-only — no behavior change, version held at 0.8.39)
+
+- **Sharpened the wedge.** README and the GitHub repo description now lead with
+  the positioning — a **deny-by-default contract / type-checker layer for AI
+  tool calls** (Pydantic-based, in-process, zero-core-deps) — with "firewall"
+  kept only as a secondary search keyword. Deny-by-default posture and the
+  Pydantic-only-core pitch are unchanged (both load-bearing).
+- **Promoted the block-rate benchmark to a top-of-README credibility block** —
+  the cross-tool comparison vs Meta LlamaFirewall & Invariant Guardrails (100%
+  block / 0% false-positive on a self-curated 210-call corpus, p50 ~2µs/decision;
+  incumbents cited, **not re-run**), the ToolPrivBench least-privilege result
+  (OWASP-Agentic mapped), and the guard-suite CVE corpus, each with a
+  one-command reproduce snippet and the honest self-corpus / not-ASR caveat.
+- **Added "Where this fits (vs native MCP gateways)"** — honest, non-disparaging
+  positioning: gateways + the MCP OAuth mandate secure transport/identity;
+  airlock is the in-process call-contract layer that validates the tool-call
+  payload after auth.
+- **Added [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md)** — copy + config only
+  (nothing auto-posts): the "library, not a server → no `server.json`" listing
+  decision, a one-line awesome-list PR entry, and a first-person HN/r/LocalLLaMA
+  problem-essay outline built on the block-rate finding.
 
 ---
 
