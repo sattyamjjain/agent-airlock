@@ -18,17 +18,33 @@ from .harness import (
     run_benchmark,
     run_scenario,
 )
+from .opur import (
+    OpurAggregate,
+    OpurRun,
+    OpurStats,
+    evaluate_opur,
+    evaluate_opur_runs,
+    opur_run_from_scenario,
+    permissive_policy,
+)
 from .scenarios import DOMAINS, RISK_PATTERNS, Scenario, load_scenarios
 
 __all__ = [
     "DOMAINS",
     "RISK_PATTERNS",
     "BenchmarkReport",
+    "OpurAggregate",
+    "OpurRun",
+    "OpurStats",
     "PatternStats",
     "Scenario",
     "ScenarioResult",
+    "evaluate_opur",
+    "evaluate_opur_runs",
     "least_privilege_policy",
     "load_scenarios",
+    "opur_run_from_scenario",
+    "permissive_policy",
     "run_benchmark",
     "run_scenario",
 ]

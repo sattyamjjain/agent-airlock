@@ -37,6 +37,12 @@ def main(argv: list[str] | None = None) -> int:
         f"  over-priv BLOCKED after failure: {report.overall_block_rate_after_failure * 100:.1f}%"
     )
     print(f"  low-priv ALLOWED (precision):    {report.overall_low_priv_allow_rate * 100:.1f}%")
+    if report.opur is not None:
+        o = report.opur
+        print(
+            f"  OPUR baseline→enforced:          {o.opur_baseline * 100:.1f}% → "
+            f"{o.opur_enforced * 100:.1f}%  (−{o.opur_delta * 100:.1f}pp over {o.denominator})"
+        )
     print()
     for pattern, stats in report.by_pattern.items():
         print(

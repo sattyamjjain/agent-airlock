@@ -60,22 +60,36 @@ def render_results_md(report: BenchmarkReport, run_date: str) -> str:
         f"- Legitimate low-privilege calls **allowed** (precision, not deny-all): "
         f"**{_pct(report.overall_low_priv_allow_rate)}**"
     )
+    if report.opur is not None:
+        opur = report.opur
+        lines.append(
+            f"- **OPUR** (over-privileged tool-use rate, ToolPrivBench): "
+            f"**{_pct(opur.opur_baseline)} baseline → {_pct(opur.opur_enforced)} enforced** "
+            f"(**−{_pct(opur.opur_delta)}** over {opur.denominator} low-priv-suffices scenarios)"
+        )
     lines.append("")
 
-    # Per risk pattern
-    lines.append("## Block-rate per ToolPrivBench risk pattern")
+    # Per risk pattern (block-rate + OPUR baseline/enforced/delta side by side)
+    lines.append("## Block-rate and OPUR per ToolPrivBench risk pattern")
     lines.append("")
     lines.append(
         "| Risk pattern | OWASP-Agentic | Scenarios | Domains | Over-priv blocked | "
-        "After transient failure | Low-priv allowed |"
+        "After transient failure | Low-priv allowed | OPUR-baseline | OPUR-enforced | OPUR Δ |"
     )
-    lines.append("|---|---|---|---|---|---|---|")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    opur_by_pattern = report.opur.by_pattern if report.opur is not None else {}
     for pattern, stats in report.by_pattern.items():
         owasp = RISK_PATTERNS[pattern]
+        o = opur_by_pattern.get(pattern)
+        opur_cells = (
+            f" {_pct(o.opur_baseline)} | {_pct(o.opur_enforced)} | −{_pct(o.opur_delta)} |"
+            if o is not None
+            else " — | — | — |"
+        )
         lines.append(
             f"| {pattern} | {owasp} | {stats.total} | {len(stats.domains)} | "
             f"{_pct(stats.block_rate)} | {_pct(stats.block_rate_after_failure)} | "
-            f"{_pct(stats.low_priv_allow_rate)} |"
+            f"{_pct(stats.low_priv_allow_rate)} |{opur_cells}"
         )
     lines.append("")
 
@@ -118,4 +132,43 @@ def render_results_md(report: BenchmarkReport, run_date: str) -> str:
         "[arXiv:2606.20023](https://arxiv.org/abs/2606.20023)."
     )
     lines.append("")
+
+    if report.opur is not None:
+        opur = report.opur
+        lines.append("## OPUR — over-privileged tool-use rate (ToolPrivBench)")
+        lines.append("")
+        lines.append(
+            f"**OPUR-baseline {_pct(opur.opur_baseline)} → OPUR-enforced "
+            f"{_pct(opur.opur_enforced)}** (Δ **−{_pct(opur.opur_delta)}**), computed over "
+            f"the **{opur.denominator}** scenarios where a lower-privilege tool would have "
+            "sufficed."
+        )
+        lines.append("")
+        lines.append(
+            "- **OPUR-baseline** — the recorded over-privileged tool call under a "
+            "**permissive** policy (no airlock): it is allowed through, so the "
+            "over-privileged tool is used."
+        )
+        lines.append(
+            "- **OPUR-enforced** — the *same* recorded call under airlock's "
+            "**least-privilege deny-by-default** policy (allow only the sufficient "
+            "low-privilege tool): it is blocked, so the over-privileged use is prevented."
+        )
+        lines.append(
+            "- A scenario where the high-privilege tool is **legitimately required** is "
+            "**excluded** from OPUR — reaching for the powerful tool there is correct, "
+            "not a violation."
+        )
+        lines.append("")
+        lines.append(
+            "> **Honest scope.** OPUR here measures airlock's **enforcement** on the "
+            "labelled ToolPrivBench scenarios (does deny-by-default prevent the recorded "
+            "over-privileged reach), **not** what a model would choose. Every scenario in "
+            "the shipped subset is an over-privileged-selection scenario, so OPUR-baseline "
+            "is 100% *by construction of the corpus*; the load-bearing numbers are the "
+            "**enforced** OPUR and the delta. Deterministic, no model call — reproducible "
+            "in CI. Anchor: [arXiv:2606.20023](https://arxiv.org/abs/2606.20023)."
+        )
+        lines.append("")
+
     return "\n".join(lines)

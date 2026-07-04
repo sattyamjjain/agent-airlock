@@ -23,10 +23,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from agent_airlock.policy import PolicyViolation, SecurityPolicy
 
 from .scenarios import RISK_PATTERNS, Scenario, load_scenarios
+
+if TYPE_CHECKING:
+    from .opur import OpurAggregate
 
 
 def least_privilege_policy(scenario: Scenario) -> SecurityPolicy:
@@ -122,6 +126,7 @@ class BenchmarkReport:
     results: list[ScenarioResult]
     by_pattern: dict[str, PatternStats]
     by_owasp: dict[str, PatternStats]
+    opur: OpurAggregate | None = None
 
     @property
     def total(self) -> int:
@@ -162,9 +167,14 @@ def run_benchmark() -> BenchmarkReport:
     by_pattern_ordered = {p: by_pattern[p] for p in RISK_PATTERNS if p in by_pattern}
     by_owasp_ordered = dict(sorted(by_owasp.items()))
 
+    # OPUR (over-privileged tool-use rate) over the same scenarios. Deferred
+    # import avoids a cycle (opur imports this module's least_privilege_policy).
+    from .opur import evaluate_opur
+
     return BenchmarkReport(
         source=source,
         results=results,
         by_pattern=by_pattern_ordered,
         by_owasp=by_owasp_ordered,
+        opur=evaluate_opur(scenarios),
     )
