@@ -37,9 +37,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -395,6 +396,92 @@ def validate_access_token_audience(
     raise TokenAudienceError(f"access token 'aud' has unsupported type: {type(aud).__name__}")
 
 
+# =============================================================================
+# Authorization-response issuer (`iss`) validation — RFC 9207 / SEP-2468
+# =============================================================================
+
+
+class IssuerMismatchError(ValueError):
+    """Raised when an OAuth authorization response fails `iss` validation.
+
+    RFC 9207 defines the `iss` authorization-response parameter so a client can
+    detect an authorization-server **mix-up attack** — an attacker replaying an
+    authorization response from a different (malicious) server. MCP's SEP-2468
+    (final 2026-07-28 spec) requires MCP clients to validate `iss` against the
+    authorization server they initiated the flow with. This guard is
+    deny-by-default: a missing (when required) or mismatched `iss` is refused.
+    """
+
+
+def _normalize_issuer(value: str) -> str:
+    # RFC 8414 issuer identifiers carry no trailing slash; normalize it away so
+    # a superficial difference does not falsely reject a legitimate response.
+    return value.strip().rstrip("/")
+
+
+def validate_authorization_response_iss(
+    params: Mapping[str, Any] | str,
+    *,
+    expected_issuer: str,
+    require_iss: bool = True,
+) -> None:
+    """Validate the `iss` parameter on an OAuth authorization response (RFC 9207).
+
+    Implements the client-side check MCP SEP-2468 mandates: the authorization
+    response returned to the redirect URI must carry an `iss` equal to the
+    issuer identifier of the authorization server the client started the flow
+    with. Comparison is exact after trailing-slash normalization (RFC 8414
+    issuer identifiers are compared as strings, not resolved).
+
+    Args:
+        params: The authorization-response parameters — either a mapping (e.g.
+            parsed query params, where a value may be a ``str`` or a
+            single-element ``list[str]``) or a raw query string
+            (``"code=…&state=…&iss=…"``).
+        expected_issuer: The issuer identifier of the authorization server the
+            client initiated the flow with (e.g. from the discovered
+            :class:`AuthorizationServerMetadata.issuer`).
+        require_iss: When True (default, deny-by-default) a response with no
+            `iss` is refused — the mix-up defence only holds if the parameter is
+            actually present. Set False only for a documented legacy server that
+            cannot emit `iss` yet.
+
+    Raises:
+        IssuerMismatchError: `iss` is missing (and required) or does not match
+            ``expected_issuer``.
+        ValueError: ``expected_issuer`` is empty.
+    """
+    if not expected_issuer or not expected_issuer.strip():
+        raise ValueError("expected_issuer must be a non-empty issuer identifier")
+
+    if isinstance(params, str):
+        parsed = parse_qs(params, keep_blank_values=True)
+        iss_raw: Any = parsed.get("iss", [None])[0]
+    else:
+        iss_raw = params.get("iss")
+        if isinstance(iss_raw, (list, tuple)):
+            iss_raw = iss_raw[0] if iss_raw else None
+
+    if iss_raw is None or (isinstance(iss_raw, str) and iss_raw.strip() == ""):
+        if require_iss:
+            raise IssuerMismatchError(
+                "authorization response has no 'iss' parameter; RFC 9207 / SEP-2468 "
+                "require it to defend against authorization-server mix-up attacks"
+            )
+        return
+
+    if not isinstance(iss_raw, str):
+        raise IssuerMismatchError(
+            f"authorization response 'iss' has unsupported type: {type(iss_raw).__name__}"
+        )
+
+    if _normalize_issuer(iss_raw) != _normalize_issuer(expected_issuer):
+        raise IssuerMismatchError(
+            f"authorization response 'iss'={iss_raw!r} does not match the expected "
+            f"authorization server {expected_issuer!r} (possible mix-up attack)"
+        )
+
+
 __all__ = [
     # PKCE
     "PKCE_VERIFIER_MIN_LEN",
@@ -421,4 +508,7 @@ __all__ = [
     # Token audience
     "TokenAudienceError",
     "validate_access_token_audience",
+    # RFC 9207 / SEP-2468 authorization-response issuer
+    "IssuerMismatchError",
+    "validate_authorization_response_iss",
 ]
