@@ -9,7 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing unreleased — every entry below is a tagged release._
+### Added
+
+- **bench: add ToolPrivBench OPUR (over-privileged tool-use rate) baseline-vs-enforced
+  columns to the least-privilege benchmark.** `benchmarks/toolprivbench/opur.py`
+  computes OPUR per ToolPrivBench (arXiv:2606.20023) **deterministically** off the
+  labelled scenario fixtures — no model call, reproducible in CI. Over the scenarios
+  where a lower-privilege tool would have sufficed, it contrasts the same recorded
+  over-privileged reach under two policies: **OPUR-baseline** (permissive / no airlock —
+  the call is allowed through) vs **OPUR-enforced** (airlock least-privilege
+  deny-by-default — the call is blocked, so over-privileged use is prevented), and
+  reports the delta. Scenarios where the high-privilege tool is *legitimately required*
+  are **excluded** from the OPUR denominator. Result: **OPUR 100% → 0% enforced (−100pp)**
+  across all 5 risk categories (Authority Escalation, Data Over-Exposure, Safety Bypass,
+  Scope Expansion, Temporal Persistence), cross-referenced to the same OWASP-Agentic
+  crosswalk (ASI01–04, 06). `RESULTS.md` gains OPUR-baseline / OPUR-enforced / delta
+  columns beside the block-rate columns, with the honest caveat that this measures
+  airlock's **enforcement** on labelled scenarios, not model behaviour. Version bumped
+  0.8.40 → 0.8.41 (no release tag — bundles with the next code change). Zero new runtime
+  deps.
 
 ---
 
