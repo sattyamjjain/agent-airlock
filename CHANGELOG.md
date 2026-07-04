@@ -9,7 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing unreleased — every entry below is a tagged release._
+
+---
+
+## [0.8.41] - 2026-07-04 — "MCP 2026-07-28 final-spec hardening + ToolPrivBench OPUR"
+
 ### Added
+
+- **feat(preset): MCP 2026-07-28 final-spec hardening — `mcp_spec_2026_07_defaults` /
+  `MCP_SPEC_2026_07`.** Client-side hardening for the MCP **2026-07-28 final spec**,
+  composed from **existing** airlock primitives (no new mechanism, Pydantic-only core):
+  - **SEP-2468 / RFC 9207 authorization-response `iss` validation.** New
+    `validate_authorization_response_iss(params, *, expected_issuer, require_iss=True)`
+    in `mcp_spec/oauth.py` (+ `IssuerMismatchError`) implements the client-side check
+    MCP clients must run to defend against an authorization-server **mix-up attack** —
+    **deny-by-default**: a missing or mismatched `iss` is refused. Accepts a parsed
+    params mapping or a raw query string; trailing-slash-tolerant. Adds a check; does
+    not weaken any existing OAuth validation.
+  - **Server-Card trust boundary.** A tool description fetched from a server card is
+    attacker-influenceable content; a poisoned (injection-shaped) description is an
+    Agentjacking-class injection into the agent's context. The preset **reuses** the
+    shipped `ToolOutputTrustGuard` (same guard as `untrusted_tool_output_defaults`) to
+    classify each tool description as untrusted output and **blocks** the card via
+    `check_server_card(card)` when a description carries injected instructions.
+  - Preset exposes `check_oauth_response(params)` + `check_server_card(card)`;
+    auto-registered in `list_active()`. **SEP-2468 / RFC 9207 are spec ids, not CVEs** —
+    the preset cites no CVE (verified by the placeholder-CVE CI guard and a dedicated
+    test). Zero new runtime deps.
 
 - **bench: add ToolPrivBench OPUR (over-privileged tool-use rate) baseline-vs-enforced
   columns to the least-privilege benchmark.** `benchmarks/toolprivbench/opur.py`
@@ -25,9 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Scope Expansion, Temporal Persistence), cross-referenced to the same OWASP-Agentic
   crosswalk (ASI01–04, 06). `RESULTS.md` gains OPUR-baseline / OPUR-enforced / delta
   columns beside the block-rate columns, with the honest caveat that this measures
-  airlock's **enforcement** on labelled scenarios, not model behaviour. Version bumped
-  0.8.40 → 0.8.41 (no release tag — bundles with the next code change). Zero new runtime
-  deps.
+  airlock's **enforcement** on labelled scenarios, not model behaviour. Zero new runtime
+  deps. (Released together with the MCP 2026-07-28 preset in this 0.8.41 cut.)
 
 ---
 

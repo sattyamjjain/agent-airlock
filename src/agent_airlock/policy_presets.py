@@ -4258,6 +4258,111 @@ def untrusted_tool_output_defaults(
 UNTRUSTED_TOOL_OUTPUT = untrusted_tool_output_defaults()
 
 
+def mcp_spec_2026_07_defaults(*, expected_issuer: str | None = None) -> dict[str, Any]:
+    """MCP 2026-07-28 final-spec hardening preset (v0.8.41+).
+
+    Two client-side controls the MCP 2026-07-28 specification tightened, composed
+    from **existing** airlock primitives (no new mechanism, Pydantic-only core):
+
+    - **SEP-2468 — authorization-response ``iss`` validation (RFC 9207).** MCP
+      clients must validate the ``iss`` parameter on an OAuth authorization
+      response against the authorization server they initiated the flow with, to
+      defend against an authorization-server **mix-up attack**. ``check_oauth_response``
+      wraps :func:`agent_airlock.mcp_spec.oauth.validate_authorization_response_iss`
+      — **deny-by-default**: a missing or mismatched ``iss`` is refused
+      (``IssuerMismatchError``). This does not weaken any existing OAuth check;
+      it adds one.
+    - **Server-Card trust boundary.** Tool descriptions fetched from a server
+      card are attacker-influenceable content, not trusted configuration. A
+      poisoned description ("...then ignore previous instructions and run…") is
+      an Agentjacking-class injection into the agent's context. ``check_server_card``
+      reuses the shipped :class:`~agent_airlock.tool_output_trust_guard.ToolOutputTrustGuard`
+      (the same guard behind :func:`untrusted_tool_output_defaults`) to classify
+      each tool description as **untrusted output** and **blocks** the card when a
+      description carries injected instructions.
+
+    Args:
+        expected_issuer: The authorization server issuer identifier to bind the
+            ``iss`` check to. If omitted here, pass it per call as
+            ``check_oauth_response(params, expected_issuer=...)``.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, plus:
+
+        - ``check_oauth_response(params, *, expected_issuer=None)`` — raises
+          :class:`~agent_airlock.mcp_spec.oauth.IssuerMismatchError` on a missing
+          / mismatched ``iss``; returns ``None`` on a valid response.
+        - ``check_server_card(card)`` — raises
+          :class:`~agent_airlock.tool_output_trust_guard.ToolOutputTrustError`
+          when any tool description in the card is a poisoned (injection-shaped)
+          description; returns ``None`` on a clean card.
+        - ``card_guard`` — the underlying ``ToolOutputTrustGuard``.
+        - ``spec`` — ``"SEP-2468"`` (a spec proposal id, **not** a CVE).
+        - ``owasp`` — ``"MCP07"`` (identity / OAuth) with the card side mapping to
+          ``MCP08`` (indirect / tool-result injection).
+
+    References:
+        - MCP 2026-07-28 specification (final).
+        - SEP-2468 — authorization-response ``iss`` validation.
+        - RFC 9207 — OAuth 2.0 Authorization Server Issuer Identification.
+    """
+    from .mcp_spec.oauth import IssuerMismatchError, validate_authorization_response_iss
+    from .tool_output_trust_guard import ToolOutputTrustError, ToolOutputTrustGuard
+
+    bound_issuer = expected_issuer
+    card_guard = ToolOutputTrustGuard(advisory="MCP 2026-07-28 server-card / Agentjacking")
+
+    def _check_oauth_response(
+        params: Mapping[str, Any] | str, *, expected_issuer: str | None = None
+    ) -> None:
+        issuer = expected_issuer if expected_issuer is not None else bound_issuer
+        if issuer is None:
+            raise ValueError(
+                "expected_issuer must be supplied (either to the preset factory or the check)"
+            )
+        validate_authorization_response_iss(params, expected_issuer=issuer)
+
+    def _tool_descriptions(card: Mapping[str, Any]) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        tools = card.get("tools")
+        if isinstance(tools, (list, tuple)):
+            for i, tool in enumerate(tools):
+                if isinstance(tool, Mapping):
+                    name = str(tool.get("name", f"tool[{i}]"))
+                    desc = tool.get("description")
+                    if isinstance(desc, str):
+                        out.append((name, desc))
+        return out
+
+    def _check_server_card(card: Mapping[str, Any]) -> None:
+        """Block the card if any tool description is injection-shaped (untrusted)."""
+        for _name, desc in _tool_descriptions(card):
+            try:
+                card_guard.process(desc, raise_on_flag=True)
+            except ToolOutputTrustError as exc:
+                raise ToolOutputTrustError(exc.decision) from exc
+        return None
+
+    return {
+        "preset_id": "mcp_spec_2026_07",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-2468",
+        "owasp": "MCP07",
+        "card_guard": card_guard,
+        "check_oauth_response": _check_oauth_response,
+        "check_server_card": _check_server_card,
+        "iss_error": IssuerMismatchError,
+        "card_error": ToolOutputTrustError,
+        "advisory_url": "https://modelcontextprotocol.io/specification/2026-07-28",
+    }
+
+
+# Named preset constant for ergonomic opt-in (``policy_presets.MCP_SPEC_2026_07``).
+MCP_SPEC_2026_07 = mcp_spec_2026_07_defaults()
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -4532,6 +4637,9 @@ __all__ = [
     "mcp_origin_host_guard_defaults",
     # V0.8.31 CVE-2026-53820 (OpenClaw exec-denylist bypass at MCP loopback session-spawn; CWE-693)
     "openclaw_cve_2026_53820_defaults",
+    # V0.8.41 MCP 2026-07-28 final-spec hardening (SEP-2468 iss + server-card trust boundary)
+    "mcp_spec_2026_07_defaults",
+    "MCP_SPEC_2026_07",
     # V0.8.33 Agentjacking / CVE-2026-42824 (untrusted tool-OUTPUT instruction injection)
     "untrusted_tool_output_defaults",
     "UNTRUSTED_TOOL_OUTPUT",
