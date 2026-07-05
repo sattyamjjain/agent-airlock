@@ -13,6 +13,56 @@ _Nothing unreleased — every entry below is a tagged release._
 
 ---
 
+## [0.8.42] - 2026-07-05 — "airlock scan-tools: static contract / type-checker"
+
+### Added
+
+- **feat(cli): `airlock scan-tools` — a static contract / type-checker for MCP tool
+  declarations** (issue #34, reframed from a generic scanner to a contract layer).
+  New `agent_airlock.scan` package + `airlock-scan-tools` console script. Given a set
+  of tool defs (a `.json` file, a directory, or an `mcp.json` /
+  `claude_desktop_config.json` config with inlined tool schemas), it statically checks
+  each tool's **declared contract** against a least-privilege `SecurityPolicy` and
+  grades it **pass / warn / fail**. It is distinct from the runtime `@Airlock` seam and
+  from content-signature tool-poisoning scanners (MCP-Scan, eSentire MCP-Scanner).
+  - **Checks (reusing shipped primitives, no new mechanism):** over-broad argument
+    surface (`additionalProperties` not `false` on a destructive tool → ghost-arg
+    vector, SCAN003); missing type constraints on sensitive args / untyped properties
+    (SCAN005); capability caps exceeding the policy via the shipped `CapabilityPolicy`
+    (SCAN006/SCAN007); the tool being denied by the policy allow/deny list
+    (`SecurityPolicy.check_tool_allowed`, SCAN001); and server-card tool descriptions
+    that widen the trust boundary — **reuses** the `mcp_spec_2026_07` Server-Card /
+    SEP-2468 `ToolOutputTrustGuard` (SCAN002). A malformed declared OAuth issuer is a
+    SEP-2468 companion warning (SCAN008).
+  - **Policies** map 1:1 to shipped constants (`permissive` / `read-only` / `strict` /
+    `deny-by-default`) — no invented policy. `strict` (default) uses the STRICT
+    capability caps. `--output json`; exit codes `0` clean / `1` warnings / `2` fail
+    for CI.
+  - **Capability inference** prefers an explicit `capabilities` list, then real MCP
+    `annotations` (`destructiveHint` / `readOnlyHint` / `openWorldHint`), then a
+    documented name heuristic.
+- **bench: `benchmarks/scantools_mcptox`** — runs `scan-tools` over fixtures
+  reconstructed from the tool-poisoning technique in **MCPTox** (arXiv:2508.14925) and
+  reports a deterministic, offline **contract-checking coverage** number, **as-is**:
+  **69.2% coverage · 100% precision**. Explicitly **not** MCPTox's model-in-the-loop
+  Attack Success Rate and **not** the paper's 1,312-case live corpus; explicitly
+  differentiated from content-signature poisoning scanners. The `declarative_side_effect`
+  fixtures are honest misses (no imperative marker) — hence 69.2%, not 100%.
+- **docs: `docs/scan-tools.md`** — the type-checker framing, the full check/grade
+  table, the policy table, and a copy-paste CI example.
+
+### Notes
+
+- Pydantic-only, zero-dep core (**Core dependencies: 0**). `agent_airlock.scan` uses
+  only stdlib + existing airlock primitives.
+- The shipped surface is the `airlock-scan-tools` console script and
+  `python -m agent_airlock.cli.scan_tools`; the unified `airlock scan-tools` space-form
+  awaits the deferred CLI-dispatcher PR.
+- SEP-2468 / RFC 9207 are spec ids, not CVEs — the scan module cites no CVE (pinned by
+  `tests/test_scan_tools.py::TestNoInventedCve`).
+
+---
+
 ## [0.8.41] - 2026-07-04 — "MCP 2026-07-28 final-spec hardening + ToolPrivBench OPUR"
 
 ### Added
