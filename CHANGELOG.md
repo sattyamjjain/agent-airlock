@@ -9,7 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing unreleased — every entry below is a tagged release._
+### Added
+
+- **bench(agentdojo): adaptive-attacker robustness.** Register `@Airlock` as an
+  [AgentDojo](https://arxiv.org/abs/2406.13352) defense (optional `bench` extra —
+  core stays zero-dep) and report benign utility / utility-under-attack / ASR on a
+  pinned, seeded workspace+banking subset, closing the self-admitted "not an
+  adaptive-attacker score" gap.
+  - `benchmarks/agentdojo/run.py` installs airlock at AgentDojo's tool-execution seam
+    (`AirlockToolsExecutor`: deny-by-default least-privilege `SecurityPolicy` +
+    ghost-arg BLOCK + `sanitize_output`). Two modes: a **deterministic** default (no
+    model, no key) that measures how many `tool_knowledge` injection→task pairs
+    airlock blocks at the tool-call seam using AgentDojo's real ground-truth targets,
+    and a **`--model`** path that runs the true model-in-the-loop
+    `benchmark_suite_with/without_injections` for defended vs undefended.
+  - **Result (deterministic, reported as-is):** on `workspace` + `banking`
+    (benchmark `v1.2.1`, `tool_knowledge`), airlock's least-privilege policy blocks
+    the target tool-call for **324/384 = 84.4%** of injection→task pairs (workspace
+    92.5%, banking 70.8%) — a deterministic **upper bound on ASR reduction**, *not*
+    the model-in-the-loop ASR. The per-suite-union counterpoint (0–17%) is the honest
+    nuance: least-privilege *scoping* is what does the work. See
+    `benchmarks/agentdojo/RESULTS.md`.
+  - `agentdojo` declared under `[project.optional-dependencies] bench` — **never** a
+    core dependency; the harness gates the import and skips cleanly when absent.
+  - README + `BENCHMARK.md` gain an "Adaptive-attacker (AgentDojo)" row; the earlier
+    "AgentDojo integration is roadmap, not yet wired" admission is replaced with the
+    real result. `tests/benchmarks/test_agentdojo_smoke.py` skips cleanly without the
+    extra (zero-dep CI stays green) and, with it, asserts airlock (defended) blocks a
+    malicious tool-call the undefended arm allows.
 
 ---
 

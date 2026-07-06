@@ -328,6 +328,37 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     out.append(render_comparison_section(run_blockrate(measure_latency=False)))
     out.append("---")
     out.append("")
+    # Adaptive-attacker robustness (AgentDojo). STATIC pointer: the numbers are
+    # recorded from the pinned deterministic bench (benchmark v1.2.1), NOT computed
+    # here — agentdojo is a bench-only extra that CI does not install, so importing
+    # or running it in this generator would break the deterministic --check gate.
+    out.append("### Adaptive-attacker robustness (AgentDojo)")
+    out.append("")
+    out.append(
+        "agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) "
+        "(Debenedetti et al., NeurIPS 2024) as a **defense** — `AirlockToolsExecutor`: "
+        "deny-by-default least-privilege `SecurityPolicy` + ghost-arg BLOCK + output "
+        "sanitizer. On the pinned **workspace + banking** suites under the "
+        "`tool_knowledge` attack (benchmark `v1.2.1`), airlock's least-privilege policy "
+        "blocks the target tool-call for **324/384 = 84.4%** of injection→task pairs — a "
+        "**deterministic upper bound on ASR reduction**, *not* the model-in-the-loop ASR."
+    )
+    out.append("")
+    out.append("| suite | injection→task pairs | blocked | block rate |")
+    out.append("|---|---|---|---|")
+    out.append("| workspace | 240 | 222 | **92.5%** |")
+    out.append("| banking | 144 | 102 | **70.8%** |")
+    out.append("")
+    out.append(
+        "> Deterministic, no model, no API key. The true benign-utility / "
+        "utility-under-attack / ASR (defended vs undefended) come from the model path "
+        "(`python -m benchmarks.agentdojo.run --model <id>`, needs a key). `agentdojo` is a "
+        "bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: "
+        "[`benchmarks/agentdojo/RESULTS.md`](benchmarks/agentdojo/RESULTS.md)."
+    )
+    out.append("")
+    out.append("---")
+    out.append("")
     out.append("### Reproduce")
     out.append("")
     out.append("```bash")
@@ -336,6 +367,9 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     out.append("python3 scripts/generate_benchmark.py")
     out.append(
         "python -m benchmarks.blockrate           # the cross-tool comparison (+ latency in its RESULTS.md)"
+    )
+    out.append(
+        "pip install 'agent-airlock[bench]' && python -m benchmarks.agentdojo.run   # AgentDojo defense (bench extra)"
     )
     out.append("```")
     out.append("")
