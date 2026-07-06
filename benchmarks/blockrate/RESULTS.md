@@ -36,6 +36,8 @@ Corpus: **210** tool calls — **106** malicious (must block), **104** benign (m
 - **Invariant Guardrails** — model-in-the-loop + policy DSL over agent traces (Guardrails/Gateway). Rule/DSL + classifier checks over MCP/agent traces — PII, secrets, prompt-injection, tool-flow policies. Detection depends on the operator-authored ruleset and (for some checks) a model classifier; no single fixed in-process block-rate to re-run on this corpus. Source: <https://github.com/invariantlabs-ai/invariant>
 
 > **Honest scope.** agent-airlock's 100% here is on a **self-curated** corpus of exploit shapes it is built to catch — it is a coverage / regression baseline, **not** an adaptive-attacker score, and **not** a head-to-head where the incumbents were run. The contrast that matters is *categorical*: agent-airlock blocks **tool-argument exploit shapes and least-privilege tool selection deterministically in-process**, which the cited prompt-injection / trace-policy systems do not target as fixed in-process checks. Different layers — use both.
+>
+> **AgentDojo now wired** (this replaces the earlier "not yet wired" note): for an *adaptive-attacker* measurement, airlock runs as an [AgentDojo](https://arxiv.org/abs/2406.13352) defense and blocks **84.4%** of `tool_knowledge` injection→task target tool-calls on the pinned workspace+banking subset — a deterministic upper bound on ASR reduction, with a `--model` path for the real model-in-the-loop ASR. See [`benchmarks/agentdojo/RESULTS.md`](../agentdojo/RESULTS.md).
 
 ## Reproduce
 
