@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import re
 import shlex as _shlex_for_gitpilot
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path as _Path_for_gitpilot
 from typing import TYPE_CHECKING, Any
@@ -4363,6 +4363,86 @@ def mcp_spec_2026_07_defaults(*, expected_issuer: str | None = None) -> dict[str
 MCP_SPEC_2026_07 = mcp_spec_2026_07_defaults()
 
 
+def mcp_stateless_conformance_2026_07_defaults(
+    *,
+    session_header: str = "Mcp-Session-Id",
+    state_params: Sequence[str] = (
+        "state",
+        "state_handle",
+        "cursor",
+        "resume_token",
+        "session_state",
+    ),
+) -> dict[str, Any]:
+    """MCP 2026-07-28 stateless-conformance preset (SEP-2567 / SEP-2575, v0.8.44+).
+
+    The MCP 2026-07-28 spec removed the server-side **session lifecycle**: no
+    ``initialize`` → session handshake and no ``Mcp-Session-Id`` header (SEP-2575).
+    State is now passed **explicitly, as an ordinary typed tool argument** (SEP-2567).
+    Composed from **existing** airlock primitives (no new engine, Pydantic-only core):
+
+    - **``check_request(request, *, method=None)``** — reject a call that still carries
+      a ``Mcp-Session-Id`` header (top level or under ``headers`` / ``meta`` / ``_meta``
+      / ``transport``) or that invokes a removed session-lifecycle method
+      (``initialize`` / ``notifications/initialized``). Raises
+      :class:`~agent_airlock.mcp_spec.statelessness.StatefulSessionError`. **Deny-by-default**.
+    - **``check_tool_call(tool, kwargs)``** — a state handle passed as a tool argument
+      must be an **explicit declared parameter** of the tool contract, not absorbed by
+      ``**kwargs`` or smuggled as a ghost argument. **Reuses** the shipped
+      :func:`~agent_airlock.validator.get_valid_parameters` and raises the shipped
+      :class:`~agent_airlock.validator.GhostArgumentError`. Strict *typing* of the
+      declared parameter is enforced by airlock's existing Pydantic strict validator.
+
+    Args:
+        session_header: Session header to reject (default ``Mcp-Session-Id``).
+        state_params: Argument names treated as explicit state handles.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, plus ``check_request`` / ``check_tool_call`` callables,
+        the ``session_error`` / ``state_error`` types, and ``spec`` =
+        ``"SEP-2567/SEP-2575"`` (spec proposal ids, **not** CVEs).
+
+    References:
+        - MCP 2026-07-28 specification (final).
+        - SEP-2567 — explicit state handles as ordinary tool arguments.
+        - SEP-2575 — removal of the session lifecycle / ``Mcp-Session-Id``.
+    """
+    from .mcp_spec.statelessness import (
+        StatefulSessionError,
+        validate_state_handle_declared,
+        validate_stateless_request,
+    )
+    from .validator import GhostArgumentError
+
+    handles = tuple(state_params)
+
+    def _check_request(request: Mapping[str, Any], *, method: str | None = None) -> None:
+        validate_stateless_request(request, method=method, session_header=session_header)
+
+    def _check_tool_call(tool: Callable[..., Any], kwargs: Mapping[str, Any]) -> None:
+        validate_state_handle_declared(tool, kwargs, state_params=handles)
+
+    return {
+        "preset_id": "mcp_stateless_conformance_2026_07",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-2567/SEP-2575",
+        "owasp": "MCP07",
+        "check_request": _check_request,
+        "check_tool_call": _check_tool_call,
+        "session_error": StatefulSessionError,
+        "state_error": GhostArgumentError,
+        "session_header": session_header,
+        "state_params": handles,
+        "advisory_url": "https://modelcontextprotocol.io/specification/2026-07-28",
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_STATELESS_CONFORMANCE_2026_07 = mcp_stateless_conformance_2026_07_defaults()
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -4640,6 +4720,8 @@ __all__ = [
     # V0.8.41 MCP 2026-07-28 final-spec hardening (SEP-2468 iss + server-card trust boundary)
     "mcp_spec_2026_07_defaults",
     "MCP_SPEC_2026_07",
+    "mcp_stateless_conformance_2026_07_defaults",
+    "MCP_STATELESS_CONFORMANCE_2026_07",
     # V0.8.33 Agentjacking / CVE-2026-42824 (untrusted tool-OUTPUT instruction injection)
     "untrusted_tool_output_defaults",
     "UNTRUSTED_TOOL_OUTPUT",

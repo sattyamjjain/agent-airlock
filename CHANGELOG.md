@@ -11,6 +11,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **feat(preset): MCP 2026-07-28 stateless conformance (SEP-2567 / SEP-2575).**
+  Contract-level conformance for the MCP 2026-07-28 stateless model, which removed the
+  server-side session lifecycle (no `initialize`→session handshake, no `Mcp-Session-Id`
+  header) and now passes state explicitly as an ordinary typed tool argument. Composed
+  from **existing** airlock primitives — **no new engine**, Pydantic-only core.
+  - `agent_airlock.mcp_spec.statelessness`: `validate_stateless_request` (rejects a call
+    carrying `Mcp-Session-Id` — top level or under `headers`/`meta`/`_meta`/`transport` —
+    or invoking a removed lifecycle method; raises `StatefulSessionError`,
+    deny-by-default) and `validate_state_handle_declared` (a state-handle arg must be an
+    explicit declared contract parameter, not absorbed by `**kwargs` or a ghost arg —
+    **reuses** the shipped `get_valid_parameters` / `GhostArgumentError`).
+  - `mcp_stateless_conformance_2026_07_defaults()` / the `MCP_STATELESS_CONFORMANCE_2026_07`
+    constant expose `check_request(request)` + `check_tool_call(tool, kwargs)`,
+    auto-registered in `list_active()`. Opt-in; the core stays zero-dependency.
+  - **SEP-2567 / SEP-2575 are spec ids, not CVEs** — the preset cites no CVE (pinned by
+    `tests/test_mcp_stateless_conformance_preset.py`, which also asserts no regression on
+    the existing SEP-2468 preset).
+
+---
+
+## [0.8.43] - 2026-07-06 — "AgentDojo adaptive-attacker robustness"
+
+### Added
+
 - **bench(agentdojo): adaptive-attacker robustness.** Register `@Airlock` as an
   [AgentDojo](https://arxiv.org/abs/2406.13352) defense (optional `bench` extra —
   core stays zero-dep) and report benign utility / utility-under-attack / ASR on a
