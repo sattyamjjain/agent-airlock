@@ -513,6 +513,7 @@ from .policy_presets import (
     mcp_origin_host_guard_defaults,
     mcp_server_env_interpolation_guard_defaults,
     mcp_spec_2026_07_defaults,
+    mcp_spec_2026_07_header_integrity_defaults,
     mcp_stateless_conformance_2026_07_defaults,
     mcp_subprocess_arg_injection_guard_defaults,
     mex_gov_2026_policy,
@@ -684,7 +685,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.44"
+__version__ = "0.8.45"
 
 __all__ = [
     # Core
@@ -746,6 +747,7 @@ __all__ = [
     "openclaw_cve_2026_53820_defaults",
     "untrusted_tool_output_defaults",
     "mcp_spec_2026_07_defaults",
+    "mcp_spec_2026_07_header_integrity_defaults",
     "mcp_stateless_conformance_2026_07_defaults",
     "mcp_subprocess_arg_injection_guard_defaults",
     "no_false_success_defaults",
