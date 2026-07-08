@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **preset(mcp): MCP 2026-07-28 SEP-2243 header-integrity — reject Mcp-Method/Mcp-Name
+  vs body mismatch.** Contract-level conformance for the SEP-2243 routing headers the
+  2026-07-28 Streamable HTTP transport now **requires** ("so load balancers, gateways,
+  and rate-limiters can route on the operation without inspecting the body") plus the
+  integrity rule "Servers reject requests where the headers and body disagree". Composed
+  from **existing** airlock primitives (stdlib mapping traversal) — **no new engine**,
+  Pydantic-only core.
+  - `agent_airlock.mcp_spec.header_integrity`: `validate_header_body_integrity(request)`
+    fails closed (deny) when a required routing header is absent or when `Mcp-Method` /
+    `Mcp-Name` disagree with the body's method / operation name, raising
+    `HeaderBodyMismatchError` — which carries a structured `audit_event` mapping
+    (`event` / `reason` / `header_method` / `body_method` / `header_name` / `body_name`)
+    for the audit log.
+  - `mcp_spec_2026_07_header_integrity_defaults()` / the `MCP_SPEC_2026_07_HEADER_INTEGRITY`
+    constant expose `check_request(request)`, auto-registered in `list_active()`. Opt-in;
+    the core stays zero-dependency.
+  - **SEP-2243 is a spec id, not a CVE** — the preset cites no CVE (pinned by
+    `tests/test_mcp_header_integrity_preset.py`, which also asserts no regression on the
+    existing SEP-2468 / SEP-2567 presets).
+
+---
+
+## [0.8.44] - 2026-07-07 — "MCP stateless conformance (SEP-2567 / SEP-2575)"
+
+### Added
+
 - **feat(preset): MCP 2026-07-28 stateless conformance (SEP-2567 / SEP-2575).**
   Contract-level conformance for the MCP 2026-07-28 stateless model, which removed the
   server-side session lifecycle (no `initialize`→session handshake, no `Mcp-Session-Id`

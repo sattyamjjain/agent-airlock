@@ -4443,6 +4443,82 @@ def mcp_stateless_conformance_2026_07_defaults(
 MCP_STATELESS_CONFORMANCE_2026_07 = mcp_stateless_conformance_2026_07_defaults()
 
 
+def mcp_spec_2026_07_header_integrity_defaults(
+    *,
+    method_header: str = "Mcp-Method",
+    name_header: str = "Mcp-Name",
+) -> dict[str, Any]:
+    """MCP 2026-07-28 SEP-2243 request header-integrity preset (v0.8.45+).
+
+    The MCP 2026-07-28 Streamable HTTP transport **requires** the ``Mcp-Method``
+    and ``Mcp-Name`` routing headers and mandates a server-side integrity rule
+    between those headers and the request body (SEP-2243). Verbatim from the
+    2026-07-28 release candidate
+    (https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/):
+
+        "The Streamable HTTP transport now requires ``Mcp-Method`` and
+        ``Mcp-Name`` headers (SEP-2243) so load balancers, gateways, and
+        rate-limiters can route on the operation without inspecting the body."
+
+        "Servers reject requests where the headers and body disagree."
+
+    Because the edge routes/rate-limits/authorizes on those headers while the
+    server executes the body, a header/body mismatch is a confused-deputy vector
+    (one operation routed past the gateway, another executed). Composed from
+    **existing** airlock primitives (no new engine, Pydantic-only core):
+
+    - **``check_request(request)``** — asserts both routing headers are present
+      and that ``Mcp-Method`` / ``Mcp-Name`` match the body's method / operation
+      name. **Fail-closed (deny)** on any missing header or header/body
+      disagreement, raising
+      :class:`~agent_airlock.mcp_spec.header_integrity.HeaderBodyMismatchError`,
+      which carries a structured ``audit_event`` mapping for the audit log.
+
+    Args:
+        method_header: Header carrying the JSON-RPC method (default ``Mcp-Method``).
+        name_header: Header carrying the operation name (default ``Mcp-Name``).
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, a ``check_request`` callable, the
+        ``header_error`` type, and ``spec`` = ``"SEP-2243"`` (a spec proposal id,
+        **not** a CVE).
+
+    References:
+        - MCP 2026-07-28 specification (final).
+        - SEP-2243 — ``Mcp-Method`` / ``Mcp-Name`` routing headers + header/body
+          integrity.
+    """
+    from .mcp_spec.header_integrity import (
+        HeaderBodyMismatchError,
+        validate_header_body_integrity,
+    )
+
+    def _check_request(request: Mapping[str, Any]) -> None:
+        validate_header_body_integrity(
+            request, method_header=method_header, name_header=name_header
+        )
+
+    return {
+        "preset_id": "mcp_spec_2026_07_header_integrity",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-2243",
+        "owasp": "MCP07",
+        "check_request": _check_request,
+        "header_error": HeaderBodyMismatchError,
+        "method_header": method_header,
+        "name_header": name_header,
+        "advisory_url": (
+            "https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/"
+        ),
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_SPEC_2026_07_HEADER_INTEGRITY = mcp_spec_2026_07_header_integrity_defaults()
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -4722,6 +4798,8 @@ __all__ = [
     "MCP_SPEC_2026_07",
     "mcp_stateless_conformance_2026_07_defaults",
     "MCP_STATELESS_CONFORMANCE_2026_07",
+    "mcp_spec_2026_07_header_integrity_defaults",
+    "MCP_SPEC_2026_07_HEADER_INTEGRITY",
     # V0.8.33 Agentjacking / CVE-2026-42824 (untrusted tool-OUTPUT instruction injection)
     "untrusted_tool_output_defaults",
     "UNTRUSTED_TOOL_OUTPUT",

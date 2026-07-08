@@ -183,9 +183,9 @@ def _parse_yaml_to_chain(yaml_text: str) -> PolicyChain:
                 raise PolicyCompileError(f"rule missing required key {required!r}")
         threshold_raw = r.get("threshold")
         threshold: float | None = None
-        if threshold_raw not in (None, ""):
+        if threshold_raw is not None and threshold_raw != "":
             try:
-                threshold = float(threshold_raw)  # type: ignore[arg-type]
+                threshold = float(threshold_raw)
             except (TypeError, ValueError) as exc:
                 raise PolicyCompileError(
                     f"rule {r['rule_id']!r}: bad threshold {threshold_raw!r}"
