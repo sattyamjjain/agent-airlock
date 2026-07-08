@@ -184,8 +184,7 @@ def validate_header_body_integrity(
     if body_name is not None and header_name != body_name:
         raise _reject(
             "name_mismatch",
-            f"{name_header!r}={header_name!r} disagrees with body name "
-            f"{body_name!r} (SEP-2243)",
+            f"{name_header!r}={header_name!r} disagrees with body name {body_name!r} (SEP-2243)",
             header_method=header_method,
             body_method=body_method,
             header_name=header_name,

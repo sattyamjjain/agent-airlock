@@ -115,9 +115,7 @@ class TestPresetMetadata:
         assert p["header_error"] is HeaderBodyMismatchError
 
     def test_named_constant_matches_factory(self) -> None:
-        assert (
-            MCP_SPEC_2026_07_HEADER_INTEGRITY["preset_id"] == "mcp_spec_2026_07_header_integrity"
-        )
+        assert MCP_SPEC_2026_07_HEADER_INTEGRITY["preset_id"] == "mcp_spec_2026_07_header_integrity"
 
     def test_no_cve_id_in_preset(self) -> None:
         src = inspect.getsource(mcp_spec_2026_07_header_integrity_defaults)
