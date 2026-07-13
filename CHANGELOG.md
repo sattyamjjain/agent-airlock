@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **feat(sanitizer): India DPDP PII — INDIA_MOBILE detector + PAN entity-char gate.**
+  Driven by the **DPDP Consent-Manager rules (effective 2026-11-14)**, which sharpen
+  data-fiduciary obligations for Aadhaar / PAN / mobile handling. Extends the existing
+  opt-in Indic PII path (`pii_locales=["in"]`) on the **same** `SensitiveDataType`
+  registry — no parallel system, no new preset.
+  - `SensitiveDataType.INDIA_MOBILE` — a `+91` / `91` / trunk-`0` prefixed 10-digit
+    number starting 6-9, masked to `+91-XXXXX-<last3>`. **Prefix-required by design:**
+    a bare 10-digit run is already masked by the US-shaped `PHONE` detector, so
+    INDIA_MOBILE only claims the +91 forms and never shares a span with it (offset-based
+    reverse-splice masking cannot corrupt).
+  - **PAN entity-char gate** — under the `"in"` locale, a PAN-shaped match whose 4th
+    character is not a valid holder-type code (`P/C/H/F/A/T/B/L/J/G`) is dropped, cutting
+    false positives on random `[A-Z]{5}[0-9]{4}[A-Z]` strings. Mirrors the Aadhaar
+    Verhoeff gate; **off by default** (behavior unchanged without the locale flag).
+  - Both wired into the existing `india_dpdp_2023_policy()` / `apply_india_dpdp_2023()`
+    via `_INDIA_LOCALE_PII_TYPES`. Pinned by `tests/test_india_mobile_pan_gate.py`
+    (valid/invalid entity chars, +91 forms, benign-false-positive controls, and the
+    Aadhaar-masked-but-benign-order-number-untouched smoke).
+
+### Changed
+
+- Documented as **13 PII types** in the README (was 12) with the INDIA_MOBILE addition.
+
+---
+
+## [0.8.45] - 2026-07-08 — "MCP 2026-07-28 SEP-2243 header-integrity"
+
+### Added
+
 - **preset(mcp): MCP 2026-07-28 SEP-2243 header-integrity — reject Mcp-Method/Mcp-Name
   vs body mismatch.** Contract-level conformance for the SEP-2243 routing headers the
   2026-07-28 Streamable HTTP transport now **requires** ("so load balancers, gateways,
