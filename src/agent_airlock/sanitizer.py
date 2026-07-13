@@ -33,6 +33,7 @@ class SensitiveDataType(str, Enum):
     UPI_ID = "upi_id"  # Unified Payments Interface ID
     IFSC = "ifsc"  # Indian Financial System Code
     PERSONAL_NAME_DEVANAGARI = "personal_name_devanagari"  # v0.8.9 — Indic-script names
+    INDIA_MOBILE = "india_mobile"  # v0.8.46 — +91 / trunk-0 prefixed 10-digit mobile
 
     # Secrets
     API_KEY = "api_key"
@@ -133,6 +134,13 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     # The Hindi-noun allowlist further down filters common non-name words
     # (greetings, pronouns, interrogatives) to cut false positives.
     SensitiveDataType.PERSONAL_NAME_DEVANAGARI: re.compile(r"[ऀ-ॿ]{2,}(?:\s+[ऀ-ॿ]{2,})*"),
+    # v0.8.46 India mobile. Deliberately REQUIRES an explicit country/trunk
+    # prefix (``+91`` / ``91`` / leading ``0``) followed by a 10-digit number
+    # starting 6-9. A *bare* 10-digit run is already caught by the (US-shaped)
+    # PHONE pattern above; requiring the prefix here means INDIA_MOBILE only
+    # claims the +91-prefixed forms PHONE misses, so the two never match the
+    # same span (offset-based reverse-splice masking cannot corrupt).
+    SensitiveDataType.INDIA_MOBILE: re.compile(r"(?<!\d)(?:\+?91[\s-]?|0)[6-9]\d{9}(?!\d)"),
     # Secret Patterns
     SensitiveDataType.API_KEY: re.compile(
         r"\b(?:"
@@ -178,6 +186,7 @@ DEFAULT_MASK_CONFIG: dict[SensitiveDataType, MaskingStrategy] = {
     SensitiveDataType.UPI_ID: MaskingStrategy.PARTIAL,  # Show @bank suffix
     SensitiveDataType.IFSC: MaskingStrategy.TYPE_ONLY,  # Bank codes are semi-public
     SensitiveDataType.PERSONAL_NAME_DEVANAGARI: MaskingStrategy.PARTIAL,  # v0.8.9
+    SensitiveDataType.INDIA_MOBILE: MaskingStrategy.PARTIAL,  # v0.8.46 — reveal last 3
     # Secrets
     SensitiveDataType.API_KEY: MaskingStrategy.PARTIAL,
     SensitiveDataType.AWS_KEY: MaskingStrategy.PARTIAL,
@@ -248,6 +257,13 @@ def _mask_value(
         # the digits are the identifying part, so keep the revealed span minimal).
         return value[:2] + "*" * (len(value) - 4) + value[-2:]
 
+    if data_type == SensitiveDataType.INDIA_MOBILE:
+        # Reveal only the last 3 digits of the subscriber number. Operate on the
+        # digit characters so the +91/0 prefix and separators don't change the
+        # revealed count: +91-XXXXX-<last3>.
+        digits = re.sub(r"\D", "", value)
+        return f"+91-XXXXX-{digits[-3:]}" if len(digits) >= 3 else f"+91-XXXXX-{digits}"
+
     if data_type in (SensitiveDataType.API_KEY, SensitiveDataType.AWS_KEY):
         # Show prefix and last 4 chars
         return value[:7] + "..." + value[-4:]
@@ -305,6 +321,20 @@ def _verhoeff_check(num: str) -> bool:
     for i, ch in enumerate(reversed(num)):
         c = _VERHOEFF_D[c][_VERHOEFF_P[i % 8][int(ch)]]
     return c == 0
+
+
+# v0.8.46 — valid PAN holder-type codes (the 4th character of a PAN encodes the
+# assessee category). Any other letter in that position is not a real PAN, so
+# gating on this set cuts false positives on random ``[A-Z]{5}[0-9]{4}[A-Z]``
+# strings. Canonical Income-Tax set: P(individual) C(company) H(HUF) F(firm/LLP)
+# A(AOP) T(trust) B(body of individuals) L(local authority) J(artificial
+# juridical person) G(government).
+_PAN_ENTITY_TYPES: frozenset[str] = frozenset("PCHFATBLJG")
+
+
+def _pan_entity_char_valid(value: str) -> bool:
+    """Return True if the PAN's 4th character is a valid holder-type code."""
+    return len(value) >= 4 and value[3] in _PAN_ENTITY_TYPES
 
 
 # Common high-frequency Devanagari tokens that are NOT personal names.
@@ -415,6 +445,7 @@ _INDIA_LOCALE_PII_TYPES: tuple[SensitiveDataType, ...] = (
     SensitiveDataType.UPI_ID,
     SensitiveDataType.IFSC,
     SensitiveDataType.PERSONAL_NAME_DEVANAGARI,
+    SensitiveDataType.INDIA_MOBILE,
 )
 
 
@@ -462,6 +493,17 @@ def detect_sensitive_data(
                 digits_only = re.sub(r"[\s-]", "", value)
                 if not _verhoeff_check(digits_only):
                     continue
+
+            # v0.8.46: PAN entity-char gate (opt-in). When the caller signals
+            # India locale, drop PAN-shaped matches whose 4th character is not a
+            # valid holder-type code (cuts false positives on random
+            # [A-Z]{5}[0-9]{4}[A-Z] strings).
+            if (
+                indic_gate
+                and data_type == SensitiveDataType.PAN
+                and not _pan_entity_char_valid(value)
+            ):
+                continue
 
             # V0.8.9: Devanagari name allowlist (opt-in). Drop matches
             # that are entirely common Hindi non-name tokens.

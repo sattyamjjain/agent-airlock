@@ -219,7 +219,7 @@ class TestSanitizeOutputLocale:
 
     def test_locale_in_extends_pii_set(self) -> None:
         """``mask_pii=True`` + ``pii_locales=["in"]`` masks Aadhaar/PAN/Devanagari."""
-        content = "User: राम शर्मा, Aadhaar: 234567890124, PAN: ABCDE1234F, email: foo@example.com"
+        content = "User: राम शर्मा, Aadhaar: 234567890124, PAN: ABCPE1234F, email: foo@example.com"
         result = sanitize_output(content, mask_pii=True, pii_locales=["in"])
         types_found = {d["type"] for d in result.detections}
         # Existing US-shape email still masked (unchanged)
@@ -275,7 +275,7 @@ class TestAirlockConfigIntegration:
         @Airlock(config=config, return_dict=True)
         def lookup(query: str) -> str:
             # Return content that should be masked under in-locale
-            return f"Result for {query}: Aadhaar 234567890124, PAN ABCDE1234F"
+            return f"Result for {query}: Aadhaar 234567890124, PAN ABCPE1234F"
 
         result = lookup(query="who")
         assert isinstance(result, dict)
@@ -283,7 +283,7 @@ class TestAirlockConfigIntegration:
         # Aadhaar should be masked (partial)
         assert "234567890124" not in result["result"]
         # PAN should be masked (partial)
-        assert "ABCDE1234F" not in result["result"]
+        assert "ABCPE1234F" not in result["result"]
 
     def test_decorator_without_locale_does_not_mask_aadhaar(self) -> None:
         """Without ``pii_locales=["in"]``, Aadhaar pass-through still works
@@ -355,7 +355,7 @@ class TestIndiaPiiMaskOutput:
         assert "2345" not in out  # leading group fully masked
 
     def test_pan_reveals_first_2_and_last_2(self) -> None:
-        out = sanitize_output("PAN: ABCDE1234F", mask_pii=True, pii_locales=["in"]).content
+        out = sanitize_output("PAN: ABCPE1234F", mask_pii=True, pii_locales=["in"]).content
         assert "AB******4F" in out  # first 2 + 6 masked + last 2
         assert "ABCDE" not in out
 
@@ -380,13 +380,13 @@ class TestIndiaPiiMaskOutput:
 
     def test_hash_strategy_emits_sha_prefix(self) -> None:
         out, _ = mask_sensitive_data(
-            "PAN: ABCDE1234F",
+            "PAN: ABCPE1234F",
             [SensitiveDataType.PAN],
             mask_config={SensitiveDataType.PAN: MaskingStrategy.HASH},
             pii_locales=["in"],
         )
         assert "[SHA256:" in out
-        assert "ABCDE1234F" not in out
+        assert "ABCPE1234F" not in out
 
 
 class TestUpiHandleCoverage:
