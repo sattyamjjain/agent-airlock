@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **chore(dist): discovery metadata + classifiers.** Distribution/discovery pass so
+  builders find agent-airlock where they already look — **no runtime change**.
+  - PyPI: tightened `[project].keywords` (adds `agent-security`, `llm-security`,
+    `least-privilege`, `tool-poisoning`, `guardrails`) and `classifiers` (adds
+    `Framework :: Pydantic` / `:: 2`, `Intended Audience :: Information Technology`,
+    `Topic :: Software Development :: Quality Assurance`); added `Source` / `Changelog`
+    to `[project.urls]`.
+  - `docs/distribution/`: canonical positioning (`README-WEDGE.md`) + **draft** (not
+    submitted) awesome-list PR text for awesome-mcp-security / awesome-llm-security /
+    awesome-agent-security / awesome-mcp-servers (tools section).
+
+---
+
+## [0.8.46] - 2026-07-13 — "India DPDP PII (INDIA_MOBILE + PAN entity gate)"
+
 ### Added
 
 - **feat(sanitizer): India DPDP PII — INDIA_MOBILE detector + PAN entity-char gate.**
