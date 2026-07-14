@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.8.46"
+version = "0.8.47"
 description = "A type-checker and contract layer for AI agent tool calls — deny-by-default, in-process, zero-dep. Strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks."
 readme = "README.md"
 license = "MIT"
@@ -16,7 +16,12 @@ keywords = [
     "mcp",
     "model-context-protocol",
     "ai-security",
+    "agent-security",
+    "llm-security",
     "agent-safety",
+    "least-privilege",
+    "tool-poisoning",
+    "guardrails",
     "pydantic",
     "e2b",
     "sandbox",
@@ -26,6 +31,7 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -33,8 +39,11 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Framework :: Pydantic",
+    "Framework :: Pydantic :: 2",
     "Topic :: Security",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
 ]
 
@@ -174,6 +183,8 @@ airlock-scan-tools = "agent_airlock.cli.scan_tools:main"
 Homepage = "https://github.com/sattyamjjain/agent-airlock"
 Documentation = "https://github.com/sattyamjjain/agent-airlock#readme"
 Repository = "https://github.com/sattyamjjain/agent-airlock"
+Source = "https://github.com/sattyamjjain/agent-airlock"
+Changelog = "https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md"
 Issues = "https://github.com/sattyamjjain/agent-airlock/issues"
 
 [tool.hatch.build.targets.sdist]
