@@ -1,0 +1,76 @@
+{
+  "_comment": "RECORDED live measurement of a native Docker MCP Gateway against the vs_gateway corpus. Regenerate with benchmarks/vs_gateway/gateway_harness/regen.py (needs Docker). The shipped bench replays this fixture so it runs without Docker.",
+  "provenance": {
+    "measured_utc_date": "2026-07-16",
+    "gateway_product": "Docker AI MCP Gateway",
+    "gateway_image_version": "2.0.1",
+    "docker_mcp_cli_version": "v0.42.1",
+    "docker_engine_version": "29.4.3",
+    "mcp_protocol_version": "2025-06-18",
+    "transport": "stdio",
+    "method": "Each corpus item sent as a real MCP tools/call through the running gateway to an echo-oracle backend that performs NO validation. PASS = backend echoed the args (gateway forwarded); BLOCK = gateway returned a JSON-RPC error before the backend saw the call.",
+    "harness": "benchmarks/vs_gateway/gateway_harness/"
+  },
+  "records": {
+    "type_confusion": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "value_constraint": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "ghost_argument": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "path_traversal": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "url_ssrf": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "url_file_scheme": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "arg_injection_eval": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "arg_injection_subproc": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "arg_injection_env": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "arg_injection_secret": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "arg_injection_codegen": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "over_privileged": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "benign_transfer": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "benign_read": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    },
+    "benign_fetch": {
+      "gateway_decision": "PASS",
+      "detail": "backend echoed args (forwarded)"
+    }
+  }
+}

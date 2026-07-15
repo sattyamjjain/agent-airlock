@@ -1,0 +1,26 @@
+version: 3
+name: airlock-bench
+displayName: Airlock Bench (echo oracle)
+registry:
+  echo:
+    description: Echo oracle backend for the airlock vs native-gateway head-to-head.
+    title: Airlock Echo Oracle
+    type: server
+    image: airlock-bench/echo-mcp:latest
+    ref: ""
+    tools:
+      - name: transfer
+      - name: read_file
+      - name: fetch
+      - name: run_python
+      - name: spawn_mcp
+      - name: connect_mcp_server
+      - name: render_template
+      - name: run_query
+      - name: admin_execute
+      - name: delete_records
+    metadata:
+      category: testing
+      tags:
+        - testing
+      owner: local

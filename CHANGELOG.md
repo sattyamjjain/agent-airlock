@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.48] - 2026-07-16 — "Reproduced head-to-head vs native MCP gateway"
+
+### Added
+
+- **bench(vs-gateway): reproduced payload-gap head-to-head vs a native MCP gateway.**
+  Stood up a **live Docker MCP Gateway v2.0.1** and pushed the SAME 12 malformed
+  tool-call payloads (type-confusion, `amount=-1` value-constraint, ghost args, path /
+  URL CVE shapes, argument-injection, over-privileged selection) + 3 benign controls
+  through BOTH it and airlock. **Dated real number (2026-07-16): the gateway forwarded
+  12/12 malformed payloads to the backend; airlock blocked 12/12** at the contract
+  layer, with 0/3 benign false-positive and p50 ~0.08 ms/decision. The gateway secures
+  transport / identity and sandboxes the server (its logs show secret-scanning +
+  `no-new-privileges`) but does not validate the argument contract — a **structural
+  gap, not a gateway defect**.
+  - `benchmarks/vs_gateway/` — reusable corpus + live airlock runner + recorded gateway
+    fixture; `python -m benchmarks.vs_gateway` replays the fixture (**no Docker needed**).
+  - `benchmarks/vs_gateway/gateway_harness/` — Docker harness (`regen.py`) to
+    re-measure the gateway live; `docs/benchmarks/vs-native-mcp-gateway.md` documents
+    method + provenance (gateway v2.0.1, `docker mcp` v0.42.1, engine 29.4.3).
+  - README: the native-gateway comparison is now a **reproduced** benched row + a
+    measured line in "Where this fits", not a prose assertion; the LlamaFirewall /
+    Invariant cells keep their honest *scope-claimed, not re-run* framing.
+
+## [0.8.47] - 2026-07-13 — "Discovery / distribution metadata"
+
 ### Changed
 
 - **chore(dist): discovery metadata + classifiers.** Distribution/discovery pass so
