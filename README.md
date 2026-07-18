@@ -73,13 +73,13 @@
 
 ---
 
-## 🧩 Where this fits (vs native MCP gateways)
+## 🧩 How this compares to native MCP gateways
 
 MCP gateways and platform firewalls — **Docker MCP Gateway, Cloudflare, Azure API Management, AWS**, and the MCP spec's **OAuth resource-server mandate** — secure the *transport and identity* layer: who is allowed to connect, over what channel, with which token. That is necessary and they do it well.
 
 agent-airlock sits **one layer in**, at the execution boundary *after* auth: it validates the **actual tool-call payload** the model produced — argument types (strict Pydantic, no coercion), hallucinated / ghost arguments, deny-by-default tool and capability scope, and output sanitization — then returns a self-healing error the model can retry against. A gateway can confirm the caller is authenticated; it does not check that `transfer(amount=-1)` is type-valid or that the agent picked the least-privileged tool for the task.
 
-**Reproduced, not asserted (2026-07-16):** the same 12 malformed tool-call payloads were pushed through a **live Docker MCP Gateway v2.0.1** and through airlock. The gateway forwarded **12/12** to the backend (its logs confirm it scanned for secrets and applied `no-new-privileges` — but not the argument contract); airlock blocked **12/12** at the contract layer, with 0/3 false positives on the benign controls. Reproduce with `python -m benchmarks.vs_gateway` (no Docker needed — it replays the recorded gateway measurement; regenerate that with `benchmarks/vs_gateway/gateway_harness/`). Method + per-payload table: [`docs/benchmarks/vs-native-mcp-gateway.md`](docs/benchmarks/vs-native-mcp-gateway.md).
+**Reproduced, not asserted (2026-07-16):** the same 12 malformed tool-call payloads were pushed through a **live Docker MCP Gateway v2.0.1** and through airlock. The gateway forwarded **12/12** to the backend (its logs confirm it scanned for secrets and applied `no-new-privileges` — but not the argument contract); airlock blocked **12/12** at the contract layer, with 0/3 false positives on the benign controls. Reproduce with `python -m benchmarks.vs_gateway` (no Docker needed — it replays the recorded gateway measurement; regenerate that with `benchmarks/vs_gateway/gateway_harness/`). Full reproducible deep-dive — method, per-payload table, and an honest read of **where a native gateway is already enough vs. where the in-process contract layer adds value**: [`docs/benchmarks/mcp-gateway-payload-gap.md`](docs/benchmarks/mcp-gateway-payload-gap.md).
 
 **Use both.** Gateway/OAuth for the connection; airlock as the in-process call-contract layer for the payload. It's a decorator, not a proxy — zero new network hops, runs wherever your tool runs.
 

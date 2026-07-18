@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+
+- **docs(bench): payload-gap deep-dive + gateway launch drafts.** Turned the reproduced
+  head-to-head into distributed docs — **no runtime change**.
+  - `docs/benchmarks/mcp-gateway-payload-gap.md`: reproducible deep-dive (method, exact
+    re-run command, per-payload-class table with the dated 2026-07-16 numbers, and an
+    honest read of **where a native MCP gateway is already enough vs. where the in-process
+    contract layer adds value**). Positions agent-airlock as a type-checker / contract
+    layer, not a firewall.
+  - README: renamed the gateway section to **"How this compares to native MCP gateways"**
+    and pointed it at the deep-dive.
+  - `docs/launch/2026-07-mcp-gateway-post.md`: **draft** (not submitted) first-person HN +
+    r/LocalLLaMA posts.
+
 ## [0.8.48] - 2026-07-16 — "Reproduced head-to-head vs native MCP gateway"
 
 ### Added
