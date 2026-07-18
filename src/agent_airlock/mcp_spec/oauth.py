@@ -29,7 +29,7 @@ Key normative requirements enforced:
 
 DPoP is **intentionally not implemented**: per the spec page retrieved
 2026-04-18 it is listed only as a SEP draft and not a normative
-requirement. Flagged UNVERIFIED in `docs/research-log.md`.
+requirement (UNVERIFIED pending a normative spec citation).
 """
 
 from __future__ import annotations

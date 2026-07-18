@@ -3,8 +3,6 @@
 Two of the three are real bugs that this PR fixes; the third is documented
 as UNVERIFIED and asserted to match the current (correct) behaviour so a
 future regression would still trip the suite.
-
-Tracked in `docs/research-log.md#2026-04-18-—-deep-analysis-bug-triage`.
 """
 
 from __future__ import annotations
@@ -77,7 +75,7 @@ class TestSensitiveParamFilterCustomNames:
 #
 # The regression below asserts the CURRENT (correct) behaviour so that a
 # future change that accidentally introduces a double-count trips the
-# suite. Flagged UNVERIFIED in docs/research-log.md.
+# suite. This item is flagged UNVERIFIED.
 
 
 class TestStreamingSanitizerNoDoubleCount:

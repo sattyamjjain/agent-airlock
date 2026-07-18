@@ -7,7 +7,7 @@ HTTP, proxy MCP servers, or run automatically — it's a building
 block operators call from their own audit hooks. agent-airlock's
 ``@Airlock`` decorator wraps a Python tool function and never sees
 outbound HTTP headers itself; the architecture is decorator-in-process,
-not proxy/sidecar (per ROADMAP_2026.md section 1's anti-pivot rule).
+not proxy/sidecar (a deliberate anti-pivot design rule).
 
 Anchor
 ------

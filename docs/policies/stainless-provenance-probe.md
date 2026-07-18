@@ -11,13 +11,11 @@ This is **not** a runtime probe, proxy, or sidecar. agent-airlock's
 `@Airlock` decorator wraps a Python tool function the agent calls;
 it does NOT intercept outbound HTTP, so the decorator never sees a
 server's response headers on its own. The decorator-in-process model
-is a deliberate anti-pivot choice (see [`ROADMAP_2026.md` §1][roadmap]).
+is a deliberate anti-pivot choice (in-process decorator, not a proxy/sidecar).
 
 This module is a **building block**. A tool function that itself
 calls out to an MCP server can pass the response's UA / first bytes
 through this classifier and tag the result onto the trajectory event.
-
-[roadmap]: https://github.com/sattyamjjain/agent-airlock/blob/main/ROADMAP_2026.md
 
 ## Anchor
 

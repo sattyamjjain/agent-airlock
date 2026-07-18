@@ -23,6 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/launch/2026-07-mcp-gateway-post.md`: **draft** (not submitted) first-person HN +
     r/LocalLLaMA posts.
 
+### Removed
+
+- **chore(docs): drop the April-2026 internal briefing pack.** Removed the unmaintained
+  planning / analysis working docs — `ROADMAP_2026.md`, `LAUNCH_PLAYBOOK_2026.md`,
+  `ECOSYSTEM_STATE_2026-04.md`, `DEEP_ANALYSIS.md`, `CROSS_PROJECT_SYNTHESIS.md`,
+  `CLAUDE_PROMPT.md`, `docs/research-log.md`, and `docs/plans/2026-04-21-v0.5.3-design.md`.
+  Updated the handful of source/test/doc comments that cited `ROADMAP_2026.md` §1 (the
+  in-process anti-pivot rationale) and `docs/research-log.md` (UNVERIFIED-item provenance)
+  so no references dangle. No runtime change.
+
 ## [0.8.48] - 2026-07-16 — "Reproduced head-to-head vs native MCP gateway"
 
 ### Added

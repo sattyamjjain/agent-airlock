@@ -2515,7 +2515,7 @@ def stainless_provenance_probe_defaults(
     classifier preset that returns marker pattern sets. agent-airlock's
     decorator wraps a Python tool function — it does not see outbound
     HTTP headers itself. The ``decorator-in-process`` model is a
-    deliberate anti-pivot choice (see ROADMAP_2026.md section 1).
+    deliberate anti-pivot choice (in-process decorator, not a proxy/sidecar).
 
     Anchor
     ------

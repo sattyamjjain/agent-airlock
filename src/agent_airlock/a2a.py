@@ -40,7 +40,7 @@ advertised in the AgentCard security schemes), NOT in the JSON-RPC body.
 This module deliberately does NOT try to validate auth — do that with
 your HTTP framework's auth middleware before calling this validator.
 
-UNVERIFIED items (flagged in docs/research-log.md#2026-04-18-a2a-protocol-middleware):
+UNVERIFIED items (A2A spec retrieved 2026-04-18):
 
 - Exact v1.0 release date and any field-level changes between v0.3.0
   and v1.0. Models below mirror the v0.3.0 spec fields that search

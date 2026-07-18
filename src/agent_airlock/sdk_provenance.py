@@ -15,7 +15,7 @@ This is NOT a runtime probe, proxy, or sidecar. agent-airlock's
 ``@Airlock`` decorator wraps a Python tool function the agent calls;
 it never sees outbound HTTP response headers on its own. The
 ``decorator-in-process`` model is a deliberate anti-pivot choice
-(see ``ROADMAP_2026.md`` section 1).
+(in-process decorator, not a proxy/sidecar).
 
 The visibility surface added here is a **building block**: a tool
 function that itself calls out to an MCP server can pass the

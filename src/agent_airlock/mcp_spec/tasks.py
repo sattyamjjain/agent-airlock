@@ -12,7 +12,7 @@ Scope here: Pydantic V2 strict models for validating task payloads on
 the wire. We do NOT run tasks (that's the server's job); we only
 enforce the envelope shape.
 
-UNVERIFIED items (flagged in docs/research-log.md):
+UNVERIFIED items (spec retrieved 2026-04-18):
 
 - Exact terminal-state spelling: search results indicated the state
   machine is `working / input_required / completed / failed / cancelled`.

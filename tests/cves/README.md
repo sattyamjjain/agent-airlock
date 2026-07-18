@@ -36,7 +36,7 @@ server-framework layer.
 ## How to add a new CVE test
 
 1. Verify the CVE resolves on NVD and that the vendor advisory is public.
-   Add the retrieval date and URL to `docs/research-log.md`.
+   Record the retrieval date and URL in the test's module docstring.
 2. Identify the exact argument pattern that triggers the bug. If it's
    not an argument to a tool call, this is probably not the right place
    for the test — see "Out of scope" above.

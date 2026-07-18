@@ -29,7 +29,7 @@ It is NOT:
 Every requirement implemented here is traceable to either
 https://modelcontextprotocol.io/specification/2025-11-25 or
 https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
-(retrieved 2026-04-18, see `docs/research-log.md#2026-04-18-mcp-2025-11-25-compliance`).
+(retrieved 2026-04-18).
 
 MCP protocol version string (for the `MCP-Protocol-Version` header) is
 a single public constant, `PROTOCOL_VERSION`, so every module agrees.
