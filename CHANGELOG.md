@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.49] - 2026-07-19 — "JSON Schema 2020-12 tool contracts + SEP-2106 $ref guard"
+
+### Added
+
+- **feat(scan): JSON Schema 2020-12 composition validation + SEP-2106 external-$ref guard.**
+  Upgrades the static `airlock scan-tools` contract checker to reason about a tool's
+  `inputSchema` when the contract is expressed through **composition**, and denies
+  auto-dereference of external `$ref` URIs — both aligned to MCP SEP-2106, ahead of the
+  2026-07-28 spec. **No new dependency** (composition is analysed with stdlib mapping
+  traversal; Pydantic-only core preserved).
+  - `agent_airlock.scan.schema` — a conservative, **deny-by-default** analyzer for
+    `oneOf` / `anyOf` / `allOf` / `not` / `if`-`then`-`else` / `$ref` / `$defs` /
+    `prefixItems`. Computes the permitted-argument union across branches and the closed /
+    open / **ambiguous** surface state: a surface that is satisfiable through any open or
+    disagreeing branch is not treated as closed, and an ambiguity (a `oneOf` branch permits
+    a shape a sibling forbids) is a hard denial for the policy to decide. Ghost-argument
+    stripping works under composition (`strip_ghost_args_under_composition`) with a
+    **per-branch report** so `airlock explain` can show which branch was evaluated. An
+    unsupported keyword is reported and denied — never silently partially-validated.
+  - `agent_airlock.mcp_spec.schema_ref_guard.SchemaRefGuard` (SEP-2106) — denies any `$ref`
+    that is not a within-document `#/$defs/...` pointer (http/https/file/relative-escape/
+    non-local scheme), **reusing** the shipped `SSRFEgressGuard` to classify an `http(s)`
+    ref's host. Follows the `mcp_spec` guard structure (verdict enum → frozen decision →
+    `AirlockError` → `check_ref` / `scan_schema` / `validate`).
+  - `contract.py` gains SCAN009 (external `$ref`, fail), SCAN010 (composition ambiguity,
+    fail — deny-by-default), SCAN011 (unsupported keyword, denied); the surface and
+    type-constraint checks are now composition-aware.
+  - `policy_presets.mcp_schema_2020_12_contract_defaults` + `MCP_SCHEMA_2020_12_CONTRACT`
+    constant (spec `SEP-2106`, deny-by-default) wire the guard + analyzer. Discovered by
+    `list_active()`; exported at the top level.
+  - README "How this compares to native MCP gateways" gains a paragraph on why
+    schema-composition validation cannot move to the network layer after the 2026-07-28
+    stateless revision (SEP-2575/2567) removes the session anchor.
+
 ### Docs
 
 - **docs(bench): payload-gap deep-dive + gateway launch drafts.** Turned the reproduced

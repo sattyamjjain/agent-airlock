@@ -29,6 +29,7 @@ from typing import Any
 from ..capabilities import Capability, CapabilityPolicy
 from ..policy import PolicyViolation, SecurityPolicy
 from ..policy_presets import is_destructive_tool
+from .schema import SurfaceState, analyze_schema, iter_property_schemas
 
 __all__ = [
     "Grade",
@@ -321,17 +322,8 @@ def _input_schema(tool: Mapping[str, Any]) -> Mapping[str, Any] | None:
     return schema if isinstance(schema, Mapping) else None
 
 
-def _check_arg_surface(
-    tool: Mapping[str, Any], destructive: bool, out: list[ContractViolation]
-) -> None:
+def _emit_open_surface(destructive: bool, reason: str, out: list[ContractViolation]) -> None:
     """SCAN003 (fail) / SCAN004 (warn) — over-broad argument surface (ghost-arg vector)."""
-    schema = _input_schema(tool)
-    # No declared schema → accepts anything. JSON Schema defaults
-    # additionalProperties to True; only an explicit False closes the surface.
-    add_props = schema.get("additionalProperties", True) if schema is not None else True
-    open_surface = add_props is not False
-    if not open_surface:
-        return
     if destructive:
         out.append(
             ContractViolation(
@@ -339,8 +331,8 @@ def _check_arg_surface(
                 grade=Grade.FAIL,
                 message=(
                     "Destructive/mutating tool declares an open argument surface "
-                    "(additionalProperties is not false). Ghost/hallucinated arguments "
-                    "would be accepted into a high-blast-radius operation."
+                    f"({reason}). Ghost/hallucinated arguments would be accepted into a "
+                    "high-blast-radius operation."
                 ),
                 suggestion='Set "additionalProperties": false and declare every parameter explicitly.',
             )
@@ -351,35 +343,134 @@ def _check_arg_surface(
                 code="SCAN004",
                 grade=Grade.WARN,
                 message=(
-                    "Tool declares an open argument surface (additionalProperties is not "
-                    "false); hallucinated arguments would be accepted."
+                    f"Tool declares an open argument surface ({reason}); hallucinated "
+                    "arguments would be accepted."
                 ),
                 suggestion='Set "additionalProperties": false to reject ghost arguments.',
             )
         )
 
 
+def _check_schema_contract(
+    tool: Mapping[str, Any],
+    destructive: bool,
+    ref_guard: Any,
+    out: list[ContractViolation],
+) -> None:
+    """Composition-aware schema contract checks (JSON Schema 2020-12).
+
+    Emits, deny-by-default:
+
+    * SCAN009 (fail) — an external ``$ref`` (attacker-controlled contract; SEP-2106).
+    * SCAN010 (fail) — a composition ambiguity (a ``oneOf``/``anyOf`` branch permits
+      an argument shape a sibling forbids, or an ``allOf`` footgun). Deny on ambiguity.
+    * SCAN011 (fail) — an unsupported schema keyword that cannot be soundly bounded
+      (denied rather than silently passed).
+    * SCAN003/SCAN004 — an open argument surface, now determined across composition
+      branches rather than only the top level.
+    """
+    schema = _input_schema(tool)
+    if schema is None:
+        # No declared schema → accepts anything (open surface), as before.
+        _emit_open_surface(destructive, "no inputSchema declared", out)
+        return
+
+    analysis = analyze_schema(schema)
+
+    # SCAN009 — external $ref anywhere in the schema tree (the ref guard walks the
+    # whole document, catching refs nested inside property / items subschemas too).
+    for decision in ref_guard.scan_schema(schema):
+        if decision.allowed:
+            continue
+        out.append(
+            ContractViolation(
+                code="SCAN009",
+                grade=Grade.FAIL,
+                message=(
+                    "Tool schema dereferences an external $ref "
+                    f"({decision.verdict.value}): {decision.detail}. A fetched schema is "
+                    "untrusted input that redefines the contract at call time."
+                ),
+                suggestion=(
+                    "Inline the subschema or use a within-document '#/$defs/...' pointer; "
+                    "external schema sources are not dereferenced (SEP-2106)."
+                ),
+            )
+        )
+
+    # SCAN011 — unsupported construct (cannot bound the surface): deny.
+    if analysis.unsupported:
+        out.append(
+            ContractViolation(
+                code="SCAN011",
+                grade=Grade.FAIL,
+                message=(
+                    "Tool schema uses a construct the contract checker cannot soundly "
+                    f"bound: {'; '.join(analysis.unsupported)}. Denied rather than "
+                    "silently partially-validated."
+                ),
+                suggestion=(
+                    "Express the contract with modelled keywords (properties / "
+                    "additionalProperties / oneOf / anyOf / allOf / $defs), or validate "
+                    "at runtime with @Airlock."
+                ),
+            )
+        )
+
+    # SCAN010 — composition ambiguity (deny-by-default). External-$ref-caused
+    # ambiguity is already reported as SCAN009, so it is filtered out here.
+    structural = [a for a in analysis.ambiguities if not a.startswith("external $ref")]
+    if structural:
+        out.append(
+            ContractViolation(
+                code="SCAN010",
+                grade=Grade.FAIL,
+                message=(
+                    "Tool schema is ambiguous under composition — the argument surface is "
+                    f"not consistent across branches: {'; '.join(structural)}. Deny-by-"
+                    "default: an ambiguous contract cannot be least-privilege."
+                ),
+                suggestion=(
+                    "Make every oneOf/anyOf branch declare the same closed property set "
+                    '(each with "additionalProperties": false), or split the tool.'
+                ),
+            )
+        )
+
+    # SCAN003/SCAN004 — open surface, only when unambiguously OPEN (an AMBIGUOUS
+    # surface is already the stronger SCAN010 signal; CLOSED is clean).
+    if analysis.surface is SurfaceState.OPEN:
+        _emit_open_surface(destructive, "additionalProperties is not false", out)
+
+
 def _check_type_constraints(tool: Mapping[str, Any], out: list[ContractViolation]) -> None:
-    """SCAN005 (warn) — under-specified types on declared properties."""
+    """SCAN005 (warn) — under-specified types on declared properties (composition-aware)."""
     schema = _input_schema(tool)
     if schema is None:
         return
+    warned: set[str] = set()
+    # A non-Mapping top-level property value still gets the "no schema object" warn.
     props = schema.get("properties")
-    if not isinstance(props, Mapping):
-        return
-    for prop_name, prop_schema in props.items():
-        if not isinstance(prop_schema, Mapping):
-            out.append(
-                ContractViolation(
-                    code="SCAN005",
-                    grade=Grade.WARN,
-                    message=f"Property '{prop_name}' has no schema object.",
-                    arg=str(prop_name),
-                    suggestion="Declare a JSON-Schema type for every property.",
+    if isinstance(props, Mapping):
+        for prop_name, prop_schema in props.items():
+            if not isinstance(prop_schema, Mapping):
+                out.append(
+                    ContractViolation(
+                        code="SCAN005",
+                        grade=Grade.WARN,
+                        message=f"Property '{prop_name}' has no schema object.",
+                        arg=str(prop_name),
+                        suggestion="Declare a JSON-Schema type for every property.",
+                    )
                 )
-            )
+                warned.add(str(prop_name))
+    # Type-constraint checks over every property reachable through composition
+    # (oneOf / anyOf / allOf / if-then-else / local $ref), deduped by name.
+    for prop_name, prop_schema in iter_property_schemas(schema):
+        if prop_name in warned:
             continue
-        _check_one_property(str(prop_name), prop_schema, out)
+        warned.add(prop_name)
+        _check_one_property(prop_name, prop_schema, out)
 
 
 def _check_one_property(
@@ -507,11 +598,19 @@ def _default_card_guard() -> Any:
     return mcp_spec_2026_07_defaults()["card_guard"]
 
 
+def _default_ref_guard() -> Any:
+    """Reuse the shipped SEP-2106 external-``$ref`` guard."""
+    from ..mcp_spec.schema_ref_guard import SchemaRefGuard
+
+    return SchemaRefGuard()
+
+
 def scan_tool(
     tool: Mapping[str, Any],
     policy: SecurityPolicy,
     *,
     card_guard: Any | None = None,
+    ref_guard: Any | None = None,
 ) -> ToolScanResult:
     """Statically check one tool declaration against a least-privilege policy.
 
@@ -521,12 +620,16 @@ def scan_tool(
         policy: The least-privilege :class:`SecurityPolicy` to check against.
         card_guard: The Server-Card trust guard to reuse. Defaults to the
             ``mcp_spec_2026_07`` preset's guard.
+        ref_guard: The SEP-2106 external-``$ref`` guard to reuse. Defaults to a
+            :class:`~agent_airlock.mcp_spec.schema_ref_guard.SchemaRefGuard`.
 
     Returns:
         A graded :class:`ToolScanResult`.
     """
     if card_guard is None:
         card_guard = _default_card_guard()
+    if ref_guard is None:
+        ref_guard = _default_ref_guard()
     tool_name = str(tool.get("name", "")).strip() or "<unnamed>"
     required = infer_required_capability(tool)
     destructive = (
@@ -545,7 +648,7 @@ def scan_tool(
     violations: list[ContractViolation] = []
     _check_policy_allowed(tool_name, policy, violations)
     _check_server_card_trust(tool, card_guard, violations)
-    _check_arg_surface(tool, destructive, violations)
+    _check_schema_contract(tool, destructive, ref_guard, violations)
     _check_type_constraints(tool, violations)
     _check_capability_caps(tool_name, required, policy.capability_policy, violations)
     _check_issuer_shape(tool, violations)
@@ -575,5 +678,8 @@ def scan_tools(
     A single guard instance is reused across all tools (one preset construction).
     """
     card_guard = _default_card_guard()
-    results = [scan_tool(tool, policy, card_guard=card_guard) for tool in tools]
+    ref_guard = _default_ref_guard()
+    results = [
+        scan_tool(tool, policy, card_guard=card_guard, ref_guard=ref_guard) for tool in tools
+    ]
     return ScanReport(results=results, policy_name=policy_name)

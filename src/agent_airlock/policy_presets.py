@@ -4519,6 +4519,90 @@ def mcp_spec_2026_07_header_integrity_defaults(
 MCP_SPEC_2026_07_HEADER_INTEGRITY = mcp_spec_2026_07_header_integrity_defaults()
 
 
+def mcp_schema_2020_12_contract_defaults(
+    *,
+    allow_internal_hosts: Sequence[str] = (),
+) -> dict[str, Any]:
+    """MCP SEP-2106 JSON Schema 2020-12 tool-contract preset (v0.8.49+).
+
+    Two contract-layer controls for a tool's JSON Schema ``inputSchema``, composed
+    from **existing** airlock primitives (no new engine, Pydantic-only core):
+
+    - **External ``$ref`` denial (SEP-2106).** An implementation MUST NOT
+      auto-dereference an external ``$ref`` URI: a fetched subschema is
+      attacker-controlled input that redefines the tool contract at call time.
+      ``check_tool_schema`` wires
+      :class:`~agent_airlock.mcp_spec.schema_ref_guard.SchemaRefGuard`
+      **deny-by-default** — any ``$ref`` that is not a within-document
+      ``#/$defs/...`` pointer is refused (``SchemaRefError``). The guard **reuses**
+      the shipped :class:`~agent_airlock.ssrf_egress_guard.SSRFEgressGuard` to
+      classify an ``http(s)`` ref's host (an external ref pointing at loopback /
+      cloud-metadata is both a contract and an SSRF problem).
+    - **Composition-aware contract analysis.** ``analyze`` runs the JSON Schema
+      2020-12 composition analyzer
+      (:func:`~agent_airlock.scan.schema.analyze_schema`) which determines the
+      permitted argument surface across ``oneOf`` / ``anyOf`` / ``allOf`` / ``not``
+      / ``if``-``then``-``else`` / ``$ref`` / ``$defs`` / ``prefixItems`` branches,
+      **deny-by-default**: a surface that is not provably closed, or that is
+      ambiguous across branches, is reported for the policy to refuse. Silent
+      partial validation is avoided — an unsupported keyword is reported and denied.
+
+    Args:
+        allow_internal_hosts: Hosts the composed SSRF guard may treat as internal
+            when classifying an ``http(s)`` ref (empty = none).
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, plus:
+
+        - ``check_tool_schema(schema)`` — raises
+          :class:`~agent_airlock.mcp_spec.schema_ref_guard.SchemaRefError` on an
+          external ``$ref``; returns ``None`` on a clean schema.
+        - ``analyze(schema)`` — returns a
+          :class:`~agent_airlock.scan.schema.SchemaAnalysis` (permitted argument
+          surface, closed/open/ambiguous state, external refs, unsupported keywords).
+        - ``ref_guard`` — the underlying ``SchemaRefGuard``.
+        - ``ref_error`` — the ``SchemaRefError`` type.
+        - ``spec`` — ``"SEP-2106"`` (a spec proposal id, **not** a CVE).
+
+    References:
+        - MCP SEP-2106 — external ``$ref`` dereference restriction.
+        - MCP 2026-07-28 specification (final).
+        - JSON Schema 2020-12 — composition keywords.
+    """
+    from .mcp_spec.schema_ref_guard import SchemaRefError, SchemaRefGuard
+    from .scan.schema import SchemaAnalysis, analyze_schema
+    from .ssrf_egress_guard import SSRFEgressGuard
+
+    ssrf = SSRFEgressGuard(
+        allow_internal_hosts=tuple(allow_internal_hosts), deny_on_resolution_failure=False
+    )
+    ref_guard = SchemaRefGuard(ssrf_guard=ssrf)
+
+    def _check_tool_schema(schema: Mapping[str, Any]) -> None:
+        ref_guard.validate(schema)
+
+    def _analyze(schema: Mapping[str, Any]) -> SchemaAnalysis:
+        return analyze_schema(schema)
+
+    return {
+        "preset_id": "mcp_schema_2020_12_contract",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-2106",
+        "owasp": "MCP08",
+        "check_tool_schema": _check_tool_schema,
+        "analyze": _analyze,
+        "ref_guard": ref_guard,
+        "ref_error": SchemaRefError,
+        "advisory_url": "https://modelcontextprotocol.io/specification/2026-07-28",
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_SCHEMA_2020_12_CONTRACT = mcp_schema_2020_12_contract_defaults()
+
+
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
