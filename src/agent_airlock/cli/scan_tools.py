@@ -56,9 +56,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output",
-        choices=("text", "json"),
+        choices=("text", "json", "sarif"),
         default="text",
-        help="Report format (default: text).",
+        help="Report format (default: text). 'sarif' emits SARIF 2.1.0 for the GitHub Security tab.",
     )
     return parser
 
@@ -102,6 +102,14 @@ def _print_json(report: ScanReport, loaded: LoadedTools) -> None:
     print(json.dumps(data, indent=2))
 
 
+def _print_sarif(report: ScanReport, loaded: LoadedTools, scanned_path: str) -> None:
+    from .. import __version__
+    from ..scan.sarif import to_sarif
+
+    log = to_sarif(report, version=__version__, sources=loaded.sources, scanned_path=scanned_path)
+    print(json.dumps(log, indent=2))
+
+
 def _quiet_stdout_logging() -> None:
     """Route structlog to stderr at ERROR level so stdout stays report-only.
 
@@ -133,6 +141,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if args.output == "json":
         _print_json(report, loaded)
+    elif args.output == "sarif":
+        _print_sarif(report, loaded, args.path)
     else:
         _print_text(report, loaded)
     return report.exit_code

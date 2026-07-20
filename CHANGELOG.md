@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.51] - 2026-07-20 — "scan-tools SARIF output + agent-audit-kit complementary docs"
+
+### Added
+
+- **feat(scan): `airlock scan-tools --output sarif`.** The static contract checker can now
+  emit **SARIF 2.1.0** (`agent_airlock.scan.sarif.to_sarif`) so its findings flow into the
+  **GitHub Security tab** (code scanning) and any other SARIF consumer — the same format
+  scanners like `agent-audit-kit` speak, so a build-time scan and airlock's runtime-adjacent
+  pre-flight surface in one place. Findings map to `SCAN0xx` rules; each result's precise
+  locator is the tool name (a SARIF logical location), with a best-effort physical location
+  (no line numbers are fabricated). FAIL → `error`, WARN → `warning`.
+
+### Docs
+
+- **README: "Scan then enforce (with `agent-audit-kit`)".** Documents the two-layer story —
+  [agent-audit-kit](https://github.com/sattyamjjain/agent-audit-kit) (build/CI/IDE-time static
+  scanner: SARIF, GitHub Action, pre-commit, VS Code, CVE feeds) finds unguarded surfaces;
+  airlock enforces the contract at runtime. The two stay **separate packages** on purpose
+  (airlock's runtime core stays Pydantic-only / zero-dep). No new dependency; airlock does
+  not import audit-kit.
+
 ## [0.8.50] - 2026-07-20 — "MCP 2026-07-28 `_meta` trust-boundary guard"
 
 ### Added

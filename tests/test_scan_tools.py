@@ -402,3 +402,64 @@ class TestMcptoxBench:
         text = format_report(run_benchmark())
         assert "arXiv:2508.14925" in text
         assert "not" in text.lower()  # states what it is NOT
+
+
+# --------------------------------------------------------------------------- #
+# SARIF output (--output sarif) — feeds the GitHub Security tab.
+# --------------------------------------------------------------------------- #
+
+
+class TestSarifOutput:
+    def _report(self):
+        from agent_airlock.policy import SecurityPolicy
+
+        pol = SecurityPolicy(allowed_tools=["run_query"], default_deny=True)
+        return scan_tools([_over_broad_tool()], pol, policy_name="strict")
+
+    def test_sarif_is_valid_2_1_0(self) -> None:
+        from agent_airlock.scan.sarif import SARIF_SCHEMA_URI, to_sarif
+
+        log = to_sarif(
+            self._report(), version="9.9.9", sources=["mcp.json"], scanned_path="mcp.json"
+        )
+        assert log["version"] == "2.1.0"
+        assert log["$schema"] == SARIF_SCHEMA_URI
+        driver = log["runs"][0]["tool"]["driver"]
+        assert driver["name"] == "agent-airlock scan-tools"
+        assert driver["version"] == "9.9.9"
+
+    def test_every_result_rule_is_declared(self) -> None:
+        from agent_airlock.scan.sarif import to_sarif
+
+        run = to_sarif(self._report(), version="9.9.9")["runs"][0]
+        declared = {r["id"] for r in run["tool"]["driver"]["rules"]}
+        used = {r["ruleId"] for r in run["results"]}
+        assert used and used <= declared
+
+    def test_fail_maps_to_error_warn_to_warning(self) -> None:
+        from agent_airlock.scan.sarif import to_sarif
+
+        run = to_sarif(self._report(), version="9.9.9")["runs"][0]
+        levels = {r["ruleId"]: r["level"] for r in run["results"]}
+        assert levels["SCAN003"] == "error"  # destructive open surface (FAIL)
+        assert all(v in ("error", "warning") for v in levels.values())
+
+    def test_result_carries_tool_as_logical_location(self) -> None:
+        from agent_airlock.scan.sarif import to_sarif
+
+        run = to_sarif(self._report(), version="9.9.9")["runs"][0]
+        loc = run["results"][0]["locations"][0]
+        assert loc["logicalLocations"][0]["name"] == "delete_records"
+        assert "physicalLocation" in loc
+
+    def test_cli_sarif_output_is_valid_json(self, tmp_path, capsys) -> None:
+        import json as _json
+
+        p = tmp_path / "tools.json"
+        p.write_text(_json.dumps([_over_broad_tool()]))
+        code = cli.main([str(p), "--policy", "strict", "--output", "sarif"])
+        out = capsys.readouterr().out
+        log = _json.loads(out)
+        assert log["version"] == "2.1.0"
+        assert log["runs"][0]["results"]
+        assert code == 2  # a FAIL is present
