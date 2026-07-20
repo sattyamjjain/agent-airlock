@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.50] - 2026-07-20 — "MCP 2026-07-28 `_meta` trust-boundary guard"
+
+### Added
+
+- **feat(mcp-spec): treat the MCP 2026-07-28 `_meta` block as untrusted client input.**
+  The final spec moves the client's protocol version, client info, and capabilities into
+  an **unsigned** `_meta` object on every request. A server that keys an authorization or
+  routing decision off those fields trusts attacker-controlled data — Akamai (2026-06-25):
+  "Because these fields lack cryptographic signing, if a server thoughtlessly trusts this
+  metadata for routing or authorization decisions, a single malicious request can instantly
+  lead to privilege escalation or cross-tenant data access." **This is a trust-boundary
+  reading of the 2026-07-28 spec — NOT a SEP id and NOT a CVE.** Composed from existing
+  primitives (stdlib mapping traversal, no new engine, Pydantic-only core).
+  - `mcp_spec/meta_trust.py` — `validate_meta_trust(request, *, pinned=None)`, **deny-by-
+    default**. With a `MetaPin` (out-of-band entitlement: OAuth claim / mTLS identity /
+    deployment config), any `_meta` value that disagrees with the pin **fails closed**;
+    with no pin, any `_meta` key asserting a capability/role/scope/permission that would
+    broaden the call is refused (configurable `escalation_tokens`, operator opts into a
+    narrower set). Shape discipline always runs: `_meta` must be a mapping, identity/role
+    values must be scalar, keys colliding under case/unicode normalization are refused (a
+    confused-deputy vector), and total `_meta` size is capped. `MetaTrustError` carries a
+    structured `audit_event` (`event` / `reason` / specifics) matching `HeaderBodyMismatchError`.
+  - `policy_presets.mcp_meta_trust_2026_07_defaults()` + `MCP_META_TRUST_2026_07` constant,
+    wired into `check_request` like the header-integrity preset (opt-in, additive — no
+    change to any existing preset or `check_request` caller). Discovered by `list_active()`;
+    exported at the top level.
+  - README: one MCP-conformance row (verbatim Akamai quote, URL, 2026-06-25) + the MCP07
+    coverage-matrix cell. Benign `_meta` (traceparent / progressToken / annotations) passes
+    untouched (mandatory false-positive test).
+
 ## [0.8.49] - 2026-07-19 — "JSON Schema 2020-12 tool contracts + SEP-2106 $ref guard"
 
 ### Added

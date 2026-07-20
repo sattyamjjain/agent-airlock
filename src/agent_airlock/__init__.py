@@ -490,6 +490,7 @@ from .policy_presets import (
     GTG_1002_DEFENSE,
     INDIA_DPDP_2023,
     LEROBOT_CVE_2026_25874_DEFAULTS,
+    MCP_META_TRUST_2026_07,
     MCP_SCHEMA_2020_12_CONTRACT,
     MEX_GOV_2026,
     MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS,
@@ -511,6 +512,7 @@ from .policy_presets import (
     india_dpdp_2023_policy,
     lerobot_cve_2026_25874_defaults,
     mcp_config_pin,
+    mcp_meta_trust_2026_07_defaults,
     mcp_origin_host_guard_defaults,
     mcp_schema_2020_12_contract_defaults,
     mcp_server_env_interpolation_guard_defaults,
@@ -687,7 +689,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.49"
+__version__ = "0.8.50"
 
 __all__ = [
     # Core
@@ -753,6 +755,8 @@ __all__ = [
     "mcp_stateless_conformance_2026_07_defaults",
     "mcp_schema_2020_12_contract_defaults",
     "MCP_SCHEMA_2020_12_CONTRACT",
+    "mcp_meta_trust_2026_07_defaults",
+    "MCP_META_TRUST_2026_07",
     "mcp_subprocess_arg_injection_guard_defaults",
     "no_false_success_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",

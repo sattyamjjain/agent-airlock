@@ -70,6 +70,7 @@ from .safe_types import SafeURLValidator
 if TYPE_CHECKING:
     from .capabilities import CapabilityPolicy
     from .mcp_spec.header_audit import ResponseHeaderAuditConfig
+    from .mcp_spec.meta_trust import MetaPin
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig
     from .mcp_spec.sampling_guard import SamplingGuardConfig
 
@@ -4601,6 +4602,93 @@ def mcp_schema_2020_12_contract_defaults(
 
 # Named preset constant for ergonomic opt-in.
 MCP_SCHEMA_2020_12_CONTRACT = mcp_schema_2020_12_contract_defaults()
+
+
+def mcp_meta_trust_2026_07_defaults(
+    *,
+    pinned: MetaPin | None = None,
+    escalation_tokens: frozenset[str] | None = None,
+    max_meta_bytes: int = 16384,
+) -> dict[str, Any]:
+    """MCP 2026-07-28 ``_meta`` trust-boundary preset (v0.8.50+).
+
+    The MCP 2026-07-28 final spec moves the client's protocol version, client info,
+    and capabilities into an **unsigned** ``_meta`` object on every request. A server
+    that keys an authorization or routing decision off those fields is trusting
+    attacker-controlled data. Akamai's 2026-06-25 review put it plainly: "Because
+    these fields lack cryptographic signing, if a server thoughtlessly trusts this
+    metadata for routing or authorization decisions, a single malicious request can
+    instantly lead to privilege escalation or cross-tenant data access."
+
+    This preset is a **trust-boundary reading of the 2026-07-28 spec — NOT a SEP id
+    and NOT a CVE.** Composed from **existing** airlock primitives (stdlib mapping
+    traversal, no new engine, Pydantic-only core). Opt-in; wired like the
+    header-integrity preset:
+
+    - **``check_request(request, *, pinned=None)``** — reuses
+      :func:`~agent_airlock.mcp_spec.meta_trust.validate_meta_trust`. With a
+      :class:`~agent_airlock.mcp_spec.meta_trust.MetaPin` (the server-side, out-of-band
+      entitlement — an OAuth claim, an mTLS identity, deployment config), any ``_meta``
+      value that DISAGREES with the pin fails closed. With no pin, any ``_meta`` key
+      asserting a capability/role/scope/permission that would BROADEN the call is
+      refused (deny-by-default; the operator opts into a narrower ``escalation_tokens``
+      set). Type + shape discipline always runs: ``_meta`` must be a mapping, identity/
+      role values must be scalar, case/unicode-colliding keys are refused, and total
+      ``_meta`` size is capped. Raises
+      :class:`~agent_airlock.mcp_spec.meta_trust.MetaTrustError`, which carries a
+      structured ``audit_event`` mapping for the audit log.
+
+    Args:
+        pinned: A default :class:`MetaPin` to check every request against (a per-call
+            ``pinned=`` on ``check_request`` overrides it).
+        escalation_tokens: The identity/privilege key-token set to deny without a pin
+            (defaults to the module's capability/role/scope/permission/admin/tenant set).
+        max_meta_bytes: Cap on the serialized ``_meta`` size (default 16384).
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, a ``check_request`` callable, the ``meta_error`` type,
+        and ``basis`` (this is **not** a SEP or CVE).
+
+    References:
+        - MCP 2026-07-28 specification (final) — ``_meta`` on every request.
+        - Akamai (2026-06-25): client-controlled metadata manipulation.
+    """
+    from .mcp_spec.meta_trust import (
+        DEFAULT_ESCALATION_TOKENS,
+        MetaTrustConfig,
+        MetaTrustError,
+        validate_meta_trust,
+    )
+
+    cfg = MetaTrustConfig(
+        escalation_tokens=(
+            escalation_tokens if escalation_tokens is not None else DEFAULT_ESCALATION_TOKENS
+        ),
+        max_meta_bytes=max_meta_bytes,
+    )
+    bound_pin = pinned
+
+    def _check_request(request: Mapping[str, Any], *, pinned: MetaPin | None = None) -> None:
+        validate_meta_trust(request, pinned=pinned if pinned is not None else bound_pin, config=cfg)
+
+    return {
+        "preset_id": "mcp_meta_trust_2026_07",
+        "severity": "high",
+        "default_action": "deny",
+        "basis": "2026-07-28 spec trust-boundary reading (not a SEP, not a CVE)",
+        "owasp": "MCP07",
+        "check_request": _check_request,
+        "meta_error": MetaTrustError,
+        "advisory_url": (
+            "https://www.akamai.com/blog/security-research/"
+            "new-mcp-specification-security-teams-must-prepare"
+        ),
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_META_TRUST_2026_07 = mcp_meta_trust_2026_07_defaults()
 
 
 def mcp_subprocess_arg_injection_guard_defaults(
