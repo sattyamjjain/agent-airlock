@@ -73,6 +73,7 @@ if TYPE_CHECKING:
     from .mcp_spec.meta_trust import MetaPin
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig
     from .mcp_spec.sampling_guard import SamplingGuardConfig
+    from .mcp_spec.step_up_scope_guard import AdmissionScopeSnapshot
 
 
 def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy | None:
@@ -4689,6 +4690,95 @@ def mcp_meta_trust_2026_07_defaults(
 
 # Named preset constant for ergonomic opt-in.
 MCP_META_TRUST_2026_07 = mcp_meta_trust_2026_07_defaults()
+
+
+def mcp_step_up_scope_2026_07_defaults(*, allow_scope_change: bool = False) -> dict[str, Any]:
+    """MCP 2026-07-28 step-up scope-accumulation guard preset (SEP-2350 / SEP-2352, v0.8.52+).
+
+    Closes a **temporal** privilege-escalation class. Between a tool call being
+    *admitted* (authorised by a scope set from a specific authorization server) and it
+    *executing*, an agent can complete an OAuth **step-up** that grants broader scopes;
+    a server that re-reads the live token then runs the already-admitted call under the
+    newly-broadened authority — a confused-deputy **scope accumulation**. SEP-2350
+    (step-up authorization) and SEP-2352 (admission-time scope binding) formalise binding
+    the authorising scope set to the admission point. Composed from **existing** airlock
+    primitives (stdlib set operations + the shipped observability hook; no new engine,
+    Pydantic-only core, in-process — not a proxy):
+
+    - **``capture_admission(tool_name, *, scopes, issuer)``** — snapshot the exact
+      authorising scope set at admission, bound to the credential's issuing
+      authorization server (``issuer`` / RFC 9207 ``iss``).
+    - **``check_execution(snapshot, *, live_scopes, live_issuer, allow_scope_change=None)``**
+      — at execution, **refuse** if the live scope set differs from the snapshot.
+      Broadening (the primary attack shape) *and* narrowing are denied; a live issuer
+      that differs from the admitted one is **always** refused (RFC 9207 / SEP-2468) —
+      a scope from a different authorization server can never satisfy another's snapshot.
+      **Deny-by-default**; ``allow_scope_change=True`` is the explicit opt-out (scope-set
+      change only, never the issuer binding), and even the opt-out path emits the
+      decision through ``agent_airlock.observability.track_event``. Raises
+      :class:`~agent_airlock.mcp_spec.step_up_scope_guard.ScopeAccumulationError`, which
+      carries a structured ``audit_event`` (admitted vs live scope set, the delta, and
+      the issuer of each).
+
+    Args:
+        allow_scope_change: Default opt-out for ``check_execution`` (a per-call
+            ``allow_scope_change=`` overrides it). Defaults to ``False`` — never opt-in.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, ``capture_admission`` / ``check_execution`` callables,
+        the ``snapshot_type`` and ``scope_error`` types, and ``spec`` =
+        ``"SEP-2350/SEP-2352"`` (spec proposal ids, **not** CVEs).
+
+    References:
+        - MCP 2026-07-28 specification (final).
+        - SEP-2350 — step-up authorization; SEP-2352 — admission-time scope binding.
+        - RFC 9207 / SEP-2468 — authorization-server issuer identification.
+    """
+    from .mcp_spec.step_up_scope_guard import (
+        AdmissionScopeSnapshot,
+        ScopeAccumulationError,
+        capture_admission_snapshot,
+        verify_scope_unchanged,
+    )
+
+    default_allow = allow_scope_change
+
+    def _capture_admission(
+        tool_name: str, *, scopes: Iterable[str] | str, issuer: str
+    ) -> AdmissionScopeSnapshot:
+        return capture_admission_snapshot(tool_name, scopes=scopes, issuer=issuer)
+
+    def _check_execution(
+        snapshot: AdmissionScopeSnapshot,
+        *,
+        live_scopes: Iterable[str] | str,
+        live_issuer: str,
+        allow_scope_change: bool | None = None,
+    ) -> None:
+        verify_scope_unchanged(
+            snapshot,
+            live_scopes=live_scopes,
+            live_issuer=live_issuer,
+            allow_scope_change=default_allow if allow_scope_change is None else allow_scope_change,
+        )
+
+    return {
+        "preset_id": "mcp_step_up_scope_2026_07",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-2350/SEP-2352",
+        "owasp": "MCP07",
+        "capture_admission": _capture_admission,
+        "check_execution": _check_execution,
+        "snapshot_type": AdmissionScopeSnapshot,
+        "scope_error": ScopeAccumulationError,
+        "advisory_url": "https://modelcontextprotocol.io/specification/2026-07-28",
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_STEP_UP_SCOPE_2026_07 = mcp_step_up_scope_2026_07_defaults()
 
 
 def mcp_subprocess_arg_injection_guard_defaults(

@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.52] - 2026-07-21 — "Step-up scope-accumulation guard (SEP-2350 / SEP-2352)"
+
+### Added
+
+- **feat(policy): refuse tool calls whose authorising scope set changed after admission.**
+  Closes a temporal privilege-escalation class from the MCP **2026-07-28** spec proposals
+  **SEP-2350** (step-up authorization) and **SEP-2352** (admission-time scope binding).
+  Between a tool call being *admitted* (authorised by a scope set from a specific
+  authorization server) and *executing*, an agent can complete an OAuth **step-up** that
+  grants broader scopes; a server that re-reads the live token then runs the already-admitted
+  call under the newly-broadened authority — confused-deputy **scope accumulation**. Composed
+  from existing airlock primitives (stdlib set operations + the shipped observability hook;
+  no new engine, Pydantic-only core, in-process — not a proxy).
+  - `mcp_spec/step_up_scope_guard.py` — `capture_admission_snapshot(tool, *, scopes, issuer)`
+    snapshots the exact authorising scope set at admission, bound to the credential's issuing
+    authorization server (RFC 9207 `iss`). `verify_scope_unchanged(snapshot, *, live_scopes,
+    live_issuer, allow_scope_change=False)` re-checks at execution, **deny-by-default**:
+    **broadening** (the primary attack shape) *and* narrowing are refused; a live issuer that
+    differs from the admitted one is **always** refused (RFC 9207 / SEP-2468) — a scope from a
+    different authorization server can never satisfy another's snapshot. The `allow_scope_change`
+    opt-out relaxes only a scope-set change (never the issuer binding), and even the opt-out path
+    emits the decision through `observability.track_event`. `ScopeAccumulationError` carries a
+    structured `audit_event` (admitted vs live scope set, the delta, and each issuer).
+  - `policy_presets.mcp_step_up_scope_2026_07_defaults()` + `MCP_STEP_UP_SCOPE_2026_07` constant
+    (spec `SEP-2350/SEP-2352`, deny-by-default), exposing `capture_admission` / `check_execution`.
+    Discovered by `list_active()`; exported at the top level. Additive — no change to any
+    existing preset. README maps it to OWASP-Agentic **ASI03 Identity and Privilege Abuse**.
+
 ## [0.8.51] - 2026-07-20 — "scan-tools SARIF output + agent-audit-kit complementary docs"
 
 ### Added
