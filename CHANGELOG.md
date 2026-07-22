@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.53] - 2026-07-22 — "MCP Tasks-extension (SEP-1686) lifecycle guard"
+
+### Added
+
+- **feat(policy): MCP Tasks-extension (SEP-1686) lifecycle guard — bind task handle to
+  issuing scope, refuse post-scope-change task ops.** The MCP **2026-07-28** Tasks
+  extension is call-now / fetch-later: a request returns a task *handle*, polled via
+  `tasks/get` / `tasks/update` / `tasks/cancel`. A long-lived handle creates two lifecycle
+  risks this preset closes, **deny-by-default** — it **extends** the MCP-2026-07-28 preset
+  family (reuses the SEP-2350/2352 scope-change detector; the on-the-wire task schema is
+  `mcp_spec.tasks`), it does not re-implement scope logic.
+  - `mcp_spec/tasks_lifecycle_guard.py` — a caller-held registry of admitted handles.
+    `admit_task(registry, task_id, *, scopes, issuer, principal, expires_at=None)` binds a
+    handle at admission to the authorising scope set + principal. `check_task_op(registry,
+    method, task_id, *, live_scopes, live_issuer, principal, allow_scope_change=False,
+    now=None)` **refuses** a `tasks/get`/`tasks/update`/`tasks/cancel` when the caller's
+    current scope set no longer covers the admission scope (**reuses**
+    `step_up_scope_guard.verify_scope_unchanged` — scope broadening/narrowing *and* a
+    different issuer are refused, RFC 9207 / SEP-2468) or the authorizing token expired;
+    and — since `tasks/list` is spec-removed — refuses any op on a handle the principal was
+    never admitted for, and `tasks/list` itself (deny-by-default, no cross-task
+    enumeration). `TaskLifecycleError` carries a structured `audit_event`; every decision
+    flows through `observability.track_event`.
+  - `policy_presets.mcp_tasks_lifecycle_2026_07_defaults()` + `MCP_TASKS_LIFECYCLE_2026_07`
+    (spec `SEP-1686`, `owasp` `MCP07`), discovered by `list_active()` (CLI / policy-compile
+    exposure); top-level exported; wired into the OWASP MCP Top-10 **MCP07** coverage row.
+    Additive — no change to any existing preset. In-process (not a proxy), Pydantic-only,
+    zero-dep core. **SEP-1686 is a spec id, not a CVE.**
+
 ## [0.8.52] - 2026-07-21 — "Step-up scope-accumulation guard (SEP-2350 / SEP-2352)"
 
 ### Added

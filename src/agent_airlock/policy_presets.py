@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig
     from .mcp_spec.sampling_guard import SamplingGuardConfig
     from .mcp_spec.step_up_scope_guard import AdmissionScopeSnapshot
+    from .mcp_spec.tasks_lifecycle_guard import TaskAdmission, TaskRegistry
 
 
 def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy | None:
@@ -4779,6 +4780,119 @@ def mcp_step_up_scope_2026_07_defaults(*, allow_scope_change: bool = False) -> d
 
 # Named preset constant for ergonomic opt-in.
 MCP_STEP_UP_SCOPE_2026_07 = mcp_step_up_scope_2026_07_defaults()
+
+
+def mcp_tasks_lifecycle_2026_07_defaults(*, allow_scope_change: bool = False) -> dict[str, Any]:
+    """MCP 2026-07-28 Tasks-extension (SEP-1686) lifecycle guard preset (v0.8.53+).
+
+    The Tasks extension is a **call-now, fetch-later** pattern: a request MAY return a
+    task *handle*, and the client later polls ``tasks/get`` / ``tasks/update`` /
+    ``tasks/cancel``. A long-lived handle creates two lifecycle risks this preset closes,
+    **deny-by-default** — and it **extends** the existing MCP-2026-07-28 preset family
+    (it reuses the SEP-2350 / SEP-2352 scope-change detector rather than re-implementing
+    it; the on-the-wire task schema lives in :mod:`agent_airlock.mcp_spec.tasks`):
+
+    - **(a)** at admission, a task handle is **bound** to the authorizing scope set +
+      principal (and, optionally, the authorizing token's expiry);
+    - **(b)** ``tasks/get`` / ``tasks/update`` / ``tasks/cancel`` are **refused** if the
+      caller's current scope set no longer covers the task's admission scope (reusing
+      :func:`~agent_airlock.mcp_spec.step_up_scope_guard.verify_scope_unchanged` — scope
+      broadening/narrowing *and* a different issuer are refused), or if the authorizing
+      token has expired;
+    - **(c)** ``tasks/list`` is **removed** in the 2026-07-28 spec, so any client attempt
+      to enumerate — or operate on — a task it did not receive a handle for is refused
+      (deny-by-default; no cross-task / cross-principal enumeration).
+
+    Every refusal raises
+    :class:`~agent_airlock.mcp_spec.tasks_lifecycle_guard.TaskLifecycleError` (structured
+    ``audit_event``) and the decision flows through ``observability.track_event`` — no new
+    engine, Pydantic-only core, in-process (not a proxy).
+
+    Args:
+        allow_scope_change: Default opt-out for a *scope-set* change on ``check_task_op``
+            (never relaxes the issuer binding). Defaults to ``False`` — never opt-in.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, plus:
+
+        - ``new_registry()`` — a fresh per-server admitted-handle registry.
+        - ``admit_task(registry, task_id, *, scopes, issuer, principal, expires_at=None)``.
+        - ``check_task_op(registry, method, task_id, *, live_scopes, live_issuer,
+          principal, allow_scope_change=None, now=None)`` — raises on refusal.
+        - ``admission_type`` / ``task_error`` types; ``spec`` = ``"SEP-1686"``.
+
+    References:
+        - MCP 2026-07-28 specification (final) — Tasks extension.
+        - SEP-1686 — Tasks primitive; SEP-2350 / SEP-2352 — scope binding (reused).
+    """
+    from .mcp_spec.tasks_lifecycle_guard import (
+        TaskAdmission,
+        TaskLifecycleError,
+        admit_task,
+        check_task_op,
+        new_registry,
+    )
+
+    default_allow = allow_scope_change
+
+    def _admit_task(
+        registry: TaskRegistry,
+        task_id: str,
+        *,
+        scopes: Iterable[str] | str,
+        issuer: str,
+        principal: str,
+        expires_at: float | None = None,
+    ) -> TaskAdmission:
+        return admit_task(
+            registry,
+            task_id,
+            scopes=scopes,
+            issuer=issuer,
+            principal=principal,
+            expires_at=expires_at,
+        )
+
+    def _check_task_op(
+        registry: TaskRegistry,
+        method: str,
+        task_id: str,
+        *,
+        live_scopes: Iterable[str] | str,
+        live_issuer: str,
+        principal: str,
+        allow_scope_change: bool | None = None,
+        now: float | None = None,
+    ) -> None:
+        check_task_op(
+            registry,
+            method,
+            task_id,
+            live_scopes=live_scopes,
+            live_issuer=live_issuer,
+            principal=principal,
+            allow_scope_change=default_allow if allow_scope_change is None else allow_scope_change,
+            now=now,
+        )
+
+    return {
+        "preset_id": "mcp_tasks_lifecycle_2026_07",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-1686",
+        "owasp": "MCP07",
+        "new_registry": new_registry,
+        "admit_task": _admit_task,
+        "check_task_op": _check_task_op,
+        "admission_type": TaskAdmission,
+        "task_error": TaskLifecycleError,
+        "advisory_url": "https://modelcontextprotocol.io/specification/2026-07-28",
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_TASKS_LIFECYCLE_2026_07 = mcp_tasks_lifecycle_2026_07_defaults()
 
 
 def mcp_subprocess_arg_injection_guard_defaults(

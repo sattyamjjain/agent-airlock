@@ -493,6 +493,7 @@ from .policy_presets import (
     MCP_META_TRUST_2026_07,
     MCP_SCHEMA_2020_12_CONTRACT,
     MCP_STEP_UP_SCOPE_2026_07,
+    MCP_TASKS_LIFECYCLE_2026_07,
     MEX_GOV_2026,
     MOBILE_MCP_INTENT_GUARD_2026_05_DEFAULTS,
     OWASP_MCP_TOP_10_2026,
@@ -522,6 +523,7 @@ from .policy_presets import (
     mcp_stateless_conformance_2026_07_defaults,
     mcp_step_up_scope_2026_07_defaults,
     mcp_subprocess_arg_injection_guard_defaults,
+    mcp_tasks_lifecycle_2026_07_defaults,
     mex_gov_2026_policy,
     mobile_mcp_intent_guard_2026_05,
     no_false_success_defaults,
@@ -691,7 +693,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.52"
+__version__ = "0.8.53"
 
 __all__ = [
     # Core
@@ -761,6 +763,8 @@ __all__ = [
     "MCP_META_TRUST_2026_07",
     "mcp_step_up_scope_2026_07_defaults",
     "MCP_STEP_UP_SCOPE_2026_07",
+    "mcp_tasks_lifecycle_2026_07_defaults",
+    "MCP_TASKS_LIFECYCLE_2026_07",
     "mcp_subprocess_arg_injection_guard_defaults",
     "no_false_success_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
