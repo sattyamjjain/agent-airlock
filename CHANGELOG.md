@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.54] - 2026-07-23 — "MCP Tasks (SEP-2663) deny-by-default admission + SEP-2260 elicitation-provenance"
+
+### Added
+
+- **feat(mcp): deny-by-default Tasks (SEP-2663) admission guard — capability gate +
+  per-principal quota/TTL.** SEP-2663 finalises **Tasks** as an official extension in the MCP
+  **2026-07-28** spec, and a server may return a task *handle* **unsolicited**. This preset is
+  the **admission-control** layer above the SEP-1686 lifecycle guard — it **composes** with it
+  (reuses `admit_task` / `check_task_op` for the handle→principal/scope binding and
+  unsolicited-/foreign-handle rejection), it does not re-implement that logic.
+  - `mcp_spec/tasks_admission_guard.py` — `admit_task_gated` / `check_task_op_gated` refuse
+    **deny-by-default**: `tasks_capability_not_advertised` when the client never advertised the
+    Tasks extension (`{"tasks": {}}` or `{"experimental": {"tasks": {}}}`), `task_quota_exceeded`
+    when outstanding tasks exceed `max_outstanding_tasks` **per principal**, and
+    `task_ttl_exceeded` when a handle outlives `task_ttl_seconds` (stale handles are swept to free
+    a quota slot) — shutting the Akamai hit-and-run task-DoS shape. `TasksAdmissionError`
+    subclasses `TaskLifecycleError`, so one `except` catches every Tasks refusal; every decision
+    flows through `observability.track_event`.
+  - `policy_presets.mcp_tasks_2026_07_28_defaults()` + `MCP_TASKS_2026_07_28` (spec `SEP-2663`,
+    `owasp` `MCP07`), discovered by `list_active()`; top-level exported; wired into the **MCP07**
+    coverage row. **SEP-2663 is a spec id, not a CVE.**
+- **feat(mcp): SEP-2260 elicitation-provenance guard — refuse unsolicited server→client
+  requests.** SEP-2260 makes any unsolicited server→client request invalid: a server may only
+  raise an elicitation / sampling prompt **within an active client-initiated request window**.
+  This is the **provenance** (the *when*) axis, complementary to — not a duplicate of — the
+  shipped content classifier `mcp_elicitation_guard_2026_04` (the *what*).
+  - `mcp_spec/elicitation_provenance.py` — a per-server `RequestWindow` of the client requests in
+    flight. `check_elicitation_solicited(window, *, request_id=None, server_origin="")` is
+    **deny-by-default**: refuses `unsolicited_elicitation` when no window is open and
+    `foreign_request_window` when the referenced request id is not in flight. Operators mark the
+    window with the `client_request_window(window, request_id)` context manager alongside
+    `@observe` — no new engine, no new dependency. `ElicitationProvenanceError` carries a
+    structured `audit_event`; every decision flows through `observability.track_event`.
+  - `policy_presets.mcp_elicitation_provenance_2026_07_defaults()` +
+    `MCP_ELICITATION_PROVENANCE_2026_07` (spec `SEP-2260`, `owasp` `MCP07`), discovered by
+    `list_active()`; top-level exported; wired into the **MCP07** coverage row. **SEP-2260 is a
+    spec id, not a CVE.**
+  - Additive — no change to any existing preset. In-process (not a proxy), Pydantic-only,
+    zero-dep core.
+
 ## [0.8.53] - 2026-07-22 — "MCP Tasks-extension (SEP-1686) lifecycle guard"
 
 ### Added

@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig
     from .mcp_spec.sampling_guard import SamplingGuardConfig
     from .mcp_spec.step_up_scope_guard import AdmissionScopeSnapshot
+    from .mcp_spec.tasks_admission_guard import TasksAdmissionState
     from .mcp_spec.tasks_lifecycle_guard import TaskAdmission, TaskRegistry
 
 
@@ -4893,6 +4894,186 @@ def mcp_tasks_lifecycle_2026_07_defaults(*, allow_scope_change: bool = False) ->
 
 # Named preset constant for ergonomic opt-in.
 MCP_TASKS_LIFECYCLE_2026_07 = mcp_tasks_lifecycle_2026_07_defaults()
+
+
+def mcp_tasks_2026_07_28_defaults(
+    *,
+    max_outstanding_tasks: int = 16,
+    task_ttl_seconds: float = 900.0,
+    require_tasks_capability: bool = True,
+    allow_scope_change: bool = False,
+) -> dict[str, Any]:
+    """MCP 2026-07-28 Tasks extension (SEP-2663) deny-by-default admission preset (v0.8.54+).
+
+    SEP-2663 finalises Tasks as an official **extension**: a server may answer a
+    ``tools/call`` with an async *task handle*, and — unlike the earlier experimental
+    primitive — may return one **unsolicited**. This preset is the **admission-control**
+    layer that makes that deny-by-default, and **composes with** the shipped SEP-1686
+    lifecycle guard (`mcp_tasks_lifecycle_2026_07_defaults`) rather than re-implementing
+    it. Stdlib only, Pydantic-only core, in-process (not a proxy):
+
+    - **Capability-advertisement gate.** A task op (create / continue / cancel) is refused
+      unless the client's capabilities advertise the Tasks extension — a client that never
+      opted in must not have tasks created for it.
+    - **Per-principal TTL + quota** (Akamai hit-and-run task DoS): outstanding tasks are
+      capped per principal (``max_outstanding_tasks``) and expire after ``task_ttl_seconds``;
+      over-quota / past-TTL is refused and logged.
+    - **Handle → principal/scope binding + unsolicited-handle rejection**: **reused**
+      verbatim from the SEP-1686 lifecycle guard (which itself reuses the SEP-2350/2352
+      scope-change detector).
+
+    Args:
+        max_outstanding_tasks: Max un-expired tasks a principal may hold (default 16).
+        task_ttl_seconds: Seconds after admission a handle expires (default 900).
+        require_tasks_capability: Require the client to advertise Tasks (default True).
+        allow_scope_change: Default opt-out for a scope-set change on the reused
+            per-op check (never relaxes the issuer binding). Default False.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, plus ``new_state()`` (a fresh admission state),
+        ``admit_task(state, task_id, *, client_capabilities, scopes, issuer, principal,
+        expires_at=None, now=None)``, ``check_task_op(state, method, task_id, *,
+        client_capabilities, live_scopes, live_issuer, principal, allow_scope_change=None,
+        now=None)``, the ``config`` / ``task_error`` / ``admission_error`` values, and
+        ``spec`` = ``"SEP-2663"`` (a spec proposal id, **not** a CVE).
+
+    References:
+        - SEP-2663 — Tasks Extension (https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663).
+        - SEP-1686 — Tasks lifecycle binding (reused); SEP-2350/2352 — scope binding (reused).
+    """
+    from .mcp_spec.tasks_admission_guard import (
+        TasksAdmissionConfig,
+        TasksAdmissionError,
+        admit_task_gated,
+        check_task_op_gated,
+        new_admission_state,
+    )
+    from .mcp_spec.tasks_lifecycle_guard import TaskLifecycleError
+
+    config = TasksAdmissionConfig(
+        max_outstanding_tasks=max_outstanding_tasks,
+        task_ttl_seconds=task_ttl_seconds,
+        require_tasks_capability=require_tasks_capability,
+    )
+    default_allow = allow_scope_change
+
+    def _admit_task(
+        state: TasksAdmissionState,
+        task_id: str,
+        *,
+        client_capabilities: Any,
+        scopes: Iterable[str] | str,
+        issuer: str,
+        principal: str,
+        expires_at: float | None = None,
+        now: float | None = None,
+    ) -> TaskAdmission:
+        return admit_task_gated(
+            state,
+            task_id,
+            client_capabilities=client_capabilities,
+            scopes=scopes,
+            issuer=issuer,
+            principal=principal,
+            expires_at=expires_at,
+            config=config,
+            now=now,
+        )
+
+    def _check_task_op(
+        state: TasksAdmissionState,
+        method: str,
+        task_id: str,
+        *,
+        client_capabilities: Any,
+        live_scopes: Iterable[str] | str,
+        live_issuer: str,
+        principal: str,
+        allow_scope_change: bool | None = None,
+        now: float | None = None,
+    ) -> None:
+        check_task_op_gated(
+            state,
+            method,
+            task_id,
+            client_capabilities=client_capabilities,
+            live_scopes=live_scopes,
+            live_issuer=live_issuer,
+            principal=principal,
+            config=config,
+            allow_scope_change=default_allow if allow_scope_change is None else allow_scope_change,
+            now=now,
+        )
+
+    return {
+        "preset_id": "mcp_tasks_2026_07_28",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-2663",
+        "owasp": "MCP07",
+        "new_state": new_admission_state,
+        "admit_task": _admit_task,
+        "check_task_op": _check_task_op,
+        "config": config,
+        "task_error": TaskLifecycleError,
+        "admission_error": TasksAdmissionError,
+        "advisory_url": "https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663",
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_TASKS_2026_07_28 = mcp_tasks_2026_07_28_defaults()
+
+
+def mcp_elicitation_provenance_2026_07_defaults() -> dict[str, Any]:
+    """MCP 2026-07-28 elicitation provenance preset (SEP-2260, v0.8.54+).
+
+    SEP-2260 makes any **unsolicited server→client request invalid**: a server may only
+    raise an elicitation **within an active client-initiated request window**. This preset
+    is the **provenance** (the *when*) axis, complementary to the shipped content
+    classifier `mcp_elicitation_guard_2026_04` (the *what*) — use both. Composed from
+    existing primitives (a request-window tracker + the shipped observability hook); no new
+    engine, no new dependency, in-process (not a proxy). **Deny-by-default.**
+
+    Returns:
+        ``dict[str, Any]`` with the canonical keys, plus ``new_window()``,
+        ``begin_request(window, request_id)`` / ``end_request(window, request_id)``, the
+        ``request_window(window, request_id)`` context manager, ``check_solicited(window,
+        *, request_id=None, server_origin="")`` (raises when unsolicited), the
+        ``provenance_error`` type, and ``spec`` = ``"SEP-2260"`` (a spec proposal id,
+        **not** a CVE).
+
+    References:
+        - SEP-2260 — server→client requests must be solicited (MCP 2026-07-28).
+    """
+    from .mcp_spec.elicitation_provenance import (
+        ElicitationProvenanceError,
+        begin_client_request,
+        check_elicitation_solicited,
+        client_request_window,
+        end_client_request,
+        new_request_window,
+    )
+
+    return {
+        "preset_id": "mcp_elicitation_provenance_2026_07",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-2260",
+        "owasp": "MCP07",
+        "new_window": new_request_window,
+        "begin_request": begin_client_request,
+        "end_request": end_client_request,
+        "request_window": client_request_window,
+        "check_solicited": check_elicitation_solicited,
+        "provenance_error": ElicitationProvenanceError,
+        "advisory_url": "https://modelcontextprotocol.io/specification/2026-07-28",
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_ELICITATION_PROVENANCE_2026_07 = mcp_elicitation_provenance_2026_07_defaults()
 
 
 def mcp_subprocess_arg_injection_guard_defaults(
