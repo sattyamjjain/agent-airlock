@@ -1,6 +1,11 @@
-"""Agent-Airlock: The Pydantic-based Firewall for MCP Servers.
+"""Agent-Airlock: a deny-by-default type-checker and contract layer for AI agent tool calls.
 
-Stops hallucinated tool calls, validates schemas, and sandboxes dangerous operations.
+The in-process check that runs beneath your MCP gateway. The gateway routes and
+authenticates the connection; Airlock validates the actual tool-call payload the
+model produced — argument types (strict Pydantic, no coercion), hallucinated /
+ghost arguments, deny-by-default tool and capability scope — and returns a
+self-healing error the model can retry against. It also sandboxes dangerous
+operations. One decorator, any agent or MCP server; zero core dependencies.
 
 Example:
     from agent_airlock import Airlock, AirlockConfig
@@ -697,7 +702,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.54"
+__version__ = "0.8.55"
 
 __all__ = [
     # Core

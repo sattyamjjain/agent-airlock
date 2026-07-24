@@ -9,6 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.55] - 2026-07-24 — "Positioning: wedge one-liner + 'where this sits' beneath the gateway"
+
+Positioning + credibility pass. **No functional or behavioral change** — documentation,
+the package module docstring, and a version bump only. The runtime, presets, and public
+API are byte-for-byte unchanged; the full suite passes untouched.
+
+### Changed
+
+- **docs: reframe the README one-liner and package docstring onto the wedge.** The
+  headline is now "*a deny-by-default type-checker and contract layer for AI agent tool
+  calls — the in-process check that runs beneath your MCP gateway*", and the
+  `agent_airlock` module docstring drops its old "The Pydantic-based Firewall for MCP
+  Servers" line for the same framing. "Firewall" is a crowded term that now collides with
+  what native MCP gateways and WAFs already do; the wedge is the *payload contract*, one
+  layer in.
+- **docs: new "Where this sits" section positioning airlock relative to the 2026 gateway /
+  agent-identity landscape.** Names the control planes that route + authenticate —
+  **Microsoft Entra Agent ID, Databricks Unity AI Gateway, Docker MCP Gateway, Cloudflare,
+  AWS**, plus the MCP spec's OAuth resource-server mandate — and draws the boundary: they
+  secure *who connects*; airlock validates the *actual tool-call payload* in-process,
+  zero-dep, so a malformed or out-of-contract call is denied before it executes. Cites the
+  real category-shift stat — **Gartner: 40% of enterprise apps will ship a task-specific AI
+  agent by end-2026, up from < 5% in 2025** ([Gartner, Aug 2025](https://www.gartner.com/en/newsroom/press-releases/2025-08-26-gartner-predicts-40-percent-of-enterprise-apps-will-feature-task-specific-ai-agents-by-2026-up-from-less-than-5-percent-in-2025)) —
+  as the reason the execution boundary now carries an order-of-magnitude more untrusted
+  model-generated traffic.
+
+### Verified (no change required)
+
+- **Placeholder/reserved CVE audit: registry is already clean and guarded.** Re-swept the
+  tree for placeholder / reserved / example CVE ids (`99999`, `00000`, `XXXX`, …). The one
+  synthetic id the repo ever carried — `CVE-2026-99999` — was removed back in
+  [0.8.36](#0836---2026-06-23--placeholder-cve-ci-guard--type-checkercontract-layer-wedge)
+  and replaced with a real disclosed CVE. The only two remaining occurrences are the
+  CHANGELOG history entry documenting that fix and the regression guard
+  (`tests/test_no_placeholder_cves.py`) whose parametrized cases assert the guard's own
+  detectors still fire — both are *credibility assets* and are kept intentionally. No
+  preset references a placeholder id; `test_registry_actually_cites_real_cves` confirms the
+  real anchors are present.
+
 ## [0.8.54] - 2026-07-23 — "MCP Tasks (SEP-2663) deny-by-default admission + SEP-2260 elicitation-provenance"
 
 ### Added
