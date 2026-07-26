@@ -49,11 +49,11 @@ try:  # pragma: no cover - trivial import guard
 except ImportError:  # pragma: no cover
     _HAVE_AGENTDOJO = False
 
-# AgentDojo suites + attack this bench pins. workspace + banking under the
-# tool_knowledge attack: a fixed, reproducible subset (2 of AgentDojo's 4 suites),
-# NOT the full task x injection x attack matrix.
+# AgentDojo suites + attack this bench pins. All 4 AgentDojo suites under the
+# tool_knowledge attack, at a pinned benchmark version for reproducibility. This is
+# the full suite set; the measured subset is stated per-suite in RESULTS.md.
 BENCHMARK_VERSION = "v1.2.1"
-PINNED_SUITES: tuple[str, ...] = ("workspace", "banking")
+PINNED_SUITES: tuple[str, ...] = ("workspace", "banking", "travel", "slack")
 ATTACK = "tool_knowledge"
 
 
@@ -317,15 +317,36 @@ def run_model(
             )
         return pipeline
 
-    lines: list[str] = []
+    from datetime import datetime, timezone
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        ad_ver = version("agentdojo")
+    except PackageNotFoundError:  # pragma: no cover
+        ad_ver = "?"
+    stamp_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # results[suite][arm] = (benign_utility, utility_under_attack, asr)
+    results: dict[str, dict[str, tuple[float, float, float]]] = {}
     for suite_name in suites:
         suite = get_suite(BENCHMARK_VERSION, suite_name)
         policy = _suite_policy(suite)
         user_ids = list(suite.user_tasks)[:max_user_tasks]
         inj_ids = list(suite.injection_tasks)[:max_injection_tasks]
+        results[suite_name] = {}
 
         for arm in ("undefended", "airlock"):
-            pipeline = AgentPipeline.from_config(PipelineConfig(llm=model_id, defense=None))
+            # agentdojo >= 0.1.x PipelineConfig requires model_id / system_message*
+            # fields (None -> the suite's default system message via its validator).
+            pipeline = AgentPipeline.from_config(
+                PipelineConfig(
+                    llm=model_id,
+                    model_id=None,
+                    defense=None,
+                    system_message_name=None,
+                    system_message=None,
+                )
+            )
             pipeline.name = f"airlock-bench-{arm}"
             if arm == "airlock":
                 pipeline = _swap_executor(pipeline, policy)
@@ -342,11 +363,59 @@ def run_model(
                 user_tasks=user_ids,
                 injection_tasks=inj_ids,
             )
-            util = _mean(benign.utility_results.values())
-            util_atk = _mean(attacked.utility_results.values())
-            asr = _mean([bool(v) for v in attacked.security_results.values()])
-            lines.append(f"| {suite_name} | {arm} | {util:.1%} | {util_atk:.1%} | {asr:.1%} |")
-    return "\n".join(lines)
+            # agentdojo SuiteResults is a TypedDict -> subscript, not attribute.
+            util = _mean(benign["utility_results"].values())
+            util_atk = _mean(attacked["utility_results"].values())
+            asr = _mean([bool(v) for v in attacked["security_results"].values()])
+            results[suite_name][arm] = (util, util_atk, asr)
+
+    return _render_model_section(
+        results, model_id, ad_ver, stamp_date, max_user_tasks, max_injection_tasks
+    )
+
+
+def _render_model_section(
+    results: dict[str, dict[str, tuple[float, float, float]]],
+    model_id: str,
+    agentdojo_version: str,
+    stamp_date: str,
+    max_user_tasks: int,
+    max_injection_tasks: int,
+) -> str:
+    """Render the model-in-the-loop "Result 2" section from measured numbers."""
+    rows = []
+    for suite_name, arms in results.items():
+        for arm in ("undefended", "airlock"):
+            if arm not in arms:
+                continue
+            util, util_atk, asr = arms[arm]
+            rows.append(f"| {suite_name} | {arm} | {util:.0%} | {util_atk:.0%} | **{asr:.0%}** |")
+
+    # Aggregate across suites (unweighted mean of per-suite rates).
+    def _agg(arm: str, idx: int) -> float:
+        vals = [arms[arm][idx] for arms in results.values() if arm in arms]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    undef_asr, air_asr = _agg("undefended", 2), _agg("airlock", 2)
+    undef_util, air_util = _agg("undefended", 0), _agg("airlock", 0)
+    asr_delta = undef_asr - air_asr
+    util_cost = undef_util - air_util
+    return f"""## Result 2 — model-in-the-loop utility-under-attack + ASR (the leaderboard metrics)
+
+Real adaptive-attacker pass, **airlock defense vs no defense**. Model **{model_id}**,
+`agentdojo {agentdojo_version}`, attack `{ATTACK}`, benchmark `{BENCHMARK_VERSION}`, run
+**{stamp_date}** (UTC). Subset: up to **{max_user_tasks}** user tasks and
+**{max_injection_tasks}** injection tasks per suite — stated as a subset, **not** the
+full leaderboard cell.
+
+| Suite | arm | benign utility | utility under attack | ASR |
+| --- | --- | --- | --- | --- |
+{chr(10).join(rows)}
+
+**Aggregate (mean over suites):** ASR **{undef_asr:.0%} -> {air_asr:.0%}**
+(**{asr_delta:+.0%}** with airlock); benign utility **{undef_util:.0%} -> {air_util:.0%}**
+(utility cost of the defense: **{util_cost:+.0%}**). Lower ASR is better; a small utility
+cost is the price of deny-by-default scoping."""
 
 
 def _mean(values: Any) -> float:
@@ -359,20 +428,60 @@ def _mean(values: Any) -> float:
 # --------------------------------------------------------------------------- #
 
 
-def render_results_md(report: DeterministicReport) -> str:
+_MODEL_SECTION_PLACEHOLDER = """## Result 2 — model-in-the-loop utility-under-attack + ASR (the leaderboard metrics)
+
+_Not yet run in this checkout._ The two metrics the AgentDojo leaderboard reports —
+**utility under attack** (benign task still succeeds with the injection present) and
+**ASR** (attack success rate) — require a real model-in-the-loop pass, which needs an
+LLM API key and real API spend. To populate this section, run:
+
+```bash
+python -m benchmarks.agentdojo.run --model gpt-4o-mini-2024-07-18 \\
+  --out benchmarks/agentdojo/RESULTS.md
+```
+
+with `OPENAI_API_KEY` set. That regenerates this file with a `baseline vs airlock`
+table (benign utility / utility-under-attack / ASR / the utility cost of the defense)
+for every pinned suite. No number is claimed here until that run produces it."""
+
+
+def _union_caveat(report: DeterministicReport) -> str:
+    """Build the honest per-suite-union caveat from the actual report numbers."""
+    full_miss = [s.suite for s in report.suites if s.injections and s.blocked_union == 0]
+    best = max(report.suites, key=lambda s: s.union_rate, default=None)
+    miss_clause = (
+        f"It drops to **0%** on {', '.join(full_miss)} — where the injection abuses a "
+        f"*legitimate* tool (e.g. `send_money` with a malicious recipient) that a "
+        f"suite-wide allow-list still permits"
+        if full_miss
+        else "It drops sharply under a suite-wide allow-list"
+    )
+    best_clause = f", and tops out at **{best.union_rate:.0%}** on {best.suite}" if best else ""
+    return miss_clause + best_clause
+
+
+def render_results_md(report: DeterministicReport, model_section: str | None = None) -> str:
     combined = report.combined_per_task_rate
     rows = "\n".join(
         f"| {s.suite} | {s.pairs} | {s.blocked_pairs} | **{s.per_task_rate:.1%}** | "
         f"{s.blocked_union}/{s.injections} ({s.union_rate:.0%}) |"
         for s in report.suites
     )
+    model_block = model_section or _MODEL_SECTION_PLACEHOLDER
     return f"""# AgentDojo — adaptive-attacker robustness (agent-airlock as a defense)
 
-Reproduce (deterministic, no model, no API key):
+Reproduce (deterministic block-coverage, no model, no API key):
 
 ```bash
 pip install "agent-airlock[bench]"
 python -m benchmarks.agentdojo.run
+```
+
+Reproduce (model-in-the-loop utility-under-attack + ASR, needs a key + API spend):
+
+```bash
+python -m benchmarks.agentdojo.run --model gpt-4o-mini-2024-07-18 \\
+  --out benchmarks/agentdojo/RESULTS.md
 ```
 
 ## What this measures
@@ -384,20 +493,19 @@ AgentDojo **defense** — the same `validate -> policy -> execute -> sanitize` s
 (`AirlockToolsExecutor`): deny-by-default `SecurityPolicy` (least-privilege
 allow-list) + ghost-argument BLOCK + output sanitizer.
 
-The numbers below are **deterministic**: using AgentDojo's real `{ATTACK}` injection
-tasks' **ground-truth target tool-calls** on the pinned **{" + ".join(PINNED_SUITES)}**
-suites (benchmark `{BENCHMARK_VERSION}`), we measure how many injection->task pairs
-airlock's least-privilege policy **blocks at the tool-call seam**. Blocking any one of
-an injection's required calls defeats it.
+This file reports **two** numbers, and is scrupulous about which is which:
 
-> This is a deterministic **upper bound on airlock's ASR reduction** — the fraction of
-> attacks whose target action airlock forces to fail *regardless of model*. It is
-> **NOT** AgentDojo's model-in-the-loop Attack Success Rate, and it is **NOT**
-> extrapolated to AgentDojo's full task set. For the real ASR (benign utility /
-> utility-under-attack / ASR, defended vs undefended), run the model path:
-> `python -m benchmarks.agentdojo.run --model <id>` (needs an API key; costs $).
+1. a **deterministic block-coverage** number (free, offline, no model) — a defensible
+   *upper bound* on airlock's ASR reduction; and
+2. the **model-in-the-loop** utility-under-attack + ASR (the actual leaderboard
+   metrics), which need an API key and are only shown once really run.
 
-## Result — deterministic block coverage (per-task least-privilege)
+## Result 1 — deterministic block coverage (per-task least-privilege)
+
+Using AgentDojo's real `{ATTACK}` injection tasks' **ground-truth target tool-calls**
+on the **{", ".join(PINNED_SUITES)}** suites (benchmark `{BENCHMARK_VERSION}`), we
+measure how many injection->task pairs airlock's least-privilege policy **blocks at the
+tool-call seam**. Blocking any one of an injection's required calls defeats it.
 
 | Suite | injection->task pairs | blocked | block rate | per-suite-union |
 | --- | --- | --- | --- | --- |
@@ -407,26 +515,45 @@ an injection's required calls defeats it.
 `{ATTACK}` injection->task pairs have their target tool-call blocked by airlock's
 deny-by-default least-privilege policy.
 
-## The honest nuance (why scoping is what matters)
+> This is a deterministic **upper bound on airlock's ASR reduction** — the fraction of
+> attacks whose target action airlock forces to fail *regardless of model*. It is
+> **NOT** AgentDojo's model-in-the-loop ASR (that is Result 2), and it is **NOT**
+> extrapolated to AgentDojo's full task x injection set.
+
+{model_block}
+
+## What airlock does NOT neutralize (the honest misses)
 
 The **per-suite-union** column allow-lists *every* tool any benign task in the suite
-uses, then asks how many injections are still blocked. It is far lower (0% on banking,
-where injections abuse a *legitimate* tool like `send_money` with a malicious
-recipient; ~17% on workspace). The gap between the per-task and per-suite-union numbers
-is the whole point: **least-privilege scoping** — authorizing only the tools the
-*current* task needs — is what blocks these attacks at the tool seam. A coarse,
-suite-wide allow-list does not. Injections that abuse a legitimately-allowed tool with
-malicious arguments are **not** caught by the tool-level policy alone; catching those
-needs argument-level policy or the model-in-the-loop run.
+uses, then asks how many injections are still blocked. {_union_caveat(report)}. The gap
+between the per-task and per-suite-union columns is the whole point: **least-privilege
+scoping** — authorizing only the tools the *current* task needs — is what blocks these
+attacks at the tool seam. A coarse, suite-wide allow-list does not. Injections that
+abuse a **legitimately-allowed tool with malicious arguments** are **not** caught by the
+tool-level policy alone; catching those needs argument-level policy (airlock's strict
+Pydantic validation on the specific arg) or the model-in-the-loop run. We report the
+misses; we do not claim airlock "blocks everything".
+
+## Where this sits vs a native MCP gateway (the wedge)
+
+A gateway / OAuth resource server authenticates *who* connects and routes the call; it
+does not open the tool-call payload and check it against the current task's contract. So
+the exact injection classes airlock's contract layer blocks here — **a call to a tool
+outside the task's least-privilege scope**, and **an argument key the tool never
+declared (ghost-arg BLOCK)** — are precisely the classes a gateway forwards, because
+they are well-formed transport-wise and carry a valid token. That is the "contract layer
+beneath your gateway" wedge, measured on a third-party adaptive-attacker benchmark rather
+than asserted. What a gateway *does* catch that airlock does not (unauthenticated
+callers, bad tokens, transport tampering) is complementary — use both.
 
 ## Scope, stated plainly
 
-- Suites: **{", ".join(PINNED_SUITES)}** (2 of AgentDojo's 4), attack: **{ATTACK}**,
-  benchmark version **{BENCHMARK_VERSION}**.
-- Deterministic, offline, reproducible in CI — no model, no API key, no network.
+- Suites: **{", ".join(PINNED_SUITES)}** (all 4 of AgentDojo's suites), attack:
+  **{ATTACK}**, benchmark version **{BENCHMARK_VERSION}**.
+- Result 1 is deterministic, offline, reproducible in CI — no model, no API key, no
+  network. Result 2 is the real model-in-the-loop pass and is only shown when run.
 - **Not** a re-run of model-in-the-loop incumbents and **no fabricated competitor
-  number.** The model path exists (`--model`) and reports the true ASR when a key is
-  supplied.
+  number.**
 """
 
 
@@ -458,17 +585,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    report = run_deterministic()
+    model_section: str | None = None
     if args.model:
         print(
-            f"# AgentDojo model run ({args.model}) — {' + '.join(PINNED_SUITES)}, attack={ATTACK}\n"
+            f"running model-in-the-loop pass ({args.model}) over "
+            f"{' + '.join(PINNED_SUITES)} — this needs an API key and spends real $. "
+            f"caps: <= {args.max_user_tasks} user / <= {args.max_injection_tasks} injection tasks per suite.",
+            file=sys.stderr,
         )
-        print("| suite | arm | benign utility | utility under attack | ASR |")
-        print("| --- | --- | --- | --- | --- |")
-        print(run_model(args.model, PINNED_SUITES, args.max_user_tasks, args.max_injection_tasks))
-        return 0
+        model_section = run_model(
+            args.model, PINNED_SUITES, args.max_user_tasks, args.max_injection_tasks
+        )
 
-    report = run_deterministic()
-    md = render_results_md(report)
+    md = render_results_md(report, model_section)
     out = args.out or (Path(__file__).parent / "RESULTS.md")
     out.write_text(md)
     print(f"wrote {out}")
@@ -476,6 +606,8 @@ def main(argv: list[str] | None = None) -> int:
         f"combined per-task block coverage: "
         f"{report.total_blocked_pairs}/{report.total_pairs} = {report.combined_per_task_rate:.1%}"
     )
+    if model_section is not None:
+        print("model-in-the-loop Result 2 section populated in RESULTS.md.")
     return 0
 
 
