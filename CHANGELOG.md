@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.56] - 2026-07-26 — "AgentDojo defense numbers: all-4-suite deterministic block-coverage + fixed model path"
+
+Benchmarks + docs. The airlock **core is untouched** (`src/agent_airlock` unchanged);
+this is `benchmarks/agentdojo/` and README/RESULTS only. `benchmarks/` is not part of
+the published wheel, so no runtime behavior changes.
+
+### Added / Changed
+
+- **bench(agentdojo): publish airlock's AgentDojo defense numbers across all 4 suites.**
+  The deterministic block-coverage harness now runs the full AgentDojo suite set
+  (workspace, banking, travel, slack; benchmark `v1.2.1`) under the `tool_knowledge`
+  attack, up from the earlier workspace+banking subset. Real, reproducible, offline:
+  **524/609 injection→task target tool-calls blocked = 86.0%** (workspace 92.5%, travel
+  95.0%, slack 81.9%, banking 70.8%) — a deterministic **upper bound on ASR reduction**,
+  explicitly **not** the model-in-the-loop ASR. `benchmarks/agentdojo/RESULTS.md` now
+  separates Result 1 (deterministic) from Result 2 (model-in-the-loop), reports the
+  honest misses (a suite-wide allow-list catches 0% on banking, where injections abuse a
+  *legitimate* tool), and cross-links the gateway wedge (which injection classes a native
+  MCP gateway forwards that airlock's contract layer denies). New README **Benchmarks:
+  AgentDojo** section.
+- **fix(bench): repair the AgentDojo model-in-the-loop path against `agentdojo 0.1.35`.**
+  `run_model` was stale and would have crashed before spending a cent: `PipelineConfig`
+  now requires `model_id` / `system_message*` fields, and `SuiteResults` is a `TypedDict`
+  (subscript, not attribute). Fixed both, plus a `--model` run now regenerates the whole
+  `RESULTS.md` with a `baseline vs airlock` table (benign utility / utility-under-attack /
+  ASR / the defense's utility cost) and a reproducibility stamp (model, agentdojo version,
+  date, caps). The `bench` extra stays optional; the airlock core stays zero-dep. Model
+  metrics (Result 2) are printed only when a real keyed `--model` run produces them — no
+  number is claimed until then.
+
 ## [0.8.55] - 2026-07-24 — "Positioning: wedge one-liner + 'where this sits' beneath the gateway"
 
 Positioning + credibility pass. **No functional or behavioral change** — documentation,
