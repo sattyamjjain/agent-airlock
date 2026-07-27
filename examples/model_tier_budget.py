@@ -40,7 +40,6 @@ from agent_airlock.policy_presets import (
     strict_tier_budget_policy,
 )
 
-
 # ---------------------------------------------------------------------------
 # Pattern 1: Explicit tagging via ``_airlock_tier`` kwarg
 # ---------------------------------------------------------------------------

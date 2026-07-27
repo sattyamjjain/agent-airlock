@@ -320,28 +320,24 @@ def _print_json_report(report: DoctorReport) -> None:
     print(json.dumps(data, indent=2))
 
 
-# CLI entry point (for use with click or argparse)
-def main() -> int:
-    """CLI entry point."""
-    import sys
+# CLI entry point
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for ``airlock doctor`` (and ``python -m agent_airlock.cli.doctor``)."""
+    import argparse
 
-    args = sys.argv[1:]
+    parser = argparse.ArgumentParser(
+        prog="airlock doctor",
+        description="Scan a codebase for unprotected tools and unsafe patterns.",
+    )
+    parser.add_argument("--path", default=".", help="Root path to scan (default: current dir).")
+    parser.add_argument(
+        "--json", action="store_true", help="Emit the report as JSON instead of text."
+    )
+    args = parser.parse_args(argv)
 
-    path = "."
-    output_format = "text"
-
-    for i, arg in enumerate(args):
-        if arg == "--path" and i + 1 < len(args):
-            path = args[i + 1]
-        elif arg == "--json":
-            output_format = "json"
-
-    report = doctor(path, output_format)
-
+    report = doctor(args.path, "json" if args.json else "text")
     return 1 if report.has_errors else 0
 
 
 if __name__ == "__main__":
-    import sys
-
-    sys.exit(main())
+    raise SystemExit(main())

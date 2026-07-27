@@ -10,10 +10,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator, Generator
-from typing import Any
 
 from agent_airlock import AirlockConfig, StreamingAirlock, create_streaming_wrapper
-
 
 # Configuration for streaming
 config = AirlockConfig(

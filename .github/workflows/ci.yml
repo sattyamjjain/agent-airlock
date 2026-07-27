@@ -75,6 +75,26 @@ jobs:
       - name: Check formatting
         run: ruff format --check src/ tests/
 
+  version-tag-guard:
+    # Fail if a version bump lands on main and lingers untagged (the 0.8.56-for-two-days
+    # failure). Only on main pushes: a release PR legitimately carries the bump ahead of
+    # the tag. Needs full history + tags, so fetch-depth: 0.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Declared version must have a matching tag
+        run: python3 scripts/check_version_tagged.py
+
   security:
     runs-on: ubuntu-latest
     steps:

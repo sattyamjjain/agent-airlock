@@ -130,8 +130,10 @@ def demonstrate_blocked_ratio() -> None:
 
     # Check if we can continue
     state = tracker.get_state(session_id)
-    print(f"Current ratio: {state.blocked_count}/{state.call_count} = "
-          f"{state.blocked_count/state.call_count:.0%}")
+    print(
+        f"Current ratio: {state.blocked_count}/{state.call_count} = "
+        f"{state.blocked_count / state.call_count:.0%}"
+    )
 
     can_continue, reason = tracker.should_block(session_id, "tool_3", constraints)
     print(f"Can continue: {not can_continue}")

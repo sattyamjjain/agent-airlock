@@ -245,24 +245,25 @@ def _print_badge_url(result: VerificationResult) -> None:
     print(url)
 
 
-def main() -> int:
-    """CLI entry point."""
-    import sys
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for ``airlock verify`` (and ``python -m agent_airlock.cli.verify``)."""
+    import argparse
 
-    args = sys.argv[1:]
+    parser = argparse.ArgumentParser(
+        prog="airlock verify",
+        description="Verify Airlock protection status and optionally emit a badge.",
+    )
+    parser.add_argument("--path", default=".", help="Root path to scan (default: current dir).")
+    parser.add_argument(
+        "--json", action="store_true", help="Emit the result as JSON instead of text."
+    )
+    parser.add_argument(
+        "--badge", action="store_true", help="Emit a shields.io badge URL instead of text."
+    )
+    args = parser.parse_args(argv)
 
-    path = "."
-    output_format = "text"
-
-    for i, arg in enumerate(args):
-        if arg == "--path" and i + 1 < len(args):
-            path = args[i + 1]
-        elif arg == "--json":
-            output_format = "json"
-        elif arg == "--badge":
-            output_format = "badge"
-
-    result = verify(path, output_format)
+    output_format = "json" if args.json else "badge" if args.badge else "text"
+    result = verify(args.path, output_format)
 
     # Exit code based on seal status
     if result.seal_status == "unsealed":
@@ -271,6 +272,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    import sys
-
-    sys.exit(main())
+    raise SystemExit(main())

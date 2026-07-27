@@ -9,13 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.8.56] - 2026-07-26 — "AgentDojo defense numbers: all-4-suite deterministic block-coverage + fixed model path"
+## [0.8.56] - 2026-07-27 — "Unified `airlock` CLI dispatcher + AgentDojo defense numbers (all 4 suites)"
 
-Benchmarks + docs. The airlock **core is untouched** (`src/agent_airlock` unchanged);
-this is `benchmarks/agentdojo/` and README/RESULTS only. `benchmarks/` is not part of
-the published wheel, so no runtime behavior changes.
+Two things ship together in 0.8.56: the unified `airlock` command-line dispatcher (the
+deferred CLI work the `pyproject.toml` comments had promised) and the AgentDojo defense
+numbers. The dispatcher touches `src/agent_airlock/cli/` (a new `__main__.py` + three
+mains normalized); every existing flag, exit code, and `python -m` invocation is
+preserved. The AgentDojo half is `benchmarks/agentdojo/` + docs, and `benchmarks/` is not
+in the published wheel.
 
-### Added / Changed
+### Added — unified `airlock` CLI
+
+- **feat(cli): a single `airlock` console script fronts every `agent_airlock.cli`
+  subcommand in space-form.** New `agent_airlock/cli/__main__.py` dispatcher, wired as
+  `airlock = "agent_airlock.cli.__main__:main"`. The docs have promised
+  `airlock scan-tools` / `airlock doctor` / `airlock corpus-bench` for releases; this is
+  the entry point that makes them real.
+  - Each subcommand delegates to the target module's own `main(argv)` — the dispatcher
+    **never re-declares a subcommand's flags** — so `airlock <cmd> ...` and
+    `python -m agent_airlock.cli.<name> ...` accept identical options. That equivalence is
+    pinned per-subcommand in `tests/test_cli_dispatcher.py`, which also fails if a new CLI
+    module ships without a registered subcommand.
+  - `airlock` with no args prints the subcommand list with one-line descriptions and exits
+    0; `airlock <unknown>` exits non-zero with a pointer to `airlock --help`. Subcommand
+    modules are imported **lazily**, so an optional-extra command (`console`) never breaks
+    the top-level listing.
+  - The three hyphenated scripts (`airlock-explain`, `airlock-conformance`,
+    `airlock-scan-tools`) are **kept as aliases** — nothing documented breaks.
+  - `doctor`, `verify`, and `egress-bench` mains were normalized to `main(argv) -> int`
+    with argparse (gaining a proper `--help`) while preserving their exact flags and exit
+    codes; `egress-bench` is now runnable via `python -m` for the first time.
+  - Removed the two "deferred PR" apology comments from `pyproject.toml` — the limitation
+    they documented no longer exists.
+- **ci: release-hygiene guard so a declared version can't linger untagged.** New
+  `scripts/check_version_tagged.py` + a `version-tag-guard` CI job (main pushes, full
+  history) fail when `pyproject.toml`'s version has no matching `vX.Y.Z` tag more than one
+  commit past the bump. This repo carried `0.8.56` on `main` **untagged for two days**
+  while it held the AgentDojo benchmark; this turns that state red.
+
+### Added / Changed — AgentDojo defense numbers
 
 - **bench(agentdojo): publish airlock's AgentDojo defense numbers across all 4 suites.**
   The deterministic block-coverage harness now runs the full AgentDojo suite set

@@ -49,4 +49,31 @@ def egress_bench(
     return 0 if fail == 0 else 1
 
 
-__all__ = ["egress_bench"]
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``airlock egress-bench`` (and ``python -m agent_airlock.cli.egress_bench``)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="airlock egress-bench",
+        description="Walk the CVE egress fixtures and report pass/fail (0=green, 1=regression).",
+    )
+    parser.add_argument(
+        "--fixture-dir",
+        default=None,
+        help="Fixture directory to walk (default: the bundled CVE fixture set).",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("tap", "json", "md"),
+        default="tap",
+        help="Output format (default: tap).",
+    )
+    args = parser.parse_args(argv)
+    return egress_bench(fixture_dir=args.fixture_dir, output_format=args.format)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+__all__ = ["egress_bench", "main"]

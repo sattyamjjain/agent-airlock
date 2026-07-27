@@ -165,18 +165,19 @@ docs = [
 ]
 
 [project.scripts]
-# v0.8.13+ — read-only privilege right-sizing reporter. NOTE: this is
-# the project's first installable console-script entry; the existing
-# `airlock <subcommand>` invocations (baseline / attest / corpus-bench
-# / etc.) remain invocable only via `python -m
-# agent_airlock.cli.<name>`. Wiring those is a separate, larger PR.
+# v0.8.56+ — unified `airlock` dispatcher. One console script fronts every
+# agent_airlock.cli module in space-form (`airlock scan-tools`, `airlock doctor`,
+# `airlock corpus-bench`, ...); it delegates to each module's own main(argv), so
+# flags are identical to the `python -m agent_airlock.cli.<name>` long form. See
+# agent_airlock/cli/__main__.py.
+airlock = "agent_airlock.cli.__main__:main"
+# The three hyphenated scripts below predate the dispatcher and are kept as stable
+# aliases so anything that already documents them keeps working.
 airlock-explain = "agent_airlock.cli.explain:main"
-# v0.8.40+ — EU AI Act Art. 12 record-keeping: append-only, hash-chained,
-# restart-surviving decision log + offline evidence bundle.
+# EU AI Act Art. 12 record-keeping: append-only, hash-chained, restart-surviving
+# decision log + offline evidence bundle.
 airlock-conformance = "agent_airlock.cli.conformance:main"
-# v0.8.42+ — static contract / type-checker for MCP tool declarations. The
-# unified `airlock scan-tools` space-form awaits the deferred dispatcher PR;
-# this hyphenated console script is the shipped surface.
+# Static contract / type-checker for MCP tool declarations.
 airlock-scan-tools = "agent_airlock.cli.scan_tools:main"
 
 [project.urls]
@@ -239,6 +240,11 @@ ignore = [
 ]
 "src/agent_airlock/anomaly.py" = [
     "ARG002",  # params reserved for future use in record_call API
+]
+"examples/**/*.py" = [
+    "ARG001",  # Example tool signatures show params that a demo body may not use
+    "ARG002",
+    "F841",    # Examples assign results to illustrate the API without consuming them
 ]
 
 [tool.ruff.lint.isort]
