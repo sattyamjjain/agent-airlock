@@ -3,7 +3,7 @@
   "plugin": "agent-airlock",
   "listing": {
     "title": "Agent-Airlock",
-    "tagline": "The open-source firewall for AI agents.",
+    "tagline": "A deny-by-default type-checker and contract layer for AI agent tool calls — the in-process check that runs beneath your MCP gateway.",
     "hero_image": "https://github.com/sattyamjjain/agent-airlock/raw/main/docs/media/hero.png",
     "demo_gif": "https://github.com/sattyamjjain/agent-airlock/raw/main/docs/media/blocked-cve.gif",
     "screenshots": [],
@@ -13,7 +13,7 @@
       "Sandboxes dangerous execution in E2B, Docker, or local (opt-in)",
       "Output sanitization: 12 PII / secret types, 4 masking strategies",
       "RBAC + rate limits + time windows + capability gating",
-      "Regression suite for 7 disclosed MCP-adjacent CVEs (2025-2026)",
+      "CVE regression suite: 30 tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026)",
       "OAuth 2.1 + PKCE S256 + RFC 8707 validators for MCP 2025-11-25",
       "OpenTelemetry audit export with documented semantic conventions",
       "Works with every major agent framework (LangChain, LangGraph, CrewAI, AutoGen, OpenAI SDK, Anthropic SDK, PydanticAI, smolagents, LlamaIndex)"
@@ -25,9 +25,9 @@
       "Offline-capable. The CVE suite, policy presets, and validators all work air-gapped."
     ],
     "proof_points": [
-      "2000 tests passing, 80% coverage floor enforced in CI",
-      "9 CVE regression tests covering CVE-2025-59528 / 59536 / 68143-68145 + 2026-23744 / 27825 / 27826 / 30615 / 30616 / 31402 / 32211 / 33032 / 39884 / 41349 / 41361 / 6980",
-      "31 policy presets including v0.6.0 newcomers: mcp_elicitation_guard_2026_04, mcp_config_path_traversal_cve_2026_31402, oauth_state_injection_guard, gemini_3_agent_defaults"
+      "3,611 tests passing at 86.62% measured coverage (CI-enforced floor 80%)",
+      "30 CVE regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026); see the generated catalog at docs/cves/index.md",
+      "61 policy presets (curated security defaults), discovered at runtime by policy_presets.list_active()"
     ],
     "audience": [
       "AI platform engineers",

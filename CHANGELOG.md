@@ -9,6 +9,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.57] - 2026-07-28 — "Published-claims integrity: manifests, spec-status provenance, OWASP coverage matrix"
+
+Claims-integrity pass. Every item repairs a **published, untrue claim** — **no
+detection logic, guard, preset, or runtime behaviour changed**. The 2026-07-28 MCP
+guards target a spec **release candidate**, not a ratified revision.
+
+### Fixed
+
+- **`.claude-plugin/plugin.json` advertised `version: 0.5.0` while the package shipped
+  `0.8.56`** — the published Claude-plugin listing lied about its own version for four
+  minor releases. Now pinned to `agent_airlock.__version__` and guarded by
+  `tests/test_marketplace_metadata.py::test_plugin_version_matches_package` (the guard
+  that would have caught this three months ago).
+- **`plugin.json` `install.extras` listed 5 extras against 13 shipped** — re-derived the
+  full map from `pyproject.toml` (bench, sandbox, modal, mcp, claude-agent, model-armor,
+  console, redis, crypto, attested, pydantic-ai, crewai, all).
+- **`.claude-plugin/marketplace.json` proof-points were all materially stale** — "2000
+  tests / 80% coverage floor", "9 CVE" (against 30 `tests/cves/test_cve_*.py` regression
+  modules), and "31 presets" (against 61 live `policy_presets.list_active()` factories).
+  Restated from the repo (the generated README TEST-BADGE, the CVE regression modules,
+  and the real registry API); both count claims are now **two-sided** gated — no
+  over-claim AND no silent >10% under-claim.
+- **`pyproject.toml` shipped an `example.com` author email in published PyPI metadata** —
+  replaced `sattyamjain@example.com` with the real maintainer address.
+- **`owasp_agentic_coverage` advertised the OWASP *Agentic* Top-10 but shipped only the
+  *LLM* Top-10** — the package `__init__` claimed a "OWASP Agentic Top-10 coverage
+  matrix" while `coverage.yaml` held LLM01–LLM10 against the LLM-top-10 spec URL. Added
+  `agentic_coverage.yaml` (ASI01–ASI10, each row mapped to an importable guard module, a
+  live `list_active()` preset, and an on-disk test), rendered to
+  `docs/owasp-agentic-2026-coverage.md` with a regenerate-and-diff gate.
+- **Two 404 references in `owasp_agentic_coverage`** — the `__init__` docstring cited
+  `.github/workflows/owasp_coverage_gate.yml.sample` (real path
+  `docs/security/owasp-coverage-gate-ci.yml.sample`) and README linked a non-existent
+  `docs/owasp-agentic-2026-coverage.md` (now generated). Also fixed a broken `test_path`
+  in `coverage.yaml` (LLM10 → `tests/test_model_tier_budget.py`) and refreshed every
+  re-verified `last_verified` date (all were ~91 days stale).
+
+### Changed
+
+- **Dropped the last "firewall" self-branding from the published manifests** —
+  `plugin.json` summary/description/keywords and `marketplace.json` tagline now use the
+  shipped v0.8.55 wedge ("a deny-by-default type-checker and contract layer … the
+  in-process check that runs beneath your MCP gateway"). A new test scans only the
+  self-describing fields so "firewall" cannot creep back (naming other people's
+  firewalls/gateways stays legal).
+- **Stated MCP spec-revision provenance explicitly** — `mcp_spec/__init__.py` now
+  separates what is implemented against the **ratified 2025-11-25** revision from what
+  targets the **2026-07-28 release candidate** (release tag `2026-07-28-RC`,
+  `prerelease: true`, published 2026-05-29, verified 2026-07-28). New `SPEC_REVISIONS`
+  constant (re-exported at top level); `PROTOCOL_VERSION` stays `2025-11-25`. README's
+  OWASP MCP Top-10 table gained a caveat that the 2026-07-28 guards are
+  forward-compatible hardening, **not a conformance claim**.
+
+### Removed
+
+- **The abandoned "v0.5.0 April 2026" launch pack and the "Operation Enterprise Firewall"
+  plan** — deleted `.claude/plans/v0.4.0-enterprise-plan.md` (whose stated goal,
+  "Transform from 'Security Library' to 'Default Agent Firewall'", contradicted the
+  100%-OSS, no-paid-tier positioning) and the stale `docs/launch/` launch-mechanics pages
+  (`index`, `announcement`, `readiness-checklist`, `faq`, `rollback`) plus their mkdocs
+  nav. Reusable distribution content (`distribution-submissions.md`,
+  `show-hn-tool-call-validation.md`) is kept and still linked from `docs/DISTRIBUTION.md`.
+
 ## [0.8.56] - 2026-07-27 — "Unified `airlock` CLI dispatcher + AgentDojo defense numbers (all 4 suites)"
 
 Two things ship together in 0.8.56: the unified `airlock` command-line dispatcher (the

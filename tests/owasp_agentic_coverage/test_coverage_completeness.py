@@ -1,11 +1,19 @@
-"""Tests for ``owasp_agentic_coverage`` matrix loader / renderer / gates."""
+"""Tests for ``owasp_agentic_coverage`` matrix loader / renderer / gates.
+
+Covers BOTH published matrices: the OWASP LLM Top-10 (``coverage.yaml``) and the
+OWASP Agentic Top-10 (``agentic_coverage.yaml``). The cross-file checks — every
+``guard_module`` imports, every ``test_path`` exists — are what make each matrix
+*evidence* rather than prose.
+"""
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import pytest
 
+from agent_airlock import policy_presets
 from agent_airlock.owasp_agentic_coverage import (
     load_coverage,
     render_json,
@@ -16,10 +24,26 @@ from agent_airlock.owasp_agentic_coverage.render import (
     stale_entries,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+AGENTIC_PATH = COVERAGE_PATH.parent / "agentic_coverage.yaml"
+AGENTIC_DOC = REPO_ROOT / "docs" / "owasp-agentic-2026-coverage.md"
+# MUST byte-match the header used to generate AGENTIC_DOC.
+AGENTIC_DOC_HEADER = (
+    "<!-- @generated from "
+    "src/agent_airlock/owasp_agentic_coverage/agentic_coverage.yaml — do not edit by "
+    "hand; regenerated and byte-diffed in "
+    "tests/owasp_agentic_coverage/test_coverage_completeness.py -->\n\n"
+)
+
 
 @pytest.fixture
 def coverage() -> object:
     return load_coverage()
+
+
+@pytest.fixture
+def agentic() -> object:
+    return load_coverage(AGENTIC_PATH)
 
 
 class TestCoverageCompleteness:
@@ -100,3 +124,53 @@ class TestCIGate:
 class TestPath:
     def test_default_path_exists(self) -> None:
         assert COVERAGE_PATH.exists()
+
+
+class TestAgenticMatrix:
+    """The OWASP Agentic Top-10 matrix (``agentic_coverage.yaml``)."""
+
+    def test_ten_asi_risks_sorted(self, agentic) -> None:
+        assert len(agentic.entries) == 10
+        ids = [e.risk_id for e in agentic.entries]
+        assert ids == sorted(ids)
+        assert set(ids) == {f"ASI{i:02d}" for i in range(1, 11)}
+
+    def test_spec_version_pinned(self, agentic) -> None:
+        # The real OWASP Agentic list version; a bump must be an explicit PR.
+        assert agentic.spec_version == "v2.01"
+
+    def test_presets_are_live_registry_factories(self, agentic) -> None:
+        """Every Agentic ``preset`` must be a real ``list_active()`` factory — the
+        registry API, not a regex, so the mapping cannot name a preset that no longer
+        ships."""
+        factories = {m.factory_name for m in policy_presets.list_active()}
+        for e in agentic.entries:
+            assert e.preset in factories, (
+                f"{e.risk_id}: preset {e.preset!r} is not in policy_presets.list_active()"
+            )
+
+    def test_not_stale_on_ship_day(self, agentic) -> None:
+        assert stale_entries(agentic, max_age_days=30) == []
+
+    def test_doc_byte_matches_render(self, agentic) -> None:
+        """docs/owasp-agentic-2026-coverage.md is regenerate-and-diff gated (same
+        discipline as the CVE catalog): it must byte-match the rendered matrix."""
+        expected = AGENTIC_DOC_HEADER + render_markdown(agentic)
+        assert AGENTIC_DOC.read_text(encoding="utf-8") == expected, (
+            "docs/owasp-agentic-2026-coverage.md is stale — regenerate it from "
+            "agentic_coverage.yaml via render_markdown()."
+        )
+
+
+class TestMatrixEvidence:
+    """Cross-file: every mapping in BOTH matrices points at a real module + test."""
+
+    @pytest.mark.parametrize("path", [COVERAGE_PATH, AGENTIC_PATH])
+    def test_guard_modules_import_and_test_paths_exist(self, path: Path) -> None:
+        cov = load_coverage(path)
+        for e in cov.entries:
+            importlib.import_module(e.guard_module)  # raises if the module is gone
+            test_file = REPO_ROOT / e.test_path
+            assert test_file.is_file(), (
+                f"{e.risk_id} ({path.name}): test_path {e.test_path!r} does not exist"
+            )
