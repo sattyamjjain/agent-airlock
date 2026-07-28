@@ -90,12 +90,6 @@ nav:
     - OTel Semantic Conventions: observability/semconv.md
   - Security: SECURITY.md
   - Contributing: CONTRIBUTING.md
-  - Launch:
-    - Overview: launch/index.md
-    - Announcement Draft: launch/announcement.md
-    - Readiness Checklist: launch/readiness-checklist.md
-    - Launch FAQ: launch/faq.md
-    - Rollback Plan: launch/rollback.md
   - Changelog: changelog.md
 
 extra:

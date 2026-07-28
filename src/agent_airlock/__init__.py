@@ -254,6 +254,7 @@ from .mcp_proxy_guard import (
     MCPSecurityError,
     MCPSession,
 )
+from .mcp_spec import SPEC_REVISIONS
 from .mcp_spec.argv_guard import ArgvStringConcatenationError
 from .mcp_spec.bind_address_guard import (
     BindAddressPublicError,
@@ -702,7 +703,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.56"
+__version__ = "0.8.57"
 
 __all__ = [
     # Core
@@ -763,6 +764,7 @@ __all__ = [
     "mcp_origin_host_guard_defaults",
     "openclaw_cve_2026_53820_defaults",
     "untrusted_tool_output_defaults",
+    "SPEC_REVISIONS",
     "mcp_spec_2026_07_defaults",
     "mcp_spec_2026_07_header_integrity_defaults",
     "mcp_stateless_conformance_2026_07_defaults",
