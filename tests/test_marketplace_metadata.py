@@ -73,37 +73,101 @@ def _claimed_cve_count() -> int:
     return int(m.group(1)) if m else 0
 
 
-def _actual_cve_module_count() -> int:
-    """Count CVE regression MODULES (``tests/cves/test_cve_*.py``).
+# tests/cves/ modules that are NOT tied to a specific disclosed CVE / advisory.
+# Everything else in the directory reproduces one external disclosure; the Metis
+# corpus is an internal block-rate regression, so it must not inflate a "CVE /
+# advisory" count.
+_NON_DISCLOSURE_CVE_MODULES = {"test_metis_inspired_corpus_2026_05_18"}
 
-    Was ``_actual_cve_fixture_count``, which globbed
-    ``tests/cves/fixtures/cve_*.json`` — a strict subset that made an honest CVE
-    claim un-publishable under the one-sided ``claimed <= actual`` guard. Each
-    ``test_cve_*.py`` module reproduces a disclosed CVE / advisory pattern and
-    asserts an airlock primitive blocks it, so it is the right denominator.
+
+def _cve_regression_module_count() -> int:
+    """Canonical count of CVE / advisory regression modules under ``tests/cves/``.
+
+    The old counter globbed only ``test_cve_*.py`` (30), silently dropping the
+    ``test_ghsa_*`` / ``test_ox_*`` modules and CVE regressions named after their
+    subject rather than the ``test_cve_`` prefix (e.g.
+    ``test_azure_mcp_cve_2026_32211``, ``test_vercel_contextai_oauth``). Every
+    ``test_*.py`` in the directory reproduces a disclosed CVE / advisory and
+    asserts an airlock primitive blocks it, EXCEPT the internal-corpus modules in
+    ``_NON_DISCLOSURE_CVE_MODULES``. This is the single number every published
+    surface (marketplace proof point, README ASI04) is fenced against.
     """
     if not CVE_DIR.is_dir():
         return 0
-    return sum(1 for f in CVE_DIR.glob("test_cve_*.py") if f.is_file())
+    return sum(
+        1
+        for f in CVE_DIR.glob("test_*.py")
+        if f.is_file() and f.stem not in _NON_DISCLOSURE_CVE_MODULES
+    )
+
+
+def _readme_cve_count() -> int:
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    m = re.search(r"(\d+)\s*CVE\s*/\s*advisory regression tests", text)
+    return int(m.group(1)) if m else 0
 
 
 def test_cve_count_is_honest() -> None:
-    """Two-sided honesty gate on the CVE claim.
+    """One canonical CVE / advisory count, fenced across every published surface.
 
-    ``claimed <= actual`` (never over-claim, as before) AND
-    ``claimed >= 0.9 * actual`` (never silently under-claim by a wide margin). A
-    stale 4x under-claim is the same honesty-bug class this module header names —
-    the listing had been claiming 9 CVEs against 30 regression modules.
+    The bug this replaces: three surfaces disagreed — README ASI04 said "11+ CVEs
+    tracked", marketplace.json said "30 CVE regression tests", and the directory
+    held 37 disclosed-CVE / advisory regression modules. The count is now derived
+    programmatically (``_cve_regression_module_count``) and BOTH the marketplace
+    proof point and the README ASI04 cell must carry exactly that number, so they
+    cannot drift from each other or from the suite. Add a CVE regression module
+    and this fails until both surfaces are bumped.
     """
-    claimed = _claimed_cve_count()
-    actual = _actual_cve_module_count()
-    assert claimed <= actual, (
-        f"marketplace over-claims CVEs: claims {claimed} but only {actual} CVE "
-        f"regression modules (test_cve_*.py) live under {CVE_DIR}."
+    actual = _cve_regression_module_count()
+    assert _claimed_cve_count() == actual, (
+        f"marketplace CVE proof point ({_claimed_cve_count()}) != actual regression "
+        f"modules ({actual}) under {CVE_DIR}. Update the proof point."
     )
-    assert claimed >= 0.9 * actual, (
-        f"marketplace under-claims CVEs: claims {claimed} against {actual} CVE "
-        f"regression modules (>10% stale)."
+    assert _readme_cve_count() == actual, (
+        f"README ASI04 CVE count ({_readme_cve_count()}) != actual regression modules "
+        f"({actual}). Say '{actual} CVE/advisory regression tests'."
+    )
+
+
+def _pyproject_fail_under() -> int:
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    m = re.search(r"fail_under\s*=\s*(\d+)", text)
+    assert m, "pyproject.toml has no [tool.coverage.report] fail_under"
+    return int(m.group(1))
+
+
+def _ci_cov_fail_under() -> int:
+    text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    m = re.search(r"--cov-fail-under=(\d+)", text)
+    assert m, "ci.yml no longer passes --cov-fail-under"
+    return int(m.group(1))
+
+
+def _marketplace_claimed_floor() -> int:
+    proof = " ".join(_load_marketplace().get("listing", {}).get("proof_points", []))
+    m = re.search(r"floor\s*(\d+)\s*%", proof)
+    return int(m.group(1)) if m else 0
+
+
+def test_coverage_floor_is_consistent() -> None:
+    """The published 'CI-enforced floor' must equal what CI actually enforces.
+
+    Two floors disagreed: ``[tool.coverage.report] fail_under = 82`` (the intended
+    floor from the v0.5.4 honesty sweep, applied locally) but ci.yml passed
+    ``--cov-fail-under=80`` on the command line, which overrides the config for
+    the CI run — so CI enforced 80 while the config claimed 82, and the
+    marketplace repeated the stale 80. This binds all three: the pytest override
+    in CI, the coverage config, and the marketplace 'floor NN%' proof point must
+    be the same number.
+    """
+    ci = _ci_cov_fail_under()
+    cfg = _pyproject_fail_under()
+    claimed = _marketplace_claimed_floor()
+    assert ci == cfg == claimed, (
+        f"coverage floor disagreement: ci.yml --cov-fail-under={ci}, "
+        f"pyproject fail_under={cfg}, marketplace proof point floor={claimed}%. "
+        "All three must match (the CLI --cov-fail-under overrides the config, so it "
+        "is the number CI truly enforces)."
     )
 
 

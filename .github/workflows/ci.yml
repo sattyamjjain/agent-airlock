@@ -40,7 +40,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest tests/ -v --cov=agent_airlock --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+          pytest tests/ -v --cov=agent_airlock --cov-report=xml --cov-report=term-missing --cov-fail-under=82
 
       - name: Benchmark drift gate
         if: matrix.python-version == '3.11'
