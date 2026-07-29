@@ -1548,7 +1548,7 @@ Agent-Airlock secures AI agent systems in production:
 
 ### Regulatory engagement
 
-- [Public comment draft — NIST AI RMF v2.0 Agentic-AI Security](./docs/regulatory/nist-ai-rmf-v2-comment-2026.md) (window: 2026-04-18 → mid-June)
+- [Public comment draft — NIST AI RMF v2.0 Agentic-AI Security](./docs/regulatory/archive/nist-ai-rmf-v2-comment-2026.md) — **archived, not filed** (window 2026-04-18 → ~2026-06-06 closed without submission)
 
 ---
 

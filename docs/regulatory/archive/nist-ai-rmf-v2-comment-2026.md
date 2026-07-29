@@ -1,8 +1,10 @@
 # Public comment — NIST AI RMF v2.0, Agentic-AI Security Subsection
 
-Submission draft. Status: **DRAFT — not yet filed** (portal submission
-is a maintainer action). Window opened 2026-04-18; seven-week comment
-period.
+Submission draft. Status: **ARCHIVED — NOT FILED.** The comment window
+opened 2026-04-18 with a seven-week period (closed ~2026-06-06) and this
+draft was never submitted to the NIST portal, so it is retained here as
+an unfiled archive record only. Portal submission remains a maintainer
+action; do not treat this document as a filed comment.
 
 **Commenter:** Sattyam Jain (open-source maintainer, agent-airlock)
 **Project:** https://github.com/sattyamjjain/agent-airlock (MIT, Python)
@@ -13,8 +15,8 @@ period.
 
 ## Summary
 
-agent-airlock is an open-source runtime firewall for AI agents,
-shipped as a Python decorator. v0.5.0 (2026-04-18) through v0.5.3
+agent-airlock is an open-source, in-process least-privilege contract
+layer for AI agent tool calls, shipped as a Python decorator. v0.5.0 (2026-04-18) through v0.5.3
 (2026-04-21) landed named regression coverage for ten disclosed
 MCP-ecosystem CVEs and a full mapping to the OWASP Top 10 for
 Agentic Applications 2026 (ASI01..ASI10). This comment offers

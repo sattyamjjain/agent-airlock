@@ -29,6 +29,28 @@ CVE_DIR = REPO_ROOT / "tests" / "cves"
 # to the reporting docs rather than the whole repo — see the test below.
 SECURITY_DOCS = [REPO_ROOT / "SECURITY.md", REPO_ROOT / "docs" / "SECURITY.md"]
 
+SRC_DIR = REPO_ROOT / "src" / "agent_airlock"
+CLI_DIR = SRC_DIR / "cli"
+DOCS_DIR = REPO_ROOT / "docs"
+# Archived, not-filed regulatory drafts are not a live surface and are exempt.
+_FIREWALL_SCAN_EXCLUDE = (DOCS_DIR / "regulatory" / "archive",)
+# Affirmative self-branding: phrasings that call agent-airlock ITSELF a firewall.
+# Deliberately narrow so legitimate uses stay legal — third-party products
+# (LlamaFirewall, Cloudflare/Docker/Azure gateways, "platform firewalls",
+# "prompt-firewalls"), the anti-firewall wedge guidance ("not a firewall", "do
+# not call it a firewall"), and the arXiv "Anti-Fabrication Firewall" paper title
+# do NOT match.
+_FIREWALL_SELF_BRAND = re.compile(
+    r"\b("
+    r"runtime firewall"
+    r"|tool[\s-]?call firewall"
+    r"|agent(?:ic)? firewall"
+    r"|(?:our|my|the pydantic-based|default agent) firewall"
+    r"|firewall for mcp"
+    r")\b",
+    re.IGNORECASE,
+)
+
 
 def _load_marketplace() -> dict:
     return json.loads(MARKETPLACE.read_text(encoding="utf-8"))
@@ -240,6 +262,47 @@ def test_manifests_do_not_self_brand_as_firewall() -> None:
     offenders = [s for s in _self_describing_strings() if "firewall" in s.lower()]
     assert not offenders, (
         f"manifest describes agent-airlock itself as a 'firewall' (dropped in v0.8.55): {offenders}"
+    )
+
+
+def test_cli_copy_never_says_firewall() -> None:
+    """Shipped CLI copy is agent-airlock describing itself to users — it must never
+    use 'firewall'. v0.8.57 still printed 'Unsealed: No tool-call firewall' from
+    ``airlock verify``. The CLI has no reason to name a third-party firewall, so
+    the bare word is banned outright here."""
+    offenders: list[str] = []
+    for path in sorted(CLI_DIR.rglob("*.py")):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "firewall" in line.lower():
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "'firewall' in shipped CLI copy — rewrite onto the tool-call contract wedge:\n"
+        + "\n".join(offenders)
+    )
+
+
+def test_shipped_source_and_docs_do_not_self_brand_as_firewall() -> None:
+    """Extend the manifest guard to shipped source docstrings and docs/.
+
+    The v0.8.55 rename dropped 'firewall' self-branding, but stragglers survived
+    in module docstrings (``mcp_spec/session_guard.py``), a regulatory draft, and
+    launch/benchmark docs. This scans ``src/agent_airlock`` and ``docs/`` for
+    affirmative self-branding only (see ``_FIREWALL_SELF_BRAND``), so naming other
+    people's firewalls/gateways and the anti-firewall wedge copy stay legal.
+    """
+    offenders: list[str] = []
+    roots = [SRC_DIR.rglob("*.py"), DOCS_DIR.rglob("*.md")]
+    for paths in roots:
+        for path in sorted(paths):
+            if any(str(path).startswith(str(ex)) for ex in _FIREWALL_SCAN_EXCLUDE):
+                continue
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if _FIREWALL_SELF_BRAND.search(line):
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "agent-airlock self-brands as a 'firewall' in shipped source/docs — rewrite "
+        "onto the tool-call contract / least-privilege wedge (see "
+        "docs/distribution/README-WEDGE.md):\n" + "\n".join(offenders)
     )
 
 

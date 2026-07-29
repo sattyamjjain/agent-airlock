@@ -4,7 +4,7 @@ Motivation
 ----------
 [Cloudflare Mesh launched 2026-04-23](https://www.cloudflare.com/press/press-releases/2026/cloudflare-launches-mesh-to-secure-the-ai-agent-lifecycle/)
 during Agents Week 2026 with direct overlap on the agent-runtime
-firewall surface. agent-airlock's wedge is **OSS-founder-built**;
+security surface. agent-airlock's wedge is **OSS-founder-built**;
 its compatibility story is "runs alongside Mesh without
 double-applying egress policies."
 

@@ -47,8 +47,8 @@ Candidate lists (full table in [`launch/distribution-submissions.md`](launch/dis
 
 ## (c) Problem-essay outline — HN / r/LocalLLaMA (first person)
 
-Working title: **"I benchmarked my agent tool-call firewall against Meta's and
-found the interesting part wasn't the score."**
+Working title: **"I benchmarked my deny-by-default tool-call contract layer
+against Meta's LlamaFirewall and found the interesting part wasn't the score."**
 
 Post the essay, put links in the **first comment** (HN/Reddit both suppress
 link-first posts). Lead with the problem, not the project.

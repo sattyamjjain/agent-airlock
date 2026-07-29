@@ -3,7 +3,7 @@
 Verifies Airlock protection status and generates badge information:
 - Protected: STRICT_POLICY + sandbox_required + audit enabled
 - Lite: Basic protection (types + ghost args only)
-- Unsealed: No tool-call firewall
+- Unsealed: No tool-call contract enforced
 
 This is used by the GitHub Action to generate badges.
 """

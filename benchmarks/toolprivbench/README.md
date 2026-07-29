@@ -56,8 +56,8 @@ model behaviour.** A 100% block-rate means deny-by-default mechanically refuses
 any tool that is not on the least-privilege allowlist (including under the
 transient-failure amplifier where ToolPrivBench shows prompt-level controls
 degrade). It is **not** a claim that the agent stopped *choosing*
-over-privileged tools — it's a claim that the runtime firewall blocks the call
-regardless of what the model selects. The complementary low-privilege
+over-privileged tools — it's a claim that the in-process deny-by-default
+contract blocks the call regardless of what the model selects. The complementary low-privilege
 allow-rate is reported to show the policy is precise, not a blunt deny-all.
 
 MIT-licensed, like the rest of agent-airlock. This is a public number + a

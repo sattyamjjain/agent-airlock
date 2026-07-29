@@ -9,8 +9,8 @@ are first-class: Blaxel, Cloudflare, Daytona, E2B, Modal, Runloop,
 Vercel. OpenAI's own framing separates the harness from the compute to
 keep credentials out of model-generated code paths.
 
-The implication for a runtime firewall is: **the snapshot is a new
-tamper surface.** A hostile or corrupted snapshot replayed into a
+The implication for an in-process tool-call contract layer is: **the
+snapshot is a new tamper surface.** A hostile or corrupted snapshot replayed into a
 container can smuggle tool calls, cached credentials, or prompt-
 injection payloads past first-hop validation. Worse, if your cost
 tracker resets on rehydration, the attacker gets a fresh token budget
