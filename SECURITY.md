@@ -2,16 +2,20 @@
 
 ## Supported Versions
 
+Agent-Airlock is pre-1.0. Security fixes land only on the current `0.8.x` line;
+older versions are unsupported — upgrade to the latest `0.8.x` release.
+
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 0.8.x   | :white_check_mark: |
+| < 0.8.0 | :x:                |
 
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Agent-Airlock, please report it responsibly:
 
 1. **Do NOT create a public GitHub issue**
-2. Email security concerns to: sattyamjain@example.com
+2. Report it privately via [**GitHub Security Advisories**](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) ("Report a vulnerability" on the repo's Security tab), or email **sattyamjjain@gmail.com**
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce
@@ -339,7 +343,7 @@ If you believe Agent-Airlock security has been compromised:
 
 1. **Isolate** - Stop affected AI agents
 2. **Collect** - Preserve audit logs for analysis
-3. **Report** - Contact security@example.com
+3. **Report** - Report privately via [GitHub Security Advisories](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) or email sattyamjjain@gmail.com
 4. **Remediate** - Apply patches when available
 5. **Review** - Assess policy and configuration
 

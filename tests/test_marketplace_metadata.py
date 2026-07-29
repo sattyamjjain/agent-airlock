@@ -23,6 +23,12 @@ PLUGIN = REPO_ROOT / ".claude-plugin" / "plugin.json"
 PRESETS_FILE = REPO_ROOT / "src" / "agent_airlock" / "policy_presets.py"
 CVE_DIR = REPO_ROOT / "tests" / "cves"
 
+# The two docs whose job is to publish a *real* vulnerability-reporting channel.
+# `example.com` is RFC-2606-reserved and used legitimately for illustration all
+# over the tree (PII-masking examples, placeholder URLs), so this guard is scoped
+# to the reporting docs rather than the whole repo — see the test below.
+SECURITY_DOCS = [REPO_ROOT / "SECURITY.md", REPO_ROOT / "docs" / "SECURITY.md"]
+
 
 def _load_marketplace() -> dict:
     return json.loads(MARKETPLACE.read_text(encoding="utf-8"))
@@ -170,4 +176,29 @@ def test_manifests_do_not_self_brand_as_firewall() -> None:
     offenders = [s for s in _self_describing_strings() if "firewall" in s.lower()]
     assert not offenders, (
         f"manifest describes agent-airlock itself as a 'firewall' (dropped in v0.8.55): {offenders}"
+    )
+
+
+def test_security_docs_publish_no_example_com_contact() -> None:
+    """SECURITY.md / docs/SECURITY.md must give a *real* reporting channel.
+
+    A fake ``example.com`` contact actually shipped: through v0.8.57 the security
+    address was ``sattyamjain@example.com`` — an RFC-2606 reserved domain that
+    nobody reads, so a responsibly-disclosed vulnerability would have bounced.
+    This locks the reporting docs against that regression. It is scoped to those
+    two files on purpose: ``example.com`` is legitimate illustration elsewhere in
+    the tree (sanitizer/PII examples, placeholder URLs), so a repo-wide ban would
+    flag ~30 correct uses. The reporting docs are the only surface where an
+    ``example.com`` string is a bug rather than an example.
+    """
+    offenders: list[str] = []
+    for doc in SECURITY_DOCS:
+        if not doc.is_file():
+            continue
+        for lineno, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
+            if "example.com" in line:
+                offenders.append(f"{doc.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "fake example.com contact in a security-reporting doc — replace with the real "
+        "channel (GitHub Security Advisories / maintainer email):\n" + "\n".join(offenders)
     )
