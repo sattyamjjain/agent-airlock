@@ -284,19 +284,24 @@ def mex_gov_2026_policy() -> SecurityPolicy:
 def owasp_mcp_top_10_2026_policy() -> SecurityPolicy:
     """Defensive policy aligned to the OWASP MCP Top 10 (2026 beta).
 
-    The OWASP MCP Top 10 enumerates the most critical security risks in
-    MCP-enabled systems. As of retrieval the live categories include:
+    The OWASP MCP Top 10 (2026 beta) enumerates the most critical security
+    risks in MCP-enabled systems:
 
-    - MCP01 Token mismanagement & secret exposure
-    - MCP02 Excessive permissions / scope creep
-    - MCP03 Tool poisoning
-    - MCP04 Software supply chain attacks
-    - MCP05 Command injection
-    - MCP06 (reserved)
-    - MCP07 Insufficient authentication
-    - MCP08 (reserved)
-    - MCP09 Shadow MCP servers
-    - MCP10 Context over-sharing
+    - MCP01 Token Mismanagement & Secret Exposure
+    - MCP02 Privilege Escalation via Scope Creep
+    - MCP03 Tool Poisoning
+    - MCP04 Software Supply Chain Attacks & Dependency Tampering
+    - MCP05 Command Injection & Execution
+    - MCP06 Intent Flow Subversion
+    - MCP07 Insufficient Authentication & Authorization
+    - MCP08 Lack of Audit and Telemetry
+    - MCP09 Shadow MCP Servers
+    - MCP10 Context Injection & Over-Sharing
+
+    This preset is the policy layer only; it covers MCP02-MCP05 and part of
+    MCP07 (see below). MCP01/06/08/09/10 are covered by other agent-airlock
+    modules (sanitizer, ToolOutputTrustGuard, audit/audit_otel, attested
+    admission) — see the OWASP MCP mapping table in the README.
 
     What this preset does:
 

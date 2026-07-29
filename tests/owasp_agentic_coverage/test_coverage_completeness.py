@@ -174,3 +174,75 @@ class TestMatrixEvidence:
             assert test_file.is_file(), (
                 f"{e.risk_id} ({path.name}): test_path {e.test_path!r} does not exist"
             )
+
+
+# The OWASP MCP Top 10 (2026 beta), pinned to the authoritative titles at
+# https://owasp.org/www-project-mcp-top-10/ (retrieved 2026-07-29). The README
+# claimed the OWASP MCP Top 10 was "covered end-to-end by the
+# OWASP_MCP_TOP_10_2026 policy preset" while the mapping table listed only 7 of
+# 10 and the preset docstring marked MCP06/MCP08 "(reserved)". This constant is
+# the single source both surfaces are bound to below, so neither can drift back
+# to a stale taxonomy or drop a category.
+MCP_TOP_10_2026 = {
+    "MCP01": "Token Mismanagement & Secret Exposure",
+    "MCP02": "Privilege Escalation via Scope Creep",
+    "MCP03": "Tool Poisoning",
+    "MCP04": "Software Supply Chain Attacks & Dependency Tampering",
+    "MCP05": "Command Injection & Execution",
+    "MCP06": "Intent Flow Subversion",
+    "MCP07": "Insufficient Authentication & Authorization",
+    "MCP08": "Lack of Audit and Telemetry",
+    "MCP09": "Shadow MCP Servers",
+    "MCP10": "Context Injection & Over-Sharing",
+}
+README = REPO_ROOT / "README.md"
+
+
+def _mcp_mapping_table() -> str:
+    """The README 'MCP-specific mapping' table, from its heading to the next one."""
+    body = README.read_text(encoding="utf-8")
+    start = body.index("### MCP-specific mapping")
+    end = body.index("Use it directly", start)
+    return body[start:end]
+
+
+class TestMcpTopTenMapping:
+    """Bind the README MCP Top-10 mapping table AND the OWASP_MCP_TOP_10_2026
+    preset docstring to the authoritative taxonomy, so the 'covered end-to-end'
+    honesty bug (7/10 rows, MCP06/08 'reserved') cannot silently return."""
+
+    def test_readme_table_lists_all_ten_with_authoritative_titles(self) -> None:
+        table = _mcp_mapping_table()
+        missing = [
+            f"{rid} {title}"
+            for rid, title in MCP_TOP_10_2026.items()
+            if f"**{rid} {title}**" not in table
+        ]
+        assert not missing, (
+            "README MCP Top-10 mapping table is missing rows or uses non-authoritative "
+            f"titles for: {missing}"
+        )
+
+    def test_readme_table_makes_no_end_to_end_single_preset_claim(self) -> None:
+        # The specific false claim that shipped: one preset covering all ten.
+        table = _mcp_mapping_table()
+        assert "covered end-to-end by the `OWASP_MCP_TOP_10_2026` policy preset" not in table, (
+            "README revived the 'covered end-to-end by the OWASP_MCP_TOP_10_2026 policy "
+            "preset' claim — the single preset covers only the policy-layer subset."
+        )
+
+    def test_preset_docstring_enumerates_the_same_ten(self) -> None:
+        doc = policy_presets.owasp_mcp_top_10_2026_policy.__doc__ or ""
+        missing = [
+            f"{rid} {title}"
+            for rid, title in MCP_TOP_10_2026.items()
+            if f"{rid} {title}" not in doc
+        ]
+        assert not missing, (
+            "owasp_mcp_top_10_2026_policy docstring drifted from the authoritative OWASP "
+            f"MCP Top-10 taxonomy for: {missing}"
+        )
+        assert "(reserved)" not in doc, (
+            "preset docstring still marks an MCP category '(reserved)' — MCP06/MCP08 are "
+            "named categories (Intent Flow Subversion / Lack of Audit and Telemetry)."
+        )
