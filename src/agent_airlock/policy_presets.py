@@ -55,12 +55,13 @@ Primary sources (retrieved 2026-04-18):
 
 from __future__ import annotations
 
+import inspect
 import re
 import shlex as _shlex_for_gitpilot
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path as _Path_for_gitpilot
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from .cost_tracking import ModelTierBudget, TierBudget
 from .exceptions import AirlockError
@@ -97,10 +98,61 @@ def _capabilities(granted: int | None = None, denied: int | None = None) -> Capa
 
 
 # -----------------------------------------------------------------------------
+# Preset registry
+# -----------------------------------------------------------------------------
+#
+# ``list_active()`` used to discover presets with a name-suffix heuristic
+# (admit anything ending in ``_policy`` / ``_defaults`` / ``_caps`` /
+# ``_2026_04``). That silently dropped ten shipped, ``__all__``-exported presets
+# whose names did not match the suffixes — e.g. ``lan_unauth_mcp_guard``,
+# ``apply_india_dpdp_2023``, ``mobile_mcp_intent_guard_2026_05``,
+# ``oauth_state_injection_guard`` — so ``airlock graph`` and the OWASP coverage
+# matrix under-counted the shipped surface. Registration is now explicit: every
+# preset factory is decorated with ``@preset`` at its definition site, and a new
+# preset that forgets the decorator fails
+# ``tests/test_marketplace_metadata.py::test_all_exported_zero_arg_presets_are_registered``
+# instead of vanishing quietly. There is deliberately no heuristic here.
+
+
+@dataclass(frozen=True)
+class PresetMeta:
+    """Metadata about a registered preset, returned by ``list_active``."""
+
+    preset_id: str
+    factory_name: str
+    """Top-level callable in :mod:`agent_airlock.policy_presets`."""
+    docstring_summary: str = ""
+
+
+_PRESET_REGISTRY: dict[str, PresetMeta] = {}
+
+_PresetFactory = TypeVar("_PresetFactory", bound=Callable[..., Any])
+
+
+def preset(func: _PresetFactory) -> _PresetFactory:
+    """Register a zero-argument preset factory for enumeration by ``list_active``.
+
+    The decorator is a pure pass-through: it returns *func* unchanged (no
+    wrapper, so framework signature introspection sees the original callable)
+    and only records the factory in the module registry as a side effect. The
+    registry — not a name heuristic — is what ``list_active`` walks.
+    """
+    doc = inspect.getdoc(func) or ""
+    summary = doc.splitlines()[0] if doc else ""
+    _PRESET_REGISTRY[func.__name__] = PresetMeta(
+        preset_id=func.__name__,
+        factory_name=func.__name__,
+        docstring_summary=summary,
+    )
+    return func
+
+
+# -----------------------------------------------------------------------------
 # GTG-1002 defense
 # -----------------------------------------------------------------------------
 
 
+@preset
 def gtg_1002_defense_policy() -> SecurityPolicy:
     """Defensive policy against the GTG-1002 tool-call pattern.
 
@@ -165,6 +217,7 @@ def gtg_1002_defense_policy() -> SecurityPolicy:
 # -----------------------------------------------------------------------------
 
 
+@preset
 def mex_gov_2026_policy() -> SecurityPolicy:
     """Defensive policy modeled on the Feb 2026 Mexican-government breach.
 
@@ -227,6 +280,7 @@ def mex_gov_2026_policy() -> SecurityPolicy:
 # -----------------------------------------------------------------------------
 
 
+@preset
 def owasp_mcp_top_10_2026_policy() -> SecurityPolicy:
     """Defensive policy aligned to the OWASP MCP Top 10 (2026 beta).
 
@@ -309,6 +363,7 @@ def owasp_mcp_top_10_2026_policy() -> SecurityPolicy:
 # -----------------------------------------------------------------------------
 
 
+@preset
 def eu_ai_act_article_15_policy() -> SecurityPolicy:
     """Defensive policy mapping to EU AI Act Article 15 cybersecurity.
 
@@ -372,6 +427,7 @@ def eu_ai_act_article_15_policy() -> SecurityPolicy:
 # -----------------------------------------------------------------------------
 
 
+@preset
 def india_dpdp_2023_policy() -> SecurityPolicy:
     """Defensive policy aligned to India's DPDP Act 2023.
 
@@ -455,6 +511,7 @@ class IndiaDPDP2023Bundle:
     policy: SecurityPolicy
 
 
+@preset
 def apply_india_dpdp_2023(config: Any | None = None) -> IndiaDPDP2023Bundle:
     """Return a config+policy bundle pre-wired for India DPDP 2023 alignment.
 
@@ -502,6 +559,7 @@ def apply_india_dpdp_2023(config: Any | None = None) -> IndiaDPDP2023Bundle:
 # - call the factory function instead of using the constant.
 
 
+@preset
 def stdio_guard_ox_defaults() -> StdioGuardConfig:
     """Ox Security advisory defaults for the MCP STDIO sanitizer (v0.5.1+).
 
@@ -572,6 +630,7 @@ STDIO_GUARD_OX_DEFAULTS = stdio_guard_ox_defaults()
 constant unless you need dynamic overrides (then call the factory)."""
 
 
+@preset
 def mcp_attested_admission_defaults(
     *,
     trust_root: Any = None,
@@ -642,6 +701,7 @@ def mcp_attested_admission_defaults(
     )
 
 
+@preset
 def oauth_audit_vercel_2026_defaults() -> OAuthAppAuditConfig:
     """OAuth app audit defaults driven by the 2026-04-19 Vercel breach.
 
@@ -674,6 +734,7 @@ OAUTH_AUDIT_VERCEL_2026_DEFAULTS = oauth_audit_vercel_2026_defaults()
 """Eagerly-constructed OAuth-audit defaults (post Vercel 2026-04-19)."""
 
 
+@preset
 def azure_mcp_cve_2026_32211_defaults() -> ResponseHeaderAuditConfig:
     """Response-header audit defaults for CVE-2026-32211.
 
@@ -705,6 +766,7 @@ AZURE_MCP_CVE_2026_32211_DEFAULTS = azure_mcp_cve_2026_32211_defaults()
 """Eagerly-constructed response-header-audit defaults (CVE-2026-32211)."""
 
 
+@preset
 def ox_mcp_supply_chain_2026_04_defaults() -> dict[str, Any]:
     """Umbrella preset for the OX Security 2026-04-20 MCP dossier.
 
@@ -766,6 +828,7 @@ def ox_mcp_supply_chain_2026_04_defaults() -> dict[str, Any]:
 # -----------------------------------------------------------------------------
 
 
+@preset
 def unit42_mcp_sampling_defaults() -> SamplingGuardConfig:
     """Sampling-guard defaults for the Unit 42 MCP attack-vector catalog.
 
@@ -816,6 +879,7 @@ UNIT42_MCP_SAMPLING_DEFAULTS = unit42_mcp_sampling_defaults()
 # -----------------------------------------------------------------------------
 
 
+@preset
 def openclaw_cve_2026_41349_defaults(
     base_policy: SecurityPolicy | None = None,
 ) -> SecurityPolicy:
@@ -872,6 +936,7 @@ def openclaw_cve_2026_41349_defaults(
 # -----------------------------------------------------------------------------
 
 
+@preset
 def openclaw_cve_2026_41361_ipv6_ssrf_defaults() -> dict[str, Any]:
     """Return the IPv6-range guard and a callable check for CVE-2026-41361.
 
@@ -996,6 +1061,7 @@ class CodebaseMcpInjectionBlocked(AirlockError):
     """Raised when a codebase-mcp-style tool carries shell-inject input."""
 
 
+@preset
 def codebase_mcp_cve_2026_5023_defaults() -> dict[str, Any]:
     """Return the codebase-mcp regression check for CVE-2026-5023.
 
@@ -1060,6 +1126,7 @@ def codebase_mcp_cve_2026_5023_defaults() -> dict[str, Any]:
 # -----------------------------------------------------------------------------
 
 
+@preset
 def agent_commerce_default_caps(
     *,
     db_path: str = ":memory:",
@@ -1098,6 +1165,7 @@ def agent_commerce_default_caps(
 # -----------------------------------------------------------------------------
 
 
+@preset
 def mcp_atlassian_cve_2026_27825(*, profile: str = "prod") -> dict[str, Any]:
     """LAN-unauth-RCE guard preset for CVE-2026-27825 / -27826.
 
@@ -1131,6 +1199,7 @@ def mcp_atlassian_cve_2026_27825(*, profile: str = "prod") -> dict[str, Any]:
     }
 
 
+@preset
 def lan_unauth_mcp_guard(*, profile: str = "prod") -> dict[str, Any]:
     """Generic LAN-unauth-RCE guard preset (the class, not the named CVE).
 
@@ -1158,6 +1227,7 @@ def _build_pr_metadata_guard(*, dry_run: bool = False) -> Any:
     )
 
 
+@preset
 def claude_code_security_review_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
     """Comment-and-Control preset for Claude Code Security Review.
 
@@ -1190,6 +1260,7 @@ def claude_code_security_review_cnc_2026_04(*, dry_run: bool = False) -> dict[st
     }
 
 
+@preset
 def gemini_cli_action_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
     """Comment-and-Control preset for the Gemini CLI Action.
 
@@ -1204,62 +1275,21 @@ def gemini_cli_action_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
     return cfg
 
 
-@dataclass(frozen=True)
-class PresetMeta:
-    """Metadata about a registered preset, returned by ``list_active``."""
-
-    preset_id: str
-    factory_name: str
-    """Top-level callable in :mod:`agent_airlock.policy_presets`."""
-    docstring_summary: str = ""
-
-
 def list_active() -> list[PresetMeta]:
-    """Return metadata for every preset factory in this module.
+    """Return metadata for every ``@preset``-registered factory in this module.
 
-    Single source of truth consumed by ``airlock graph``, the OWASP
-    coverage matrix, and any future tool that needs to enumerate
-    presets without re-walking the package.
+    Single source of truth consumed by ``airlock graph``, the OWASP coverage
+    matrix, and any future tool that needs to enumerate presets without
+    re-walking the package. Every preset factory registers itself explicitly via
+    the ``@preset`` decorator at its definition site (see the *Preset registry*
+    section near the top of this module); this returns them sorted by id. No
+    name heuristic is involved, so a preset can never be dropped for having an
+    off-pattern name.
     """
-    import inspect
-    import sys
-
-    module = sys.modules[__name__]
-    out: list[PresetMeta] = []
-    for name, obj in inspect.getmembers(module, inspect.isfunction):
-        # Heuristics to filter out helpers + check predicates:
-        # only top-level zero-arg-or-kwargs-only callables that return
-        # dicts / SecurityPolicy / CapabilityPolicy / dataclasses.
-        if name.startswith("_"):
-            continue
-        if name in {"is_destructive_tool", "list_active", "list_presets"}:
-            continue
-        if not name.endswith(("_policy", "_defaults", "_caps", "_2026_04")):
-            continue
-        try:
-            sig = inspect.signature(obj)
-        except (TypeError, ValueError):
-            continue
-        if any(
-            p.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
-            and p.default is inspect.Parameter.empty
-            for p in sig.parameters.values()
-        ):
-            # Skip predicates that demand mandatory positional args
-            # (e.g. ``mcpwn_cve_2026_33032_check``).
-            continue
-        doc = (inspect.getdoc(obj) or "").splitlines()[0] if inspect.getdoc(obj) else ""
-        out.append(
-            PresetMeta(
-                preset_id=name,
-                factory_name=name,
-                docstring_summary=doc,
-            )
-        )
-    out.sort(key=lambda m: m.preset_id)
-    return out
+    return sorted(_PRESET_REGISTRY.values(), key=lambda m: m.preset_id)
 
 
+@preset
 def copilot_agent_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
     """Comment-and-Control preset for GitHub Copilot Agent.
 
@@ -1274,6 +1304,7 @@ def copilot_agent_cnc_2026_04(*, dry_run: bool = False) -> dict[str, Any]:
     return cfg
 
 
+@preset
 def agent_capability_default_caps() -> dict[str, Any]:
     """Conservative capability caps for agent-on-agent surfaces.
 
@@ -1322,6 +1353,7 @@ def agent_capability_default_caps() -> dict[str, Any]:
     }
 
 
+@preset
 def gpt_5_5_spud_agent_defaults(
     *,
     max_parallel_tool_calls: int = 8,
@@ -1362,6 +1394,7 @@ def gpt_5_5_spud_agent_defaults(
     }
 
 
+@preset
 def oauth_state_injection_guard(
     *,
     max_state_bytes: int = 2048,
@@ -1389,6 +1422,7 @@ def oauth_state_injection_guard(
     }
 
 
+@preset
 def gemini_3_agent_defaults(
     *,
     redact_thought_signature: bool = True,
@@ -1416,6 +1450,7 @@ def gemini_3_agent_defaults(
     }
 
 
+@preset
 def mcp_config_path_traversal_cve_2026_31402(
     *,
     platform: str = "auto",
@@ -1441,6 +1476,7 @@ def mcp_config_path_traversal_cve_2026_31402(
     }
 
 
+@preset
 def mcp_elicitation_guard_2026_04(
     *,
     allowlist_origins: frozenset[str] = frozenset(),
@@ -1476,6 +1512,7 @@ def mcp_elicitation_guard_2026_04(
     }
 
 
+@preset
 def mcp_stdio_meta_cve_2026_04(
     *,
     enable_manifest_drift_check: bool = True,
@@ -1525,6 +1562,7 @@ def mcp_stdio_meta_cve_2026_04(
     }
 
 
+@preset
 def windsurf_cve_2026_30615_defaults(
     signer_allowlist: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
@@ -1666,6 +1704,7 @@ class GitPilotRepoPathInjection(AirlockError):
         )
 
 
+@preset
 def gitpilot_mcp_cve_2026_6980_defaults(
     safe_repo_roots: tuple[_Path_for_gitpilot, ...] = (),
 ) -> dict[str, Any]:
@@ -1809,6 +1848,7 @@ class ArchivedMcpServerBlocked(AirlockError):
     """Raised when a tool's package_origin is on the archived block-list."""
 
 
+@preset
 def archived_mcp_server_advisory_defaults(
     block_list: Iterable[dict[str, Any]] | None = None,
     allow_list: Iterable[str] = (),
@@ -1880,6 +1920,7 @@ def archived_mcp_server_advisory_defaults(
 # -----------------------------------------------------------------------------
 
 
+@preset
 def claude_managed_agents_safe_defaults() -> dict[str, Any]:
     """Conservative defaults for the Claude Managed Agents harness.
 
@@ -1937,6 +1978,7 @@ def claude_managed_agents_safe_defaults() -> dict[str, Any]:
 _DEV_SERVER_TOOL_NAME_PATTERN = re.compile(r"(?i)^(?:mcpjam|inspector|dev[-_ ]?server|studio)\b")
 
 
+@preset
 def mcpjam_cve_2026_23744_defaults() -> dict[str, Any]:
     """Return the bind-address guard for CVE-2026-23744 (MCPJam ≤ 1.4.2).
 
@@ -2005,6 +2047,7 @@ _KUBECTL_INJECTION_PRONE_FIELDS: tuple[str, ...] = (
 )
 
 
+@preset
 def flux159_mcp_kubernetes_cve_2026_39884_defaults() -> dict[str, Any]:
     """Return the kubectl argv-injection check for CVE-2026-39884.
 
@@ -2127,6 +2170,7 @@ def mcpwn_cve_2026_33032_check(
             )
 
 
+@preset
 def mcpwn_cve_2026_33032_defaults() -> dict[str, Any]:
     """Preset-style factory returning the MCPwn audit config.
 
@@ -2208,6 +2252,7 @@ def flowise_cve_2025_59528_check(tools: list[dict[str, Any]]) -> None:
                     )
 
 
+@preset
 def high_value_action_deny_by_default() -> dict[str, Any]:
     """Deny-by-default preset for financial / on-chain / high-value tools.
 
@@ -2265,6 +2310,7 @@ class HighValueActionBlocked(AirlockError):
     """Raised when a high-value action runs without explicit opt-in."""
 
 
+@preset
 def flowise_cve_2025_59528_defaults() -> dict[str, Any]:
     """Preset-style factory returning the Flowise-eval checker.
 
@@ -2287,6 +2333,7 @@ def flowise_cve_2025_59528_defaults() -> dict[str, Any]:
     }
 
 
+@preset
 def mcp_inspector_exposure_guard_defaults(
     *,
     inspector_ports: frozenset[int] | None = None,
@@ -2318,6 +2365,7 @@ def mcp_inspector_exposure_guard_defaults(
     }
 
 
+@preset
 def stdio_guard_eval_defaults_2026_05_15(
     *,
     extra_sinks: frozenset[str] = frozenset(),
@@ -2361,6 +2409,7 @@ _CALC_SERVER_TOOL_NAME_PATTERNS: tuple[str, ...] = (
 )
 
 
+@preset
 def mcp_calc_server_bundle_defaults_2026_05_15(
     *,
     extra_sinks: frozenset[str] = frozenset(),
@@ -2440,6 +2489,7 @@ def mcp_calc_server_bundle_defaults_2026_05_15(
     }
 
 
+@preset
 def metis_inspired_corpus_block_rate_regression_defaults_2026_05_18(
     *,
     baseline_block_rate: float = 0.68,
@@ -2500,6 +2550,7 @@ def metis_inspired_corpus_block_rate_regression_defaults_2026_05_18(
     }
 
 
+@preset
 def stainless_provenance_probe_defaults(
     *,
     extra_ua_patterns: frozenset[str] = frozenset(),
@@ -2570,6 +2621,7 @@ def stainless_provenance_probe_defaults(
     }
 
 
+@preset
 def openapi_doc_drift_guard_defaults(
     *,
     spec: Mapping[str, Any],
@@ -2610,6 +2662,7 @@ def openapi_doc_drift_guard_defaults(
     }
 
 
+@preset
 def npm_oidc_publish_window_guard_defaults(
     *,
     blast_list: frozenset[tuple[str, str, str]] | None = None,
@@ -2649,6 +2702,7 @@ def npm_oidc_publish_window_guard_defaults(
     }
 
 
+@preset
 def mcp_stdio_command_injection_preset_defaults(
     *,
     cwd_allowlist: tuple[str, ...] = (),
@@ -2721,6 +2775,7 @@ class FlowiseMcpStdioInjectionError(AirlockError):
         self.matched_path = matched_path
 
 
+@preset
 def flowise_mcp_stdio_guard_2026_defaults(
     *,
     cwd_allowlist: tuple[str, ...] = (),
@@ -2866,6 +2921,7 @@ def flowise_mcp_stdio_guard_2026_defaults(
     }
 
 
+@preset
 def semantic_kernel_filter_eval_rce_2026_25592_26030_defaults(
     *,
     suspect_fields: frozenset[str] | None = None,
@@ -2911,6 +2967,7 @@ def semantic_kernel_filter_eval_rce_2026_25592_26030_defaults(
     }
 
 
+@preset
 def managed_agents_outcomes_2026_05_06_defaults(
     *,
     allowlist: frozenset[str] = frozenset(),
@@ -2990,6 +3047,7 @@ or assemble your own :class:`~agent_airlock.policy.SecurityPolicy` with
 """
 
 
+@preset
 def strict_tier_budget_policy(
     tier_resolver: Any | None = None,
 ) -> SecurityPolicy:
@@ -3075,6 +3133,7 @@ _MOBILE_MCP_INTENT_VALIDATOR = SafeURLValidator(
 )
 
 
+@preset
 def mobile_mcp_intent_guard_2026_05() -> dict[str, Any]:
     """Defensive bundle for CVE-2026-35394 (Mobile MCP intent-URL RCE).
 
@@ -3205,6 +3264,7 @@ _CAPSULE_INDIRECT_INJECTION_TOOL_CORPUS: tuple[str, ...] = (
 )
 
 
+@preset
 def capsule_indirect_injection_cve_2026_21520_defaults(
     *,
     extra_denied_tools: tuple[str, ...] = (),
@@ -3371,6 +3431,7 @@ extend ``extra_denied_tools`` or admit read-side ``allowed_tools``.
 """
 
 
+@preset
 def mcp_description_manifest_guard_defaults(
     *,
     manifests: Iterable[Any],
@@ -3494,6 +3555,7 @@ _LEROBOT_DESERIALIZATION_DENIED_TOOLS: tuple[str, ...] = (
 )
 
 
+@preset
 def lerobot_cve_2026_25874_defaults() -> SecurityPolicy:
     """Deny-by-default posture for the LeRobot pickle-deserialization RCE class.
 
@@ -3568,6 +3630,7 @@ factory when you need a fresh, independently-mutable :class:`SecurityPolicy`
 """
 
 
+@preset
 def mcp_server_env_interpolation_guard_defaults(
     *,
     allowed_vars: Iterable[str] | None = None,
@@ -3651,6 +3714,7 @@ def mcp_server_env_interpolation_guard_defaults(
     }
 
 
+@preset
 def codegen_delimiter_injection_guard_defaults(
     *,
     allowed_literal_fields: Iterable[str] | None = None,
@@ -3745,6 +3809,7 @@ def codegen_delimiter_injection_guard_defaults(
     }
 
 
+@preset
 def cline_cve_2026_44211_defaults(
     *,
     allowed_origins: Iterable[str] | None = None,
@@ -3828,6 +3893,7 @@ def cline_cve_2026_44211_defaults(
     }
 
 
+@preset
 def ssrf_egress_guard_defaults(
     *,
     allow_internal_hosts: Iterable[str] | None = None,
@@ -3908,6 +3974,7 @@ def ssrf_egress_guard_defaults(
     }
 
 
+@preset
 def dns_rebinding_safe_url_defaults(
     *,
     allowed_hosts: list[str] | None = None,
@@ -3986,6 +4053,7 @@ def dns_rebinding_safe_url_defaults(
     }
 
 
+@preset
 def mcp_origin_host_guard_defaults(
     *,
     allowed_origins: Iterable[str] | None = None,
@@ -4074,6 +4142,7 @@ def mcp_origin_host_guard_defaults(
     }
 
 
+@preset
 def openclaw_cve_2026_53820_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -4167,6 +4236,7 @@ def openclaw_cve_2026_53820_defaults(
     }
 
 
+@preset
 def untrusted_tool_output_defaults(
     *,
     envelope: bool = True,
@@ -4262,6 +4332,7 @@ def untrusted_tool_output_defaults(
 UNTRUSTED_TOOL_OUTPUT = untrusted_tool_output_defaults()
 
 
+@preset
 def mcp_spec_2026_07_defaults(*, expected_issuer: str | None = None) -> dict[str, Any]:
     """MCP 2026-07-28 final-spec hardening preset (v0.8.41+).
 
@@ -4367,6 +4438,7 @@ def mcp_spec_2026_07_defaults(*, expected_issuer: str | None = None) -> dict[str
 MCP_SPEC_2026_07 = mcp_spec_2026_07_defaults()
 
 
+@preset
 def mcp_stateless_conformance_2026_07_defaults(
     *,
     session_header: str = "Mcp-Session-Id",
@@ -4447,6 +4519,7 @@ def mcp_stateless_conformance_2026_07_defaults(
 MCP_STATELESS_CONFORMANCE_2026_07 = mcp_stateless_conformance_2026_07_defaults()
 
 
+@preset
 def mcp_spec_2026_07_header_integrity_defaults(
     *,
     method_header: str = "Mcp-Method",
@@ -4523,6 +4596,7 @@ def mcp_spec_2026_07_header_integrity_defaults(
 MCP_SPEC_2026_07_HEADER_INTEGRITY = mcp_spec_2026_07_header_integrity_defaults()
 
 
+@preset
 def mcp_schema_2020_12_contract_defaults(
     *,
     allow_internal_hosts: Sequence[str] = (),
@@ -4607,6 +4681,7 @@ def mcp_schema_2020_12_contract_defaults(
 MCP_SCHEMA_2020_12_CONTRACT = mcp_schema_2020_12_contract_defaults()
 
 
+@preset
 def mcp_meta_trust_2026_07_defaults(
     *,
     pinned: MetaPin | None = None,
@@ -4694,6 +4769,7 @@ def mcp_meta_trust_2026_07_defaults(
 MCP_META_TRUST_2026_07 = mcp_meta_trust_2026_07_defaults()
 
 
+@preset
 def mcp_step_up_scope_2026_07_defaults(*, allow_scope_change: bool = False) -> dict[str, Any]:
     """MCP 2026-07-28 step-up scope-accumulation guard preset (SEP-2350 / SEP-2352, v0.8.52+).
 
@@ -4783,6 +4859,7 @@ def mcp_step_up_scope_2026_07_defaults(*, allow_scope_change: bool = False) -> d
 MCP_STEP_UP_SCOPE_2026_07 = mcp_step_up_scope_2026_07_defaults()
 
 
+@preset
 def mcp_tasks_lifecycle_2026_07_defaults(*, allow_scope_change: bool = False) -> dict[str, Any]:
     """MCP 2026-07-28 Tasks-extension (SEP-1686) lifecycle guard preset (v0.8.53+).
 
@@ -4896,6 +4973,7 @@ def mcp_tasks_lifecycle_2026_07_defaults(*, allow_scope_change: bool = False) ->
 MCP_TASKS_LIFECYCLE_2026_07 = mcp_tasks_lifecycle_2026_07_defaults()
 
 
+@preset
 def mcp_tasks_2026_07_28_defaults(
     *,
     max_outstanding_tasks: int = 16,
@@ -5026,6 +5104,7 @@ def mcp_tasks_2026_07_28_defaults(
 MCP_TASKS_2026_07_28 = mcp_tasks_2026_07_28_defaults()
 
 
+@preset
 def mcp_elicitation_provenance_2026_07_defaults() -> dict[str, Any]:
     """MCP 2026-07-28 elicitation provenance preset (SEP-2260, v0.8.54+).
 
@@ -5076,6 +5155,7 @@ def mcp_elicitation_provenance_2026_07_defaults() -> dict[str, Any]:
 MCP_ELICITATION_PROVENANCE_2026_07 = mcp_elicitation_provenance_2026_07_defaults()
 
 
+@preset
 def mcp_subprocess_arg_injection_guard_defaults(
     *,
     allowed_commands: Iterable[str] | None = None,
@@ -5364,4 +5444,15 @@ __all__ = [
     "mcp_subprocess_arg_injection_guard_defaults",
     # V0.8.25 Goal-Autopilot (arXiv:2606.11688) fail-closed terminal-claim guard
     "no_false_success_defaults",
+    # MCP 2026-07-28 spec-guard presets — shipped and registered via @preset, but
+    # previously omitted from __all__ (the old name-suffix list_active heuristic
+    # picked them up anyway, masking the gap). Exported here so the public surface
+    # matches list_active().
+    "mcp_schema_2020_12_contract_defaults",
+    "mcp_meta_trust_2026_07_defaults",
+    "mcp_step_up_scope_2026_07_defaults",
+    "mcp_tasks_lifecycle_2026_07_defaults",
+    "mcp_tasks_2026_07_28_defaults",
+    "mcp_elicitation_provenance_2026_07_defaults",
+    "mcp_attested_admission_defaults",
 ]

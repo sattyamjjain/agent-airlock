@@ -202,3 +202,63 @@ def test_security_docs_publish_no_example_com_contact() -> None:
         "fake example.com contact in a security-reporting doc — replace with the real "
         "channel (GitHub Security Advisories / maintainer email):\n" + "\n".join(offenders)
     )
+
+
+def _exported_zero_arg_preset_factories() -> list[str]:
+    """``__all__`` names that are module-level factories callable with no args.
+
+    This is the set every enumeration surface (``airlock graph``, the OWASP
+    coverage matrix) is *supposed* to see. Classes (``PresetMeta``,
+    ``*Blocked``/``*Error``), eagerly-built default instances (``UPPER_SNAKE``),
+    and check predicates that demand positional args (``*_check``,
+    ``is_destructive_tool``) are excluded — they are not zero-arg factories.
+    ``list_active`` itself is excluded.
+    """
+    import inspect
+
+    out: list[str] = []
+    for name in policy_presets.__all__:
+        if name == "list_active":
+            continue
+        obj = getattr(policy_presets, name, None)
+        if not inspect.isfunction(obj):
+            continue
+        try:
+            sig = inspect.signature(obj)
+        except (TypeError, ValueError):
+            continue
+        has_required_positional = any(
+            p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            and p.default is inspect.Parameter.empty
+            for p in sig.parameters.values()
+        )
+        if has_required_positional:
+            continue
+        out.append(name)
+    return out
+
+
+def test_all_exported_zero_arg_presets_are_registered() -> None:
+    """Every ``__all__``-exported zero-arg preset factory must appear in
+    ``list_active()``.
+
+    v0.8.57 shipped a ``list_active`` that discovered presets by a name-suffix
+    heuristic (admit ``*_policy`` / ``*_defaults`` / ``*_caps`` / ``*_2026_04``).
+    Ten shipped, exported presets with off-pattern names — ``lan_unauth_mcp_guard``,
+    ``apply_india_dpdp_2023``, ``mobile_mcp_intent_guard_2026_05``,
+    ``oauth_state_injection_guard``, ``high_value_action_deny_by_default``, and
+    five CVE presets — were silently dropped from ``airlock graph`` and the OWASP
+    matrix despite the function calling itself the 'single source of truth'.
+
+    ``list_active`` is now backed by an explicit ``@preset`` registry, so this
+    guard binds the public surface to the enumerated surface: add a preset to
+    ``__all__`` without ``@preset`` and this fails, rather than the preset
+    quietly disappearing from every enumeration.
+    """
+    exported = set(_exported_zero_arg_preset_factories())
+    active = {m.factory_name for m in policy_presets.list_active()}
+    missing = sorted(exported - active)
+    assert not missing, (
+        f"{len(missing)} __all__-exported zero-arg preset factories are not in "
+        f"list_active() — decorate them with @preset:\n" + "\n".join(missing)
+    )
