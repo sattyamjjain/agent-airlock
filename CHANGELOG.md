@@ -9,6 +9,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.58] - 2026-07-29 — "Claims-integrity #2: security contact, preset registry, OWASP MCP mapping, CVE count, de-branding"
+
+A second claims-integrity pass. Most items repair a **published, untrue claim**;
+two touch runtime/CI behaviour — `list_active()` now enumerates every shipped
+preset (it dropped ten), and the CI coverage floor now enforces the declared 82%.
+No detection logic or guard behaviour changed.
+
+### Fixed
+
+- **`SECURITY.md` advertised a fake reporting contact.** The vulnerability-reporting
+  address was `sattyamjain@example.com` (an RFC-2606 reserved domain nobody reads)
+  and the supported-versions table still listed only `0.1.x` while the package
+  ships `0.8.x`. Both `SECURITY.md` and `docs/SECURITY.md` now point at GitHub
+  Security Advisories + the real maintainer email, and the table declares the
+  actual policy (`0.8.x` supported, `< 0.8.0` unsupported). Guard:
+  `test_security_docs_publish_no_example_com_contact`.
+- **`policy_presets.list_active()` under-counted itself.** Calling itself the
+  "single source of truth", it discovered presets by a name-suffix heuristic and
+  silently dropped ten shipped, `__all__`-exported factories with off-pattern
+  names (`lan_unauth_mcp_guard`, `apply_india_dpdp_2023`,
+  `mobile_mcp_intent_guard_2026_05`, `oauth_state_injection_guard`,
+  `high_value_action_deny_by_default`, and five CVE presets), so `airlock graph`
+  and the OWASP matrix under-counted the shipped surface. Replaced with an
+  explicit `@preset` registry (public signature and `list[PresetMeta]` return type
+  unchanged); it now returns **71** (was 61). Seven `mcp_*_2026_07_defaults`
+  spec-guard factories that the heuristic picked up but `__all__` never exported
+  were added to `__all__`. Guard: `test_all_exported_zero_arg_presets_are_registered`.
+- **README claimed the OWASP MCP Top 10 was "covered end-to-end by the
+  `OWASP_MCP_TOP_10_2026` policy preset"** while the mapping table listed only 7 of
+  10 and the single preset covers only the policy-layer subset. The lead claim is
+  rewritten (the preset is the policy layer; other modules cover the rest), the
+  table is completed to all 10 rows with the authoritative OWASP titles and a
+  Full/Partial status column, and two mis-tagged CVE rows are corrected (SSRF is
+  not a standalone MCP category → ASI02; the tool-output guard → MCP06 Intent Flow
+  Subversion, not MCP08). Guard: `TestMcpTopTenMapping`.
+- **Three surfaces disagreed on the CVE-regression count** — README ASI04 "11+ CVEs
+  tracked", marketplace "30 CVE regression tests", and 37 real modules in
+  `tests/cves/`. Counted programmatically (every `tests/cves/test_*.py` except the
+  internal Metis corpus = **37**) and fenced both surfaces to it. Guard:
+  `test_cve_count_is_honest`.
+- **Coverage floor disagreed with itself.** `pyproject.toml` set `fail_under = 82`
+  but `ci.yml` passed `--cov-fail-under=80`, which overrides the config on the CI
+  run — so CI enforced 80 while the config and marketplace claimed different
+  numbers. CI now enforces 82 (full-suite coverage is 86.66%); the marketplace
+  proof point reads "floor 82%". Guard: `test_coverage_floor_is_consistent`.
+
+### Changed
+
+- **Dropped the residual "firewall" self-branding** from the shipped `airlock
+  verify` CLI copy, two source-module docstrings, a benchmark README, and a launch
+  draft — rewritten onto the tool-call contract / least-privilege wedge. Naming
+  third-party firewalls (LlamaFirewall, Invariant, Cloudflare/Docker/Azure
+  gateways) stays legal. The self-branding guard now covers shipped CLI copy and
+  `docs/`, not just the manifests
+  (`test_cli_copy_never_says_firewall`,
+  `test_shipped_source_and_docs_do_not_self_brand_as_firewall`).
+- **Archived the unfiled NIST AI RMF v2.0 public comment.** Its seven-week window
+  (opened 2026-04-18) closed ~2026-06-06 without submission, so the draft moved to
+  `docs/regulatory/archive/` and is re-marked "ARCHIVED — NOT FILED".
+
 ## [0.8.57] - 2026-07-28 — "Published-claims integrity: manifests, spec-status provenance, OWASP coverage matrix"
 
 Claims-integrity pass. Every item repairs a **published, untrue claim** — **no
