@@ -6,8 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 from .cache import CompileCache
 from .prompt import COMPILE_PROMPT, PROMPT_HASH

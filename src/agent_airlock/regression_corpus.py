@@ -51,7 +51,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
-import structlog
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.regression_corpus")
 

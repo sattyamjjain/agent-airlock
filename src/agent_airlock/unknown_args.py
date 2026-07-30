@@ -18,7 +18,7 @@ import warnings
 from enum import Enum
 from typing import TYPE_CHECKING
 
-import structlog
+from ._log import structlog
 
 if TYPE_CHECKING:
     from .audit import AuditLogger

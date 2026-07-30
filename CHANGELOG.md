@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.59] - 2026-07-30 — "Claims-integrity #3: the zero-core-dependency claim is now true"
+
+A third claims-integrity pass. It repairs the single highest-traffic untrue
+claim on the repo — a zero-core-dependency pitch that a bare `pip install`
+disproved — by making it true. It changes the packaging surface (one runtime
+dependency moves to an extra) but no detection logic, guard behaviour, or public
+API.
+
+### Fixed — the zero-core-dependency claim is now true (structlog moved to an extra)
+
+Through v0.8.58, `pip install agent-airlock` pulled `structlog` — an
+unconditional entry in `pyproject.toml` `[project].dependencies` — while every
+public surface (the README subtitle and its `Core dependencies: 0` metric, the
+PyPI `description`) advertised a zero-dependency, Pydantic-only core. A
+five-second `pip install` disproved the highest-traffic claim on the repo. This
+release makes the claim true rather than dropping it. **No detection logic,
+guard behaviour, or public API changed.**
+
+- **`structlog` is no longer a core runtime dependency.** It moved out of
+  `[project].dependencies` — now Pydantic plus the environment-marked `tomli`
+  3.10 stdlib backport only — into a new `logging` optional-dependency extra,
+  and into the `dev` and `all` extras so CI and full installs exercise the real
+  dependency unchanged.
+- **New `src/agent_airlock/_log.py` shim.** The core logs through
+  `from ._log import structlog`, which re-exports the real module when it is
+  installed and otherwise falls back to a tiny stdlib-`logging`-backed shim that
+  accepts structlog's keyword-event call form. The `import structlog` line in
+  109 modules was rewritten to the shim import; every `structlog.get_logger(...)`
+  / `configure(...)` call site is byte-identical.
+- **README stays honest under scrutiny.** The `Zero core dependencies` subtitle
+  (line 10) and the `Core dependencies: 0 (Pydantic only)` metric (line 1463)
+  keep the claim and gain a footnote naming the 3.10-only `tomli` backport, so
+  the number is defensible rather than merely correct.
+- **Fenced so it cannot drift again.** Two guards in
+  `tests/test_public_metadata.py` — `test_core_dependencies_are_pydantic_only`
+  (the unmarked core-distribution set must be exactly `{pydantic}`) and
+  `test_readme_core_dependency_count_matches_pyproject` (the README number must
+  equal pyproject's beyond-Pydantic count) — plus a new `bare-install` CI job
+  that installs with no extras, asserts `structlog` is absent, and imports the
+  core through the shim. Nothing read `[project].dependencies` before, which is
+  why this drifted silently for 24 releases.
+
 ## [0.8.58] - 2026-07-29 — "Claims-integrity #2: security contact, preset registry, OWASP MCP mapping, CVE count, de-branding"
 
 A second claims-integrity pass. Most items repair a **published, untrue claim**;

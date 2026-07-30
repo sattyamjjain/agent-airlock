@@ -21,8 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from .builder import GraphSnapshot, build_snapshot
 
 logger = structlog.get_logger("agent-airlock.graph.server")

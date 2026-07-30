@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.studio.app")
 

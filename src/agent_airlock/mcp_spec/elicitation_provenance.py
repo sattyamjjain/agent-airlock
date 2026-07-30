@@ -31,8 +31,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..observability import track_event
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.elicitation_provenance")

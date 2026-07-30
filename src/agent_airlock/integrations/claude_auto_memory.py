@@ -51,8 +51,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 from ..sanitizer import sanitize_output
 

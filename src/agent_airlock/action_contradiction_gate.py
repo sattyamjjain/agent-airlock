@@ -77,8 +77,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-import structlog
-
+from ._log import structlog
 from .policy import PolicyViolation, ViolationType
 
 logger = structlog.get_logger("agent-airlock.action_contradiction_gate")

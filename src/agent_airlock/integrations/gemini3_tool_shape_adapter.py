@@ -41,8 +41,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 from .gpt5_5_tool_shape_adapter import NormalizedToolCall
 

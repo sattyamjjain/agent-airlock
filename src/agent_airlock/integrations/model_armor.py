@@ -56,7 +56,7 @@ import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-import structlog
+from .._log import structlog
 
 if TYPE_CHECKING:  # pragma: no cover
     pass

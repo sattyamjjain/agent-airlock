@@ -15,8 +15,7 @@ import inspect
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
-import structlog
-
+from ._log import structlog
 from .config import DEFAULT_CONFIG, AirlockConfig
 from .policy import SecurityPolicy
 

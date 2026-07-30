@@ -8,8 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
-import structlog
-
+from .._log import structlog
 from .quorum import QuorumError, ResetQuorum
 from .signer import HMACBroadcastSigner, InvalidBroadcastSignature
 from .transports import BroadcastTransport

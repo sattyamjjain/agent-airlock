@@ -41,8 +41,9 @@ from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
-import structlog
 from pydantic import AfterValidator
+
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.safe_types")
 

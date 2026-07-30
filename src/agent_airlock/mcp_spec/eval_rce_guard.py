@@ -50,7 +50,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.eval_rce_guard")
 

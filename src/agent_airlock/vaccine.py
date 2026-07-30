@@ -28,8 +28,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
-
+from ._log import structlog
 from .config import AirlockConfig
 from .core import Airlock
 from .policy import SecurityPolicy

@@ -34,8 +34,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Literal
 from urllib.parse import unquote
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.config_path_guard")

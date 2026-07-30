@@ -64,8 +64,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, runtime_checkable
 
-import structlog
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.a2a")
 

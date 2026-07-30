@@ -35,7 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
-import structlog
+from ._log import structlog
 
 if TYPE_CHECKING:
     from .config import AirlockConfig

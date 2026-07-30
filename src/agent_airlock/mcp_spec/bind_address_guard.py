@@ -37,8 +37,7 @@ from __future__ import annotations
 import ipaddress
 from dataclasses import dataclass
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.bind_address_guard")

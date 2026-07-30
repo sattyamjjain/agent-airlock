@@ -22,8 +22,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
-import structlog
-
+from ._log import structlog
 from .exceptions import AirlockError
 
 if TYPE_CHECKING:

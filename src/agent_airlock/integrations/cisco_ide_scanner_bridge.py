@@ -34,8 +34,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from .scanners import Finding
 
 logger = structlog.get_logger("agent-airlock.integrations.cisco_ide_scanner_bridge")

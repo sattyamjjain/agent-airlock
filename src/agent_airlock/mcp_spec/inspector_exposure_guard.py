@@ -50,7 +50,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.inspector_exposure_guard")
 

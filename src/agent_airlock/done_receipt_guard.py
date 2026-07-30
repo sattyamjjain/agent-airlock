@@ -44,8 +44,7 @@ import secrets
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-import structlog
-
+from ._log import structlog
 from .exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.done_receipt_guard")

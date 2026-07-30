@@ -35,8 +35,7 @@ import enum
 from dataclasses import dataclass
 from pathlib import Path
 
-import structlog
-
+from .._log import structlog
 from ..mcp_spec.manifest_only_mode import (
     ManifestNotRegisteredError,
     ManifestRegistry,

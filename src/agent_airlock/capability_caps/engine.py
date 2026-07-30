@@ -6,8 +6,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Literal
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 from .enums import Capability
 from .store import CapabilityLedgerStore, SQLiteCapabilityLedgerStore

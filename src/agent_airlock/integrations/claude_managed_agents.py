@@ -41,8 +41,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.integrations.claude_managed_agents")

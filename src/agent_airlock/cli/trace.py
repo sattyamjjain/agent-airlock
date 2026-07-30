@@ -32,8 +32,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..trace_redaction import TraceRedactionPolicy, trace_redact, verify_watermark
 
 _EXIT_DETECTED = 0

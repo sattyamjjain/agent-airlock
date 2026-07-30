@@ -21,8 +21,7 @@ from collections.abc import AsyncGenerator, Generator
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
-import structlog
-
+from ._log import structlog
 from .config import AirlockConfig
 from .sanitizer import sanitize_output
 

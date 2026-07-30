@@ -1,4 +1,4 @@
-# Distribution — wedge + block-rate (v0.8.39)
+# Distribution — wedge + block-rate
 
 Status: **copy + config only. Nothing here auto-posts.** This is the current,
 block-rate-led entry point; the deeper ready-to-paste bullets and launch
@@ -26,7 +26,7 @@ awesome-lists below, plus PyPI.
 
 **Listed on (keep current):**
 
-- PyPI — <https://pypi.org/project/agent-airlock/> (v0.8.39)
+- PyPI — <https://pypi.org/project/agent-airlock/> (canonical, always the latest release)
 - _(pending PRs below — check the box when merged)_
   - [ ] Awesome LLM Security
   - [ ] Awesome MCP Security

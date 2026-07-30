@@ -36,8 +36,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.supply_chain")

@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-import structlog
+from ._log import structlog
 
 if TYPE_CHECKING:
     from opentelemetry.trace import Tracer

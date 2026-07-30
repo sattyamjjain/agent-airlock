@@ -46,8 +46,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 from ..scan.schema import is_local_ref
 from ..ssrf_egress_guard import SSRFEgressDecision, SSRFEgressGuard

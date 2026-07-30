@@ -50,8 +50,7 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from typing import Any, Literal
 
-import structlog
-
+from .._log import structlog
 from ..attest.receipt import ReceiptVerdict, ReceiptVerdictKind
 from ..exceptions import AirlockError
 

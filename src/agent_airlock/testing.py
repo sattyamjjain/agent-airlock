@@ -28,7 +28,7 @@ Or for specific cleanup:
 
 from __future__ import annotations
 
-import structlog
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.testing")
 

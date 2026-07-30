@@ -56,7 +56,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from typing import Any
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oidc_publish_window_guard")
 

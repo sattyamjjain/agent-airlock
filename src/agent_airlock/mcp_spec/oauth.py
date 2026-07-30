@@ -42,8 +42,9 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-import structlog
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oauth")
 

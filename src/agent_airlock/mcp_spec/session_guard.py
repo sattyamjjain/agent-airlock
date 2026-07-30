@@ -56,8 +56,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Literal
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 if TYPE_CHECKING:

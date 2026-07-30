@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol, TypeGuard
 
-import structlog
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.honeypot")
 

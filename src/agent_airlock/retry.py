@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
-import structlog
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.retry")
 

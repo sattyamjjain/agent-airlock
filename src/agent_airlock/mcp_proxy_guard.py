@@ -27,8 +27,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-import structlog
-
+from ._log import structlog
 from .policy import StdioGuardConfig
 
 if TYPE_CHECKING:

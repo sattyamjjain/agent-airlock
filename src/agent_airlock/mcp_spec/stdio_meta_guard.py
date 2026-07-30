@@ -35,8 +35,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 from ..policy import StdioGuardConfig
 from .argv_guard import ArgvStringConcatenationError, enforce_argv_array

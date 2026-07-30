@@ -35,8 +35,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..regression_corpus import (
     CorpusEntry,
     MetisInspiredCorpusBlockRateDecision,

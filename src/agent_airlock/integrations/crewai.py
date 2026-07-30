@@ -47,8 +47,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy

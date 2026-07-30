@@ -40,8 +40,7 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.argv_guard")

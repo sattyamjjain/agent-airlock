@@ -13,8 +13,7 @@ from dataclasses import asdict, dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal, Protocol
 
-import structlog
-
+from ._log import structlog
 from .exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.cost_tracking")

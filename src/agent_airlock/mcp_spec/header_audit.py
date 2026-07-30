@@ -37,8 +37,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.header_audit")

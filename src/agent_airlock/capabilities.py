@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from enum import Enum, Flag, auto
 from typing import Any, TypeVar
 
-import structlog
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.capabilities")
 

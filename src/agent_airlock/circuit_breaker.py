@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-import structlog
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.circuit_breaker")
 

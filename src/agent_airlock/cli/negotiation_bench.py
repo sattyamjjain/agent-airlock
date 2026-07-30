@@ -19,8 +19,7 @@ import argparse
 import json
 import sys
 
-import structlog
-
+from .._log import structlog
 from ..negotiation_bench import BenchmarkReport, run_benchmark
 
 

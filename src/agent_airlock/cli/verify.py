@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.cli.verify")
 

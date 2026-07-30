@@ -45,8 +45,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..observability import track_event
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.step_up_scope_guard")

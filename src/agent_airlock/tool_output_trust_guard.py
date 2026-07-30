@@ -69,8 +69,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
-
+from ._log import structlog
 from .exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.tool_output_trust_guard")

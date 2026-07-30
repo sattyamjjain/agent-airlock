@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.integrations.langgraph_toolnode_compat")
 

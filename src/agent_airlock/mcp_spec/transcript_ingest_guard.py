@@ -28,8 +28,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
-import structlog
-
+from .._log import structlog
 from .pr_metadata_guard import PRMetadataGuard, SanitizedField
 
 # Transcript-specific imperative patterns. PRMetadataGuard's regex set

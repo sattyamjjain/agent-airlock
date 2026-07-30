@@ -26,7 +26,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.integrations.cloudflare_mesh_probe")
 

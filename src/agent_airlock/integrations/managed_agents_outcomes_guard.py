@@ -47,7 +47,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.integrations.managed_agents_outcomes_guard")
 

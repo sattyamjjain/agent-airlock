@@ -46,8 +46,7 @@ import os
 import unicodedata
 from typing import Any
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 from ..policy import StdioGuardConfig
 

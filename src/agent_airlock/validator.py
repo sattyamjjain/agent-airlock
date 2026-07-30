@@ -12,8 +12,9 @@ import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-import structlog
 from pydantic import ConfigDict, ValidationError, validate_call
+
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.validator")
 

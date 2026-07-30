@@ -42,7 +42,7 @@ import json
 from dataclasses import dataclass
 from importlib.resources import files
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.budget.agent_sdk_credit")
 

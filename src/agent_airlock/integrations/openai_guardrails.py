@@ -10,12 +10,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
-import structlog
-
 from agent_airlock.config import AirlockConfig
 from agent_airlock.core import Airlock
 from agent_airlock.policy import SecurityPolicy
 from agent_airlock.sanitizer import SensitiveDataType, detect_sensitive_data
+
+from .._log import structlog
 
 if TYPE_CHECKING:
     pass

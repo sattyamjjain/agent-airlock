@@ -54,9 +54,9 @@ import time
 from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar, overload
 
-import structlog
 from pydantic import ValidationError
 
+from ._log import structlog
 from .audit import AuditLogger
 from .capabilities import (
     Capability,

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.8.58"
+version = "0.8.59"
 description = "A type-checker and contract layer for AI agent tool calls — deny-by-default, in-process, zero-dep. Strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks."
 readme = "README.md"
 license = "MIT"
@@ -49,11 +49,22 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.0,<3.0",
-    "structlog>=24.0",
     "tomli>=2.0;python_version<'3.11'",
 ]
 
 [project.optional-dependencies]
+# Structured JSON logging (v0.8.59+).
+# Install with: pip install "agent-airlock[logging]"
+# structlog was an unconditional core dependency through v0.8.58 while every
+# public surface advertised a zero-dependency, Pydantic-only core. It now lives
+# here: the core imports it through src/agent_airlock/_log.py, which falls back
+# to a stdlib-logging shim when structlog is absent, so `pip install
+# agent-airlock` pulls Pydantic only. Install this extra for structured JSON
+# output. It is also in [dev] and [all], so CI and full installs exercise the
+# real dependency unchanged.
+logging = [
+    "structlog>=24.0",
+]
 # Adaptive-attacker benchmark harness (v0.8.43+, issue: AgentDojo wiring).
 # Install with: pip install "agent-airlock[bench]"
 # Pulls AgentDojo, used ONLY by benchmarks/agentdojo/. NEVER a core dependency —
@@ -133,7 +144,7 @@ crewai = [
     "crewai>=1.14.4,<2.0",
 ]
 all = [
-    "agent-airlock[sandbox,mcp,claude-agent,model-armor,console,redis,crypto,pydantic-ai,crewai]",
+    "agent-airlock[logging,sandbox,mcp,claude-agent,model-armor,console,redis,crypto,pydantic-ai,crewai]",
 ]
 dev = [
     "pytest>=8.0",
@@ -142,6 +153,12 @@ dev = [
     "pytest-benchmark>=4.0",
     "mypy>=1.8",
     "ruff>=0.2",
+    # structlog is no longer a core dependency (v0.8.59+, moved to the [logging]
+    # extra). It stays here so the CI test job — which installs `.[dev]` —
+    # exercises the real-structlog path and coverage does not move. The bare
+    # `pip install -e .` CI job deliberately omits it to exercise the _log.py
+    # stdlib fallback.
+    "structlog>=24.0",
     # Security tools. bandit floor pinned to 1.9.4 to match the CI image:
     # 1.9.x is stricter than 1.8.x (e.g. flags dict keys / vars named like
     # secrets as B105), so a lower local floor caused "passes locally, fails

@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.cli.doctor")
 

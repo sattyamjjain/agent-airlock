@@ -67,9 +67,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Annotated, Any
 
-import structlog
 from pydantic import Field
 
+from ._log import structlog
 from .core import Airlock
 
 logger = structlog.get_logger("agent-airlock.negotiation_bench")

@@ -34,7 +34,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-import structlog
+from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.integrations.gpt5_5_tool_shape_adapter")
 

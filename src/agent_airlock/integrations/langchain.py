@@ -10,11 +10,11 @@ import functools
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
-import structlog
-
 from agent_airlock.config import AirlockConfig
 from agent_airlock.core import Airlock
 from agent_airlock.policy import SecurityPolicy
+
+from .._log import structlog
 
 if TYPE_CHECKING:
     pass

@@ -40,7 +40,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 
-import structlog
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.sdk_provenance")
 

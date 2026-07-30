@@ -38,8 +38,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oauth_state_entropy_guard")

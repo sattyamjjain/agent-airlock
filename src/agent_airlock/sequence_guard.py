@@ -75,8 +75,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-import structlog
-
+from ._log import structlog
 from .policy import PolicyViolation, ViolationType
 
 logger = structlog.get_logger("agent-airlock.sequence_guard")

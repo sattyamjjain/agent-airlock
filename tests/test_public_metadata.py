@@ -42,6 +42,29 @@ def _load_pyproject() -> dict:
         return tomllib.load(fh)
 
 
+# PEP 508: a distribution name is the leading run before any version specifier,
+# extra bracket, or environment marker.
+_DIST_NAME = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+
+def _dist_name(requirement: str) -> str:
+    base = requirement.split(";", 1)[0].strip()
+    match = _DIST_NAME.match(base)
+    assert match, f"cannot parse a distribution name from requirement {requirement!r}"
+    return match.group(1).lower()
+
+
+def _unmarked_core_distributions() -> set[str]:
+    """Core runtime distributions with no environment marker.
+
+    A marker-gated entry (``tomli>=2.0;python_version<'3.11'``) is a stdlib
+    backport, not a third-party runtime dependency on any supported modern
+    Python (``tomllib`` is stdlib on 3.11+), so it is excluded here.
+    """
+    deps = _load_pyproject()["project"]["dependencies"]
+    return {_dist_name(req) for req in deps if ";" not in req}
+
+
 def test_project_urls_point_to_canonical_repo() -> None:
     """Every [project.urls] entry must contain the canonical ``sattyamjjain`` slug."""
     data = _load_pyproject()
@@ -118,6 +141,51 @@ def test_readme_does_not_hand_maintain_loc_count() -> None:
         "README.md re-introduced the hand-maintained 'Lines of Code' row. "
         "Don't — it drifts and the TEST-BADGE block + Complete Examples "
         "table are the only sources of truth this README hand-maintains."
+    )
+
+
+def test_core_dependencies_are_pydantic_only() -> None:
+    """The airlock core must stay Pydantic-only (v0.8.59+).
+
+    Honesty bug fixed in v0.8.59: ``structlog`` was an unconditional
+    ``[project].dependencies`` entry for 24 releases while every public surface
+    — the README subtitle, the Performance table's ``Core dependencies: 0``
+    row, and the PyPI ``description`` — advertised a zero-dependency,
+    Pydantic-only core. It now lives in the ``[logging]`` extra (the core imports
+    it through ``agent_airlock._log``, which falls back to a stdlib shim). This
+    guard is why the claim can never quietly drift again: any new unconditional
+    core dependency trips it.
+    """
+    unmarked = _unmarked_core_distributions()
+    extra = sorted(unmarked - {"pydantic"})
+    assert unmarked == {"pydantic"}, (
+        "The airlock core must stay Pydantic-only — the README's "
+        "'Core dependencies: 0 (Pydantic only)' pitch depends on it. Unexpected "
+        f"unconditional core dependenc(ies): {extra}. Gate a new dependency behind "
+        "an optional extra (as structlog is, via [logging]), or add it here "
+        "deliberately with the README row updated to match."
+    )
+
+
+def test_readme_core_dependency_count_matches_pyproject() -> None:
+    """The README 'Core dependencies' number must equal pyproject's reality.
+
+    The row reads ``| **Core dependencies** | 0 (Pydantic only) |``. The integer
+    counts third-party runtime dependencies *beyond* the Pydantic foundation —
+    which is exactly ``len(unmarked core distributions) - {"pydantic"}``. Binding
+    the two means the table can never restate a stale number: add a core dep and
+    both this guard and :func:`test_core_dependencies_are_pydantic_only` fail.
+    """
+    text = README.read_text(encoding="utf-8")
+    match = re.search(r"\|\s*\*\*Core dependencies\*\*\s*\|\s*(\d+)\b[^|]*\|", text)
+    assert match, "README Performance table is missing the '| **Core dependencies** |' row"
+    claimed = int(match.group(1))
+    beyond_pydantic = _unmarked_core_distributions() - {"pydantic"}
+    assert claimed == len(beyond_pydantic), (
+        f"README 'Core dependencies' row says {claimed} but pyproject declares "
+        f"{len(beyond_pydantic)} unconditional runtime dependenc(ies) beyond Pydantic: "
+        f"{sorted(beyond_pydantic)}. The number means 'third-party runtime deps beyond "
+        "the Pydantic foundation' — keep it and pyproject in lockstep."
     )
 
 

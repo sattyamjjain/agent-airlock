@@ -37,8 +37,7 @@ from dataclasses import dataclass
 from queue import Empty, Queue
 from typing import TYPE_CHECKING, Any, TypeVar
 
-import structlog
-
+from ._log import structlog
 from .config import DEFAULT_CONFIG, AirlockConfig
 
 if TYPE_CHECKING:

@@ -50,8 +50,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
-import structlog
-
+from ._log import structlog
 from .exceptions import AirlockError
 from .network import is_blocked_ipv6_range
 

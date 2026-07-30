@@ -54,8 +54,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
-import structlog
-
+from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.mcp_origin_host_guard")

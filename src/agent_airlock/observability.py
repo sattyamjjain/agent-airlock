@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.observability")
 

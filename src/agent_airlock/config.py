@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import structlog
+from ._log import structlog
 
 if TYPE_CHECKING:
     from pydantic import ValidationError
