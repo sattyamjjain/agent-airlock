@@ -1,9 +1,9 @@
 # Public comment — NIST AI RMF v2.0, Agentic-AI Security Subsection
 
-Submission draft. Status: **ARCHIVED — NOT FILED.** The comment window
+Submission draft. Status: **DRAFTED, NEVER SUBMITTED.** The comment window
 opened 2026-04-18 with a seven-week period (closed ~2026-06-06) and this
-draft was never submitted to the NIST portal, so it is retained here as
-an unfiled archive record only. Portal submission remains a maintainer
+draft was never submitted to the NIST portal; it is kept here only as a
+record of the drafted comment. Portal submission remains a maintainer
 action; do not treat this document as a filed comment.
 
 **Commenter:** Sattyam Jain (open-source maintainer, agent-airlock)

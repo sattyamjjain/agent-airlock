@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.60] - 2026-07-31 — "Measured: the AgentDojo model-in-the-loop ASR"
+
+Item 1 is a **measurement**, not a feature: the real model-in-the-loop AgentDojo
+ASR (45% → 10% with airlock) now sits in the README next to the deterministic
+86% upper bound, and the harness bugs found while running it are fixed. Item 2
+removes two dead artifacts. No airlock runtime or core behaviour changed.
+
+### Measured — the AgentDojo model-in-the-loop ASR the README's "needs a key" caveat had only promised
+
+Ran the real model-in-the-loop AgentDojo pass that the harness had described but
+never executed. Against `gpt-4o-mini-2024-07-18` (AgentDojo `v1.2.1`,
+`tool_knowledge` attack, a 60-attacked-trajectory subset across all four suites),
+airlock cuts attack-success-rate **45% → 10%** (−35pp; airlock ASR 95% Wilson CI
+[5%, 20%]) at a **+10pp** benign-utility cost. Published next to the existing
+deterministic upper bound (**86.0%**, 524/609); the ~51pp gap between "target
+call blockable" and "attack prevented in the loop" is stated as the finding, not
+hidden. The README benchmark table now carries the real number instead of the
+"needs a key" caveat. **No airlock runtime or core behaviour changed — this is a
+measurement, not a feature.**
+
+Executing the `--model` path (never run before) surfaced three latent bugs in
+`benchmarks/agentdojo/run.py`, all fixed:
+
+- the pipeline name overwrote the model identity, so the attack's
+  `get_model_name_from_pipeline()` raised before any API call;
+- `logdir=None` hit agentdojo 0.1.x's `NullLogger.logdir`, crashing pre-API;
+- the model path scoped a suite-wide-union policy while Result 1 is per-task — an
+  apples-to-oranges comparison; reworked to per-task least-privilege so both
+  results measure the same defense.
+
+Also added to the harness: a Wilson score interval and benign false-positive-rate
+reporting (a block rate without an FPR is not interpretable), and `--logdir` /
+`--suites` for cached resume and per-suite runs.
+
+### Removed — dead artifacts
+
+- `releases/v0.5.6.md` and `releases/v0.5.7.md` — orphaned standalone release
+  notes superseded by `CHANGELOG.md`; deleted (only historical CHANGELOG prose
+  referenced them, left intact).
+- `docs/regulatory/archive/nist-ai-rmf-v2-comment-2026.md` — a lone-file
+  "archive" is clutter; moved to `docs/nist-ai-rmf-v2-comment-2026.md` with a
+  drafted-never-submitted header, the empty `regulatory/` tree removed, and the
+  README link plus the self-branding-scan exclusion updated to the new path.
+
 ## [0.8.59] - 2026-07-30 — "Claims-integrity #3: the zero-core-dependency claim is now true"
 
 A third claims-integrity pass. It repairs the single highest-traffic untrue

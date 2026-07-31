@@ -32,8 +32,9 @@ SECURITY_DOCS = [REPO_ROOT / "SECURITY.md", REPO_ROOT / "docs" / "SECURITY.md"]
 SRC_DIR = REPO_ROOT / "src" / "agent_airlock"
 CLI_DIR = SRC_DIR / "cli"
 DOCS_DIR = REPO_ROOT / "docs"
-# Archived, not-filed regulatory drafts are not a live surface and are exempt.
-_FIREWALL_SCAN_EXCLUDE = (DOCS_DIR / "regulatory" / "archive",)
+# The not-filed NIST comment draft is a policy document, not a live product
+# surface, so it is exempt from the self-branding scan.
+_FIREWALL_SCAN_EXCLUDE = (DOCS_DIR / "nist-ai-rmf-v2-comment-2026.md",)
 # Affirmative self-branding: phrasings that call agent-airlock ITSELF a firewall.
 # Deliberately narrow so legitimate uses stay legal — third-party products
 # (LlamaFirewall, Cloudflare/Docker/Azure gateways, "platform firewalls",

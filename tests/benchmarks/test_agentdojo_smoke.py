@@ -20,10 +20,13 @@ from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime  # noqa: 
 from agentdojo.task_suite.load_suites import get_suite  # noqa: E402
 from agentdojo.types import ChatAssistantMessage  # noqa: E402
 from benchmarks.agentdojo.run import (  # noqa: E402
+    ArmCounts,
+    _render_model_section,
     airlock_blocks,
     least_privilege_policy,
     make_airlock_tools_executor,
     measure_suite_coverage,
+    wilson_ci,
 )
 
 
@@ -79,3 +82,39 @@ def test_deterministic_coverage_is_nonzero() -> None:
     cov = measure_suite_coverage("banking")
     assert cov.pairs > 0
     assert 0.0 < cov.per_task_rate <= 1.0
+
+
+def test_wilson_ci_known_values() -> None:
+    """Wilson score interval matches textbook values and is well-behaved at 0/1."""
+    # Empty sample -> maximal uncertainty.
+    assert wilson_ci(0, 0) == (0.0, 1.0)
+    # 10/20 = 0.5 -> symmetric ~[0.299, 0.701].
+    lo, hi = wilson_ci(10, 20)
+    assert round(lo, 3) == 0.299 and round(hi, 3) == 0.701
+    # All-success stays below 1 on the low side, clamps to 1.0 on the high side.
+    lo, hi = wilson_ci(20, 20)
+    assert 0.0 < lo < 1.0 and hi == 1.0
+    # Zero-success clamps to 0.0 on the low side.
+    lo, hi = wilson_ci(0, 20)
+    assert lo == 0.0 and 0.0 < hi < 1.0
+
+
+def test_render_model_section_reports_ci_fpr_and_gap() -> None:
+    """The rendered Result 2 carries the per-arm ASR, a Wilson CI, the benign
+    false-positive cost, and the deterministic-vs-realised gap — the four things
+    a bare percentage would omit."""
+    results = {
+        "banking": {
+            "undefended": ArmCounts(4, 5, 2, 15, 9, 15),
+            "airlock": ArmCounts(4, 5, 3, 15, 2, 15),
+        },
+    }
+    md = _render_model_section(
+        results, "gpt-4o-mini-2024-07-18", "0.1.35", "2026-07-31", 5, 3, 0.86
+    )
+    assert "Result 2" in md
+    assert "Wilson CI" in md
+    assert "false-positive cost" in md
+    assert "gap" in md.lower()
+    # Pooled ASR reduction 60% -> 13% must appear as a headline.
+    assert "60%" in md and "13%" in md

@@ -32,7 +32,9 @@ Run::
 from __future__ import annotations
 
 import argparse
+import math
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -205,6 +207,53 @@ def run_deterministic(suites: tuple[str, ...] = PINNED_SUITES) -> DeterministicR
 # --------------------------------------------------------------------------- #
 
 
+def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score interval for a binomial proportion ``k/n``.
+
+    The Wilson interval is well-behaved at small ``n`` and near 0/1 (unlike the
+    normal-approximation interval), which matters here: the model-in-the-loop
+    subset is deliberately small, so a bare percentage would over-claim
+    precision. Returns ``(low, high)`` clamped to ``[0, 1]``; an empty sample
+    ``(n == 0)`` returns ``(0.0, 1.0)`` — maximal uncertainty. Pure stdlib, no
+    scipy, so the ``[bench]`` extra stays light.
+
+    Args:
+        k: Number of successes.
+        n: Number of trials.
+        z: Standard-normal quantile (1.96 == 95% CI).
+
+    Returns:
+        The ``(low, high)`` bounds of the Wilson score interval.
+    """
+    if n <= 0:
+        return 0.0, 1.0
+    p = k / n
+    denom = 1.0 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = (z / denom) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return max(0.0, center - half), min(1.0, center + half)
+
+
+@dataclass
+class ArmCounts:
+    """Raw success/total counts for one (suite, arm) — kept so the report can
+    compute pooled rates and Wilson intervals rather than shipping bare means.
+
+    * ``benign_*``  — benign utility: task solved with no injection present.
+    * ``atk_util_*`` — utility under attack: benign task still solved with the
+      injection present.
+    * ``asr_*`` — attack success: the injection achieved its goal (higher is
+      worse; the defense's job is to lower it).
+    """
+
+    benign_k: int = 0
+    benign_n: int = 0
+    atk_util_k: int = 0
+    atk_util_n: int = 0
+    asr_k: int = 0
+    asr_n: int = 0
+
+
 def make_airlock_tools_executor(policy: SecurityPolicy) -> Any:
     """Build an ``AirlockToolsExecutor`` pipeline element bound to ``policy``.
 
@@ -271,17 +320,13 @@ def make_airlock_tools_executor(policy: SecurityPolicy) -> Any:
     return AirlockToolsExecutor(policy)
 
 
-def _suite_policy(suite: Any) -> SecurityPolicy:
-    """Least-privilege policy allow-listing the suite's benign toolset."""
-    env = suite.load_and_inject_default_environment({})
-    allowed: set[str] = set()
-    for ut in suite.user_tasks.values():
-        allowed |= {n for n, _ in _ground_truth_calls(ut, env)}
-    return least_privilege_policy(list(allowed))
-
-
 def run_model(
-    model_id: str, suites: tuple[str, ...], max_user_tasks: int, max_injection_tasks: int
+    model_id: str,
+    suites: tuple[str, ...],
+    max_user_tasks: int,
+    max_injection_tasks: int,
+    deterministic_rate: float,
+    logdir_arg: str | None = None,
 ) -> str:
     """Run the real model-in-the-loop AgentDojo pass for defended vs undefended.
 
@@ -299,6 +344,7 @@ def run_model(
         benchmark_suite_with_injections,
         benchmark_suite_without_injections,
     )
+    from agentdojo.logging import OutputLogger
     from agentdojo.task_suite.load_suites import get_suite
 
     def _swap_executor(pipeline: Any, policy: SecurityPolicy) -> Any:
@@ -326,101 +372,187 @@ def run_model(
         ad_ver = "?"
     stamp_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # results[suite][arm] = (benign_utility, utility_under_attack, asr)
-    results: dict[str, dict[str, tuple[float, float, float]]] = {}
-    for suite_name in suites:
-        suite = get_suite(BENCHMARK_VERSION, suite_name)
-        policy = _suite_policy(suite)
-        user_ids = list(suite.user_tasks)[:max_user_tasks]
-        inj_ids = list(suite.injection_tasks)[:max_injection_tasks]
-        results[suite_name] = {}
+    # agentdojo's TraceLogger reads ``delegate.logdir`` from the ambient logger, so
+    # the benchmark calls must run inside an OutputLogger context. A bare
+    # ``logdir=None`` hits a NullLogger with no ``logdir`` attribute in agentdojo
+    # 0.1.x. When ``logdir_arg`` is given, agentdojo reuses any per-task result
+    # already cached there (``force_rerun=False``), so a run can resume without
+    # re-spending on completed trajectories; otherwise a throwaway dir is used.
+    logdir = Path(logdir_arg) if logdir_arg else Path(tempfile.mkdtemp(prefix="airlock-agentdojo-"))
+    logdir.mkdir(parents=True, exist_ok=True)
 
-        for arm in ("undefended", "airlock"):
-            # agentdojo >= 0.1.x PipelineConfig requires model_id / system_message*
-            # fields (None -> the suite's default system message via its validator).
-            pipeline = AgentPipeline.from_config(
-                PipelineConfig(
-                    llm=model_id,
-                    model_id=None,
-                    defense=None,
-                    system_message_name=None,
-                    system_message=None,
-                )
-            )
-            pipeline.name = f"airlock-bench-{arm}"
-            if arm == "airlock":
-                pipeline = _swap_executor(pipeline, policy)
-            benign = benchmark_suite_without_injections(
-                pipeline, suite, logdir=None, force_rerun=False, user_tasks=user_ids
-            )
-            attack = load_attack(ATTACK, suite, pipeline)
-            attacked = benchmark_suite_with_injections(
-                pipeline,
-                suite,
-                attack,
-                logdir=None,
-                force_rerun=False,
-                user_tasks=user_ids,
-                injection_tasks=inj_ids,
-            )
-            # agentdojo SuiteResults is a TypedDict -> subscript, not attribute.
-            util = _mean(benign["utility_results"].values())
-            util_atk = _mean(attacked["utility_results"].values())
-            asr = _mean([bool(v) for v in attacked["security_results"].values()])
-            results[suite_name][arm] = (util, util_atk, asr)
+    # results[suite][arm] = raw success/total counts (rates + Wilson CIs derived later)
+    results: dict[str, dict[str, ArmCounts]] = {}
+    with OutputLogger(str(logdir)):
+        for suite_name in suites:
+            suite = get_suite(BENCHMARK_VERSION, suite_name)
+            env = suite.load_and_inject_default_environment({})
+            user_ids = list(suite.user_tasks)[:max_user_tasks]
+            inj_ids = list(suite.injection_tasks)[:max_injection_tasks]
+            results[suite_name] = {}
+
+            for arm in ("undefended", "airlock"):
+                counts = ArmCounts()
+                # PER-USER-TASK least-privilege, matching Result 1's per-task posture
+                # (not the weaker suite-wide union), so both results measure the SAME
+                # defense and the gap is a clean deterministic-vs-realised comparison.
+                # A fresh pipeline is built per task so the airlock arm enforces exactly
+                # the current task's allow-list.
+                for uid in user_ids:
+                    task_tools = {n for n, _ in _ground_truth_calls(suite.user_tasks[uid], env)}
+                    if not task_tools:
+                        # Ground truth unavailable -> can't scope a per-task policy;
+                        # skip rather than fabricate a block-everything false positive.
+                        continue
+                    policy = least_privilege_policy(list(task_tools))
+                    # agentdojo >= 0.1.x PipelineConfig requires model_id / system_message*
+                    # fields (None -> the suite's default system message via its validator).
+                    pipeline = AgentPipeline.from_config(
+                        PipelineConfig(
+                            llm=model_id,
+                            model_id=None,
+                            defense=None,
+                            system_message_name=None,
+                            system_message=None,
+                        )
+                    )
+                    # Keep the model string in the pipeline name: the tool_knowledge
+                    # (important_instructions) attack derives the target model name from
+                    # it via agentdojo's get_model_name_from_pipeline(); a name without a
+                    # recognized model makes load_attack raise.
+                    pipeline.name = f"{model_id}-{arm}"
+                    if arm == "airlock":
+                        pipeline = _swap_executor(pipeline, policy)
+                    benign = benchmark_suite_without_injections(
+                        pipeline, suite, logdir=logdir, force_rerun=False, user_tasks=[uid]
+                    )
+                    attack = load_attack(ATTACK, suite, pipeline)
+                    attacked = benchmark_suite_with_injections(
+                        pipeline,
+                        suite,
+                        attack,
+                        logdir=logdir,
+                        force_rerun=False,
+                        user_tasks=[uid],
+                        injection_tasks=inj_ids,
+                    )
+                    # agentdojo SuiteResults is a TypedDict -> subscript, not attribute.
+                    counts.benign_k += sum(1 for v in benign["utility_results"].values() if v)
+                    counts.benign_n += len(benign["utility_results"])
+                    counts.atk_util_k += sum(1 for v in attacked["utility_results"].values() if v)
+                    counts.atk_util_n += len(attacked["utility_results"])
+                    counts.asr_k += sum(1 for v in attacked["security_results"].values() if v)
+                    counts.asr_n += len(attacked["security_results"])
+                results[suite_name][arm] = counts
 
     return _render_model_section(
-        results, model_id, ad_ver, stamp_date, max_user_tasks, max_injection_tasks
+        results,
+        model_id,
+        ad_ver,
+        stamp_date,
+        max_user_tasks,
+        max_injection_tasks,
+        deterministic_rate,
     )
 
 
+def _pooled(results: dict[str, dict[str, ArmCounts]], arm: str) -> ArmCounts:
+    """Sum an arm's raw counts across all suites (for pooled rates + CIs)."""
+    total = ArmCounts()
+    for arms in results.values():
+        c = arms.get(arm)
+        if c is None:
+            continue
+        total.benign_k += c.benign_k
+        total.benign_n += c.benign_n
+        total.atk_util_k += c.atk_util_k
+        total.atk_util_n += c.atk_util_n
+        total.asr_k += c.asr_k
+        total.asr_n += c.asr_n
+    return total
+
+
+def _rate(k: int, n: int) -> float:
+    return k / n if n else 0.0
+
+
 def _render_model_section(
-    results: dict[str, dict[str, tuple[float, float, float]]],
+    results: dict[str, dict[str, ArmCounts]],
     model_id: str,
     agentdojo_version: str,
     stamp_date: str,
     max_user_tasks: int,
     max_injection_tasks: int,
+    deterministic_rate: float,
 ) -> str:
-    """Render the model-in-the-loop "Result 2" section from measured numbers."""
+    """Render the model-in-the-loop "Result 2" section from raw counts.
+
+    Reports, per arm, benign utility / utility-under-attack / ASR with the
+    underlying k/n; a pooled Wilson 95% CI on ASR; the benign-utility cost (the
+    defense's false-positive analogue); and the gap between the measured ASR
+    reduction and the deterministic upper bound.
+    """
     rows = []
     for suite_name, arms in results.items():
         for arm in ("undefended", "airlock"):
-            if arm not in arms:
+            c = arms.get(arm)
+            if c is None:
                 continue
-            util, util_atk, asr = arms[arm]
-            rows.append(f"| {suite_name} | {arm} | {util:.0%} | {util_atk:.0%} | **{asr:.0%}** |")
+            rows.append(
+                f"| {suite_name} | {arm} | "
+                f"{_rate(c.benign_k, c.benign_n):.0%} ({c.benign_k}/{c.benign_n}) | "
+                f"{_rate(c.atk_util_k, c.atk_util_n):.0%} ({c.atk_util_k}/{c.atk_util_n}) | "
+                f"**{_rate(c.asr_k, c.asr_n):.0%}** ({c.asr_k}/{c.asr_n}) |"
+            )
 
-    # Aggregate across suites (unweighted mean of per-suite rates).
-    def _agg(arm: str, idx: int) -> float:
-        vals = [arms[arm][idx] for arms in results.values() if arm in arms]
-        return sum(vals) / len(vals) if vals else 0.0
+    undef = _pooled(results, "undefended")
+    air = _pooled(results, "airlock")
 
-    undef_asr, air_asr = _agg("undefended", 2), _agg("airlock", 2)
-    undef_util, air_util = _agg("undefended", 0), _agg("airlock", 0)
-    asr_delta = undef_asr - air_asr
-    util_cost = undef_util - air_util
+    undef_asr, air_asr = _rate(undef.asr_k, undef.asr_n), _rate(air.asr_k, air.asr_n)
+    undef_lo, undef_hi = wilson_ci(undef.asr_k, undef.asr_n)
+    air_lo, air_hi = wilson_ci(air.asr_k, air.asr_n)
+    asr_reduction = undef_asr - air_asr
+
+    undef_util, air_util = _rate(undef.benign_k, undef.benign_n), _rate(air.benign_k, air.benign_n)
+    fp_cost = undef_util - air_util
+    gap = deterministic_rate - asr_reduction
+
     return f"""## Result 2 — model-in-the-loop utility-under-attack + ASR (the leaderboard metrics)
 
 Real adaptive-attacker pass, **airlock defense vs no defense**. Model **{model_id}**,
 `agentdojo {agentdojo_version}`, attack `{ATTACK}`, benchmark `{BENCHMARK_VERSION}`, run
 **{stamp_date}** (UTC). Subset: up to **{max_user_tasks}** user tasks and
-**{max_injection_tasks}** injection tasks per suite — stated as a subset, **not** the
-full leaderboard cell.
+**{max_injection_tasks}** injection tasks per suite — a stated subset, **not** the full
+609-pair leaderboard cell. Greedy decoding is not guaranteed for this model, so treat
+single-run rates as point estimates and read the Wilson interval, not the bare percentage.
 
 | Suite | arm | benign utility | utility under attack | ASR |
 | --- | --- | --- | --- | --- |
 {chr(10).join(rows)}
 
-**Aggregate (mean over suites):** ASR **{undef_asr:.0%} -> {air_asr:.0%}**
-(**{asr_delta:+.0%}** with airlock); benign utility **{undef_util:.0%} -> {air_util:.0%}**
-(utility cost of the defense: **{util_cost:+.0%}**). Lower ASR is better; a small utility
-cost is the price of deny-by-default scoping."""
+**Pooled across suites** (n = {air.asr_n} attacked trajectories/arm, {air.benign_n} benign):
 
+| arm | ASR | ASR 95% Wilson CI | benign utility |
+| --- | --- | --- | --- |
+| undefended | {undef_asr:.0%} ({undef.asr_k}/{undef.asr_n}) | [{undef_lo:.0%}, {undef_hi:.0%}] | {undef_util:.0%} ({undef.benign_k}/{undef.benign_n}) |
+| **airlock** | **{air_asr:.0%}** ({air.asr_k}/{air.asr_n}) | **[{air_lo:.0%}, {air_hi:.0%}]** | {air_util:.0%} ({air.benign_k}/{air.benign_n}) |
 
-def _mean(values: Any) -> float:
-    vals = [1.0 if bool(v) else 0.0 for v in values]
-    return sum(vals) / len(vals) if vals else 0.0
+- **ASR reduction (headline): {undef_asr:.0%} → {air_asr:.0%} = {asr_reduction:+.0%}** with airlock
+  (lower ASR is better); airlock ASR 95% Wilson CI **[{air_lo:.0%}, {air_hi:.0%}]**.
+- **Benign false-positive cost: {fp_cost:+.0%}** — benign utility {undef_util:.0%} → {air_util:.0%}.
+  A false positive here is a benign task the policy breaks by denying a tool the agent
+  reached for. The policy allow-lists each task's **minimal ground-truth tools** (matching
+  Result 1), so this is the tightest-scoping cost — see the per-suite benign column above
+  for where it concentrates; a more permissive per-task allow-list trades some of it back.
+  A block rate without this number is not interpretable, which is why it is on the same run.
+- **The gap is the finding: deterministic upper bound {deterministic_rate:.0%} vs measured
+  reduction {asr_reduction:+.0%} (gap {gap:+.0%}).** Result 1's {deterministic_rate:.0%} is an
+  *upper bound* on ASR reduction — the fraction of all 609 injection→task pairs whose target
+  tool-call airlock *can* block. The model-in-the-loop reduction here is over {air.asr_n}
+  attacked trajectories: a related but distinct quantity on a different sample. The gap
+  between "target call blockable" and "attack actually prevented in the loop" is expected —
+  the model does not always attempt the blocked call, and some attacks resolve for reasons
+  upstream of the tool seam. The deterministic number *bounds*; the model number *realises*."""
 
 
 # --------------------------------------------------------------------------- #
@@ -575,6 +707,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Model path: cap injection tasks per suite.",
     )
     parser.add_argument("--out", type=Path, default=None, help="Write RESULTS.md to this path.")
+    parser.add_argument(
+        "--logdir",
+        default=None,
+        help="Persistent trace/cache dir for the model path. Reuses completed "
+        "per-task results (resume without re-spending); default is a throwaway dir.",
+    )
+    parser.add_argument(
+        "--suites",
+        default=None,
+        help="Comma-separated subset of suites for the model path (default: all four). "
+        "Result 1 (deterministic) always covers all four.",
+    )
     args = parser.parse_args(argv)
 
     if not _HAVE_AGENTDOJO:
@@ -588,14 +732,24 @@ def main(argv: list[str] | None = None) -> int:
     report = run_deterministic()
     model_section: str | None = None
     if args.model:
+        model_suites = (
+            PINNED_SUITES
+            if not args.suites
+            else tuple(s.strip() for s in args.suites.split(",") if s.strip())
+        )
         print(
             f"running model-in-the-loop pass ({args.model}) over "
-            f"{' + '.join(PINNED_SUITES)} — this needs an API key and spends real $. "
+            f"{' + '.join(model_suites)} — this needs an API key and spends real $. "
             f"caps: <= {args.max_user_tasks} user / <= {args.max_injection_tasks} injection tasks per suite.",
             file=sys.stderr,
         )
         model_section = run_model(
-            args.model, PINNED_SUITES, args.max_user_tasks, args.max_injection_tasks
+            args.model,
+            model_suites,
+            args.max_user_tasks,
+            args.max_injection_tasks,
+            report.combined_per_task_rate,
+            logdir_arg=args.logdir,
         )
 
     md = render_results_md(report, model_section)

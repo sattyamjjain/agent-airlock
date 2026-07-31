@@ -55,19 +55,47 @@ deny-by-default least-privilege policy.
 
 ## Result 2 — model-in-the-loop utility-under-attack + ASR (the leaderboard metrics)
 
-_Not yet run in this checkout._ The two metrics the AgentDojo leaderboard reports —
-**utility under attack** (benign task still succeeds with the injection present) and
-**ASR** (attack success rate) — require a real model-in-the-loop pass, which needs an
-LLM API key and real API spend. To populate this section, run:
+Real adaptive-attacker pass, **airlock defense vs no defense**. Model **gpt-4o-mini-2024-07-18**,
+`agentdojo 0.1.35`, attack `tool_knowledge`, benchmark `v1.2.1`, run
+**2026-07-31** (UTC). Subset: up to **5** user tasks and
+**3** injection tasks per suite — a stated subset, **not** the full
+609-pair leaderboard cell. Greedy decoding is not guaranteed for this model, so treat
+single-run rates as point estimates and read the Wilson interval, not the bare percentage.
 
-```bash
-python -m benchmarks.agentdojo.run --model gpt-4o-mini-2024-07-18 \
-  --out benchmarks/agentdojo/RESULTS.md
-```
+| Suite | arm | benign utility | utility under attack | ASR |
+| --- | --- | --- | --- | --- |
+| workspace | undefended | 100% (5/5) | 87% (13/15) | **13%** (2/15) |
+| workspace | airlock | 60% (3/5) | 80% (12/15) | **0%** (0/15) |
+| banking | undefended | 40% (2/5) | 20% (3/15) | **40%** (6/15) |
+| banking | airlock | 40% (2/5) | 20% (3/15) | **0%** (0/15) |
+| travel | undefended | 100% (5/5) | 60% (9/15) | **40%** (6/15) |
+| travel | airlock | 100% (5/5) | 93% (14/15) | **7%** (1/15) |
+| slack | undefended | 80% (4/5) | 80% (12/15) | **87%** (13/15) |
+| slack | airlock | 80% (4/5) | 60% (9/15) | **33%** (5/15) |
 
-with `OPENAI_API_KEY` set. That regenerates this file with a `baseline vs airlock`
-table (benign utility / utility-under-attack / ASR / the utility cost of the defense)
-for every pinned suite. No number is claimed here until that run produces it.
+**Pooled across suites** (n = 60 attacked trajectories/arm, 20 benign):
+
+| arm | ASR | ASR 95% Wilson CI | benign utility |
+| --- | --- | --- | --- |
+| undefended | 45% (27/60) | [33%, 58%] | 80% (16/20) |
+| **airlock** | **10%** (6/60) | **[5%, 20%]** | 70% (14/20) |
+
+- **ASR reduction (headline): 45% → 10% = +35%** with airlock
+  (lower ASR is better); airlock ASR 95% Wilson CI **[5%, 20%]**.
+- **Benign false-positive cost: +10%** — benign utility 80% → 70%.
+  A false positive here is a benign task the policy breaks by denying a tool the agent
+  reached for. The policy allow-lists each task's **minimal ground-truth tools** (matching
+  Result 1), so this is the tightest-scoping cost — see the per-suite benign column above
+  for where it concentrates; a more permissive per-task allow-list trades some of it back.
+  A block rate without this number is not interpretable, which is why it is on the same run.
+- **The gap is the finding: deterministic upper bound 86% vs measured
+  reduction +35% (gap +51%).** Result 1's 86% is an
+  *upper bound* on ASR reduction — the fraction of all 609 injection→task pairs whose target
+  tool-call airlock *can* block. The model-in-the-loop reduction here is over 60
+  attacked trajectories: a related but distinct quantity on a different sample. The gap
+  between "target call blockable" and "attack actually prevented in the loop" is expected —
+  the model does not always attempt the blocked call, and some attacks resolve for reasons
+  upstream of the tool seam. The deterministic number *bounds*; the model number *realises*.
 
 ## What airlock does NOT neutralize (the honest misses)
 
