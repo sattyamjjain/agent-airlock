@@ -9,6 +9,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.61] - 2026-08-01 — "MCP 2026-07-28 is ratified"
+
+Two correctness fixes tied to MCP `2026-07-28` becoming the ratified current
+revision. No airlock guard behaviour or public-API signature was weakened: the
+transport validator now accepts the current revision it had been wrongly
+rejecting, and the `_meta` trust guard now fires on the namespaced wire keys it
+had been silently missing. airlock still makes no conformance claim.
+
+### Fixed
+
+- **The transport validator rejected conformant current-revision traffic.** MCP
+  `2026-07-28` was ratified as the current revision
+  (`/specification/latest` 307-redirects to `/specification/2026-07-28`; release
+  `prerelease: false`, published 2026-07-28T16:47:49Z — verified 2026-08-01), but
+  `mcp_spec` still cited the earlier `2026-07-28-RC` prerelease tag and pinned the
+  `MCP-Protocol-Version` header to the now-legacy `2025-11-25`, so
+  `validate_streamable_http_request` raised `MCPTransportError` on a wire header of
+  `MCP-Protocol-Version: 2026-07-28` — rejecting standards-conformant traffic. This
+  is a **correctness fix**, not a feature: `PROTOCOL_VERSION` is now `2026-07-28`,
+  the header check accepts a supported set (new `SUPPORTED_PROTOCOL_VERSIONS =
+  ("2026-07-28", "2025-11-25")` — current plus legacy interop), an unsupported
+  version is rejected with an `UnsupportedProtocolVersionError`-shaped message
+  naming the supported list, and `SPEC_REVISIONS` records the spec's own
+  terminology (`2026-07-28` → `current`, `2025-11-25` → `legacy`). The three
+  SEP-2243 blog-RC source links were re-attributed to the ratified spec; the
+  verbatim quotes are unchanged. **airlock still makes no conformance claim** — no
+  conformance suite has been run. (The revision guard's own docstring had recorded
+  running the `/specification/latest` check and asserting the opposite; the check
+  was right, it just needed re-running.)
+- **`MetaPin` never fired on real 2026-07-28 wire traffic.** The reserved
+  identity/capability fields the spec puts in `_meta` arrive **namespaced** —
+  `io.modelcontextprotocol/protocolVersion` (required on every client request),
+  `io.modelcontextprotocol/clientInfo`, `io.modelcontextprotocol/clientCapabilities`
+  (required) — but `meta_trust` resolved only **bare** keys, so a pin disagreement
+  carried under the conformant namespaced key silently passed: a no-op guard. Field
+  resolution is now prefix-aware — it prefers the `io.modelcontextprotocol/` form,
+  falls back to other reserved prefixes and then the bare key — and a new
+  `meta_reserved_key_shadowed` rejection fails closed when a bare key and a namespaced
+  reserved key (or two reserved prefixes) resolve to the same short name but differ
+  literally. The reservation rule follows the spec verbatim ("any prefix whose second
+  label is `modelcontextprotocol` or `mcp`"), so `com.mcp.tools/` is reserved while
+  `com.example.mcp/` is not. Because 2026-07-28 removed the handshake, these unsigned
+  per-request fields are now the only identity/capability channel — the surface that
+  matters. Guards, audit-event shapes, and the Pydantic-only core are unchanged.
+
 ## [0.8.60] - 2026-07-31 — "Measured: the AgentDojo model-in-the-loop ASR"
 
 Item 1 is a **measurement**, not a feature: the real model-in-the-loop AgentDojo

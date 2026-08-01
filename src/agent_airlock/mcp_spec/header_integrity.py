@@ -7,8 +7,8 @@ headers now drive routing/rate-limiting/authorization at the edge while the
 server executes the body, a request whose headers disagree with its body is a
 confused-deputy vector: one operation is routed past the gateway while a
 different one runs. The spec closes this with a server-side integrity rule.
-Verbatim from the 2026-07-28 release candidate
-(https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/):
+Verbatim from the ratified 2026-07-28 spec
+(https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http):
 
     "The Streamable HTTP transport now requires ``Mcp-Method`` and ``Mcp-Name``
     headers (SEP-2243) so load balancers, gateways, and rate-limiters can route
