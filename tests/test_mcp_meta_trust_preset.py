@@ -195,6 +195,99 @@ class TestTypeAndShapeDiscipline:
         assert validate_meta_trust({"_meta": {"role": "reader"}}, config=cfg) is None
 
 
+class TestReservedNamespacedKeys:
+    """The 2026-07-28 wire carries reserved fields namespaced under
+    ``io.modelcontextprotocol/`` (e.g. ``io.modelcontextprotocol/protocolVersion``),
+    not as bare keys. A guard that reads only bare keys is a no-op on conformant
+    traffic. These pin the namespaced resolution + the shadow rule."""
+
+    def test_namespaced_protocol_version_disagreement_denies(self) -> None:
+        # (a) The conformant wire form. Before the fix meta_trust read only bare
+        # keys, so a disagreement carried here silently PASSED. It must DENY.
+        req = {
+            "method": "tools/call",
+            "_meta": {"io.modelcontextprotocol/protocolVersion": "2020-01-01"},
+        }
+        with pytest.raises(MetaTrustError) as exc:
+            validate_meta_trust(req, pinned=_pin())
+        event = exc.value.audit_event
+        assert event["reason"] == "meta_pin_disagreement"
+        assert event["field"] == "protocolVersion"
+        assert event["meta_value"] == "2020-01-01"
+        assert event["pin_value"] == "2026-07-28"
+
+    def test_namespaced_entitled_request_passes(self) -> None:
+        # A fully conformant, namespaced request that agrees with the pin passes.
+        req = {
+            "method": "tools/call",
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientInfo": {"name": "acme-agent", "version": "1.4.0"},
+                "io.modelcontextprotocol/clientCapabilities": {"tools": {}, "logging": {}},
+            },
+        }
+        assert validate_meta_trust(req, pinned=_pin()) is None
+
+    def test_namespaced_capability_escalation_denies(self) -> None:
+        # A capability beyond the pin, carried under the namespaced wire field.
+        req = {
+            "_meta": {"io.modelcontextprotocol/clientCapabilities": {"tools": {}, "admin": True}},
+        }
+        with pytest.raises(MetaTrustError) as exc:
+            validate_meta_trust(req, pinned=_pin())
+        event = exc.value.audit_event
+        assert event["reason"] == "meta_capability_escalation"
+        assert "admin" in event["offending_capabilities"]
+
+    def test_bare_and_namespaced_protocol_version_shadow_denies(self) -> None:
+        # (b) Bare + namespaced protocolVersion in one _meta -> shadowed pin.
+        req = {
+            "_meta": {
+                "protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/protocolVersion": "2020-01-01",
+            }
+        }
+        with pytest.raises(MetaTrustError) as exc:
+            validate_meta_trust(req, pinned=_pin())
+        event = exc.value.audit_event
+        assert event["reason"] == "meta_reserved_key_shadowed"
+        assert event["collides_with"] in (
+            "protocolVersion",
+            "io.modelcontextprotocol/protocolVersion",
+        )
+
+    def test_two_reserved_prefixes_same_short_name_shadow_denies(self) -> None:
+        # Two reserved prefixes (io.modelcontextprotocol/ and com.mcp.tools/) that
+        # resolve to the same reserved short name also shadow.
+        req = {
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "com.mcp.tools/protocolVersion": "2020-01-01",
+            }
+        }
+        with pytest.raises(MetaTrustError) as exc:
+            validate_meta_trust(req)
+        assert exc.value.audit_event["reason"] == "meta_reserved_key_shadowed"
+
+    def test_com_example_mcp_prefix_is_not_reserved_no_shadow(self) -> None:
+        # (c) com.example.mcp/ is NOT reserved (mcp is the third label), so it does
+        # not shadow a bare protocolVersion.
+        req = {
+            "_meta": {
+                "protocolVersion": "2026-07-28",
+                "com.example.mcp/protocolVersion": "vendor-value",
+            }
+        }
+        assert validate_meta_trust(req) is None
+
+    def test_bare_key_back_compat_still_resolves(self) -> None:
+        # (d) Pre-2026-07-28 shape (bare keys) must still be checked against the pin.
+        req = {"_meta": {"protocolVersion": "2020-01-01"}}
+        with pytest.raises(MetaTrustError) as exc:
+            validate_meta_trust(req, pinned=_pin())
+        assert exc.value.audit_event["reason"] == "meta_pin_disagreement"
+
+
 class TestPresetMetadata:
     def test_canonical_metadata(self) -> None:
         p = mcp_meta_trust_2026_07_defaults()
