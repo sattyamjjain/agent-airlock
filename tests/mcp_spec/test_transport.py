@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from agent_airlock.mcp_spec import PROTOCOL_VERSION
+from agent_airlock.mcp_spec import PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS
 from agent_airlock.mcp_spec.transport import (
+    _PROTOCOL_VERSION_VALUE,
+    _SUPPORTED_PROTOCOL_VERSIONS,
     PROTOCOL_VERSION_HEADER,
     MCPTransportError,
     validate_streamable_http_request,
@@ -40,7 +42,7 @@ class TestProtocolVersionHeader:
     def test_wrong_version_rejected(self) -> None:
         headers = _base_headers()
         headers[PROTOCOL_VERSION_HEADER] = "2024-01-01"
-        with pytest.raises(MCPTransportError, match="does not match"):
+        with pytest.raises(MCPTransportError, match="unsupported"):
             validate_streamable_http_request(
                 method="POST",
                 url="https://mcp/",
@@ -57,6 +59,27 @@ class TestProtocolVersionHeader:
         )
         assert result.bearer is not None
         assert result.bearer.token == "abc123"
+
+    def test_legacy_2025_version_accepted(self) -> None:
+        # 2025-11-25 (legacy) MUST still validate for interop, not raise.
+        headers = _base_headers()
+        headers[PROTOCOL_VERSION_HEADER] = "2025-11-25"
+        result = validate_streamable_http_request(
+            method="POST", url="https://mcp/", headers=headers, body={"jsonrpc": "2.0"}
+        )
+        assert result.bearer is not None
+
+    def test_unknown_version_rejected_lists_both_supported(self) -> None:
+        # An unsupported version is rejected with a message naming the supported
+        # set (mirrors UnsupportedProtocolVersionError.data.supported).
+        headers = _base_headers()
+        headers[PROTOCOL_VERSION_HEADER] = "1900-01-01"
+        with pytest.raises(MCPTransportError) as exc:
+            validate_streamable_http_request(
+                method="POST", url="https://mcp/", headers=headers, body={"jsonrpc": "2.0"}
+            )
+        msg = str(exc.value)
+        assert "2026-07-28" in msg and "2025-11-25" in msg
 
 
 class TestTokenInQueryString:
@@ -216,3 +239,10 @@ class TestConstantsConsistent:
             },
             body={"jsonrpc": "2.0"},
         )
+
+    def test_private_transport_constants_track_the_package(self) -> None:
+        # transport.py duplicates the version strings to avoid an import cycle;
+        # this is the cross-check that they stay in lockstep with the package.
+        assert _PROTOCOL_VERSION_VALUE == PROTOCOL_VERSION
+        assert _SUPPORTED_PROTOCOL_VERSIONS == SUPPORTED_PROTOCOL_VERSIONS
+        assert PROTOCOL_VERSION in _SUPPORTED_PROTOCOL_VERSIONS

@@ -4535,8 +4535,8 @@ def mcp_spec_2026_07_header_integrity_defaults(
     The MCP 2026-07-28 Streamable HTTP transport **requires** the ``Mcp-Method``
     and ``Mcp-Name`` routing headers and mandates a server-side integrity rule
     between those headers and the request body (SEP-2243). Verbatim from the
-    2026-07-28 release candidate
-    (https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/):
+    ratified 2026-07-28 spec
+    (https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http):
 
         "The Streamable HTTP transport now requires ``Mcp-Method`` and
         ``Mcp-Name`` headers (SEP-2243) so load balancers, gateways, and
@@ -4592,7 +4592,7 @@ def mcp_spec_2026_07_header_integrity_defaults(
         "method_header": method_header,
         "name_header": name_header,
         "advisory_url": (
-            "https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/"
+            "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http"
         ),
     }
 

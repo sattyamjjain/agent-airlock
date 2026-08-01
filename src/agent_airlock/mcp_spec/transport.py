@@ -1,15 +1,16 @@
-"""Streamable HTTP transport validators for MCP 2025-11-25.
+"""Streamable HTTP transport validators for MCP 2026-07-28 (accepts 2025-11-25 for legacy interop).
 
-Source: https://modelcontextprotocol.io/specification/2025-11-25 +
+Source: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http +
 https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
-(retrieved 2026-04-18).
+(retrieved 2026-04-18; 2026-07-28 basic/versioning verified 2026-08-01).
 
 Scope: runtime header + envelope validation. Not an HTTP server.
 
 Key normative checks (all exposed as `validate_streamable_http_request`):
 
-- `MCP-Protocol-Version: 2025-11-25` header present on every request (the
-  spec-required version negotiation header).
+- `MCP-Protocol-Version` header present on every request and naming a supported
+  revision — `2026-07-28` (current) or `2025-11-25` (legacy) — the spec-required
+  version negotiation header.
 - `Content-Type: application/json` on JSON-RPC request bodies.
 - `Authorization: Bearer <token>` for any request targeting a protected
   server. Tokens MUST NOT be in the query string; we reject that
@@ -35,12 +36,14 @@ from .oauth import (
 
 PROTOCOL_VERSION_HEADER = "MCP-Protocol-Version"
 """Name of the required MCP protocol version header on Streamable HTTP
-requests. Value on the wire is `2025-11-25` for this spec revision."""
+requests. Accepted values are `2026-07-28` (current) and `2025-11-25` (legacy);
+see `_SUPPORTED_PROTOCOL_VERSIONS`."""
 
-# See PROTOCOL_VERSION in __init__ — importing it here would create a
-# cycle, so the string is duplicated with a test-level assertion in
-# tests/mcp_spec/test_transport.py.
-_PROTOCOL_VERSION_VALUE = "2025-11-25"
+# See PROTOCOL_VERSION / SUPPORTED_PROTOCOL_VERSIONS in __init__ — importing them
+# here would create a cycle, so the values are duplicated with a test-level
+# cross-check in tests/mcp_spec/test_transport.py.
+_PROTOCOL_VERSION_VALUE = "2026-07-28"
+_SUPPORTED_PROTOCOL_VERSIONS = (_PROTOCOL_VERSION_VALUE, "2025-11-25")
 
 
 class MCPTransportError(ValueError):
@@ -93,14 +96,17 @@ def validate_streamable_http_request(
     if method.upper() not in ("GET", "POST", "DELETE"):
         raise MCPTransportError(f"unsupported HTTP method for Streamable HTTP: {method!r}")
 
-    # 2. MCP-Protocol-Version header.
+    # 2. MCP-Protocol-Version header — must name a supported revision (current
+    #    2026-07-28 or legacy 2025-11-25). Mirrors the spec's
+    #    UnsupportedProtocolVersionError (-32022), whose data.supported lists the
+    #    versions the server accepts.
     version = hdr.get(PROTOCOL_VERSION_HEADER.lower())
     if version is None:
         raise MCPTransportError(f"missing required {PROTOCOL_VERSION_HEADER} header")
-    if version != _PROTOCOL_VERSION_VALUE:
+    if version not in _SUPPORTED_PROTOCOL_VERSIONS:
         raise MCPTransportError(
-            f"{PROTOCOL_VERSION_HEADER}={version!r} does not match "
-            f"implementation ({_PROTOCOL_VERSION_VALUE!r})"
+            f"unsupported {PROTOCOL_VERSION_HEADER}={version!r}; "
+            f"supported={list(_SUPPORTED_PROTOCOL_VERSIONS)!r}"
         )
 
     # 3. Token MUST NOT appear in the query string.
