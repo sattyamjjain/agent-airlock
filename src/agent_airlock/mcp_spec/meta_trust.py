@@ -50,6 +50,8 @@ from typing import Any
 __all__ = [
     "DEFAULT_ESCALATION_TOKENS",
     "DEFAULT_MAX_META_BYTES",
+    "MCP_META_PREFIX",
+    "RESERVED_PREFIX_RE",
     "MetaPin",
     "MetaTrustConfig",
     "MetaTrustError",
@@ -91,6 +93,24 @@ _CAPABILITY_TOKENS: frozenset[str] = frozenset({"capability", "capabilities"})
 #: Default cap on the serialized size of a ``_meta`` block (bytes). Generous enough
 #: that ordinary metadata (traceparent, progressToken, small annotations) passes.
 DEFAULT_MAX_META_BYTES = 16384
+
+#: Canonical MCP ``_meta`` key prefix. On the 2026-07-28 wire the reserved fields
+#: arrive **namespaced** — ``io.modelcontextprotocol/protocolVersion`` (required on
+#: every client request), ``io.modelcontextprotocol/clientInfo``,
+#: ``io.modelcontextprotocol/clientCapabilities`` (required),
+#: ``io.modelcontextprotocol/logLevel``, ``io.modelcontextprotocol/subscriptionId`` —
+#: not as bare keys. A guard that only reads bare keys is a no-op on conformant traffic.
+MCP_META_PREFIX = "io.modelcontextprotocol/"
+
+#: The spec's ``_meta`` reservation rule (2026-07-28 ``basic/index``): "Any prefix
+#: where the second label is ``modelcontextprotocol`` or ``mcp`` is reserved." So
+#: ``io.modelcontextprotocol/``, ``dev.mcp/``, ``org.modelcontextprotocol.api/`` and
+#: ``com.mcp.tools/`` all MATCH, but ``com.example.mcp/`` does NOT (``mcp`` is the
+#: third label there, not the second).
+RESERVED_PREFIX_RE = re.compile(
+    r"^[A-Za-z0-9-]+\.(modelcontextprotocol|mcp)(\.[A-Za-z0-9.-]+)?/",
+    re.IGNORECASE,
+)
 
 _SCALAR_TYPES = (str, int, float, bool, type(None))
 _CAMEL_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+")
@@ -228,6 +248,19 @@ def _check_size(meta: Mapping[str, Any], config: MetaTrustConfig) -> None:
 
 
 def _check_duplicate_keys(meta: Mapping[str, Any]) -> None:
+    """Refuse ``_meta`` whose keys collide — two ways, both confused-deputy vectors.
+
+    1. **Case / unicode normalization** (NFKC + casefold): ``Role`` vs ``role``,
+       fullwidth ``ｒｏｌｅ`` vs ``role``.
+    2. **Reserved-prefix shadowing**: a bare ``protocolVersion`` alongside the
+       conformant ``io.modelcontextprotocol/protocolVersion`` (or two reserved
+       prefixes, e.g. ``com.mcp.tools/protocolVersion``) resolve to the same
+       reserved short name but differ literally. NFKC + casefold alone does **not**
+       catch this — those keys normalize to *different* strings (see
+       :func:`_normalized_key`, which lower-cases and NFKC-folds but keeps the
+       prefix), so it needs its own pass. ``com.example.mcp/`` is not reserved, so
+       it never shadows a bare key.
+    """
     seen: dict[str, str] = {}
     for key in meta:
         norm = _normalized_key(str(key))
@@ -241,6 +274,25 @@ def _check_duplicate_keys(meta: Mapping[str, Any]) -> None:
                 normalized_key=norm,
             )
         seen[norm] = str(key)
+
+    # Reserved-prefix shadowing — a separate namespace from NFKC. A reserved-prefixed
+    # key claims its post-slash short name; a bare key claims itself. A collision
+    # therefore means a bare key and a reserved key (or two reserved keys) resolve to
+    # the same reserved short name while differing literally.
+    claimed: dict[str, str] = {}
+    for key in meta:
+        literal = str(key)
+        short = _reserved_short_name(literal)
+        name = short if short is not None else literal
+        if name in claimed and claimed[name] != literal:
+            raise _reject(
+                "meta_reserved_key_shadowed",
+                f"_meta keys {claimed[name]!r} and {literal!r} both resolve to the "
+                f"reserved short name {name!r} but differ literally — a shadowed-pin vector",
+                key=literal,
+                collides_with=claimed[name],
+            )
+        claimed[name] = literal
 
 
 def _check_pin(meta: Mapping[str, Any], pinned: MetaPin) -> None:
@@ -293,21 +345,62 @@ def _collect_capabilities(meta: Mapping[str, Any]) -> set[str]:
     for key, value in meta.items():
         if _key_tokens(str(key)) & _CAPABILITY_TOKENS:
             caps |= _meta_capabilities(value)
+    # Fold in the conformant 2026-07-28 wire field explicitly, regardless of how it
+    # tokenizes: io.modelcontextprotocol/clientCapabilities (and the bare/aliased
+    # forms) are resolved by preference so a namespaced capability set is checked
+    # against the pin, not silently ignored.
+    for name in ("clientCapabilities", "capabilities"):
+        value = _resolve_meta(meta, name)
+        if value is not None:
+            caps |= _meta_capabilities(value)
     return caps
 
 
-def _first(meta: Mapping[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in meta:
+def _reserved_short_name(key: str) -> str | None:
+    """Return the post-slash segment of ``key`` when it uses a reserved MCP prefix.
+
+    ``io.modelcontextprotocol/protocolVersion`` -> ``protocolVersion``;
+    ``com.mcp.tools/protocolVersion`` -> ``protocolVersion``;
+    ``com.example.mcp/protocolVersion`` (NOT reserved) -> ``None``.
+    """
+    match = RESERVED_PREFIX_RE.match(key)
+    if match is None:
+        return None
+    return key[match.end() :]
+
+
+def _resolve_meta(meta: Mapping[str, Any], name: str) -> Any:
+    """Resolve a logical ``_meta`` field to its value, preferring conformant forms.
+
+    Preference order — so a conformant 2026-07-28 request wins over a spoofed bare
+    key: the canonical ``io.modelcontextprotocol/<name>`` form first, then any other
+    reserved-prefix key whose post-slash segment equals ``name``, then the bare
+    ``name``. Returns ``None`` when no form is present.
+    """
+    namespaced = MCP_META_PREFIX + name
+    if namespaced in meta:
+        return meta[namespaced]
+    for key in meta:
+        if _reserved_short_name(str(key)) == name:
             return meta[key]
+    if name in meta:
+        return meta[name]
+    return None
+
+
+def _first(meta: Mapping[str, Any], *keys: str) -> Any:
+    for name in keys:
+        value = _resolve_meta(meta, name)
+        if value is not None:
+            return value
     return None
 
 
 def _client_field(meta: Mapping[str, Any], nested: str, flat: str) -> Any:
-    info = meta.get("clientInfo")
+    info = _resolve_meta(meta, "clientInfo")
     if isinstance(info, Mapping) and nested in info:
         return info[nested]
-    return meta.get(flat)
+    return _resolve_meta(meta, flat)
 
 
 def validate_meta_trust(
@@ -317,6 +410,10 @@ def validate_meta_trust(
     config: MetaTrustConfig | None = None,
 ) -> None:
     """Reject a request whose ``_meta`` block cannot be trusted for authorization/routing.
+
+    Reserved fields are resolved in both their bare and ``io.modelcontextprotocol/``
+    namespaced forms (the 2026-07-28 wire shape), preferring the namespaced form, so a
+    pin fires on conformant traffic; a bare key shadowing a namespaced one fails closed.
 
     Args:
         request: The request / tool-call mapping. ``_meta`` is looked for at the top
