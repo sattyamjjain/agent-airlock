@@ -266,6 +266,23 @@ def test_manifests_do_not_self_brand_as_firewall() -> None:
     )
 
 
+def test_manifests_make_no_unqualified_zero_dep_claim() -> None:
+    """The plugin/marketplace manifests are registry pages too — rendered with no room
+    for a footnote, exactly like the PyPI summary
+    (test_public_metadata.py::test_summary_makes_no_unqualified_zero_dep_claim). A bare
+    'zero-dep' must be qualified by 'Pydantic' in the same string, or not appear."""
+    variants = ("zero-dep", "zero dep", "zerodep", "zero-dependency", "zero dependencies")
+    offenders = [
+        s
+        for s in _self_describing_strings()
+        if any(v in s.lower() for v in variants) and "pydantic" not in s.lower()
+    ]
+    assert not offenders, (
+        "plugin/marketplace manifest carries an unqualified zero-dep claim (a registry "
+        f"page has no footnote — say 'Pydantic-only'): {offenders}"
+    )
+
+
 def test_cli_copy_never_says_firewall() -> None:
     """Shipped CLI copy is agent-airlock describing itself to users — it must never
     use 'firewall'. v0.8.57 still printed 'Unsealed: No tool-call firewall' from

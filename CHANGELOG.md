@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.62] - 2026-08-02 — "Claims-integrity: registry summary + honest test count"
+
+Two claims-integrity fixes on the highest-traffic surfaces. No runtime or public-API
+change.
+
+### Fixed
+
+- **The PyPI one-line summary made an unqualified "zero-dep" claim.** `pyproject.toml`'s
+  `description` (byte-identical to the registry `info.summary`) read "…in-process,
+  zero-dep." The qualifier that makes that defensible — the `[^deps]` footnote noting the
+  env-marked `tomli` 3.10 backport — lives in README.md 158 lines below the claim and does
+  not exist on the registry page at all, so the highest-traffic surface read as an
+  unqualified zero-dependency claim over two real installs. The summary now says
+  **"Pydantic-only"** — true standalone, no footnote needed. The README line 1463 table
+  row and its `[^deps]` footnote are unchanged (correct in context). Guard:
+  `tests/test_public_metadata.py::test_summary_makes_no_unqualified_zero_dep_claim`.
+- **The headline test count silently excluded twelve tests.** The README TEST-BADGE block
+  (the "source of truth") showed only the coverage-run count: `--ignore=tests/benchmarks`
+  drops 8 benchmark tests and `-m 'not docker'` deselects 4, and the headline never said
+  so. `scripts/update_test_badge.py` now renders the **true total** (a second,
+  unfiltered `--collect-only`) plus an explicit note of what is excluded from the coverage
+  run and why (benchmarks aren't correctness tests; docker-marked need a daemon). New
+  guard `tests/test_badge_test_count_honesty.py` ties the headline to a fresh collect so
+  the number cannot drift back.
+
 ## [0.8.61] - 2026-08-01 — "MCP 2026-07-28 is ratified"
 
 Two correctness fixes tied to MCP `2026-07-28` becoming the ratified current

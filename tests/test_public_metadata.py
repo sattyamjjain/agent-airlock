@@ -65,6 +65,53 @@ def _unmarked_core_distributions() -> set[str]:
     return {_dist_name(req) for req in deps if ";" not in req}
 
 
+# A registry summary (PyPI ``info.summary`` == pyproject ``description``) is shown
+# with no room for a footnote, so a bare "zero-dep" there reads as an unqualified
+# claim over two real installs. The defensible standalone claim is "Pydantic-only";
+# the qualifier must travel with the word if "zero-dep" is ever used at all.
+_ZERO_DEP_VARIANTS = ("zero-dep", "zero dep", "zerodep", "zero-dependency", "zero dependencies")
+
+
+def _project_description() -> str:
+    return str(_load_pyproject()["project"]["description"])
+
+
+def test_summary_makes_no_unqualified_zero_dep_claim() -> None:
+    """The PyPI one-line summary must not carry a bare 'zero-dep' claim.
+
+    The registry page renders this string with no footnote (unlike README.md, where
+    ``[^deps]`` qualifies the table row), so if 'zero-dep' appears at all, 'Pydantic'
+    must qualify it in the same string. In the spirit of test_no_placeholder_cves.py:
+    a claim that needed a footnote once will need it again.
+    """
+    desc = _project_description()
+    low = desc.lower()
+    for variant in _ZERO_DEP_VARIANTS:
+        if variant in low:
+            assert "pydantic" in low, (
+                f"pyproject description carries an unqualified {variant!r} claim; the "
+                "registry page has no footnote — convey 'Pydantic-only' instead "
+                f"(description: {desc!r})"
+            )
+
+
+def test_summary_conveys_pydantic_only() -> None:
+    """The summary should name Pydantic — the defensible standalone dependency claim."""
+    assert "pydantic" in _project_description().lower(), (
+        "the PyPI one-line summary should convey 'Pydantic-only' (the standalone-true "
+        "dependency claim) rather than an unqualified 'zero-dep'"
+    )
+
+
+def test_zero_dep_guard_would_catch_an_unqualified_claim() -> None:
+    """The detector fires on a synthetic unqualified summary — proving it is live,
+    not silently passing (mirrors test_no_placeholder_cves's guard-would-catch)."""
+    synthetic = "A contract layer for tool calls — in-process, zero-dep. Strict validation."
+    low = synthetic.lower()
+    caught = any(v in low for v in _ZERO_DEP_VARIANTS) and "pydantic" not in low
+    assert caught, "guard failed to flag an unqualified zero-dep summary"
+
+
 def test_project_urls_point_to_canonical_repo() -> None:
     """Every [project.urls] entry must contain the canonical ``sattyamjjain`` slug."""
     data = _load_pyproject()
