@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.63] - 2026-08-02 — "Interop spec for OpenID AIIM, and the AgentDojo gap gets a heading"
+
+Docs and one README section; no runtime change.
+
+### Added
+
+- **An interop specification a partner can actually drive.** `docs/interop/openid-aiim-2026.md`
+  states which MCP revisions airlock accepts (read from `SUPPORTED_PROTOCOL_VERSIONS`, not
+  typed), the exact request shape and deny behaviour on the wire, and a precise scope line:
+  airlock constrains tool calls, it is not an authorization server and it issues no tokens.
+  Written for the OpenID Foundation AIIM Community Group MCP interop event, commit-by
+  2026-08-10. A guard test (`tests/test_interop_doc.py`) ties the doc's revision list to the
+  code so the two cannot drift. `docs/interop/CONFORMANCE-SCOPE.md` keeps the position the
+  0.8.61 entry already takes — no MCP conformance suite has been run, so the claim strength
+  stays "implements" / "targets", never "conformant".
+
+### Changed
+
+- **The AgentDojo gap moved out of a footnote.** The 86.0% deterministic bound and the
+  45% → 10% model-in-the-loop reduction disagree, and that disagreement is the honest
+  result. It now has its own subsection under the benchmark table instead of an italic line
+  beneath it.
+
 ## [0.8.62] - 2026-08-02 — "Claims-integrity: registry summary + honest test count"
 
 Two claims-integrity fixes on the highest-traffic surfaces. No runtime or public-API
