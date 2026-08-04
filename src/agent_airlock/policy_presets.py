@@ -111,6 +111,10 @@ def _capabilities(granted: int | None = None, denied: int | None = None) -> Capa
 # preset factory is decorated with ``@preset`` at its definition site, and a new
 # preset that forgets the decorator fails
 # ``tests/test_marketplace_metadata.py::test_all_exported_zero_arg_presets_are_registered``
+# (zero-arg factories) or
+# ``tests/test_public_api.py::TestPresetRegistryCoversExports`` (any ``__all__``
+# callable that returns a policy/config object, including arg-taking factories
+# like ``mcp_config_pin`` — which is exactly how three of them drifted out)
 # instead of vanishing quietly. There is deliberately no heuristic here.
 
 
@@ -123,6 +127,11 @@ class PresetMeta:
     """Top-level callable in :mod:`agent_airlock.policy_presets`."""
     docstring_summary: str = ""
 
+    @property
+    def name(self) -> str:
+        """Alias for :attr:`factory_name` — the exported callable's name."""
+        return self.factory_name
+
 
 _PRESET_REGISTRY: dict[str, PresetMeta] = {}
 
@@ -130,12 +139,16 @@ _PresetFactory = TypeVar("_PresetFactory", bound=Callable[..., Any])
 
 
 def preset(func: _PresetFactory) -> _PresetFactory:
-    """Register a zero-argument preset factory for enumeration by ``list_active``.
+    """Register a preset factory for enumeration by ``list_active``.
 
     The decorator is a pure pass-through: it returns *func* unchanged (no
     wrapper, so framework signature introspection sees the original callable)
     and only records the factory in the module registry as a side effect. The
     registry — not a name heuristic — is what ``list_active`` walks.
+
+    It records ``func.__name__`` and the docstring summary only; it never calls
+    *func*, so factories that take required arguments (e.g. ``mcp_config_pin``)
+    are safe to decorate and still appear in the coverage matrix.
     """
     doc = inspect.getdoc(func) or ""
     summary = doc.splitlines()[0] if doc else ""
@@ -976,6 +989,7 @@ def openclaw_cve_2026_41361_ipv6_ssrf_defaults() -> dict[str, Any]:
 # -----------------------------------------------------------------------------
 
 
+@preset
 def offensive_cyber_model_defaults(model_id: str) -> CapabilityPolicy:
     """Return a ``CapabilityPolicy`` sized to the given model's tier.
 
@@ -1622,6 +1636,7 @@ def windsurf_cve_2026_30615_defaults(
     }
 
 
+@preset
 def mcp_config_pin(
     manifest: Iterable[Mapping[str, Any]],
     *,
@@ -5257,6 +5272,7 @@ def mcp_subprocess_arg_injection_guard_defaults(
     }
 
 
+@preset
 def no_false_success_defaults(
     checks: Mapping[str, Any],
     *,

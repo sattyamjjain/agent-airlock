@@ -6,6 +6,7 @@ guardrails format for seamless integration.
 
 from __future__ import annotations
 
+import abc
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -34,9 +35,14 @@ class GuardrailResult:
     violations: list[str] | None = None
 
 
-class InputGuardrail:
-    """Base class for input guardrails."""
+class InputGuardrail(abc.ABC):
+    """Base class for input guardrails.
 
+    Abstract: a subclass that does not override ``check`` fails at
+    construction (``TypeError``), not on first call.
+    """
+
+    @abc.abstractmethod
     def check(self, input_data: dict[str, Any]) -> GuardrailResult:
         """Check input data against guardrail.
 
@@ -46,12 +52,17 @@ class InputGuardrail:
         Returns:
             Guardrail result.
         """
-        raise NotImplementedError
+        ...
 
 
-class OutputGuardrail:
-    """Base class for output guardrails."""
+class OutputGuardrail(abc.ABC):
+    """Base class for output guardrails.
 
+    Abstract: a subclass that does not override ``check`` fails at
+    construction (``TypeError``), not on first call.
+    """
+
+    @abc.abstractmethod
     def check(self, output_data: Any) -> GuardrailResult:
         """Check output data against guardrail.
 
@@ -61,7 +72,7 @@ class OutputGuardrail:
         Returns:
             Guardrail result.
         """
-        raise NotImplementedError
+        ...
 
 
 class PIIGuardrail(OutputGuardrail):

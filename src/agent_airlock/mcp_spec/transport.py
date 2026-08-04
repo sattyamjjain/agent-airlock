@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
+from ._versions import SUPPORTED_PROTOCOL_VERSIONS as _SUPPORTED_PROTOCOL_VERSIONS
 from .oauth import (
     BearerHeaderError,
     BearerToken,
@@ -38,12 +39,6 @@ PROTOCOL_VERSION_HEADER = "MCP-Protocol-Version"
 """Name of the required MCP protocol version header on Streamable HTTP
 requests. Accepted values are `2026-07-28` (current) and `2025-11-25` (legacy);
 see `_SUPPORTED_PROTOCOL_VERSIONS`."""
-
-# See PROTOCOL_VERSION / SUPPORTED_PROTOCOL_VERSIONS in __init__ — importing them
-# here would create a cycle, so the values are duplicated with a test-level
-# cross-check in tests/mcp_spec/test_transport.py.
-_PROTOCOL_VERSION_VALUE = "2026-07-28"
-_SUPPORTED_PROTOCOL_VERSIONS = (_PROTOCOL_VERSION_VALUE, "2025-11-25")
 
 
 class MCPTransportError(ValueError):

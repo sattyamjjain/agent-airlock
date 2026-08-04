@@ -7,7 +7,7 @@ submissions only.**
 
 ## The one-liner (canonical)
 
-> **in-process least-privilege for AI tool calls — deny-by-default, per-CVE presets.**
+> **in-process least-privilege for AI tool calls, deny-by-default, per-CVE presets.**
 
 Lead with **least-privilege / type-checker / contract layer for tool calls**.
 Do **not** call it a "firewall" (crowded term; collides with an existing WAF
@@ -19,19 +19,19 @@ per-argument angle).
 One factual sentence, reused verbatim across every list:
 
 > **agent-airlock** — in-process least-privilege decorator for AI tool calls;
-> deny-by-default, PII masking, per-CVE presets, 3,409 tests.
+> deny-by-default, PII masking, per-CVE presets, 3,678 tests.
 
 > [!NOTE]
 > **Refresh the test count** to the current README **TEST-BADGE** value at the
-> moment you submit each PR (badge is regenerated every release). As of v0.8.47
-> it is **3,409**.
+> moment you submit each PR (badge is regenerated every release). As of v0.8.64
+> it is **3,678**.
 
 ## PyPI description (already on-message)
 
 The `[project].description` in `pyproject.toml` already reflects this wedge:
 
 > A type-checker and contract layer for AI agent tool calls — deny-by-default,
-> in-process, zero-dep. Strict argument validation, ghost-argument stripping,
+> in-process, Pydantic-only. Strict argument validation, ghost-argument stripping,
 > and self-healing retries for MCP servers and agent frameworks.
 
 Keep them aligned: if you sharpen one, sharpen the other.
@@ -43,7 +43,7 @@ Keep them aligned: if you sharpen one, sharpen the other.
 - **least-privilege / deny-by-default** — a `SecurityPolicy` allow-lists exactly
   the tools/args a task needs; everything else is refused.
 - **per-CVE presets** — curated, opt-in policy bundles that track named MCP CVEs
-  and spec SEPs (composed from existing primitives, zero-dep core).
+  and spec SEPs (composed from existing primitives, Pydantic-only core).
 - **PII masking** — output sanitizer with 13 PII types incl. India DPDP
   (Aadhaar/PAN/UPI/IFSC/mobile).
 

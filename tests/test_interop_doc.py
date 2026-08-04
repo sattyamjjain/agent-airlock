@@ -1,9 +1,11 @@
 """CI guard: the interop doc's stated MCP revision list matches the code.
 
 ``docs/interop/openid-aiim-2026.md`` tells an interop partner which
-``MCP-Protocol-Version`` values airlock accepts. That list must equal
-``SUPPORTED_PROTOCOL_VERSIONS`` (and its status labels must match
-``SPEC_REVISIONS``), so a partner reading the doc can trust it against the running
+``MCP-Protocol-Version`` values airlock accepts. That list must equal the set the
+wire path actually enforces — ``transport._SUPPORTED_PROTOCOL_VERSIONS``, what
+``validate_streamable_http_request`` checks against (post-refactor the same object
+as the public ``SUPPORTED_PROTOCOL_VERSIONS``) — and its status labels must match
+``SPEC_REVISIONS``, so a partner reading the doc can trust it against the running
 code. Same claims-integrity habit as ``tests/test_public_metadata.py`` and
 ``tests/test_badge_test_count_honesty.py``.
 """
@@ -13,7 +15,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from agent_airlock.mcp_spec import SPEC_REVISIONS, SUPPORTED_PROTOCOL_VERSIONS
+from agent_airlock.mcp_spec import SPEC_REVISIONS
+from agent_airlock.mcp_spec.transport import (
+    _SUPPORTED_PROTOCOL_VERSIONS as _WIRE_SUPPORTED_VERSIONS,
+)
 
 _INTEROP_DIR = Path(__file__).resolve().parents[1] / "docs" / "interop"
 _DOC = _INTEROP_DIR / "openid-aiim-2026.md"
@@ -32,11 +37,13 @@ def test_interop_doc_and_scope_exist() -> None:
     assert _SCOPE.is_file(), f"conformance-scope doc not found at {_SCOPE}"
 
 
-def test_doc_revision_list_matches_supported_versions() -> None:
+def test_doc_revision_list_matches_the_wire_enforced_versions() -> None:
+    # Bind to the value validate_streamable_http_request actually enforces on the
+    # wire (transport's imported set), not a second copy that could drift from it.
     doc_versions = tuple(v for v, _ in _doc_rows())
-    assert doc_versions == SUPPORTED_PROTOCOL_VERSIONS, (
-        f"interop doc revision table {doc_versions} != SUPPORTED_PROTOCOL_VERSIONS "
-        f"{SUPPORTED_PROTOCOL_VERSIONS} — regenerate the doc from the code"
+    assert doc_versions == _WIRE_SUPPORTED_VERSIONS, (
+        f"interop doc revision table {doc_versions} != the versions the wire path "
+        f"enforces {_WIRE_SUPPORTED_VERSIONS} — regenerate the doc from the code"
     )
 
 

@@ -6,7 +6,6 @@ import pytest
 
 from agent_airlock.mcp_spec import PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS
 from agent_airlock.mcp_spec.transport import (
-    _PROTOCOL_VERSION_VALUE,
     _SUPPORTED_PROTOCOL_VERSIONS,
     PROTOCOL_VERSION_HEADER,
     MCPTransportError,
@@ -240,9 +239,10 @@ class TestConstantsConsistent:
             body={"jsonrpc": "2.0"},
         )
 
-    def test_private_transport_constants_track_the_package(self) -> None:
-        # transport.py duplicates the version strings to avoid an import cycle;
-        # this is the cross-check that they stay in lockstep with the package.
-        assert _PROTOCOL_VERSION_VALUE == PROTOCOL_VERSION
-        assert _SUPPORTED_PROTOCOL_VERSIONS == SUPPORTED_PROTOCOL_VERSIONS
+    def test_transport_and_package_share_one_versions_source(self) -> None:
+        # transport imports the accepted-version set from the ._versions leaf, the
+        # same object the package re-exports — so the wire path (what
+        # validate_streamable_http_request enforces) and the public constant are
+        # one source of truth, not two copies that can drift.
+        assert _SUPPORTED_PROTOCOL_VERSIONS is SUPPORTED_PROTOCOL_VERSIONS
         assert PROTOCOL_VERSION in _SUPPORTED_PROTOCOL_VERSIONS

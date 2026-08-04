@@ -39,6 +39,7 @@ implementation (still SEP-draft; deferred).
 
 from __future__ import annotations
 
+from ._versions import PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS
 from .oauth import (
     AuthorizationServerMetadata,
     ProtectedResourceMetadata,
@@ -65,13 +66,6 @@ from .transport import (
     validate_streamable_http_response,
 )
 
-PROTOCOL_VERSION = "2026-07-28"
-"""MCP spec version this module implements, as it appears in the
-`MCP-Protocol-Version` HTTP header on Streamable HTTP requests. This is the
-current ratified revision: ``/specification/latest`` 307-redirects to
-``/specification/2026-07-28`` (verified 2026-08-01) and the release has been
-``prerelease: false`` since 2026-07-28T16:47:49Z."""
-
 SPEC_REVISIONS: dict[str, str] = {
     "2025-11-25": "legacy",
     "2026-07-28": "current",
@@ -82,13 +76,6 @@ is "Modern"/current, ``<= 2025-11-25`` is "Legacy"). ``2026-07-28`` is the
 current ratified revision — the negotiated :data:`PROTOCOL_VERSION`.
 ``2025-11-25`` is legacy, still accepted on the wire for interop. This records
 provenance only; airlock makes no conformance claim for either."""
-
-SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = ("2026-07-28", "2025-11-25")
-"""``MCP-Protocol-Version`` header values this package accepts on the wire,
-newest first: the current ratified ``2026-07-28`` and the legacy ``2025-11-25``
-(kept for interop). A request naming any other version is rejected with an
-``UnsupportedProtocolVersionError``-shaped message; see
-:func:`~agent_airlock.mcp_spec.transport.validate_streamable_http_request`."""
 
 
 __all__ = [

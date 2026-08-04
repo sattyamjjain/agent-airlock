@@ -12,16 +12,25 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 import agent_airlock
 from agent_airlock import policy_presets
 
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - exercised only on 3.10
+    import tomli as tomllib
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MARKETPLACE = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 PLUGIN = REPO_ROOT / ".claude-plugin" / "plugin.json"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
+README = REPO_ROOT / "README.md"
 PRESETS_FILE = REPO_ROOT / "src" / "agent_airlock" / "policy_presets.py"
 CVE_DIR = REPO_ROOT / "tests" / "cves"
+DIST_DIR = REPO_ROOT / "docs" / "distribution"
 
 # The two docs whose job is to publish a *real* vulnerability-reporting channel.
 # `example.com` is RFC-2606-reserved and used legitimately for illustration all
@@ -406,4 +415,75 @@ def test_all_exported_zero_arg_presets_are_registered() -> None:
     assert not missing, (
         f"{len(missing)} __all__-exported zero-arg preset factories are not in "
         f"list_active() — decorate them with @preset:\n" + "\n".join(missing)
+    )
+
+
+def _pyproject_description() -> str:
+    with PYPROJECT.open("rb") as fh:
+        return str(tomllib.load(fh)["project"]["description"])
+
+
+def _badge_test_count() -> int:
+    """The test count the README TEST-BADGE is generated from."""
+    block = re.search(
+        r"<!-- TEST-BADGE-START -->(.*?)<!-- TEST-BADGE-END -->",
+        README.read_text(encoding="utf-8"),
+        re.DOTALL,
+    )
+    assert block, "README TEST-BADGE block missing"
+    m = re.search(r"\*\*Test suite:\*\*\s*([\d,]+)\s*tests", block.group(1))
+    assert m, "could not parse the TEST-BADGE test count"
+    return int(m.group(1).replace(",", ""))
+
+
+def _wedge_pypi_quote() -> str:
+    """The blockquote under '## PyPI description' in README-WEDGE.md, joined."""
+    after = (DIST_DIR / "README-WEDGE.md").read_text(encoding="utf-8")
+    after = after[after.index("## PyPI description") :]
+    quote: list[str] = []
+    for line in after.splitlines():
+        if line.startswith(">"):
+            quote.append(line.lstrip("> ").rstrip())
+        elif quote:  # first blockquote after the heading has ended
+            break
+    return " ".join(quote)
+
+
+def test_wedge_description_is_byte_identical_to_pyproject() -> None:
+    """The description quoted in README-WEDGE.md must equal ``[project].description``
+    verbatim.
+
+    The drafts here get pasted into third-party awesome-* lists and then never
+    updated. When the PyPI summary was sharpened to "Pydantic-only" (0.8.62) the
+    wedge copy still said "zero-dep" — a retracted claim shipping to every listing.
+    Same fencing as ``test_cve_count_is_honest``: lock the copy to the live source.
+    """
+    assert _wedge_pypi_quote() == _pyproject_description(), (
+        "README-WEDGE.md PyPI-description quote has drifted from pyproject "
+        f"[project].description.\n  quote:     {_wedge_pypi_quote()!r}\n  pyproject: "
+        f"{_pyproject_description()!r}"
+    )
+
+
+def test_distribution_test_counts_match_the_badge() -> None:
+    """Every test count in ``docs/distribution/*.md`` must equal the TEST-BADGE value.
+
+    The drafts quoted a count from v0.8.47 (3,409) long after the badge moved on.
+    The count appears there only as a comma-grouped integer, so this asserts every
+    such number equals what the badge is generated from — fail until refreshed.
+    """
+    badge = _badge_test_count()
+    count_re = re.compile(r"\b(\d{1,3}(?:,\d{3})+)\b")
+    offenders: list[str] = []
+    for md in sorted(DIST_DIR.glob("*.md")):
+        for lineno, line in enumerate(md.read_text(encoding="utf-8").splitlines(), 1):
+            for m in count_re.finditer(line):
+                n = int(m.group(1).replace(",", ""))
+                if n != badge:
+                    offenders.append(
+                        f"{md.relative_to(REPO_ROOT)}:{lineno}: {n:,} != badge {badge:,}"
+                    )
+    assert not offenders, (
+        "docs/distribution test count(s) drifted from the README TEST-BADGE "
+        f"({badge:,}); refresh to the badge value:\n" + "\n".join(offenders)
     )

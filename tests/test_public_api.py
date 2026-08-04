@@ -112,3 +112,63 @@ class TestPolicyPresetsReexports:
         module = importlib.import_module("agent_airlock.policy_presets")
         for name in self.EXPECTED_FACTORIES:
             assert name in module.__all__, f"{name!r} missing from __all__"
+
+
+class TestPresetRegistryCoversExports:
+    """Every exported preset factory must be in the ``@preset`` registry.
+
+    ``list_active()`` — which drives ``airlock graph`` and the README OWASP
+    coverage matrix — walks the ``@preset`` registry, not ``__all__``. So a
+    factory exported in ``__all__`` but never decorated is invisible to the
+    matrix even though the README cites it as evidence (e.g. ASI04 points at
+    ``policy_presets.mcp_config_pin``). That is exactly how three factories
+    (``mcp_config_pin``, ``offensive_cyber_model_defaults``,
+    ``no_false_success_defaults``) drifted out of the count.
+
+    This test ties the two together: any module-level callable in ``__all__``
+    whose return annotation is a policy/config object must be registered.
+    Same claims-integrity shape as ``test_cve_count_is_honest`` — lock the
+    published surface to the live source so it can't silently drift again.
+    """
+
+    # A callable "returns a policy or config object" when its return
+    # annotation is the preset-dict shape or a *Policy / *Config / *Bundle
+    # type. Check functions (-> None), predicates (-> bool), and the registry
+    # reader itself (-> list[PresetMeta]) are deliberately not preset factories.
+    _POLICY_CONFIG_SUFFIXES = ("Policy", "Config", "Bundle")
+    _PRESET_DICT = "dict[str, Any]"
+
+    @classmethod
+    def _returns_policy_or_config(cls, fn: object) -> bool:
+        import inspect
+
+        try:
+            ret = inspect.signature(fn).return_annotation  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return False
+        if ret is inspect.Signature.empty:
+            return False
+        text = str(ret)
+        return text == cls._PRESET_DICT or text.endswith(cls._POLICY_CONFIG_SUFFIXES)
+
+    def test_every_policy_config_factory_in_all_is_registered(self) -> None:
+        import inspect
+
+        from agent_airlock import policy_presets as module
+
+        registered = {m.factory_name for m in module.list_active()}
+        missing: list[str] = []
+        for name in module.__all__:
+            obj = getattr(module, name, None)
+            if not inspect.isfunction(obj):
+                continue
+            if getattr(obj, "__module__", "") != module.__name__:
+                continue  # imported symbol, not a factory defined here
+            if self._returns_policy_or_config(obj) and name not in registered:
+                ret = inspect.signature(obj).return_annotation
+                missing.append(f"{name} -> {ret}")
+        assert not missing, (
+            "these __all__ callables return a policy/config object but are not "
+            "in the @preset registry, so list_active() and the OWASP coverage "
+            f"matrix under-count them: {missing}. Add @preset at the def site."
+        )
