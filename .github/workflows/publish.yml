@@ -28,3 +28,34 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
+
+  # Fail the release loudly when the live GitHub description drifts from the
+  # source of truth (pyproject.toml [project].description). A CI token cannot
+  # write the repo description, so the fix stays a manual paste into Settings;
+  # this job just makes a stale value impossible to miss. Deliberately NOT in
+  # publish's needs: (fixing it unblocks nothing) and release-only so it never
+  # flakes on a fork that cannot read the description. Shape mirrors
+  # agent-audit-kit PR #532's description-liveness job.
+  description-liveness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Live GitHub description must match pyproject.toml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          expected="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['description'])")"
+          live="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.description // ""')"
+          if [ "$expected" != "$live" ]; then
+            echo "::error::Live GitHub repo description has drifted from pyproject.toml [project].description. It is not writable from a CI token; update it by hand in repo Settings > Description."
+            printf '  pyproject: %s\n' "$expected"
+            printf '  live:      %s\n' "$live"
+            exit 1
+          fi
+          echo "Live repo description matches pyproject.toml [project].description."
