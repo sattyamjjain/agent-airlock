@@ -56,10 +56,13 @@ def test_supported_versions_accept_current_and_legacy() -> None:
 
 def test_readme_keeps_no_conformance_claim_caveat() -> None:
     text = README.read_text(encoding="utf-8")
-    # Stable phrases from the caveat above the OWASP MCP Top-10 table. The caveat
-    # now states 2026-07-28 is the current ratified revision, but MUST keep
-    # pinning that airlock makes no conformance claim.
-    assert "not a conformance claim" in text, "README lost the no-conformance-claim caveat"
-    assert "no MCP conformance suite has been run" in text, (
-        "README lost the no-conformance-claim caveat"
+    # The first transport-surface conformance run is now published and linked, so
+    # the old "no suite has been run" wording is retired. The caveat MUST still
+    # pin that airlock makes no FULL server/client conformance claim (it is a
+    # request validator, not a server) and MUST link the results.
+    assert "full MCP server/client conformance pass" in text, (
+        "README lost the no-full-conformance-claim caveat"
+    )
+    assert "benchmarks/mcp_conformance/RESULTS.md" in text, (
+        "README caveat should link the conformance results file"
     )

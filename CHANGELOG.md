@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The GitHub description still said "firewall" and "zero-core-deps" three weeks after
+  both were dropped. It now renders from pyproject.toml and the release checks for drift.
+
+### Added
+
+- benchmarks/mcp_conformance/RESULTS.md. First conformance run against spec 2026-07-28,
+  failures included.
+
+## [0.8.64] - 2026-08-04
+
+### Fixed
+
 - **Distribution copy claimed a dependency posture the package does not have, and quoted a stale test count and version.** The five `docs/distribution/*.md` drafts still said "zero-dep" after 0.8.62 and 0.8.63 corrected the PyPI summary to Pydantic-only, and still quoted `3,409` tests from v0.8.47. The copy is now Pydantic-only with the live test count and current version, and two guards in `tests/test_marketplace_metadata.py` hold it there: the README-WEDGE PyPI quote must be byte-identical to `[project].description` in `pyproject.toml`, and every test count in `docs/distribution/*.md` must equal the value the README TEST-BADGE is generated from.
 - **Three exported preset factories were never registered, so `list_active()` and the OWASP coverage matrix under-counted them.** `mcp_config_pin`, `offensive_cyber_model_defaults`, and `no_false_success_defaults` were in `__all__` but missing the `@preset` decorator, so the README could cite `policy_presets.mcp_config_pin` as ASI04 evidence while the matrix, which is built from `list_active()`, never saw it. All three are now registered (the preset count goes from 71 to 74), and `tests/test_public_api.py` ties every policy/config-returning `__all__` callable to the registry so the next one cannot drift out quietly.
 - **The interop doc's version guard bound to a protocol-version constant the wire path did not enforce.** `mcp_spec/transport.py` and `mcp_spec/__init__.py` each defined their own copy of the accepted `MCP-Protocol-Version` set, and `tests/test_interop_doc.py` checked the `__init__` copy while `validate_streamable_http_request` read the transport copy, so the doc and the guard pointed at a constant the wire path did not use. The set now lives in one dependency-free leaf module, `mcp_spec/_versions.py`, imported by both, and the guard binds to the value the wire path actually enforces.
