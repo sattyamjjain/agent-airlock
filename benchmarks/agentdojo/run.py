@@ -32,6 +32,7 @@ Run::
 from __future__ import annotations
 
 import argparse
+import contextlib
 import math
 import sys
 import tempfile
@@ -320,18 +321,19 @@ def make_airlock_tools_executor(policy: SecurityPolicy) -> Any:
     return AirlockToolsExecutor(policy)
 
 
-def run_model(
+def execute_model(
     model_id: str,
     suites: tuple[str, ...],
     max_user_tasks: int,
     max_injection_tasks: int,
-    deterministic_rate: float,
     logdir_arg: str | None = None,
-) -> str:
+) -> tuple[dict[str, dict[str, ArmCounts]], str, str]:
     """Run the real model-in-the-loop AgentDojo pass for defended vs undefended.
 
-    Requires an API key for ``model_id``'s provider. Returns a markdown block with
-    benign utility, utility-under-attack, and ASR for each arm.
+    Requires an API key for ``model_id``'s provider. Returns
+    ``(results, agentdojo_version, stamp_date)`` — the raw per-(suite, arm) counts,
+    which the caller renders (single-model section or cross-model roll-up). Wrap the
+    call in :func:`install_litellm_cost_hook` to capture token/$ cost.
     """
     from agentdojo.agent_pipeline import (
         AgentPipeline,
@@ -445,6 +447,26 @@ def run_model(
                     counts.asr_n += len(attacked["security_results"])
                 results[suite_name][arm] = counts
 
+    return results, ad_ver, stamp_date
+
+
+def run_model(
+    model_id: str,
+    suites: tuple[str, ...],
+    max_user_tasks: int,
+    max_injection_tasks: int,
+    deterministic_rate: float,
+    logdir_arg: str | None = None,
+) -> str:
+    """Single-model convenience wrapper: execute + render the "Result 2" section.
+
+    Kept for the original single-model reproduce command so its output is
+    byte-for-byte unchanged. The cross-model path uses :func:`execute_model`
+    directly (see ``main``).
+    """
+    results, ad_ver, stamp_date = execute_model(
+        model_id, suites, max_user_tasks, max_injection_tasks, logdir_arg
+    )
     return _render_model_section(
         results,
         model_id,
@@ -556,25 +578,249 @@ single-run rates as point estimates and read the Wilson interval, not the bare p
 
 
 # --------------------------------------------------------------------------- #
+# Cross-model: cost accounting, per-model roll-up, append-only RESULTS log.
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class CostMeter:
+    """Token / dollar accounting for one model's run.
+
+    A benchmark whose cost is undocumented cannot be decided-on by anyone, so the
+    harness records it. Populated best-effort from a litellm success callback (see
+    :func:`install_litellm_cost_hook`); if the backend does not route through
+    litellm, ``calls`` stays 0 and :meth:`summary` says so plainly rather than
+    printing a fabricated $0.00.
+    """
+
+    calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    usd: float = 0.0
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+    def record(self, *, prompt_tokens: int, completion_tokens: int, usd: float) -> None:
+        self.calls += 1
+        self.prompt_tokens += int(prompt_tokens)
+        self.completion_tokens += int(completion_tokens)
+        self.usd += float(usd)
+
+    @property
+    def measured(self) -> bool:
+        return self.calls > 0
+
+    def summary(self) -> str:
+        if not self.measured:
+            return "unmeasured (no LLM calls captured via litellm — record token/$ by hand)"
+        return (
+            f"{self.calls} calls, {self.total_tokens:,} tokens "
+            f"({self.prompt_tokens:,} prompt + {self.completion_tokens:,} completion), "
+            f"${self.usd:.4f}"
+        )
+
+
+def install_litellm_cost_hook(meter: CostMeter):  # type: ignore[no-untyped-def]
+    """Feed ``meter`` from litellm's success callback. Returns a teardown callable.
+
+    Best-effort and non-fatal: if litellm is not importable (or the model backend
+    does not use it) nothing is captured and the meter stays at 0. Never raises.
+    """
+    try:
+        import litellm
+    except Exception:  # noqa: BLE001 - litellm absent or broken -> no cost capture
+        return lambda: None
+
+    def _cb(kwargs: Any, response: Any, _start: Any, _end: Any) -> None:  # pragma: no cover
+        try:
+            usage = getattr(response, "usage", None) or {}
+            get = (
+                (lambda k: usage.get(k, 0))
+                if isinstance(usage, dict)
+                else (lambda k: getattr(usage, k, 0))
+            )
+            usd = float(kwargs.get("response_cost") or 0.0)
+            if not usd:
+                try:
+                    usd = float(litellm.completion_cost(completion_response=response))
+                except Exception:  # noqa: BLE001
+                    usd = 0.0
+            meter.record(
+                prompt_tokens=int(get("prompt_tokens") or 0),
+                completion_tokens=int(get("completion_tokens") or 0),
+                usd=usd,
+            )
+        except Exception:  # noqa: BLE001 - accounting must never break the run
+            pass
+
+    litellm.success_callback = [*(getattr(litellm, "success_callback", None) or []), _cb]
+
+    def _teardown() -> None:
+        with contextlib.suppress(Exception):
+            litellm.success_callback = [c for c in litellm.success_callback if c is not _cb]
+
+    return _teardown
+
+
+@dataclass
+class ModelRun:
+    """One model's raw counts + cost, kept so the report derives per-model rates,
+    per-model Wilson CIs, and a benign-FPR control without re-running anything."""
+
+    model_id: str
+    results: dict[str, dict[str, ArmCounts]]
+    cost: CostMeter
+    agentdojo_version: str
+    stamp_date: str
+    max_user_tasks: int
+    max_injection_tasks: int
+
+
+def _asr_fpr(counts_undef: ArmCounts, counts_air: ArmCounts) -> dict[str, float]:
+    undef_asr, air_asr = (
+        _rate(counts_undef.asr_k, counts_undef.asr_n),
+        _rate(counts_air.asr_k, counts_air.asr_n),
+    )
+    air_lo, air_hi = wilson_ci(counts_air.asr_k, counts_air.asr_n)
+    undef_lo, undef_hi = wilson_ci(counts_undef.asr_k, counts_undef.asr_n)
+    undef_util, air_util = (
+        _rate(counts_undef.benign_k, counts_undef.benign_n),
+        _rate(counts_air.benign_k, counts_air.benign_n),
+    )
+    return {
+        "undef_asr": undef_asr,
+        "air_asr": air_asr,
+        "air_lo": air_lo,
+        "air_hi": air_hi,
+        "undef_lo": undef_lo,
+        "undef_hi": undef_hi,
+        "reduction": undef_asr - air_asr,
+        "fp_cost": undef_util - air_util,
+    }
+
+
+def render_cross_model_comparison(runs: list[ModelRun], deterministic_rate: float) -> str:
+    """Render a dated, per-model cross-model block for the append-only RESULTS log.
+
+    Reports **per model** (each with its own Wilson CI and its own benign-FPR
+    control) and, **separately**, a pooled-across-models figure that is explicitly
+    NOT presented as a single measurement. If a second model shows a materially
+    smaller reduction, that is the finding — the table shows it rather than hiding
+    it in a pool.
+    """
+    if not runs:
+        return ""
+    date = runs[0].stamp_date
+    ad_ver = runs[0].agentdojo_version
+    caps = (
+        f"<= {runs[0].max_user_tasks} user / <= {runs[0].max_injection_tasks} injection per suite"
+    )
+    model_list = ", ".join(r.model_id for r in runs)
+
+    per_model_rows = []
+    pooled_undef, pooled_air = ArmCounts(), ArmCounts()
+    for r in runs:
+        undef, air = _pooled(r.results, "undefended"), _pooled(r.results, "airlock")
+        m = _asr_fpr(undef, air)
+        per_model_rows.append(
+            f"| `{r.model_id}` | {m['undef_asr']:.0%} → **{m['air_asr']:.0%}** "
+            f"({m['reduction']:+.0%}) | [{m['air_lo']:.0%}, {m['air_hi']:.0%}] | "
+            f"{m['fp_cost']:+.0%} | {air.asr_n} | {r.cost.summary()} |"
+        )
+        for src, dst in ((undef, pooled_undef), (air, pooled_air)):
+            dst.asr_k += src.asr_k
+            dst.asr_n += src.asr_n
+            dst.benign_k += src.benign_k
+            dst.benign_n += src.benign_n
+
+    pm = _asr_fpr(pooled_undef, pooled_air)
+    n_models = len(runs)
+    spread = ""
+    if n_models > 1:
+        reductions = [
+            _asr_fpr(_pooled(r.results, "undefended"), _pooled(r.results, "airlock"))["reduction"]
+            for r in runs
+        ]
+        spread = (
+            f"Per-model ASR reduction ranges **{min(reductions):+.0%} to "
+            f"{max(reductions):+.0%}** across the {n_models} models. "
+        )
+
+    return f"""### {date} · cross-model ({model_list})
+
+`agentdojo {ad_ver}`, attack `{ATTACK}`, benchmark `{BENCHMARK_VERSION}`, caps {caps}.
+Each row is one model with its **own** Wilson 95% CI and its **own** benign-FPR control.
+`cost` is that model's measured token/$ spend for this run.
+
+| model | ASR (undef → airlock) | airlock ASR 95% CI | benign FP cost | n/arm | cost |
+| --- | --- | --- | --- | --- | --- |
+{chr(10).join(per_model_rows)}
+
+{spread}A defense that generalises should hold its reduction across families; a model
+where it does not is a finding, published here rather than pooled away.
+
+**Pooled across models** (reported separately, **not** a single measurement — the models
+differ, so this is a weighted average, not one experiment): undefended ASR
+{pm["undef_asr"]:.0%} → airlock **{pm["air_asr"]:.0%}** ({pm["reduction"]:+.0%}), airlock
+95% Wilson CI [{pm["air_lo"]:.0%}, {pm["air_hi"]:.0%}] over {pooled_air.asr_n} attacked
+trajectories, benign FP cost {pm["fp_cost"]:+.0%}. Deterministic upper bound
+{deterministic_rate:.0%}; the pooled realised reduction is {pm["reduction"]:+.0%}
+(gap {deterministic_rate - pm["reduction"]:+.0%})."""
+
+
+_RUNS_MARKER = "<!-- CROSS-MODEL-RUNS: append newest below; never edit dated blocks -->"
+
+
+def append_run_to_results(results_path: Path, dated_block: str, *, force: bool = False) -> str:
+    """Append a dated model-run block below ``_RUNS_MARKER``, preserving prior runs.
+
+    The 2026-07-31 single-model rows and every later run stay intact and dated;
+    this only inserts, never rewrites them. Returns the new file text. Raises if
+    the marker is absent, or (unless ``force``) if the block's ``### <heading>``
+    already exists — so a re-run does not silently duplicate a dated section.
+    """
+    text = results_path.read_text(encoding="utf-8")
+    if _RUNS_MARKER not in text:
+        raise ValueError(
+            f"{results_path} has no append marker; add {_RUNS_MARKER!r} where runs should go"
+        )
+    heading = dated_block.strip().splitlines()[0].strip()
+    if heading in text and not force:
+        raise ValueError(f"a run block for {heading!r} already exists; pass force=True to replace")
+    head, _, tail = text.partition(_RUNS_MARKER)
+    new = f"{head}{_RUNS_MARKER}\n\n{dated_block.strip()}\n{tail}"
+    results_path.write_text(new, encoding="utf-8")
+    return new
+
+
+# --------------------------------------------------------------------------- #
 # RESULTS.md rendering + CLI
 # --------------------------------------------------------------------------- #
 
 
-_MODEL_SECTION_PLACEHOLDER = """## Result 2 — model-in-the-loop utility-under-attack + ASR (the leaderboard metrics)
+_PENDING_NOTE = """_No model run recorded yet._ The two leaderboard metrics — **utility under attack** and
+**ASR** — need a real model-in-the-loop pass (an LLM API key + real API spend). Each run
+appends a dated block above; none is claimed until a run produces it."""
 
-_Not yet run in this checkout._ The two metrics the AgentDojo leaderboard reports —
-**utility under attack** (benign task still succeeds with the injection present) and
-**ASR** (attack success rate) — require a real model-in-the-loop pass, which needs an
-LLM API key and real API spend. To populate this section, run:
+
+def _model_log_region(dated_block: str | None) -> str:
+    """The append-only Result 2 region: H2 + reproduce command + marker + block."""
+    return f"""## Result 2 — model-in-the-loop utility-under-attack + ASR (append-only log)
+
+Each dated block below is one run and is never edited after the fact; newer runs are
+prepended under the marker. Reproduce / add a run (cross-model example):
 
 ```bash
-python -m benchmarks.agentdojo.run --model gpt-4o-mini-2024-07-18 \\
+python -m benchmarks.agentdojo.run \\
+  --model gpt-4o-mini-2024-07-18 --model claude-3-5-haiku-20241022 \\
   --out benchmarks/agentdojo/RESULTS.md
 ```
 
-with `OPENAI_API_KEY` set. That regenerates this file with a `baseline vs airlock`
-table (benign utility / utility-under-attack / ASR / the utility cost of the defense)
-for every pinned suite. No number is claimed here until that run produces it."""
+{_RUNS_MARKER}
+
+{dated_block.strip() if dated_block else _PENDING_NOTE}"""
 
 
 def _union_caveat(report: DeterministicReport) -> str:
@@ -599,7 +845,7 @@ def render_results_md(report: DeterministicReport, model_section: str | None = N
         f"{s.blocked_union}/{s.injections} ({s.union_rate:.0%}) |"
         for s in report.suites
     )
-    model_block = model_section or _MODEL_SECTION_PLACEHOLDER
+    model_block = _model_log_region(model_section)
     return f"""# AgentDojo — adaptive-attacker robustness (agent-airlock as a defense)
 
 Reproduce (deterministic block-coverage, no model, no API key):
@@ -695,7 +941,17 @@ def main(argv: list[str] | None = None) -> int:
         description="Register agent-airlock as an AgentDojo defense and measure robustness.",
     )
     parser.add_argument(
-        "--model", default=None, help="Run the real model-in-the-loop pass (needs an API key)."
+        "--model",
+        action="append",
+        default=None,
+        help="Model id for the real model-in-the-loop pass (needs an API key). "
+        "Repeat to run several models cross-family (e.g. --model gpt-4o-mini-2024-07-18 "
+        "--model claude-3-5-haiku-20241022); each is reported with its own Wilson CI.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing dated run block of the same heading (default: refuse).",
     )
     parser.add_argument(
         "--max-user-tasks", type=int, default=5, help="Model path: cap user tasks per suite."
@@ -730,38 +986,75 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     report = run_deterministic()
-    model_section: str | None = None
-    if args.model:
+    print(
+        f"Result 1 (deterministic, no model): "
+        f"{report.total_blocked_pairs}/{report.total_pairs} pairs blocked = "
+        f"{report.combined_per_task_rate:.1%}"
+    )
+
+    models: list[str] = args.model or []
+    dated_block: str | None = None
+    if models:
         model_suites = (
             PINNED_SUITES
             if not args.suites
             else tuple(s.strip() for s in args.suites.split(",") if s.strip())
         )
-        print(
-            f"running model-in-the-loop pass ({args.model}) over "
-            f"{' + '.join(model_suites)} — this needs an API key and spends real $. "
-            f"caps: <= {args.max_user_tasks} user / <= {args.max_injection_tasks} injection tasks per suite.",
-            file=sys.stderr,
-        )
-        model_section = run_model(
-            args.model,
-            model_suites,
-            args.max_user_tasks,
-            args.max_injection_tasks,
-            report.combined_per_task_rate,
-            logdir_arg=args.logdir,
-        )
+        runs: list[ModelRun] = []
+        for model_id in models:
+            print(
+                f"running model-in-the-loop pass ({model_id}) over "
+                f"{' + '.join(model_suites)} — needs an API key and spends real $. caps: "
+                f"<= {args.max_user_tasks} user / <= {args.max_injection_tasks} injection per suite.",
+                file=sys.stderr,
+            )
+            meter = CostMeter()
+            teardown = install_litellm_cost_hook(meter)
+            try:
+                results, ad_ver, stamp = execute_model(
+                    model_id,
+                    model_suites,
+                    args.max_user_tasks,
+                    args.max_injection_tasks,
+                    logdir_arg=args.logdir,
+                )
+            finally:
+                teardown()
+            print(f"  {model_id} cost: {meter.summary()}", file=sys.stderr)
+            runs.append(
+                ModelRun(
+                    model_id,
+                    results,
+                    meter,
+                    ad_ver,
+                    stamp,
+                    args.max_user_tasks,
+                    args.max_injection_tasks,
+                )
+            )
+        dated_block = render_cross_model_comparison(runs, report.combined_per_task_rate)
 
-    md = render_results_md(report, model_section)
-    out = args.out or (Path(__file__).parent / "RESULTS.md")
-    out.write_text(md)
-    print(f"wrote {out}")
-    print(
-        f"combined per-task block coverage: "
-        f"{report.total_blocked_pairs}/{report.total_pairs} = {report.combined_per_task_rate:.1%}"
-    )
-    if model_section is not None:
-        print("model-in-the-loop Result 2 section populated in RESULTS.md.")
+    # Non-destructive by default: never silently overwrite RESULTS.md. With --out on
+    # an existing marked file, APPEND the dated block (prior runs stay intact); a
+    # fresh --out gets a full scaffold; with no --out the block prints for pasting.
+    if args.out:
+        out: Path = args.out
+        if out.exists() and _RUNS_MARKER in out.read_text(encoding="utf-8"):
+            if dated_block:
+                append_run_to_results(out, dated_block, force=args.force)
+                print(f"appended a dated run block to {out} (prior runs preserved)")
+            else:
+                print(f"{out} left unchanged (no --model given; nothing to append)")
+        else:
+            out.write_text(render_results_md(report, dated_block))
+            print(f"wrote fresh {out}")
+    elif dated_block:
+        print("\n" + dated_block)
+        print(
+            "\n(paste the block above under the CROSS-MODEL-RUNS marker in "
+            "benchmarks/agentdojo/RESULTS.md, or re-run with "
+            "--out benchmarks/agentdojo/RESULTS.md to append it)"
+        )
     return 0
 
 

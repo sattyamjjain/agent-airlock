@@ -25,7 +25,7 @@
       "Offline-capable. The CVE suite, policy presets, and validators all work air-gapped."
     ],
     "proof_points": [
-      "3,680 tests passing at 86.70% measured coverage (CI-enforced floor 82%)",
+      "3,689 tests passing at 86.70% measured coverage (CI-enforced floor 82%)",
       "37 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026); see the generated catalog at docs/cves/index.md",
       "74 policy presets (curated security defaults), enumerated at runtime by policy_presets.list_active()"
     ],

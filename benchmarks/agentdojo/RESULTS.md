@@ -7,10 +7,13 @@ pip install "agent-airlock[bench]"
 python -m benchmarks.agentdojo.run
 ```
 
-Reproduce (model-in-the-loop utility-under-attack + ASR, needs a key + API spend):
+Reproduce (model-in-the-loop utility-under-attack + ASR, needs a key + API spend). Pass
+`--model` more than once to run several families; each appends a dated block, never
+overwriting a prior run:
 
 ```bash
-python -m benchmarks.agentdojo.run --model gpt-4o-mini-2024-07-18 \
+python -m benchmarks.agentdojo.run \
+  --model gpt-4o-mini-2024-07-18 --model claude-3-5-haiku-20241022 \
   --out benchmarks/agentdojo/RESULTS.md
 ```
 
@@ -53,7 +56,29 @@ deny-by-default least-privilege policy.
 > **NOT** AgentDojo's model-in-the-loop ASR (that is Result 2), and it is **NOT**
 > extrapolated to AgentDojo's full task x injection set.
 
-## Result 2 — model-in-the-loop utility-under-attack + ASR (the leaderboard metrics)
+## Result 2 — model-in-the-loop utility-under-attack + ASR (append-only log)
+
+Each dated block below is one run and is never edited after the fact; newer runs are
+prepended under the marker.
+
+**Why a second model.** The 2026-07-31 block below is one model (gpt-4o-mini) on a 60-pair
+subset, so its airlock ASR sits in a wide Wilson interval **[5%, 20%]** — wide enough that a
+reviewer can read the −35pp as subset selection. The harness now takes `--model` more than
+once and reports **each model with its own Wilson CI and its own benign-FPR control**, plus a
+**pooled figure shown separately** (not as one measurement). The recommended second model is
+**`claude-3-5-haiku-20241022`** — a different *family* and provider from gpt-4o-mini, and
+cheap, so the run stays affordable while testing whether the defense generalises across
+families rather than to one model. (Confirm agentdojo's model registry recognises the id; the
+`tool_knowledge` attack derives the target model name from it. Swap for another known
+different-family id if not.) airlock's defense is deterministic at the tool seam, so a
+*materially smaller* realised reduction on the second model would itself be the finding — the
+per-model table publishes it rather than pooling it away. **Token/$ cost is recorded per model
+on every run** (a benchmark whose cost is undocumented cannot be decided on). As of this
+commit only the 2026-07-31 run exists; the cross-model numbers are pending a paid run.
+
+<!-- CROSS-MODEL-RUNS: append newest below; never edit dated blocks -->
+
+### 2026-07-31 · gpt-4o-mini-2024-07-18
 
 Real adaptive-attacker pass, **airlock defense vs no defense**. Model **gpt-4o-mini-2024-07-18**,
 `agentdojo 0.1.35`, attack `tool_knowledge`, benchmark `v1.2.1`, run

@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - benchmarks/mcp_conformance/RESULTS.md. First conformance run against spec 2026-07-28,
   failures included.
+- The AgentDojo harness runs cross-model now, and records what it costs. `--model` is
+  repeatable; the recommended second model is `claude-3-5-haiku-20241022` (a different
+  family and provider from gpt-4o-mini, so the run tests generalisation, not one model),
+  and each run records its token/$ cost per model. Each model gets its own Wilson CI and
+  its own benign-FPR control; the pooled figure is shown separately, not as one
+  measurement. Runs append as dated blocks in benchmarks/agentdojo/RESULTS.md, so the
+  2026-07-31 gpt-4o-mini rows stay intact. The cross-family numbers are pending a paid run
+  (#123).
+- OWASP ASI04 (Agentic Supply Chain) now names its boundary. The row splits the runtime
+  leg airlock covers from the on-disk, pre-tool-call compromise (e.g. the 2026-08-04 keyv
+  npm worm, which poisoned agent config and IDE task files on disk) that an in-process
+  tool-call validator is the wrong layer for, and points at agent-audit-kit for that leg.
+  The label stays Partial (#124).
 
 ## [0.8.64] - 2026-08-04
 
