@@ -1,0 +1,44 @@
+# Agent Egress Bench — GitHub Actions job sample (v0.5.3+)
+#
+# This file is a SAMPLE. A maintainer with GitHub `workflow` scope on
+# the repo needs to merge the `egress-bench` job block below into
+# `.github/workflows/ci.yml`. The bot that landed v0.5.3 could not
+# push under `.github/workflows/` (lacks `workflow` scope).
+#
+# What it does:
+#   - Runs on every push + PR
+#   - Fails the build if any CVE fixture regresses (any payload
+#     previously blocked is now unblocked)
+#   - Surfaces the TAP output inline in the Actions log
+#
+# Motivating incident:
+#   OX Security "Mother of All AI Supply Chains" dossier, 2026-04-20
+#   https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20
+
+  egress-bench:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run egress bench
+        run: |
+          python3 scripts/egress_bench.py --format tap | tee egress-bench.tap
+          # Exit code propagates; TAP output captured for PR annotation.
+
+      - name: Upload bench output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: egress-bench
+          path: egress-bench.tap
