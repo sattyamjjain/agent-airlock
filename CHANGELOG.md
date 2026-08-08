@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- The GitHub description still said "firewall" and "zero-core-deps" three weeks after
-  both were dropped. It now renders from pyproject.toml and the release checks for drift.
+- The GitHub description said "firewall" and "zero-core-deps" for three weeks after both
+  were dropped, and the changelog entry claiming that was fixed shipped before the fix
+  did. It renders from pyproject.toml now, and the release fails on drift rather than
+  reporting it afterwards.
 - The documentation site did not exist. mkdocs.yml pointed site_url at agent-airlock.dev
   (no DNS record) and the github.io URL 404'd, so the whole docs set, including the CVE
   writeups and the OWASP coverage matrix, was readable only by cloning. Docs now publish
