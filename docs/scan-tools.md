@@ -123,7 +123,7 @@ model-in-the-loop Attack Success Rate (up to 72% across 1,312 cases on 45 live
 servers), which is a property of agents, not of a static checker. The
 `declarative_side_effect` fixtures (a malicious side effect stated with no
 imperative marker) are honest misses, which is why coverage is 69.2%, not 100%. See
-[`benchmarks/scantools_mcptox/RESULTS.md`](../benchmarks/scantools_mcptox/RESULTS.md).
+[`benchmarks/scantools_mcptox/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/scantools_mcptox/RESULTS.md).
 
 ## Programmatic use
 

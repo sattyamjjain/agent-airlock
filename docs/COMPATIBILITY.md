@@ -2,7 +2,7 @@
 
 Agent-Airlock is designed to work seamlessly with all major AI agent frameworks in 2026. This guide covers integration patterns, the critical "Golden Rule" for decorator ordering, and links to comprehensive examples.
 
-> **See also:** Full working examples in [`examples/`](../examples/README.md)
+> **See also:** Full working examples in [`examples/`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/README.md)
 
 ---
 
@@ -40,7 +40,7 @@ def my_tool(x: int, y: str) -> dict:
 
 LangChain's `@tool` decorator reads function signatures to build schemas for the LLM.
 
-> **Full example:** [`examples/langchain_integration.py`](../examples/langchain_integration.py)
+> **Full example:** [`examples/langchain_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/langchain_integration.py)
 
 ### Basic Usage
 
@@ -92,7 +92,7 @@ executor = AgentExecutor(agent=agent, tools=tools)
 
 LangGraph is the evolution of LangChain for stateful, graph-based agent workflows.
 
-> **Full example:** [`examples/langgraph_integration.py`](../examples/langgraph_integration.py)
+> **Full example:** [`examples/langgraph_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/langgraph_integration.py)
 
 ### With ToolNode
 
@@ -135,7 +135,7 @@ workflow.add_node("tools", tool_node)
 
 CrewAI's `@tool` decorator enables role-based multi-agent collaboration.
 
-> **Full example:** [`examples/crewai_integration.py`](../examples/crewai_integration.py)
+> **Full example:** [`examples/crewai_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/crewai_integration.py)
 
 ### Basic Usage
 
@@ -186,7 +186,7 @@ analyst = Agent(
 
 OpenAI's Agents SDK is a lightweight framework for multi-agent workflows.
 
-> **Full example:** [`examples/openai_agents_sdk_integration.py`](../examples/openai_agents_sdk_integration.py)
+> **Full example:** [`examples/openai_agents_sdk_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/openai_agents_sdk_integration.py)
 
 ### Basic Usage
 
@@ -240,7 +240,7 @@ triage = Agent(
 
 PydanticAI provides type-safe agents with Pydantic validation.
 
-> **Full example:** [`examples/pydanticai_integration.py`](../examples/pydanticai_integration.py)
+> **Full example:** [`examples/pydanticai_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/pydanticai_integration.py)
 
 ### Basic Usage
 
@@ -286,7 +286,7 @@ def search(query: str) -> str:
 
 AutoGen enables multi-agent conversations and code execution.
 
-> **Full example:** [`examples/autogen_integration.py`](../examples/autogen_integration.py)
+> **Full example:** [`examples/autogen_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/autogen_integration.py)
 
 ### AutoGen 0.4+ (FunctionTool)
 
@@ -342,7 +342,7 @@ register_function(
 
 LlamaIndex provides tools for RAG and agent workflows.
 
-> **Full example:** [`examples/llamaindex_integration.py`](../examples/llamaindex_integration.py)
+> **Full example:** [`examples/llamaindex_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/llamaindex_integration.py)
 
 ### FunctionTool
 
@@ -373,7 +373,7 @@ agent = ReActAgent.from_tools([search_tool], llm=llm)
 
 smolagents provides code-writing agents that are 30% more efficient than ReAct.
 
-> **Full example:** [`examples/smolagents_integration.py`](../examples/smolagents_integration.py)
+> **Full example:** [`examples/smolagents_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/smolagents_integration.py)
 
 ### Basic Usage
 
@@ -404,7 +404,7 @@ result = agent.run("Calculate 15 * 23")
 
 Direct integration with Anthropic's Claude API for tool use.
 
-> **Full example:** [`examples/anthropic_integration.py`](../examples/anthropic_integration.py)
+> **Full example:** [`examples/anthropic_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/anthropic_integration.py)
 
 ### Pattern
 
@@ -447,7 +447,7 @@ def execute_tool(name: str, input: dict) -> str:
 
 FastMCP is the recommended way to build MCP servers.
 
-> **Full example:** [`examples/fastmcp_integration.py`](../examples/fastmcp_integration.py)
+> **Full example:** [`examples/fastmcp_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/fastmcp_integration.py)
 
 ### @secure_tool Convenience Decorator
 

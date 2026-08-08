@@ -45,7 +45,7 @@ the dossier honest.
 
 1. Drop the JSON into `tests/cves/fixtures/`.
 2. Add a dispatcher entry to `_DISPATCH` in
-   [`scripts/egress_bench.py`](../../scripts/egress_bench.py) that
+   [`scripts/egress_bench.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/scripts/egress_bench.py) that
    knows how to unpack the fixture shape and call the matching preset.
 3. Run `make egress-bench` locally.
 4. Commit both the fixture and the dispatcher update together.

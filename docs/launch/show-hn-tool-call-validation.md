@@ -131,7 +131,7 @@ def run_query(table: str, limit: int) -> list[dict]:
 
 `make benchmark` runs the full guard suite over a deterministic, version-controlled corpus
 of real CVE-shaped payloads plus benign controls, and writes
-[`BENCHMARK.md`](../../BENCHMARK.md):
+[`BENCHMARK.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/BENCHMARK.md):
 
 | metric | value |
 |---|---|

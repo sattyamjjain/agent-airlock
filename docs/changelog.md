@@ -1,6 +1,6 @@
 # Changelog
 
-For the complete changelog with all versions and detailed release notes, see the [CHANGELOG.md](../CHANGELOG.md) file in the project root.
+For the complete changelog with all versions and detailed release notes, see the [CHANGELOG.md](https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md) file in the project root.
 
 ## Quick Version Summary
 
@@ -72,10 +72,10 @@ No breaking changes - all V0.3.0 features are opt-in.
 
 ## Contributing
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](https://github.com/sattyamjjain/agent-airlock/blob/main/CONTRIBUTING.md) for guidelines.
 
 Report issues at [GitHub Issues](https://github.com/sattyamjjain/agent-airlock/issues).
 
 ---
 
-[View full changelog →](../CHANGELOG.md)
+[View full changelog →](https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md)

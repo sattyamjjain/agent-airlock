@@ -11,7 +11,7 @@ Local, Managed-stub).
   calls `container.wait(timeout=...)` and kills+removes the
   container on timeout. Prior to v0.5.1 the `timeout` kwarg was a
   TODO, so a runaway function would hang forever. See
-  [CHANGELOG v0.5.1](../../CHANGELOG.md).
+  [CHANGELOG v0.5.1](https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md).
 - **`no-new-privileges` always on.** The container runs with
   `security_opt=["no-new-privileges:true"]` so a child process
   cannot regain privileges via `setuid`.

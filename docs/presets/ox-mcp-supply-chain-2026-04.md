@@ -63,5 +63,5 @@ cfg["eval_token_check"](my_tools)
 
 - [OX dossier](https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20)
 - [The Hacker News coverage](https://thehackernews.com/2026/04/ox-security-mcp-dossier.html)
-- Per-CVE NVD URLs in [`tests/cves/fixtures/ox_supply_chain_2026_04.json`](../../tests/cves/fixtures/ox_supply_chain_2026_04.json)
-- Regression tests: [`tests/cves/test_ox_supply_chain_2026_04.py`](../../tests/cves/test_ox_supply_chain_2026_04.py)
+- Per-CVE NVD URLs in [`tests/cves/fixtures/ox_supply_chain_2026_04.json`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/fixtures/ox_supply_chain_2026_04.json)
+- Regression tests: [`tests/cves/test_ox_supply_chain_2026_04.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_ox_supply_chain_2026_04.py)
