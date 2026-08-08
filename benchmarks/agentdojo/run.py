@@ -36,6 +36,7 @@ import contextlib
 import math
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -664,6 +665,101 @@ def install_litellm_cost_hook(meter: CostMeter):  # type: ignore[no-untyped-def]
     return _teardown
 
 
+# USD per 1M tokens: (input, output). List price, used to turn captured token
+# counts into the dollar figure a run records. Prefix-matched against the model
+# the API response reports. Extend as models are added.
+_MODEL_PRICES: dict[str, tuple[float, float]] = {
+    "gpt-4o-mini-2024-07-18": (0.15, 0.60),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o-2024-05-13": (5.00, 15.00),
+    "gpt-4o": (2.50, 10.00),
+    "gpt-4-turbo": (10.00, 30.00),
+    "gpt-3.5-turbo": (0.50, 1.50),
+    "claude-3-haiku-20240307": (0.25, 1.25),
+    "claude-3-5-haiku": (0.80, 4.00),
+    "claude-3-5-sonnet": (3.00, 15.00),
+    "claude-3-7-sonnet": (3.00, 15.00),
+    "claude-3-opus": (15.00, 75.00),
+}
+
+
+def _price_usd(model: str | None, prompt_tokens: int, completion_tokens: int) -> float:
+    if not model:
+        return 0.0
+    for key, (pin, pout) in _MODEL_PRICES.items():
+        if model.startswith(key):
+            return prompt_tokens / 1e6 * pin + completion_tokens / 1e6 * pout
+    return 0.0
+
+
+def install_provider_cost_hooks(meter: CostMeter):  # type: ignore[no-untyped-def]
+    """Record token/$ cost from the OpenAI and Anthropic SDK responses into ``meter``.
+
+    agentdojo calls the provider SDKs directly (OpenAI sync ``chat.completions``,
+    Anthropic async ``messages.stream``), not litellm, so the litellm callback never
+    fires. This patches the two points where the raw API response — which carries
+    ``.usage`` — is in hand: the OpenAI ``Completions.create`` return value, and
+    agentdojo's Anthropic message converter (the async streaming client makes a
+    call-level patch awkward). Returns a teardown that restores both. Best-effort
+    and non-fatal: a provider whose internals differ is simply not metered.
+    """
+    restores: list[Callable[[], None]] = []
+
+    try:
+        from openai.resources.chat import completions as _oai
+
+        _orig_create = _oai.Completions.create
+
+        def _patched_create(self: Any, *a: Any, **k: Any) -> Any:
+            resp = _orig_create(self, *a, **k)
+            with contextlib.suppress(Exception):
+                u = getattr(resp, "usage", None)
+                if u is not None:
+                    pt = int(getattr(u, "prompt_tokens", 0) or 0)
+                    ct = int(getattr(u, "completion_tokens", 0) or 0)
+                    meter.record(
+                        prompt_tokens=pt,
+                        completion_tokens=ct,
+                        usd=_price_usd(getattr(resp, "model", None), pt, ct),
+                    )
+            return resp
+
+        _oai.Completions.create = _patched_create  # type: ignore[method-assign]
+        restores.append(lambda: setattr(_oai.Completions, "create", _orig_create))
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        import agentdojo.agent_pipeline.llms.anthropic_llm as _am
+
+        _orig_conv = _am._anthropic_to_assistant_message
+
+        def _patched_conv(completion: Any, *a: Any, **k: Any) -> Any:
+            with contextlib.suppress(Exception):
+                u = getattr(completion, "usage", None)
+                if u is not None:
+                    pt = int(getattr(u, "input_tokens", 0) or 0)
+                    ct = int(getattr(u, "output_tokens", 0) or 0)
+                    meter.record(
+                        prompt_tokens=pt,
+                        completion_tokens=ct,
+                        usd=_price_usd(getattr(completion, "model", None), pt, ct),
+                    )
+            return _orig_conv(completion, *a, **k)
+
+        _am._anthropic_to_assistant_message = _patched_conv  # type: ignore[assignment]
+        restores.append(lambda: setattr(_am, "_anthropic_to_assistant_message", _orig_conv))
+    except Exception:  # noqa: BLE001
+        pass
+
+    def _teardown() -> None:
+        for restore in restores:
+            with contextlib.suppress(Exception):
+                restore()
+
+    return _teardown
+
+
 @dataclass
 class ModelRun:
     """One model's raw counts + cost, kept so the report derives per-model rates,
@@ -814,7 +910,7 @@ prepended under the marker. Reproduce / add a run (cross-model example):
 
 ```bash
 python -m benchmarks.agentdojo.run \\
-  --model gpt-4o-mini-2024-07-18 --model claude-3-5-haiku-20241022 \\
+  --model gpt-4o-mini-2024-07-18 --model gpt-4o-2024-05-13 \\
   --out benchmarks/agentdojo/RESULTS.md
 ```
 
@@ -946,7 +1042,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Model id for the real model-in-the-loop pass (needs an API key). "
         "Repeat to run several models cross-family (e.g. --model gpt-4o-mini-2024-07-18 "
-        "--model claude-3-5-haiku-20241022); each is reported with its own Wilson CI.",
+        "--model gpt-4o-2024-05-13); each is reported with its own Wilson CI.",
     )
     parser.add_argument(
         "--force",
@@ -1009,7 +1105,8 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             meter = CostMeter()
-            teardown = install_litellm_cost_hook(meter)
+            teardown_litellm = install_litellm_cost_hook(meter)
+            teardown_sdk = install_provider_cost_hooks(meter)
             try:
                 results, ad_ver, stamp = execute_model(
                     model_id,
@@ -1019,7 +1116,8 @@ def main(argv: list[str] | None = None) -> int:
                     logdir_arg=args.logdir,
                 )
             finally:
-                teardown()
+                teardown_sdk()
+                teardown_litellm()
             print(f"  {model_id} cost: {meter.summary()}", file=sys.stderr)
             runs.append(
                 ModelRun(

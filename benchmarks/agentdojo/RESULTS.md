@@ -13,7 +13,7 @@ overwriting a prior run:
 
 ```bash
 python -m benchmarks.agentdojo.run \
-  --model gpt-4o-mini-2024-07-18 --model claude-3-5-haiku-20241022 \
+  --model gpt-4o-mini-2024-07-18 --model gpt-4o-2024-05-13 \
   --out benchmarks/agentdojo/RESULTS.md
 ```
 
@@ -61,22 +61,51 @@ deny-by-default least-privilege policy.
 Each dated block below is one run and is never edited after the fact; newer runs are
 prepended under the marker.
 
-**Why a second model.** The 2026-07-31 block below is one model (gpt-4o-mini) on a 60-pair
-subset, so its airlock ASR sits in a wide Wilson interval **[5%, 20%]** — wide enough that a
-reviewer can read the −35pp as subset selection. The harness now takes `--model` more than
-once and reports **each model with its own Wilson CI and its own benign-FPR control**, plus a
-**pooled figure shown separately** (not as one measurement). The recommended second model is
-**`claude-3-5-haiku-20241022`** — a different *family* and provider from gpt-4o-mini, and
-cheap, so the run stays affordable while testing whether the defense generalises across
-families rather than to one model. (Confirm agentdojo's model registry recognises the id; the
-`tool_knowledge` attack derives the target model name from it. Swap for another known
-different-family id if not.) airlock's defense is deterministic at the tool seam, so a
-*materially smaller* realised reduction on the second model would itself be the finding — the
-per-model table publishes it rather than pooling it away. **Token/$ cost is recorded per model
-on every run** (a benchmark whose cost is undocumented cannot be decided on). As of this
-commit only the 2026-07-31 run exists; the cross-model numbers are pending a paid run.
+**Why a second model, and which one.** The 2026-07-31 block below is one model (gpt-4o-mini)
+on a 60-pair subset, so its airlock ASR sits in a wide Wilson interval a reviewer can read as
+subset selection. The harness now takes `--model` more than once and reports **each model with
+its own Wilson CI and its own benign-FPR control**, plus a **pooled figure shown separately**
+(not as one measurement), with **token/$ cost recorded per model**.
+
+The intended second model was a different *provider* (Anthropic), to test cross-family
+generalisation. That is blocked: `agentdojo 0.1.35` is the latest release and unmaintained, and
+its model registry lists only retired `claude-3-x` ids — every Anthropic model the API serves
+today (claude-4 / claude-5) is unknown to it, and forcing one in would break the
+`tool_knowledge` attack's model-name lookup and produce a meaningless number. So the 2026-08-08
+run below uses **`gpt-4o-2024-05-13`**, the larger sibling of gpt-4o-mini, as the achievable
+cross-*model* (same-provider, different size) contrast. Cross-*provider* generalisation stays
+open, tracked in [#123](https://github.com/sattyamjjain/agent-airlock/issues/123), pending a
+maintained harness with current Anthropic models.
+
+The finding is published rather than pooled away: airlock cuts ASR on both models, **more on
+the stronger gpt-4o (+50pp, 72% → 22%) than on gpt-4o-mini (+30pp, 42% → 12%)**, while gpt-4o's
+residual ASR is higher. Cost was captured at the SDK layer (agentdojo calls the provider SDKs
+directly, not litellm); total spend ~$5.16.
 
 <!-- CROSS-MODEL-RUNS: append newest below; never edit dated blocks -->
+
+### 2026-08-08 · cross-model (gpt-4o-mini-2024-07-18, gpt-4o-2024-05-13)
+
+`agentdojo 0.1.35`, attack `tool_knowledge`, benchmark `v1.2.1`, caps <= 5 user / <= 3 injection per suite.
+Each row is one model with its **own** Wilson 95% CI and its **own** benign-FPR control.
+`cost` is that model's measured token/$ spend for this run.
+
+| model | ASR (undef → airlock) | airlock ASR 95% CI | benign FP cost | n/arm | cost |
+| --- | --- | --- | --- | --- | --- |
+| `gpt-4o-mini-2024-07-18` | 42% → **12%** (+30%) | [6%, 22%] | +15% | 60 | $0.2383 (814 calls, 1.47M tokens; measured on the initial pass, replayed from cache here) |
+| `gpt-4o-2024-05-13` | 72% → **22%** (+50%) | [13%, 34%] | +15% | 60 | 523 calls, 930,865 tokens (904,170 prompt + 26,695 completion), $4.9213 |
+
+Per-model ASR reduction ranges **+30% to +50%** across the 2 models. A defense that generalises should hold its reduction across families; a model
+where it does not is a finding, published here rather than pooled away.
+
+**Pooled across models** (reported separately, **not** a single measurement — the models
+differ, so this is a weighted average, not one experiment): undefended ASR
+57% → airlock **17%** (+40%), airlock
+95% Wilson CI [11%, 24%] over 120 attacked
+trajectories, benign FP cost +15%. Deterministic upper bound
+86%; the pooled realised reduction is +40%
+(gap +46%).
+
 
 ### 2026-07-31 · gpt-4o-mini-2024-07-18
 

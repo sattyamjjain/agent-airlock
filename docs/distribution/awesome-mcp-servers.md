@@ -9,7 +9,7 @@
   MCP server**, so it only belongs in a tools/clients/utilities section (if the
   list has one). If the list is servers-only, **do not submit** — use the
   awesome-mcp-security / awesome-llm-security lists instead.
-- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.8.66 = 3,689).
+- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.8.67 = 3,689).
 
 ## Entry (list format)
 
