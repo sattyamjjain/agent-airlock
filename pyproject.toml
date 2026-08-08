@@ -199,7 +199,7 @@ airlock-scan-tools = "agent_airlock.cli.scan_tools:main"
 
 [project.urls]
 Homepage = "https://github.com/sattyamjjain/agent-airlock"
-Documentation = "https://github.com/sattyamjjain/agent-airlock#readme"
+Documentation = "https://sattyamjjain.github.io/agent-airlock/"
 Repository = "https://github.com/sattyamjjain/agent-airlock"
 Source = "https://github.com/sattyamjjain/agent-airlock"
 Changelog = "https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md"

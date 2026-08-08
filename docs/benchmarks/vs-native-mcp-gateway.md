@@ -92,5 +92,5 @@ sandboxes; it forwards the payload. Airlock validates the payload's contract.
 
 Docker MCP Gateway image **v2.0.1** · `docker mcp` CLI **v0.42.1** · Docker engine
 **29.4.3** · MCP protocol `2025-06-18` · measured **2026-07-16**. Full method and
-per-payload table: [`benchmarks/vs_gateway/RESULTS.md`](../../benchmarks/vs_gateway/RESULTS.md).
+per-payload table: [`benchmarks/vs_gateway/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/vs_gateway/RESULTS.md).
 Regeneration harness: [`benchmarks/vs_gateway/gateway_harness/`](../../benchmarks/vs_gateway/gateway_harness/).

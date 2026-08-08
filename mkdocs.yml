@@ -1,6 +1,6 @@
 site_name: Agent-Airlock
 site_description: Security middleware for MCP servers - Intercept, validate, and sandbox AI agent tool calls
-site_url: https://agent-airlock.dev
+site_url: https://sattyamjjain.github.io/agent-airlock/
 repo_url: https://github.com/sattyamjjain/agent-airlock
 repo_name: sattyamjjain/agent-airlock
 
@@ -89,7 +89,7 @@ nav:
   - Observability:
     - OTel Semantic Conventions: observability/semconv.md
   - Security: SECURITY.md
-  - Contributing: CONTRIBUTING.md
+  - Contributing: https://github.com/sattyamjjain/agent-airlock/blob/main/CONTRIBUTING.md
   - Changelog: changelog.md
 
 extra:

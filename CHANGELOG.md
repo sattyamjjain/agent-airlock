@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The GitHub description still said "firewall" and "zero-core-deps" three weeks after
   both were dropped. It now renders from pyproject.toml and the release checks for drift.
+- The documentation site did not exist. mkdocs.yml pointed site_url at agent-airlock.dev
+  (no DNS record) and the github.io URL 404'd, so the whole docs set, including the CVE
+  writeups and the OWASP coverage matrix, was readable only by cloning. Docs now publish
+  to https://sattyamjjain.github.io/agent-airlock/ on every push to main
+  (.github/workflows/docs.yml), the dead domain is gone, and CI runs mkdocs build --strict
+  so a broken internal link fails the build.
 
 ### Added
 

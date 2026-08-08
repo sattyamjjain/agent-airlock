@@ -134,7 +134,7 @@ receipt = build_receipt(
 
 ## Related
 
-- [`airlock attest receipt`](./receipt.md) (v0.6.0) — the signed
+- [`airlock attest receipt`](https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent_airlock/cli/attest.py) (v0.6.0) — the signed
   receipt surface this extends.
 - [`@requires_human_oversight`](../policies/human-oversight-decorator.md)
   (v0.8.4) — a policy primitive whose per-call audit events can

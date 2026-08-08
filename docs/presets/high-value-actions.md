@@ -61,7 +61,7 @@ Without `allow_high_value=True`, the `check` raises
 
 ## Tests
 
-See [`tests/test_policy_presets_high_value.py`](../../tests/test_policy_presets_high_value.py):
+See [`tests/test_policy_presets_high_value.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/test_policy_presets_high_value.py):
 - Banned-prefix tool is blocked.
 - Same tool passes when `allow_high_value=True`.
 - Non-matching tool is unaffected.

@@ -97,4 +97,4 @@ result = crew.kickoff()
 - [CrewAI v1.14.4 release (2026-04-30)](https://github.com/crewAIInc/crewAI/releases/tag/1.14.4) — native MCP server support floor
 - [CrewAI v1.14.5a1 release (2026-05-01)](https://github.com/crewAIInc/crewAI/releases/tag/1.14.5a1) — alpha
 - [CrewAI v1.14.5a2 release (2026-05-04)](https://github.com/crewAIInc/crewAI/releases/tag/1.14.5a2) — alpha
-- Cross-link to legacy decorator-only path: [`examples/crewai_integration.py`](../../examples/crewai_integration.py)
+- Cross-link to legacy decorator-only path: [`examples/crewai_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/crewai_integration.py)

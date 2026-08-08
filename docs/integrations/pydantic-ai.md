@@ -83,4 +83,4 @@ result = agent.run_sync("What's the weather in Bangalore?")
 - [PydanticAI v1.89.0 release (2026-05-01)](https://github.com/pydantic/pydantic-ai/releases/tag/v1.89.0)
 - [PydanticAI v1.88.0 release (2026-04-29)](https://github.com/pydantic/pydantic-ai/releases/tag/v1.88.0) — introduces the `output_validate` hook
 - [pydantic/pydantic-ai#4859](https://github.com/pydantic/pydantic-ai/pull/4859) — `prepare_output_tools` / `output_validate` PR
-- Cross-link to legacy decorator-only path: [`examples/pydanticai_integration.py`](../../examples/pydanticai_integration.py)
+- Cross-link to legacy decorator-only path: [`examples/pydanticai_integration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/examples/pydanticai_integration.py)

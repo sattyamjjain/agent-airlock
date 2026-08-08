@@ -4,7 +4,7 @@ A native MCP gateway and an in-process contract layer sit at different points in
 the same request. This doc measures exactly where one ends and the other begins,
 using agent-airlock's own head-to-head bench — no vendor claims, no borrowed
 analogies. If you only want the raw table, read
-[`benchmarks/vs_gateway/RESULTS.md`](../../benchmarks/vs_gateway/RESULTS.md); this
+[`benchmarks/vs_gateway/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/vs_gateway/RESULTS.md); this
 is the narrative + the honest "where each one is actually enough."
 
 agent-airlock is a **type-checker / contract layer for AI tool calls**, not a
@@ -16,7 +16,7 @@ are complementary, not competing.
 
 One corpus, two layers. The corpus is 12 malformed tool-call payloads + 3 benign
 controls, defined once in
-[`benchmarks/vs_gateway/corpus.py`](../../benchmarks/vs_gateway/corpus.py) and
+[`benchmarks/vs_gateway/corpus.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/vs_gateway/corpus.py) and
 pushed through both:
 
 - the **native gateway** — a live **Docker MCP Gateway v2.0.1**, running with its
@@ -154,7 +154,7 @@ payload at the function boundary. That's the gap the 12/12 measures:
   this as "the contract layer catches the contract-layer classes it claims to,"
   not "airlock is robust against a determined attacker." For the adaptive angle,
   see the AgentDojo result in
-  [`benchmarks/agentdojo/RESULTS.md`](../../benchmarks/agentdojo/RESULTS.md).
+  [`benchmarks/agentdojo/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md).
 - **Airlock's value depends on the developer declaring the contract.** The
   `amount=-1` block only happens because the airlocked tool declares
   `amount > 0`. A plain `amount: int` signature would pass `-1` through airlock
@@ -177,7 +177,7 @@ yourself rather than take it on faith.
 
 **Provenance:** Docker MCP Gateway image v2.0.1 · `docker mcp` CLI v0.42.1 ·
 Docker engine 29.4.3 · MCP protocol `2025-06-18` · measured 2026-07-16. Raw data:
-[`benchmarks/vs_gateway/RESULTS.md`](../../benchmarks/vs_gateway/RESULTS.md).
+[`benchmarks/vs_gateway/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/vs_gateway/RESULTS.md).
 Shorter summary: [`vs-native-mcp-gateway.md`](vs-native-mcp-gateway.md).
 Regeneration harness:
 [`benchmarks/vs_gateway/gateway_harness/`](../../benchmarks/vs_gateway/gateway_harness/).

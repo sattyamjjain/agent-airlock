@@ -69,7 +69,7 @@ config = managed_agents_outcomes_2026_05_06_defaults(
 
 `evaluate(provenance)` returns `OutcomesRubricDecision` with four
 fields. The `allowed` field intentionally mirrors
-[`AllowlistVerdict`](../../src/agent_airlock/runtime/manifest_only_allowlist.py)
+[`AllowlistVerdict`](https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent_airlock/runtime/manifest_only_allowlist.py)
 so an integrator can chain guards on a single short-circuit
 predicate.
 

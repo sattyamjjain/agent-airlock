@@ -66,7 +66,7 @@ python -m benchmarks.vs_gateway          # human-readable table
 python -m benchmarks.vs_gateway --json   # machine-readable summary
 ```
 
-Method, per-payload table, and the honest read of where a native gateway is already enough: [`benchmarks/vs_gateway/RESULTS.md`](../../benchmarks/vs_gateway/RESULTS.md).
+Method, per-payload table, and the honest read of where a native gateway is already enough: [`benchmarks/vs_gateway/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/vs_gateway/RESULTS.md).
 
 ## Conformance scope
 

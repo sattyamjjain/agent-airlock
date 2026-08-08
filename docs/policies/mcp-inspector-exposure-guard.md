@@ -2,7 +2,7 @@
 
 `agent_airlock.mcp_spec.inspector_exposure_guard.InspectorExposureGuard`
 is the **runtime listener-scan** complement to the v0.5.x
-[`bind_address_guard.py`](../mcp/bind_address.md) config-time check.
+[`bind_address_guard.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent_airlock/mcp_spec/bind_address_guard.py) config-time check.
 
 ## Why
 

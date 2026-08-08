@@ -50,7 +50,7 @@ presets:                              # list of preset entries
     allowlist_fallback: true          # forwarded to factories that accept it
 ```
 
-JSON-schema spec at [`schemas/preset_v1.json`](../../schemas/preset_v1.json).
+JSON-schema spec at [`schemas/preset_v1.json`](https://github.com/sattyamjjain/agent-airlock/blob/main/schemas/preset_v1.json).
 
 ## What the parser accepts
 
@@ -86,7 +86,7 @@ coverage.
 
 ## OX-MCP composite preset
 
-The shipped [`presets/ox-mcp-2026-04.yaml`](../../presets/ox-mcp-2026-04.yaml)
+The shipped [`presets/ox-mcp-2026-04.yaml`](https://github.com/sattyamjjain/agent-airlock/blob/main/presets/ox-mcp-2026-04.yaml)
 enables the nine April-2026 OX-disclosure-class presets:
 
 | Entry id | Factory | CVE |

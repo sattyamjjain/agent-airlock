@@ -1478,6 +1478,8 @@ Agent-Airlock secures AI agent systems in production:
 
 ## 📖 Documentation
 
+Full docs — guides, API reference, the CVE catalog, and the OWASP coverage matrix — are hosted at **[sattyamjjain.github.io/agent-airlock](https://sattyamjjain.github.io/agent-airlock/)** (built from `docs/` on every push to `main`).
+
 | Resource | Description |
 |----------|-------------|
 | [**AGENTS.md**](./AGENTS.md) | v0.6.1 — repo-root entrypoint for agentic IDEs (Cursor, Claude Code, Windsurf, Mintlify) |
