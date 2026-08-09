@@ -68,14 +68,31 @@ its own Wilson CI and its own benign-FPR control**, plus a **pooled figure shown
 (not as one measurement), with **token/$ cost recorded per model**.
 
 The intended second model was a different *provider* (Anthropic), to test cross-family
-generalisation. That is blocked: `agentdojo 0.1.35` is the latest release and unmaintained, and
-its model registry lists only retired `claude-3-x` ids — every Anthropic model the API serves
-today (claude-4 / claude-5) is unknown to it, and forcing one in would break the
-`tool_knowledge` attack's model-name lookup and produce a meaningless number. So the 2026-08-08
-run below uses **`gpt-4o-2024-05-13`**, the larger sibling of gpt-4o-mini, as the achievable
-cross-*model* (same-provider, different size) contrast. Cross-*provider* generalisation stays
-open, tracked in [#123](https://github.com/sattyamjjain/agent-airlock/issues/123), pending a
-maintained harness with current Anthropic models.
+generalisation. At the time of the 2026-08-08 run that was blocked: `agentdojo 0.1.35` is the
+latest release and unmaintained, and its model registry lists only retired `claude-3-x` ids —
+every Anthropic model the API serves today (claude-4 / claude-5) was unknown to it, and forcing
+one in through the enum alone would leave the `tool_knowledge` attack's model-name lookup empty
+and produce a meaningless number. So that run uses **`gpt-4o-2024-05-13`**, the larger sibling of
+gpt-4o-mini, as the achievable cross-*model* (same-provider, different size) contrast.
+
+That block is now removed without waiting on upstream. `benchmarks/agentdojo/model_registry_shim.py`
+registers current Claude ids across **all three** tables agentdojo keys off — `ModelsEnum`
+membership, `MODEL_PROVIDERS`, and the `MODEL_NAMES` self-name the attack reads — so the lookup
+stays correct and the number stays meaningful (patching the enum alone would not). The
+cross-*provider* run is a key away, not an upstream release away:
+
+```bash
+python -m benchmarks.agentdojo.run \
+  --model claude-sonnet-5 \
+  --model gpt-4o-mini-2024-07-18 \
+  --out benchmarks/agentdojo/RESULTS.md
+```
+
+A `claude-*` `--model` agentdojo does not recognise is auto-registered; `--register-model <id>`
+covers a non-claude id or overrides the inferred provider/self-name. The run needs an Anthropic
+key and real spend; when it lands, its Wilson interval is published here even if it is wider than
+the current subset's, and [#123](https://github.com/sattyamjjain/agent-airlock/issues/123) — held
+open for cross-*provider* generalisation — closes.
 
 The finding is published rather than pooled away: airlock cuts ASR on both models, **more on
 the stronger gpt-4o (+50pp, 72% → 22%) than on gpt-4o-mini (+30pp, 42% → 12%)**, while gpt-4o's

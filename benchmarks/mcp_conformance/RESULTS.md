@@ -103,6 +103,12 @@ document. They are published so the gap is visible.
 The `D-PING-NAME` result is the one an operator should weigh before turning
 `mcp_spec_2026_07_header_integrity_defaults` on for a server that answers `ping`.
 
+Each probe is tracked so it is closeable work, not a permanent line in this file:
+[D-PING-NAME #127](https://github.com/sattyamjjain/agent-airlock/issues/127),
+[D-ACCEPT-JSON-ONLY #128](https://github.com/sattyamjjain/agent-airlock/issues/128),
+[D-GET-NOVERSION #129](https://github.com/sattyamjjain/agent-airlock/issues/129). See
+[docs/interop/CONFORMANCE-SCOPE.md](../../docs/interop/CONFORMANCE-SCOPE.md).
+
 ## Official-suite scenario inventory at 2026-07-28, mapped to airlock's surface
 
 From `npx @modelcontextprotocol/conformance@0.1.16 list`. This is where airlock's
