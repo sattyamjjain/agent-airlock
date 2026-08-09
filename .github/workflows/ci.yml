@@ -60,13 +60,15 @@ jobs:
           coverage-badge -o coverage.svg -f
 
   bare-install:
-    # The zero-core-dependency claim, enforced. A bare `pip install agent-airlock`
-    # (no extras) must resolve to Pydantic only and still import + run through the
-    # stdlib logging shim in agent_airlock/_log.py. The `test` job installs
-    # `.[dev]` (which includes structlog), so this is the ONLY job that exercises
-    # the fallback path — added in v0.8.59 when structlog moved to the [logging]
-    # extra. Nothing read [project].dependencies before, which is why the claim
-    # drifted silently for 24 releases.
+    # The zero-core-dependency claim, enforced as an EXHAUSTIVE allowlist. A bare
+    # `pip install agent-airlock` (no extras) must resolve to Pydantic + its transitive
+    # runtime closure and NOTHING else, and still import + run through the stdlib logging
+    # shim in agent_airlock/_log.py. The `test` job installs `.[dev]` (which includes
+    # structlog), so this is the ONLY job that exercises the Pydantic-only core — added
+    # in v0.8.59 when structlog moved to the [logging] extra. Through v0.8.67 the check
+    # was a structlog-specific denylist, which would wave through any OTHER dependency
+    # that crept into [project.dependencies]; scripts/check_core_deps.py now fails on any
+    # installed distribution outside the dynamically-derived Pydantic closure.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,23 +78,21 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Bare install (no extras)
+      - name: Bare install (no extras) into a fresh venv
+        # A fresh venv gives a deterministic baseline (only pip/setuptools/wheel are
+        # seeded), so the allowlist gate measures exactly what `pip install agent-airlock`
+        # pulls — not whatever the runner's base interpreter happened to carry.
         run: |
-          python -m pip install --upgrade pip
-          pip install -e .
+          python -m venv /tmp/bare
+          /tmp/bare/bin/python -m pip install --upgrade pip
+          /tmp/bare/bin/pip install -e .
 
-      - name: structlog must be absent on a bare install
-        run: |
-          if pip list --format=freeze | grep -qiE '^structlog=='; then
-            echo "::error::structlog is installed on a bare 'pip install agent-airlock' — the zero-core-dependency claim is false."
-            pip list --format=freeze | grep -iE '^structlog=='
-            exit 1
-          fi
-          echo "OK: structlog absent on a bare install (Pydantic-only core)"
+      - name: Installed set must be Pydantic-only (exhaustive allowlist)
+        run: /tmp/bare/bin/python scripts/check_core_deps.py
 
       - name: Core imports and runs through the logging shim
         run: |
-          python -c "import agent_airlock; from agent_airlock import Airlock; from agent_airlock.audit import AuditLogger; from agent_airlock.policy_presets import list_active; print(len(list_active()))"
+          /tmp/bare/bin/python -c "import agent_airlock; from agent_airlock import Airlock; from agent_airlock.audit import AuditLogger; from agent_airlock.policy_presets import list_active; print(len(list_active()))"
 
   lint:
     runs-on: ubuntu-latest
@@ -129,6 +129,9 @@ jobs:
 
       - name: Declared version must have a matching tag
         run: python3 scripts/check_version_tagged.py
+
+      - name: Declared version must have a conformant CHANGELOG heading
+        run: python3 scripts/check_changelog_heading.py
 
   security:
     runs-on: ubuntu-latest

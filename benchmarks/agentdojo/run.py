@@ -1045,6 +1045,17 @@ def main(argv: list[str] | None = None) -> int:
         "--model gpt-4o-2024-05-13); each is reported with its own Wilson CI.",
     )
     parser.add_argument(
+        "--register-model",
+        action="append",
+        default=None,
+        metavar="ID",
+        help="Register a model id against agentdojo's registry before running (repeatable). "
+        "Needed for current Claude ids that unmaintained agentdojo 0.1.35 does not know "
+        "(its enum lists only retired claude-3-x). A claude-* --model not in the enum is "
+        "auto-registered; use this to register a non-claude id or override the inference. "
+        "See benchmarks/agentdojo/model_registry_shim.py.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Replace an existing dated run block of the same heading (default: refuse).",
@@ -1091,6 +1102,22 @@ def main(argv: list[str] | None = None) -> int:
     models: list[str] = args.model or []
     dated_block: str | None = None
     if models:
+        # Register current model ids agentdojo 0.1.35 does not know (its enum lists only
+        # retired claude-3-x) across enum / provider / attack-name tables, so the pipeline
+        # can be built and the attack stays meaningful. Opt-in, best-effort.
+        try:
+            from benchmarks.agentdojo.model_registry_shim import ensure_registered
+
+            registered = ensure_registered(models, extra=args.register_model or [])
+            if registered:
+                print(
+                    f"model-registry shim: registered {', '.join(registered)} against "
+                    "agentdojo (enum + provider + attack self-name)",
+                    file=sys.stderr,
+                )
+        except Exception as exc:  # noqa: BLE001 - never let the shim abort a run
+            print(f"model-registry shim skipped: {exc}", file=sys.stderr)
+
         model_suites = (
             PINNED_SUITES
             if not args.suites

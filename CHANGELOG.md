@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.68] - 2026-08-09
+
+### Changed
+
+- The zero-core-dependency claim is now an exhaustive allowlist gate, not a structlog
+  denylist. The bare-install CI job (added v0.8.59) only checked that structlog was
+  absent, so any *other* dependency that crept into `[project.dependencies]` would have
+  passed. `scripts/check_core_deps.py` installs the package alone into a fresh venv and
+  fails on any distribution outside Pydantic's dynamically-derived transitive closure, so
+  a new core dep cannot land silently. The closure is walked at runtime, so a Pydantic
+  patch release that renames a transitive dep does not false-fail the gate.
+
+### Fixed
+
+- The CHANGELOG headings for 0.8.65 through 0.8.67 were never promoted out of
+  `[Unreleased]`, even though all three shipped and were tagged, so the newest dated
+  heading (`0.8.64`) lagged the shipped version by three releases. Each now carries a dated
+  `## [x.y.z] - YYYY-MM-DD` heading reconstructed from that release's own changelog diff,
+  and a release gate (`scripts/check_changelog_heading.py`, run in the version job, plus
+  `tests/test_changelog_headings.py`) fails if the declared version has no conformant dated
+  heading.
+- The README `### One CLI` heading pinned the CLI to `v0.8.56` — the release the dispatcher
+  was introduced — though the command set has grown across releases since. It now names the
+  release the current command set stabilised in. `tests/test_readme_version_pins.py`
+  asserts every `agent-airlock>=X` pin in the README maps to a real released version, so a
+  stale or typo'd floor fails the suite.
+
+### Added
+
+- `benchmarks/agentdojo/model_registry_shim.py`: a one-file model-registry shim that
+  registers current Claude ids against agentdojo's interface — `ModelsEnum` membership,
+  `MODEL_PROVIDERS`, and the `MODEL_NAMES` map the `tool_knowledge` attack reads (patching
+  all three is what keeps the attack meaningful; an enum-only hack would not). It turns the
+  cross-provider AgentDojo axis — blocked by unmaintained agentdojo 0.1.35, which knows
+  only retired claude-3-x ids — into a one-file patch instead of a wait on upstream.
+  `run.py --register-model <id>` applies it before building the pipeline; the paid
+  wider-n run stays #123's to trigger with a key.
+- One tracked issue per published MCP-conformance divergence probe — `D-PING-NAME` (#127),
+  `D-ACCEPT-JSON-ONLY` (#128), `D-GET-NOVERSION` (#129) — linked from
+  `docs/interop/CONFORMANCE-SCOPE.md` and cross-linked from the conformance RESULTS
+  divergence table, so each divergence is closeable work instead of a line in a results file.
+
+## [0.8.67] - 2026-08-08
+
 ### Fixed
 
 - The GitHub description said "firewall" and "zero-core-deps" for three weeks after both
@@ -24,8 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- benchmarks/mcp_conformance/RESULTS.md. First conformance run against spec 2026-07-28,
-  failures included.
 - The AgentDojo harness runs cross-model, records what it costs, and has a first
   cross-model result. `--model` is repeatable; each model gets its own Wilson CI and its
   own benign-FPR control, the pooled figure is shown separately (not one measurement), and
@@ -36,11 +78,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the 2026-07-31 rows intact. The intended cross-provider (Anthropic) run stays
   blocked: agentdojo 0.1.35 (latest, unmaintained) recognises only retired claude-3-x ids,
   so cross-family generalisation remains open on #123.
+
+## [0.8.66] - 2026-08-06
+
+### Added
+
+- The AgentDojo harness runs cross-model now, and records what it costs. `--model` is
+  repeatable; the recommended second model is `claude-3-5-haiku-20241022` (a different
+  family and provider from gpt-4o-mini, so the run tests generalisation, not one model),
+  and each run records its token/$ cost per model. Each model gets its own Wilson CI and
+  its own benign-FPR control; the pooled figure is shown separately, not as one
+  measurement. Runs append as dated blocks in benchmarks/agentdojo/RESULTS.md, so the
+  2026-07-31 gpt-4o-mini rows stay intact. The cross-family numbers are pending a paid run
+  (#123).
 - OWASP ASI04 (Agentic Supply Chain) now names its boundary. The row splits the runtime
   leg airlock covers from the on-disk, pre-tool-call compromise (e.g. the 2026-08-04 keyv
   npm worm, which poisoned agent config and IDE task files on disk) that an in-process
   tool-call validator is the wrong layer for, and points at agent-audit-kit for that leg.
   The label stays Partial (#124).
+
+## [0.8.65] - 2026-08-05
+
+### Fixed
+
+- The GitHub description still said "firewall" and "zero-core-deps" three weeks after
+  both were dropped. It now renders from pyproject.toml and the release checks for drift.
+
+### Added
+
+- benchmarks/mcp_conformance/RESULTS.md. First conformance run against spec 2026-07-28,
+  failures included.
 
 ## [0.8.64] - 2026-08-04
 
