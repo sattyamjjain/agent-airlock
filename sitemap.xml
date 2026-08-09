@@ -2,290 +2,290 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/COMPATIBILITY/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/DISTRIBUTION/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/SECURITY/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/changelog/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/nist-ai-rmf-v2-comment-2026/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/owasp-agentic-2026-coverage/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/scan-tools/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/api/airlock/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/api/config/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/api/mcp/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/api/policy/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/api/sandbox/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/api/sanitizer/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/attest/layer-contract/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/benchmarks/mcp-gateway-payload-gap/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/benchmarks/vs-native-mcp-gateway/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/budget/agent-sdk-credit/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/cli/egress-bench/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/compliance/EU-AI-ACT-ART12/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/cves/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/cves/cve-2026-23744/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/cves/cve-2026-30615/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/cves/cve-2026-39884/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/cves/cve-2026-6980/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/distribution/README-WEDGE/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/distribution/awesome-agent-security/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/distribution/awesome-llm-security/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/distribution/awesome-mcp-security/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/distribution/awesome-mcp-servers/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/examples/basic/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/examples/pii/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/examples/policy/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/examples/sandbox/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/getting-started/configuration/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/getting-started/installation/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/getting-started/quickstart/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/guide/concepts/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/guide/mcp/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/guide/policy/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/guide/sandbox/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/guide/sanitization/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/guide/validation/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/integrations/anthropic-claude-agent-sdk/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/integrations/crewai/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/integrations/managed-agents/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/integrations/pydantic-ai/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/interop/CONFORMANCE-SCOPE/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/interop/openid-aiim-2026/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/launch/2026-07-mcp-gateway-post/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/launch/distribution-submissions/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/launch/show-hn-tool-call-validation/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/launch/security-artifacts/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/mcp/manifest-only-mode/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/observability/semconv/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/eval-rce-cve-2026-44717/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/human-oversight-decorator/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/managed-agents-outcomes-2026-05-06/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/mcp-inspector-exposure-guard/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/mcp-stdio-command-injection-guard/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/metis-inspired-corpus-block-rate/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/npm-oidc-publish-window-guard/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/openapi-drift-guard/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/semantic-kernel-filter-eval-rce/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/policies/stainless-provenance-probe/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/presets/high-value-actions/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/presets/offensive-cyber-model-tier/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/presets/ox-mcp-supply-chain-2026-04/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/presets/yaml-format/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/sandbox/docker/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/security/egress-bench/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/security/stdio-taint-scan/</loc>
-         <lastmod>2026-08-08</lastmod>
+         <lastmod>2026-08-09</lastmod>
     </url>
 </urlset>
