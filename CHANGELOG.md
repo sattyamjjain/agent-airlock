@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.69] - 2026-08-10
+
+### Added
+
+- mcp_spec_2026_07_28_handle_trust_defaults. Deny-by-default for server-minted handles and
+  x-mcp-header-sourced headers, now that SEP-2567 removed the session and SEP-2243 routes
+  headers through tool parameters. Three checks: a handle must be a declared tool parameter,
+  an x-mcp-header may not set or override an explicitly enumerated policy-decision header, and
+  a handle not minted in the current policy scope is denied.
+- docs/mcp/stateless-trust-boundary.md.
+- airlock conformance --revision <rev> runs airlock's MCP transport-contract conformance from
+  the installed wheel, sharing one source of truth (agent_airlock.mcp_spec.conformance) with
+  the benchmarks/mcp_conformance harness.
+
+### Fixed
+
+- Conformance divergences D-GET-NOVERSION, D-ACCEPT-JSON-ONLY and D-PING-NAME, resolved against
+  the ratified 2026-07-28 clause text: a POST must list both Accept types, a GET or DELETE to
+  the MCP endpoint is 405 at 2026-07-28 (the GET stream endpoint was removed), and Mcp-Name is
+  required only on the name-bearing methods (tools/call, resources/read, prompts/get). Closes
+  #129, #128, #127.
+
 ## [0.8.68] - 2026-08-09
 
 ### Changed

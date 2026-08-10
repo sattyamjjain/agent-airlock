@@ -1,20 +1,27 @@
 """MCP 2026-07-28 request header-integrity conformance (SEP-2243).
 
-The MCP 2026-07-28 Streamable HTTP transport **requires** two routing headers on
-every request — ``Mcp-Method`` and ``Mcp-Name`` — so operational infrastructure
-can route on the operation without inspecting the body (SEP-2243). Because those
-headers now drive routing/rate-limiting/authorization at the edge while the
-server executes the body, a request whose headers disagree with its body is a
-confused-deputy vector: one operation is routed past the gateway while a
-different one runs. The spec closes this with a server-side integrity rule.
-Verbatim from the ratified 2026-07-28 spec
+The MCP 2026-07-28 Streamable HTTP transport mirrors selected body fields into
+HTTP routing headers so operational infrastructure can route on the operation
+without inspecting the body, and mandates a server-side integrity rule between
+those headers and the body (SEP-2243). Because the edge routes/rate-limits/
+authorizes on the headers while the server executes the body, a request whose
+headers disagree with its body is a confused-deputy vector: one operation is
+routed past the gateway while a different one runs. Verbatim from the ratified
+2026-07-28 spec
 (https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http):
 
-    "The Streamable HTTP transport now requires ``Mcp-Method`` and ``Mcp-Name``
-    headers (SEP-2243) so load balancers, gateways, and rate-limiters can route
-    on the operation without inspecting the body."
+    Standard request headers — ``Mcp-Method`` (source ``method``) is
+    "Required For: All requests"; ``Mcp-Name`` (source ``params.name`` or
+    ``params.uri``) is "Required For: ``tools/call``, ``resources/read``,
+    ``prompts/get`` requests". "These headers are REQUIRED for compliance."
 
-    "Servers reject requests where the headers and body disagree."
+    Server Validation — "Servers that process the request body MUST reject
+    requests where the values specified in the headers do not match the
+    corresponding values in the request body."
+
+So ``Mcp-Method`` is required on every request; ``Mcp-Name`` is required only on
+the name-bearing methods above (requiring it on, e.g., ``tools/list`` would be a
+benign-request false positive, stricter than spec).
 
 This module provides that single contract check, built **only** on stdlib
 mapping traversal — it adds no new detection engine:
@@ -38,16 +45,23 @@ from typing import Any
 
 __all__ = [
     "METHOD_HEADER",
+    "NAME_BEARING_METHODS",
     "NAME_HEADER",
     "HeaderBodyMismatchError",
     "validate_header_body_integrity",
 ]
 
-#: Routing header carrying the JSON-RPC method (SEP-2243).
+#: Routing header carrying the JSON-RPC method (SEP-2243). Required on all requests.
 METHOD_HEADER = "Mcp-Method"
 
 #: Routing header carrying the operation / tool name (SEP-2243).
 NAME_HEADER = "Mcp-Name"
+
+#: SEP-2243 scopes the ``Mcp-Name`` requirement to exactly these methods (its
+#: source field is ``params.name`` / ``params.uri``). Every other method carries
+#: ``Mcp-Method`` but no ``Mcp-Name``, so requiring the name header on them is
+#: stricter than spec.
+NAME_BEARING_METHODS = frozenset({"tools/call", "resources/read", "prompts/get"})
 
 
 class HeaderBodyMismatchError(ValueError):
@@ -91,12 +105,16 @@ def _body_method(request: Mapping[str, Any]) -> Any:
 def _body_name(request: Mapping[str, Any]) -> Any:
     """The operation/tool name the body actually targets.
 
-    MCP carries the tool/prompt name under ``params.name`` (e.g. ``tools/call``);
-    a flattened top-level ``name`` is accepted too.
+    SEP-2243's ``Mcp-Name`` source is ``params.name`` (``tools/call``,
+    ``prompts/get``) or ``params.uri`` (``resources/read``); a flattened
+    top-level ``name`` is accepted too.
     """
     params = request.get("params")
-    if isinstance(params, Mapping) and "name" in params:
-        return params["name"]
+    if isinstance(params, Mapping):
+        if "name" in params:
+            return params["name"]
+        if "uri" in params:
+            return params["uri"]
     return request.get("name")
 
 
@@ -148,8 +166,12 @@ def validate_header_body_integrity(
     body_method = _body_method(request)
     body_name = _body_name(request)
 
-    # (a) Both routing headers are REQUIRED by SEP-2243. Deny-by-default: an
-    #     absent (or empty) header is a rejected request, not an exempt one.
+    # (a) SEP-2243: ``Mcp-Method`` is REQUIRED on every request; ``Mcp-Name`` is
+    #     REQUIRED only on the name-bearing methods (tools/call, resources/read,
+    #     prompts/get). Deny-by-default: a required-but-absent header is a rejected
+    #     request. Requiring ``Mcp-Name`` on, e.g., ``tools/list`` would be a
+    #     benign-request false positive (stricter than spec), so it is not required
+    #     there.
     if header_method in (None, ""):
         raise _reject(
             "missing_method_header",
@@ -159,10 +181,12 @@ def validate_header_body_integrity(
             header_name=header_name,
             body_name=body_name,
         )
-    if header_name in (None, ""):
+    name_required = isinstance(body_method, str) and body_method in NAME_BEARING_METHODS
+    if name_required and header_name in (None, ""):
         raise _reject(
             "missing_name_header",
-            f"required {name_header!r} routing header is absent (SEP-2243)",
+            f"required {name_header!r} routing header is absent for {body_method!r} "
+            "(SEP-2243 name-bearing method)",
             header_method=header_method,
             body_method=body_method,
             header_name=header_name,

@@ -21,6 +21,15 @@ from typing import Any
 
 from ..conformance.art12 import export_evidence_bundle, render_coverage_table
 from ..conformance.decision_log import DecisionLog, DecisionLogError
+from ..mcp_spec._versions import SUPPORTED_PROTOCOL_VERSIONS
+from ..mcp_spec.conformance import format_report, run_conformance
+
+
+def _cmd_revision(revision: str) -> int:
+    """Run airlock's MCP transport-contract conformance for ``revision`` and print it."""
+    report = run_conformance(revision)
+    print(format_report(report))
+    return 0 if report.ok else 1
 
 
 def _cmd_record(args: argparse.Namespace) -> int:
@@ -72,9 +81,20 @@ def _cmd_export(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="airlock-conformance",
-        description="EU AI Act Art. 12-style tamper-evident decision log (offline).",
+        description=(
+            "EU AI Act Art. 12-style tamper-evident decision log (offline), plus "
+            "--revision for MCP transport-contract conformance."
+        ),
     )
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    parser.add_argument(
+        "--revision",
+        choices=list(SUPPORTED_PROTOCOL_VERSIONS),
+        default=None,
+        help="run airlock's MCP transport-contract conformance for this revision and "
+        "print the tally (exit 0 if all cases pass). Independent of the "
+        "record/verify/export decision-log subcommands.",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=False)
 
     p_rec = sub.add_parser("record", help="append one decision to the log")
     p_rec.add_argument("--log", required=True, help="decision-log JSONL path")
@@ -99,6 +119,10 @@ def main(argv: list[str] | None = None) -> int:
     p_exp.set_defaults(func=_cmd_export)
 
     args = parser.parse_args(argv)
+    if args.revision is not None:
+        return _cmd_revision(args.revision)
+    if getattr(args, "func", None) is None:
+        parser.error("a subcommand (record/verify/export) or --revision is required")
     return int(args.func(args))
 
 

@@ -4,15 +4,20 @@ agent-airlock **implements** validators and hardening that **target** the MCP `2
 
 The claim strength is therefore "implements" and "targets" — never "conformant". This is the same position the `CHANGELOG.md` `0.8.61` entry already takes: *"airlock still makes no conformance claim — no conformance suite has been run."* Keep that wording.
 
-## Open divergence-resolution issues
+## Divergence-resolution issues — resolved (2026-08-10)
 
-The first conformance run ([`benchmarks/mcp_conformance/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcp_conformance/RESULTS.md)) published three **divergence probes** — inputs where airlock's strictness may differ from a lenient reading of the clause. Each is now a tracked issue, so a divergence is closeable work instead of a line in a results file:
+The first conformance run published three **divergence probes** — inputs where airlock's
+strictness might differ from a lenient reading of the clause — held open until the ratified
+2026-07-28 text could be read. All three are now resolved against that text (verbatim clause
+quotes in the guard source); each is a scored contract case in
+[`benchmarks/mcp_conformance/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcp_conformance/RESULTS.md)
+("Resolved divergences"), and issues #127/#128/#129 are closed:
 
-- [#127](https://github.com/sattyamjjain/agent-airlock/issues/127) — **D-PING-NAME**: airlock rejects `ping` (it requires `Mcp-Name` on every request). Stricter than spec *if* SEP-2243 scopes `Mcp-Name` to named operations — a benign-request false positive.
-- [#128](https://github.com/sattyamjjain/agent-airlock/issues/128) — **D-ACCEPT-JSON-ONLY**: airlock accepts an `application/json`-only `Accept`. More lenient than spec *if* 2026-07-28 requires both `application/json` and `text/event-stream`.
-- [#129](https://github.com/sattyamjjain/agent-airlock/issues/129) — **D-GET-NOVERSION**: airlock requires `MCP-Protocol-Version` on the SSE-open `GET`, not only on JSON-RPC `POST`s. Confirm the clause requires it on `GET`.
+- [#127](https://github.com/sattyamjjain/agent-airlock/issues/127) — **D-PING-NAME**: the SEP-2243 header table scopes `Mcp-Name` to `tools/call` / `resources/read` / `prompts/get` (and `ping` was removed). airlock's `Mcp-Name` requirement is now scoped to those methods (`H-ACCEPT-LIST-NO-NAME`).
+- [#128](https://github.com/sattyamjjain/agent-airlock/issues/128) — **D-ACCEPT-JSON-ONLY**: the spec requires a POST to list **both** `application/json` and `text/event-stream`; airlock now rejects a json-only `Accept` on a POST (`T-REJECT-ACCEPT-JSON-ONLY`).
+- [#129](https://github.com/sattyamjjain/agent-airlock/issues/129) — **D-GET-NOVERSION**: the GET stream endpoint was removed (`405` at 2026-07-28); airlock rejects `GET`/`DELETE` to the protected MCP endpoint at 2026-07-28 while keeping legacy GET-SSE (`T-REJECT-GET-CURRENT`, `T-ACCEPT-GET-LEGACY`).
 
-Each closes when the ratified 2026-07-28 clause is read and airlock is either confirmed conformant (the reading recorded) or adjusted (the probe flips and a regression case is added). Until then the probes stay published as-is; none is tuned away.
+Reproduce from the installed wheel: `airlock conformance --revision 2026-07-28`.
 
 ## If the OpenID AIIM interop event produces a result
 
