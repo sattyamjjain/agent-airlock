@@ -105,6 +105,53 @@ class TestMismatchIsBlocked:
             validate_header_body_integrity(req)
 
 
+class TestNameHeaderScopedToNameBearingMethods:
+    """SEP-2243: Mcp-Name is required only for tools/call, resources/read, prompts/get.
+
+    Requiring it on every request (the historical D-PING-NAME divergence, #127) was
+    stricter than the ratified header table and a benign-request false positive.
+    """
+
+    def test_operation_less_method_without_name_accepted(self) -> None:
+        # tools/list carries Mcp-Method but no Mcp-Name (no params.name/uri).
+        req = {"method": "tools/list", "headers": {"Mcp-Method": "tools/list"}}
+        assert validate_header_body_integrity(req) is None
+
+    def test_second_operation_less_method_accepted(self) -> None:
+        req = {
+            "method": "completion/complete",
+            "headers": {"Mcp-Method": "completion/complete"},
+        }
+        assert validate_header_body_integrity(req) is None
+
+    def test_tools_call_still_requires_name(self) -> None:
+        req = {
+            "method": "tools/call",
+            "params": {"name": "search"},
+            "headers": {"Mcp-Method": "tools/call"},
+        }
+        with pytest.raises(HeaderBodyMismatchError) as exc:
+            validate_header_body_integrity(req)
+        assert exc.value.audit_event["reason"] == "missing_name_header"
+
+    def test_resources_read_name_sourced_from_uri(self) -> None:
+        req = {
+            "method": "resources/read",
+            "params": {"uri": "file:///a"},
+            "headers": {"Mcp-Method": "resources/read", "Mcp-Name": "file:///a"},
+        }
+        assert validate_header_body_integrity(req) is None
+
+    def test_resources_read_missing_name_rejected(self) -> None:
+        req = {
+            "method": "resources/read",
+            "params": {"uri": "file:///a"},
+            "headers": {"Mcp-Method": "resources/read"},
+        }
+        with pytest.raises(HeaderBodyMismatchError):
+            validate_header_body_integrity(req)
+
+
 class TestPresetMetadata:
     def test_canonical_metadata(self) -> None:
         p = mcp_spec_2026_07_header_integrity_defaults()

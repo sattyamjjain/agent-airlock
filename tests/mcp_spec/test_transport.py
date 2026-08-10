@@ -19,7 +19,8 @@ def _base_headers(**overrides: str) -> dict[str, str]:
     headers = {
         PROTOCOL_VERSION_HEADER: PROTOCOL_VERSION,
         "Content-Type": "application/json",
-        "Accept": "application/json",
+        # 2026-07-28 requires a POST to list both types (see TestAcceptHeader).
+        "Accept": "application/json, text/event-stream",
         "Authorization": "Bearer abc123",
     }
     headers.update(overrides)
@@ -102,10 +103,12 @@ class TestTokenInQueryString:
             )
 
     def test_benign_query_string_allowed(self) -> None:
+        # GET is a legacy (2025-11-25) SSE-open; 2026-07-28 removed the GET
+        # endpoint, so this interop case pins the legacy version.
         validate_streamable_http_request(
             method="GET",
             url="https://mcp/?cursor=abc",
-            headers=_base_headers(),
+            headers=_base_headers(**{PROTOCOL_VERSION_HEADER: "2025-11-25"}),
         )
 
 
@@ -121,26 +124,39 @@ class TestContentType:
             )
 
     def test_get_without_body_no_ctype_required(self) -> None:
-        headers = _base_headers()
+        headers = _base_headers(**{PROTOCOL_VERSION_HEADER: "2025-11-25"})  # legacy GET-SSE
         headers.pop("Content-Type")
         validate_streamable_http_request(method="GET", url="https://mcp/", headers=headers)
 
 
 class TestAcceptHeader:
-    def test_accept_json_ok(self) -> None:
+    def test_post_accept_both_ok(self) -> None:
         r = validate_streamable_http_request(
             method="POST",
             url="https://mcp/",
-            headers=_base_headers(Accept="application/json"),
+            headers=_base_headers(Accept="application/json, text/event-stream"),
             body={"jsonrpc": "2.0"},
         )
-        assert r.accept_json
+        assert r.accept_json and r.accept_sse
+
+    def test_post_accept_json_only_rejected(self) -> None:
+        # 2026-07-28: a POST MUST list BOTH application/json and text/event-stream.
+        with pytest.raises(MCPTransportError, match="both application/json"):
+            validate_streamable_http_request(
+                method="POST",
+                url="https://mcp/",
+                headers=_base_headers(Accept="application/json"),
+                body={"jsonrpc": "2.0"},
+            )
 
     def test_accept_sse_ok(self) -> None:
+        # SSE-only Accept on a legacy (2025-11-25) GET SSE-open stream.
         r = validate_streamable_http_request(
             method="GET",
             url="https://mcp/",
-            headers=_base_headers(Accept="text/event-stream"),
+            headers=_base_headers(
+                Accept="text/event-stream", **{PROTOCOL_VERSION_HEADER: "2025-11-25"}
+            ),
         )
         assert r.accept_sse
 
@@ -151,7 +167,7 @@ class TestAcceptHeader:
             headers=_base_headers(Accept="*/*"),
             body={"jsonrpc": "2.0"},
         )
-        assert r.accept_json
+        assert r.accept_json and r.accept_sse
 
     def test_bad_accept_rejected(self) -> None:
         with pytest.raises(MCPTransportError, match="Accept"):
@@ -161,6 +177,44 @@ class TestAcceptHeader:
                 headers=_base_headers(Accept="text/html"),
                 body={"jsonrpc": "2.0"},
             )
+
+
+class TestMethodRestrictionAt2026_07_28:
+    """SEP-2575 made the MCP endpoint POST-only; GET/DELETE are 405 at 2026-07-28."""
+
+    def test_get_rejected_at_current_revision(self) -> None:
+        with pytest.raises(MCPTransportError, match="POST-only"):
+            validate_streamable_http_request(
+                method="GET", url="https://mcp/", headers=_base_headers()
+            )
+
+    def test_delete_rejected_at_current_revision(self) -> None:
+        with pytest.raises(MCPTransportError, match="POST-only"):
+            validate_streamable_http_request(
+                method="DELETE", url="https://mcp/", headers=_base_headers()
+            )
+
+    def test_get_allowed_at_legacy_revision(self) -> None:
+        # 2025-11-25 kept the GET SSE-open stream for interop.
+        r = validate_streamable_http_request(
+            method="GET",
+            url="https://mcp/",
+            headers=_base_headers(**{PROTOCOL_VERSION_HEADER: "2025-11-25"}),
+        )
+        assert r is not None
+
+    def test_wellknown_get_allowed_at_current_revision(self) -> None:
+        # Public discovery endpoints (require_auth=False) are not the MCP endpoint.
+        r = validate_streamable_http_request(
+            method="GET",
+            url="https://mcp/.well-known/oauth-protected-resource",
+            headers={
+                PROTOCOL_VERSION_HEADER: PROTOCOL_VERSION,
+                "Accept": "application/json, text/event-stream",
+            },
+            require_auth=False,
+        )
+        assert r.bearer is None
 
 
 class TestAuthorizationHeader:
@@ -233,7 +287,7 @@ class TestConstantsConsistent:
             headers={
                 PROTOCOL_VERSION_HEADER: PROTOCOL_VERSION,
                 "Content-Type": "application/json",
-                "Accept": "application/json",
+                "Accept": "application/json, text/event-stream",
                 "Authorization": "Bearer t",
             },
             body={"jsonrpc": "2.0"},

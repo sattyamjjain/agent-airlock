@@ -4547,17 +4547,19 @@ def mcp_spec_2026_07_header_integrity_defaults(
 ) -> dict[str, Any]:
     """MCP 2026-07-28 SEP-2243 request header-integrity preset (v0.8.45+).
 
-    The MCP 2026-07-28 Streamable HTTP transport **requires** the ``Mcp-Method``
-    and ``Mcp-Name`` routing headers and mandates a server-side integrity rule
-    between those headers and the request body (SEP-2243). Verbatim from the
-    ratified 2026-07-28 spec
+    The MCP 2026-07-28 Streamable HTTP transport mirrors selected body fields into
+    routing headers and mandates a server-side integrity rule between them and the
+    body (SEP-2243). Verbatim from the ratified 2026-07-28 spec
     (https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http):
 
-        "The Streamable HTTP transport now requires ``Mcp-Method`` and
-        ``Mcp-Name`` headers (SEP-2243) so load balancers, gateways, and
-        rate-limiters can route on the operation without inspecting the body."
+        ``Mcp-Method`` (source ``method``) is "Required For: All requests";
+        ``Mcp-Name`` (source ``params.name`` / ``params.uri``) is "Required For:
+        ``tools/call``, ``resources/read``, ``prompts/get`` requests". "These
+        headers are REQUIRED for compliance."
 
-        "Servers reject requests where the headers and body disagree."
+        "Servers that process the request body MUST reject requests where the
+        values specified in the headers do not match the corresponding values in
+        the request body."
 
     Because the edge routes/rate-limits/authorizes on those headers while the
     server executes the body, a header/body mismatch is a confused-deputy vector
@@ -4614,6 +4616,100 @@ def mcp_spec_2026_07_header_integrity_defaults(
 
 # Named preset constant for ergonomic opt-in.
 MCP_SPEC_2026_07_HEADER_INTEGRITY = mcp_spec_2026_07_header_integrity_defaults()
+
+
+@preset
+def mcp_spec_2026_07_28_handle_trust_defaults(
+    *,
+    handle_params: Sequence[str] | None = None,
+    reserved_headers: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    """MCP 2026-07-28 stateless handle-channel trust preset (SEP-2567 + SEP-2243, v0.8.69+).
+
+    2026-07-28 removed the protocol session (SEP-2575) and put two things on the
+    tool-argument channel that used to ride trusted transport state: cross-call **state**
+    is now a server-minted handle passed as an ordinary tool argument (SEP-2567), and
+    **headers** can be sourced from tool parameters via ``x-mcp-header`` (SEP-2243). So state
+    and headers now share the injection-controlled channel. This preset is the deny-by-default
+    contract check for that boundary, composed from **existing** airlock primitives (no new
+    engine, Pydantic-only core):
+
+    - **``check_tool_call(tool, kwargs)``** — a state/handle argument must be an **explicit
+      declared parameter** of the tool contract (a distinct trust class from caller data), not
+      absorbed by ``**kwargs`` or smuggled as a ghost argument. Reuses the shipped
+      :func:`~agent_airlock.mcp_spec.statelessness.validate_state_handle_declared` and raises
+      :class:`~agent_airlock.validator.GhostArgumentError`.
+    - **``check_headers(candidate_headers)``** — reject any ``x-mcp-header``-sourced header
+      that would set or override a header airlock makes its own decisions on. The decision
+      set is enumerated **explicitly** (``reserved_headers`` /
+      :data:`~agent_airlock.mcp_spec.handle_trust.RESERVED_DECISION_HEADERS`), not matched by
+      prefix.
+    - **``check_handle(handle, *, minted)``** — **deny by default** a presented handle not
+      minted within the current policy scope.
+
+    Honest limit: a contract layer can require a handle to be declared and minted-in-scope,
+    but cannot verify that a handle the server minted is one the server *should* have minted
+    (see ``docs/mcp/stateless-trust-boundary.md``).
+
+    Args:
+        handle_params: argument names treated as server-minted state handles (defaults to the
+            shipped ``DEFAULT_STATE_PARAMS``).
+        reserved_headers: the policy-decision header set to protect (defaults to
+            ``RESERVED_DECISION_HEADERS``).
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, the ``check_tool_call`` / ``check_headers`` / ``check_handle``
+        callables, the ``handle_error`` / ``state_error`` types, and ``spec`` =
+        ``"SEP-2567/SEP-2243"`` (spec proposal ids, **not** CVEs).
+
+    References:
+        - MCP 2026-07-28 specification (final).
+        - SEP-2567 — explicit, server-minted state handles as ordinary tool arguments.
+        - SEP-2243 — standard request headers + ``x-mcp-header`` custom headers from parameters.
+    """
+    from .mcp_spec.handle_trust import (
+        RESERVED_DECISION_HEADERS,
+        HandleTrustError,
+        validate_handle_minted,
+        validate_no_reserved_header_override,
+    )
+    from .mcp_spec.statelessness import DEFAULT_STATE_PARAMS, validate_state_handle_declared
+    from .validator import GhostArgumentError
+
+    handles = tuple(handle_params) if handle_params is not None else DEFAULT_STATE_PARAMS
+    reserved = reserved_headers if reserved_headers is not None else RESERVED_DECISION_HEADERS
+
+    def _check_tool_call(tool: Callable[..., Any], kwargs: Mapping[str, Any]) -> None:
+        validate_state_handle_declared(tool, kwargs, state_params=handles)
+
+    def _check_headers(candidate_headers: Sequence[str]) -> None:
+        validate_no_reserved_header_override(candidate_headers, reserved=reserved)
+
+    def _check_handle(handle: Any, *, minted: Sequence[Any]) -> None:
+        validate_handle_minted(handle, minted=minted)
+
+    return {
+        "preset_id": "mcp_spec_2026_07_28_handle_trust",
+        "severity": "high",
+        "default_action": "deny",
+        "spec": "SEP-2567/SEP-2243",
+        "owasp": "MCP07",
+        "check_tool_call": _check_tool_call,
+        "check_headers": _check_headers,
+        "check_handle": _check_handle,
+        "handle_error": HandleTrustError,
+        "state_error": GhostArgumentError,
+        "reserved_headers": frozenset(reserved),
+        "handle_params": handles,
+        "advisory_url": (
+            "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http"
+        ),
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_SPEC_2026_07_28_HANDLE_TRUST = mcp_spec_2026_07_28_handle_trust_defaults()
 
 
 @preset

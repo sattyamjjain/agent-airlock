@@ -15,8 +15,13 @@ Key normative checks (all exposed as `validate_streamable_http_request`):
 - `Authorization: Bearer <token>` for any request targeting a protected
   server. Tokens MUST NOT be in the query string; we reject that
   explicitly.
-- `Accept` header must allow `application/json` and/or `text/event-stream`
-  (the two transport variants per the spec's streaming section).
+- `Accept` header on a POST must list **both** `application/json` and
+  `text/event-stream` (2026-07-28 MUST); a legacy GET SSE-open needs only
+  `text/event-stream`.
+- At 2026-07-28 the MCP endpoint is POST-only: a GET or DELETE to the protected
+  endpoint is rejected (405 Method Not Allowed; the GET stream endpoint and
+  session DELETE were removed by SEP-2575). Legacy 2025-11-25 GET/DELETE stay
+  accepted for interop.
 
 Any violation raises `MCPTransportError` with a concise reason string that
 matches what an MCP server SHOULD return in its JSON-RPC `error.message`.
@@ -28,7 +33,12 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
-from ._versions import SUPPORTED_PROTOCOL_VERSIONS as _SUPPORTED_PROTOCOL_VERSIONS
+from ._versions import (
+    PROTOCOL_VERSION as _CURRENT_PROTOCOL_VERSION,
+)
+from ._versions import (
+    SUPPORTED_PROTOCOL_VERSIONS as _SUPPORTED_PROTOCOL_VERSIONS,
+)
 from .oauth import (
     BearerHeaderError,
     BearerToken,
@@ -65,7 +75,7 @@ def validate_streamable_http_request(
     body: Any = None,
     require_auth: bool = True,
 ) -> StreamableHTTPValidation:
-    """Validate a Streamable HTTP request against the MCP 2025-11-25 spec.
+    """Validate a Streamable HTTP request against the MCP 2026-07-28 spec (2025-11-25 for legacy interop).
 
     Args:
         method: HTTP method (e.g. "POST").
@@ -86,9 +96,10 @@ def validate_streamable_http_request(
     """
     hdr = _case_insensitive(headers or {})
 
-    # 1. Method sanity — Streamable HTTP uses POST for JSON-RPC and GET
-    #    for the SSE stream; we don't restrict beyond that.
-    if method.upper() not in ("GET", "POST", "DELETE"):
+    method_upper = method.upper()
+    # 1. Method sanity — Streamable HTTP is HTTP; GET/POST/DELETE are the methods
+    #    meaningful across the revisions this validator spans.
+    if method_upper not in ("GET", "POST", "DELETE"):
         raise MCPTransportError(f"unsupported HTTP method for Streamable HTTP: {method!r}")
 
     # 2. MCP-Protocol-Version header — must name a supported revision (current
@@ -102,6 +113,21 @@ def validate_streamable_http_request(
         raise MCPTransportError(
             f"unsupported {PROTOCOL_VERSION_HEADER}={version!r}; "
             f"supported={list(_SUPPORTED_PROTOCOL_VERSIONS)!r}"
+        )
+
+    # 2b. 2026-07-28 made the MCP endpoint POST-only: the GET SSE-stream endpoint
+    #     and the session-terminating DELETE were removed (SEP-2575). Verbatim from
+    #     the ratified spec (.../basic/transports/streamable-http, "Backward
+    #     Compatibility"): "HTTP GET or DELETE to the MCP endpoint: respond with
+    #     405 Method Not Allowed." Legacy 2025-11-25 kept GET (SSE-open) and DELETE
+    #     (session terminate), so those stay allowed for interop. Public discovery
+    #     endpoints (e.g. /.well-known/*, validated with require_auth=False) are not
+    #     the MCP endpoint and keep ordinary GET semantics.
+    if require_auth and version == _CURRENT_PROTOCOL_VERSION and method_upper in ("GET", "DELETE"):
+        raise MCPTransportError(
+            f"{method_upper} is not allowed on the MCP endpoint at {version}: the GET "
+            "stream endpoint and session DELETE were removed in 2026-07-28 (SEP-2575); "
+            "the Streamable HTTP transport is POST-only (405 Method Not Allowed)"
         )
 
     # 3. Token MUST NOT appear in the query string.
@@ -123,12 +149,25 @@ def validate_streamable_http_request(
                 f"got {content_type!r}"
             )
 
-    # 5. Accept header must include at least one of the two allowed types.
+    # 5. Accept header. Verbatim from the ratified 2026-07-28 spec
+    #    (.../basic/transports/streamable-http, "Sending Messages"): "The client
+    #    MUST include an Accept header listing both application/json and
+    #    text/event-stream as supported content types." A POST is answered with
+    #    either a single JSON object or an SSE stream, so both MUST be accepted;
+    #    "*/*" satisfies both. A legacy GET SSE-open (2025-11-25) only needs
+    #    text/event-stream.
     accept = hdr.get("accept", "")
     accept_lower = accept.lower()
-    accept_json = "application/json" in accept_lower or "*/*" in accept_lower or accept == ""
-    accept_sse = "text/event-stream" in accept_lower or "*/*" in accept_lower
-    if accept and not (accept_json or accept_sse):
+    wildcard = "*/*" in accept_lower
+    accept_json = "application/json" in accept_lower or wildcard
+    accept_sse = "text/event-stream" in accept_lower or wildcard
+    if method_upper == "POST":
+        if not (accept_json and accept_sse):
+            raise MCPTransportError(
+                "Streamable HTTP POST requires the Accept header to list both "
+                f"application/json and text/event-stream (2026-07-28); got {accept!r}"
+            )
+    elif accept and not (accept_json or accept_sse):
         raise MCPTransportError(
             f"Accept header must allow application/json or text/event-stream; got {accept!r}"
         )

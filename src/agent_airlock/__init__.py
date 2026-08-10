@@ -527,6 +527,7 @@ from .policy_presets import (
     mcp_origin_host_guard_defaults,
     mcp_schema_2020_12_contract_defaults,
     mcp_server_env_interpolation_guard_defaults,
+    mcp_spec_2026_07_28_handle_trust_defaults,
     mcp_spec_2026_07_defaults,
     mcp_spec_2026_07_header_integrity_defaults,
     mcp_stateless_conformance_2026_07_defaults,
@@ -703,7 +704,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.68"
+__version__ = "0.8.69"
 
 __all__ = [
     # Core
@@ -766,6 +767,7 @@ __all__ = [
     "untrusted_tool_output_defaults",
     "SPEC_REVISIONS",
     "mcp_spec_2026_07_defaults",
+    "mcp_spec_2026_07_28_handle_trust_defaults",
     "mcp_spec_2026_07_header_integrity_defaults",
     "mcp_stateless_conformance_2026_07_defaults",
     "mcp_schema_2020_12_contract_defaults",
