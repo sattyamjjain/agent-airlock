@@ -1484,10 +1484,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#open-divergence-resolution-issues" class="md-nav__link">
+  <a href="#divergence-resolution-issues-resolved-2026-08-10" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Open divergence-resolution issues
+        Divergence-resolution issues — resolved (2026-08-10)
       
     </span>
   </a>
@@ -1528,14 +1528,19 @@
 <h1 id="conformance-scope">Conformance scope<a class="headerlink" href="#conformance-scope" title="Permanent link">&para;</a></h1>
 <p>agent-airlock <strong>implements</strong> validators and hardening that <strong>target</strong> the MCP <code>2026-07-28</code> (current) and <code>2025-11-25</code> (legacy) revisions. It makes <strong>no conformance claim</strong>: no MCP conformance suite has been run against agent-airlock.</p>
 <p>The claim strength is therefore "implements" and "targets" — never "conformant". This is the same position the <code>CHANGELOG.md</code> <code>0.8.61</code> entry already takes: <em>"airlock still makes no conformance claim — no conformance suite has been run."</em> Keep that wording.</p>
-<h2 id="open-divergence-resolution-issues">Open divergence-resolution issues<a class="headerlink" href="#open-divergence-resolution-issues" title="Permanent link">&para;</a></h2>
-<p>The first conformance run (<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcp_conformance/RESULTS.md"><code>benchmarks/mcp_conformance/RESULTS.md</code></a>) published three <strong>divergence probes</strong> — inputs where airlock's strictness may differ from a lenient reading of the clause. Each is now a tracked issue, so a divergence is closeable work instead of a line in a results file:</p>
+<h2 id="divergence-resolution-issues-resolved-2026-08-10">Divergence-resolution issues — resolved (2026-08-10)<a class="headerlink" href="#divergence-resolution-issues-resolved-2026-08-10" title="Permanent link">&para;</a></h2>
+<p>The first conformance run published three <strong>divergence probes</strong> — inputs where airlock's
+strictness might differ from a lenient reading of the clause — held open until the ratified
+2026-07-28 text could be read. All three are now resolved against that text (verbatim clause
+quotes in the guard source); each is a scored contract case in
+<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcp_conformance/RESULTS.md"><code>benchmarks/mcp_conformance/RESULTS.md</code></a>
+("Resolved divergences"), and issues #127/#128/#129 are closed:</p>
 <ul>
-<li><a href="https://github.com/sattyamjjain/agent-airlock/issues/127">#127</a> — <strong>D-PING-NAME</strong>: airlock rejects <code>ping</code> (it requires <code>Mcp-Name</code> on every request). Stricter than spec <em>if</em> SEP-2243 scopes <code>Mcp-Name</code> to named operations — a benign-request false positive.</li>
-<li><a href="https://github.com/sattyamjjain/agent-airlock/issues/128">#128</a> — <strong>D-ACCEPT-JSON-ONLY</strong>: airlock accepts an <code>application/json</code>-only <code>Accept</code>. More lenient than spec <em>if</em> 2026-07-28 requires both <code>application/json</code> and <code>text/event-stream</code>.</li>
-<li><a href="https://github.com/sattyamjjain/agent-airlock/issues/129">#129</a> — <strong>D-GET-NOVERSION</strong>: airlock requires <code>MCP-Protocol-Version</code> on the SSE-open <code>GET</code>, not only on JSON-RPC <code>POST</code>s. Confirm the clause requires it on <code>GET</code>.</li>
+<li><a href="https://github.com/sattyamjjain/agent-airlock/issues/127">#127</a> — <strong>D-PING-NAME</strong>: the SEP-2243 header table scopes <code>Mcp-Name</code> to <code>tools/call</code> / <code>resources/read</code> / <code>prompts/get</code> (and <code>ping</code> was removed). airlock's <code>Mcp-Name</code> requirement is now scoped to those methods (<code>H-ACCEPT-LIST-NO-NAME</code>).</li>
+<li><a href="https://github.com/sattyamjjain/agent-airlock/issues/128">#128</a> — <strong>D-ACCEPT-JSON-ONLY</strong>: the spec requires a POST to list <strong>both</strong> <code>application/json</code> and <code>text/event-stream</code>; airlock now rejects a json-only <code>Accept</code> on a POST (<code>T-REJECT-ACCEPT-JSON-ONLY</code>).</li>
+<li><a href="https://github.com/sattyamjjain/agent-airlock/issues/129">#129</a> — <strong>D-GET-NOVERSION</strong>: the GET stream endpoint was removed (<code>405</code> at 2026-07-28); airlock rejects <code>GET</code>/<code>DELETE</code> to the protected MCP endpoint at 2026-07-28 while keeping legacy GET-SSE (<code>T-REJECT-GET-CURRENT</code>, <code>T-ACCEPT-GET-LEGACY</code>).</li>
 </ul>
-<p>Each closes when the ratified 2026-07-28 clause is read and airlock is either confirmed conformant (the reading recorded) or adjusted (the probe flips and a regression case is added). Until then the probes stay published as-is; none is tuned away.</p>
+<p>Reproduce from the installed wheel: <code>airlock conformance --revision 2026-07-28</code>.</p>
 <h2 id="if-the-openid-aiim-interop-event-produces-a-result">If the OpenID AIIM interop event produces a result<a class="headerlink" href="#if-the-openid-aiim-interop-event-produces-a-result" title="Permanent link">&para;</a></h2>
 <p>This file is where a completed interop result lands. When one exists, record:</p>
 <ul>

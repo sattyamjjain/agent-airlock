@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/distribution/README-WEDGE/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/mcp/stateless-trust-boundary/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Distribution copy — the wedge, one message everywhere - Agent-Airlock</title>
+        <title>The stateless trust boundary (MCP 2026-07-28) - Agent-Airlock</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#distribution-copy-the-wedge-one-message-everywhere" class="md-skip">
+        <a href="#the-stateless-trust-boundary-mcp-2026-07-28" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Distribution copy — the wedge, one message everywhere
+              The stateless trust boundary (MCP 2026-07-28)
             
           </span>
         </div>
@@ -1484,10 +1484,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-one-liner-canonical" class="md-nav__link">
+  <a href="#what-the-spec-changed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The one-liner (canonical)
+        What the spec changed
       
     </span>
   </a>
@@ -1495,10 +1495,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-entry-line-awesome-lists" class="md-nav__link">
+  <a href="#the-consequence-in-one-sentence" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The entry line (awesome-lists)
+        The consequence, in one sentence
       
     </span>
   </a>
@@ -1506,10 +1506,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pypi-description-already-on-message" class="md-nav__link">
+  <a href="#what-agent-airlock-does" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PyPI description (already on-message)
+        What agent-airlock does
       
     </span>
   </a>
@@ -1517,10 +1517,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-these-words" class="md-nav__link">
+  <a href="#the-honest-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why these words
+        The honest limit
       
     </span>
   </a>
@@ -1528,10 +1528,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#distribution-surfaces-submit-where-builders-already-look" class="md-nav__link">
+  <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Distribution surfaces (submit where builders already look)
+        See also
       
     </span>
   </a>
@@ -1558,58 +1558,71 @@
   
 
 
-<h1 id="distribution-copy-the-wedge-one-message-everywhere">Distribution copy — the wedge, one message everywhere<a class="headerlink" href="#distribution-copy-the-wedge-one-message-everywhere" title="Permanent link">&para;</a></h1>
-<p>Single source of truth for how agent-airlock is described in external listings
-(awesome-lists, PyPI, social). Keep every channel on this message so discovery
-copy stays consistent. <strong>Not a runtime feature — this directory is copy + draft
-submissions only.</strong></p>
-<h2 id="the-one-liner-canonical">The one-liner (canonical)<a class="headerlink" href="#the-one-liner-canonical" title="Permanent link">&para;</a></h2>
+<h1 id="the-stateless-trust-boundary-mcp-2026-07-28">The stateless trust boundary (MCP 2026-07-28)<a class="headerlink" href="#the-stateless-trust-boundary-mcp-2026-07-28" title="Permanent link">&para;</a></h1>
+<p>MCP <code>2026-07-28</code> made the Streamable HTTP transport stateless and moved two things onto the
+tool-argument channel that used to live in trusted transport state. This is the security
+read of that change, and what agent-airlock does about it.</p>
+<h2 id="what-the-spec-changed">What the spec changed<a class="headerlink" href="#what-the-spec-changed" title="Permanent link">&para;</a></h2>
+<p><strong>SEP-2567 — cross-call state is now a server-minted handle passed as an ordinary tool
+argument.</strong> Verbatim from the
+<a href="https://modelcontextprotocol.io/specification/2026-07-28/changelog">2026-07-28 changelog</a>:</p>
 <blockquote>
-<p><strong>in-process least-privilege for AI tool calls, deny-by-default, per-CVE presets.</strong></p>
+<p>Remove protocol-level sessions and the <code>Mcp-Session-Id</code> header from the Streamable HTTP
+transport. List endpoints (<code>tools/list</code>, <code>resources/list</code>, <code>prompts/list</code>) no longer vary
+per-connection. Servers that need cross-call state use explicit, server-minted handles
+passed as ordinary tool arguments (SEP-2567).</p>
 </blockquote>
-<p>Lead with <strong>least-privilege / type-checker / contract layer for tool calls</strong>.
-Do <strong>not</strong> call it a "firewall" (crowded term; collides with an existing WAF
-vendor and several other "airlock" projects, and it undersells the in-process,
-per-argument angle).</p>
-<h2 id="the-entry-line-awesome-lists">The entry line (awesome-lists)<a class="headerlink" href="#the-entry-line-awesome-lists" title="Permanent link">&para;</a></h2>
-<p>One factual sentence, reused verbatim across every list:</p>
+<p><strong>SEP-2243 — custom headers can be sourced from tool parameters.</strong> Verbatim from the same
+changelog:</p>
 <blockquote>
-<p><strong>agent-airlock</strong> — in-process least-privilege decorator for AI tool calls;
-deny-by-default, PII masking, per-CVE presets, 3,721 tests.</p>
-<p>[!NOTE]
-<strong>Refresh the test count</strong> to the current README <strong>TEST-BADGE</strong> value at the
-moment you submit each PR (badge is regenerated every release). As of v0.8.69
-it is <strong>3,721</strong>.</p>
+<p>Require standard MCP request headers (<code>Mcp-Method</code>, <code>Mcp-Name</code>) on Streamable HTTP POST
+requests, and add support for custom headers from tool parameters via <code>x-mcp-header</code>
+(SEP-2243).</p>
 </blockquote>
-<h2 id="pypi-description-already-on-message">PyPI description (already on-message)<a class="headerlink" href="#pypi-description-already-on-message" title="Permanent link">&para;</a></h2>
-<p>The <code>[project].description</code> in <code>pyproject.toml</code> already reflects this wedge:</p>
-<blockquote>
-<p>A type-checker and contract layer for AI agent tool calls, deny-by-default,
-in-process, Pydantic-only. Strict argument validation, ghost-argument stripping,
-and self-healing retries for MCP servers and agent frameworks.</p>
-</blockquote>
-<p>Keep them aligned: if you sharpen one, sharpen the other.</p>
-<h2 id="why-these-words">Why these words<a class="headerlink" href="#why-these-words" title="Permanent link">&para;</a></h2>
+<h2 id="the-consequence-in-one-sentence">The consequence, in one sentence<a class="headerlink" href="#the-consequence-in-one-sentence" title="Permanent link">&para;</a></h2>
+<p><strong>State and headers now share the injection-controlled channel</strong> — a value that grants
+cross-call continuity, and values that become HTTP headers, both now arrive in the same
+place as attacker-influenced tool arguments.</p>
+<h2 id="what-agent-airlock-does">What agent-airlock does<a class="headerlink" href="#what-agent-airlock-does" title="Permanent link">&para;</a></h2>
+<p>The opt-in, deny-by-default preset <strong><code>mcp_spec_2026_07_28_handle_trust_defaults</code></strong> is the
+contract check for that boundary. It complements the SEP-2567 / SEP-2575 stateless preset
+<code>mcp_stateless_conformance_2026_07_defaults</code>, and is composed from existing airlock
+primitives (no new engine, Pydantic-only core):</p>
+<ol>
+<li><strong>A handle must be declared, not inferred.</strong> A server-minted handle passed as a tool
+   argument must be an <em>explicit declared parameter</em> of the tool contract — a distinct trust
+   class from caller-supplied data — not absorbed by <code>**kwargs</code> or smuggled as a ghost
+   argument. Reuses the shipped <code>validate_state_handle_declared</code>; raises <code>GhostArgumentError</code>.</li>
+<li><strong>A tool-parameter header may not set or override a policy-decision header.</strong> An
+   <code>x-mcp-header</code>-sourced header (rendered <code>Mcp-Param-{name}</code>) that resolves to a header
+   airlock makes its own decisions on is rejected. The decision set is enumerated
+   <strong>explicitly</strong> in <code>RESERVED_DECISION_HEADERS</code> (<code>MCP-Protocol-Version</code>, <code>Mcp-Method</code>,
+   <code>Mcp-Name</code>, <code>Authorization</code>, <code>Mcp-Session-Id</code>, <code>Origin</code>, <code>Host</code>) rather than matched by a
+   <code>Mcp-*</code> prefix, so the boundary is auditable and cannot silently widen.</li>
+<li><strong>An unminted handle is denied by default.</strong> A presented handle that was not minted within
+   the current policy scope is refused.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">mcp_spec_2026_07_28_handle_trust_defaults</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">preset</span> <span class="o">=</span> <span class="n">mcp_spec_2026_07_28_handle_trust_defaults</span><span class="p">()</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">preset</span><span class="p">[</span><span class="s2">&quot;check_tool_call&quot;</span><span class="p">](</span><span class="n">tool</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>               <span class="c1"># handle must be a declared param</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">preset</span><span class="p">[</span><span class="s2">&quot;check_headers&quot;</span><span class="p">](</span><span class="n">tool_parameter_header_names</span><span class="p">)</span>  <span class="c1"># no reserved-header override</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">preset</span><span class="p">[</span><span class="s2">&quot;check_handle&quot;</span><span class="p">](</span><span class="n">handle</span><span class="p">,</span> <span class="n">minted</span><span class="o">=</span><span class="n">minted_handles</span><span class="p">)</span> <span class="c1"># deny an unminted handle</span>
+</code></pre></div>
+<h2 id="the-honest-limit">The honest limit<a class="headerlink" href="#the-honest-limit" title="Permanent link">&para;</a></h2>
+<p>This is a contract layer. It can require a handle to be an explicit, declared parameter and
+to have been minted within the current policy scope — but it <strong>cannot verify that a handle
+the server minted is one the server <em>should</em> have minted</strong>. Whether a given server-issued
+handle is legitimate for a given caller is a server-side authorization question, not a
+request-shape question; airlock narrows the channel, it does not replace the server's own
+mint-time checks.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>in-process</strong> — the check runs at the <code>@Airlock</code> decorator seam, in the tool
-  process. No sidecar, no model call, microsecond overhead.</li>
-<li><strong>least-privilege / deny-by-default</strong> — a <code>SecurityPolicy</code> allow-lists exactly
-  the tools/args a task needs; everything else is refused.</li>
-<li><strong>per-CVE presets</strong> — curated, opt-in policy bundles that track named MCP CVEs
-  and spec SEPs (composed from existing primitives, Pydantic-only core).</li>
-<li><strong>PII masking</strong> — output sanitizer with 13 PII types incl. India DPDP
-  (Aadhaar/PAN/UPI/IFSC/mobile).</li>
+<li><a href="../../interop/CONFORMANCE-SCOPE/">MCP conformance scope</a> — what airlock's conformance run
+  does and does not claim.</li>
+<li><code>mcp_stateless_conformance_2026_07_defaults</code> — the SEP-2567 / SEP-2575 stateless preset.</li>
+<li><code>mcp_spec_2026_07_header_integrity_defaults</code> — the SEP-2243 header/body integrity preset.</li>
 </ul>
-<h2 id="distribution-surfaces-submit-where-builders-already-look">Distribution surfaces (submit where builders already look)<a class="headerlink" href="#distribution-surfaces-submit-where-builders-already-look" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>awesome-mcp-security.md</code> — MCP security tooling lists</li>
-<li><code>awesome-llm-security.md</code> — LLM/AI security lists</li>
-<li><code>awesome-agent-security.md</code> — agent-security lists</li>
-<li><code>awesome-mcp-servers.md</code> — the <strong>clients / tools</strong> section (it is a library,
-  <strong>not</strong> an MCP server — only the tools/clients section is appropriate)</li>
-</ul>
-<p>Each file is <strong>draft PR text for the operator to submit</strong> — nothing here is
-auto-submitted.</p>
 
 
 
