@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/distribution/awesome-mcp-security/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/interop/capability-union-boundary/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Draft PR — awesome-mcp-security - Agent-Airlock</title>
+        <title>Capability-union boundary — the runtime half (interop with the static scan) - Agent-Airlock</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#draft-pr-awesome-mcp-security" class="md-skip">
+        <a href="#capability-union-boundary-the-runtime-half-interop-with-the-static-scan" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Draft PR — awesome-mcp-security
+              Capability-union boundary — the runtime half (interop with the static scan)
             
           </span>
         </div>
@@ -1484,10 +1484,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#entry-list-format" class="md-nav__link">
+  <a href="#the-boundary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Entry (list format)
+        The boundary
       
     </span>
   </a>
@@ -1495,10 +1495,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-title" class="md-nav__link">
+  <a href="#runtime-api" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR title
+        Runtime API
       
     </span>
   </a>
@@ -1506,10 +1506,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-body" class="md-nav__link">
+  <a href="#the-override-escape-hatch-deliberate-and-loud" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR body
+        The override escape hatch (deliberate, and loud)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honest-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honest scope
       
     </span>
   </a>
@@ -1536,32 +1547,86 @@
   
 
 
-<h1 id="draft-pr-awesome-mcp-security">Draft PR — awesome-mcp-security<a class="headerlink" href="#draft-pr-awesome-mcp-security" title="Permanent link">&para;</a></h1>
-<blockquote>
-<p><strong>Status: DRAFT for the operator to submit.</strong> Nothing here is auto-submitted.
-Confirm the canonical list repo before opening the PR.</p>
-</blockquote>
+<h1 id="capability-union-boundary-the-runtime-half-interop-with-the-static-scan">Capability-union boundary — the runtime half (interop with the static scan)<a class="headerlink" href="#capability-union-boundary-the-runtime-half-interop-with-the-static-scan" title="Permanent link">&para;</a></h1>
+<p>Two tools cover the same exfiltration risk from opposite ends, and they must agree on the
+boundary so their verdicts compose:</p>
 <ul>
-<li><strong>Target list:</strong> <a href="https://github.com/Puliczek/awesome-mcp-security"><code>Puliczek/awesome-mcp-security</code></a> (canonical list, 725 stars, verified 2026-08-05)</li>
-<li><strong>Section:</strong> <code>## 🧑‍🚀 Tools and code</code> (agent-airlock is a library, not a hosted server, so not "MCP Security Servers")</li>
-<li><strong>Refresh the test count</strong> to the current README TEST-BADGE at submission time (v0.8.69 = 3,741).</li>
+<li><strong>Static (before load):</strong> agent-audit-kit scans a skill set and <strong>flags</strong> a risky capability
+  union — a set of skills that, taken together, could read sensitive data and send it out —
+  before the agent ever runs.</li>
+<li><strong>Runtime (at grant time):</strong> agent-airlock does not scan. It <strong>grants and revokes</strong> capability
+  leases, and at the point it issues a lease it evaluates the <em>union</em> of capability the calling
+  context would hold <strong>if this lease were granted</strong> — not just the capability in the lease
+  itself — and <strong>denies by default</strong> when the union crosses the boundary.</li>
 </ul>
-<h2 id="entry-list-format">Entry (list format)<a class="headerlink" href="#entry-list-format" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) - in-process least-privilege decorator for AI tool calls; deny-by-default, PII masking, per-CVE presets, 3,741 tests.
+<p>This page is the shared definition of that boundary so the two halves stay consistent.</p>
+<h2 id="the-boundary">The boundary<a class="headerlink" href="#the-boundary" title="Permanent link">&para;</a></h2>
+<p>A capability lease is tagged with the exfiltration-relevant <strong>categories</strong> it confers
+(<code>CapabilityCategory</code>): <code>filesystem_read</code>, <code>credential_access</code>, <code>network_egress</code>. The default
+boundary (<code>EXFILTRATION_BOUNDARY</code>) is:</p>
+<blockquote>
+<p><strong><code>{filesystem_read</code> OR <code>credential_access}</code>  +  <code>{non-allowlisted network_egress}</code></strong>  is an
+exfiltration path, and is <strong>denied even when each individual lease is independently
+permitted</strong>.</p>
+</blockquote>
+<p>Notes that make the rule precise:</p>
+<ul>
+<li><strong>Non-allowlisted egress only.</strong> A <code>network_egress</code> lease whose destination is on the policy
+  allowlist is not a <em>sink</em> — egress to a trusted destination is not exfiltration — so it does
+  not trigger the boundary.</li>
+<li><strong>Combination, not single tools.</strong> The rule fires on a <em>cross-lease</em> union: the new lease
+  supplies one side and a <strong>distinct prior lease</strong> supplies the other. A single reviewed unit
+  that intrinsically confers both (e.g. an <code>upload_file(path, url)</code> tool declared
+  <code>FILESYSTEM_READ | NETWORK_HTTPS</code>) is one lease, not a combination, and is not denied here.</li>
+<li><strong>Deny names the culprit.</strong> A denial names the <strong>specific prior lease</strong> that combined with the
+  new one to trigger it — a deny with no explanation gets configured away within a week.</li>
+</ul>
+<h2 id="runtime-api">Runtime API<a class="headerlink" href="#runtime-api" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.capability_caps</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">CapabilityCapEngine</span><span class="p">,</span> <span class="n">CapabilityRulesConfig</span><span class="p">,</span> <span class="n">CapabilityCategory</span><span class="p">,</span> <span class="n">Lease</span><span class="p">,</span> <span class="n">UnionOverride</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">CapabilityCapEngine</span><span class="p">(</span><span class="n">CapabilityRulesConfig</span><span class="p">())</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Individually permitted:</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">engine</span><span class="o">.</span><span class="n">grant_lease</span><span class="p">(</span><span class="s2">&quot;agent&quot;</span><span class="p">,</span> <span class="n">Lease</span><span class="p">(</span><span class="s2">&quot;L1&quot;</span><span class="p">,</span> <span class="s2">&quot;read_config&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                                  <span class="nb">frozenset</span><span class="p">({</span><span class="n">CapabilityCategory</span><span class="o">.</span><span class="n">FILESYSTEM_READ</span><span class="p">})))</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># The combination is an exfiltration path -&gt; CapabilityUnionDeniedError naming &quot;L1&quot;:</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">engine</span><span class="o">.</span><span class="n">grant_lease</span><span class="p">(</span><span class="s2">&quot;agent&quot;</span><span class="p">,</span> <span class="n">Lease</span><span class="p">(</span><span class="s2">&quot;L2&quot;</span><span class="p">,</span> <span class="s2">&quot;fetch_url&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>                                  <span class="nb">frozenset</span><span class="p">({</span><span class="n">CapabilityCategory</span><span class="o">.</span><span class="n">NETWORK_EGRESS</span><span class="p">})))</span>
 </code></pre></div>
-<h2 id="pr-title">PR title<a class="headerlink" href="#pr-title" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Add agent-airlock (in-process least-privilege for MCP tool calls)
+<ul>
+<li><code>grant_lease(agent_id, lease, *, boundaries=(EXFILTRATION_BOUNDARY,), override=None,
+  decision_log=None)</code> — issues the lease after the union check; raises
+  <code>CapabilityUnionDeniedError</code> on a crossing (deny-by-default).</li>
+<li><code>revoke_lease(agent_id, lease_id)</code> — drops a held lease so it no longer counts toward the
+  union.</li>
+<li><code>evaluate_union_grant(held, new, ...)</code> — the pure decision function, for testing or custom
+  wiring.</li>
+</ul>
+<h2 id="the-override-escape-hatch-deliberate-and-loud">The override escape hatch (deliberate, and loud)<a class="headerlink" href="#the-override-escape-hatch-deliberate-and-loud" title="Permanent link">&para;</a></h2>
+<p>Some legitimate workflows need a source + sink combination. The override is explicit and
+<strong>non-repudiable</strong>: pass a <code>UnionOverride(identity, reason)</code>. The grant is then allowed, and it
+is recorded <strong>loudly</strong> —</p>
+<ul>
+<li>a <code>structlog</code> <code>capability_union_override</code> <strong>warning</strong> with the identity, reason, boundary, and
+  the triggering prior lease(s), and</li>
+<li>a <code>warn</code> record in the tamper-evident <strong>decision log</strong> (<code>decision_log=</code> argument) naming the
+  granting identity, so the escape hatch is auditable after the fact.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">engine</span><span class="o">.</span><span class="n">grant_lease</span><span class="p">(</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="s2">&quot;agent&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">Lease</span><span class="p">(</span><span class="s2">&quot;L2&quot;</span><span class="p">,</span> <span class="s2">&quot;fetch_url&quot;</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">({</span><span class="n">CapabilityCategory</span><span class="o">.</span><span class="n">NETWORK_EGRESS</span><span class="p">})),</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">override</span><span class="o">=</span><span class="n">UnionOverride</span><span class="p">(</span><span class="n">identity</span><span class="o">=</span><span class="s2">&quot;secops@corp&quot;</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;approved migration window&quot;</span><span class="p">),</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">decision_log</span><span class="o">=</span><span class="n">decision_log</span><span class="p">,</span>   <span class="c1"># the override is written here with the identity</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
 </code></pre></div>
-<h2 id="pr-body">PR body<a class="headerlink" href="#pr-body" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>agent-airlock is an MIT, Pydantic-only decorator that enforces
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>least-privilege at the tool-call seam: deny-by-default SecurityPolicy, strict
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>argument validation, ghost-argument stripping, output PII/secret masking, and
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>opt-in per-CVE / MCP-spec (SEP) presets. Runs in-process (microsecond overhead),
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>no model call. 3,741 tests, mypy-strict, CI-gated.
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>Repo: https://github.com/sattyamjjain/agent-airlock
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>PyPI: https://pypi.org/project/agent-airlock/
-</code></pre></div>
+<h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
+<p>The runtime check reasons about the <em>categories a lease confers</em> and the <em>union across leases</em>.
+It is a contract-layer control: it denies an exfiltration-shaped capability union by default and
+makes the override auditable. It does <strong>not</strong> inspect payloads, prove that a specific egress will
+carry specific data, or replace the static pre-load scan — the two halves are complementary.</p>
 
 
 
