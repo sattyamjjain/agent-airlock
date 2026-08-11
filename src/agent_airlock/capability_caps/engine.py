@@ -4,12 +4,24 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .._log import structlog
 from ..exceptions import AirlockError
 from .enums import Capability
 from .store import CapabilityLedgerStore, SQLiteCapabilityLedgerStore
+from .union import (
+    EXFILTRATION_BOUNDARY,
+    CapabilityUnionDeniedError,
+    Lease,
+    UnionBoundary,
+    UnionGrantDecision,
+    UnionOverride,
+    evaluate_union_grant,
+)
+
+if TYPE_CHECKING:
+    from ..conformance.decision_log import DecisionLog
 
 logger = structlog.get_logger("agent-airlock.capability_caps.engine")
 
@@ -102,6 +114,10 @@ class CapabilityCapEngine:
     ) -> None:
         self.config = config
         self.store: CapabilityLedgerStore = store or SQLiteCapabilityLedgerStore()
+        # Runtime capability-union registry: the leases each agent currently holds. Distinct
+        # from the SQLite cap ledger (which meters `use` events by the coarse Capability enum)
+        # — this tracks category-tagged Leases so grant_lease can evaluate the union boundary.
+        self._active_leases: dict[str, list[Lease]] = {}
 
     # ------------------------------------------------------------------
     # Grant / revoke
@@ -143,6 +159,89 @@ class CapabilityCapEngine:
             kind="revoke",
             ts_epoch=time.time(),
         )
+
+    # ------------------------------------------------------------------
+    # Capability-union leases (grant-time union boundary)
+    # ------------------------------------------------------------------
+
+    def held_leases(self, agent_id: str) -> tuple[Lease, ...]:
+        """The capability leases ``agent_id`` currently holds."""
+        return tuple(self._active_leases.get(agent_id, ()))
+
+    def grant_lease(
+        self,
+        agent_id: str,
+        lease: Lease,
+        *,
+        boundaries: tuple[UnionBoundary, ...] = (EXFILTRATION_BOUNDARY,),
+        override: UnionOverride | None = None,
+        decision_log: DecisionLog | None = None,
+    ) -> UnionGrantDecision:
+        """Issue a capability lease, checking the *union* it would create at grant time.
+
+        Evaluates the union of the leases ``agent_id`` already holds plus ``lease`` against
+        ``boundaries``. **Deny-by-default**: if granting ``lease`` would complete a forbidden
+        union with a distinct prior lease, this raises :class:`CapabilityUnionDeniedError`
+        (whose message names that prior lease) — unless ``override`` is supplied, in which case
+        the grant is allowed and recorded **loudly**: a ``warn`` record is written to
+        ``decision_log`` (if given) with the granting identity, and a ``structlog`` warning is
+        emitted.
+
+        On allow, the lease is added to the agent's held set. Returns the decision.
+
+        Raises:
+            CapabilityUnionDeniedError: if the union crosses a boundary and no override is set.
+        """
+        held = self._active_leases.get(agent_id, [])
+        decision = evaluate_union_grant(held, lease, boundaries=boundaries, override=override)
+
+        if not decision.allowed:
+            logger.warning(
+                "capability_union_denied",
+                agent_id=agent_id,
+                lease_id=lease.lease_id,
+                capability=lease.capability,
+                boundary=decision.boundary.name if decision.boundary else None,
+                triggering_leases=[lease_.lease_id for lease_ in decision.triggering_leases],
+            )
+            raise CapabilityUnionDeniedError(decision, lease)
+
+        if decision.overridden and override is not None:
+            # Loud, non-repudiable record of the escape hatch.
+            logger.warning(
+                "capability_union_override",
+                agent_id=agent_id,
+                lease_id=lease.lease_id,
+                capability=lease.capability,
+                boundary=decision.boundary.name if decision.boundary else None,
+                triggering_leases=[lease_.lease_id for lease_ in decision.triggering_leases],
+                override_identity=override.identity,
+                override_reason=override.reason,
+            )
+            if decision_log is not None:
+                decision_log.append(
+                    stage="policy",
+                    tool_name=lease.capability,
+                    decision="warn",
+                    reason=(
+                        f"capability-union override [{decision.boundary.name if decision.boundary else '?'}] "
+                        f"by {override.identity}: {override.reason}"
+                    ),
+                    agent_id=agent_id,
+                )
+
+        self._active_leases.setdefault(agent_id, []).append(lease)
+        return decision
+
+    def revoke_lease(self, agent_id: str, lease_id: str) -> bool:
+        """Drop a held lease so it no longer counts toward the union. Returns True if removed."""
+        leases = self._active_leases.get(agent_id)
+        if not leases:
+            return False
+        remaining = [lease for lease in leases if lease.lease_id != lease_id]
+        removed = len(remaining) != len(leases)
+        self._active_leases[agent_id] = remaining
+        return removed
 
     # ------------------------------------------------------------------
     # Check

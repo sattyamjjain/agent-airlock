@@ -99,6 +99,48 @@ the stronger gpt-4o (+50pp, 72% → 22%) than on gpt-4o-mini (+30pp, 42% → 12%
 residual ASR is higher. Cost was captured at the SDK layer (agentdojo calls the provider SDKs
 directly, not litellm); total spend ~$5.16.
 
+## Widening plan (#123) — power-calc-sized, ≥3 families (not yet run, pending keys)
+
+The published numbers above rest on a thin sample: two models of **one family** (OpenAI) at a
+**60-pair** subset. This section fixes the *sampling* design so the next run is defensible; the
+run itself needs three provider keys and real spend and **has not been run yet** — no number
+here changes until it has.
+
+**Pair count from a power calculation, not convenience.** `power_sample_size(p1, p2)` in
+`run.py` (two-proportion z-test, two-sided) is the source of truth. Sizing to detect a
+conservative **15pp** reduction — undefended ASR `p1 = 0.45` → airlock `p2 = 0.30`, `alpha =
+0.05`, `power = 0.80` — gives **163 injection→task pairs per arm** (vs the current 60). At an
+airlock ASR near 20%, that narrows the 95% Wilson half-width from **±10pp (n=60)** to **±6.1pp
+(n=163)** — enough to distinguish a 15pp reduction from zero. Raise `--max-user-tasks` /
+`--max-injection-tasks` until the harness reports ≈163 pairs/arm.
+
+**At least three model families, because one model cannot speak for the harness.** **ActBench**
+([arXiv:2608.09476](https://arxiv.org/abs/2608.09476)) reports attack-success-rate spanning
+**10.1%–94.4% across models under a *fixed* harness** — so a single-model (or single-family)
+result cannot support a claim about the defense. The widened run spans three distinct families:
+**OpenAI** (`gpt-4o-mini-2024-07-18`, native), **Anthropic** (via
+`model_registry_shim.py`), and **Together** (`mistralai/Mixtral-8x7B-Instruct-v0.1`, native,
+OpenAI-compatible). Each model is already reported with **its own Wilson CI**, **its own
+benign-pass (benign-FPR) control** — a reduction figure without the benign arm cannot
+distinguish "the guard works" from "the guard blocks everything" — and **its own measured
+token/$ cost**, and the pooled figure is shown separately.
+
+```bash
+# needs OPENAI_API_KEY, ANTHROPIC_API_KEY, TOGETHER_API_KEY; caps raised to ≈163 pairs/arm
+python -m benchmarks.agentdojo.run \
+  --model gpt-4o-mini-2024-07-18 \
+  --model claude-sonnet-5 \
+  --model mistralai/Mixtral-8x7B-Instruct-v0.1 \
+  --max-user-tasks 13 --max-injection-tasks 3 \
+  --out benchmarks/agentdojo/RESULTS.md
+```
+
+**Commitment.** When this run lands, its per-model Wilson intervals are published here even if
+they are wider than the current subset's — and **if the widened sample makes the realised
+reduction smaller, the smaller number is published and every place the old one appears
+(README benchmark row + gap paragraph) is updated to match.** That outcome is the point of
+widening.
+
 <!-- CROSS-MODEL-RUNS: append newest below; never edit dated blocks -->
 
 ### 2026-08-08 · cross-model (gpt-4o-mini-2024-07-18, gpt-4o-2024-05-13)

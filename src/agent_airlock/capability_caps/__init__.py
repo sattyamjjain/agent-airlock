@@ -29,14 +29,32 @@ from .engine import (
 )
 from .enums import Capability
 from .store import CapabilityLedgerStore, SQLiteCapabilityLedgerStore
+from .union import (
+    EXFILTRATION_BOUNDARY,
+    CapabilityCategory,
+    CapabilityUnionDeniedError,
+    Lease,
+    UnionBoundary,
+    UnionGrantDecision,
+    UnionOverride,
+    evaluate_union_grant,
+)
 
 __all__ = [
+    "EXFILTRATION_BOUNDARY",
     "Capability",
     "CapabilityCapEngine",
     "CapabilityCapExceeded",
+    "CapabilityCategory",
     "CapabilityDecision",
     "CapabilityLedgerStore",
     "CapabilityRule",
     "CapabilityRulesConfig",
+    "CapabilityUnionDeniedError",
+    "Lease",
     "SQLiteCapabilityLedgerStore",
+    "UnionBoundary",
+    "UnionGrantDecision",
+    "UnionOverride",
+    "evaluate_union_grant",
 ]

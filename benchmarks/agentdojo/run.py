@@ -39,6 +39,7 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from statistics import NormalDist
 from typing import Any
 
 from agent_airlock import SecurityPolicy
@@ -680,6 +681,13 @@ _MODEL_PRICES: dict[str, tuple[float, float]] = {
     "claude-3-5-sonnet": (3.00, 15.00),
     "claude-3-7-sonnet": (3.00, 15.00),
     "claude-3-opus": (15.00, 75.00),
+    # Together (open models) list price — the 3rd family for the widened run. Cost is
+    # captured by the OpenAI-client SDK hook (Together is OpenAI-compatible).
+    "mistralai/Mixtral-8x7B-Instruct-v0.1": (0.60, 0.60),
+    "meta-llama/Llama-3-70b-chat-hf": (0.88, 0.88),
+    # NOTE: current Claude (4/5) ids the model-registry shim registers are not priced here
+    # yet — set their list price before running the paid Anthropic arm, or their cost records
+    # as $0 ("unmeasured") rather than a fabricated number.
 }
 
 
@@ -690,6 +698,47 @@ def _price_usd(model: str | None, prompt_tokens: int, completion_tokens: int) ->
         if model.startswith(key):
             return prompt_tokens / 1e6 * pin + completion_tokens / 1e6 * pout
     return 0.0
+
+
+def power_sample_size(
+    p1: float,
+    p2: float,
+    *,
+    alpha: float = 0.05,
+    power: float = 0.80,
+) -> int:
+    """Per-arm pair count for a two-proportion z-test (two-sided), rounded up.
+
+    This is how the widened AgentDojo sample size is chosen from a power calculation rather
+    than from convenience (see RESULTS.md "Widening plan"). It returns the number of
+    injection->task pairs **per arm** needed to detect a change in attack-success-rate from
+    ``p1`` (undefended) to ``p2`` (airlock) at significance ``alpha`` and ``power``, using the
+    standard normal approximation::
+
+        n = ( z_{1-alpha/2}·sqrt(2·pbar·(1-pbar))
+              + z_{1-beta}·sqrt(p1·(1-p1) + p2·(1-p2)) )^2 / (p1 - p2)^2 ,   pbar = (p1+p2)/2
+
+    Args:
+        p1: undefended ASR (0 < p1 < 1).
+        p2: airlock ASR (0 < p2 < 1), p2 != p1.
+        alpha: two-sided significance (default 0.05).
+        power: desired power 1-beta (default 0.80).
+
+    Returns:
+        The per-arm pair count (``math.ceil``).
+
+    Raises:
+        ValueError: if ``p1``/``p2`` are outside (0, 1) or equal.
+    """
+    if not (0.0 < p1 < 1.0) or not (0.0 < p2 < 1.0) or p1 == p2:
+        raise ValueError("p1 and p2 must be distinct proportions in the open interval (0, 1)")
+    normal = NormalDist()
+    z_alpha = normal.inv_cdf(1.0 - alpha / 2.0)
+    z_beta = normal.inv_cdf(power)
+    pbar = (p1 + p2) / 2.0
+    pooled = z_alpha * math.sqrt(2.0 * pbar * (1.0 - pbar))
+    unpooled = z_beta * math.sqrt(p1 * (1.0 - p1) + p2 * (1.0 - p2))
+    return math.ceil((pooled + unpooled) ** 2 / (p1 - p2) ** 2)
 
 
 def install_provider_cost_hooks(meter: CostMeter):  # type: ignore[no-untyped-def]
