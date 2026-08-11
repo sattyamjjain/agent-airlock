@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Runtime capability-union boundary at grant time (`CapabilityCapEngine.grant_lease`, new
+  `capability_caps/union.py`). At the point airlock issues a capability lease it evaluates the
+  union of capability the calling context would hold if the lease were granted and denies by
+  default when it crosses a configured boundary: the default `{filesystem-read or credential} +
+  non-allowlisted network egress` exfiltration path is denied even when each lease is individually
+  permitted, and the denial names the specific prior lease that combined to trigger it. An explicit
+  `UnionOverride` is allowed but recorded loudly — a structlog warning plus a `warn` record in the
+  tamper-evident decision log with the granting identity. This is the runtime half; agent-audit-kit
+  does the static pre-load scan. See docs/interop/capability-union-boundary.md.
+- AgentDojo sample-widening — harness and power calculation only; the run itself is deferred until
+  keys are available. `power_sample_size()` in benchmarks/agentdojo/run.py sizes the pair count from
+  a two-proportion power calculation (163 pairs/arm to detect a conservative 15pp reduction at 80%
+  power, alpha 0.05), the 3rd family (Together, mistralai/Mixtral-8x7B-Instruct-v0.1) is priced and
+  wired, and benchmarks/agentdojo/RESULTS.md documents the >=3-family widening plan plus the ActBench
+  (arXiv:2608.09476) reason a single-model result cannot support a harness claim. No published number
+  changed and the README cross-model claim is unchanged; it stays that way until the widened run
+  completes.
+
 ## [0.8.69] - 2026-08-10
 
 ### Added
