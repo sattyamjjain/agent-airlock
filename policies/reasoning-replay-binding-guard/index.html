@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/distribution/awesome-agent-security/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/policies/reasoning-replay-binding-guard/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Draft PR — awesome-agent-security - Agent-Airlock</title>
+        <title>Reasoning-block replay binding guard (v0.8.70+, arXiv:2605.27157 anchor) - Agent-Airlock</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#draft-pr-awesome-agent-security" class="md-skip">
+        <a href="#reasoning-block-replay-binding-guard-v0870-arxiv260527157-anchor" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Draft PR — awesome-agent-security
+              Reasoning-block replay binding guard (v0.8.70+, arXiv:2605.27157 anchor)
             
           </span>
         </div>
@@ -1484,10 +1484,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#entry-list-format" class="md-nav__link">
+  <a href="#why" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Entry (list format)
+        Why
       
     </span>
   </a>
@@ -1495,10 +1495,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-title" class="md-nav__link">
+  <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR title
+        Install
       
     </span>
   </a>
@@ -1506,10 +1506,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-body" class="md-nav__link">
+  <a href="#usage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR body
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limit
       
     </span>
   </a>
@@ -1536,34 +1547,89 @@
   
 
 
-<h1 id="draft-pr-awesome-agent-security">Draft PR — awesome-agent-security<a class="headerlink" href="#draft-pr-awesome-agent-security" title="Permanent link">&para;</a></h1>
-<blockquote>
-<p><strong>Status: DRAFT for the operator to submit.</strong> Nothing here is auto-submitted.
-Confirm the canonical list repo before opening the PR (the agent-security
-lists are less consolidated than the LLM/MCP ones — pick the most active).</p>
-</blockquote>
+<h1 id="reasoning-block-replay-binding-guard-v0870-arxiv260527157-anchor">Reasoning-block replay binding guard (v0.8.70+, arXiv:2605.27157 anchor)<a class="headerlink" href="#reasoning-block-replay-binding-guard-v0870-arxiv260527157-anchor" title="Permanent link">&para;</a></h1>
+<p><code>agent_airlock.mcp_spec.reasoning_replay_guard.ReasoningReplayGuard</code> binds a
+provider-returned <strong>opaque reasoning block</strong> to the session that minted it and
+refuses cross-context replay.</p>
+<h2 id="why">Why<a class="headerlink" href="#why" title="Permanent link">&para;</a></h2>
+<p>This repo's stated position is <strong>behaviour over reasoning-trust</strong>:
+<code>action_contradiction_gate.py</code> and <code>sequence_guard.py</code> both refuse to trust a
+model's <em>stated</em> reasoning, citing <a href="https://arxiv.org/abs/2605.27157">arXiv:2605.27157</a>. That position is
+right and this guard does not change it.</p>
+<p>The gap is different. An encrypted / opaque reasoning block (a redacted or
+signed thinking block) arrives as an opaque string, is passed <strong>back</strong> on the
+next turn to continue the thought, and nothing checks that the block belongs to
+this session. A block minted in one session — or by a different model — that is
+replayed into another is accepted today. That is a provenance failure, not a
+reasoning-content failure.</p>
+<p>The guard never parses, decodes, or interprets the block (consistent with "don't
+trust reasoning" — it never reads what the block <em>says</em>). It <strong>binds</strong> it:</p>
 <ul>
-<li><strong>Target list:</strong> <code>awesome-agent-security</code> <!-- verify canonical repo URL --></li>
-<li><strong>Section:</strong> Tools / Runtime defenses</li>
-<li><strong>Refresh the test count</strong> to the current README TEST-BADGE at submission time (v0.8.70 = 3,749).</li>
+<li><code>bind(payload, *, session_id, model, lease)</code> — on first sight, record a
+  SHA-256 of the opaque payload against the current session / model / lease. The
+  first binding wins, so a mint cannot be laundered by re-minting under a new
+  context.</li>
+<li><code>check_replay(payload, *, session_id, model, lease)</code> — on replay, <strong>refuse</strong>
+  when the binding does not match (<code>REFUSE_SESSION_MISMATCH</code> /
+  <code>REFUSE_MODEL_MISMATCH</code> / <code>REFUSE_LEASE_MISMATCH</code>), and treat an <strong>absent</strong>
+  binding as <em>untrusted</em> (<code>REFUSE_UNBOUND</code>) rather than trusted. Deny-by-default.</li>
 </ul>
-<h2 id="entry-list-format">Entry (list format)<a class="headerlink" href="#entry-list-format" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) — in-process least-privilege decorator for AI tool calls; deny-by-default, PII masking, per-CVE presets, 3,749 tests.
+<table>
+<thead>
+<tr>
+<th>Verdict</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BOUND_FIRST_SEEN</code></td>
+<td>Recorded on first sight (allowed).</td>
+</tr>
+<tr>
+<td><code>REPLAY_MATCH</code></td>
+<td>Replay matches its binding (allowed).</td>
+</tr>
+<tr>
+<td><code>REFUSE_SESSION_MISMATCH</code></td>
+<td>Bound to a different session.</td>
+</tr>
+<tr>
+<td><code>REFUSE_MODEL_MISMATCH</code></td>
+<td>Bound to a different model.</td>
+</tr>
+<tr>
+<td><code>REFUSE_LEASE_MISMATCH</code></td>
+<td>Bound to a different lease.</td>
+</tr>
+<tr>
+<td><code>REFUSE_UNBOUND</code></td>
+<td>Never minted in this scope — untrusted.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<p>Core. No optional extra. The guard imports only <code>hashlib</code> / <code>dataclasses</code> /
+<code>enum</code> from the stdlib — Pydantic-only core, zero-dep.</p>
+<h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReasoningReplayGuard</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">ReasoningReplayGuard</span><span class="p">()</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># When the provider returns an encrypted reasoning block this turn:</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">guard</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">session_id</span><span class="o">=</span><span class="s2">&quot;sess-A&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;claude-opus-5&quot;</span><span class="p">,</span> <span class="n">lease</span><span class="o">=</span><span class="s2">&quot;lease-1&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># When a reasoning block is passed back next turn:</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">decision</span> <span class="o">=</span> <span class="n">guard</span><span class="o">.</span><span class="n">check_replay</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">session_id</span><span class="o">=</span><span class="s2">&quot;sess-A&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;claude-opus-5&quot;</span><span class="p">,</span> <span class="n">lease</span><span class="o">=</span><span class="s2">&quot;lease-1&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">decision</span><span class="o">.</span><span class="n">allowed</span><span class="p">:</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="o">...</span>  <span class="c1"># refuse; decision.verdict says why</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># or fail-closed:</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">guard</span><span class="o">.</span><span class="n">check_replay_or_raise</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">session_id</span><span class="o">=</span><span class="s2">&quot;sess-A&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;claude-opus-5&quot;</span><span class="p">,</span> <span class="n">lease</span><span class="o">=</span><span class="s2">&quot;lease-1&quot;</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="pr-title">PR title<a class="headerlink" href="#pr-title" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Add agent-airlock (in-process least-privilege for agent tool calls)
-</code></pre></div>
-<h2 id="pr-body">PR body<a class="headerlink" href="#pr-body" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>agent-airlock is a decorator (@Airlock) that wraps an agent tool and enforces a
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>validate → policy → execute → sanitize seam in-process: deny-by-default
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>least-privilege SecurityPolicy, strict typed argument validation, ghost-argument
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>stripping, output PII/secret masking, capability gating, and opt-in per-CVE /
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>MCP-spec presets. Integrates with LangChain, LangGraph, PydanticAI, OpenAI
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>Agents, Anthropic, CrewAI, and more. MIT, Pydantic-only core, 3,749 tests.
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>Repo: https://github.com/sattyamjjain/agent-airlock
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>PyPI: https://pypi.org/project/agent-airlock/
-</code></pre></div>
+<h2 id="limit">Limit<a class="headerlink" href="#limit" title="Permanent link">&para;</a></h2>
+<p>This stops <strong>replay</strong> — a block minted elsewhere reused here. It does <strong>nothing</strong>
+about a payload that was malicious the first time it arrived; binding proves
+provenance-within-session, not benignity. Pair it with the guards that judge
+<em>behaviour</em> (<code>action_contradiction_gate</code>, <code>sequence_guard</code>) — those remain the
+answer to a block whose content is the problem.</p>
 
 
 
