@@ -9,25 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.70] - 2026-08-12
+
 ### Added
 
 - Runtime capability-union boundary at grant time (`CapabilityCapEngine.grant_lease`, new
-  `capability_caps/union.py`). At the point airlock issues a capability lease it evaluates the
-  union of capability the calling context would hold if the lease were granted and denies by
-  default when it crosses a configured boundary: the default `{filesystem-read or credential} +
-  non-allowlisted network egress` exfiltration path is denied even when each lease is individually
-  permitted, and the denial names the specific prior lease that combined to trigger it. An explicit
-  `UnionOverride` is allowed but recorded loudly — a structlog warning plus a `warn` record in the
-  tamper-evident decision log with the granting identity. This is the runtime half; agent-audit-kit
-  does the static pre-load scan. See docs/interop/capability-union-boundary.md.
-- AgentDojo sample-widening — harness and power calculation only; the run itself is deferred until
-  keys are available. `power_sample_size()` in benchmarks/agentdojo/run.py sizes the pair count from
-  a two-proportion power calculation (163 pairs/arm to detect a conservative 15pp reduction at 80%
-  power, alpha 0.05), the 3rd family (Together, mistralai/Mixtral-8x7B-Instruct-v0.1) is priced and
-  wired, and benchmarks/agentdojo/RESULTS.md documents the >=3-family widening plan plus the ActBench
-  (arXiv:2608.09476) reason a single-model result cannot support a harness claim. No published number
-  changed and the README cross-model claim is unchanged; it stays that way until the widened run
-  completes.
+  `capability_caps/union.py`). The "lethal trifecta" capability combination — read untrusted
+  content, access sensitive data, and egress, each individually legitimate but exploitable when
+  they share a trust context the architect never designed — was named in the Black Hat USA 2026
+  AI-agent briefings; that is the shape this guards ([CSA lethal-trifecta capability-security
+  note](https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-agent-lethal-trifecta-capability-securi/)).
+  At the point airlock issues a lease it evaluates the union of capability the calling context
+  would hold if the lease were granted and denies by default when it crosses a configured
+  boundary: the default `{filesystem-read or credential} + non-allowlisted network egress`
+  exfiltration path is denied even when each lease is individually permitted, and the denial names
+  the specific prior lease that combined to trigger it. It evaluates at **grant time, not call
+  time**, so it does nothing about capabilities acquired outside the lease system. The escape
+  hatch is an explicit `UnionOverride`, allowed but recorded loudly — a structlog warning plus a
+  `warn` record in the tamper-evident decision log with the granting identity. Runtime half;
+  agent-audit-kit does the static pre-load scan. See docs/interop/capability-union-boundary.md.
+- Reasoning-block replay binding guard (`mcp_spec/reasoning_replay_guard.py`,
+  `ReasoningReplayGuard` / `ReasoningReplayDecision` / `ReasoningReplayVerdict`). A
+  provider-returned encrypted/opaque reasoning block is passed back on the next turn with nothing
+  checking it belongs to this session; a block minted in one session or by a different model is
+  accepted today. The guard does not parse or decode the block (the repo's behaviour-over-
+  reasoning-trust position, [arXiv:2605.27157](https://arxiv.org/abs/2605.27157), is unchanged) —
+  it binds a SHA-256 of the opaque payload to the session/model/lease on first sight and refuses
+  cross-session, cross-model, or cross-lease replay, treating an absent binding as untrusted rather
+  than trusted. Limit: it stops replay; it does nothing about a payload that was malicious the
+  first time it arrived. See docs/policies/reasoning-replay-binding-guard.md.
+- AgentDojo claim downscoped in place, resolving #123. The README's 45% → 10% model-in-the-loop
+  reduction now carries its full scope inside the claim — gpt-4o-mini only, one model family
+  (OpenAI), a 60-pair subset, wide 95% Wilson CI [5%, 20%] — rather than reading as a general
+  result, with ActBench ([arXiv:2608.09476](https://arxiv.org/abs/2608.09476), ASR 10.1%–94.4%
+  across models under a fixed harness) cited as why one family cannot generalise. The widening
+  harness is ready — `power_sample_size()` in benchmarks/agentdojo/run.py sizes 163 pairs/arm for
+  80% power, the model-registry shim registers current Claude ids, and Together
+  (mistralai/Mixtral-8x7B-Instruct-v0.1) is priced and wired — so a keyed OpenAI + Anthropic +
+  Together run replaces the scoped estimate with a real cross-family number. #123 is resolved by
+  making the claim honest about its scope rather than carrying an over-broad headline.
 
 ## [0.8.69] - 2026-08-10
 

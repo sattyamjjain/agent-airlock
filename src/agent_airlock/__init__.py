@@ -378,6 +378,12 @@ from .mcp_spec.pr_metadata_guard import (
     PRMetadataGuard,
     PRMetadataInjectionRejected,
 )
+from .mcp_spec.reasoning_replay_guard import (
+    ReasoningReplayDecision,
+    ReasoningReplayError,
+    ReasoningReplayGuard,
+    ReasoningReplayVerdict,
+)
 from .mcp_spec.sampling_guard import (
     SamplingConsentMissingError,
     SamplingInstructionPersistenceError,
@@ -704,7 +710,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.69"
+__version__ = "0.8.70"
 
 __all__ = [
     # Core
@@ -906,6 +912,10 @@ __all__ = [
     "LoopbackSessionSpawnGuard",
     "LoopbackSpawnDecision",
     "LoopbackSpawnVerdict",
+    "ReasoningReplayDecision",
+    "ReasoningReplayError",
+    "ReasoningReplayGuard",
+    "ReasoningReplayVerdict",
     # V0.8.33 — tool-OUTPUT trust-boundary guard (Agentjacking / CVE-2026-42824)
     "ToolOutputTrustDecision",
     "ToolOutputTrustError",
