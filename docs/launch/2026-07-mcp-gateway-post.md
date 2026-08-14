@@ -16,11 +16,14 @@ Market context to weave in (both posts):
 
 ## A. Hacker News
 
-**Title** (the framing; HN caps titles at 80 chars, so use the short one and put the full
-line in the first sentence):
+**Title to paste** (74 chars — HN caps titles at 80; paste this line only, nothing before it):
 
-- Intended framing: *I re-ran my agent contract-checker against Docker's native MCP Gateway; here's the exact payload class each blocks*
-- Fits-in-80 version to actually submit: **I re-ran my tool-call contract-checker against Docker's native MCP Gateway**
+```
+I re-ran my tool-call contract-checker against Docker's native MCP Gateway
+```
+
+(The fuller framing — "...; here's the exact payload class each blocks" — is 112 chars,
+over HN's limit, so it goes in the first line of the comment, not the title field.)
 
 **URL:** https://github.com/sattyamjjain/agent-airlock
 
