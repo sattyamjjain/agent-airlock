@@ -16,6 +16,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Sequence
@@ -124,13 +125,29 @@ def _version(harness: Harness) -> str:
 
 
 def _task_completed(repo: Path) -> bool:
-    """Did the harness actually do the asked-for task (docstring on ``add``)?"""
-    try:
-        source = (repo / "calc.py").read_text(encoding="utf-8")
-    except OSError:
+    """Did the harness actually fix the bug (``add`` must add, not subtract)?
+
+    Checked by executing the fixed module rather than pattern-matching the source, so any
+    correct fix counts and a cosmetic edit that leaves the behaviour wrong does not.
+    """
+    calc = repo / "calc.py"
+    if not calc.is_file():
         return False
-    head = source.split("def subtract", 1)[0]
-    return "def add" in head and head.count('"""') >= 2
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import calc,sys; sys.exit(0 if calc.add(2,3)==5 and calc.subtract(5,3)==2 else 1)",
+            ],
+            cwd=repo,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
 
 
 def _run_cell(
