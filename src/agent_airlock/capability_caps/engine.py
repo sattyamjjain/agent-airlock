@@ -22,6 +22,7 @@ from .union import (
 
 if TYPE_CHECKING:
     from ..conformance.decision_log import DecisionLog
+    from ..mcp.cimd import CIMDGuard
 
 logger = structlog.get_logger("agent-airlock.capability_caps.engine")
 
@@ -111,6 +112,7 @@ class CapabilityCapEngine:
         self,
         config: CapabilityRulesConfig,
         store: CapabilityLedgerStore | None = None,
+        cimd_guard: CIMDGuard | None = None,
     ) -> None:
         self.config = config
         self.store: CapabilityLedgerStore = store or SQLiteCapabilityLedgerStore()
@@ -118,6 +120,11 @@ class CapabilityCapEngine:
         # from the SQLite cap ledger (which meters `use` events by the coarse Capability enum)
         # — this tracks category-tagged Leases so grant_lease can evaluate the union boundary.
         self._active_leases: dict[str, list[Lease]] = {}
+        # Optional CIMD trust anchor. When set, grant_lease verifies the requesting
+        # client_id's pinned metadata document *before* evaluating the union, so a lease
+        # grant has one decision point covering both "who is asking" and "what would they
+        # then hold". See agent_airlock.mcp.cimd.
+        self.cimd_guard: CIMDGuard | None = cimd_guard
 
     # ------------------------------------------------------------------
     # Grant / revoke
@@ -176,6 +183,8 @@ class CapabilityCapEngine:
         boundaries: tuple[UnionBoundary, ...] = (EXFILTRATION_BOUNDARY,),
         override: UnionOverride | None = None,
         decision_log: DecisionLog | None = None,
+        client_id: str | None = None,
+        cimd_guard: CIMDGuard | None = None,
     ) -> UnionGrantDecision:
         """Issue a capability lease, checking the *union* it would create at grant time.
 
@@ -187,11 +196,44 @@ class CapabilityCapEngine:
         ``decision_log`` (if given) with the granting identity, and a ``structlog`` warning is
         emitted.
 
+        When a CIMD trust anchor is configured (``cimd_guard`` here, or ``self.cimd_guard``)
+        and ``client_id`` is supplied, the client's pinned metadata document is verified
+        **first**: an unpinned, drifted, or revoked ``client_id`` never reaches the union
+        evaluation. Both checks surface through this one method so a grant has a single
+        decision point (see :mod:`agent_airlock.mcp.cimd`). ``override`` deliberately does
+        **not** waive the CIMD check — it is scoped to the union boundary; a client whose
+        trust anchor moved is not a capability-shape question.
+
         On allow, the lease is added to the agent's held set. Returns the decision.
 
         Raises:
+            CIMDTrustAnchorError: if ``client_id`` fails its trust-anchor check.
             CapabilityUnionDeniedError: if the union crosses a boundary and no override is set.
         """
+        guard = cimd_guard if cimd_guard is not None else self.cimd_guard
+        if guard is not None and client_id is not None:
+            cimd_decision = guard.check(client_id)
+            if not cimd_decision.allowed:
+                logger.warning(
+                    "cimd_grant_denied",
+                    agent_id=agent_id,
+                    lease_id=lease.lease_id,
+                    client_id=client_id,
+                    verdict=cimd_decision.verdict.value,
+                    changed_fields=[c.field for c in cimd_decision.changed_fields],
+                )
+                if decision_log is not None:
+                    decision_log.append(
+                        stage="policy",
+                        tool_name=lease.capability,
+                        decision="block",
+                        reason=cimd_decision.reason,
+                        agent_id=agent_id,
+                    )
+                from ..mcp.cimd import CIMDTrustAnchorError
+
+                raise CIMDTrustAnchorError(cimd_decision)
+
         held = self._active_leases.get(agent_id, [])
         decision = evaluate_union_grant(held, lease, boundaries=boundaries, override=override)
 

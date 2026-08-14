@@ -5554,6 +5554,11 @@ __all__ = [
     "MCP_STATELESS_CONFORMANCE_2026_07",
     "mcp_spec_2026_07_header_integrity_defaults",
     "MCP_SPEC_2026_07_HEADER_INTEGRITY",
+    # V0.8.69 MCP 2026-07-28 stateless handle channel (deny-by-default). Shipped registered
+    # and re-exported from the package root but missing from this list until v0.8.71; the
+    # three-set parity test in tests/presets/test_registry_parity.py now makes that fail.
+    "mcp_spec_2026_07_28_handle_trust_defaults",
+    "MCP_SPEC_2026_07_28_HANDLE_TRUST",
     # V0.8.33 Agentjacking / CVE-2026-42824 (untrusted tool-OUTPUT instruction injection)
     "untrusted_tool_output_defaults",
     "UNTRUSTED_TOOL_OUTPUT",

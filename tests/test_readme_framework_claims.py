@@ -30,18 +30,24 @@ _README = _REPO / "README.md"
 # Modules under src/agent_airlock that the README's adapter-shipped
 # paragraph must reference. Update both this set and the README in the
 # same PR when you add a new framework adapter.
-_ADAPTER_SHIPPED_MODULES: tuple[str, ...] = (
-    "integrations/langchain.py",
-    "integrations/langgraph_toolnode_compat.py",
-    "integrations/openai_guardrails.py",
-    "integrations/anthropic.py",
-    "integrations/anthropic_claude_agent_sdk.py",
-    "integrations/smolagents_wrapper.py",
-    "integrations/gemini3_tool_shape_adapter.py",
-    "integrations/gpt5_5_tool_shape_adapter.py",
-    "integrations/pydantic_ai.py",
-    "integrations/crewai.py",
-    "mcp.py",
+#: ``(path under src/agent_airlock, token the README must contain)``.
+#:
+#: The token is carried explicitly rather than derived from the filename because the
+#: FastMCP adapter became a *package* in v0.8.71 (``mcp.py`` -> ``mcp/__init__.py``, to make
+#: room for ``mcp/cimd.py``). Deriving the token would reduce that row's assertion to
+#: ``"__init__.py" in README``, which every future package would satisfy vacuously.
+_ADAPTER_SHIPPED_MODULES: tuple[tuple[str, str], ...] = (
+    ("integrations/langchain.py", "langchain.py"),
+    ("integrations/langgraph_toolnode_compat.py", "langgraph_toolnode_compat.py"),
+    ("integrations/openai_guardrails.py", "openai_guardrails.py"),
+    ("integrations/anthropic.py", "anthropic.py"),
+    ("integrations/anthropic_claude_agent_sdk.py", "anthropic_claude_agent_sdk.py"),
+    ("integrations/smolagents_wrapper.py", "smolagents_wrapper.py"),
+    ("integrations/gemini3_tool_shape_adapter.py", "gemini3_tool_shape_adapter.py"),
+    ("integrations/gpt5_5_tool_shape_adapter.py", "gpt5_5_tool_shape_adapter.py"),
+    ("integrations/pydantic_ai.py", "pydantic_ai.py"),
+    ("integrations/crewai.py", "crewai.py"),
+    ("mcp/__init__.py", "agent_airlock/mcp"),
 )
 
 
@@ -59,20 +65,20 @@ def _readme_text() -> str:
 class TestReadmeFrameworkClaims:
     """Lock the public claim against the directory listing."""
 
-    @pytest.mark.parametrize("module_rel", _ADAPTER_SHIPPED_MODULES)
-    def test_adapter_module_exists(self, module_rel: str) -> None:
+    @pytest.mark.parametrize(("module_rel", "readme_token"), _ADAPTER_SHIPPED_MODULES)
+    def test_adapter_module_exists(self, module_rel: str, readme_token: str) -> None:
         path = _REPO / "src" / "agent_airlock" / module_rel
         assert path.exists(), f"adapter module {module_rel} declared in README but absent on disk"
 
-    @pytest.mark.parametrize("module_rel", _ADAPTER_SHIPPED_MODULES)
-    def test_readme_references_each_adapter_module(self, module_rel: str) -> None:
+    @pytest.mark.parametrize(("module_rel", "readme_token"), _ADAPTER_SHIPPED_MODULES)
+    def test_readme_references_each_adapter_module(
+        self, module_rel: str, readme_token: str
+    ) -> None:
         text = _readme_text()
-        # The README references each adapter module by relative path.
-        # We accept either the bare filename or the module path as the
-        # match — both shapes are stable references.
-        filename = Path(module_rel).name
-        assert filename in text, (
-            f"README must mention adapter module {filename!r} to match the on-disk file"
+        # The README references each adapter module by relative path. The token is the
+        # stable, non-vacuous substring for that row (see _ADAPTER_SHIPPED_MODULES).
+        assert readme_token in text, (
+            f"README must mention {readme_token!r} to match the on-disk module {module_rel!r}"
         )
 
     @pytest.mark.parametrize("framework", _EXAMPLE_ONLY_FRAMEWORKS)

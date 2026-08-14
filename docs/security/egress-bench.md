@@ -19,16 +19,28 @@ python3 scripts/egress_bench.py --format json   # machine-readable
 python3 scripts/egress_bench.py --format md     # Markdown table for PR bodies
 ```
 
-## Coverage as of v0.5.3
+## Coverage
+
+The walker emits one TAP line per fixture in `tests/cves/fixtures/`. Fixtures without a
+dispatcher are reported as `SKIP` rather than silently dropped, so the plan line counts
+every fixture on disk while only the dispatched ones are graded:
 
 ```
-1..3
-ok 1 - CVE-2026-33032 (blocked 12/12)
-ok 2 - CVE-2026-30616 (blocked 10/10)
-ok 3 - OX-DOSSIER-2026-04 (blocked 10/10)
+1..12
+...
+ok 6 - CVE-2026-33032 (blocked 12/12)
+...
+ok 11 - CVE-2026-30616 (blocked 10/10)
+ok 12 - OX-DOSSIER-2026-04 (blocked 10/10)
 ```
 
-Three fixture categories, 32 payloads, zero slips.
+Three graded fixture categories, 32 payloads, zero slips. The remaining fixtures are
+carried for other guards and have no egress dispatcher yet — a `SKIP` is an honest "not
+measured here", not a pass.
+
+These three numbers are re-derived from a live walk by
+`tests/test_numeric_claim_parity.py::TestEgressBenchDocClaims`, so they fail CI if a
+fixture change moves them.
 
 ## Fixture contract
 
