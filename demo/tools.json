@@ -1,0 +1,31 @@
+{
+  "tools": [
+    {
+      "name": "get_balance",
+      "description": "Return the account balance for an account id.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "account_id": { "type": "string", "maxLength": 32 } },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "transfer_funds",
+      "description": "Move money between accounts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "to": { "type": "string" }, "amount": { "type": "number" } },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_account",
+      "description": "Permanently delete an account and all its data.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "account_id": { "type": "string" } },
+        "additionalProperties": true
+      }
+    }
+  ]
+}

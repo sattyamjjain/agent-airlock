@@ -3,21 +3,26 @@
 <!-- AUTO-MANAGED: project-description -->
 ## Overview
 
-**Agent-Airlock** is an open-source security middleware for MCP (Model Context Protocol) servers. It intercepts, validates, and sandboxes AI agent tool calls to prevent hallucinated arguments, type errors, and dangerous operations.
+**agent-airlock** — an in-process, deny-by-default contract layer and type-checker for AI
+agent tool calls. It intercepts calls into MCP (Model Context Protocol) servers and agent
+frameworks, validates arguments strictly, applies policy, and sandboxes dangerous execution.
 
-**Key Features:**
-- Ghost argument stripping/rejection (LLM-invented parameters)
-- Pydantic V2 strict schema validation (no type coercion)
-- Self-healing error responses with fix_hints for LLM retry
-- E2B Firecracker sandbox execution for dangerous code
-- RBAC policy engine (rate limits, time windows, role-based access)
-- PII/secret detection and masking (12 types including India PII)
-- FastMCP integration with `@secure_tool` decorator
-- Filesystem validation, network egress control, honeypot deception, framework vaccination ("Vaccine")
-- Circuit breaker, cost tracking, retry policies, OpenTelemetry observability, capability gating ("Enterprise")
-- Anomaly detection, human-oversight gating, identity/attestation, SDK provenance classification
-- Curated security presets (`policy_presets.py` + `preset_loader.py`) and a regression corpus block-rate harness
-- Redis-backed distributed rate limiting and per-model-tier cost budgets
+The wedge is argument validation at the call boundary; every other layer wraps it.
+
+- Ghost-argument stripping/rejection (parameters the LLM invented)
+- Pydantic V2 strict validation, no type coercion; self-healing errors carrying `fix_hints`
+- Policy engine: RBAC, token-bucket rate limits, time windows, per-model-tier cost budgets
+- PII/secret detection and masking (includes opt-in Indic PII)
+- Sandboxed execution via pluggable backends (E2B Firecracker, Modal, Docker, local)
+- `mcp_spec/` guards mapped to specific named CVEs — stdio injection, OAuth, DNS rebinding,
+  SSRF, eval-RCE, WebSocket origin hijack, task lifecycle
+- Framework adapters: FastMCP, LangChain/LangGraph, Anthropic, OpenAI, Gemini, PydanticAI,
+  CrewAI, smolagents
+- `airlock` CLI: scan-tools, doctor, verify, attest, replay, corpus-bench, conformance
+
+**The installed core is Pydantic-only.** Everything else — structlog included — lives in an
+extra. `src/agent_airlock/_log.py` falls back to a stdlib-logging shim when structlog is
+absent. `scripts/check_core_deps.py` enforces this; do not add a core dependency.
 
 <!-- END AUTO-MANAGED -->
 
@@ -25,223 +30,181 @@
 ## Build & Development Commands
 
 ```bash
-# Install dependencies
-pip install -e ".[dev]"
+pip install -e ".[dev]"            # editable install with dev deps
 
-# Install with optional features
-pip install -e ".[sandbox]"   # E2B sandbox support
-pip install -e ".[mcp]"       # FastMCP integration
-pip install -e ".[all]"       # Everything
+# Optional extras — install only what you need
+pip install -e ".[sandbox]"        # E2B Firecracker   ([modal] [mcp] [console] ...)
+pip install -e ".[redis]"          # distributed rate limiter ([crypto] [attested] ...)
+pip install -e ".[all]"            # everything
 
-# Run tests
-pytest tests/ -v
-
-# Run tests with coverage
-pytest tests/ -v --cov=agent_airlock --cov-report=html
-
-# Type checking (strict mode)
-mypy src/
-
-# Linting
-ruff check src/ tests/
-
-# Format code
-ruff format src/ tests/
-
-# Run example MCP server
-python examples/fastmcp_integration.py
+make test          # pytest tests/ -v --no-cov
+make coverage      # pytest with coverage (floor enforced; see [tool.coverage.report])
+make lint          # ruff check + ruff format --check + mypy src/
+make format        # ruff format + ruff check --fix
+make bench         # pytest-benchmark suite
 ```
+
+Repo-specific gates (each also runs in CI):
+
+```bash
+make benchmark               # regenerate BENCHMARK.md (block-rate corpus)
+make test-badge              # regenerate the TEST-BADGE block in README.md
+make egress-bench            # CVE egress walker over tests/cves/fixtures/
+make verify-corpus           # verify wild_payload_corpus MANIFEST.sha256
+make check-changelog         # post-release drift gate
+make check-changelog-release # pre-tag gate ([Unreleased] must be non-empty)
+```
+
+Docker integration tests are **opt-in**: default `addopts` carries `-m 'not docker'`.
+Run them explicitly with `pytest -m docker`.
 
 <!-- END AUTO-MANAGED -->
 
 <!-- AUTO-MANAGED: architecture -->
 ## Architecture
 
+`src/` layout, single package, hatchling build. The `airlock` console script dispatches to
+every `agent_airlock.cli.<name>:main(argv)` in space-form (`airlock scan-tools`), so flags
+are identical to the `python -m agent_airlock.cli.<name>` long form.
+
 ```
 src/agent_airlock/
-├── __init__.py         # Public API exports
-├── core.py             # @Airlock decorator — main entry point
-│                       └─ Ghost args, validation, sandbox, policies, capabilities
-│                       └─ Full async/await support, context propagation
-├── config.py           # Config loading (env > constructor > airlock.toml)
-├── exceptions.py       # Custom exception hierarchy
+├── core.py            @Airlock decorator — the entrypoint; sync + async
+├── __init__.py        public API surface (large, explicit __all__)
+├── config.py          ENV (AIRLOCK_*) > constructor > airlock.toml
+├── exceptions.py
 │
-├── ── VALIDATION LAYER ──
-├── validator.py        # Ghost argument detection + Pydantic strict validation
-├── unknown_args.py     # BLOCK / STRIP_AND_LOG / STRIP_SILENT modes
-├── safe_types.py       # SafePath, SafeURL with auto-validation
-├── self_heal.py        # Self-healing error responses with fix_hints
-│
-├── ── POLICY LAYER ──
-├── policy.py           # SecurityPolicy, RBAC, RateLimit (token bucket)
-├── policy_presets.py   # Curated security presets (e.g. CAMOUFLAGE_RESISTANT,
-│                       │   mobile_mcp_intent_guard, MCP_STDIO_INJECTION_GUARD)
-├── preset_loader.py    # Loader for versioned YAML/TOML preset bundles
-├── capabilities.py     # Capability gating (Flag enum, @requires decorator)
-├── oversight.py        # @requires_human_oversight (Code-as-Harness anchor)
-├── identity.py         # Agent identity + attestation receipts
-├── redis_rate_limit.py # Redis-backed distributed rate limiting
-│
-├── ── EXECUTION LAYER ──
-├── sandbox.py          # E2B Firecracker MicroVM integration
-├── sandbox_backend.py  # Pluggable backends (E2B / Docker / Local)
-├── streaming.py        # StreamingAirlock for generators (sync + async)
-├── context.py          # AirlockContext with contextvars
-├── conversation.py     # Multi-turn state + conversation constraints
-├── circuit_breaker.py  # Fault tolerance (CLOSED / OPEN / HALF_OPEN)
-├── retry.py            # Exponential backoff + jitter
-│
-├── ── SANITIZATION / OBSERVABILITY ──
-├── sanitizer.py        # PII / secret detection + masking (incl. Indic PII)
-├── audit.py            # JSON Lines audit log (thread-safe)
-├── audit_otel.py       # OpenTelemetry audit exporter
-├── observability.py    # OTel spans + metrics
-├── cost_tracking.py    # Token usage + per-model-tier budget limits
-│
-├── ── "VACCINE" FEATURES ──
-├── filesystem.py       # CVE-resistant path validation
-├── network.py          # Egress control (socket monkeypatch, thread-local)
-├── honeypot.py         # Deception protocol (fake-success responses)
-├── vaccine.py          # Framework auto-wrap (LangChain / OpenAI @tool)
-├── camouflage_resistant.py  # Debate-amplification + camouflage guard
-│
-├── ── ADVERSARIAL / CORPUS ──
-├── anomaly.py          # Behavioral anomaly detection
-├── regression_corpus.py # Block-rate regression corpus (Metis-inspired)
-├── sdk_provenance.py   # Stainless SDK provenance classifier
-├── a2a.py              # Agent-to-Agent protocol guard
-├── mcp_proxy_guard.py  # Token-passthrough prevention
-├── testing.py          # Test helpers / fixtures
-│
-├── mcp.py              # FastMCP @secure_tool integration
-│
-├── integrations/       # Framework adapters
-│   ├── langchain.py, langgraph_toolnode_compat.py, lc_040_fixture_migration.py
-│   ├── anthropic.py, anthropic_claude_agent_sdk.py
-│   ├── claude_managed_agents.py, managed_agents_outcomes_guard.py
-│   ├── claude_task_budget.py, claude_auto_memory.py
-│   ├── openai_guardrails.py, gpt5_5_tool_shape_adapter.py
-│   ├── gemini3_tool_shape_adapter.py, pydantic_ai.py
-│   ├── crewai.py, smolagents_wrapper.py
-│   ├── model_armor.py, model_tier.py, log_redaction.py
-│   ├── agent_commerce_caps.py
-│   ├── cisco_ide_scanner_bridge.py, cloudflare_mesh_probe.py
-│
-└── cli/                # `airlock <subcommand>` CLI surface
-    ├── doctor.py, verify.py, console.py
-    ├── attest.py, manifest.py, baseline.py, policy.py
-    ├── pack.py, graph.py, replay.py, studio.py
-    ├── corpus_bench.py, egress_bench.py, kill_switch.py
+├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py
+├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
+│                oversight.py, identity.py, redis_rate_limit.py, capability_caps/,
+│                policy_compiler/, budget/
+├── EXECUTION    sandbox.py, sandbox_backend.py, streaming.py, context.py,
+│                conversation.py, circuit_breaker.py, retry.py, runtime/
+├── SANITIZE     sanitizer.py, audit.py, audit_otel.py, observability.py,
+│                cost_tracking.py, trace_redaction.py
+├── VACCINE      filesystem.py, network.py, honeypot.py, vaccine.py,
+│                camouflage_resistant.py, ssrf_egress_guard.py, sequence_guard.py,
+│                action_contradiction_gate.py, tool_output_trust_guard.py
+├── mcp_spec/    per-CVE / per-spec-revision MCP guards (largest subpackage)
+├── ADVERSARIAL  anomaly.py, regression_corpus.py, sdk_provenance.py, a2a.py,
+│                mcp_proxy_guard.py, corpus/wild_payload_corpus/
+├── ATTEST       attest/, conformance/, baseline/, pack/, packs/, kill_switch/,
+│                scan/, graph/, studio/, owasp_agentic_coverage/
+├── integrations/  framework adapters, plus adapters/ and scanners/
+└── cli/           subcommands behind the unified dispatcher
 ```
 
-**Data Flow:**
-1. LLM calls MCP tool with arguments
-2. `@Airlock` intercepts → logs with sensitive param filtering
-3. Ghost arguments handled (BLOCK/STRIP_AND_LOG/STRIP_SILENT)
-4. Security policy checked (RBAC, rate limits, time restrictions)
-5. Filesystem path validation (V0.3.0)
-6. Capability gating (V0.4.0)
-7. Pydantic validates types strictly (no coercion)
-8. Network airgap applied if configured (V0.3.0)
-9. Execute: local or E2B sandbox (with circuit breaker)
-10. Output sanitized (PII/secrets masked, truncated)
-11. Cost tracked, audit logged (with OTel export option)
-12. Return result or self-healing error with `fix_hints`
+**Call flow through `@Airlock`** — `_pre_execution` gates, then execute, then
+`_post_execution`:
+
+1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
+2. Resolve policy (static, or `Callable[[AirlockContext], SecurityPolicy]`) and check it
+   - 2.5 behavioral tool-call sequence guard
+   - 2.6 action-time contradiction gate
+   - 2.7 unsafe-deserialization content guard
+3. Filesystem path validation
+4. Capability requirements
+5. Endpoint policy validation
+6. Per-model-tier budget check
+7. Pydantic strict validation → execute locally or in sandbox (circuit breaker + retry)
+8. Sanitize output (PII/secrets, truncation) → audit log → mark untrusted output →
+   reconcile actual vs estimated cost
+
+Blocked calls return an `AirlockResponse`. Validation failures return structured JSON
+carrying `fix_hints` for the model to retry against, rather than raising.
 
 <!-- END AUTO-MANAGED -->
 
 <!-- AUTO-MANAGED: conventions -->
 ## Code Conventions
 
-- **Python:** 3.10+ with full type hints (`X | Y` unions, no `Optional`)
-- **Validation:** Pydantic V2 strict mode
-- **Logging:** structlog for structured JSON output (`logger = structlog.get_logger("agent-airlock")`)
-- **Build:** src/ layout with hatch build system
-- **Testing:** pytest with 80%+ coverage target, class-based `Test<Feature>` naming
-- **Types:** mypy --strict (no untyped defs), `TypeVar`/`ParamSpec`/`overload` for generics
-- **Lint/Format:** ruff check and ruff format
-- **Imports:** `from __future__ import annotations` first, then stdlib → 3rd-party → first-party (agent_airlock)
-- **Line length:** 100 characters
-- **Docstrings:** Google-style (Args/Returns/Raises sections)
-- **Naming:** snake_case (functions), PascalCase (classes), UPPER_SNAKE_CASE (constants), `_` prefix (private)
-- **Enums:** Extend `str, Enum` for JSON serialization
-- **Dataclasses:** `@dataclass` with `field(default_factory=...)` for mutable defaults
-- **Commits:** Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `security:`)
+- **Python 3.10+**, `from __future__ import annotations` first. Use `X | Y`, not `Optional`.
+- **mypy strict** (`disallow_untyped_defs`, `warn_return_any`, pydantic plugin). Type every
+  signature. `TypeVar` / `ParamSpec` / `@overload` for generics.
+- **ruff**, line length 100, target `py310`. Selected: E, W, F, I, B, C4, UP, ARG, SIM.
+  Per-file `ARG` ignores exist for `integrations/`, `cli/`, `anomaly.py`, tests and examples —
+  those unused args are callback-interface signatures, so do not "fix" them.
+- **Pydantic V2 strict mode** for validation. `@dataclass` with `field(default_factory=...)`
+  for structured data; prefer it over plain dicts.
+- **Enums** extend `str, Enum` so they serialize to JSON.
+- **Logging** through `agent_airlock._log` (structlog when installed, stdlib shim otherwise):
+  `logger = get_logger("agent-airlock")`. Structured kwargs, never f-strings.
+- **Imports** stdlib → third-party → first-party (`known-first-party = ["agent_airlock"]`).
+- **Naming**: snake_case functions, PascalCase classes, UPPER_SNAKE constants, `_` private.
+- **Docstrings** Google-style (Args / Returns / Raises).
+- **Exceptions** store details as attributes and call `super().__init__()`.
+- `TYPE_CHECKING` guards for type-only imports.
+- **Tests**: `Test<Feature>` classes with `test_<scenario>` methods; keep each under ~5s.
+- **Commits**: conventional — `feat:` `fix:` `docs:` `chore:` `ci:` `security:` `bench:`.
+  Branches `feat/<short>` `fix/<short>` `chore/<short>`. Squash-merge into `main`;
+  `main` stays tag-able at all times.
 
 <!-- END AUTO-MANAGED -->
 
 <!-- AUTO-MANAGED: patterns -->
 ## Detected Patterns
 
-- **Decorator Pattern:** `@Airlock()` wraps functions with validation/security
-- **Defense-in-Depth:** 6 layers: validation → policy → capability → filesystem → network → sandbox
-- **Response Objects:** `AirlockResponse` for consistent blocked/success format
-- **Config Priority:** ENV vars (`AIRLOCK_*`) > constructor > `airlock.toml`
-- **Self-Healing:** `ValidationError` → structured JSON with `fix_hints` for LLM retry
-- **Token Bucket:** Rate limiting via `RateLimit` class with thread-safe refill
-- **Warm Pool:** `SandboxPool` maintains pre-created E2B sandboxes (<200ms latency)
-- **Predefined Policies:** `PERMISSIVE_POLICY`, `STRICT_POLICY`, `READ_ONLY_POLICY`, `BUSINESS_HOURS_POLICY`
-- **Context Propagation:** `contextvars` for request-scoped state (AirlockContext)
-- **Policy Resolver:** Dynamic policies via `Callable[[AirlockContext], SecurityPolicy]`
-- **Streaming Sanitization:** Per-chunk validation with cumulative truncation
-- **Conversation State:** Multi-turn tracking with budget management (ConversationConstraints)
-- **Circuit Breaker:** CLOSED → OPEN → HALF_OPEN states for fault tolerance
-- **Framework Vaccination:** Monkeypatch `@tool` decorators via `vaccinate()`
-- **Honeypot Deception:** Return fake success data instead of errors
-- **Signature Preservation:** Copy `__signature__`, `__annotations__` for framework introspection
-- **Curated Presets:** CVE-targeted bundles loaded via `preset_loader` (e.g. `mobile_mcp_intent_guard_2026_05`)
-- **Human Oversight Anchor:** `@requires_human_oversight` gates tool execution on out-of-band approval
-- **Attestation Receipts:** Identity + LayerContract (assume/guarantee) receipts on `airlock attest`
-- **Regression Corpus:** Block-rate harness with per-category coverage (`airlock corpus-bench`)
-- **Tier-Aware Budgets:** Per-model-tier cost limits with deny-by-default fallback
+- **Decorator entrypoint** — `@Airlock()` wraps a function with the full layer stack, and
+  preserves `__signature__` / `__annotations__` so framework introspection still works.
+- **Defense-in-depth** — validation → policy → capability → filesystem → network → sandbox.
+  Each layer exists because an earlier one proved insufficient for a specific CVE.
+- **Guard triple** — new guards ship as `<Name>Guard` + `<Name>Decision` + `<Name>Verdict`
+  with a `*_defaults()` factory re-exported from `__init__.py`. Follow this shape.
+- **Deny-by-default** — unknown tier, unregistered manifest, and unpinned spec revision all
+  fail closed. New branches should preserve that direction.
+- **Config priority** — `AIRLOCK_*` env > constructor > `airlock.toml`.
+- **Self-healing** — `ValidationError` becomes structured JSON with `fix_hints`.
+- **Context propagation** — `contextvars`-backed `AirlockContext`; `get_current_context()`
+  is available inside the wrapped tool.
+- **Policy resolver** — policy may be a callable taking `AirlockContext`, enabling
+  per-tenant / per-workspace rules.
+- **Preset registry** — explicit `@preset` registration so `list_active()` enumerates
+  everything; versioned YAML/TOML bundles load through `preset_loader`.
+- **Attestation receipts** — identity plus LayerContract (assume/guarantee) on
+  `airlock attest`.
+- **Warm pool** — `SandboxPool` keeps pre-created sandboxes to hide cold-start latency.
+- **Framework vaccination** — `vaccinate()` monkeypatches third-party `@tool` decorators.
+- **Honeypot deception** — return plausible fake success instead of an error.
 
 <!-- END AUTO-MANAGED -->
 
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-Recent commits:
-- `0be2e57` feat(sanitizer): opt-in Indic PII masking (Verhoeff + Devanagari) (#69)
-- `d7be9ff` feat(presets): mobile_mcp_intent_guard_2026_05 for CVE-2026-35394 (#68)
-- `e98f724` feat(policy): per-model-tier cost budgets with deny-by-default fallback (#67)
-- `7c37e83` feat: CAMOUFLAGE_RESISTANT preset + debate-amplification guard
-- `757f0d7` feat: opt-in LayerContract (assume/guarantee) block on attest receipts (#66)
-- `0d26f98` feat: @requires_human_oversight decorator (Code-as-Harness anchor) (#65)
-- `7a7c17b` feat: Stainless SDK provenance classifier + corpus per-category coverage (#64)
-- `ac7cce2` feat: Metis-inspired corpus block-rate regression + `airlock corpus-bench` CLI (#63)
-- `802f4f9` feat: OpenAPI Drift Guard (Hermes 2026-05-13) + MCP Calc-Server bundle preset (#62)
-- `1c63eae` feat: Eval-RCE (CVE-2026-44717) + MCP Inspector runtime scan (CVE-2026-23744) (#61)
+History is dominated by `feat:` and `fix:`, with recurring `bench:` and `docs:` work.
+Two themes drive most recent development:
 
-Key security additions:
-- `sandbox_required=True` prevents unsafe local execution fallback
-- Sensitive parameter names filtered from debug logs
-- Path validation (CVE-resistant via `os.path.commonpath()`)
-- Network egress control via socket monkeypatch with thread-local storage
-- Capability gating with `@requires(Capability.*)` decorator
-- `@requires_human_oversight` decorator as a Code-as-Harness anchor
-- Circuit breaker for fault tolerance; MCP Proxy Guard for token passthrough
-- OpenTelemetry observability + audit exporter
-- Curated CVE-targeted presets (mobile MCP intent guard, MCP STDIO injection, OpenAPI drift, MCP Inspector runtime scan, Eval-RCE)
-- Regression corpus block-rate harness (per-category coverage) via `airlock corpus-bench`
-- LayerContract (assume/guarantee) attestation receipts
-- Per-model-tier cost budgets with deny-by-default fallback
-- Stainless SDK provenance classifier
+1. **Per-CVE guards.** Most `feat:` commits add one guard for one named advisory
+   (`mcp_spec/*_guard.py`), its preset defaults, and a regression fixture. Commit messages
+   carry the primary-source URL.
+2. **Claims integrity.** A distinct class of `fix(meta):` commits exists purely to stop the
+   README/docs/registry over-claiming — reconciling coverage floors, test counts, CVE counts,
+   spec-revision status, and dependency claims against what the code actually does.
+   Machine-checked gates (`scripts/check_*.py`, badge and changelog tests) were added so this
+   drift fails CI instead of shipping.
+
+Practical consequence: **do not add a capability claim to README, docs, or a preset
+description unless code and a test back it.** There is tooling that will fail the build on it.
 
 <!-- END AUTO-MANAGED -->
 
 <!-- AUTO-MANAGED: best-practices -->
 ## Best Practices
 
-- Always run `pytest tests/ -v` after code changes to verify nothing breaks
-- Run `mypy src/` and `ruff check src/ tests/` before committing
-- Use `python3 -m py_compile <file>` to verify syntax after writing Python
-- Keep coverage above 80% (CI enforced via `--cov-fail-under=80`)
-- New modules should follow the layered architecture pattern (validation → policy → execution → sanitization)
-- Security-sensitive code must include structured logging via structlog
-- Custom exceptions should store details as attributes and call `super().__init__()`
-- Use `TYPE_CHECKING` guards for imports only needed by type checkers
-- Prefer `@dataclass` over plain dicts for structured data
-- Test classes should be named `Test<Feature>` with `test_<scenario>` methods
+- Read `AGENTS.md` first — it holds the load-bearing contributor contract.
+- Default safety posture:
+  `@Airlock(policy=STRICT_POLICY, sandbox=True, sandbox_required=True)`.
+  Anything weaker needs a one-line justification in the docstring.
+- **Forbidden:** `subprocess.run(..., shell=True)` outside `mcp_spec/manifest_only_mode.py`;
+  raw `eval()` / `exec()`; mocking fixtures in CVE regression tests.
+- **CVE fixtures are signed history.** Files under `corpus/wild_payload_corpus/` and
+  `tests/cves/` require a primary-source URL in the commit message plus a matching
+  `docs/cves/index.md` update in the same PR. Never remove a check without naming the CVE
+  that motivated it.
+- Every `feat:` needs at least one regression test.
+- Run `make lint` and `pytest -m "not docker"` before committing.
+- New modules follow the layered structure: validation → policy → execution → sanitization.
+- Keep security-relevant decisions observable via structured logging.
 
 <!-- END AUTO-MANAGED -->
 
