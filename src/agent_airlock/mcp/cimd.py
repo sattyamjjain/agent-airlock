@@ -386,6 +386,25 @@ def _canonicalise(payload: Mapping[str, Any]) -> tuple[str, dict[str, str]]:
     return canonical, fields
 
 
+def _resolution_invariant_error(client_id: str) -> CIMDDecision:
+    """Fail-closed decision for the "resolve returned neither" case.
+
+    :meth:`CIMDGuard.resolve` returns exactly one of ``(document, None)`` or ``(None, denial)``,
+    so this is unreachable. It is written as a real branch rather than an ``assert`` because
+    ``assert`` is stripped under ``python -O`` — a narrowing assertion in a security decision
+    path would silently become no control flow at all in an optimised deployment.
+    """
+    return CIMDDecision(
+        allowed=False,
+        verdict=CIMDVerdict.DENY_FETCH_FAILED,
+        client_id=client_id,
+        reason=(
+            "internal: CIMD resolution returned neither a document nor a denial; failing closed"
+        ),
+        fix_hints=("This is a bug in agent-airlock — please report it.",),
+    )
+
+
 def _diff_fields(
     pinned: Mapping[str, str], observed: Mapping[str, str]
 ) -> tuple[CIMDFieldChange, ...]:
@@ -633,7 +652,8 @@ class CIMDGuard:
                 approved_by=approved_by,
             )
             raise CIMDTrustAnchorError(denial)
-        assert document is not None  # noqa: S101 - narrowing; resolve() returns one or the other
+        if document is None:  # pragma: no cover - resolve() returns exactly one of the two
+            raise CIMDTrustAnchorError(_resolution_invariant_error(client_id))
 
         previous = self.store.get(client_id)
         pin = CIMDPin(
@@ -728,7 +748,8 @@ class CIMDGuard:
                 pin=pin,
                 fix_hints=denial.fix_hints,
             )
-        assert document is not None  # noqa: S101 - narrowing
+        if document is None:  # pragma: no cover - resolve() returns exactly one of the two
+            return _resolution_invariant_error(client_id)
 
         if document.sha256 == pin.document_sha256:
             return CIMDDecision(
