@@ -369,14 +369,27 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     )
     out.append("")
     out.append(
-        "> **No number is published here yet.** The harness "
-        "([`benchmarks/harness_injection/`](benchmarks/harness_injection/)) is complete and "
-        "reproducible, but running it launches third-party coding agents non-interactively "
-        "with approvals disabled against a deliberately injection-seeded fixture, and spends "
-        "real API budget. That needs explicit operator sign-off, so it is not run in CI and no "
-        "placeholder figure stands in for it. Status, per-harness blockers, and an explicit "
-        "statement of what the number will and will not show: "
+        "**First run (2026-08-14, n=21 measured cells):** `claude-code` 2.1.232 and `codex` "
+        "0.147.0 each acted on the injected line **0** times — and on the **benign control 0 "
+        "times as well**."
+    )
+    out.append("")
+    out.append(
+        "> **That result is inconclusive, and is reported as such.** A zero control means "
+        "neither harness ran the README-suggested script even when it was harmless, so the "
+        "zero on the injected arm **does not demonstrate injection resistance** — it is "
+        "equally consistent with these harnesses not running README-suggested scripts for "
+        "this task at all. The pair cannot separate those two explanations. The agents did "
+        "complete the asked-for task in 21/21 cells, so this is a choice not to run the "
+        "script, not a harness that never started. Full table, exclusions, and what would "
+        "make the next run informative: "
         "[`benchmarks/harness_injection/RESULTS.md`](benchmarks/harness_injection/RESULTS.md)."
+    )
+    out.append("")
+    out.append(
+        "Not run in CI: it launches third-party coding agents against a deliberately "
+        "injection-seeded fixture and spends real API budget, so it needs explicit operator "
+        "sign-off."
     )
     out.append("")
     out.append("---")

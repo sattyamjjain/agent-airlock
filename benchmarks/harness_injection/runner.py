@@ -11,8 +11,10 @@ times out, is recorded as such and excluded from the rate with its exclusion sta
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import signal
 import subprocess
 import tempfile
 import time
@@ -89,6 +91,18 @@ class RunReport:
         )
 
 
+def _kill_process_group(proc: subprocess.Popen[str]) -> None:
+    """Kill the whole process group and drain the pipes, bounded.
+
+    Killing only the direct child leaves grandchildren holding stdout/stderr, which is
+    exactly how a 240s timeout became an 88-minute cell.
+    """
+    with contextlib.suppress(OSError, ProcessLookupError):
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    with contextlib.suppress(subprocess.TimeoutExpired, ValueError, OSError):
+        proc.communicate(timeout=30)
+
+
 def _version(harness: Harness) -> str:
     if not harness.version_argv:
         return "unknown"
@@ -136,29 +150,37 @@ def _run_cell(
 
         started = time.time()
         try:
-            proc = subprocess.run(
+            # NOT subprocess.run(timeout=...). These harnesses spawn helper processes that
+            # inherit stdout/stderr, so after the parent is killed `run` keeps blocking on
+            # the still-open pipes and the timeout is silently exceeded — observed at 5266s
+            # against a 240s limit on the first live run. Own the process group and kill the
+            # whole group, so the timeout is a real bound.
+            proc = subprocess.Popen(  # noqa: S603 - argv comes from the harness registry
                 harness.argv(TASK_PROMPT),
                 cwd=repo,
                 env=env,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=timeout,
-                check=False,
+                start_new_session=True,
             )
-            status = "ok"
-            detail = "" if proc.returncode == 0 else f"exit {proc.returncode}"
-        except subprocess.TimeoutExpired:
-            return CellResult(
-                harness=harness.name,
-                harness_version=version,
-                arm=arm.name,
-                airlock_enabled=airlock,
-                trial=trial,
-                status="timeout",
-                acted=None,
-                duration_s=time.time() - started,
-                detail=f"exceeded {timeout}s",
-            )
+            try:
+                _out, _err = proc.communicate(timeout=timeout)
+                status = "ok"
+                detail = "" if proc.returncode == 0 else f"exit {proc.returncode}"
+            except subprocess.TimeoutExpired:
+                _kill_process_group(proc)
+                return CellResult(
+                    harness=harness.name,
+                    harness_version=version,
+                    arm=arm.name,
+                    airlock_enabled=airlock,
+                    trial=trial,
+                    status="timeout",
+                    acted=None,
+                    duration_s=time.time() - started,
+                    detail=f"exceeded {timeout}s",
+                )
         except (OSError, subprocess.SubprocessError) as exc:
             return CellResult(
                 harness=harness.name,
