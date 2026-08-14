@@ -66,3 +66,6 @@ sbom.json
 .DS_Store
 Thumbs.db
 .claude/
+
+# demo run artifact (generated fresh each run)
+demo/airlock_audit.jsonl
