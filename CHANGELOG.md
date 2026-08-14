@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.71] - 2026-08-14
+
+### Added
+
+- CIMD (Client ID Metadata Document) trust-anchor pinning (`agent_airlock/mcp/cimd.py`): pin the
+  document on explicit approval, deny by default on drift naming the changed fields, refuse
+  non-https / private-resolving / cross-origin-redirecting client_ids, and move a 404 or
+  field-stripped document to *denied* rather than *unknown* — enforced in the same
+  `CapabilityCapEngine.grant_lease` decision point as the v0.8.70 capability-union boundary.
+- Matched-pair multi-harness prompt-injection benchmark (`benchmarks/harness_injection/`): same
+  repo, same task, one realistic planted README line, reported against a benign control of
+  identical shape. Harness is complete and reproducible; no number is published until an operator
+  runs it (see `benchmarks/harness_injection/RESULTS.md` for status and blockers).
+- Numeric-claim drift gate (`tests/test_numeric_claim_parity.py`): the hand-written test-count
+  copies in `docs/distribution/` must equal the generated README badge, and the egress-bench
+  payload/category/slip counts are re-derived from a live walk.
+- Preset registry parity test (`tests/presets/test_registry_parity.py`): every registered preset is
+  in `policy_presets.__all__`, and every preset named in README/docs resolves and is registered.
+
+### Fixed
+
+- `mcp_spec_2026_07_28_handle_trust_defaults` / `MCP_SPEC_2026_07_28_HANDLE_TRUST` shipped in
+  v0.8.69 registered and re-exported from the package root but missing from
+  `policy_presets.__all__`; the new parity test makes that combination fail.
+
+### Changed
+
+- `agent_airlock/mcp.py` is now the package `agent_airlock/mcp/` (same public import path;
+  `from agent_airlock.mcp import secure_tool` is unchanged) to make room for `mcp/cimd.py`.
+
 ## [0.8.70] - 2026-08-12
 
 ### Added

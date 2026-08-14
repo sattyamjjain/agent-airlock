@@ -359,6 +359,28 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     out.append("")
     out.append("---")
     out.append("")
+    out.append("## Matched-pair multi-harness prompt injection")
+    out.append("")
+    out.append(
+        "Same repository, same task, **one** realistic instruction planted in a README: which "
+        "coding harness acts on it? Reported against a benign control line of identical shape, "
+        "because an injected rate without its benign twin cannot distinguish "
+        "*injection-susceptible* from merely *README-obedient*."
+    )
+    out.append("")
+    out.append(
+        "> **No number is published here yet.** The harness "
+        "([`benchmarks/harness_injection/`](benchmarks/harness_injection/)) is complete and "
+        "reproducible, but running it launches third-party coding agents non-interactively "
+        "with approvals disabled against a deliberately injection-seeded fixture, and spends "
+        "real API budget. That needs explicit operator sign-off, so it is not run in CI and no "
+        "placeholder figure stands in for it. Status, per-harness blockers, and an explicit "
+        "statement of what the number will and will not show: "
+        "[`benchmarks/harness_injection/RESULTS.md`](benchmarks/harness_injection/RESULTS.md)."
+    )
+    out.append("")
+    out.append("---")
+    out.append("")
     out.append("### Reproduce")
     out.append("")
     out.append("```bash")
@@ -370,6 +392,9 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     )
     out.append(
         "pip install 'agent-airlock[bench]' && python -m benchmarks.agentdojo.run   # AgentDojo defense (bench extra)"
+    )
+    out.append(
+        "python -m benchmarks.harness_injection            # dry-run; add --run to execute (costs API $)"
     )
     out.append("```")
     out.append("")

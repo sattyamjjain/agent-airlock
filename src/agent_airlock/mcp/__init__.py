@@ -15,9 +15,9 @@ import inspect
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
-from ._log import structlog
-from .config import DEFAULT_CONFIG, AirlockConfig
-from .policy import SecurityPolicy
+from .._log import structlog
+from ..config import DEFAULT_CONFIG, AirlockConfig
+from ..policy import SecurityPolicy
 
 if TYPE_CHECKING:
     from fastmcp import Context
@@ -92,7 +92,7 @@ class MCPAirlock:
     def __call__(self, func: Callable[P, R]) -> Callable[P, R]:
         """Apply the decorator to a function."""
         # Import here to avoid circular imports
-        from .core import Airlock
+        from ..core import Airlock
 
         # Create base Airlock decorator
         airlock = Airlock(
