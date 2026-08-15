@@ -149,7 +149,10 @@ jobs:
           pip install bandit safety cyclonedx-bom
 
       - name: Run Bandit security scan
-        run: bandit -r src/agent_airlock/ -f txt
+        # -c makes [tool.bandit] in pyproject.toml authoritative. Without it that block was
+        # silently inert, so the repo's stated scan config and the scan actually run had
+        # drifted apart with no way to notice.
+        run: bandit -c pyproject.toml -r src/agent_airlock/ -f txt
 
       - name: Run Safety dependency check
         run: pip freeze | safety check --stdin

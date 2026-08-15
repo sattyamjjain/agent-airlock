@@ -603,7 +603,13 @@ class MCPProxyGuard:
         try:
             import jwt
 
-            return jwt.decode(token, options={"verify_signature": False})  # type: ignore[no-any-return]
+            # Bound to an annotated local rather than returned directly. `jwt` is Any when
+            # PyJWT is absent (CI, no [crypto] extra), which makes a direct return trip
+            # `warn_return_any`; it is properly typed when PyJWT *is* installed, which makes
+            # a pinned `# type: ignore[no-any-return]` an *unused* ignore. The annotation is
+            # correct in both, so neither environment needs a suppression.
+            claims: dict[str, Any] = jwt.decode(token, options={"verify_signature": False})
+            return claims
         except ImportError:
             logger.warning(
                 "pyjwt_not_installed",
