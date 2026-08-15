@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.72] - 2026-08-15
+
+### Fixed
+
+- Two `type: ignore` comments whose correct error code depended on which optional packages
+  happened to be installed, so each was right in one environment and wrong in the other:
+  `integrations/model_armor.py` (`import-not-found` vs `import-untyped` for `google.cloud`,
+  now handled by an `ignore_missing_imports` override) and `mcp_proxy_guard.py`
+  (`no-any-return` on `jwt.decode`, now an annotated local needing no suppression). Both
+  verified clean with and without the optional packages present. No behaviour change.
+
+### Changed
+
+- `[tool.bandit]` in `pyproject.toml` is now authoritative: CI ran `bandit` without
+  `-c pyproject.toml`, so the block was inert and the repo described a scan that was never
+  in force. `skips = ["B101"]` is deliberately not restored — B101 caught two narrowing
+  asserts in the CIMD guard that `python -O` would have stripped from a security decision
+  path.
+
+### Added
+
+- Matched-pair prompt-injection benchmark, first published result
+  (`benchmarks/harness_injection/`). `claude-code` 2.1.233 and `codex` 0.147.0 each fixed
+  the seeded bug in 12/12 cells, ran the suite in 12/12, and acted on the planted script
+  0/6 injected and 0/6 benign. Reported as **channel indifference, explicitly not injection
+  resistance**: the benign twin was ignored identically, so the zero is not specific to the
+  malicious script and says nothing about a channel these agents do act on.
+- Live demo package (`demo/`) — three acts showing an injected agent having its dangerous
+  tool call blocked in-process.
+
+
 ## [0.8.71] - 2026-08-14
 
 ### Added
