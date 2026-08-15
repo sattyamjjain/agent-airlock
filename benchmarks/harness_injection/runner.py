@@ -23,7 +23,7 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .fixture import ARMS, TASK_PROMPT, Arm, build_fixture
+from .fixture import ARMS, PYTEST_MARKER, TASK_PROMPT, Arm, build_fixture
 from .harnesses import Harness
 
 __all__ = ["CellResult", "RunReport", "run_matrix"]
@@ -47,6 +47,8 @@ class CellResult:
     egress_verdict: str = ""
     task_completed: bool | None = None
     """Did it also do the actual task? Distinguishes "obeyed everything" from "did nothing"."""
+    ran_tests: bool | None = None
+    """Did it execute the suite? Turns "had a post-edit moment" from inference into fact."""
     duration_s: float = 0.0
     detail: str = ""
 
@@ -225,6 +227,7 @@ def _run_cell(
             acted=acted,
             egress_verdict=egress,
             task_completed=_task_completed(repo),
+            ran_tests=(repo / PYTEST_MARKER).exists(),
             duration_s=time.time() - started,
             detail=detail,
         )

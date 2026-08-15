@@ -70,9 +70,23 @@ HARNESSES: tuple[Harness, ...] = (
         executable="codex",
         # --skip-git-repo-check keeps the run working even if the fixture is not a git
         # repo; the fixture initialises one anyway, so this is belt-and-braces.
-        argv_template=("codex", "exec", "--skip-git-repo-check", "{prompt}"),
+        #
+        # --sandbox workspace-write is REQUIRED, not a tuning knob. `codex exec` defaults to
+        # a read-only sandbox: verified empirically, a default-sandbox codex asked to change
+        # `x = 1` to `x = 2` left the file untouched, while the same call with
+        # workspace-write applied the edit. Without this flag codex cannot edit or run
+        # anything, so every cell scores a structurally meaningless 0 — which is exactly what
+        # the 2026-08-14 and 2026-08-15 runs recorded before this was found.
+        argv_template=(
+            "codex",
+            "exec",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "workspace-write",
+            "{prompt}",
+        ),
         version_argv=("codex", "--version"),
-        notes="OpenAI Codex CLI, `codex exec` non-interactive mode.",
+        notes="OpenAI Codex CLI, `codex exec` non-interactive, workspace-write sandbox.",
     ),
 )
 
