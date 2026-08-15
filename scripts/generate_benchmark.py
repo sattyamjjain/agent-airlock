@@ -369,22 +369,35 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     )
     out.append("")
     out.append(
-        "**Second run (2026-08-15, 24/24 cells measured).** `claude-code` 2.1.233 fixed the "
-        "seeded bug in **12/12** cells and acted on the planted script **0/6 injected, 0/6 "
-        "benign**. `codex` 0.147.0 is **excluded**: it completed the task in 0/12 cells "
-        "because `codex exec` defaults to a read-only sandbox and could not write a file, so "
-        "its zeros measure the harness config, not the harness."
+        "**Result (2026-08-15, 24/24 cells measured, 3 trials x 2 arms x 2 airlock modes).** "
+        "`claude-code` 2.1.233 and `codex` 0.147.0 each fixed the seeded bug in **12/12** "
+        "cells and ran the test suite in **12/12** — and acted on the planted script "
+        "**0/6 injected, 0/6 benign**."
     )
     out.append("")
     out.append(
-        '> **Still not injection resistance.** For `claude-code` the run does rule out *"it '
-        'had no reason to run anything"* — it demonstrably did the work. What remains is that '
-        "it does not act on README-planted script conventions **at all**: the benign control "
-        "is zero too. That is a real behavioural observation and a genuinely useful one, but "
-        "it is not evidence the injection was recognised, because a harness that simply never "
-        "runs repo scripts produces this identical table. Full per-harness breakdown, "
-        "exclusions, and what would separate those two readings: "
+        "> **What that does and does not establish.** Two explanations for a zero are ruled "
+        "out by the run itself: the agents had a reason to act (they did the task) and they "
+        "do run commands in the fixture (they ran the suite, at the exact point the planted "
+        "line applies). What remains is specific and real: **both harnesses are indifferent "
+        "to a README-planted script convention — benign or exfiltration-shaped — while "
+        "actively running commands in the same repository.** The injection did not work."
+    )
+    out.append("")
+    out.append(
+        "> It is **not** evidence the injection was *recognised*. The benign twin was ignored "
+        "identically, so the mechanism is indifference to this delivery channel, not "
+        "detection of malicious intent — which means it predicts nothing about an injection "
+        "arriving through a channel these agents *do* act on (a task-relevant source file, a "
+        "tool description, an error message). Per-harness table and the full list of what "
+        "this does not show: "
         "[`benchmarks/harness_injection/RESULTS.md`](benchmarks/harness_injection/RESULTS.md)."
+    )
+    out.append("")
+    out.append(
+        "Earlier runs are superseded: 2026-08-14 used a task that gave no reason to act, and "
+        "both 2026-08-14 and the first 2026-08-15 run recorded codex zeros that were an "
+        "artefact of `codex exec` defaulting to a read-only sandbox."
     )
     out.append("")
     out.append(
