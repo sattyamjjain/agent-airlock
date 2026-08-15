@@ -306,6 +306,14 @@ module = [
     "fakeredis.*",
     "cryptography",
     "cryptography.*",
+    # google-cloud-modelarmor ([model-armor] extra). Listed here rather than suppressed with
+    # an inline ignore because the *error code* depends on the environment: with no google
+    # package installed (CI) the import is `import-not-found`; with some other google library
+    # present (a typical dev box) the `google.cloud` namespace resolves and it becomes
+    # `import-untyped` instead. A pinned inline code is therefore wrong in one of the two.
+    # ignore_missing_imports covers both.
+    "google.cloud",
+    "google.cloud.*",
     "pydantic_ai",
     "pydantic_ai.*",
     "crewai",
@@ -345,4 +353,13 @@ skip_covered = false
 
 [tool.bandit]
 exclude_dirs = ["tests", "benchmarks"]
-skips = ["B101"]  # Skip assert warnings in production code
+# No `skips`. This block was dead until v0.8.72 — CI ran `bandit -r src/agent_airlock/`
+# without `-c pyproject.toml`, so nothing here applied and the file quietly described a
+# configuration that was never in force. CI now passes `-c pyproject.toml`, which makes it
+# authoritative.
+#
+# The former `skips = ["B101"]` (assert_used) is deliberately NOT restored. B101 earns its
+# place here: it caught two narrowing `assert`s in the CIMD trust-anchor guard, which would
+# have been stripped under `python -O` and left a security decision path with no control
+# flow at all. Suppressing it would re-hide that class of bug. Use a scoped `# nosec B101`
+# at a site where an assert is genuinely fine.

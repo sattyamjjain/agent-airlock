@@ -176,7 +176,7 @@ class ModelArmorScanner:
             return self._client
 
         try:
-            from google.cloud import modelarmor_v1  # type: ignore[import-not-found]
+            from google.cloud import modelarmor_v1
         except ImportError as e:  # pragma: no cover - exercised by tests via monkeypatch
             raise ModelArmorNotInstalled(
                 "Model Armor adapter requires `google-cloud-modelarmor`. "
