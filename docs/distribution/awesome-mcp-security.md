@@ -5,7 +5,7 @@
 
 - **Target list:** [`Puliczek/awesome-mcp-security`](https://github.com/Puliczek/awesome-mcp-security) (canonical list, 725 stars, verified 2026-08-05)
 - **Section:** `## 🧑‍🚀 Tools and code` (agent-airlock is a library, not a hosted server, so not "MCP Security Servers")
-- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.8.71 = 3,845).
+- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.8.72 = 3,845).
 
 ## Entry (list format)
 
