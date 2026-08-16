@@ -9,12 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.73] - 2026-08-16
+
 ### Added
 
 - Added a comparison against the propose-versus-authorize projects that appeared this week,
   including where they are the better choice.
 - Added a test for the detour-hijacking shape, where the task completes and the cost is the
   payload.
+
+### Fixed
+
+- Two links in `docs/security/detour-hijacking.md` pointed outside the docs root, which
+  aborted the strict mkdocs build. Switched to the absolute blob URLs the rest of `docs/`
+  already uses for source files.
 
 ## [0.8.72] - 2026-08-15
 

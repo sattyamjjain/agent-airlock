@@ -5,7 +5,7 @@
 
 - **Target list:** `awesome-llm-security` <!-- verify canonical repo URL, e.g. corca-ai/awesome-llm-security -->
 - **Section:** Tools / Defense (or "Frameworks / Guardrails")
-- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.8.72 = 3,861).
+- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.8.73 = 3,861).
 
 ## Entry (list format)
 
