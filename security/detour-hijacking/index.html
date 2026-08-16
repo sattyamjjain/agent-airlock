@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/distribution/awesome-agent-security/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/security/detour-hijacking/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Draft PR — awesome-agent-security - Agent-Airlock</title>
+        <title>Convergent Detour Hijacking: when the task succeeds and the cost is the payload - Agent-Airlock</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#draft-pr-awesome-agent-security" class="md-skip">
+        <a href="#convergent-detour-hijacking-when-the-task-succeeds-and-the-cost-is-the-payload" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Draft PR — awesome-agent-security
+              Convergent Detour Hijacking: when the task succeeds and the cost is the payload
             
           </span>
         </div>
@@ -1484,10 +1484,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#entry-list-format" class="md-nav__link">
+  <a href="#the-attack" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Entry (list format)
+        The attack
       
     </span>
   </a>
@@ -1495,10 +1495,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-title" class="md-nav__link">
+  <a href="#why-this-is-hard-to-see" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR title
+        Why this is hard to see
       
     </span>
   </a>
@@ -1506,10 +1506,60 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-body" class="md-nav__link">
+  <a href="#what-agent-airlock-sees" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR body
+        What agent-airlock sees
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What agent-airlock sees">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#visible-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visible today
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#not-visible-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Not visible today
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-mitigation-that-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The mitigation that exists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproduce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproduce
       
     </span>
   </a>
@@ -1536,33 +1586,100 @@
   
 
 
-<h1 id="draft-pr-awesome-agent-security">Draft PR — awesome-agent-security<a class="headerlink" href="#draft-pr-awesome-agent-security" title="Permanent link">&para;</a></h1>
-<blockquote>
-<p><strong>Status: DRAFT for the operator to submit.</strong> Nothing here is auto-submitted.
-Confirm the canonical list repo before opening the PR (the agent-security
-lists are less consolidated than the LLM/MCP ones — pick the most active).</p>
-</blockquote>
-<ul>
-<li><strong>Target list:</strong> <code>awesome-agent-security</code> <!-- verify canonical repo URL --></li>
-<li><strong>Section:</strong> Tools / Runtime defenses</li>
-<li><strong>Refresh the test count</strong> to the current README TEST-BADGE at submission time (v0.8.72 = 3,861).</li>
-</ul>
-<h2 id="entry-list-format">Entry (list format)<a class="headerlink" href="#entry-list-format" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) — in-process least-privilege decorator for AI tool calls; deny-by-default, PII masking, per-CVE presets, 3,861 tests.
+<h1 id="convergent-detour-hijacking-when-the-task-succeeds-and-the-cost-is-the-payload">Convergent Detour Hijacking: when the task succeeds and the cost is the payload<a class="headerlink" href="#convergent-detour-hijacking-when-the-task-succeeds-and-the-cost-is-the-payload" title="Permanent link">&para;</a></h1>
+<p><strong>Paper:</strong> <a href="https://arxiv.org/abs/2608.12273">Convergent Detour Hijacking: Task-Preserving Resource Amplification in
+Skill-Based LLM Agents</a> (arXiv:2608.12273, 2026-08-12)
+<strong>Regression fixture:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/test_detour_hijacking.py"><code>tests/test_detour_hijacking.py</code></a>
+<strong>Open gap:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/issues/142">#142</a></p>
+<h2 id="the-attack">The attack<a class="headerlink" href="#the-attack" title="Permanent link">&para;</a></h2>
+<p>Convergent Detour Hijacking (CDH) is text-only and runtime-independent. It needs no exploit,
+no malformed argument, and no dangerous tool. It works like this:</p>
+<ol>
+<li>A malicious skill's <strong>description</strong> wins tool selection under shared semantic cover. It
+   looks relevant because it was written to look relevant.</li>
+<li>That skill's <strong>body</strong> reuses the same rationale to fabricate plausible dependencies.</li>
+<li>The fabricated dependencies <strong>recruit unnecessary but genuinely benign skills</strong> into a
+   bounded detour.</li>
+<li>The trajectory <strong>re-enters the original route</strong>, so the task still completes correctly.</li>
+</ol>
+<p>Reported on DeepSeek-V4-Pro across 491 held-out tasks: the matched attacker coordinator is
+selected in <strong>80.02%</strong> of tasks. Among coordinator-hit runs that complete, token consumption
+rises <strong>66.91%</strong> and end-to-end execution time <strong>92.45%</strong>, while aggregate task completion
+stays comparable.</p>
+<h2 id="why-this-is-hard-to-see">Why this is hard to see<a class="headerlink" href="#why-this-is-hard-to-see" title="Permanent link">&para;</a></h2>
+<p>Every layer that evaluates an agent by its <strong>output</strong> is blind here, because the output is
+correct. There is no failed assertion, no wrong answer, no exception, and no refused call.
+The damage is entirely in the trajectory: work that was done and did not need to be.</p>
+<p>Content inspection does not help either. The recruited skills are real skills doing real
+things. There is nothing to find inside <code>detect_document_encoding</code>. The attack lives in the
+<em>fact of the call</em>, not in its payload.</p>
+<h2 id="what-agent-airlock-sees">What agent-airlock sees<a class="headerlink" href="#what-agent-airlock-sees" title="Permanent link">&para;</a></h2>
+<p>A deny-by-default contract layer runs on every tool call, so the recruited calls pass
+through a seam an outcome checker never touches. That makes airlock one of the few places
+this is observable at all. The fixture pins down exactly how far that goes.</p>
+<h3 id="visible-today">Visible today<a class="headerlink" href="#visible-today" title="Permanent link">&para;</a></h3>
+<p>Every recruited call lands in the audit log as its own <code>AuditRecord</code>, carrying <code>tool_name</code>,
+<code>blocked</code>, <code>duration_ms</code>, <code>agent_id</code>, and <code>session_id</code>. Given a <code>session_id</code>, the calls group
+into a run and the count is directly readable:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>{&quot;timestamp&quot;:&quot;...&quot;,&quot;tool_name&quot;:&quot;fetch_document&quot;,&quot;blocked&quot;:false,&quot;session_id&quot;:&quot;sess-detour&quot;,...}
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>{&quot;timestamp&quot;:&quot;...&quot;,&quot;tool_name&quot;:&quot;resolve_skill_dependencies&quot;,&quot;blocked&quot;:false,&quot;session_id&quot;:&quot;sess-detour&quot;,...}
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>{&quot;timestamp&quot;:&quot;...&quot;,&quot;tool_name&quot;:&quot;detect_document_encoding&quot;,&quot;blocked&quot;:false,&quot;session_id&quot;:&quot;sess-detour&quot;,...}
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>{&quot;timestamp&quot;:&quot;...&quot;,&quot;tool_name&quot;:&quot;normalize_whitespace&quot;,&quot;blocked&quot;:false,&quot;session_id&quot;:&quot;sess-detour&quot;,...}
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>{&quot;timestamp&quot;:&quot;...&quot;,&quot;tool_name&quot;:&quot;estimate_reading_time&quot;,&quot;blocked&quot;:false,&quot;session_id&quot;:&quot;sess-detour&quot;,...}
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>{&quot;timestamp&quot;:&quot;...&quot;,&quot;tool_name&quot;:&quot;summarize_text&quot;,&quot;blocked&quot;:false,&quot;session_id&quot;:&quot;sess-detour&quot;,...}
 </code></pre></div>
-<h2 id="pr-title">PR title<a class="headerlink" href="#pr-title" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Add agent-airlock (in-process least-privilege for agent tool calls)
+<p>Six calls where two were needed. An outcome checker sees one identical answer twice; the
+contract layer sees two calls and six. That difference is the finding, and it is asserted in
+<code>TestPerRunRecordMakesRecruitedCallsVisible</code>.</p>
+<h3 id="not-visible-today">Not visible today<a class="headerlink" href="#not-visible-today" title="Permanent link">&para;</a></h3>
+<p>Three limits, each with a test that fails if it is ever fixed silently.</p>
+<p><strong>No cost or token accounting on the record.</strong> <code>AuditRecord</code> has no field for either, so the
+quantity the paper measures cannot be read off the log even in principle. <code>duration_ms</code> is
+tool execution time, not the agent's end-to-end wall time, and summing it does not
+reconstruct the 92.45% figure because it excludes model latency, which is where a detour
+spends most of what it wastes.</p>
+<p><strong>No run identity without a harness context.</strong> <code>session_id</code> is populated from a context
+object passed as the first positional argument. A harness that does not supply one still
+gets every call logged, but the records are anonymous and cannot be assembled into a run at
+all. Run-level analysis needs grouping before it needs anything else.</p>
+<p><strong>No detector fires.</strong> <code>AnomalyDetector</code> watches call rate, endpoint diversity, error rate,
+and consecutive blocks. A detour run has a zero error rate, zero blocks, no endpoint, and a
+call count well under <code>max_calls_per_window</code>. By these four metrics it is the <em>quietest
+possible run</em>. That is not a defect in the detector, whose remit is different. It is why the
+detour needs its own answer.</p>
+<p>The distance between the first list and the second is the distance between <strong>visibility and
+detection</strong>. The layer records the extra calls. Nothing in it says they were extra.</p>
+<h2 id="the-mitigation-that-exists">The mitigation that exists<a class="headerlink" href="#the-mitigation-that-exists" title="Permanent link">&para;</a></h2>
+<p><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/README.md#-behavioral-sequence-guard-v0812"><code>SequenceGuard</code></a> in DECLARED mode does
+refuse a detour today, because a detour is by definition a transition outside the expected
+route:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.sequence_guard</span><span class="w"> </span><span class="kn">import</span> <span class="n">ENTRY_SENTINEL</span><span class="p">,</span> <span class="n">SequenceGuard</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">sequence_guard</span><span class="o">=</span><span class="n">SequenceGuard</span><span class="p">(</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;declared&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="n">action</span><span class="o">=</span><span class="s2">&quot;block&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="n">dag</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>            <span class="n">ENTRY_SENTINEL</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;fetch_document&quot;</span><span class="p">},</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>            <span class="s2">&quot;fetch_document&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;summarize_text&quot;</span><span class="p">},</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>            <span class="s2">&quot;summarize_text&quot;</span><span class="p">:</span> <span class="nb">set</span><span class="p">(),</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="p">},</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="p">),</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="p">)</span>
 </code></pre></div>
-<h2 id="pr-body">PR body<a class="headerlink" href="#pr-body" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>agent-airlock is a decorator (@Airlock) that wraps an agent tool and enforces a
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>validate → policy → execute → sanitize seam in-process: deny-by-default
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>least-privilege SecurityPolicy, strict typed argument validation, ghost-argument
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>stripping, output PII/secret masking, capability gating, and opt-in per-CVE /
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>MCP-spec presets. Integrates with LangChain, LangGraph, PydanticAI, OpenAI
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>Agents, Anthropic, CrewAI, and more. MIT, Pydantic-only core, 3,861 tests.
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>Repo: https://github.com/sattyamjjain/agent-airlock
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>PyPI: https://pypi.org/project/agent-airlock/
+<p>The coordinator is the first step off the route, so that is where the block lands.</p>
+<p><strong>The cost is real and worth stating.</strong> DECLARED mode enforces a route the operator wrote
+down in advance, and CDH targets skill-based agents precisely because their legitimate route
+is discovered at runtime. Where you can declare the route, declare it. Where you cannot, this
+control does not reach.</p>
+<p>BASELINE mode is the closer fit in principle: it learns per-session transition probabilities
+and flags low-probability ones. In practice a detour composed of legitimate skills in a
+plausible order may not be low-probability at the level of any single transition, and the
+guard will not flag anything until <code>min_baseline_samples</code> observations have accumulated from
+the preceding tool. It is worth running; it is not a solution.</p>
+<h2 id="reproduce">Reproduce<a class="headerlink" href="#reproduce" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_detour_hijacking.py<span class="w"> </span>-v
 </code></pre></div>
 
 
