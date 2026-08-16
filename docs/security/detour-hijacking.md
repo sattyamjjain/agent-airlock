@@ -2,7 +2,7 @@
 
 **Paper:** [Convergent Detour Hijacking: Task-Preserving Resource Amplification in
 Skill-Based LLM Agents](https://arxiv.org/abs/2608.12273) (arXiv:2608.12273, 2026-08-12)
-**Regression fixture:** [`tests/test_detour_hijacking.py`](../../tests/test_detour_hijacking.py)
+**Regression fixture:** [`tests/test_detour_hijacking.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/test_detour_hijacking.py)
 **Open gap:** [#142](https://github.com/sattyamjjain/agent-airlock/issues/142)
 
 ## The attack
@@ -83,7 +83,7 @@ detection**. The layer records the extra calls. Nothing in it says they were ext
 
 ## The mitigation that exists
 
-[`SequenceGuard`](../../README.md#-behavioral-sequence-guard-v0812) in DECLARED mode does
+[`SequenceGuard`](https://github.com/sattyamjjain/agent-airlock/blob/main/README.md#-behavioral-sequence-guard-v0812) in DECLARED mode does
 refuse a detour today, because a detour is by definition a transition outside the expected
 route:
 
