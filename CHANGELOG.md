@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a comparison against the propose-versus-authorize projects that appeared this week,
+  including where they are the better choice.
+- Added a test for the detour-hijacking shape, where the task completes and the cost is the
+  payload.
+
 ## [0.8.72] - 2026-08-15
 
 ### Fixed

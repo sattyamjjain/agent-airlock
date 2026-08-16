@@ -1,0 +1,23 @@
+# v0.5.7 STDIO-taint CI gate — maintainer-applied patch
+#
+# Automated PRs from this repo lack the ``workflow`` OAuth scope
+# needed to write files under ``.github/workflows/``. A maintainer
+# must copy the job below into the existing ``ci.yml`` alongside the
+# ``test`` / ``lint`` / ``security`` jobs.
+
+  stdio-taint-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run STDIO-taint scanner
+        run: python tools/scan_stdio_remote_input_flow.py src/ tests/ examples/
+      - name: Upload finding summary on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stdio-taint-summary
+          path: .airlock-stdio-taint.json

@@ -1,0 +1,117 @@
+# NVD MCP-CVE watcher — GitHub Actions workflow (sample)
+#
+# This file is a SAMPLE. A maintainer with GitHub `workflow` scope on
+# the repo needs to copy this into `.github/workflows/nvd-mcp-watch.yml`.
+# The bot that landed docs/launch/ couldn't push under
+# `.github/workflows/` (lacks `workflow` scope).
+#
+# What it does:
+#   - Runs on a daily cron
+#   - Queries the NVD 2.0 REST API for CVEs containing "MCP" or
+#     "Model Context Protocol" disclosed in the last 48 hours
+#   - For each hit, opens a GitHub issue using the
+#     `cve_rule_request.md` template, pre-filled with NVD metadata
+#   - Labels the issue `cve-rule-request` and `nvd-auto` so humans can
+#     triage and convert to a regression test
+#
+# Security considerations:
+#   - Uses `GITHUB_TOKEN` (default), NO external secrets needed
+#   - NVD API does not require an API key for < 5 requests in a 30 s
+#     window; a dedicated key can be added via `secrets.NVD_API_KEY`
+#     for higher volume
+#   - The watcher only CREATES issues. It never modifies test code.
+#
+# Stability:
+#   - NVD API schema:
+#     https://nvd.nist.gov/developers/vulnerabilities (retrieved
+#     2026-04-18)
+#   - If NVD changes the shape, the `jq` filters below will stop
+#     matching and no issues will be created. That's a safe failure
+#     mode — the worst case is "we miss a CVE for a day" not
+#     "we open garbage issues".
+
+name: NVD MCP-CVE watcher
+
+on:
+  schedule:
+    - cron: "17 7 * * *"  # 07:17 UTC daily — off the top-of-hour crowd
+  workflow_dispatch:  # manual trigger for testing
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  nvd-watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch recent MCP CVEs from NVD
+        id: nvd
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}  # optional
+        run: |
+          set -euo pipefail
+          since=$(date -u -d "48 hours ago" +%Y-%m-%dT%H:%M:%S.000)
+          now=$(date -u +%Y-%m-%dT%H:%M:%S.000)
+          url="https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=${since}&pubEndDate=${now}"
+          auth=()
+          if [ -n "${NVD_API_KEY:-}" ]; then
+            auth=(-H "apiKey: ${NVD_API_KEY}")
+          fi
+          curl -sSfL "${auth[@]}" "$url" > nvd.json
+          # extract: id, description[en], cvssV3 base score, reference URLs
+          jq -r '
+            .vulnerabilities[]
+            | .cve
+            | {
+                id,
+                desc: (.descriptions[] | select(.lang=="en") | .value),
+                cvss: (try .metrics.cvssMetricV31[0].cvssData.baseScore // null),
+                refs: [.references[].url]
+              }
+          ' nvd.json > hits.jsonl
+          echo "count=$(wc -l < hits.jsonl)" >> "$GITHUB_OUTPUT"
+
+      - name: Open CVE-rule-request issues for each hit
+        if: steps.nvd.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r hit; do
+            id=$(echo "$hit" | jq -r .id)
+            desc=$(echo "$hit" | jq -r .desc)
+            cvss=$(echo "$hit" | jq -r .cvss)
+            refs=$(echo "$hit" | jq -r '.refs | join("\n- ")')
+            # idempotent: skip if an issue for this CVE already exists
+            if gh issue list --repo "${{ github.repository }}" \
+                 --search "in:title \"${id}\"" --state all --json number \
+                 | jq -e 'length > 0' > /dev/null; then
+              echo "Skipping ${id} — issue already exists"
+              continue
+            fi
+            gh issue create --repo "${{ github.repository }}" \
+              --title "CVE rule request: ${id}" \
+              --label cve-rule-request,nvd-auto \
+              --body "$(cat <<EOF
+          Auto-filed by the NVD MCP-CVE watcher.
+
+          **NVD:** https://nvd.nist.gov/vuln/detail/${id}
+          **CVSS:** ${cvss}
+
+          **Description:**
+
+          ${desc}
+
+          **References:**
+
+          - ${refs}
+
+          Please triage and, if the CVE is in scope for runtime middleware
+          (see \`tests/cves/README.md\`), convert to a regression test
+          using the \`cve_rule_request.md\` template fields.
+          EOF
+          )"
+          done < hits.jsonl

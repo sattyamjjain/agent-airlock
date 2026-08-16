@@ -1,0 +1,47 @@
+# v0.5.7 perf-gate CI job — maintainer-applied patch (issue #4)
+#
+# Closes the manifest-mode-latency claim from v0.5.7 Task 2:
+# without a perf gate, the "HMAC verify per launch is negligible"
+# statement is unverifiable. This job runs ``pytest --benchmark-only``
+# on every push and fails if the median exceeds the per-test ceilings
+# documented in tests/benchmarks/test_bench_manifest_mode.py.
+#
+# Automated PRs from this repo lack the ``workflow`` OAuth scope
+# needed to write files under ``.github/workflows/``. A maintainer
+# must copy the job below into the existing ``ci.yml`` alongside the
+# ``test`` / ``lint`` / ``security`` jobs.
+
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run benchmark suite
+        run: |
+          pytest tests/benchmarks/ --benchmark-only --no-cov \
+            --benchmark-json=bench-results.json
+      - name: Upload bench results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench-results.json
+      - name: Assert manifest-mode resolve median ≤ 50µs
+        run: |
+          python - <<'PY'
+          import json, sys
+          d = json.load(open("bench-results.json"))
+          for bench in d["benchmarks"]:
+              if "manifest_resolve_p50" in bench["name"]:
+                  median_us = bench["stats"]["median"] * 1e6
+                  print(f"{bench['name']}: median {median_us:.1f}µs")
+                  if median_us > 50:
+                      print(f"::error::manifest-mode resolve median {median_us:.1f}µs exceeds 50µs ceiling")
+                      sys.exit(1)
+          PY
