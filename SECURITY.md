@@ -10,6 +10,12 @@ older versions are unsupported — upgrade to the latest `0.8.x` release.
 | 0.8.x   | :white_check_mark: |
 | < 0.8.0 | :x:                |
 
+### Fixed security issues
+
+| Fixed in | Issue |
+| --- | --- |
+| v0.8.74 | [`SecurityPolicy.freeze()` silently dropped five security fields](docs/security/freeze-dropped-security-fields.md) (affects v0.5.7–v0.8.73, only when `freeze()` is called) |
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Agent-Airlock, please report it responsibly:

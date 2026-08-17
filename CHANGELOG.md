@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.75] - 2026-08-17
+
+### Added
+
+- Benchmark dates were kept honest only by someone remembering to re-run, which is the
+  failure `tests/test_numeric_claim_parity.py` already names: *"A human instruction is
+  exactly the thing that rots."* The 2026-07-16 gateway claim sat a month past its run
+  before anyone noticed. Added `scripts/check_benchmark_freshness.py` with the same
+  two-mode shape as `check_changelog.py`: the default is structural (every published
+  benchmark row must carry a date — never flaps on a calendar boundary, safe on every
+  commit) and `--release` additionally fails on any claim older than 30 days. The
+  `--release` form is wired into `publish.yml` beside the stale-description gate, so a
+  stale competitive claim blocks the release rather than shipping with it. Eight tests
+  drive the gate against synthetic READMEs, because a gate nobody has watched fail is the
+  same failure class it exists to prevent.
+
+### Documentation
+
+- Wrote up the `SecurityPolicy.freeze()` field-drop fixed in 0.8.74 as
+  `docs/security/freeze-dropped-security-fields.md`, with the affected range per field
+  (v0.5.7–v0.8.73, each field from its own release), a one-line reproduction, and who is
+  actually affected — only callers of `freeze()`. Linked from `SECURITY.md` and the README
+  security-docs table. The changelog entry alone was not enough for a regression that
+  silently disarmed controls in prior releases.
+
 ## [0.8.74] - 2026-08-17
 
 ### Added

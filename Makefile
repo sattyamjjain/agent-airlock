@@ -1,4 +1,4 @@
-.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-changelog check-changelog-release verify-corpus
+.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release verify-corpus
 
 help:
 	@echo "Targets:"
@@ -13,6 +13,8 @@ help:
 	@echo "  verify-corpus           Verify wild_payload_corpus MANIFEST.sha256"
 	@echo "  check-changelog         Post-release drift gate (fails if [Unreleased] has entries after a release)"
 	@echo "  check-changelog-release Pre-tag gate (fails if [Unreleased] is empty)"
+	@echo "  check-benchmark-freshness         Structural gate (every benchmark row carries a date)"
+	@echo "  check-benchmark-freshness-release Pre-tag gate (fails on a benchmark claim >30d old)"
 
 verify-corpus:
 	@python3 scripts/verify_corpus_manifest.py
@@ -49,3 +51,9 @@ check-changelog:
 
 check-changelog-release:
 	python3 scripts/check_changelog.py --release
+
+check-benchmark-freshness:
+	python3 scripts/check_benchmark_freshness.py
+
+check-benchmark-freshness-release:
+	python3 scripts/check_benchmark_freshness.py --release
