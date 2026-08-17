@@ -1565,7 +1565,7 @@ facade over the existing <code>claude_*.py</code> family (managed-agents, auto-m
 task-budget) so callers can find the entrypoint without learning the
 internal module layout.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;agent-airlock[claude-agent]&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"agent-airlock[claude-agent]"</span>
 </code></pre></div>
 <p>The extra pins <code>claude-agent-sdk&gt;=0.1.58</code>. The SDK is <em>not</em> imported at
 module load — calling <code>wrap_agent</code> without the extra installed raises a
@@ -1587,7 +1587,7 @@ clear <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent
 <a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># - ghost arguments stripped</span>
 <a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="c1"># - Pydantic V2 strict validation</span>
 <a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># - PolicyViolation raised on denied tools</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">secured</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;Summarise the latest commit on main.&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">secured</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">"Summarise the latest commit on main."</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="what-the-adapter-does">What the adapter does<a class="headerlink" href="#what-the-adapter-does" title="Permanent link">&para;</a></h2>
 <ol>

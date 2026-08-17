@@ -1585,7 +1585,7 @@ recommended job.</p>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>bandit<span class="w"> </span>-r<span class="w"> </span>src/agent_airlock/<span class="w"> </span>-f<span class="w"> </span>txt<span class="w"> </span>-o<span class="w"> </span>docs/launch/security-artifacts/bandit.txt
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># pip-audit core</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nb">printf</span><span class="w"> </span><span class="s1">&#39;pydantic&gt;=2.0,&lt;3.0\nstructlog&gt;=24.0\n&#39;</span><span class="w"> </span>&gt;<span class="w"> </span>/tmp/deps.txt
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nb">printf</span><span class="w"> </span><span class="s1">'pydantic&gt;=2.0,&lt;3.0\nstructlog&gt;=24.0\n'</span><span class="w"> </span>&gt;<span class="w"> </span>/tmp/deps.txt
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>pip-audit<span class="w"> </span>-r<span class="w"> </span>/tmp/deps.txt<span class="w"> </span>--format<span class="o">=</span>json<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>-o<span class="w"> </span>docs/launch/security-artifacts/pip-audit-core.json
 </code></pre></div>

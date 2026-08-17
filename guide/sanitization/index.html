@@ -1856,19 +1856,19 @@
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_customer</span><span class="p">(</span><span class="n">customer_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">return</span> <span class="p">{</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;John Doe&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="s2">&quot;email&quot;</span><span class="p">:</span> <span class="s2">&quot;john@example.com&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="s2">&quot;ssn&quot;</span><span class="p">:</span> <span class="s2">&quot;123-45-6789&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="s2">&quot;sk-1234567890&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"John Doe"</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="s2">"email"</span><span class="p">:</span> <span class="s2">"john@example.com"</span><span class="p">,</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="s2">"ssn"</span><span class="p">:</span> <span class="s2">"123-45-6789"</span><span class="p">,</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        <span class="s2">"api_key"</span><span class="p">:</span> <span class="s2">"sk-1234567890"</span><span class="p">,</span>
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="p">}</span>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">result</span> <span class="o">=</span> <span class="n">get_customer</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="mi">123</span><span class="p">)</span>
 <a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="c1"># Returns:</span>
 <a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="c1"># {</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="c1">#     &quot;name&quot;: &quot;John Doe&quot;,</span>
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="c1">#     &quot;email&quot;: &quot;[EMAIL REDACTED]&quot;,</span>
-<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="c1">#     &quot;ssn&quot;: &quot;[SSN REDACTED]&quot;,</span>
-<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="c1">#     &quot;api_key&quot;: &quot;[API_KEY REDACTED]&quot;</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="c1">#     "name": "John Doe",</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="c1">#     "email": "[EMAIL REDACTED]",</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="c1">#     "ssn": "[SSN REDACTED]",</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="c1">#     "api_key": "[API_KEY REDACTED]"</span>
 <a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="c1"># }</span>
 </code></pre></div>
 <h2 id="sensitive-data-types">Sensitive Data Types<a class="headerlink" href="#sensitive-data-types" title="Permanent link">&para;</a></h2>
@@ -2014,47 +2014,47 @@
 <p>For multi-tenant applications:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkspacePIIConfig</span><span class="p">,</span> <span class="n">sanitize_with_workspace_config</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># Enterprise workspace: Don&#39;t mask internal emails</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># Enterprise workspace: Don't mask internal emails</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">enterprise_config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">&quot;acme-corp&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="n">allow_email_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;acme.com&quot;</span><span class="p">,</span> <span class="s2">&quot;acme.internal&quot;</span><span class="p">],</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">"acme-corp"</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="n">allow_email_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">"acme.com"</span><span class="p">,</span> <span class="s2">"acme.internal"</span><span class="p">],</span>
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">)</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="c1"># Sales workspace: Mask competitor emails</span>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">sales_config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">&quot;sales&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="n">mask_email_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;competitor1.com&quot;</span><span class="p">,</span> <span class="s2">&quot;competitor2.com&quot;</span><span class="p">],</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">"sales"</span><span class="p">,</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="n">mask_email_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">"competitor1.com"</span><span class="p">,</span> <span class="s2">"competitor2.com"</span><span class="p">],</span>
 <a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="p">)</span>
 <a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
 <a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="c1"># HR workspace: Custom patterns</span>
 <a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="n">hr_config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">&quot;hr&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">"hr"</span><span class="p">,</span>
 <a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>    <span class="n">custom_patterns</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="s2">&quot;employee_id&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;EMP-\d</span><span class="si">{6}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>        <span class="s2">&quot;salary&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot;\$\d{1,3}(?:,\d</span><span class="si">{3}</span><span class="s2">)*(?:\.\d</span><span class="si">{2}</span><span class="s2">)?&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="s2">"employee_id"</span><span class="p">:</span> <span class="sa">r</span><span class="s2">"EMP-\d</span><span class="si">{6}</span><span class="s2">"</span><span class="p">,</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>        <span class="s2">"salary"</span><span class="p">:</span> <span class="sa">r</span><span class="s2">"\$\d{1,3}(?:,\d</span><span class="si">{3}</span><span class="s2">)*(?:\.\d</span><span class="si">{2}</span><span class="s2">)?"</span><span class="p">,</span>
 <a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="p">},</span>
 <a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="n">custom_strategies</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>        <span class="s2">&quot;salary&quot;</span><span class="p">:</span> <span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">FULL</span><span class="p">,</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>        <span class="s2">"salary"</span><span class="p">:</span> <span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">FULL</span><span class="p">,</span>
 <a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>    <span class="p">},</span>
 <a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a><span class="p">)</span>
 <a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>
 <a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a><span class="c1"># Apply workspace config</span>
-<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a><span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;Contact: alice@acme.com or bob@competitor1.com&quot;</span>
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a><span class="n">content</span> <span class="o">=</span> <span class="s2">"Contact: alice@acme.com or bob@competitor1.com"</span>
 <a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_with_workspace_config</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">sales_config</span><span class="p">)</span>
-<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="c1"># &quot;Contact: alice@acme.com or [EMAIL REDACTED]&quot;</span>
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="c1"># "Contact: alice@acme.com or [EMAIL REDACTED]"</span>
 </code></pre></div>
 <h2 id="phone-number-filtering">Phone Number Filtering<a class="headerlink" href="#phone-number-filtering" title="Permanent link">&para;</a></h2>
 <p>Allow specific phone prefixes:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkspacePIIConfig</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">&quot;support&quot;</span><span class="p">,</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">allow_phone_prefixes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;+1800&quot;</span><span class="p">,</span> <span class="s2">&quot;1800&quot;</span><span class="p">,</span> <span class="s2">&quot;+1888&quot;</span><span class="p">],</span>  <span class="c1"># Toll-free</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">"support"</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">allow_phone_prefixes</span><span class="o">=</span><span class="p">[</span><span class="s2">"+1800"</span><span class="p">,</span> <span class="s2">"1800"</span><span class="p">,</span> <span class="s2">"+1888"</span><span class="p">],</span>  <span class="c1"># Toll-free</span>
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">)</span>
 <a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;Call us: 1-800-555-1234 or 555-123-4567&quot;</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">content</span> <span class="o">=</span> <span class="s2">"Call us: 1-800-555-1234 or 555-123-4567"</span>
 <a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_with_workspace_config</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1"># &quot;Call us: 1-800-555-1234 or [PHONE REDACTED]&quot;</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1"># "Call us: 1-800-555-1234 or [PHONE REDACTED]"</span>
 </code></pre></div>
 <h2 id="output-truncation">Output Truncation<a class="headerlink" href="#output-truncation" title="Permanent link">&para;</a></h2>
 <p>Limit output size to prevent token bloat:</p>
@@ -2081,8 +2081,8 @@
 <a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">streaming</span> <span class="o">=</span> <span class="n">StreamingAirlock</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
 <a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
 <a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_report</span><span class="p">():</span>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">yield</span> <span class="s2">&quot;Customer: john@example.com&quot;</span>
-<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="k">yield</span> <span class="s2">&quot;Phone: 555-123-4567&quot;</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">yield</span> <span class="s2">"Customer: john@example.com"</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="k">yield</span> <span class="s2">"Phone: 555-123-4567"</span>
 <a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>
 <a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">streaming</span><span class="o">.</span><span class="n">wrap_generator</span><span class="p">(</span><span class="n">generate_report</span><span class="p">()):</span>
 <a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
@@ -2093,19 +2093,19 @@
 <p>Get details about what was masked:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">sanitize_output</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;Email: john@example.com, SSN: 123-45-6789&quot;</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">content</span> <span class="o">=</span> <span class="s2">"Email: john@example.com, SSN: 123-45-6789"</span>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_output</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">mask_pii</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
 <a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># &quot;Email: [EMAIL REDACTED], SSN: [SSN REDACTED]&quot;</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># "Email: [EMAIL REDACTED], SSN: [SSN REDACTED]"</span>
 <a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
 <a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">detection_count</span><span class="p">)</span>
 <a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="c1"># 2</span>
 <a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>
 <a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">detections</span><span class="p">)</span>
 <a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="c1"># [</span>
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="c1">#     {&quot;type&quot;: &quot;EMAIL&quot;, &quot;original&quot;: &quot;john@example.com&quot;, &quot;masked&quot;: &quot;[EMAIL REDACTED]&quot;},</span>
-<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="c1">#     {&quot;type&quot;: &quot;SSN&quot;, &quot;original&quot;: &quot;123-45-6789&quot;, &quot;masked&quot;: &quot;[SSN REDACTED]&quot;}</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="c1">#     {"type": "EMAIL", "original": "john@example.com", "masked": "[EMAIL REDACTED]"},</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="c1">#     {"type": "SSN", "original": "123-45-6789", "masked": "[SSN REDACTED]"}</span>
 <a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="c1"># ]</span>
 </code></pre></div>
 

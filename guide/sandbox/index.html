@@ -2121,10 +2121,10 @@
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">run_code</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Execute Python code safely.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="sd">"""Execute Python code safely."""</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">result</span> <span class="o">=</span> <span class="n">run_code</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="s2">&quot;2 + 2&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">result</span> <span class="o">=</span> <span class="n">run_code</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="s2">"2 + 2"</span><span class="p">)</span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Executes in E2B sandbox, returns: 4</span>
 </code></pre></div>
 <h2 id="setup">Setup<a class="headerlink" href="#setup" title="Permanent link">&para;</a></h2>
@@ -2133,12 +2133,12 @@
 </code></pre></div>
 <h3 id="configure-api-key">Configure API Key<a class="headerlink" href="#configure-api-key" title="Permanent link">&para;</a></h3>
 <p>Get an API key from <a href="https://e2b.dev">e2b.dev</a> and set it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">E2B_API_KEY</span><span class="o">=</span><span class="s2">&quot;your-key-here&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">E2B_API_KEY</span><span class="o">=</span><span class="s2">"your-key-here"</span>
 </code></pre></div>
 <p>Or configure in code:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">e2b_api_key</span><span class="o">=</span><span class="s2">&quot;your-key-here&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">e2b_api_key</span><span class="o">=</span><span class="s2">"your-key-here"</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="sandbox-options">Sandbox Options<a class="headerlink" href="#sandbox-options" title="Permanent link">&para;</a></h2>
 <h3 id="timeout">Timeout<a class="headerlink" href="#timeout" title="Permanent link">&para;</a></h3>
@@ -2218,13 +2218,13 @@
 <p>Mount files into sandbox:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">process_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Process a file in sandbox.&quot;&quot;&quot;</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="sd">"""Process a file in sandbox."""</span>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>        <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;lines&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">content</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">))}</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"lines"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">content</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">))}</span>
 <a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
 <a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="c1"># File is automatically mounted into sandbox</span>
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="n">result</span> <span class="o">=</span> <span class="n">process_file</span><span class="p">(</span><span class="n">file_path</span><span class="o">=</span><span class="s2">&quot;/data/input.txt&quot;</span><span class="p">)</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="n">result</span> <span class="o">=</span> <span class="n">process_file</span><span class="p">(</span><span class="n">file_path</span><span class="o">=</span><span class="s2">"/data/input.txt"</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <h3 id="serialization-requirements">Serialization Requirements<a class="headerlink" href="#serialization-requirements" title="Permanent link">&para;</a></h3>
@@ -2257,9 +2257,9 @@
 <a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
 <a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>
 <a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">risky_code</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="s2">&quot;import os; os.system(&#39;rm -rf /&#39;)&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">risky_code</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="s2">"import os; os.system('rm -rf /')"</span><span class="p">)</span>
 <a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="k">except</span> <span class="n">SandboxExecutionError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sandbox error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Sandbox error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>    <span class="c1"># Error is contained - your server is safe</span>
 </code></pre></div>
 <h2 id="monitoring">Monitoring<a class="headerlink" href="#monitoring" title="Permanent link">&para;</a></h2>
@@ -2270,10 +2270,10 @@
 <a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
 <a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="c1"># Get statistics</span>
 <a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="n">stats</span> <span class="o">=</span> <span class="n">pool</span><span class="o">.</span><span class="n">stats</span><span class="p">()</span>
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Active: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;active&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Idle: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;idle&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total executions: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;total_executions&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Average latency: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;avg_latency_ms&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">ms&quot;</span><span class="p">)</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Active: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">'active'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Idle: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">'idle'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Total executions: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">'total_executions'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Average latency: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">'avg_latency_ms'</span><span class="p">]</span><span class="si">}</span><span class="s2">ms"</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="best-practices">Best Practices<a class="headerlink" href="#best-practices" title="Permanent link">&para;</a></h2>
 <h3 id="1-use-for-untrusted-code-only">1. Use for Untrusted Code Only<a class="headerlink" href="#1-use-for-untrusted-code-only" title="Permanent link">&para;</a></h3>
@@ -2297,18 +2297,18 @@
 <a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">sandbox_timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">))</span>
 <a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">train_model</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    <span class="c1"># Long-running ML task</span>
-<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;accuracy&quot;</span><span class="p">:</span> <span class="mf">0.95</span><span class="p">}</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"accuracy"</span><span class="p">:</span> <span class="mf">0.95</span><span class="p">}</span>
 </code></pre></div>
 <h3 id="3-handle-failures-gracefully">3. Handle Failures Gracefully<a class="headerlink" href="#3-handle-failures-gracefully" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sandbox_required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">optional_sandbox</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Falls back to local if E2B unavailable.&quot;&quot;&quot;</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="sd">"""Falls back to local if E2B unavailable."""</span>
 <a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
 <a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>
 <a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="c1"># Check if sandboxed</span>
 <a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_sandboxed</span>
 <a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="k">if</span> <span class="n">is_sandboxed</span><span class="p">():</span>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Running in sandbox&quot;</span><span class="p">)</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">"Running in sandbox"</span><span class="p">)</span>
 </code></pre></div>
 
 

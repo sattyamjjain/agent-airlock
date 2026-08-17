@@ -1651,19 +1651,19 @@ different <code>toolset_version</code> raise <code>UnknownToolsetVersionError</c
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">ManagedAgentsAuditConfig</span><span class="p">(</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">allowed_tools</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;read_file&quot;</span><span class="p">,</span> <span class="s2">&quot;web_browse&quot;</span><span class="p">),</span>  <span class="c1"># opt in to two harness tools</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">allowed_tools</span><span class="o">=</span><span class="p">(</span><span class="s2">"read_file"</span><span class="p">,</span> <span class="s2">"web_browse"</span><span class="p">),</span>  <span class="c1"># opt in to two harness tools</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">require_beta_header</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">toolset_version</span><span class="o">=</span><span class="n">AGENT_TOOLSET_VERSION</span><span class="p">,</span>
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">redact_sse_payloads</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="p">)</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="n">session</span> <span class="o">=</span> <span class="n">ManagedAgentSession</span><span class="p">(</span><span class="n">session_id</span><span class="o">=</span><span class="s2">&quot;prod-42&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="n">session</span> <span class="o">=</span> <span class="n">ManagedAgentSession</span><span class="p">(</span><span class="n">session_id</span><span class="o">=</span><span class="s2">"prod-42"</span><span class="p">)</span>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># Before sending the request to Anthropic:</span>
 <a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="n">audit_managed_agent_invocation</span><span class="p">(</span>
 <a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">request</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>        <span class="s2">&quot;tool&quot;</span><span class="p">:</span> <span class="s2">&quot;read_file&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>        <span class="s2">&quot;betas&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">MANAGED_AGENTS_BETA_HEADER</span><span class="p">],</span>
-<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>        <span class="s2">&quot;toolset_version&quot;</span><span class="p">:</span> <span class="n">AGENT_TOOLSET_VERSION</span><span class="p">,</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>        <span class="s2">"tool"</span><span class="p">:</span> <span class="s2">"read_file"</span><span class="p">,</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>        <span class="s2">"betas"</span><span class="p">:</span> <span class="p">[</span><span class="n">MANAGED_AGENTS_BETA_HEADER</span><span class="p">],</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>        <span class="s2">"toolset_version"</span><span class="p">:</span> <span class="n">AGENT_TOOLSET_VERSION</span><span class="p">,</span>
 <a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>        <span class="c1"># ... your usual managed-agents request fields</span>
 <a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>    <span class="p">},</span>
 <a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>    <span class="n">cfg</span><span class="o">=</span><span class="n">cfg</span><span class="p">,</span>
@@ -1707,8 +1707,8 @@ permit — there is no "allow everything" default.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">claude_managed_agents_safe_defaults</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">claude_managed_agents_safe_defaults</span><span class="p">()</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">audit</span> <span class="o">=</span> <span class="n">cfg</span><span class="p">[</span><span class="s2">&quot;audit_config&quot;</span><span class="p">]</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">audit</span><span class="o">.</span><span class="n">allowed_tools</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;read_file&quot;</span><span class="p">,</span> <span class="s2">&quot;web_browse&quot;</span><span class="p">)</span>  <span class="c1"># opt in explicitly</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">audit</span> <span class="o">=</span> <span class="n">cfg</span><span class="p">[</span><span class="s2">"audit_config"</span><span class="p">]</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">audit</span><span class="o">.</span><span class="n">allowed_tools</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"read_file"</span><span class="p">,</span> <span class="s2">"web_browse"</span><span class="p">)</span>  <span class="c1"># opt in explicitly</span>
 </code></pre></div>
 <p>The preset mapping also exposes:
 - <code>cfg["harness_tools"]</code> — the four documented tools

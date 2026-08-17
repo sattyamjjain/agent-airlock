@@ -2418,26 +2418,26 @@
 <p><strong>Threat</strong>: LLMs invent parameters that don't exist in tool signatures.</p>
 <p><strong>Example</strong>:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Tool expects: read_file(path: str)</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># LLM sends: read_file(path=&quot;data.txt&quot;, force=True, admin=True)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># LLM sends: read_file(path="data.txt", force=True, admin=True)</span>
 </code></pre></div></p>
 <p><strong>Mitigation</strong>: Ghost argument stripping (permissive) or rejection (strict mode).</p>
 <h3 id="2-type-coercion-attacks">2. Type Coercion Attacks<a class="headerlink" href="#2-type-coercion-attacks" title="Permanent link">&para;</a></h3>
 <p><strong>Threat</strong>: LLMs send wrong types expecting implicit conversion.</p>
 <p><strong>Example</strong>:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Tool expects: delete_records(limit: int)</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># LLM sends: delete_records(limit=&quot;999999999&quot;)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># LLM sends: delete_records(limit="999999999")</span>
 </code></pre></div></p>
 <p><strong>Mitigation</strong>: Pydantic V2 strict mode - no type coercion allowed.</p>
 <h3 id="3-prompt-injection-via-tool-arguments">3. Prompt Injection via Tool Arguments<a class="headerlink" href="#3-prompt-injection-via-tool-arguments" title="Permanent link">&para;</a></h3>
 <p><strong>Threat</strong>: Malicious content in tool arguments designed to manipulate subsequent LLM behavior.</p>
 <p><strong>Example</strong>:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># LLM sends: write_file(content=&quot;Ignore all previous instructions...&quot;)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># LLM sends: write_file(content="Ignore all previous instructions...")</span>
 </code></pre></div></p>
 <p><strong>Mitigation</strong>: Output sanitization + policy-based content filtering.</p>
 <h3 id="4-resource-exhaustion">4. Resource Exhaustion<a class="headerlink" href="#4-resource-exhaustion" title="Permanent link">&para;</a></h3>
 <p><strong>Threat</strong>: Tools that consume excessive compute, memory, or API calls.</p>
 <p><strong>Example</strong>:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># LLM sends: process_file(path=&quot;/dev/zero&quot;)  # Infinite read</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># LLM sends: process_file(path="/dev/zero")  # Infinite read</span>
 </code></pre></div></p>
 <p><strong>Mitigation</strong>: Rate limiting, output truncation, and sandbox resource limits.</p>
 <h3 id="5-privilege-escalation">5. Privilege Escalation<a class="headerlink" href="#5-privilege-escalation" title="Permanent link">&para;</a></h3>
@@ -2449,7 +2449,7 @@
 <h3 id="6-data-exfiltration">6. Data Exfiltration<a class="headerlink" href="#6-data-exfiltration" title="Permanent link">&para;</a></h3>
 <p><strong>Threat</strong>: Sensitive data leaking through tool outputs back to the LLM.</p>
 <p><strong>Example</strong>:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Tool returns: {&quot;api_key&quot;: &quot;sk-live-xxxxx&quot;, &quot;user_ssn&quot;: &quot;123-45-6789&quot;}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Tool returns: {"api_key": "sk-live-xxxxx", "user_ssn": "123-45-6789"}</span>
 </code></pre></div></p>
 <p><strong>Mitigation</strong>: PII/secret detection and masking in output sanitization.</p>
 <hr />
@@ -2565,30 +2565,30 @@
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
 <a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">PRODUCTION_POLICY</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span>
 <a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="c1"># Tool access control</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">allowed_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;read_*&quot;</span><span class="p">,</span> <span class="s2">&quot;query_*&quot;</span><span class="p">,</span> <span class="s2">&quot;get_*&quot;</span><span class="p">],</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">denied_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;delete_*&quot;</span><span class="p">,</span> <span class="s2">&quot;drop_*&quot;</span><span class="p">,</span> <span class="s2">&quot;truncate_*&quot;</span><span class="p">],</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">allowed_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"read_*"</span><span class="p">,</span> <span class="s2">"query_*"</span><span class="p">,</span> <span class="s2">"get_*"</span><span class="p">],</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">denied_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"delete_*"</span><span class="p">,</span> <span class="s2">"drop_*"</span><span class="p">,</span> <span class="s2">"truncate_*"</span><span class="p">],</span>
 <a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
 <a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    <span class="c1"># Agent identity requirements</span>
 <a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    <span class="n">require_agent_id</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    <span class="n">allowed_roles</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;analyst&quot;</span><span class="p">,</span> <span class="s2">&quot;developer&quot;</span><span class="p">],</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    <span class="n">allowed_roles</span><span class="o">=</span><span class="p">[</span><span class="s2">"analyst"</span><span class="p">,</span> <span class="s2">"developer"</span><span class="p">],</span>
 <a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>
 <a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>    <span class="c1"># Rate limiting</span>
 <a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>    <span class="n">rate_limits</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>        <span class="s2">&quot;query_*&quot;</span><span class="p">:</span> <span class="s2">&quot;100/minute&quot;</span><span class="p">,</span>
-<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>        <span class="s2">&quot;*&quot;</span><span class="p">:</span> <span class="s2">&quot;1000/hour&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>        <span class="s2">"query_*"</span><span class="p">:</span> <span class="s2">"100/minute"</span><span class="p">,</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>        <span class="s2">"*"</span><span class="p">:</span> <span class="s2">"1000/hour"</span><span class="p">,</span>
 <a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>    <span class="p">},</span>
 <a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>
 <a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>    <span class="c1"># Time restrictions</span>
 <a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>    <span class="n">time_restrictions</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>        <span class="s2">&quot;write_*&quot;</span><span class="p">:</span> <span class="s2">&quot;09:00-17:00&quot;</span><span class="p">,</span>  <span class="c1"># Business hours only</span>
+<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>        <span class="s2">"write_*"</span><span class="p">:</span> <span class="s2">"09:00-17:00"</span><span class="p">,</span>  <span class="c1"># Business hours only</span>
 <a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>    <span class="p">},</span>
 <a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a><span class="p">)</span>
 </code></pre></div>
 <h3 id="rate-limit-patterns">Rate Limit Patterns<a class="headerlink" href="#rate-limit-patterns" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">rate_limits</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="s2">&quot;expensive_api&quot;</span><span class="p">:</span> <span class="s2">&quot;10/minute&quot;</span><span class="p">,</span>    <span class="c1"># Specific tool</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="s2">&quot;query_*&quot;</span><span class="p">:</span> <span class="s2">&quot;100/minute&quot;</span><span class="p">,</span>          <span class="c1"># Wildcard pattern</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="s2">&quot;*&quot;</span><span class="p">:</span> <span class="s2">&quot;1000/hour&quot;</span><span class="p">,</span>                 <span class="c1"># Global fallback</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="s2">"expensive_api"</span><span class="p">:</span> <span class="s2">"10/minute"</span><span class="p">,</span>    <span class="c1"># Specific tool</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="s2">"query_*"</span><span class="p">:</span> <span class="s2">"100/minute"</span><span class="p">,</span>          <span class="c1"># Wildcard pattern</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="s2">"*"</span><span class="p">:</span> <span class="s2">"1000/hour"</span><span class="p">,</span>                 <span class="c1"># Global fallback</span>
 <a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="p">}</span>
 </code></pre></div>
 <hr />
@@ -2607,14 +2607,14 @@ that execute arbitrary code.</p>
 <a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_code</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>  <span class="c1"># May run locally!</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="k">return</span> <span class="s2">&quot;executed&quot;</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="k">return</span> <span class="s2">"executed"</span>
 <a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
 <a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># SECURE: Raises error instead of local fallback</span>
 <a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sandbox_required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_code</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Runs in isolated E2B MicroVM. Never runs locally.&quot;&quot;&quot;</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">    </span><span class="sd">"""Runs in isolated E2B MicroVM. Never runs locally."""</span>
 <a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>  <span class="c1"># Only runs in sandbox</span>
-<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="k">return</span> <span class="s2">&quot;executed&quot;</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="k">return</span> <span class="s2">"executed"</span>
 </code></pre></div>
 <p><strong>Always use <code>sandbox_required=True</code> for</strong>:
 - Code execution (exec(), eval())
@@ -2631,12 +2631,12 @@ that execute arbitrary code.</p>
 </ul>
 <h3 id="e2b-api-key-security">E2B API Key Security<a class="headerlink" href="#e2b-api-key-security" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Store in environment (recommended)</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">E2B_API_KEY</span><span class="o">=</span><span class="s2">&quot;your-key-here&quot;</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">E2B_API_KEY</span><span class="o">=</span><span class="s2">"your-key-here"</span>
 <a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
 <a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Or in config file (less secure)</span>
 <a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="c1"># airlock.toml</span>
 <a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="o">[</span>sandbox<span class="o">]</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="nv">e2b_api_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;your-key-here&quot;</span><span class="w">  </span><span class="c1"># Ensure file permissions are restricted</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="nv">e2b_api_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"your-key-here"</span><span class="w">  </span><span class="c1"># Ensure file permissions are restricted</span>
 </code></pre></div>
 <h3 id="pickle-serialization-security">Pickle Serialization Security<a class="headerlink" href="#pickle-serialization-security" title="Permanent link">&para;</a></h3>
 <p>Agent-Airlock uses <code>cloudpickle</code> to serialize functions and arguments for
@@ -2715,13 +2715,13 @@ In distributed deployments, consider:
 <h3 id="log-format">Log Format<a class="headerlink" href="#log-format" title="Permanent link">&para;</a></h3>
 <p>All tool calls are logged as structured JSON:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-01-31T10:30:00Z&quot;</span><span class="p">,</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;delete_records&quot;</span><span class="p">,</span>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">&quot;agent_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agent-123&quot;</span><span class="p">,</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;table&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;users&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;where&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;id=1&quot;</span><span class="p">},</span>
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span><span class="nt">&quot;result&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;blocked&quot;</span><span class="p">,</span>
-<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="nt">&quot;reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tool_denied&quot;</span><span class="p">,</span>
-<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="nt">&quot;policy&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;STRICT_POLICY&quot;</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-01-31T10:30:00Z"</span><span class="p">,</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">"tool"</span><span class="p">:</span><span class="w"> </span><span class="s2">"delete_records"</span><span class="p">,</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">"agent_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agent-123"</span><span class="p">,</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"table"</span><span class="p">:</span><span class="w"> </span><span class="s2">"users"</span><span class="p">,</span><span class="w"> </span><span class="nt">"where"</span><span class="p">:</span><span class="w"> </span><span class="s2">"id=1"</span><span class="p">},</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span><span class="nt">"result"</span><span class="p">:</span><span class="w"> </span><span class="s2">"blocked"</span><span class="p">,</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="nt">"reason"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tool_denied"</span><span class="p">,</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="nt">"policy"</span><span class="p">:</span><span class="w"> </span><span class="s2">"STRICT_POLICY"</span>
 <a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="p">}</span>
 </code></pre></div>
 <h3 id="log-destinations">Log Destinations<a class="headerlink" href="#log-destinations" title="Permanent link">&para;</a></h3>

@@ -1629,25 +1629,25 @@ can call this classifier from their own audit hooks.</p>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">)</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Inside YOUR tool function (agent-airlock does not auto-probe):</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;https://my-mcp-server.example/info&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"https://my-mcp-server.example/info"</span><span class="p">)</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">match</span> <span class="o">=</span> <span class="n">classify_sdk_lineage</span><span class="p">(</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">user_agent</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;User-Agent&quot;</span><span class="p">),</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">user_agent</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"User-Agent"</span><span class="p">),</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">response_body_head</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">[:</span><span class="mi">4096</span><span class="p">],</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="k">if</span> <span class="n">match</span><span class="o">.</span><span class="n">lineage</span> <span class="o">==</span> <span class="n">SDKLineage</span><span class="o">.</span><span class="n">STAINLESS</span><span class="p">:</span>
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="s2">&quot;mcp_server_lineage_stainless&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="s2">"mcp_server_lineage_stainless"</span><span class="p">,</span>
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        <span class="n">match_source</span><span class="o">=</span><span class="n">match</span><span class="o">.</span><span class="n">match_source</span><span class="p">,</span>
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        <span class="n">matched_pattern</span><span class="o">=</span><span class="n">match</span><span class="o">.</span><span class="n">matched_pattern</span><span class="p">,</span>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="p">)</span>
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># Tag the trajectory event with the lineage label regardless of outcome.</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="n">audit_event</span><span class="p">[</span><span class="s2">&quot;sdk_lineage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">lineage</span><span class="o">.</span><span class="n">value</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="n">audit_event</span><span class="p">[</span><span class="s2">"sdk_lineage"</span><span class="p">]</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">lineage</span><span class="o">.</span><span class="n">value</span>
 </code></pre></div>
 <h2 id="match-dataclass">Match dataclass<a class="headerlink" href="#match-dataclass" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">SDKLineageMatch</span><span class="p">:</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">lineage</span><span class="p">:</span> <span class="n">SDKLineage</span>              <span class="c1"># STAINLESS | UNKNOWN</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">match_source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>         <span class="c1"># &quot;user_agent&quot; | &quot;response_body&quot; | None</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">match_source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>         <span class="c1"># "user_agent" | "response_body" | None</span>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">matched_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>      <span class="c1"># the literal substring that fired</span>
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">detail</span><span class="p">:</span> <span class="nb">str</span>
 </code></pre></div>
@@ -1656,17 +1656,17 @@ already names Stainless. Matching is case-insensitive substring on
 both surfaces.</p>
 <h2 id="default-markers">Default markers<a class="headerlink" href="#default-markers" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">DEFAULT_STAINLESS_UA_PATTERNS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="s2">&quot;stainless&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="s2">&quot;stainless-sdk&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="s2">&quot;stainless-node&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="s2">&quot;stainless-python&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="s2">"stainless"</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="s2">"stainless-sdk"</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="s2">"stainless-node"</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="s2">"stainless-python"</span><span class="p">,</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="p">})</span>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">DEFAULT_STAINLESS_BODY_MARKERS</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="s2">&quot;auto-generated by Stainless&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="s2">&quot;Generated by Stainless&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="s2">&quot;@stainless-generated&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="s2">&quot;stainless-codegen&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="s2">"auto-generated by Stainless"</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="s2">"Generated by Stainless"</span><span class="p">,</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="s2">"@stainless-generated"</span><span class="p">,</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="s2">"stainless-codegen"</span><span class="p">,</span>
 <a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="p">)</span>
 </code></pre></div>
 <p>Only the <strong>first 4 KB</strong> of the response body is scanned. Operators
@@ -1677,8 +1677,8 @@ deliberate.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">match</span> <span class="o">=</span> <span class="n">classify_sdk_lineage</span><span class="p">(</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">user_agent</span><span class="o">=</span><span class="n">ua</span><span class="p">,</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">response_body_head</span><span class="o">=</span><span class="n">head</span><span class="p">,</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">extra_ua_patterns</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;acme-internal-gen&quot;</span><span class="p">}),</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">extra_body_markers</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;AcmeCodeGen-v3&quot;</span><span class="p">,),</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">extra_ua_patterns</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">"acme-internal-gen"</span><span class="p">}),</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">extra_body_markers</span><span class="o">=</span><span class="p">(</span><span class="s2">"AcmeCodeGen-v3"</span><span class="p">,),</span>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span>
 </code></pre></div>
 <p>A match on an operator-added pattern still yields <code>SDKLineage.STAINLESS</code>
@@ -1691,12 +1691,12 @@ taxonomy expansion.</p>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">stainless_provenance_probe_defaults</span><span class="p">()</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># {</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1">#   &#39;preset_id&#39;: &#39;stainless_provenance_probe_2026_05_19&#39;,</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="c1">#   &#39;severity&#39;: &#39;info&#39;,</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1">#   &#39;default_action&#39;: &#39;tag_only&#39;,</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1">#   &#39;advisory_url&#39;: &#39;https://www.anthropic.com/news/anthropic-acquires-stainless&#39;,</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="c1">#   &#39;ua_patterns&#39;: frozenset({&#39;stainless&#39;, &#39;stainless-sdk&#39;, ...}),</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1">#   &#39;body_markers&#39;: (&#39;auto-generated by Stainless&#39;, ...),</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1">#   'preset_id': 'stainless_provenance_probe_2026_05_19',</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="c1">#   'severity': 'info',</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1">#   'default_action': 'tag_only',</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1">#   'advisory_url': 'https://www.anthropic.com/news/anthropic-acquires-stainless',</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="c1">#   'ua_patterns': frozenset({'stainless', 'stainless-sdk', ...}),</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1">#   'body_markers': ('auto-generated by Stainless', ...),</span>
 <a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="c1">#   ...</span>
 <a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="c1"># }</span>
 </code></pre></div>

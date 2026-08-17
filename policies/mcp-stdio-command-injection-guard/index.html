@@ -1618,12 +1618,12 @@ guard is a regex / string-set match over the argv.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">StdioCommandInjectionGuard</span><span class="p">,</span> <span class="n">StdioCommandInjectionVerdict</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Default: metachar block-list active; traversal check opt-in.</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">StdioCommandInjectionGuard</span><span class="p">(</span><span class="n">cwd_allowlist</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;/srv/app&quot;</span><span class="p">,))</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">StdioCommandInjectionGuard</span><span class="p">(</span><span class="n">cwd_allowlist</span><span class="o">=</span><span class="p">(</span><span class="s2">"/srv/app"</span><span class="p">,))</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">decision</span> <span class="o">=</span> <span class="n">guard</span><span class="o">.</span><span class="n">evaluate</span><span class="p">({</span><span class="s2">&quot;command&quot;</span><span class="p">:</span> <span class="s2">&quot;bash&quot;</span><span class="p">,</span> <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;-c&quot;</span><span class="p">,</span> <span class="s2">&quot;echo hi; rm -rf /&quot;</span><span class="p">]})</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">decision</span> <span class="o">=</span> <span class="n">guard</span><span class="o">.</span><span class="n">evaluate</span><span class="p">({</span><span class="s2">"command"</span><span class="p">:</span> <span class="s2">"bash"</span><span class="p">,</span> <span class="s2">"args"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"-c"</span><span class="p">,</span> <span class="s2">"echo hi; rm -rf /"</span><span class="p">]})</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># decision.allowed is False</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># decision.verdict == StdioCommandInjectionVerdict.DENY_SHELL_METACHAR</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># decision.matched_metachar == &quot;;&quot;</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># decision.matched_metachar == ";"</span>
 </code></pre></div>
 <h2 id="companion-preset">Companion preset<a class="headerlink" href="#companion-preset" title="Permanent link">&para;</a></h2>
 <p><code>agent_airlock.policy_presets.mcp_stdio_command_injection_preset_defaults()</code>
@@ -1657,8 +1657,8 @@ family for chain-friendly composition.</p>
 </table>
 <h2 id="extending-the-metachar-set">Extending the metachar set<a class="headerlink" href="#extending-the-metachar-set" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">StdioCommandInjectionGuard</span><span class="p">(</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">cwd_allowlist</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;/srv/app&quot;</span><span class="p">,),</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">extra_metachars</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;#&quot;</span><span class="p">}),</span>  <span class="c1"># treat `#` as a metachar too</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">cwd_allowlist</span><span class="o">=</span><span class="p">(</span><span class="s2">"/srv/app"</span><span class="p">,),</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">extra_metachars</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">"#"</span><span class="p">}),</span>  <span class="c1"># treat `#` as a metachar too</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="p">)</span>
 </code></pre></div>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>

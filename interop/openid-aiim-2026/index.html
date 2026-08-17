@@ -1613,7 +1613,7 @@
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>Accept: application/json
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>Authorization: Bearer &lt;token&gt;
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>{&quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;id&quot;: 1, &quot;method&quot;: &quot;tools/call&quot;, &quot;params&quot;: {...}}
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {...}}
 </code></pre></div>
 <p>A valid request returns a <code>StreamableHTTPValidation</code> result and proceeds.</p>
 <p><strong>What a deny looks like on the wire</strong> — a violation raises <code>MCPTransportError</code> with a message safe to place in a JSON-RPC <code>error.message</code>. Verbatim examples:</p>

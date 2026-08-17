@@ -1875,7 +1875,7 @@
 <p>"Ghost arguments" are parameters the LLM invents that don't exist in your function signature.</p>
 <h3 id="the-problem">The Problem<a class="headerlink" href="#the-problem" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_user</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;deleted&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"deleted"</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># LLM calls with invented parameters</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">delete_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="mi">123</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">bypass_audit</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -1887,27 +1887,27 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Permissive mode: strip ghost arguments</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">strict_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_user</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;deleted&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"deleted"</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Strict mode: reject ghost arguments</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">strict_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_user_strict</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;deleted&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"deleted"</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
 </code></pre></div>
 <h3 id="permissive-mode-default">Permissive Mode (Default)<a class="headerlink" href="#permissive-mode-default" title="Permanent link">&para;</a></h3>
 <p>Ghost arguments are stripped and logged:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">delete_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="mi">123</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># Logs: WARNING - Stripped ghost arguments: [&#39;force&#39;]</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Returns: {&quot;deleted&quot;: 123}</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># Logs: WARNING - Stripped ghost arguments: ['force']</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Returns: {"deleted": 123}</span>
 </code></pre></div>
 <h3 id="strict-mode">Strict Mode<a class="headerlink" href="#strict-mode" title="Permanent link">&para;</a></h3>
 <p>Ghost arguments cause rejection:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">delete_user_strict</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="mi">123</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># Returns: AirlockResponse(</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1">#     status=&quot;blocked&quot;,</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1">#     error=&quot;Ghost arguments not allowed&quot;,</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1">#     fix_hints=[&quot;Remove unknown parameters: force&quot;],</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="c1">#     blocked_args=[&quot;force&quot;]</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1">#     status="blocked",</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1">#     error="Ghost arguments not allowed",</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1">#     fix_hints=["Remove unknown parameters: force"],</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="c1">#     blocked_args=["force"]</span>
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># )</span>
 </code></pre></div>
 <h2 id="type-validation">Type Validation<a class="headerlink" href="#type-validation" title="Permanent link">&para;</a></h2>
@@ -1917,8 +1917,8 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Without strict mode</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_user</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span> <span class="o">...</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">get_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="s2">&quot;123&quot;</span><span class="p">)</span>  <span class="c1"># Works! &quot;123&quot; coerced to 123</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">get_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="s2">&quot;abc&quot;</span><span class="p">)</span>  <span class="c1"># Crashes at runtime</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">get_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="s2">"123"</span><span class="p">)</span>  <span class="c1"># Works! "123" coerced to 123</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">get_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="s2">"abc"</span><span class="p">)</span>  <span class="c1"># Crashes at runtime</span>
 </code></pre></div>
 <h3 id="the-solution_1">The Solution<a class="headerlink" href="#the-solution_1" title="Permanent link">&para;</a></h3>
 <p>Airlock enforces exact types:</p>
@@ -1926,13 +1926,13 @@
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nd">@Airlock</span><span class="p">()</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_user</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
 <a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">result</span> <span class="o">=</span> <span class="n">get_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="s2">&quot;123&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">result</span> <span class="o">=</span> <span class="n">get_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="s2">"123"</span><span class="p">)</span>
 <a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="c1"># Returns: AirlockResponse(</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="c1">#     status=&quot;blocked&quot;,</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="c1">#     error=&quot;Type validation failed&quot;,</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="c1">#     fix_hints=[&quot;user_id: Expected int, got str. Try: user_id=123&quot;]</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="c1">#     status="blocked",</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="c1">#     error="Type validation failed",</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="c1">#     fix_hints=["user_id: Expected int, got str. Try: user_id=123"]</span>
 <a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="c1"># )</span>
 </code></pre></div>
 <h2 id="supported-types">Supported Types<a class="headerlink" href="#supported-types" title="Permanent link">&para;</a></h2>
@@ -1995,13 +1995,13 @@
 <a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
 <a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="nd">@Airlock</span><span class="p">()</span>
 <a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_user</span><span class="p">(</span><span class="n">user</span><span class="p">:</span> <span class="n">UserCreate</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;created&quot;</span><span class="p">:</span> <span class="n">user</span><span class="o">.</span><span class="n">name</span><span class="p">}</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"created"</span><span class="p">:</span> <span class="n">user</span><span class="o">.</span><span class="n">name</span><span class="p">}</span>
 <a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>
 <a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="c1"># Valid</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="n">result</span> <span class="o">=</span> <span class="n">create_user</span><span class="p">(</span><span class="n">user</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;John&quot;</span><span class="p">,</span> <span class="s2">&quot;email&quot;</span><span class="p">:</span> <span class="s2">&quot;j@x.com&quot;</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">})</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="n">result</span> <span class="o">=</span> <span class="n">create_user</span><span class="p">(</span><span class="n">user</span><span class="o">=</span><span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"John"</span><span class="p">,</span> <span class="s2">"email"</span><span class="p">:</span> <span class="s2">"j@x.com"</span><span class="p">,</span> <span class="s2">"age"</span><span class="p">:</span> <span class="mi">30</span><span class="p">})</span>
 <a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>
 <a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="c1"># Invalid - age is string</span>
-<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="n">result</span> <span class="o">=</span> <span class="n">create_user</span><span class="p">(</span><span class="n">user</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;John&quot;</span><span class="p">,</span> <span class="s2">&quot;email&quot;</span><span class="p">:</span> <span class="s2">&quot;j@x.com&quot;</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="s2">&quot;30&quot;</span><span class="p">})</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="n">result</span> <span class="o">=</span> <span class="n">create_user</span><span class="p">(</span><span class="n">user</span><span class="o">=</span><span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"John"</span><span class="p">,</span> <span class="s2">"email"</span><span class="p">:</span> <span class="s2">"j@x.com"</span><span class="p">,</span> <span class="s2">"age"</span><span class="p">:</span> <span class="s2">"30"</span><span class="p">})</span>
 <a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="c1"># Blocked with fix_hints</span>
 </code></pre></div>
 <h2 id="self-healing-responses">Self-Healing Responses<a class="headerlink" href="#self-healing-responses" title="Permanent link">&para;</a></h2>
@@ -2010,15 +2010,15 @@
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">search</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">offset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="k">return</span> <span class="p">[]</span>
 <a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">result</span> <span class="o">=</span> <span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="mi">123</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="s2">&quot;ten&quot;</span><span class="p">,</span> <span class="n">extra_param</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">result</span> <span class="o">=</span> <span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="mi">123</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="s2">"ten"</span><span class="p">,</span> <span class="n">extra_param</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="c1"># Returns:</span>
 <a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># {</span>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1">#     &quot;status&quot;: &quot;blocked&quot;,</span>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="c1">#     &quot;error&quot;: &quot;Validation failed&quot;,</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1">#     &quot;fix_hints&quot;: [</span>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="c1">#         &quot;query: Expected str, got int. Try: query=&#39;123&#39;&quot;,</span>
-<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="c1">#         &quot;limit: Expected int, got str. Try: limit=10&quot;,</span>
-<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="c1">#         &quot;Remove unknown parameters: extra_param&quot;</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1">#     "status": "blocked",</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="c1">#     "error": "Validation failed",</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1">#     "fix_hints": [</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="c1">#         "query: Expected str, got int. Try: query='123'",</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="c1">#         "limit: Expected int, got str. Try: limit=10",</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="c1">#         "Remove unknown parameters: extra_param"</span>
 <a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="c1">#     ]</span>
 <a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="c1"># }</span>
 </code></pre></div>
@@ -2030,7 +2030,7 @@
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_validation_error</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="n">ValidationError</span><span class="p">):</span>
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="c1"># Log to monitoring system</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Validation error in </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="o">.</span><span class="n">error_count</span><span class="p">()</span><span class="si">}</span><span class="s2"> issues&quot;</span><span class="p">)</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Validation error in </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="o">.</span><span class="n">error_count</span><span class="p">()</span><span class="si">}</span><span class="s2"> issues"</span><span class="p">)</span>
 <a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
 <a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">on_validation_error</span><span class="o">=</span><span class="n">on_validation_error</span><span class="p">)</span>
 <a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
@@ -2049,8 +2049,8 @@
 <a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
 <a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="c1"># Signature is preserved</span>
 <a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">my_tool</span><span class="p">)</span>
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="k">assert</span> <span class="s2">&quot;query&quot;</span> <span class="ow">in</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span>
-<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="k">assert</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s2">&quot;limit&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">default</span> <span class="o">==</span> <span class="mi">10</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="k">assert</span> <span class="s2">"query"</span> <span class="ow">in</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="k">assert</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s2">"limit"</span><span class="p">]</span><span class="o">.</span><span class="n">default</span> <span class="o">==</span> <span class="mi">10</span>
 </code></pre></div>
 <p>This ensures compatibility with:
 - OpenAI Function Calling
