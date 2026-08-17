@@ -16,8 +16,8 @@ The wedge is argument validation at the call boundary; every other layer wraps i
 - Sandboxed execution via pluggable backends (E2B Firecracker, Modal, Docker, local)
 - `mcp_spec/` guards mapped to specific named CVEs — stdio injection, OAuth, DNS rebinding,
   SSRF, eval-RCE, WebSocket origin hijack, task lifecycle
-- Framework adapters: FastMCP, LangChain/LangGraph, Anthropic, OpenAI, Gemini, PydanticAI,
-  CrewAI, smolagents
+- Framework adapters: FastMCP, LangChain/LangGraph, Anthropic (Messages, Claude Agent SDK,
+  Managed Agents), OpenAI, Gemini, PydanticAI, CrewAI, smolagents, Google Model Armor
 - `airlock` CLI: scan-tools, doctor, verify, attest, replay, corpus-bench, conformance
 
 **The installed core is Pydantic-only.** Everything else — structlog included — lives in an
@@ -32,10 +32,12 @@ absent. `scripts/check_core_deps.py` enforces this; do not add a core dependency
 ```bash
 pip install -e ".[dev]"            # editable install with dev deps
 
-# Optional extras — install only what you need
-pip install -e ".[sandbox]"        # E2B Firecracker   ([modal] [mcp] [console] ...)
-pip install -e ".[redis]"          # distributed rate limiter ([crypto] [attested] ...)
-pip install -e ".[all]"            # everything
+# Optional extras — install only what you need. Full set:
+#   logging bench sandbox modal mcp claude-agent model-armor console
+#   redis crypto attested pydantic-ai crewai all dev docs
+pip install -e ".[sandbox]"        # E2B Firecracker micro-VM execution
+pip install -e ".[redis]"          # distributed rate limiter
+pip install -e ".[all]"            # every runtime extra (not dev/docs)
 
 make test          # pytest tests/ -v --no-cov
 make coverage      # pytest with coverage (floor enforced; see [tool.coverage.report])
@@ -67,6 +69,13 @@ Run them explicitly with `pytest -m docker`.
 every `agent_airlock.cli.<name>:main(argv)` in space-form (`airlock scan-tools`), so flags
 are identical to the `python -m agent_airlock.cli.<name>` long form.
 
+Repo-level directories outside the package: `tests/`, `benchmarks/` (agentdojo, blockrate,
+harness_injection, mcp_conformance, scantools_mcptox, toolprivbench, vs_gateway),
+`scripts/` (the `check_*` claim gates and `smoke_*` guard drivers), `docs/`, `examples/`,
+`demo/` (runnable live demo), `presets/`, `schemas/`, `tools/`, `.claude-plugin/`
+(marketplace manifest), and `site/` — **committed mkdocs build output; never hand-edit
+it, regenerate instead.**
+
 ```
 src/agent_airlock/
 ├── core.py            @Airlock decorator — the entrypoint; sync + async
@@ -85,7 +94,10 @@ src/agent_airlock/
 ├── VACCINE      filesystem.py, network.py, honeypot.py, vaccine.py,
 │                camouflage_resistant.py, ssrf_egress_guard.py, sequence_guard.py,
 │                action_contradiction_gate.py, tool_output_trust_guard.py
-├── mcp_spec/    per-CVE / per-spec-revision MCP guards (largest subpackage)
+├── mcp_spec/    per-CVE / per-spec-revision MCP guards — 47 modules, has own CLAUDE.md
+├── mcp/         cimd.py — pinned CIMD trust anchor, denies on drift
+├── data/        dated snapshots (model pricing, advisory blast radius)
+├── fixtures/    dated pattern files (e.g. redaction_patterns_2026_04.txt)
 ├── ADVERSARIAL  anomaly.py, regression_corpus.py, sdk_provenance.py, a2a.py,
 │                mcp_proxy_guard.py, corpus/wild_payload_corpus/
 ├── ATTEST       attest/, conformance/, baseline/, pack/, packs/, kill_switch/,
@@ -121,7 +133,9 @@ carrying `fix_hints` for the model to retry against, rather than raising.
 - **Python 3.10+**, `from __future__ import annotations` first. Use `X | Y`, not `Optional`.
 - **mypy strict** (`disallow_untyped_defs`, `warn_return_any`, pydantic plugin). Type every
   signature. `TypeVar` / `ParamSpec` / `@overload` for generics.
-- **ruff**, line length 100, target `py310`. Selected: E, W, F, I, B, C4, UP, ARG, SIM.
+- **ruff**, line length 100, target `py310`. Selected: E, W, F, I, B, C4, UP, ARG, SIM;
+  globally ignored: E501, SIM102, SIM103, B027. The `py310` target is deliberate — bumping
+  it makes UP036/UP042 fire and emit code that breaks on 3.10. Do not raise it.
   Per-file `ARG` ignores exist for `integrations/`, `cli/`, `anomaly.py`, tests and examples —
   those unused args are callback-interface signatures, so do not "fix" them.
 - **Pydantic V2 strict mode** for validation. `@dataclass` with `field(default_factory=...)`
@@ -148,8 +162,10 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   preserves `__signature__` / `__annotations__` so framework introspection still works.
 - **Defense-in-depth** — validation → policy → capability → filesystem → network → sandbox.
   Each layer exists because an earlier one proved insufficient for a specific CVE.
-- **Guard triple** — new guards ship as `<Name>Guard` + `<Name>Decision` + `<Name>Verdict`
-  with a `*_defaults()` factory re-exported from `__init__.py`. Follow this shape.
+- **Guard triple, split across two files** — `<Name>Guard` + `<Name>Decision` +
+  `<Name>Verdict` in `mcp_spec/` (re-exported via its `__all__`), and the matching
+  `*_defaults()` factory in `policy_presets.py`, `@preset`-registered (51 of 51 are).
+  A guard with no registered preset never shows up in `list_active()`.
 - **Deny-by-default** — unknown tier, unregistered manifest, and unpinned spec revision all
   fail closed. New branches should preserve that direction.
 - **Config priority** — `AIRLOCK_*` env > constructor > `airlock.toml`.
@@ -171,8 +187,9 @@ carrying `fix_hints` for the model to retry against, rather than raising.
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-History is dominated by `feat:` and `fix:`, with recurring `bench:` and `docs:` work.
-Two themes drive most recent development:
+History is dominated by `feat:` and `fix:`, with recurring `bench:` and `docs:` work
+(last 120 commits: 41 `feat:`, 21 `fix:`, 11 `bench:`, 10 `docs:`). Three themes drive
+most recent development:
 
 1. **Per-CVE guards.** Most `feat:` commits add one guard for one named advisory
    (`mcp_spec/*_guard.py`), its preset defaults, and a regression fixture. Commit messages
@@ -182,9 +199,16 @@ Two themes drive most recent development:
    spec-revision status, and dependency claims against what the code actually does.
    Machine-checked gates (`scripts/check_*.py`, badge and changelog tests) were added so this
    drift fails CI instead of shipping.
+3. **Benchmark honesty.** `bench(...)` commits publish adversarial results under
+   `benchmarks/` and are written to survive a hostile read: a null result ships as a null
+   result ("first live run — inconclusive, and reported as inconclusive"), a broken harness
+   is fixed before its output is quoted ("stop zeros reading as results"), and the sample
+   scope is stated inline rather than rounded up. Match this register when touching
+   `benchmarks/` or `BENCHMARK.md`.
 
 Practical consequence: **do not add a capability claim to README, docs, or a preset
 description unless code and a test back it.** There is tooling that will fail the build on it.
+A benchmark number is a claim too — report the run you actually got, including a zero.
 
 <!-- END AUTO-MANAGED -->
 
@@ -203,6 +227,13 @@ description unless code and a test back it.** There is tooling that will fail th
   that motivated it.
 - Every `feat:` needs at least one regression test.
 - Run `make lint` and `pytest -m "not docker"` before committing.
+- CI gates are `test`, `bare-install`, `lint`, `version-tag-guard`, `security`, `docs`.
+  `bare-install` is the one that enforces the Pydantic-only core — if you add an import
+  that is not in an extra, that job fails, not the test suite.
+- Six guards additionally carry a `scripts/smoke_*.py` end-to-end driver runnable outside
+  pytest (sequence guard, action-contradiction gate, attested admission, capsule indirect
+  injection, Flowise MCP stdio, explain). It is not required for every guard — add one
+  when the guard's behaviour is hard to see from a unit test alone.
 - New modules follow the layered structure: validation → policy → execution → sanitization.
 - Keep security-relevant decisions observable via structured logging.
 

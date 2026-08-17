@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
@@ -34,6 +34,15 @@ class BlockReason(str, Enum):
     ANOMALY_DETECTED = "anomaly_detected"
     # V0.8.7 cost-budget reasons
     BUDGET_EXCEEDED = "budget_exceeded"
+    # V0.8.74 third-verdict reasons (issue #143). Distinct from POLICY_VIOLATION on
+    # purpose: "blocked because nobody could approve it" and "blocked because it is
+    # forbidden" are different operational situations, and collapsing them hides a
+    # missing approver integration behind a working-looking denial.
+    ESCALATION_REQUIRED = "escalation_required"
+    ESCALATION_DENIED = "escalation_denied"
+    ESCALATION_TIMEOUT = "escalation_timeout"
+    # V0.8.74 resource-amplification reasons (issue #142).
+    AMPLIFICATION_EXCEEDED = "amplification_exceeded"
 
 
 @dataclass
@@ -198,6 +207,135 @@ def handle_policy_violation(
             "function": func_name,
             "policy": policy_name,
             "violation_reason": reason,
+        },
+    )
+
+
+def handle_amplification_exceeded(
+    func_name: str,
+    *,
+    reason: str,
+    run_call_count: int,
+    baseline_calls: int | None,
+    amplification_ratio: float | None,
+    verdict: str,
+) -> AirlockResponse:
+    """Create a response for a run that exceeded its amplification budget.
+
+    Args:
+        func_name: Name of the function that tripped the budget.
+        reason: Human-readable explanation from the guard.
+        run_call_count: Calls recorded for the run, including this one.
+        baseline_calls: The policy's declared baseline, when set.
+        amplification_ratio: ``run_call_count / baseline_calls``, when computable.
+        verdict: The :class:`~agent_airlock.amplification.AmplificationVerdict` value.
+
+    Returns:
+        AirlockResponse explaining the amplification block.
+    """
+    unconfigured = verdict == "unconfigured"
+    fix_hints = (
+        [
+            "Amplification checking is enabled but no threshold is set",
+            "Set AmplificationBudget(max_calls_per_run=N), or "
+            "max_amplification_ratio=R with baseline_calls_per_run=B",
+            "Blocked deny-by-default: a budget that cannot fire is not a budget",
+        ]
+        if unconfigured
+        else [
+            "This run made more tool calls than its declared budget allows",
+            "If the extra calls are legitimate, raise the budget; if not, the run may "
+            "have been recruited into a detour (arXiv:2608.12273)",
+            "Use action='warn' to record the ratio without blocking while you establish a baseline",
+        ]
+    )
+
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.AMPLIFICATION_EXCEEDED,
+        error=f"AIRLOCK_BLOCK: '{func_name}' — {reason}",
+        fix_hints=fix_hints,
+        metadata={
+            "function": func_name,
+            "amplification_verdict": verdict,
+            "run_call_count": run_call_count,
+            "run_baseline_calls": baseline_calls,
+            "run_amplification_ratio": amplification_ratio,
+        },
+    )
+
+
+def handle_escalation(
+    func_name: str,
+    *,
+    reason: str,
+    rule: str,
+    outcome: Literal["no_approver", "denied", "timeout"],
+    detail: str = "",
+    approver: str | None = None,
+) -> AirlockResponse:
+    """Create a response for a call that escalated and did not come back approved.
+
+    Args:
+        func_name: Name of the function that was held.
+        reason: The operator-authored reason from the matching escalation rule.
+        rule: The ``escalate_tools`` pattern that fired.
+        outcome: Why the call is blocked. ``"no_approver"`` means the policy escalated
+            with nothing registered to escalate to — a **configuration** failure, and the
+            reason this helper exists as its own block reason rather than reusing
+            ``POLICY_VIOLATION``.
+        detail: Free-form detail from the approver, when there was one.
+        approver: Identifier of the human/system that decided, when known.
+
+    Returns:
+        AirlockResponse explaining the escalation outcome.
+    """
+    block_reason = {
+        "no_approver": BlockReason.ESCALATION_REQUIRED,
+        "denied": BlockReason.ESCALATION_DENIED,
+        "timeout": BlockReason.ESCALATION_TIMEOUT,
+    }[outcome]
+
+    if outcome == "no_approver":
+        error = (
+            f"AIRLOCK_BLOCK: '{func_name}' requires human approval (rule {rule!r}: {reason}) "
+            f"but no approver is registered on the policy. Blocked deny-by-default."
+        )
+        fix_hints = [
+            "This call needs human approval and the policy has no approver wired up",
+            "Register one: SecurityPolicy(..., approver=my_approver) — see "
+            "agent_airlock.oversight.Approver",
+            "Do not retry; this is a configuration gap, not a transient failure",
+        ]
+    elif outcome == "denied":
+        error = (
+            f"AIRLOCK_BLOCK: '{func_name}' was denied by human approval "
+            f"(rule {rule!r}: {reason}). {detail}"
+        )
+        fix_hints = [
+            "A human reviewed this call and declined it",
+            "Do not retry the same call; ask the operator why it was declined",
+        ]
+    else:
+        error = (
+            f"AIRLOCK_BLOCK: human approval for '{func_name}' timed out "
+            f"(rule {rule!r}: {reason}). {detail}"
+        )
+        fix_hints = [
+            "The approval request was not answered in time",
+            "Blocked rather than allowed, because an unanswered gate is not consent",
+        ]
+
+    return AirlockResponse.blocked_response(
+        reason=block_reason,
+        error=error,
+        fix_hints=fix_hints,
+        metadata={
+            "function": func_name,
+            "escalation_rule": rule,
+            "escalation_reason": reason,
+            "escalation_outcome": outcome,
+            "approver": approver,
+            "detail": detail,
         },
     )
 

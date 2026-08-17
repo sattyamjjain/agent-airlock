@@ -26,9 +26,12 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from ._log import structlog
+
+if TYPE_CHECKING:
+    from .amplification import AmplificationDecision
 
 logger = structlog.get_logger("agent-airlock.context")
 
@@ -78,6 +81,11 @@ class AirlockContext(Generic[T]):
     # potential domain-camouflaged injection vector per arXiv:2605.22001).
     # SecurityPolicy.check_reauthorization() reads these.
     untrusted_reinvocation_count: dict[str, int] = field(default_factory=dict)
+    # V0.8.74 per-run amplification decision (issue #142). Written by the
+    # @Airlock seam right after the policy check and read at audit time, so
+    # every audit call site can carry the run's call/token counters without
+    # threading a new parameter through each one.
+    _amplification: AmplificationDecision | None = field(default=None, repr=False)
     _authorized_once: set[str] = field(default_factory=set, repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
 

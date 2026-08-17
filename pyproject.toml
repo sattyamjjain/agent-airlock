@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.8.73"
+version = "0.8.74"
 description = "A type-checker and contract layer for AI agent tool calls, deny-by-default, in-process, Pydantic-only. Strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks."
 readme = "README.md"
 license = "MIT"
@@ -209,9 +209,19 @@ Issues = "https://github.com/sattyamjjain/agent-airlock/issues"
 include = [
     "/src",
 ]
+# Subtree CLAUDE.md files are contributor documentation that lives next to the code it
+# describes (e.g. src/agent_airlock/mcp_spec/CLAUDE.md). They sit under /src, so without
+# this they would be swept into the sdist and — via `packages` below — installed into the
+# end user's site-packages. Nothing at runtime reads them.
+exclude = [
+    "**/CLAUDE.md",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_airlock"]
+exclude = [
+    "**/CLAUDE.md",
+]
 
 [tool.ruff]
 # requires-python remains ">=3.10"; ruff target stays at py310 so UP036

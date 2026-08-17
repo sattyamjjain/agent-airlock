@@ -1,7 +1,7 @@
 {
   "_comment": "RECORDED live measurement of a native Docker MCP Gateway against the vs_gateway corpus. Regenerate with benchmarks/vs_gateway/gateway_harness/regen.py (needs Docker). The shipped bench replays this fixture so it runs without Docker.",
   "provenance": {
-    "measured_utc_date": "2026-07-16",
+    "measured_utc_date": "2026-08-17",
     "gateway_product": "Docker AI MCP Gateway",
     "gateway_image_version": "2.0.1",
     "docker_mcp_cli_version": "v0.42.1",

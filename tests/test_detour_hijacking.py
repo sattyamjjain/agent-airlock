@@ -28,9 +28,12 @@ What this module establishes, in order:
    return value, block count, and error count.
 3. **The recruited calls ARE visible** in the per-call audit record. This is the real
    capability and it is asserted, not assumed.
-4. **The amplification is NOT visible.** The audit record carries no token or cost field, so
-   the quantity the paper actually measures cannot be read off the log even in principle.
-   Tracked as a gap, not passed over silently.
+4. **The amplification IS now recorded, and detected.** v0.8.74 added an opt-in
+   ``SecurityPolicy.amplification_budget``: the run's call count is compared against a
+   declared baseline, five ``run_*`` fields carry the comparison onto every ``AuditRecord``,
+   and an over-budget run is refused. The unit is calls, not dollars — the paper's token and
+   wall-time figures are not universally observable at this seam, and the field names say so
+   rather than estimating. Closes issue #142.
 5. `SequenceGuard` in DECLARED mode does catch the detour today, at the cost of the operator
    having declared the route up front.
 """
@@ -44,9 +47,14 @@ from typing import Any
 
 import pytest
 
-from agent_airlock import Airlock, AirlockConfig, SecurityPolicy
+from agent_airlock import (
+    Airlock,
+    AirlockConfig,
+    AmplificationBudget,
+    SecurityPolicy,
+    detour_hijacking_defaults,
+)
 from agent_airlock.anomaly import AnomalyDetector, AnomalyDetectorConfig
-from agent_airlock.audit import AuditRecord
 from agent_airlock.sequence_guard import ENTRY_SENTINEL, SequenceGuard, SequenceViolation
 
 # --------------------------------------------------------------------------------------
@@ -123,14 +131,30 @@ def _build_tools(audit_path: Path, policy: SecurityPolicy | None = None) -> dict
     }
 
 
-def _run(route: tuple[str, ...], audit_path: Path, session_id: str) -> Any:
-    """Drive one trajectory end to end and return the final tool's value."""
-    tools = _build_tools(audit_path)
+def _run_all(
+    route: tuple[str, ...],
+    audit_path: Path,
+    session_id: str,
+    policy: SecurityPolicy | None = None,
+) -> list[Any]:
+    """Drive one trajectory and return EVERY call's result, in order.
+
+    A blocked call returns an ``AirlockResponse`` dict rather than the tool's value, so
+    the caller can see exactly where in the trajectory a control fired.
+    """
+    tools = _build_tools(audit_path, policy)
     wrapper = _Wrapper(context=_Session(session_id=session_id))
-    result = None
-    for tool_name in route:
-        result = tools[tool_name](wrapper)
-    return result
+    return [tools[tool_name](wrapper) for tool_name in route]
+
+
+def _run(
+    route: tuple[str, ...],
+    audit_path: Path,
+    session_id: str,
+    policy: SecurityPolicy | None = None,
+) -> Any:
+    """Drive one trajectory end to end and return the final tool's value."""
+    return _run_all(route, audit_path, session_id, policy)[-1]
 
 
 def _audit_records(audit_path: Path, session_id: str) -> list[dict[str, Any]]:
@@ -276,36 +300,131 @@ class TestPerRunRecordMakesRecruitedCallsVisible:
         assert all("session_id" not in record for record in lines)
 
 
-class TestResourceAmplificationIsNotRecorded:
-    """The gap. The calls are visible; the cost they carry is not.
+class TestResourceAmplificationIsRecordedAndDetected:
+    """Closed in v0.8.74. The calls were always visible; now the amplification is too.
 
-    CDH's damage is measured in tokens (+66.91%) and wall time (+92.45%). An operator
-    reading airlock's audit log can count six calls instead of two, which is a real and
-    useful signal — but cannot say what those four extra calls *cost*, because the record
-    has no field for it.
+    This class previously asserted the *absence* of cost accounting — it was a tripwire
+    designed to fail loudly the day someone closed the gap, rather than let it be closed
+    in silence. It has been rewritten in place, which is the tripwire working as intended.
 
-    These assertions fail the moment someone adds cost accounting to `AuditRecord`. That is
-    intended: the gap is tracked as an open issue, and closing it should break this test
-    loudly rather than pass in silence.
+    What changed: `SecurityPolicy.amplification_budget` declares what a run should cost,
+    `AmplificationGuard` counts calls against it, and five `run_*` fields carry the
+    comparison onto every `AuditRecord`.
 
-    Tracked in https://github.com/sattyamjjain/agent-airlock/issues/142
+    What deliberately did **not** change: the unit is CALLS, not dollars. The paper
+    measures tokens (+66.91%) and wall time (+92.45%); airlock observes neither
+    universally, so it reports the unit it genuinely has and the field names say so.
+    `run_input_tokens` is populated only from a caller-supplied `_airlock_input_tokens`
+    and is never estimated.
+
+    Closes https://github.com/sattyamjjain/agent-airlock/issues/142
     """
 
-    def test_audit_record_has_no_cost_or_token_field(self) -> None:
-        fields = set(
-            AuditRecord(timestamp="2026-08-16T00:00:00Z", tool_name="t", blocked=False)
-            .to_dict()
-            .keys()
-        )
-        assert not {f for f in fields if "token" in f or "cost" in f}, (
-            "AuditRecord gained cost accounting — update this test and close issue #142"
+    #: A budget declaring the direct route's two calls as normal, tripping at 1.5x.
+    def _budget_policy(self) -> SecurityPolicy:
+        return SecurityPolicy(
+            amplification_budget=detour_hijacking_defaults(baseline_calls_per_run=len(DIRECT_ROUTE))
         )
 
-    def test_duration_is_per_call_and_never_summed(self, tmp_path: Path) -> None:
-        """`duration_ms` is tool execution time, not the agent's end-to-end wall time.
+    def test_audit_record_now_carries_the_run_fields(self, tmp_path: Path) -> None:
+        """The field that did not exist. Inverse of the old assertion."""
+        audit_path = tmp_path / "detour.jsonl"
+        _run(DETOUR_ROUTE, audit_path, "sess-detour", policy=self._budget_policy())
+        records = _audit_records(audit_path, "sess-detour")
 
-        Summing it does not reconstruct the paper's 92.45% figure: it excludes model
-        latency, which is where a detour spends most of the time it wastes.
+        assert records
+        last = records[-1]
+        assert last["run_call_count"] == len(DETOUR_ROUTE)
+        assert last["run_baseline_calls"] == len(DIRECT_ROUTE)
+        assert last["run_amplification_ratio"] == 3.0
+
+    def test_the_check_fires_on_the_detour(self, tmp_path: Path) -> None:
+        """2c: detectable, not merely visible. The run is refused mid-detour."""
+        audit_path = tmp_path / "detour.jsonl"
+        results = _run_all(DETOUR_ROUTE, audit_path, "sess-detour", policy=self._budget_policy())
+
+        blocked = [r for r in results if isinstance(r, dict)]
+        assert blocked, "the detour ran to completion without tripping the budget"
+        assert blocked[0]["block_reason"] == "amplification_exceeded"
+        assert "amplification" in blocked[0]["error"]
+
+    def test_the_direct_route_is_not_flagged(self, tmp_path: Path) -> None:
+        """The control. A budget that also refuses the legitimate route is useless."""
+        audit_path = tmp_path / "direct.jsonl"
+        results = _run_all(DIRECT_ROUTE, audit_path, "sess-direct", policy=self._budget_policy())
+
+        assert all(not isinstance(r, dict) for r in results), "the direct route was blocked"
+        records = _audit_records(audit_path, "sess-direct")
+        assert records[-1]["run_amplification_ratio"] == 1.0
+        assert records[-1]["amplification_verdict"] == "ok"
+
+    def test_a_budget_with_no_threshold_blocks(self) -> None:
+        """Deny-by-default: opting in without a threshold must not be a silent no-op.
+
+        This is issue #142's own failure mode — a field nobody reads — applied to the fix
+        itself. An operator who enables amplification checking and configures nothing has
+        expressed an intent the configuration cannot satisfy.
+        """
+        policy = SecurityPolicy(amplification_budget=AmplificationBudget())
+
+        @Airlock(policy=policy)
+        def anything() -> str:
+            return "ran"
+
+        result = anything()
+        assert isinstance(result, dict)
+        assert result["metadata"]["amplification_verdict"] == "unconfigured"
+
+    def test_warn_action_records_without_blocking(self, tmp_path: Path) -> None:
+        """The baseline-establishing mode: get the numbers before enforcing them."""
+        audit_path = tmp_path / "warn.jsonl"
+        policy = SecurityPolicy(
+            amplification_budget=AmplificationBudget(
+                baseline_calls_per_run=len(DIRECT_ROUTE),
+                max_amplification_ratio=1.5,
+                action="warn",
+            )
+        )
+        results = _run_all(DETOUR_ROUTE, audit_path, "sess-warn", policy=policy)
+
+        assert all(not isinstance(r, dict) for r in results), "warn mode blocked a call"
+        records = _audit_records(audit_path, "sess-warn")
+        assert records[-1]["amplification_verdict"] == "over_budget"
+
+    def test_no_budget_leaves_the_record_byte_identical(self, tmp_path: Path) -> None:
+        """Opt-in means opt-in. A v0.8.73 policy produces a v0.8.73 record."""
+        audit_path = tmp_path / "nobudget.jsonl"
+        _run(DETOUR_ROUTE, audit_path, "sess-detour")
+        records = _audit_records(audit_path, "sess-detour")
+
+        leaked = {k for r in records for k in r if k.startswith("run_") or "amplification" in k}
+        assert leaked == set(), f"amplification fields leaked without a budget: {leaked}"
+
+    def test_tokens_are_carried_but_never_estimated(self, tmp_path: Path) -> None:
+        """`run_input_tokens` reflects what the caller supplied, and nothing more."""
+        audit_path = tmp_path / "tokens.jsonl"
+        config = AirlockConfig(enable_audit_log=True, audit_log_path=audit_path)
+        policy = SecurityPolicy(
+            amplification_budget=AmplificationBudget(max_calls_per_run=10),
+        )
+
+        @Airlock(config=config, policy=policy)
+        def summarize_text(_wrapper: _Wrapper) -> str:
+            return EXPECTED_ANSWER
+
+        wrapper = _Wrapper(context=_Session(session_id="sess-tok"))
+        summarize_text(wrapper, _airlock_input_tokens=1200)
+        summarize_text(wrapper, _airlock_input_tokens=800)
+
+        records = _audit_records(audit_path, "sess-tok")
+        assert records[-1]["run_input_tokens"] == 2000, "token counts did not accumulate"
+
+    def test_duration_is_still_per_call_and_never_summed(self, tmp_path: Path) -> None:
+        """Unchanged and still true: `duration_ms` cannot reconstruct the wall-time figure.
+
+        Kept from the original class. Adding call accounting did not turn `duration_ms`
+        into an end-to-end timer, and nothing here should imply otherwise — it excludes
+        model latency, which is where a detour spends most of what it wastes.
         """
         audit_path = tmp_path / "detour.jsonl"
         _run(DETOUR_ROUTE, audit_path, "sess-detour")
@@ -314,22 +433,17 @@ class TestResourceAmplificationIsNotRecorded:
         assert all("duration_ms" in record for record in records)
         assert not any("total" in key or "elapsed" in key for record in records for key in record)
 
-    def test_nothing_in_the_layer_flags_the_run_as_amplified(self, tmp_path: Path) -> None:
-        """End to end: a detour run emits no warning, no block, and no anomaly event.
+    def test_the_anomaly_detector_still_does_not_fire(self) -> None:
+        """The detour remains invisible to `AnomalyDetector`, and that is still correct.
 
-        Six calls where two were needed, and the layer's own record says everything was
-        fine. Visibility is not detection, and this is the distance between them.
+        The amplification budget is a *separate* control, not a fifth `AnomalyType`. This
+        assertion stays so the boundary is explicit: closing #142 did not widen the
+        detector's remit, it added the control the detector was never meant to be.
         """
-        audit_path = tmp_path / "detour.jsonl"
-        _run(DETOUR_ROUTE, audit_path, "sess-detour")
-        records = _audit_records(audit_path, "sess-detour")
-
         detector = AnomalyDetector(AnomalyDetectorConfig())
         events = [
             detector.record_call(tool_name=name, session_id="sess-detour") for name in DETOUR_ROUTE
         ]
-
-        assert not any(record["blocked"] for record in records)
         assert not any(events)
 
 

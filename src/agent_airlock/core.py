@@ -51,8 +51,10 @@ import contextlib
 import functools
 import inspect
 import time
+import uuid
 from collections.abc import Callable
-from typing import Any, ParamSpec, TypeVar, overload
+from datetime import datetime, timezone
+from typing import Any, Literal, ParamSpec, TypeVar, overload
 
 from pydantic import ValidationError
 
@@ -81,13 +83,21 @@ from .honeypot import (
     should_use_honeypot,
 )
 from .network import NetworkBlockedError, network_airgap
-from .policy import PolicyMutationError, PolicyViolation, SecurityPolicy, ViolationType
+from .policy import (
+    PolicyEscalation,
+    PolicyMutationError,
+    PolicyViolation,
+    SecurityPolicy,
+    ViolationType,
+)
 from .sanitizer import sanitize_output
 from .self_heal import (
     AirlockResponse,
     BlockReason,
+    handle_amplification_exceeded,
     handle_budget_exceeded,
     handle_endpoint_violation,
+    handle_escalation,
     handle_ghost_argument_error,
     handle_network_blocked,
     handle_path_violation,
@@ -483,6 +493,22 @@ class Airlock:
             if deser_error is not None:
                 return kwargs, start_time, context, deser_error, None
 
+            # Step 2.8: Per-run resource-amplification budget (V0.8.74,
+            # issue #142, arXiv:2608.12273). Counts calls against the run and
+            # compares them to the budget the policy declares. Runs AFTER the
+            # gates above so a call that was going to be refused anyway is not
+            # first charged to the run's ledger. Inert when
+            # policy.amplification_budget is None; blocks when it is set but
+            # carries no threshold.
+            amp_error = self._check_amplification(
+                func_name=func_name,
+                resolved_policy=resolved_policy,
+                context=context,
+                input_tokens=input_tokens_kwarg,
+            )
+            if amp_error is not None:
+                return kwargs, start_time, context, amp_error, None
+
             # Step 3: Validate filesystem paths
             fs_error = self._validate_filesystem_paths(func_name, cleaned_kwargs)
             if fs_error is not None:
@@ -582,6 +608,7 @@ class Airlock:
                 result=result,
                 agent_id=context.agent_id if context else None,
                 session_id=context.session_id if context else None,
+                amplification=context._amplification if context else None,
             )
 
             # V0.8.6 camouflage-resistant guard: tool output flowing back
@@ -686,6 +713,7 @@ class Airlock:
                         error=error_response.error,
                         agent_id=context.agent_id,
                         session_id=context.session_id,
+                        amplification=context._amplification,
                     )
                     return error_response.to_dict()
 
@@ -801,6 +829,7 @@ class Airlock:
                         error=error_response.error,
                         agent_id=context.agent_id,
                         session_id=context.session_id,
+                        amplification=context._amplification,
                     )
                     return error_response.to_dict()
 
@@ -1123,6 +1152,16 @@ class Airlock:
             try:
                 resolved_policy.check_reauthorization(func_name, context)
                 resolved_policy.check(func_name)
+            except PolicyEscalation as e:
+                # V0.8.74 (issue #143): the third verdict. This clause MUST stay above
+                # the PolicyViolation handler below — PolicyEscalation subclasses it,
+                # so ordering is what makes escalation distinguishable from denial.
+                # If this clause is ever removed, the subclass relationship means the
+                # call still BLOCKS via the generic handler. That is the intended
+                # failure mode: losing the approver path must not open the gate.
+                escalation_response = self._resolve_escalation(resolved_policy, func_name, e)
+                if escalation_response is not None:
+                    return resolved_policy, escalation_response
             except PolicyViolation as e:
                 if e.violation_type == ViolationType.RATE_LIMITED.value:
                     reset_seconds = int(e.details.get("reset_seconds", 60))
@@ -1153,6 +1192,222 @@ class Airlock:
                 return resolved_policy, response
 
         return resolved_policy, None
+
+    def _check_amplification(
+        self,
+        *,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        context: AirlockContext[Any],
+        input_tokens: int | None,
+    ) -> AirlockResponse | None:
+        """Record this call against the run and enforce the amplification budget.
+
+        Closes issue #142: before v0.8.74 every recruited call of a Convergent Detour
+        Hijacking run reached the audit log, but nothing in the layer said the calls were
+        *extra*. The decision produced here is stashed on the context so every audit call
+        site writes the run's counters onto the record — making the amplification
+        detectable, not merely visible.
+
+        Args:
+            func_name: Name of the tool being called.
+            resolved_policy: The resolved policy, or None.
+            context: Current context; supplies the run identity and receives the decision.
+            input_tokens: Caller-supplied ``_airlock_input_tokens``, when provided. Never
+                estimated — a run whose harness supplies none simply carries no token
+                figure rather than a guessed one.
+
+        Returns:
+            An :class:`AirlockResponse` when the run is over budget under a ``block``
+            action, otherwise ``None``.
+        """
+        if resolved_policy is None:
+            return None
+        guard = resolved_policy._amplification_guard
+        if guard is None:
+            return None
+
+        decision = guard.record_and_check(
+            session_key=context.session_id,
+            tool_name=func_name,
+            input_tokens=input_tokens,
+        )
+        # Stashed even when OK: the counters are the point, and an operator
+        # establishing a baseline needs the numbers from passing runs too.
+        context._amplification = decision
+
+        if not decision.is_over:
+            return None
+
+        if guard.budget.action == "warn":
+            logger.warning(
+                "amplification_over_budget_warn_only",
+                function=func_name,
+                run_call_count=decision.run_call_count,
+                reason=decision.reason,
+            )
+            return None
+
+        logger.warning(
+            "amplification_blocked",
+            function=func_name,
+            run_call_count=decision.run_call_count,
+            verdict=decision.verdict.value,
+            reason=decision.reason,
+        )
+        response = handle_amplification_exceeded(
+            func_name,
+            reason=decision.reason,
+            run_call_count=decision.run_call_count,
+            baseline_calls=decision.baseline_calls,
+            amplification_ratio=decision.amplification_ratio,
+            verdict=decision.verdict.value,
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            decision.reason,
+            {
+                "violation_type": "amplification",
+                "verdict": decision.verdict.value,
+                "run_call_count": decision.run_call_count,
+            },
+        )
+        return response
+
+    def _resolve_escalation(
+        self,
+        policy: SecurityPolicy,
+        func_name: str,
+        escalation: PolicyEscalation,
+    ) -> AirlockResponse | None:
+        """Route a :class:`PolicyEscalation` to the operator-supplied approver.
+
+        Reuses the v0.8.4 :mod:`agent_airlock.oversight` primitive rather than inventing
+        a second approval surface: the same :class:`~agent_airlock.oversight.Approver`
+        callable, the same :class:`~agent_airlock.oversight.OversightRequest` /
+        ``OversightResponse`` shapes, the same ``request_id`` echo contract.
+
+        Args:
+            policy: The resolved policy that escalated.
+            func_name: Name of the tool being called.
+            escalation: The raised escalation, carrying ``reason`` and ``rule``.
+
+        Returns:
+            ``None`` if the approver granted and the call may proceed. An
+            :class:`AirlockResponse` in **every** other case — no approver registered,
+            explicit denial, timeout, a malformed approver reply, or an approver that
+            itself raised. Deny-by-default: there is exactly one path that returns
+            ``None``, and it requires an affirmative ``GRANT``.
+        """
+        from .oversight import OversightRequest, OversightVerdict
+
+        approver = policy.approver
+
+        # 1c bullet 4 — the case this feature exists for. A policy that escalates
+        # with nothing to escalate to blocks, loudly, naming the configuration gap.
+        if approver is None:
+            logger.warning(
+                "escalation_no_approver",
+                tool=func_name,
+                rule=escalation.rule,
+                reason=escalation.reason,
+            )
+            response = handle_escalation(
+                func_name,
+                reason=escalation.reason,
+                rule=escalation.rule,
+                outcome="no_approver",
+            )
+            self._safe_invoke_callback(
+                self.config.on_blocked,
+                "on_blocked",
+                func_name,
+                escalation.message,
+                {"violation_type": escalation.violation_type, **escalation.details},
+            )
+            return response
+
+        request = OversightRequest(
+            request_id=str(uuid.uuid4()),
+            tool_name=func_name,
+            args={"escalation_reason": escalation.reason, "escalation_rule": escalation.rule},
+            channel=policy.escalation_channel,
+            timeout_seconds=float(policy.escalation_timeout_seconds),
+            requested_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        try:
+            oversight_response = approver(request)
+        except Exception as exc:  # noqa: BLE001 - operator transport, any failure blocks
+            # An approver that raises is an approval that did not happen.
+            logger.warning(
+                "escalation_approver_raised", tool=func_name, rule=escalation.rule, error=str(exc)
+            )
+            return handle_escalation(
+                func_name,
+                reason=escalation.reason,
+                rule=escalation.rule,
+                outcome="denied",
+                detail=f"approver raised {type(exc).__name__}: {exc}",
+            )
+
+        # Same protocol fault the oversight decorator enforces: an approver that does
+        # not echo the request_id is not answering *this* request, so it cannot grant it.
+        if oversight_response.request_id != request.request_id:
+            logger.warning(
+                "escalation_request_id_mismatch",
+                tool=func_name,
+                expected=request.request_id,
+                got=oversight_response.request_id,
+            )
+            return handle_escalation(
+                func_name,
+                reason=escalation.reason,
+                rule=escalation.rule,
+                outcome="denied",
+                detail=(
+                    "approver returned a mismatched request_id "
+                    f"(expected {request.request_id!r}, got {oversight_response.request_id!r})"
+                ),
+                approver=oversight_response.approver,
+            )
+
+        if oversight_response.verdict is OversightVerdict.GRANT:
+            logger.info(
+                "escalation_granted",
+                tool=func_name,
+                rule=escalation.rule,
+                approver=oversight_response.approver,
+            )
+            return None
+
+        outcome: Literal["denied", "timeout"] = (
+            "timeout" if oversight_response.verdict is OversightVerdict.TIMEOUT else "denied"
+        )
+        logger.info(
+            f"escalation_{outcome}",
+            tool=func_name,
+            rule=escalation.rule,
+            approver=oversight_response.approver,
+        )
+        response = handle_escalation(
+            func_name,
+            reason=escalation.reason,
+            rule=escalation.rule,
+            outcome=outcome,
+            detail=oversight_response.detail,
+            approver=oversight_response.approver,
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            escalation.message,
+            {"violation_type": escalation.violation_type, **escalation.details},
+        )
+        return response
 
     def _validate_filesystem_paths(
         self,

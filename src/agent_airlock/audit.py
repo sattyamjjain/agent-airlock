@@ -23,9 +23,12 @@ import threading
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ._log import structlog
+
+if TYPE_CHECKING:
+    from .amplification import AmplificationDecision
 
 logger = structlog.get_logger("agent-airlock.audit")
 
@@ -77,6 +80,23 @@ class AuditRecord:
     result_type: str = "unknown"
     result_preview: str = ""
     error: str | None = None
+    # V0.8.74 resource amplification (issue #142, arXiv:2608.12273).
+    #
+    # These make the Convergent-Detour-Hijacking shape *detectable* rather than merely
+    # visible: before v0.8.74 the six recruited calls of a detour each reached the log as
+    # their own record, but nothing in the record said they were extra.
+    #
+    # The unit is CALLS, and the names say so. `duration_ms` above is per-call tool
+    # execution time and excludes model latency, so it cannot reconstruct the paper's
+    # wall-time figure; `run_input_tokens` is populated only from a caller-supplied
+    # `_airlock_input_tokens` and is NEVER estimated. All optional, and `to_dict()` drops
+    # None, so a record from a run with no amplification budget is byte-identical to a
+    # v0.8.73 record.
+    run_call_count: int | None = None
+    run_input_tokens: int | None = None
+    run_baseline_calls: int | None = None
+    run_amplification_ratio: float | None = None
+    amplification_verdict: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary, excluding None values."""
@@ -164,6 +184,7 @@ class AuditLogger:
         args: dict[str, Any] | None = None,
         result: Any = None,
         error: str | None = None,
+        amplification: AmplificationDecision | None = None,
     ) -> None:
         """Write an audit record to the log file.
 
@@ -179,6 +200,9 @@ class AuditLogger:
             args: Tool arguments (will be redacted).
             result: Tool result (will be previewed).
             error: Error message if call failed.
+            amplification: V0.8.74 per-run amplification decision (issue #142).
+                When None the five ``run_*`` fields stay unset and ``to_dict()``
+                omits them, so the record is byte-identical to a v0.8.73 one.
         """
         if not self.enabled or self.path is None:
             return
@@ -197,6 +221,11 @@ class AuditLogger:
             result_type=type(result).__name__ if result is not None else "None",
             result_preview=self._preview_result(result, blocked),
             error=error,
+            run_call_count=amplification.run_call_count if amplification else None,
+            run_input_tokens=amplification.run_input_tokens if amplification else None,
+            run_baseline_calls=amplification.baseline_calls if amplification else None,
+            run_amplification_ratio=(amplification.amplification_ratio if amplification else None),
+            amplification_verdict=amplification.verdict.value if amplification else None,
         )
 
         self._write_record(record)

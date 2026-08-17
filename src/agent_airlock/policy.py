@@ -17,12 +17,15 @@ import json
 import re
 import threading
 import time
+from dataclasses import asdict as dc_asdict
 from dataclasses import dataclass, field
+from dataclasses import fields as dc_fields
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
 from ._log import structlog
+from .amplification import AmplificationBudget, AmplificationGuard
 from .exceptions import AirlockError
 
 if TYPE_CHECKING:
@@ -33,6 +36,7 @@ if TYPE_CHECKING:
         CostTracker,
         ModelTierBudget,
     )
+    from .oversight import Approver
     from .safe_types import UnsafeDeserializationGuard
     from .sequence_guard import SequenceGuard
     from .trace_redaction import TraceRedactionPolicy
@@ -90,6 +94,48 @@ class ViolationType(str, Enum):
     TIME_RESTRICTED = "time_restricted"
     RATE_LIMITED = "rate_limited"
     REAUTH_REQUIRED = "reauth_required"
+    # V0.8.74 third verdict (issue #143). Not a denial — a decision deferred to a human.
+    ESCALATION_REQUIRED = "escalation_required"
+
+
+class PolicyEscalation(PolicyViolation):
+    """The third verdict (v0.8.74): the policy declines to decide — hold for a human.
+
+    Subclasses :class:`PolicyViolation` **deliberately**. Escalation is a *stricter*
+    outcome than allow, so every call site that predates this class and catches
+    ``PolicyViolation`` already blocks on it. Deny-by-default is therefore a property of
+    the type lattice rather than a runtime branch someone can forget to write: a policy
+    that escalates with no approver registered cannot degrade to allow, because allowing
+    would require code that does not exist.
+
+    Raised by :meth:`SecurityPolicy.check_escalation`, caught in ``core.py``'s
+    ``_check_policy`` *before* the generic ``PolicyViolation`` handler, and routed to the
+    operator-supplied :data:`agent_airlock.oversight.Approver`.
+
+    Attributes:
+        tool_name: The tool whose call escalated.
+        reason: Operator-authored explanation, shown to the human approver.
+        rule: The specific ``escalate_tools`` pattern that matched. Distinct from
+            ``tool_name`` when the rule is a glob (``"wire_*"`` matching ``wire_transfer``),
+            which is what lets an operator find the rule that fired.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        tool_name: str,
+        reason: str,
+        rule: str,
+    ) -> None:
+        self.tool_name = tool_name
+        self.reason = reason
+        self.rule = rule
+        super().__init__(
+            message,
+            violation_type=ViolationType.ESCALATION_REQUIRED.value,
+            details={"tool_name": tool_name, "reason": reason, "rule": rule},
+        )
 
 
 @dataclass
@@ -402,6 +448,25 @@ class SecurityPolicy:
     # turns it ON. The local JSON-Lines audit keeps full fidelity. See
     # :class:`agent_airlock.trace_redaction.TraceRedactionPolicy`.
     trace_redaction: TraceRedactionPolicy | None = None
+    # V0.8.74 third verdict — escalate to a human (issue #143).
+    # ``escalate_tools`` maps a glob pattern to the operator-authored reason the
+    # human approver will see: ``{"wire_*": "wires need a second pair of eyes"}``.
+    # Checked LAST in ``check()``, so an explicitly denied tool (or one outside a
+    # non-empty allowlist) stays denied and never becomes merely askable.
+    #
+    # ``approver`` is the operator-supplied transport from ``agent_airlock.oversight``
+    # (Slack, PagerDuty, a CLI prompt, ...). It is deliberately OPTIONAL and defaults
+    # to None — but a matched escalation with no approver BLOCKS. A policy that
+    # escalates into a void must never pass; see ``PolicyEscalation``.
+    # V0.8.74 per-run resource-amplification budget (issue #142, arXiv:2608.12273).
+    # OFF by default: None preserves v0.8.73 behavior exactly. When SET but with no
+    # threshold configured, every call BLOCKS — enabling amplification checking and
+    # leaving it toothless would reproduce issue #142 in a new location.
+    amplification_budget: AmplificationBudget | None = None
+    escalate_tools: dict[str, str] = field(default_factory=dict)
+    approver: Approver | None = None
+    escalation_channel: str = "default"
+    escalation_timeout_seconds: float = 300.0
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -409,6 +474,8 @@ class SecurityPolicy:
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     # V0.5.5: SHA-256 digest recorded by freeze(); None means policy is mutable.
     _frozen_digest: str | None = field(default=None, repr=False)
+    # Rebuilt by __post_init__; underscore-prefixed so freeze() skips it.
+    _amplification_guard: AmplificationGuard | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Parse time restrictions and rate limits."""
@@ -419,6 +486,10 @@ class SecurityPolicy:
         # Parse rate limits
         for pattern, limit_str in self.rate_limits.items():
             self._rate_limiters[pattern] = RateLimit.parse(limit_str)
+
+        # V0.8.74: one guard per policy, holding the per-run ledgers.
+        if self.amplification_budget is not None:
+            self._amplification_guard = AmplificationGuard(self.amplification_budget)
 
     def _matches_pattern(self, tool_name: str, pattern: str) -> bool:
         """Check if tool name matches a glob pattern."""
@@ -650,7 +721,49 @@ class SecurityPolicy:
         # Check rate limits
         self.check_rate_limit(tool_name)
 
+        # V0.8.74: escalation is checked LAST, on purpose. Everything above is a
+        # denial; reaching here means the call would otherwise be allowed. Only an
+        # otherwise-allowable call can be escalated, so a denied tool can never be
+        # softened into "ask a human".
+        self.check_escalation(tool_name)
+
         logger.debug("policy_check_passed", tool=tool_name)
+
+    def check_escalation(self, tool_name: str) -> None:
+        """Raise :class:`PolicyEscalation` if this tool matches an escalation rule.
+
+        Args:
+            tool_name: Name of the tool to check.
+
+        Raises:
+            PolicyEscalation: If ``tool_name`` matches an ``escalate_tools`` pattern.
+                The caller routes this to the approver; if it does not, the exception
+                is a :class:`PolicyViolation` and the call blocks.
+        """
+        if not self.escalate_tools:
+            return
+
+        matching = self._find_matching_patterns(tool_name, self.escalate_tools)
+        if not matching:
+            return
+
+        # Most specific pattern wins, matching the precedence used by rate_limits.
+        rule = max(matching, key=len)
+        reason = self.escalate_tools[rule]
+
+        logger.info(
+            "policy_escalation_required",
+            tool=tool_name,
+            rule=rule,
+            reason=reason,
+            has_approver=self.approver is not None,
+        )
+        raise PolicyEscalation(
+            f"Tool '{tool_name}' requires human approval (rule {rule!r}): {reason}",
+            tool_name=tool_name,
+            reason=reason,
+            rule=rule,
+        )
 
     # -- v0.8.7 per-model-tier cost budget --
 
@@ -742,6 +855,21 @@ class SecurityPolicy:
             "untrusted_reinvocation_threshold": self.untrusted_reinvocation_threshold,
             "default_deny": self.default_deny,
             "model_tier_budget": tier_budget_payload,
+            # V0.8.74: escalation rules are a security decision, so freeze() must
+            # cover them — a rule that could be deleted post-freeze without moving
+            # the digest would let an operator silently drop a human gate. The
+            # approver itself is reduced to a boolean: callable identity is not
+            # deterministic across processes, and freeze() covers config, not
+            # behavior (same treatment as ModelTierBudget's tier_resolver).
+            "amplification_budget": (
+                dc_asdict(self.amplification_budget)
+                if self.amplification_budget is not None
+                else None
+            ),
+            "escalate_tools": dict(sorted(self.escalate_tools.items())),
+            "has_approver": self.approver is not None,
+            "escalation_channel": self.escalation_channel,
+            "escalation_timeout_seconds": self.escalation_timeout_seconds,
         }
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -766,20 +894,38 @@ class SecurityPolicy:
         Idempotent: calling ``freeze()`` on an already-frozen policy
         returns another fresh copy with the same canonical digest
         (since the digest is excluded from the canonical-bytes payload).
+
+        Field-completeness (v0.8.74 fix)
+        --------------------------------
+        Through v0.8.73 this method rebuilt the policy from a hand-maintained
+        list of constructor kwargs. Every field added after that list was
+        written was therefore **silently dropped on freeze**, which inverted
+        the method's purpose: freezing a hardened policy quietly relaxed it.
+        Verified dropped before the fix — ``stdio_mode`` (``"disabled"`` reverted
+        to ``"allowlist"``), ``sequence_guard``, ``action_contradiction_gate``,
+        ``deserialization_guard``, ``trace_redaction``.
+
+        The rebuild now iterates ``dataclasses.fields`` so it is complete by
+        construction and a field added tomorrow cannot regress it. Underscore
+        fields are skipped on purpose: ``_time_windows`` / ``_rate_limiters``
+        are caches ``__post_init__`` rebuilds, ``_lock`` cannot be copied, and
+        ``_frozen_digest`` is set below.
         """
-        frozen = SecurityPolicy(
-            allowed_tools=list(self.allowed_tools),
-            denied_tools=list(self.denied_tools),
-            time_restrictions=copy.deepcopy(self.time_restrictions),
-            rate_limits=copy.deepcopy(self.rate_limits),
-            require_agent_id=self.require_agent_id,
-            allowed_roles=list(self.allowed_roles),
-            capability_policy=self.capability_policy,
-            reauth_on_untrusted_reinvocation=self.reauth_on_untrusted_reinvocation,
-            untrusted_reinvocation_threshold=self.untrusted_reinvocation_threshold,
-            default_deny=self.default_deny,
-            model_tier_budget=self.model_tier_budget,
-        )
+        kwargs: dict[str, Any] = {}
+        for spec in dc_fields(self):
+            if spec.name.startswith("_"):
+                continue
+            value = getattr(self, spec.name)
+            # Containers are copied so the frozen policy cannot be mutated
+            # through a reference the caller still holds. Guard objects and
+            # budgets are shared by reference, matching the pre-v0.8.74
+            # treatment of capability_policy / model_tier_budget — they carry
+            # their own runtime state and must not be duplicated.
+            kwargs[spec.name] = (
+                copy.deepcopy(value) if isinstance(value, dict | list | set) else value
+            )
+
+        frozen = SecurityPolicy(**kwargs)
         frozen._frozen_digest = frozen._compute_policy_digest()
         return frozen
 

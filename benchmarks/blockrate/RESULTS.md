@@ -1,6 +1,6 @@
 # Cross-tool block-rate comparison — results
 
-Last run: **2026-06-29**. Corpus: **210** tool calls.
+Last run: **2026-08-17** (re-run; identical result to 2026-06-29). Corpus: **210** tool calls.
 
 ## Headline
 

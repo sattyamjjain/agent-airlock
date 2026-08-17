@@ -9,6 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.74] - 2026-08-17
+
+### Added
+
+- A `SecurityPolicy` could not escalate. The verdict was binary — `check()` returns `None`
+  to allow and raises `PolicyViolation` to deny — so "transfers under $500 proceed, over
+  $500 ask a human" was inexpressible, even though `agent_airlock.oversight` has shipped a
+  working human-approval primitive since v0.8.4 that nothing in `core.py` or `policy.py`
+  referenced. Added `PolicyEscalation` as a third verdict, raised by
+  `SecurityPolicy.check_escalation()` from a new `escalate_tools` pattern map and routed to
+  the existing `Approver` callable. It **subclasses `PolicyViolation`**, so every
+  pre-existing `except PolicyViolation` site already blocks it: a policy that escalates
+  with no approver registered cannot degrade to allow, because allowing would require code
+  that does not exist. Denial, timeout, a raising approver, and a mismatched `request_id`
+  all block too. ([#143](https://github.com/sattyamjjain/agent-airlock/issues/143))
+- The audit record could not express resource amplification. For Convergent Detour
+  Hijacking ([arXiv:2608.12273](https://arxiv.org/abs/2608.12273)) the cost *is* the
+  payload, and `AuditRecord` had no field that could hold it — every recruited call was
+  logged, but nothing said the calls were extra. Added an opt-in
+  `SecurityPolicy.amplification_budget`, an `AmplificationGuard` that counts calls per run
+  against a declared baseline, and five `run_*` fields on `AuditRecord` carrying the
+  comparison. The unit is **calls**, and the field names say so: the paper's token and
+  wall-time figures are not universally observable at this seam, so `run_input_tokens` is
+  populated only from a caller-supplied `_airlock_input_tokens` and is never estimated.
+  Enabling the budget with no threshold set **blocks** rather than silently never firing.
+  ([#142](https://github.com/sattyamjjain/agent-airlock/issues/142))
+
+### Fixed
+
+- `SecurityPolicy.freeze()` silently disarmed security controls. It rebuilt the policy from
+  a hand-maintained list of constructor kwargs, so every field added after that list was
+  written was dropped on freeze — inverting the method's purpose, since freezing a hardened
+  policy quietly relaxed it. Verified dropped: `stdio_mode` (`"disabled"` reverted to
+  `"allowlist"`), `sequence_guard`, `action_contradiction_gate`, `deserialization_guard`,
+  `trace_redaction`. The rebuild now iterates `dataclasses.fields`, so it is complete by
+  construction, and a regression test asserts that property rather than today's field list.
+  Found while wiring escalation into `freeze()`; `freeze()` is the CVE-2026-41349
+  consent-bypass guard, so this was a live hole in the integrity mechanism itself.
+
+### Changed
+
+- Re-ran the three benchmark rows whose last run had aged past 30 days and dated the other
+  two. The native-gateway head-to-head was **re-measured live 2026-08-17** against a running
+  Docker MCP Gateway (`docker mcp` v0.42.1, image 2.0.1, engine 29.4.3) and reproduced
+  0/12 — the same result as 2026-07-16, now current rather than inherited. Docker Hub's
+  moving `v2` tag was rebuilt 2026-07-23, so a newer build exists that this run did not
+  measure; `benchmarks/vs_gateway/RESULTS.md` says so explicitly rather than letting the
+  claim read as newer than it is. `blockrate` and `toolprivbench` re-ran with identical
+  results; `agentdojo` (2026-08-08) and `mcp_conformance` (2026-08-10) are inside the window
+  and now carry explicit last-verified dates in the README table.
+
 ## [0.8.73] - 2026-08-16
 
 ### Added

@@ -43,6 +43,14 @@ V0.3.0 "Vaccine" Features:
 
 from typing import TYPE_CHECKING
 
+from .amplification import (
+    AmplificationBudget,
+    AmplificationDecision,
+    AmplificationGuard,
+    AmplificationVerdict,
+    detour_hijacking_defaults,
+)
+
 # V0.4.1 Anomaly detection
 from .anomaly import (
     AnomalyDetector,
@@ -486,6 +494,7 @@ from .policy import (
     READ_ONLY_POLICY,
     STRICT_POLICY,
     AgentIdentity,
+    PolicyEscalation,
     PolicyMutationError,
     PolicyViolation,
     RateLimit,
@@ -710,7 +719,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.73"
+__version__ = "0.8.74"
 
 __all__ = [
     # Core
@@ -721,6 +730,12 @@ __all__ = [
     "DEFAULT_CONFIG",
     # Policy
     "SecurityPolicy",
+    "AmplificationBudget",
+    "AmplificationDecision",
+    "AmplificationGuard",
+    "AmplificationVerdict",
+    "detour_hijacking_defaults",
+    "PolicyEscalation",
     "PolicyMutationError",
     "PolicyViolation",
     "ViolationType",

@@ -12,7 +12,7 @@ column replays a **recorded live measurement** of a Docker MCP Gateway
 (`benchmarks/vs_gateway/gateway_measurement.json`); regenerate it with
 `benchmarks/vs_gateway/gateway_harness/` (needs a Docker daemon).
 
-## The number (recorded 2026-07-16)
+## The number (re-measured live 2026-08-17)
 
 Identical corpus: **12 malformed tool-call payloads + 3 benign controls**, sent
 through both layers.
@@ -24,6 +24,23 @@ through both layers.
 
 **Contract-layer gap: airlock blocks 12/12 malformed payloads that the native
 gateway forwards to the backend.** Airlock p50 ≈ 0.08 ms/decision.
+
+### Which gateway build this is, and what has moved since
+
+Re-measured **2026-08-17** against a live gateway: `docker mcp` CLI plugin **v0.42.1**,
+gateway image version **2.0.1**, Docker engine **29.4.3**. Same result as the 2026-07-16
+run — **0 / 12** — so the finding is reproduced, not inherited.
+
+Stated precisely, because a competitive claim against a moving target decays: **v2.0.1 is
+what the currently-installed `docker mcp` plugin runs**, not necessarily the newest build
+in existence. Docker Hub's `docker/mcp-gateway` moving tags `v2` and `latest` were rebuilt
+**2026-07-23**, and the highest pinned tag there is `v0.43.3` (2026-07-16) against the
+local plugin's `v0.42.1`. A newer gateway therefore exists that this run did not measure.
+
+That gap is deliberate and disclosed rather than papered over: the number above is exactly
+what a user on the current shipped Docker toolchain gets today. Re-measuring against a
+bumped plugin is a one-command job — `python -m benchmarks.vs_gateway.gateway_harness.regen`
+— and this section should be rewritten, not appended to, when someone does it.
 
 Both layers are correct on the 3 benign controls (0 false positives) — the
 gateway is not "blocking nothing because it's broken"; it forwards *everything*,

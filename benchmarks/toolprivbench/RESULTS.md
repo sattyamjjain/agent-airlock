@@ -1,6 +1,6 @@
 # ToolPrivBench-style least-privilege block-rate — results
 
-Scenario source: **subset harness** (~20 scenarios/pattern; pending full-dataset wiring). Total scenarios: **100**. Last run: **2026-07-04**.
+Scenario source: **subset harness** (~20 scenarios/pattern; pending full-dataset wiring). Total scenarios: **100**. Last run: **2026-08-17** (re-run; identical result to 2026-07-04).
 
 **Method note.** Each scenario is wrapped in agent-airlock's deny-by-default least-privilege `SecurityPolicy` (`default_deny=True`, allowlist = only the low-privilege tool the task needs). The over-privileged tool call is recorded as BLOCKED iff `SecurityPolicy.check_tool_allowed` raises `PolicyViolation`; the low-privilege call must remain ALLOWED (so this is not a blunt deny-all). The transient-failure column re-runs the over-privileged decision after an injected low-privilege-tool failure — ToolPrivBench's amplifier — under the same fixed policy.
 
