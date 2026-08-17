@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/distribution/awesome-llm-security/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/security/freeze-dropped-security-fields/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Draft PR — awesome-llm-security - Agent-Airlock</title>
+        <title>SecurityPolicy.freeze() silently dropped five security fields (≤ v0.8.73) - Agent-Airlock</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#draft-pr-awesome-llm-security" class="md-skip">
+        <a href="#securitypolicyfreeze-silently-dropped-five-security-fields-v0873" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Draft PR — awesome-llm-security
+              SecurityPolicy.freeze() silently dropped five security fields (≤ v0.8.73)
             
           </span>
         </div>
@@ -1484,10 +1484,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#entry-list-format" class="md-nav__link">
+  <a href="#what-happened" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Entry (list format)
+        What happened
       
     </span>
   </a>
@@ -1495,10 +1495,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-title" class="md-nav__link">
+  <a href="#what-was-dropped" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR title
+        What was dropped
       
     </span>
   </a>
@@ -1506,10 +1506,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-body" class="md-nav__link">
+  <a href="#are-you-affected" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR body
+        Are you affected
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-fix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The fix
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-was-not-caught-earlier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this was not caught earlier
       
     </span>
   </a>
@@ -1536,32 +1558,118 @@
   
 
 
-<h1 id="draft-pr-awesome-llm-security">Draft PR — awesome-llm-security<a class="headerlink" href="#draft-pr-awesome-llm-security" title="Permanent link">&para;</a></h1>
-<blockquote>
-<p><strong>Status: DRAFT for the operator to submit.</strong> Nothing here is auto-submitted.
-Confirm the canonical list repo before opening the PR.</p>
-</blockquote>
-<ul>
-<li><strong>Target list:</strong> <code>awesome-llm-security</code> <!-- verify canonical repo URL, e.g. corca-ai/awesome-llm-security --></li>
-<li><strong>Section:</strong> Tools / Defense (or "Frameworks / Guardrails")</li>
-<li><strong>Refresh the test count</strong> to the current README TEST-BADGE at submission time (v0.8.75 = 3,899).</li>
-</ul>
-<h2 id="entry-list-format">Entry (list format)<a class="headerlink" href="#entry-list-format" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) — in-process least-privilege decorator for AI tool calls; deny-by-default, PII masking, per-CVE presets, 3,899 tests.
+<h1 id="securitypolicyfreeze-silently-dropped-five-security-fields-v0873"><code>SecurityPolicy.freeze()</code> silently dropped five security fields (≤ v0.8.73)<a class="headerlink" href="#securitypolicyfreeze-silently-dropped-five-security-fields-v0873" title="Permanent link">&para;</a></h1>
+<p><strong>Affected:</strong> <strong>v0.5.7 → v0.8.73.</strong> <code>freeze()</code> itself landed in v0.5.5, but the first field
+it could drop (<code>stdio_mode</code>) arrived in v0.5.7; each later field is affected from its own
+release onward (see the table below)
+<strong>Fixed in:</strong> <strong>v0.8.74</strong>
+<strong>Regression fixture:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/test_escalate_verdict.py"><code>tests/test_escalate_verdict.py::TestFreezeIsFieldComplete</code></a>
+<strong>Found:</strong> 2026-08-17, while wiring the third verdict (<a href="https://github.com/sattyamjjain/agent-airlock/issues/143">#143</a>) into the freeze digest</p>
+<h2 id="what-happened">What happened<a class="headerlink" href="#what-happened" title="Permanent link">&para;</a></h2>
+<p><code>SecurityPolicy.freeze()</code> is the CVE-2026-41349 consent-bypass guard. It returns a frozen
+copy of a policy with a SHA-256 digest so that <code>verify_frozen()</code> can refuse a policy that
+was mutated mid-session — the attack it exists to stop added a tool to <code>allowed_tools</code> that
+the user never approved.</p>
+<p>It built that copy from a <strong>hand-maintained list of constructor keyword arguments</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">frozen</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">allowed_tools</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">allowed_tools</span><span class="p">),</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">denied_tools</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">denied_tools</span><span class="p">),</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">...</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">model_tier_budget</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_tier_budget</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
 </code></pre></div>
-<h2 id="pr-title">PR title<a class="headerlink" href="#pr-title" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Add agent-airlock (least-privilege tool-call validation for LLM agents)
+<p>That list was correct when it was written. Every field added to <code>SecurityPolicy</code>
+afterwards was simply absent from it, and a dataclass constructor fills an absent field
+with its default. So the frozen copy silently reverted those fields to their defaults —
+and since the digest is computed <em>from the frozen copy</em>, the digest agreed with the
+weakened policy. Nothing reported drift, because by the time the digest was taken there
+was no drift left to see.</p>
+<p>The result inverted the method's purpose: <strong>freezing a hardened policy relaxed it.</strong></p>
+<h2 id="what-was-dropped">What was dropped<a class="headerlink" href="#what-was-dropped" title="Permanent link">&para;</a></h2>
+<p>Verified by direct comparison before the fix:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Added in</th>
+<th>Configured</th>
+<th>After <code>freeze()</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stdio_mode</code></td>
+<td>v0.5.7</td>
+<td><code>"disabled"</code></td>
+<td><strong><code>"allowlist"</code></strong> — subprocess spawning re-enabled</td>
+</tr>
+<tr>
+<td><code>sequence_guard</code></td>
+<td>v0.8.12</td>
+<td>a <code>SequenceGuard</code></td>
+<td><code>None</code> — behavioural route enforcement off</td>
+</tr>
+<tr>
+<td><code>action_contradiction_gate</code></td>
+<td>v0.8.15</td>
+<td>a gate</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td><code>deserialization_guard</code></td>
+<td>v0.8.19</td>
+<td>a guard</td>
+<td><code>None</code> — pickle/marshal content gate off</td>
+</tr>
+<tr>
+<td><code>trace_redaction</code></td>
+<td>v0.8.24</td>
+<td>a policy</td>
+<td><code>None</code> — redaction off for non-local sinks</td>
+</tr>
+</tbody>
+</table>
+<p><code>stdio_mode</code> is the sharpest of the five: an operator who set <code>"disabled"</code> to forbid
+subprocess spawns entirely, and then froze the policy for integrity, got <code>"allowlist"</code>.</p>
+<p>The eleven fields already in the kwarg list (<code>allowed_tools</code>, <code>denied_tools</code>,
+<code>time_restrictions</code>, <code>rate_limits</code>, <code>require_agent_id</code>, <code>allowed_roles</code>,
+<code>capability_policy</code>, <code>reauth_on_untrusted_reinvocation</code>,
+<code>untrusted_reinvocation_threshold</code>, <code>default_deny</code>, <code>model_tier_budget</code>) were <strong>not</strong>
+affected, and the CVE-2026-41349 allow/deny-list protection those cover worked as
+documented throughout.</p>
+<h2 id="are-you-affected">Are you affected<a class="headerlink" href="#are-you-affected" title="Permanent link">&para;</a></h2>
+<p>Only if you call <code>freeze()</code>. A policy that is never frozen was never touched by this — the
+fields work correctly in normal use.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># On &lt;= 0.8.73 this prints "allowlist". On 0.8.74 it prints "disabled".</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nb">print</span><span class="p">(</span><span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">stdio_mode</span><span class="o">=</span><span class="s2">"disabled"</span><span class="p">)</span><span class="o">.</span><span class="n">freeze</span><span class="p">()</span><span class="o">.</span><span class="n">stdio_mode</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="pr-body">PR body<a class="headerlink" href="#pr-body" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>agent-airlock guards the LLM→tool boundary in-process: it strict-validates tool
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>arguments (Pydantic, no coercion), strips hallucinated/ghost arguments, enforces
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>a deny-by-default least-privilege policy, and masks PII/secrets in tool output
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>(13 PII types incl. India DPDP). Opt-in per-CVE and MCP-spec presets. MIT,
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>Pydantic-only core, 3,899 tests.
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>Repo: https://github.com/sattyamjjain/agent-airlock
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>PyPI: https://pypi.org/project/agent-airlock/
+<p>If you froze a policy that set any of the five fields above, that policy has been running
+with those controls off. Re-check the settings after upgrading; no configuration change is
+needed, the values simply now survive.</p>
+<h2 id="the-fix">The fix<a class="headerlink" href="#the-fix" title="Permanent link">&para;</a></h2>
+<p><code>freeze()</code> now rebuilds by iterating <code>dataclasses.fields</code>, so it is complete by
+construction and a field added tomorrow cannot regress it. Underscore-prefixed fields are
+skipped deliberately — <code>_time_windows</code> / <code>_rate_limiters</code> are caches <code>__post_init__</code>
+rebuilds, <code>_lock</code> cannot be copied, <code>_frozen_digest</code> is set afterwards.</p>
+<p>The regression test asserts the <em>property</em> rather than today's field list:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">dropped</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">spec</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"_"</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">frozen</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="p">]</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">assert</span> <span class="n">dropped</span> <span class="o">==</span> <span class="p">[]</span>
 </code></pre></div>
+<p>A field-by-field test would have needed someone to remember to extend it, which is the
+same failure that caused the bug.</p>
+<h2 id="why-this-was-not-caught-earlier">Why this was not caught earlier<a class="headerlink" href="#why-this-was-not-caught-earlier" title="Permanent link">&para;</a></h2>
+<p>There was no test that froze a policy and compared it field-for-field against the original.
+The existing <code>freeze()</code> tests each checked one specific mutation (<code>allowed_tools</code> changed →
+<code>verify_frozen()</code> raises), which is a real property and it held. The gap was that no test
+asked the broader question — <em>does the frozen copy still say what the original said</em> — and
+the fields added over the following releases were never in anyone's field of view.</p>
+<p>The escalation work forced the question only because a new field (<code>escalate_tools</code>) had to
+be covered by the digest, and the test written for it failed for the wrong reason.</p>
 
 
 
