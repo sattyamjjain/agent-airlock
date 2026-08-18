@@ -11,7 +11,7 @@ whatever produced the zero was not specific to the malicious script.
 
 - **Run date:** 2026-08-15 · **Cells:** 24/24 measured, no exclusions
 - **Reproduce:** `python -m benchmarks.harness_injection --trials 5 --write`
-- **Raw table and full caveats:** [`benchmarks/harness_injection/RESULTS.md`](../../benchmarks/harness_injection/RESULTS.md)
+- **Raw table and full caveats:** [`benchmarks/harness_injection/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md)
 - **Not run in CI:** it drives third-party coding agents against an injection-seeded
   fixture and spends real API budget, so it needs explicit operator sign-off.
 
