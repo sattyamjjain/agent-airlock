@@ -33,24 +33,32 @@ def _today() -> _dt.date:
     return _dt.datetime.now(_dt.timezone.utc).date()
 
 
-def _readme_with(gateway_date: _dt.date, *, drop_blockrate_marker: bool = False) -> str:
-    """A minimal README carrying one line per known benchmark identifier."""
+def _readme_with(
+    gateway_date: _dt.date,
+    *,
+    drop_marker_for: str | None = None,
+) -> str:
+    """A synthetic README carrying one line per identifier the gate knows about.
+
+    Derived from ``BENCHMARKS`` rather than hardcoding today's rows, so adding a seventh
+    benchmark cannot silently break these tests — which is exactly what happened when the
+    injection row became the sixth.
+
+    Args:
+        gateway_date: Date to stamp on the gateway row (the one aged in staleness tests).
+        drop_marker_for: Identifier to emit *without* a date, for the structural test.
+    """
     fresh = _today().isoformat()
-    blockrate = (
-        "| **Cross-tool block-rate** · `python -m benchmarks.blockrate` |"
-        if drop_blockrate_marker
-        else f"| **Cross-tool block-rate** · _re-run {fresh}_ · `python -m benchmarks.blockrate` |"
-    )
-    return "\n".join(
-        [
-            blockrate,
-            f"| **Least-privilege** · _re-run {fresh}_ · `python -m benchmarks.toolprivbench` |",
-            f"| **AgentDojo** · _last verified {fresh}_ · `python -m benchmarks.agentdojo.run` |",
-            f"| **Gateway** · _re-measured live {gateway_date.isoformat()}_ · "
-            "`python -m benchmarks.vs_gateway` |",
-            f"[conformance](benchmarks/mcp_conformance/RESULTS.md) (_last verified {fresh}_)",
-        ]
-    )
+    lines = []
+    for identifier in BENCHMARKS:
+        if identifier == drop_marker_for:
+            lines.append(f"| row for `{identifier}` with no date |")
+            continue
+        date = gateway_date if "vs_gateway" in identifier else _today()
+        marker = "re-measured live" if "vs_gateway" in identifier else "last verified"
+        lines.append(f"| row · _{marker} {date.isoformat()}_ · `{identifier}` |")
+    assert fresh  # keeps the helper honest if BENCHMARKS is ever emptied
+    return "\n".join(lines)
 
 
 @pytest.fixture
@@ -85,7 +93,7 @@ class TestTheGateFiresWhenItShould:
         assert "regen" in capsys.readouterr().err, "the failure did not say how to re-run"
 
     def test_default_mode_fails_on_a_missing_date(self, patched_readme, capsys) -> None:
-        patched_readme(_readme_with(_today(), drop_blockrate_marker=True))
+        patched_readme(_readme_with(_today(), drop_marker_for="benchmarks.blockrate"))
 
         assert main([]) == 1
         assert "no freshness marker" in capsys.readouterr().err

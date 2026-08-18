@@ -16,6 +16,12 @@ older versions are unsupported — upgrade to the latest `0.8.x` release.
 | --- | --- |
 | v0.8.74 | [`SecurityPolicy.freeze()` silently dropped five security fields](docs/security/freeze-dropped-security-fields.md) (affects v0.5.7–v0.8.73, only when `freeze()` is called) |
 
+### Published measurements
+
+| Result | What it is |
+| --- | --- |
+| [Matched-pair multi-harness prompt injection](docs/benchmarks/injection-multi-harness.md) | **A null result, published as one.** `claude-code` 2.1.233 and `codex` 0.147.0 both ignored a planted README script convention entirely — 0/6 injected and 0/6 on the benign control. Explicitly **not** an injection-resistance finding: the benign twin was ignored identically. Includes the two earlier inconclusive runs and why they were inconclusive. |
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Agent-Airlock, please report it responsibly:

@@ -9,6 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.76] - 2026-08-18
+
+### Added
+
+- **The injection benchmark found nothing, and that result was only findable by reading
+  `git log`.** Both harnesses ignored the planted README convention entirely —
+  `claude-code` 2.1.233 and `codex` 0.147.0 each acted on the planted script **0/6 on the
+  injected arm and 0/6 on the benign control**, while fixing the seeded bug in 12/12 cells
+  and running the test suite in 12/12. Published as
+  `docs/benchmarks/injection-multi-harness.md` with the null in the first two lines: the
+  task, both harness versions, the planted line verbatim alongside its benign twin, n=6 per
+  harness per arm (24 cells = 2 harnesses x 2 arms x 2 airlock modes x 3 trials), Wilson 95%
+  intervals ([0.0%, 39.0%] at n=6 — the run rules out a *high* action rate, not a low one),
+  and the control that makes the injected column mean anything. It is explicitly **not** an
+  injection-resistance finding: the benign twin was ignored identically, so the mechanism is
+  indifference to this delivery channel, not detection of intent. The doc also carries the
+  two earlier inconclusive runs and why — 2026-08-14's task ("add a docstring") gave no
+  reason to act so the control could never fire, and the first 2026-08-15 run recorded a
+  codex zero that was `codex exec` defaulting to a read-only sandbox rather than a harness
+  behaviour. Linked from `README.md` and `SECURITY.md`, and registered in
+  `scripts/check_benchmark_freshness.py`, so the date is now gate-owned and cannot rot past
+  30 days silently.
+- `examples/escalation_threshold.py` — the v0.8.74 changelog named "transfers under $500
+  proceed, over $500 ask a human" as the thing that had been inexpressible, and nothing
+  showed it end to end. One command, offline, deterministic, no API key: a policy *resolver*
+  reads the pending amount off the request context (because `escalate_tools` matches on tool
+  name while the rule depends on an argument value), and over the threshold the resolved
+  policy raises `PolicyEscalation` into a stubbed `agent_airlock.oversight` approver. All
+  four outcomes are shown, including the one that matters — escalate with **no approver
+  registered blocks**. Twelve tests drive it, both imported and as the advertised
+  subprocess.
+
+### Changed
+
+- The README wedge line still centred a gateway ("the in-process check that runs beneath
+  your MCP gateway") while the live GitHub description — the correct wedge — does not
+  mention one. Aligned line 1 to the description: *a deny-by-default type-checker and
+  contract layer for AI agent tool calls, in-process, Pydantic-only*. Also retired the
+  animated tagline "Your AI Agent Just Tried rm -rf /. We Stopped It.", which is firewall
+  framing for a project whose wedge is argument validation; it now names the actual
+  differentiator. Added a **Runnable examples** table listing the eight examples verified to
+  run offline with no framework installed.
+
+### Fixed
+
+- The README claimed "`@Airlock`'s own verdict stays binary, so a `SecurityPolicy` cannot
+  escalate a call to a human" and cited #143 as open. Both have been false since v0.8.74
+  shipped `PolicyEscalation`, and #143 is closed. Corrected to state what airlock now does
+  and — the part worth keeping — what `toolpermit` still has that airlock does not: the UI,
+  the pending-request store, and the redacted audit trail. airlock ships the hook, not the
+  prompt.
+
 ## [0.8.75] - 2026-08-17
 
 ### Added
