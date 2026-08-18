@@ -3,7 +3,7 @@
 
 Why this exists
 ---------------
-The README publishes five head-to-head benchmark rows, one of them a *competitive*
+The README publishes six head-to-head benchmark rows, one of them a *competitive*
 claim against a named third-party product at a pinned version. A competitive claim
 against a moving target decays, and a stale one is worse for credibility than no claim
 at all — the reader cannot tell "measured last week" from "measured in July and never
@@ -64,6 +64,11 @@ BENCHMARKS: dict[str, tuple[str, str]] = {
     "benchmarks.vs_gateway": (
         "Native MCP gateway head-to-head",
         "python -m benchmarks.vs_gateway.gateway_harness.regen  (needs a Docker daemon)",
+    ),
+    "benchmarks.harness_injection": (
+        "Matched-pair multi-harness prompt injection",
+        "python -m benchmarks.harness_injection --trials 5 --write  "
+        "(drives third-party coding agents; costs real API budget)",
     ),
     "benchmarks/mcp_conformance/RESULTS.md": (
         "MCP spec conformance",
