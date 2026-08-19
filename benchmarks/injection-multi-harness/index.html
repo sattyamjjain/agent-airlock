@@ -1539,6 +1539,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#what-n-would-be-needed-and-what-this-run-could-not-have-seen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What n would be needed, and what this run could not have seen
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1756,6 +1767,96 @@ honest way to say so. Wilson score intervals:</p>
 this run is consistent with a true action rate as high as roughly one in three. What it
 rules out is a <em>high</em> rate, not a low one. Anyone citing "0%" without the interval is
 citing something this run did not measure.</p>
+<h3 id="what-n-would-be-needed-and-what-this-run-could-not-have-seen">What n would be needed, and what this run could not have seen<a class="headerlink" href="#what-n-would-be-needed-and-what-this-run-could-not-have-seen" title="Permanent link">&para;</a></h3>
+<p>The interval above is the weakness of this result, so it is worth stating exactly how much
+sample would fix it rather than leaving "more trials" as a gesture.</p>
+<p>The runner takes <code>--trials N</code>. Each trial is measured in both airlock modes, so one <code>--trials</code>
+step buys <strong>two</strong> observations per harness per arm: <code>n = 2 × trials</code>. For zero observed
+events the Wilson upper bound has a closed form, <code>z² / (n + z²)</code>:</p>
+<table>
+<thead>
+<tr>
+<th><code>--trials</code></th>
+<th>n per harness per arm</th>
+<th>95% Wilson upper bound</th>
+<th>Rule of three</th>
+<th>Total cells</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>3</strong> <em>(this run)</em></td>
+<td>6</td>
+<td><strong>39.0%</strong></td>
+<td>50.0%</td>
+<td>24</td>
+</tr>
+<tr>
+<td>6</td>
+<td>12</td>
+<td>24.3%</td>
+<td>25.0%</td>
+<td>48</td>
+</tr>
+<tr>
+<td>10</td>
+<td>20</td>
+<td>16.1%</td>
+<td>15.0%</td>
+<td>80</td>
+</tr>
+<tr>
+<td><strong>18</strong></td>
+<td><strong>36</strong></td>
+<td><strong>9.6%</strong></td>
+<td>8.3%</td>
+<td>144</td>
+</tr>
+<tr>
+<td>37</td>
+<td>74</td>
+<td>4.9%</td>
+<td>4.1%</td>
+<td>296</td>
+</tr>
+</tbody>
+</table>
+<p><strong>For a 10% upper bound you need n = 35, which is <code>--trials 18</code></strong> — 144 cells, six times this
+run. That is the number to quote when someone asks what it would take to say "under 10%"
+rather than "under 39%".</p>
+<p>Sample size is only half of it. The bound answers <em>how high could the rate be</em>; it does not
+answer <em>would this run have noticed a low one</em>. For a true action rate p, the chance of
+observing zero anyway is <code>(1 − p)ⁿ</code>:</p>
+<table>
+<thead>
+<tr>
+<th>If the true rate were…</th>
+<th>…this run (n=6) sees zero</th>
+<th>…at n=36</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5%</td>
+<td><strong>74%</strong> of the time</td>
+<td>16%</td>
+</tr>
+<tr>
+<td>10%</td>
+<td>53%</td>
+<td>2%</td>
+</tr>
+</tbody>
+</table>
+<p>So <strong>at n=6 a 5% action rate would have produced this exact null about three times in four.</strong>
+The published zero is close to uninformative about low rates, and that is the honest reason
+the next run is worth its API budget: not because the answer is expected to change, but
+because at <code>--trials 3</code> there is very little the result could have been.</p>
+<p>The arithmetic is in <code>benchmarks/harness_injection/power.py</code> rather than in this paragraph,
+and <code>tests/test_injection_benchmark_power.py</code> asserts that every percentage printed above is
+what that code returns — a figure in a document that nothing recomputes is the same class of
+claim <code>check_benchmark_freshness.py</code> exists to stop. <code>python -m benchmarks.harness_injection
+--trials N</code> prints the same summary on its dry run, before any budget is spent.</p>
 <h2 id="what-the-zero-rules-out-and-what-it-does-not">What the zero rules out, and what it does not<a class="headerlink" href="#what-the-zero-rules-out-and-what-it-does-not" title="Permanent link">&para;</a></h2>
 <p>Two explanations for a zero are ruled out <strong>by the data</strong>, not argued away:</p>
 <ol>

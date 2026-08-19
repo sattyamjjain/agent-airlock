@@ -1517,6 +1517,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#handlefield-the-same-check-as-a-declared-contract-v0877" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HandleField — the same check as a declared contract (v0.8.77+)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-honest-limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1609,13 +1620,47 @@ primitives (no new engine, Pydantic-only core):</p>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">preset</span><span class="p">[</span><span class="s2">"check_headers"</span><span class="p">](</span><span class="n">tool_parameter_header_names</span><span class="p">)</span>  <span class="c1"># no reserved-header override</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">preset</span><span class="p">[</span><span class="s2">"check_handle"</span><span class="p">](</span><span class="n">handle</span><span class="p">,</span> <span class="n">minted</span><span class="o">=</span><span class="n">minted_handles</span><span class="p">)</span> <span class="c1"># deny an unminted handle</span>
 </code></pre></div>
+<h2 id="handlefield-the-same-check-as-a-declared-contract-v0877"><code>HandleField</code> — the same check as a declared contract (v0.8.77+)<a class="headerlink" href="#handlefield-the-same-check-as-a-declared-contract-v0877" title="Permanent link">&para;</a></h2>
+<p>The preset above works, but the operator has to supply <code>minted</code> themselves, and nothing
+records <em>who</em> minted a handle, <em>what for</em>, or <em>for how long</em>. <code>HandleField</code> closes that: the
+check becomes part of the tool's declared contract, backed by a per-run issuance ledger.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">HandleField</span><span class="p">,</span> <span class="n">handle_run</span><span class="p">,</span> <span class="n">issue_handle</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nd">@Airlock</span><span class="p">()</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">open_session</span><span class="p">(</span><span class="n">workspace</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="k">return</span> <span class="n">issue_handle</span><span class="p">(</span><span class="n">issuer</span><span class="o">=</span><span class="s2">"mnemo.checkpoint"</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">workspace</span><span class="p">,</span> <span class="n">ttl_seconds</span><span class="o">=</span><span class="mi">900</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nd">@Airlock</span><span class="p">()</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_checkpoint</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">HandleField</span><span class="p">(</span><span class="n">issuer</span><span class="o">=</span><span class="s2">"mnemo.checkpoint"</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="s2">"workspace"</span><span class="p">))</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="o">...</span>  <span class="c1"># reached only for a handle issued in this run, by that tool, for that scope, unexpired</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="k">with</span> <span class="n">handle_run</span><span class="p">(</span><span class="s2">"run-42"</span><span class="p">):</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">read_checkpoint</span><span class="p">(</span><span class="n">session</span><span class="o">=</span><span class="n">open_session</span><span class="p">(</span><span class="n">workspace</span><span class="o">=</span><span class="s2">"workspace"</span><span class="p">))</span>
+</code></pre></div>
+<p>Four distinct rejections, each with its own <code>BlockReason</code> so they stay separable in the audit
+log: <code>handle_not_issued</code>, <code>handle_wrong_issuer</code>, <code>handle_wrong_scope</code>, <code>handle_expired</code>.
+<strong>Deny-by-default extends to the absence of the mechanism</strong> — with no ledger bound to the run,
+a declared handle argument is refused rather than waved through, and there is no observe-only
+mode.</p>
+<p>The two compose rather than compete: <code>HandleLedger.minted()</code> returns exactly the set
+<code>check_handle(handle, minted=...)</code> expects, so a codebase already using the preset can feed it
+from the ledger instead of hand-maintaining one.</p>
+<p>Two limits, both pinned by tests in <code>tests/test_handle_field.py</code>:</p>
+<ul>
+<li>A tool whose signature ends in <code>**kwargs</code> declares nothing, so a handle smuggled through it
+  is neither ghost-stripped nor <code>HandleField</code>-validated. <code>assert_handles_declared()</code> is the
+  one-line front door to point 1 above, which closes it.</li>
+<li>Under <code>sandbox=True</code> with a real backend, <code>@Airlock</code> serialises the <em>undecorated</em> function
+  into the micro-VM, so no <code>Annotated</code> validator runs on that path (<code>SafePath</code> and <code>SafeURL</code>
+  included). Validate in the parent process, or keep validated tools out of the sandbox.</li>
+</ul>
 <h2 id="the-honest-limit">The honest limit<a class="headerlink" href="#the-honest-limit" title="Permanent link">&para;</a></h2>
-<p>This is a contract layer. It can require a handle to be an explicit, declared parameter and
-to have been minted within the current policy scope — but it <strong>cannot verify that a handle
-the server minted is one the server <em>should</em> have minted</strong>. Whether a given server-issued
-handle is legitimate for a given caller is a server-side authorization question, not a
-request-shape question; airlock narrows the channel, it does not replace the server's own
-mint-time checks.</p>
+<p>This is a contract layer. It can require a handle to be an explicit, declared parameter, to
+have been minted in this run by the declared tool for the declared scope, and to be unexpired
+— but it <strong>cannot verify that a handle the server minted is one the server <em>should</em> have
+minted</strong>. Whether a given server-issued handle is legitimate for a given caller is a
+server-side authorization question, not a request-shape question; airlock narrows the channel,
+it does not replace the server's own mint-time checks.</p>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../../interop/CONFORMANCE-SCOPE/">MCP conformance scope</a> — what airlock's conformance run
