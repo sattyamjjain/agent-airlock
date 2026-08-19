@@ -57,14 +57,54 @@ preset["check_headers"](tool_parameter_header_names)  # no reserved-header overr
 preset["check_handle"](handle, minted=minted_handles) # deny an unminted handle
 ```
 
+## `HandleField` — the same check as a declared contract (v0.8.77+)
+
+The preset above works, but the operator has to supply `minted` themselves, and nothing
+records *who* minted a handle, *what for*, or *for how long*. `HandleField` closes that: the
+check becomes part of the tool's declared contract, backed by a per-run issuance ledger.
+
+```python
+from agent_airlock import Airlock, HandleField, handle_run, issue_handle
+
+@Airlock()
+def open_session(workspace: str) -> str:
+    return issue_handle(issuer="mnemo.checkpoint", scope=workspace, ttl_seconds=900)
+
+@Airlock()
+def read_checkpoint(session: HandleField(issuer="mnemo.checkpoint", scope="workspace")) -> str:
+    ...  # reached only for a handle issued in this run, by that tool, for that scope, unexpired
+
+with handle_run("run-42"):
+    read_checkpoint(session=open_session(workspace="workspace"))
+```
+
+Four distinct rejections, each with its own `BlockReason` so they stay separable in the audit
+log: `handle_not_issued`, `handle_wrong_issuer`, `handle_wrong_scope`, `handle_expired`.
+**Deny-by-default extends to the absence of the mechanism** — with no ledger bound to the run,
+a declared handle argument is refused rather than waved through, and there is no observe-only
+mode.
+
+The two compose rather than compete: `HandleLedger.minted()` returns exactly the set
+`check_handle(handle, minted=...)` expects, so a codebase already using the preset can feed it
+from the ledger instead of hand-maintaining one.
+
+Two limits, both pinned by tests in `tests/test_handle_field.py`:
+
+- A tool whose signature ends in `**kwargs` declares nothing, so a handle smuggled through it
+  is neither ghost-stripped nor `HandleField`-validated. `assert_handles_declared()` is the
+  one-line front door to point 1 above, which closes it.
+- Under `sandbox=True` with a real backend, `@Airlock` serialises the *undecorated* function
+  into the micro-VM, so no `Annotated` validator runs on that path (`SafePath` and `SafeURL`
+  included). Validate in the parent process, or keep validated tools out of the sandbox.
+
 ## The honest limit
 
-This is a contract layer. It can require a handle to be an explicit, declared parameter and
-to have been minted within the current policy scope — but it **cannot verify that a handle
-the server minted is one the server _should_ have minted**. Whether a given server-issued
-handle is legitimate for a given caller is a server-side authorization question, not a
-request-shape question; airlock narrows the channel, it does not replace the server's own
-mint-time checks.
+This is a contract layer. It can require a handle to be an explicit, declared parameter, to
+have been minted in this run by the declared tool for the declared scope, and to be unexpired
+— but it **cannot verify that a handle the server minted is one the server _should_ have
+minted**. Whether a given server-issued handle is legitimate for a given caller is a
+server-side authorization question, not a request-shape question; airlock narrows the channel,
+it does not replace the server's own mint-time checks.
 
 ## See also
 
