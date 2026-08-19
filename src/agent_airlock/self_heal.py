@@ -218,7 +218,8 @@ def _handle_field_rejection(
     """
     from .handles import handle_rejection_from
 
-    for err in error.errors():
+    errors = error.errors()
+    for err in errors:
         ctx = err.get("ctx") or {}
         rejection = handle_rejection_from(ctx.get("error"), err.get("msg", ""))
         if rejection is None:
@@ -226,16 +227,30 @@ def _handle_field_rejection(
 
         reason = rejection.reason.value
         field_path = ".".join(str(loc) for loc in err["loc"]) or (rejection.field_name or "handle")
+        fix_hints = [_HANDLE_FIX_HINTS.get(reason, "Obtain a valid handle and retry.")]
+
+        # `block_reason` can only hold one value, and a capability failure is the one worth
+        # surfacing — mixing a type error into it would dilute a security signal. But the
+        # other errors must not vanish silently, or the model fixes the handle, retries, and
+        # discovers the rest one round trip at a time.
+        others = len(errors) - 1
+        if others:
+            fix_hints.append(
+                f"{others} other validation error(s) on this call are not shown while the "
+                f"handle is invalid; they will be reported once a valid handle is supplied."
+            )
+
         return AirlockResponse.blocked_response(
             reason=_HANDLE_BLOCK_REASONS.get(reason, BlockReason.VALIDATION_ERROR),
             error=(
                 f"AIRLOCK_BLOCK: Tool '{func_name}' refused the capability handle in "
                 f"'{field_path}'. {rejection}"
             ),
-            fix_hints=[_HANDLE_FIX_HINTS.get(reason, "Obtain a valid handle and retry.")],
+            fix_hints=fix_hints,
             metadata={
                 "function": func_name,
                 "field": field_path,
+                "other_error_count": others,
                 **rejection.audit_event,
             },
         )

@@ -63,6 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A capability handle is a bearer token, so `handle` joined `AUDIT_REDACT_PARAMS` and
   rejection messages carry a truncated preview rather than the value — echoing a whole handle
   into an error would push the capability straight back into model context and into the logs.
+- When a handle rejection co-occurs with ordinary validation errors, the response reports the
+  handle (a capability failure outranks a type error, and `block_reason` holds one value) but
+  now carries `other_error_count` and a fix hint saying more will follow. Reporting only the
+  handle and dropping the rest would have made the model rediscover them one round trip at a
+  time.
 - `_handle_error` now threads the run context into the audit record, so a rejection on the
   validation path carries `agent_id` / `session_id`. "A handle was replayed across scopes" is
   not actionable without knowing which run did it. Existing callers are unaffected; the

@@ -178,6 +178,46 @@ class TestTheVerdictSetDoesNotGrow:
         assert "mint" in hints or "call the tool that mints" in hints
 
 
+class TestCoOccurringErrorsAreNotLostSilently:
+    """`block_reason` holds one value, so the other errors need somewhere to be counted."""
+
+    @staticmethod
+    def _tool_with_two_fields():
+        @Airlock()
+        def read(
+            session: HandleField(issuer=ISSUER, scope=SCOPE),
+            count: int = 1,
+        ) -> str:
+            return f"READ:{count}"
+
+        return read
+
+    def test_the_handle_failure_is_the_one_reported(self) -> None:
+        """A capability failure outranks a type error; mixing them dilutes the signal."""
+        with handle_run("run-1"):
+            result = self._tool_with_two_fields()(session="ah_nope", count="5")
+        assert result["block_reason"] == BlockReason.HANDLE_NOT_ISSUED.value
+
+    def test_the_other_errors_are_counted_rather_than_dropped(self) -> None:
+        with handle_run("run-1"):
+            result = self._tool_with_two_fields()(session="ah_nope", count="5")
+        assert result["metadata"]["other_error_count"] == 1
+        assert any("other validation error" in hint for hint in result["fix_hints"])
+
+    def test_a_lone_handle_failure_reports_no_others(self) -> None:
+        with handle_run("run-1"):
+            result = self._tool_with_two_fields()(session="ah_nope", count=5)
+        assert result["metadata"]["other_error_count"] == 0
+        assert not any("other validation error" in hint for hint in result["fix_hints"])
+
+    def test_the_remaining_error_surfaces_once_the_handle_is_valid(self) -> None:
+        """The promise the fix hint makes has to be true."""
+        with handle_run("run-1"):
+            good = issue_handle(issuer=ISSUER, scope=SCOPE)
+            result = self._tool_with_two_fields()(session=good, count="5")
+        assert result["block_reason"] == BlockReason.VALIDATION_ERROR.value
+
+
 class TestHandlesAreRedacted:
     """Possession is authority, so a handle must not be echoed back at full length."""
 
