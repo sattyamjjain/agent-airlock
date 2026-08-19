@@ -499,6 +499,61 @@ class TestLedgerMechanics:
             issue_handle(issuer=ISSUER, scope=SCOPE)
 
 
+class TestTheAsyncPath:
+    """`@Airlock` treats async as first-class, and contextvars behave differently there.
+
+    A task inherits a *copy* of the context at creation, so the binding propagates into child
+    tasks — and because the copy points at the same `HandleLedger` object, a handle minted in
+    a child is visible to the parent. That is the behaviour a per-run ledger needs, and it is
+    subtle enough to be worth pinning rather than assuming.
+    """
+
+    @staticmethod
+    def _async_tool():
+        @Airlock()
+        async def read_async(session: HandleField(issuer=ISSUER, scope=SCOPE)) -> str:
+            return "ASYNC-OK"
+
+        return read_async
+
+    async def test_a_valid_handle_is_accepted_on_the_async_wrapper(self) -> None:
+        tool = self._async_tool()
+        with handle_run("run-async"):
+            good = issue_handle(issuer=ISSUER, scope=SCOPE)
+            assert await tool(session=good) == "ASYNC-OK"
+
+    async def test_an_unissued_handle_is_refused_on_the_async_wrapper(self) -> None:
+        tool = self._async_tool()
+        with handle_run("run-async"):
+            result = await tool(session="ah_nope")
+        assert result["block_reason"] == BlockReason.HANDLE_NOT_ISSUED.value
+
+    async def test_no_ledger_bound_blocks_on_the_async_wrapper_too(self) -> None:
+        result = await self._async_tool()(session="ah_anything")
+        assert result["block_reason"] == BlockReason.HANDLE_NOT_ISSUED.value
+
+    async def test_a_handle_minted_in_a_child_task_is_honoured_by_the_parent(self) -> None:
+        import asyncio
+
+        tool = self._async_tool()
+        with handle_run("run-async"):
+
+            async def child() -> str:
+                return issue_handle(issuer=ISSUER, scope=SCOPE)
+
+            from_child = await asyncio.create_task(child())
+            assert await tool(session=from_child) == "ASYNC-OK"
+
+    async def test_concurrent_validation_does_not_interfere(self) -> None:
+        import asyncio
+
+        tool = self._async_tool()
+        with handle_run("run-async"):
+            good = issue_handle(issuer=ISSUER, scope=SCOPE)
+            results = await asyncio.gather(*[tool(session=good) for _ in range(20)])
+        assert set(results) == {"ASYNC-OK"}
+
+
 class TestHandleFieldDeclaration:
     def test_an_empty_issuer_or_scope_is_refused_at_declaration_time(self) -> None:
         with pytest.raises(ValueError, match="issuer"):
