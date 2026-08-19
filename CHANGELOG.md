@@ -9,6 +9,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.77] - 2026-08-19
+
+### Added
+
+- **A handle in the argument stream was just a string, and a type check accepts every
+  forgery of one.** MCP 2026-07-28 removed the protocol session (SEP-2575) and made
+  cross-call state a server-minted handle the model passes back as an *argument* (SEP-2567),
+  which moves a value that grants continuity into the same channel as attacker-influenced
+  inputs. Possession is authority, so a model that has seen a handle issued for scope A can
+  present it to a tool operating on scope B, replay an expired one, or pass one it read out
+  of a transcript — all three are well-typed strings and all three passed. Added
+  `HandleField(issuer=..., scope=...)`, declared where a `str` annotation would go, backed by
+  a per-run in-memory issuance ledger (`HandleLedger`, bound with `handle_run()`) recording
+  the minting tool, the scope, the run identity, an issue timestamp and an optional TTL.
+  Four distinct rejections — `handle_not_issued`, `handle_wrong_issuer`, `handle_wrong_scope`,
+  `handle_expired` — because "the integration was never wired up" and "an agent is replaying
+  a capability across tenants" need different responses from whoever reads the log.
+  Deny-by-default extends to the absence of the mechanism: with **no ledger bound at all** a
+  declared handle argument is refused, and there is deliberately no observe-only mode.
+  Pydantic-only, no new dependency, no database and no network call. 46 tests.
+- `examples/handle_capability.py` — one command, offline, deterministic, no API key. Two
+  minting tools and one consumer, showing the accept case and all four rejections against a
+  single declared field, ending on the scenario that matters: no ledger bound, still blocked.
+  `main()` asserts every verdict against the one its scenario declares and exits non-zero on
+  a mismatch, so the 15 tests driving it (imported and as the advertised subprocess) fail on
+  a wrong verdict rather than only on a traceback.
+- `benchmarks/harness_injection/power.py` — the injection benchmark's null is only readable
+  next to its interval, and those intervals were hand arithmetic in a write-up. The Wilson
+  bound for zero events, the rule-of-three comparison, and `(1-p)^n` now live in code that
+  `docs/benchmarks/injection-multi-harness.md` quotes and
+  `tests/test_injection_benchmark_power.py` checks the doc against. The runner already took
+  `--trials`; its dry run now prints what a given `--trials` would license *before* the API
+  budget is spent.
+
+### Changed
+
+- The benchmark doc now states its own power instead of leaving "more trials" as a gesture:
+  **a 10% upper bound needs n = 35, which is `--trials 18`** — 144 cells, six times the
+  published run. It also says the part that is easy to leave out: at n = 6 a true 5% action
+  rate would still have produced this exact null about **74%** of the time, so the published
+  zero is close to uninformative about low rates. That, rather than an expectation the answer
+  will change, is why the next run is worth its budget.
+- `SECURITY.md` positions against the free containment layers now giving this away — NVIDIA
+  OpenShell and Cisco DefenseClaw for process-level deny-by-default containment, Amazon Cedar
+  for the policy language — and leads with the concession: if you are not running one of
+  them, do that first, because they close a larger class of problem than argument validation
+  does. What they do not do is check whether the argument the model constructed is the one
+  the contract allows; a contained, authorized principal calling an authorized action with a
+  fabricated `account_id` passes all of them. Includes five cases where airlock is the wrong
+  tool. The propose-versus-authorize positioning from 2026-08-16 (db751d18) is linked, not
+  restated.
+- A capability handle is a bearer token, so `handle` joined `AUDIT_REDACT_PARAMS` and
+  rejection messages carry a truncated preview rather than the value — echoing a whole handle
+  into an error would push the capability straight back into model context and into the logs.
+- When a handle rejection co-occurs with ordinary validation errors, the response reports the
+  handle (a capability failure outranks a type error, and `block_reason` holds one value) but
+  now carries `other_error_count` and a fix hint saying more will follow. Reporting only the
+  handle and dropping the rest would have made the model rediscover them one round trip at a
+  time.
+- `_handle_error` now threads the run context into the audit record, so a rejection on the
+  validation path carries `agent_id` / `session_id`. "A handle was replayed across scopes" is
+  not actionable without knowing which run did it. Existing callers are unaffected; the
+  parameter is optional.
+
+### Notes
+
+- The verdict set did not grow. A handle rejection is an ordinary **deny** expressed through
+  the existing `AirlockResponse` shape, with its own `BlockReason`; allow / deny / escalate
+  remains the whole set, and the third verdict added in v0.8.74 stays the last one.
+- No `SecurityPolicy` field was added, so there is nothing new for `freeze()` to drop. The
+  contract lives on the *type*, like `SafePath` — a policy field would need a value meaning
+  "handles are not checked here", and a knob that downgrades a capability check to a warning
+  is what this feature exists to remove. Asserted as a test rather than only written down.
+- Known limit, stated rather than papered over: a tool whose signature ends in `**kwargs`
+  declares nothing, so a handle smuggled through it is neither ghost-stripped nor
+  `HandleField`-validated. `assert_handles_declared()` is the one-line front door to the
+  `mcp_spec` primitive that already closes it, and the test suite carries the evidence for
+  both halves of that sentence.
+- Second known limit, found while writing this and pinned by a test rather than left in a
+  docstring: with a real sandbox backend available, `@Airlock` serialises the *undecorated*
+  function into the micro-VM instead of calling the Pydantic-validated wrapper, so **no**
+  `Annotated` validator runs on that path. `SafePath` and `SafeURL` have been in exactly the
+  same position since they shipped — this is a property of the sandbox dispatch path, not of
+  the new module, and it is not something a per-run in-process ledger could paper over
+  anyway. Validate handles in the parent process, or keep the minting and consuming tools
+  outside the sandbox. `TestSandboxDispatchSkipsTheCheck` asserts both halves: the sandbox
+  branch lets the call through, and the identical call blocks on the ordinary path.
+
 ## [0.8.76] - 2026-08-18
 
 ### Added

@@ -43,6 +43,15 @@ class BlockReason(str, Enum):
     ESCALATION_TIMEOUT = "escalation_timeout"
     # V0.8.74 resource-amplification reasons (issue #142).
     AMPLIFICATION_EXCEEDED = "amplification_exceeded"
+    # V0.8.77 capability-handle reasons (MCP 2026-07-28 / SEP-2567). One per failure mode,
+    # because "the integration was never wired up" (HANDLE_NOT_ISSUED on every call) and "an
+    # agent is replaying a capability across scopes" (HANDLE_WRONG_SCOPE on some calls) need
+    # different responses from whoever reads the log. These are *reasons*, not verdicts: a
+    # handle rejection is an ordinary deny, so allow/deny/escalate stays the whole verdict set.
+    HANDLE_NOT_ISSUED = "handle_not_issued"
+    HANDLE_WRONG_ISSUER = "handle_wrong_issuer"
+    HANDLE_WRONG_SCOPE = "handle_wrong_scope"
+    HANDLE_EXPIRED = "handle_expired"
 
 
 @dataclass
@@ -133,8 +142,15 @@ def handle_validation_error(
         func_name: Name of the function that was being called.
 
     Returns:
-        AirlockResponse with structured error info and fix hints.
+        AirlockResponse with structured error info and fix hints. A capability-handle
+        rejection (V0.8.77) is recognised here and reported with its own
+        :class:`BlockReason` instead of the generic ``VALIDATION_ERROR``, so the four
+        handle failure modes stay distinguishable in the audit log.
     """
+    handle_response = _handle_field_rejection(error, func_name)
+    if handle_response is not None:
+        return handle_response
+
     formatted = format_validation_error(error)
     fix_hints = [err["fix_hint"] for err in formatted["errors"]]
 
@@ -151,6 +167,94 @@ def handle_validation_error(
             "errors": formatted["errors"],
         },
     )
+
+
+#: ``HandleRejectionReason`` value -> ``BlockReason``. Written out rather than derived from
+#: the string values so that renaming one enum without the other fails at import of the test
+#: that walks this map, instead of silently falling back to a generic block reason.
+_HANDLE_BLOCK_REASONS: dict[str, BlockReason] = {
+    "handle_not_issued": BlockReason.HANDLE_NOT_ISSUED,
+    "handle_wrong_issuer": BlockReason.HANDLE_WRONG_ISSUER,
+    "handle_wrong_scope": BlockReason.HANDLE_WRONG_SCOPE,
+    "handle_expired": BlockReason.HANDLE_EXPIRED,
+}
+
+#: What the model should do about each failure mode. A handle rejection is one of the few
+#: blocks where retrying the *same* call is always wrong: the value is a capability, so the
+#: fix is always to obtain a different one, never to reformat this one.
+_HANDLE_FIX_HINTS: dict[str, str] = {
+    "handle_not_issued": (
+        "This handle was not issued in this run. Call the tool that mints it and pass the "
+        "value that call returned — do not reuse a handle from an earlier run, a transcript, "
+        "or another tool's output."
+    ),
+    "handle_wrong_issuer": (
+        "This handle came from a different tool than this parameter accepts. Mint one from "
+        "the issuer this parameter declares."
+    ),
+    "handle_wrong_scope": (
+        "This handle was issued for a different scope. Mint a handle for the scope this tool "
+        "operates on; a handle is not transferable between scopes."
+    ),
+    "handle_expired": (
+        "This handle has expired. Mint a fresh one; an expired handle cannot be replayed."
+    ),
+}
+
+
+def _handle_field_rejection(
+    error: ValidationError,
+    func_name: str,
+) -> AirlockResponse | None:
+    """Return a handle-specific response, or ``None`` if this is ordinary validation failure.
+
+    A ``HandleField`` rejection arrives here wrapped in a Pydantic ``ValidationError``,
+    because the check runs as an ``AfterValidator`` — which is the point: the capability
+    check rides the validation path that already exists rather than adding a gate beside it.
+    Unwrapping it back into a structured reason is what keeps the audit record specific.
+
+    ``None`` is the common case and is not a degraded one; the caller falls through to the
+    generic formatter.
+    """
+    from .handles import handle_rejection_from
+
+    errors = error.errors()
+    for err in errors:
+        ctx = err.get("ctx") or {}
+        rejection = handle_rejection_from(ctx.get("error"), err.get("msg", ""))
+        if rejection is None:
+            continue
+
+        reason = rejection.reason.value
+        field_path = ".".join(str(loc) for loc in err["loc"]) or (rejection.field_name or "handle")
+        fix_hints = [_HANDLE_FIX_HINTS.get(reason, "Obtain a valid handle and retry.")]
+
+        # `block_reason` can only hold one value, and a capability failure is the one worth
+        # surfacing — mixing a type error into it would dilute a security signal. But the
+        # other errors must not vanish silently, or the model fixes the handle, retries, and
+        # discovers the rest one round trip at a time.
+        others = len(errors) - 1
+        if others:
+            fix_hints.append(
+                f"{others} other validation error(s) on this call are not shown while the "
+                f"handle is invalid; they will be reported once a valid handle is supplied."
+            )
+
+        return AirlockResponse.blocked_response(
+            reason=_HANDLE_BLOCK_REASONS.get(reason, BlockReason.VALIDATION_ERROR),
+            error=(
+                f"AIRLOCK_BLOCK: Tool '{func_name}' refused the capability handle in "
+                f"'{field_path}'. {rejection}"
+            ),
+            fix_hints=fix_hints,
+            metadata={
+                "function": func_name,
+                "field": field_path,
+                "other_error_count": others,
+                **rejection.audit_event,
+            },
+        )
+    return None
 
 
 def handle_ghost_argument_error(
