@@ -251,6 +251,67 @@ class TestComposesWithGhostArgumentStripping:
             assert _tool()(session=good) == "READ:"
 
 
+class TestSandboxDispatchSkipsTheCheck:
+    """A stated limit, pinned so it cannot change unnoticed.
+
+    With a real sandbox backend available, `@Airlock` serialises the **undecorated** function
+    into the micro-VM rather than calling the Pydantic-validated wrapper. No `Annotated`
+    validator runs on that path — `SafePath` and `SafeURL` have been in the same position
+    since they shipped, so this is a property of the sandbox dispatch path and not of
+    `HandleField`.
+
+    It is asserted here rather than only written in a docstring because a security check that
+    silently does not apply is worse than one that visibly does not exist. Without E2B
+    installed the decorator falls back to local execution *with* validation, so the hole is
+    invisible on this machine — which is exactly why it needs a test that does not depend on
+    having E2B.
+    """
+
+    def test_the_sandbox_path_receives_the_unvalidated_function(self, monkeypatch) -> None:
+        import agent_airlock.core as core_module
+
+        seen: dict[str, object] = {}
+
+        class _FakeResult:
+            success = True
+            result = "SANDBOX-RAN"
+            sandbox_id = "fake"
+            execution_time_ms = 0.0
+
+        def fake_execute_in_sandbox(func, args, kwargs, config):  # noqa: ANN001, ANN202, ARG001
+            seen["func"] = func
+            return _FakeResult()
+
+        # Stand in for the [sandbox] extra so the ImportError fallback (which *does*
+        # validate) is not the path under test.
+        monkeypatch.setattr(
+            core_module.Airlock,
+            "_execute_in_sandbox",
+            lambda self, func, *a, **kw: fake_execute_in_sandbox(func, a, kw, None).result,
+        )
+
+        @Airlock(sandbox=True)
+        def sandboxed(session: HandleField(issuer=ISSUER, scope=SCOPE)) -> str:
+            return "REACHED THE BODY"
+
+        with handle_run("run-1"):
+            # A handle that was never issued. On the ordinary path this is a hard block.
+            result = sandboxed(session="ah_never-issued-anywhere")
+
+        assert result == "SANDBOX-RAN", (
+            "the sandbox branch no longer bypasses validation — if this now blocks, the "
+            "limit documented in agent_airlock.handles has been fixed and the docstring "
+            "should be updated to say so"
+        )
+
+    def test_the_same_call_is_blocked_on_the_ordinary_path(self) -> None:
+        """The contrast is the point: the check works, the sandbox dispatch skips it."""
+        with handle_run("run-1"):
+            assert _tool()(session="ah_never-issued-anywhere")["block_reason"] == (
+                BlockReason.HANDLE_NOT_ISSUED.value
+            )
+
+
 class TestComposesWithFreeze:
     """v0.8.74 fixed `freeze()` dropping fields. This release must not reintroduce it."""
 

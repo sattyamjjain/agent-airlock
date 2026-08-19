@@ -47,6 +47,16 @@ How it composes with the layers already in the pipeline
   smuggled through it is neither ghost-stripped nor ``HandleField``-validated. That hole is
   closed by the existing ``mcp_spec_2026_07_28_handle_trust`` preset's ``check_tool_call``,
   and :func:`assert_handles_declared` is the one-line front door to it.
+* **Second known limit — ``sandbox=True``.** When a real sandbox backend is available,
+  ``@Airlock`` serialises the *undecorated* function into the micro-VM instead of calling
+  the Pydantic-validated wrapper, so **no** ``Annotated`` validator runs — ``SafePath`` and
+  ``SafeURL`` are in exactly the same position, and have been since they shipped. This is a
+  property of the sandbox dispatch path, not of this module, and it is not something a
+  per-run ledger could paper over anyway: the ledger is in-process by design, and shipping
+  it into a remote VM would mean the network call this module refuses to make. Validate
+  handles in the parent process (the default, non-sandboxed path), or keep the minting and
+  consuming tools outside the sandbox. Pinned by
+  ``TestSandboxDispatchSkipsTheCheck`` so the behaviour cannot change unnoticed.
 * **The verdict set does not grow.** A rejection is a *deny*, expressed through the
   ``AirlockResponse`` shape that already exists, with its own :class:`BlockReason` so the
   four cases stay distinguishable in the audit log. allow / deny / escalate remain the only

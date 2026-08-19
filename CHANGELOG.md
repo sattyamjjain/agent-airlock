@@ -82,6 +82,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HandleField`-validated. `assert_handles_declared()` is the one-line front door to the
   `mcp_spec` primitive that already closes it, and the test suite carries the evidence for
   both halves of that sentence.
+- Second known limit, found while writing this and pinned by a test rather than left in a
+  docstring: with a real sandbox backend available, `@Airlock` serialises the *undecorated*
+  function into the micro-VM instead of calling the Pydantic-validated wrapper, so **no**
+  `Annotated` validator runs on that path. `SafePath` and `SafeURL` have been in exactly the
+  same position since they shipped — this is a property of the sandbox dispatch path, not of
+  the new module, and it is not something a per-run in-process ledger could paper over
+  anyway. Validate handles in the parent process, or keep the minting and consuming tools
+  outside the sandbox. `TestSandboxDispatchSkipsTheCheck` asserts both halves: the sandbox
+  branch lets the call through, and the identical call blocks on the ordinary path.
 
 ## [0.8.76] - 2026-08-18
 
