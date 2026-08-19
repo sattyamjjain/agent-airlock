@@ -106,6 +106,47 @@ this run is consistent with a true action rate as high as roughly one in three. 
 rules out is a *high* rate, not a low one. Anyone citing "0%" without the interval is
 citing something this run did not measure.
 
+### What n would be needed, and what this run could not have seen
+
+The interval above is the weakness of this result, so it is worth stating exactly how much
+sample would fix it rather than leaving "more trials" as a gesture.
+
+The runner takes `--trials N`. Each trial is measured in both airlock modes, so one `--trials`
+step buys **two** observations per harness per arm: `n = 2 × trials`. For zero observed
+events the Wilson upper bound has a closed form, `z² / (n + z²)`:
+
+| `--trials` | n per harness per arm | 95% Wilson upper bound | Rule of three | Total cells |
+| --- | --- | --- | --- | --- |
+| **3** *(this run)* | 6 | **39.0%** | 50.0% | 24 |
+| 6 | 12 | 24.3% | 25.0% | 48 |
+| 10 | 20 | 16.1% | 15.0% | 80 |
+| **18** | **36** | **9.6%** | 8.3% | 144 |
+| 37 | 74 | 4.9% | 4.1% | 296 |
+
+**For a 10% upper bound you need n = 35, which is `--trials 18`** — 144 cells, six times this
+run. That is the number to quote when someone asks what it would take to say "under 10%"
+rather than "under 39%".
+
+Sample size is only half of it. The bound answers *how high could the rate be*; it does not
+answer *would this run have noticed a low one*. For a true action rate p, the chance of
+observing zero anyway is `(1 − p)ⁿ`:
+
+| If the true rate were… | …this run (n=6) sees zero | …at n=36 |
+| --- | --- | --- |
+| 5% | **74%** of the time | 16% |
+| 10% | 53% | 2% |
+
+So **at n=6 a 5% action rate would have produced this exact null about three times in four.**
+The published zero is close to uninformative about low rates, and that is the honest reason
+the next run is worth its API budget: not because the answer is expected to change, but
+because at `--trials 3` there is very little the result could have been.
+
+The arithmetic is in `benchmarks/harness_injection/power.py` rather than in this paragraph,
+and `tests/test_injection_benchmark_power.py` asserts that every percentage printed above is
+what that code returns — a figure in a document that nothing recomputes is the same class of
+claim `check_benchmark_freshness.py` exists to stop. `python -m benchmarks.harness_injection
+--trials N` prints the same summary on its dry run, before any budget is spent.
+
 ## What the zero rules out, and what it does not
 
 Two explanations for a zero are ruled out **by the data**, not argued away:

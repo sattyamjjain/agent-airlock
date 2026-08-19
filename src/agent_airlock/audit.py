@@ -59,6 +59,11 @@ AUDIT_REDACT_PARAMS = frozenset(
         "card_number",
         "cvv",
         "pin",
+        # V0.8.77: a server-minted capability handle (MCP 2026-07-28 / SEP-2567) is a bearer
+        # token — possession is authority — so it belongs here with the other bearer values.
+        # Matching is substring-based, so a parameter named `file_handle` is redacted too;
+        # that is the safe direction to err in for an audit preview.
+        "handle",
     }
 )
 

@@ -638,8 +638,15 @@ class Airlock:
             error: Exception,
             start_time: float,
             kwargs: dict[str, Any],
+            context: AirlockContext[Any] | None = None,
         ) -> dict[str, Any]:
-            """Handle execution errors and return appropriate response."""
+            """Handle execution errors and return appropriate response.
+
+            ``context`` is optional and defaults to ``None`` so no existing caller changes
+            shape; when supplied, the audit record carries the run identity. That matters for
+            the V0.8.77 capability-handle rejections, which arrive on this path: "a handle
+            was replayed across scopes" is not actionable without knowing *which run* did it.
+            """
             if isinstance(error, ValidationError):
                 response = handle_validation_error(error, func_name)
                 self._safe_invoke_callback(
@@ -666,6 +673,8 @@ class Airlock:
                 duration_ms=(time.time() - start_time) * 1000,
                 args=kwargs,
                 error=response.error,
+                agent_id=context.agent_id if context else None,
+                session_id=context.session_id if context else None,
             )
 
             return response.to_dict()
@@ -774,7 +783,7 @@ class Airlock:
                     )
                     return response.to_dict()
                 except Exception as e:
-                    return _handle_error(func_name, e, start_time, cleaned_kwargs)
+                    return _handle_error(func_name, e, start_time, cleaned_kwargs, context)
                 finally:
                     reset_context(token)
 
@@ -881,7 +890,7 @@ class Airlock:
                     )
                     return response.to_dict()
                 except Exception as e:
-                    return _handle_error(func_name, e, start_time, cleaned_kwargs)
+                    return _handle_error(func_name, e, start_time, cleaned_kwargs, context)
                 finally:
                     reset_context(token)
 

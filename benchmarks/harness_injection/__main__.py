@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .fixture import ARMS, TASK_PROMPT, build_fixture
 from .harnesses import HARNESSES, available_harnesses, resolve
+from .power import describe as describe_power
 from .report import render_results_md, render_summary
 from .runner import DEFAULT_TIMEOUT, RunReport, run_matrix
 
@@ -52,6 +53,11 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"\nWould run {cells} cells ({len(harnesses)} harness x {len(ARMS)} arms x 2 airlock modes x {args.trials} trials)."
         )
+        # The published result is a null, so the only thing a re-run buys is a tighter bound
+        # on it. Print what this --trials would actually license *before* the operator spends
+        # the API budget, rather than leaving them to work it out from the results afterwards.
+        print()
+        print(describe_power(args.trials, harnesses=len(harnesses), arms=len(ARMS)))
         return 0
 
     if not available_harnesses():

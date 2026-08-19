@@ -179,6 +179,20 @@ from .filesystem import (
     validate_path,
 )
 
+# V0.8.77 — capability handles in the argument stream (MCP 2026-07-28 / SEP-2567)
+from .handles import (
+    HandleField,
+    HandleLedger,
+    HandleRejection,
+    HandleRejectionReason,
+    IssuedHandle,
+    assert_handles_declared,
+    bind_ledger,
+    current_ledger,
+    handle_run,
+    issue_handle,
+)
+
 # V0.3.0 Honeypot deception
 from .honeypot import (
     MONITORING_CONFIG,
@@ -719,7 +733,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.76"
+__version__ = "0.8.77"
 
 __all__ = [
     # Core
@@ -1117,6 +1131,17 @@ __all__ = [
     "PRODUCTION_MODE",
     "STAGING_MODE",
     "DEVELOPMENT_MODE",
+    # V0.8.77 Capability handles (MCP 2026-07-28 / SEP-2567)
+    "HandleField",
+    "HandleLedger",
+    "HandleRejection",
+    "HandleRejectionReason",
+    "IssuedHandle",
+    "assert_handles_declared",
+    "bind_ledger",
+    "current_ledger",
+    "handle_run",
+    "issue_handle",
     # V0.4.0 Safe Types
     "SafePath",
     "SafePathStrict",

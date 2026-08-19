@@ -22,6 +22,61 @@ older versions are unsupported — upgrade to the latest `0.8.x` release.
 | --- | --- |
 | [Matched-pair multi-harness prompt injection](docs/benchmarks/injection-multi-harness.md) | **A null result, published as one.** `claude-code` 2.1.233 and `codex` 0.147.0 both ignored a planted README script convention entirely — 0/6 injected and 0/6 on the benign control. Explicitly **not** an injection-resistance finding: the benign twin was ignored identically. Includes the two earlier inconclusive runs and why they were inconclusive. |
 
+## What the free containment layers cover, and what they leave open
+
+Process-level containment for agents is being given away now. NVIDIA's **OpenShell** and
+Cisco's **DefenseClaw** both ship deny-by-default sandboxing around the process an agent's
+tools run in, and Amazon's **Cedar** gives away the policy language for expressing who may do
+what. None of these is a competitor airlock is trying to argue with, and the honest starting
+point is that **if you are not running one of them, do that before you reach for this.** They
+close a larger and more commonly exploited class of problem than argument validation does.
+
+**What they solve.** They bound *what a process can reach*. A contained tool process cannot
+open a socket to an attacker's host, read `~/.aws/credentials`, or write outside its
+workspace, regardless of what the model asked it to do or how the request was phrased. That
+is containment in the operating-system sense, and it holds even when every layer above it has
+been fooled — which is the property that makes it valuable and the reason it belongs at the
+bottom of any agent stack. Cedar covers the adjacent question: given an authenticated
+principal and a resource, is this action permitted at all.
+
+**What they do not solve.** They bound the blast radius of a call; they do not check whether
+the call is the one the contract allows. A sandbox has no opinion about
+`transfer(amount=-1)`, about an `account_id` the model invented that happens to be a valid
+string, about a `session` handle minted for another tenant, or about six extra parameters
+that were never in the tool's signature. Every one of those is a well-formed, in-policy,
+fully-contained call that does the wrong thing with the authority it legitimately has. Cedar
+is the sharpest illustration: it answers *may this principal call this action on this
+resource*, and answers it well — but the arguments are the part it does not model, and an
+authorized principal calling an authorized action with fabricated arguments passes.
+
+That gap is the whole of airlock's wedge, and it is deliberately narrow: **a deny-by-default
+type-checker and contract layer for the arguments themselves, in-process, at the call
+boundary.** It runs inside the sandbox, not instead of it.
+
+### Where agent-airlock is the wrong tool
+
+Stated plainly, because a security library that cannot say where it does not help is not one
+worth trusting on where it does:
+
+- **You need containment, not validation.** If the risk you are managing is "this tool could
+  exfiltrate data or touch the host", a sandbox is the answer and airlock is not a substitute
+  for one. `sandbox=True` delegates to E2B, Modal, or Docker precisely because airlock does
+  not implement isolation itself.
+- **You cannot run code in the agent's process.** airlock is a decorator. If the tools are
+  behind someone else's server and you can only intervene on the wire, you need a proxy or a
+  gateway; see the MCP-gateway comparison in the README.
+- **The open question is who may authorize an action.** That is an authorization model —
+  Cedar, or the propose-versus-authorize architectures. airlock's escalation verdict routes
+  to an approver you supply; it does not decide policy for your organisation. The full
+  comparison is in the README's
+  [propose-versus-authorize section](README.md#propose-versus-authorize-agent-safe-pipeline-and-toolpermit)
+  and is not repeated here.
+- **You want a human-approval UI.** airlock's approver is a callable. There is no prompt, no
+  pending-request queue, and no approval store.
+- **Your tools take no structured arguments.** A single free-text `query` string has almost no
+  contract to check. The value of argument validation scales with how much structure the
+  arguments have.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Agent-Airlock, please report it responsibly:
