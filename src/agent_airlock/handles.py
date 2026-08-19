@@ -100,8 +100,10 @@ __all__ = [
     "assert_handles_declared",
     "bind_ledger",
     "current_ledger",
+    "handle_rejection_from",
     "handle_run",
     "issue_handle",
+    "reset_ledger",
 ]
 
 #: Prefix on every handle this ledger mints. Not a security control — a debugging aid, so an

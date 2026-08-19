@@ -191,6 +191,7 @@ from .handles import (
     current_ledger,
     handle_run,
     issue_handle,
+    reset_ledger,
 )
 
 # V0.3.0 Honeypot deception
@@ -1142,6 +1143,7 @@ __all__ = [
     "current_ledger",
     "handle_run",
     "issue_handle",
+    "reset_ledger",
     # V0.4.0 Safe Types
     "SafePath",
     "SafePathStrict",
