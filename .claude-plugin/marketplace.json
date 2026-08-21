@@ -26,7 +26,7 @@
     ],
     "proof_points": [
       "3,749 tests passing at 86.85% measured coverage (CI-enforced floor 82%)",
-      "37 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026); see the generated catalog at docs/cves/index.md",
+      "38 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026); see the generated catalog at docs/cves/index.md",
       "75 policy presets (curated security defaults), enumerated at runtime by policy_presets.list_active()"
     ],
     "audience": [

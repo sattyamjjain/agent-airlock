@@ -9,6 +9,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.78] - 2026-08-21
+
+### Added
+
+- **CVE-2026-75130 — Upstash Context7 "ContextCrush"** joins the per-CVE regression suite.
+  Context7 ≤ 2.1.2 served a per-library **Custom AI Instructions** field through its MCP
+  server unsanitised: an attacker registers a library in the public registry, embeds
+  instructions in that field, and the text enters the model's working context as
+  documentation on any routine docs request.
+  [Noma Security's PoC](https://noma.security/blog/contextcrush-context7-the-mcp-server-vulnerability/)
+  chained three legs through the agent's *own already-authorised* tools — read every `.env`,
+  file the contents as a **GitHub issue** on an attacker-owned repo, delete local folders.
+  **Nothing in that chain crosses a network boundary the agent was not already allowed to
+  cross**, which is why a transport or identity layer sees three authorised calls and has
+  nothing to object to. The failure is in the arguments, which is this library's thesis.
+  `context7_contextcrush_cve_2026_75130_defaults()` composes shipped primitives — the v0.8.33
+  `ToolOutputTrustGuard` over the served content, `RESTRICTIVE_FILESYSTEM_POLICY` so a `.env`
+  path is refused **as an argument even when the read tool is allowlisted**, and
+  deny-by-default `denied_tools` for the exfil and destructive sinks. Registered the same way
+  the Flowise and Semantic-Kernel cases are: `@preset`, canonical `preset_id` / `severity` /
+  `default_action` / `cves` / `advisory_url` keys, discoverable via `list_active()`.
+  46 tests asserting the three legs **separately**, because one combined pass cannot
+  distinguish "the guard works" from "everything is denied".
+- NVD records two scores for it and both are published here rather than the flattering one:
+  **CVSS v3.1 9.0 Critical** and **CVSS v4.0 6.4 Medium**. The gap is not a disagreement about
+  severity — v4.0 scores `VC:N/VI:N/VA:N` with `SC:H/SI:H/SA:H`, i.e. Context7 itself is
+  unharmed and the entire impact lands on the connected downstream system. That is an accurate
+  description of the class, and the reason a server-side fix does not protect an agent talking
+  to some other poisoned source.
+
+### Changed
+
+- **The published null moved out of the wins table into its own section.** The multi-harness
+  injection result — `claude-code` 2.1.233 and `codex` 0.147.0 each **0/6 injected, 0/6
+  benign** — was the last row of a table headed "Reproducible block-rate", which is precisely
+  where a null goes to be skimmed past. It now has a **Published nulls** section directly
+  beneath the wins, same table shape, carrying the pinned harness versions, the 95% Wilson
+  interval **[0.0%, 39.0%]** rather than a bare zero, the **n = 35** requirement stated as the
+  reason this is not yet a claim, and one sentence on what it does not show: the benign twin
+  of identical shape was ignored just as completely, so this is indifference to the delivery
+  channel, not injection resistance.
+- `ToolOutputTrustGuard` gained `extra_imperative_patterns`, the same extension idiom
+  `StdioCommandInjectionGuard` exposes as `extra_metachars`. This was necessary rather than
+  decorative: the shipped imperative set is tuned for Agentjacking ("run the following",
+  fenced shell) and **does not fire** on the ContextCrush payload, which is prose describing a
+  data workflow. Verified before the patterns were written, and pinned by
+  `TestTheShippedPatternsDoNotCoverThisShape` — if the built-in set ever grows to cover this
+  shape, that test fails and says the per-CVE extension has become redundant. Off by default,
+  so no existing caller changes behaviour.
+
+### Notes
+
+- Stated limit, asserted rather than only written down: the guard matches the *shape* of
+  agent-directed imperatives, so a poisoned rule written entirely as passive description —
+  no imperative, no command — is **not** caught and is not claimed to be.
+- CVE count bumped 37 → 38 on both surfaces the honesty gate fences
+  (`marketplace.json` proof point and the README ASI04 cell).
+
 ## [0.8.77] - 2026-08-19
 
 ### Added
