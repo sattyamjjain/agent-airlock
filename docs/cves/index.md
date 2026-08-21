@@ -29,6 +29,7 @@ catalog and the tests stay in lockstep.
 
 | CVE | Component / title | CVSS | Airlock fit |
 | --- | --- | --- | --- |
+| [CVE-2025-59528](#cve-2025-59528) | Flowise CustomMCP RCE via JS ``Function()`` constructor | — | — |
 | [CVE-2025-59536](#cve-2025-59536) | Claude Code hooks RCE + MCP consent bypass (exfil leg) | 8.7 (High) | Partial |
 | [CVE-2025-68143](#cve-2025-68143) | Anthropic mcp-server-git `git_init` path traversal | 8.2 (High) | Strong |
 | [CVE-2025-68144](#cve-2025-68144) | Anthropic mcp-server-git argument injection | 8.1 (High) | Strongest |
@@ -37,8 +38,19 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-27825](#cve-2026-27825) | mcp-atlassian arbitrary file write via download_path | 9.1 (Critical) | Strong |
 | [CVE-2026-27826](#cve-2026-27826) | mcp-atlassian SSRF via `X-Atlassian-*-Url` headers | 7.5 (High, AV:A/PR:N/UI:N, C:H) | Partial |
 | [CVE-2026-30616](#cve-2026-30616) | MCP STDIO transport command-injection (Ox Security class) | 9.8 (Critical) | Strongest |
+| [CVE-2026-40933](#cve-2026-40933) | Flowise MCP-stdio adapter RCE regression | — | — |
+| [CVE-2026-42271](#cve-2026-42271) | CISA KEV regression fixture (LiteLLM MCP command injection) | — | — |
+| [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
 
 ## Details
+
+### CVE-2025-59528
+
+**Flowise CustomMCP RCE via JS ``Function()`` constructor**
+
+- **Regression test:** [`tests/cves/test_cve_2025_59528_flowise.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2025_59528_flowise.py)
+
+<a id="cve-2025-59528"></a>
 
 ### CVE-2025-59536
 
@@ -335,3 +347,72 @@ client-surface problem and out-of-scope for runtime middleware;
 see ``docs/cves/index.md`` fit-matrix notes.
 
 <a id="cve-2026-30616"></a>
+
+### CVE-2026-40933
+
+**Flowise MCP-stdio adapter RCE regression**
+
+- **Regression test:** [`tests/cves/test_cve_2026_40933_flowise_mcp_stdio.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_40933_flowise_mcp_stdio.py)
+
+<a id="cve-2026-40933"></a>
+
+### CVE-2026-42271
+
+**CISA KEV regression fixture (LiteLLM MCP command injection)**
+
+- **Regression test:** [`tests/cves/test_cve_2026_42271_kev_regression.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_42271_kev_regression.py)
+
+<a id="cve-2026-42271"></a>
+
+### CVE-2026-75130
+
+**Upstash Context7 "ContextCrush" MCP instruction injection**
+
+- **CVSS:** 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0)
+- **Airlock fit:** strongest
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-75130](https://nvd.nist.gov/vuln/detail/CVE-2026-75130)
+- **Advisory:** [https://www.vulncheck.com/advisories/context7-prompt-injection-via-custom-ai-instructions](https://www.vulncheck.com/advisories/context7-prompt-injection-via-custom-ai-instructions)
+- **Write-up:** [https://noma.security/blog/contextcrush-context7-the-mcp-server-vulnerability/](https://noma.security/blog/contextcrush-context7-the-mcp-server-vulnerability/)
+- **Regression test:** [`tests/cves/test_cve_2026_75130_context7_contextcrush.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_75130_context7_contextcrush.py)
+
+**Vulnerability**
+
+Context7 through 2.1.2 serves a per-library **Custom AI Instructions**
+("Custom Rules") field through its MCP server without sanitising it.
+An attacker registers a library in the public Context7 registry and
+embeds instructions in that field; when any developer later asks their
+coding agent about that library, the text is inserted directly into the
+model's working context as though it were documentation. No
+user interaction with the attacker is required beyond a routine
+documentation request.
+
+Noma Security's proof of concept chained three legs through the
+connected agent's own, already-authorised tools:
+
+    1. Search the workspace for ``.env`` files and read them.
+    2. File the contents as a **GitHub issue** on an attacker-owned
+       repository.
+    3. Delete local folders on the victim's machine.
+
+NVD records two very different scores. v3.1 rates it 9.0 Critical.
+v4.0 rates it 6.4 Medium — because it scores ``VC:N/VI:N/VA:N`` with
+``SC:H/SI:H/SA:H``: Context7 itself is unharmed and the entire impact
+lands on the *connected downstream system*. That gap is not a
+disagreement about how bad this is; it is an accurate description of
+the class, and the reason a server-side fix does not protect an agent
+talking to some other poisoned source. Upstash accepted the findings
+and shipped rule sanitisation with guardrails to production within
+days.
+
+**Airlock mitigation**
+
+Nothing in the chain crosses a network boundary the agent was not
+already authorised to cross. The agent may read files. It may call the
+GitHub tool. It may delete. Every individual call is in-policy for an
+authenticated principal — what is wrong is the *arguments*: a ``.env``
+path nobody asked for, an issue body full of credentials, a delete
+nobody requested. A transport or identity layer sees three authorised
+calls and has nothing to object to. That is an argument-level failure,
+which is the seam this library exists to cover.
+
+<a id="cve-2026-75130"></a>

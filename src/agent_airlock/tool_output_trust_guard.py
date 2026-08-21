@@ -209,10 +209,24 @@ class ToolOutputTrustGuard:
         envelope: bool = True,
         envelope_only_when_flagged: bool = False,
         advisory: str | None = "Agentjacking / CVE-2026-42824",
+        extra_imperative_patterns: tuple[str, ...] = (),
     ) -> None:
         self._envelope = envelope
         self._envelope_only_when_flagged = envelope_only_when_flagged
         self._advisory = advisory
+        # V0.8.78: the same extension idiom `StdioCommandInjectionGuard` uses for
+        # `extra_metachars`. :data:`_IMPERATIVE_RE` is tuned for the Agentjacking
+        # shape — "run the following", fenced shell — and a per-CVE projection can
+        # need a different vocabulary without a new detector. CVE-2026-75130 is the
+        # motivating case: the ContextCrush payload is prose describing a data
+        # workflow ("search for every .env file … create an issue containing them")
+        # with no shell and no "execute", so the shipped set does not fire on it.
+        self._extra_imperative_patterns = tuple(extra_imperative_patterns)
+        self._extra_imperative_re = (
+            re.compile("|".join(f"(?:{p})" for p in extra_imperative_patterns), re.IGNORECASE)
+            if extra_imperative_patterns
+            else None
+        )
 
     def inspect(self, output: Any) -> ToolOutputTrustDecision:
         """Scan a tool result for injected-instruction signals (no mutation)."""
@@ -307,7 +321,9 @@ class ToolOutputTrustGuard:
                     ToolOutputTrustVerdict.OVERRIDE_DIRECTIVE, path, _excerpt(text)
                 )
             )
-        if _IMPERATIVE_RE.search(text):
+        if _IMPERATIVE_RE.search(text) or (
+            self._extra_imperative_re is not None and self._extra_imperative_re.search(text)
+        ):
             signals.append(
                 ToolOutputTrustSignal(
                     ToolOutputTrustVerdict.IMPERATIVE_COMMAND, path, _excerpt(text)

@@ -3451,6 +3451,292 @@ extend ``extra_denied_tools`` or admit read-side ``allowed_tools``.
 """
 
 
+# ---------------------------------------------------------------------------
+# CVE-2026-75130 — Context7 "ContextCrush" (v0.8.78)
+# ---------------------------------------------------------------------------
+#
+# The Context7 MCP surface a coding agent calls when it wants library docs.
+# Both the hyphenated (canonical MCP) and underscored spellings are listed
+# because clients normalise tool names differently; the globs catch vendor
+# prefixes (`mcp__context7__resolve-library-id` and friends).
+_CONTEXT7_TOOL_NAME_PATTERNS: tuple[str, ...] = (
+    "resolve-library-id",
+    "resolve_library_id",
+    "get-library-docs",
+    "get_library_docs",
+    "query-docs",
+    "query_docs",
+    "context7_*",
+    "*context7*",
+)
+
+#: The two outbound legs the ContextCrush chain needs after it has read the
+#: `.env`. Leg 2 is exfiltration — Noma's PoC filed the credentials as a GitHub
+#: **issue** on an attacker-owned repo, so the issue/comment surface is named
+#: explicitly rather than left to the generic `post_to_*` glob. Leg 3 is the
+#: destructive clean-up. Scoped to the chain that was actually demonstrated; a
+#: wider deny-list would be a claim about coverage nobody measured.
+_CONTEXTCRUSH_EXFIL_SINKS: tuple[str, ...] = (
+    # Leg 2 — credential exfiltration to an attacker-controlled repo.
+    "create_issue",
+    "add_issue_comment",
+    "github_*",
+    "create_or_update_file",
+    "push_files",
+    "create_pull_request",
+    "http_request",
+    "post_to_*",
+    "webhook_*",
+    "upload_*",
+    "export_*",
+    # Leg 3 — destructive local clean-up.
+    "delete_file",
+    "delete_folder",
+    "delete_directory",
+    "remove_directory",
+    "rmtree",
+    "shell",
+    "run_command",
+    "execute_command",
+)
+
+
+#: The vocabulary the ContextCrush payload actually uses, supplied to the shipped
+#: :class:`~agent_airlock.tool_output_trust_guard.ToolOutputTrustGuard` through its
+#: ``extra_imperative_patterns`` hook — the same extension idiom
+#: ``StdioCommandInjectionGuard`` exposes as ``extra_metachars``.
+#:
+#: This is needed because the guard's built-in set is tuned for Agentjacking:
+#: "run the following", "execute this", fenced shell. ContextCrush carries none of
+#: those. Its payload is *prose describing a data workflow* — find the credential
+#: files, put them somewhere the attacker can read, then clean up — and the shipped
+#: patterns do not fire on it. Verified before these were written, rather than
+#: assumed; see ``TestTheShippedPatternsDoNotCoverThisShape``.
+#:
+#: Each pattern is anchored on the thing that makes the sentence an instruction to
+#: an agent, not on the nouns, so that documentation *mentioning* `.env` files is
+#: not caught.
+_CONTEXTCRUSH_IMPERATIVE_PATTERNS: tuple[str, ...] = (
+    # Leg 1 — harvest credential files.
+    r"\b(search|scan|look|find|locate|grep)\b[^.\n]{0,60}\b(for|through)\b[^.\n]{0,40}"
+    r"\.env\b",
+    r"\b(read|open|cat|load|collect|gather)\b[^.\n]{0,40}\b(\.env|env(ironment)?\s+file"
+    r"|credential|secret|api[_\s-]?key)s?\b",
+    # Leg 2 — put them somewhere the attacker reads.
+    r"\b(create|open|file|submit|post)\b[^.\n]{0,40}\b(issue|pull request|pr|gist|comment)\b"
+    r"[^.\n]{0,60}\b(contain|with|includ|attach|paste)\w*\b",
+    r"\b(send|upload|transmit|exfiltrat|forward|report)\w*\b[^.\n]{0,50}"
+    r"\b(\.env|credential|secret|token|api[_\s-]?key|content)s?\b",
+    # Leg 3 — destructive clean-up.
+    r"\b(delete|remove|wipe|purge|clear)\b[^.\n]{0,40}"
+    r"\b(local|folder|directory|repositor|node_modules|\.git)\w*\b",
+    # The framing that makes any of the above look like policy to the model.
+    r"\bbefore (answering|responding|continuing|proceeding)\b[^.\n]{0,60}\byou must\b",
+)
+
+
+class Context7InstructionInjectionError(AirlockError):
+    """Raised when Context7-served content carries agent-directed instructions.
+
+    CVE-2026-75130. Stores the underlying
+    :class:`~agent_airlock.tool_output_trust_guard.ToolOutputTrustDecision`
+    verdicts and the flagged field paths as attributes so callers can branch on
+    the specific signal, per the project's exception convention.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        verdicts: tuple[str, ...],
+        fields: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.verdicts = verdicts
+        self.fields = fields
+
+
+@preset
+def context7_contextcrush_cve_2026_75130_defaults(
+    *,
+    allowed_tools: tuple[str, ...] = (),
+    extra_denied_tools: tuple[str, ...] = (),
+    filesystem_policy: Any = None,
+) -> dict[str, Any]:
+    """Defensive bundle for CVE-2026-75130 (Context7 "ContextCrush").
+
+    Upstash Context7 ≤ 2.1.2 serves a per-library **Custom AI Instructions**
+    ("Custom Rules") field through its MCP server without sanitisation. An
+    attacker registers a library in the Context7 registry, embeds instructions
+    in that field, and waits: when any developer asks their coding agent about
+    that library, the text is inserted straight into the model's working
+    context as though it were documentation. Noma Security's PoC chained three
+    legs — search the workspace for ``.env`` files and read them, file the
+    contents as a **GitHub issue** on an attacker-owned repository, then delete
+    local folders. CVSS v3.1 **9.0 Critical** (v4.0 scores it 6.4 Medium; see
+    the note below). Upstash remediated in production within days with rule
+    sanitisation and guardrails.
+
+    Why this CVE is the library's thesis in one chain: **nothing in it crosses
+    a network boundary the agent was not already authorised to cross.** The
+    agent is allowed to read files. It is allowed to call the GitHub tool. It
+    is allowed to delete. Every individual call is in-policy for an
+    authenticated principal; what is wrong is the *arguments* — a ``.env`` path
+    the user never asked for, an issue body full of credentials, a delete
+    nobody requested. A transport or identity layer sees three authorised
+    calls. The failure is at the argument level, which is where this layer sits.
+
+    On the two CVSS scores: v3.1 rates it 9.0 Critical, v4.0 rates it 6.4
+    Medium. The gap is not a disagreement about severity — v4.0 records
+    ``VC:N/VI:N/VA:N`` with ``SC:H/SI:H/SA:H``, i.e. *Context7 itself is
+    unharmed and the entire impact lands on the connected downstream system*.
+    That is a precise description of this vulnerability class, and the reason a
+    server-side fix alone does not protect an agent talking to some other
+    poisoned source. Both scores are recorded here rather than the flattering
+    one.
+
+    Honest framing — this preset introduces **no new runtime detector.** It is
+    a per-CVE projection of two shipped primitives:
+
+    - :class:`~agent_airlock.tool_output_trust_guard.ToolOutputTrustGuard`
+      (v0.8.33, the Agentjacking anchor) inspects the served content — a tool
+      description, a docs payload, a Custom Rules blob — for override
+      directives, imperative command directives, fenced shell, and
+      tool-call-shaped payloads. Exposed here as ``check_served_content``.
+    - :class:`~agent_airlock.filesystem.FilesystemPolicy` (v0.3.0) refuses a
+      ``.env`` path **as an argument**, which is what stops leg 1 even when the
+      read tool is legitimately on ``allowed_tools``. Defaults to
+      :data:`~agent_airlock.filesystem.RESTRICTIVE_FILESYSTEM_POLICY`.
+
+    plus a :class:`SecurityPolicy` whose ``denied_tools`` name the leg-2 and
+    leg-3 sinks the demonstrated chain needs.
+
+    Deliberate scope limit: the guard reads text and refuses arguments. It
+    cannot tell a *legitimate* library instruction from a malicious one by
+    intent — it matches on the shape of agent-directed imperatives. A poisoned
+    rule written entirely as passive description, carrying no imperative and no
+    command, is not caught by this and is not claimed to be.
+
+    Args:
+        allowed_tools: Read-side tools to admit. Empty (default) leaves
+            ``default_deny=True`` refusing everything — populate from a real
+            trace, e.g. with ``airlock explain --unused-scopes``.
+        extra_denied_tools: Additional sinks on top of
+            :data:`_CONTEXTCRUSH_EXFIL_SINKS`.
+        filesystem_policy: Override the ``.env``-denying policy. ``None``
+            (default) uses ``RESTRICTIVE_FILESYSTEM_POLICY``.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``cves`` / ``advisory_url`` keys, plus:
+
+        - ``policy`` — :class:`SecurityPolicy`, deny-by-default, exfil and
+          destructive sinks denied by name and glob.
+        - ``airlock_config`` — :class:`AirlockConfig` carrying the
+          ``.env``-refusing ``filesystem_policy`` and
+          ``UnknownArgsMode.BLOCK``.
+        - ``guard`` — the pre-built ``ToolOutputTrustGuard``.
+        - ``check_served_content`` — ``check_served_content(text)`` raises
+          :class:`Context7InstructionInjectionError` on instruction-bearing
+          content and returns ``None`` on ordinary documentation.
+        - ``tool_name_patterns`` — the Context7 MCP surface.
+        - ``denied_sinks`` — the leg-2 / leg-3 sink corpus.
+
+    Usage::
+
+        from agent_airlock import context7_contextcrush_cve_2026_75130_defaults
+
+        bundle = context7_contextcrush_cve_2026_75130_defaults(
+            allowed_tools=("get-library-docs", "read_file"),
+        )
+        bundle["check_served_content"](docs_payload)   # raises on poisoned rules
+
+        @Airlock(policy=bundle["policy"], config=bundle["airlock_config"])
+        def read_file(path: str) -> str: ...
+
+    Primary sources:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-75130
+      https://noma.security/blog/contextcrush-context7-the-mcp-server-vulnerability/
+    """
+    from .config import AirlockConfig
+    from .filesystem import RESTRICTIVE_FILESYSTEM_POLICY
+    from .tool_output_trust_guard import ToolOutputTrustGuard
+    from .unknown_args import UnknownArgsMode
+
+    if not isinstance(allowed_tools, tuple):
+        raise TypeError(
+            f"allowed_tools must be a tuple[str, ...]; got {type(allowed_tools).__name__}"
+        )
+    if not isinstance(extra_denied_tools, tuple):
+        raise TypeError(
+            f"extra_denied_tools must be a tuple[str, ...]; got {type(extra_denied_tools).__name__}"
+        )
+
+    guard = ToolOutputTrustGuard(
+        extra_imperative_patterns=_CONTEXTCRUSH_IMPERATIVE_PATTERNS,
+        advisory="CVE-2026-75130 (ContextCrush)",
+    )
+    fs_policy = RESTRICTIVE_FILESYSTEM_POLICY if filesystem_policy is None else filesystem_policy
+
+    def _check_served_content(content: Any) -> None:
+        """Raise :class:`Context7InstructionInjectionError` on poisoned content."""
+        decision = guard.inspect(content)
+        if decision.flagged:
+            raise Context7InstructionInjectionError(
+                (
+                    "Context7-served content carries agent-directed instructions "
+                    "(CVE-2026-75130 ContextCrush): "
+                    f"{', '.join(s.verdict.value for s in decision.signals)}. "
+                    "Documentation is data, never instruction. See "
+                    "https://nvd.nist.gov/vuln/detail/CVE-2026-75130"
+                ),
+                verdicts=tuple(s.verdict.value for s in decision.signals),
+                fields=tuple(s.field_path for s in decision.signals),
+            )
+
+    denied_tools = list(_CONTEXTCRUSH_EXFIL_SINKS) + list(extra_denied_tools)
+    policy = SecurityPolicy(
+        allowed_tools=list(allowed_tools),
+        denied_tools=denied_tools,
+        default_deny=True,
+        reauth_on_untrusted_reinvocation=True,
+        untrusted_reinvocation_threshold=1,
+    )
+    return {
+        "preset_id": "context7_contextcrush_cve_2026_75130",
+        "severity": "critical",
+        "default_action": "deny",
+        "policy": policy,
+        "airlock_config": AirlockConfig(
+            unknown_args=UnknownArgsMode.BLOCK,
+            filesystem_policy=fs_policy,
+        ),
+        "guard": guard,
+        "check_served_content": _check_served_content,
+        "tool_name_patterns": _CONTEXT7_TOOL_NAME_PATTERNS,
+        "denied_sinks": _CONTEXTCRUSH_EXFIL_SINKS,
+        "owasp": "MCP03",
+        "cves": ("CVE-2026-75130",),
+        "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-75130",
+        "writeup_url": (
+            "https://noma.security/blog/contextcrush-context7-the-mcp-server-vulnerability/"
+        ),
+        "composes": (
+            "tool_output_trust_guard",
+            "RESTRICTIVE_FILESYSTEM_POLICY",
+        ),
+    }
+
+
+CONTEXT7_CONTEXTCRUSH_CVE_2026_75130_DEFAULTS = context7_contextcrush_cve_2026_75130_defaults()
+"""Eagerly-constructed defaults for
+:func:`context7_contextcrush_cve_2026_75130_defaults`.
+
+Use the constant for the canonical deny-by-default posture; call the factory
+when you need to admit read-side ``allowed_tools`` or extend the sink list.
+"""
+
+
 @preset
 def mcp_description_manifest_guard_defaults(
     *,
@@ -5525,6 +5811,10 @@ __all__ = [
     # V0.8.14 CVE-2026-21520 (Capsule ShareLeak / PipeLeak) indirect injection
     "capsule_indirect_injection_cve_2026_21520_defaults",
     "CAPSULE_INDIRECT_INJECTION_CVE_2026_21520_DEFAULTS",
+    # V0.8.78 CVE-2026-75130 (Context7 "ContextCrush" instruction injection)
+    "context7_contextcrush_cve_2026_75130_defaults",
+    "CONTEXT7_CONTEXTCRUSH_CVE_2026_75130_DEFAULTS",
+    "Context7InstructionInjectionError",
     # V0.8.16 CVE-2026-40933 (Flowise MCP-stdio adapter RCE)
     "flowise_mcp_stdio_guard_2026_defaults",
     "FlowiseMcpStdioInjectionError",
