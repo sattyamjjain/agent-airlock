@@ -47,17 +47,17 @@ jobs:
         run: |
           python3 scripts/generate_benchmark.py --check
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.xml
-          fail_ci_if_error: false
-
-      - name: Generate coverage badge
-        if: matrix.python-version == '3.11' && github.ref == 'refs/heads/main'
-        run: |
-          pip install coverage-badge
-          coverage-badge -o coverage.svg -f
+      # Codecov upload removed in v0.8.79. It ran on all four Python versions,
+      # uploaded tokenless (no CODECOV_TOKEN was ever configured), landed nowhere
+      # — codecov.io 301s and the API 500s for this repo — and carried
+      # `fail_ci_if_error: false`, so nothing ever caught it. The README badge it
+      # fed rendered "unknown" next to a coverage claim. The honest coverage number
+      # comes from `--cov-fail-under=82` above (a real gate) and the generated
+      # TEST-BADGE block in the README. Re-add this step together with a token and
+      # `fail_ci_if_error: true` if Codecov is ever actually adopted.
+      #
+      # The `coverage-badge -o coverage.svg` step went with it: nothing in the repo
+      # ever referenced the file it wrote.
 
   bare-install:
     # The zero-core-dependency claim, enforced as an EXHAUSTIVE allowlist. A bare

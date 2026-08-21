@@ -9,6 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.79] - 2026-08-21
+
+A housekeeping release with no code changes to the library itself. Every item is a claim this
+README was making that turned out not to be true, or not to be checkable.
+
+### Removed
+
+- **The "Used By" section named two projects that do not use this library, and it has been
+  removed.** It listed FerrumDeck and Mnemo under the heading "Agent-Airlock secures AI agent
+  systems in production". Verified before deleting rather than after: a fresh clone of
+  [Mnemo](https://github.com/sattyamjjain/Mnemo) contains **zero** occurrences of the string
+  "airlock" across all 602 files, and a fresh clone of
+  [FerrumDeck](https://github.com/sattyamjjain/FerrumDeck) contains **zero** occurrences of
+  `agent_airlock` / `agent-airlock`. FerrumDeck's 117 "airlock" matches are its own
+  `fd_policy::airlock` Rust RASP module — same name, different language, no shared code and
+  no dependency in either direction. Replaced with a **Related work by the same author**
+  note that says all of this in the open, including the name collision, so a reader who greps
+  does not think they have caught something. There are no known production users to name; when
+  there are, they will be named with a link to the integration.
+- **The Codecov badge.** It rendered **"unknown"** in the primary badge row, immediately next
+  to a coverage claim. The cause: no `CODECOV_TOKEN` was ever configured, so CI uploaded
+  tokenless on all four Python versions, `codecov.io/gh/sattyamjjain/agent-airlock` 301s, the
+  Codecov API 500s for this repo, and `fail_ci_if_error: false` meant nothing ever caught any
+  of it. Codecov is not in use, so the badge is gone rather than repaired, and the dead
+  upload step went with it (along with a `coverage-badge -o coverage.svg` step whose output
+  nothing referenced). Coverage is still gated for real by `--cov-fail-under=82` in CI and
+  reported by the generated TEST-BADGE block. Re-add the step with a token and
+  `fail_ci_if_error: true` if Codecov is ever actually adopted.
+- **"Prompt Security $50K+/year"** from the vendor comparison table, and the same figure from
+  the intro. No source exists: neither vendor publishes list pricing, Prompt Security is now
+  part of SentinelOne and is quote-only, and the third-party figures that do circulate are
+  orders of magnitude lower. Removed rather than re-sourced with a different uncited number.
+  The table now carries a note that the competitor columns are read off public materials
+  rather than from testing, because that is what they are.
+- **The "Sandbox warm pool <200ms" row.** `sandbox.py` describes `<200ms` as a *target*, no
+  benchmark measures it, and a warm-pool figure larger than the ~125ms cold start it exists to
+  avoid is incoherent on its face.
+
+### Changed
+
+- **The two performance numbers are reconciled and each now states its scope.** The README
+  claimed `<50ms` validation overhead on the same page as `p50 ~2µs/decision` and
+  `p50 ~0.08ms/decision` — four orders of magnitude apart, unlabelled. Nothing in the repo
+  measures 50ms, so that row is deleted. The two that survive are labelled with exactly what
+  they time: **p50 0.0015 ms** is one policy verdict in isolation (`benchmarks.blockrate`),
+  **p50 ~0.08 ms** is the full `@Airlock` path — ghost-arg check, policy, strict Pydantic
+  validation, sanitize, audit (`benchmarks.vs_gateway`), independently corroborated at
+  **median 84µs** by `pytest tests/benchmarks/test_bench_core.py`. They differ by ~50× because
+  they measure different things, which the table now says. The sandbox row is labelled
+  vendor-published (E2B's Firecracker figure), not measured here.
+- **`ROADMAP.md` no longer points at closed issues.** It said "each item is a GitHub issue
+  with the roadmap label" and linked #122 / #123 / #124; all three are closed and the repo has
+  zero open issues, so a reader clicking through found closed tickets and no way to tell what
+  had landed. Rewritten to describe the actual plan, with the issues kept as history labelled
+  by what shipped and what did not — including that **#124 was closed while the OWASP ASI04
+  row still reads Partial**, which is recorded rather than left to imply otherwise.
+- **The Docker MCP Gateway caveat moved from the footnote onto the headline line.** That
+  comparison is against a build Hub's moving `v2` tag superseded on 2026-07-23; "0/12 blocked"
+  and "against a build that is now superseded" now travel together, because the first
+  without the second is the sentence that gets quoted.
+
+### Notes
+
+- **The published nulls are untouched**, deliberately: the 0/24 injection null, the n=6
+  multi-harness null with its [0.0%, 39.0%] Wilson interval, and the AgentDojo subset
+  intervals are all byte-identical. They are the strongest thing on the page.
+
 ## [0.8.78] - 2026-08-21
 
 ### Added
