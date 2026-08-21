@@ -1356,6 +1356,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#cve-2025-59528" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2025-59528
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2025-59536" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1437,6 +1448,39 @@
     <span class="md-ellipsis">
       
         CVE-2026-30616
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-40933" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-40933
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-42271" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-42271
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-75130" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-75130
       
     </span>
   </a>
@@ -1676,6 +1720,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#cve-2025-59528" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2025-59528
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2025-59536" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1763,6 +1818,39 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#cve-2026-40933" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-40933
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-42271" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-42271
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-75130" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-75130
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1818,6 +1906,12 @@ catalog and the tests stay in lockstep.</p>
 </thead>
 <tbody>
 <tr>
+<td><a href="#cve-2025-59528">CVE-2025-59528</a></td>
+<td>Flowise CustomMCP RCE via JS <code>Function()</code> constructor</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
 <td><a href="#cve-2025-59536">CVE-2025-59536</a></td>
 <td>Claude Code hooks RCE + MCP consent bypass (exfil leg)</td>
 <td>8.7 (High)</td>
@@ -1865,9 +1959,33 @@ catalog and the tests stay in lockstep.</p>
 <td>9.8 (Critical)</td>
 <td>Strongest</td>
 </tr>
+<tr>
+<td><a href="#cve-2026-40933">CVE-2026-40933</a></td>
+<td>Flowise MCP-stdio adapter RCE regression</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-42271">CVE-2026-42271</a></td>
+<td>CISA KEV regression fixture (LiteLLM MCP command injection)</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-75130">CVE-2026-75130</a></td>
+<td>Upstash Context7 "ContextCrush" MCP instruction injection</td>
+<td>9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0)</td>
+<td>Strongest</td>
+</tr>
 </tbody>
 </table>
 <h2 id="details">Details<a class="headerlink" href="#details" title="Permanent link">&para;</a></h2>
+<h3 id="cve-2025-59528">CVE-2025-59528<a class="headerlink" href="#cve-2025-59528" title="Permanent link">&para;</a></h3>
+<p><strong>Flowise CustomMCP RCE via JS <code>Function()</code> constructor</strong></p>
+<ul>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2025_59528_flowise.py"><code>tests/cves/test_cve_2025_59528_flowise.py</code></a></li>
+</ul>
+<p><a id="cve-2025-59528"></a></p>
 <h3 id="cve-2025-59536">CVE-2025-59536<a class="headerlink" href="#cve-2025-59536" title="Permanent link">&para;</a></h3>
 <p><strong>Claude Code hooks RCE + MCP consent bypass (exfil leg)</strong></p>
 <ul>
@@ -2109,6 +2227,63 @@ middleware that sits between the tool call and the subprocess.</p>
 client-surface problem and out-of-scope for runtime middleware;
 see <code>docs/cves/index.md</code> fit-matrix notes.</p>
 <p><a id="cve-2026-30616"></a></p>
+<h3 id="cve-2026-40933">CVE-2026-40933<a class="headerlink" href="#cve-2026-40933" title="Permanent link">&para;</a></h3>
+<p><strong>Flowise MCP-stdio adapter RCE regression</strong></p>
+<ul>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_40933_flowise_mcp_stdio.py"><code>tests/cves/test_cve_2026_40933_flowise_mcp_stdio.py</code></a></li>
+</ul>
+<p><a id="cve-2026-40933"></a></p>
+<h3 id="cve-2026-42271">CVE-2026-42271<a class="headerlink" href="#cve-2026-42271" title="Permanent link">&para;</a></h3>
+<p><strong>CISA KEV regression fixture (LiteLLM MCP command injection)</strong></p>
+<ul>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_42271_kev_regression.py"><code>tests/cves/test_cve_2026_42271_kev_regression.py</code></a></li>
+</ul>
+<p><a id="cve-2026-42271"></a></p>
+<h3 id="cve-2026-75130">CVE-2026-75130<a class="headerlink" href="#cve-2026-75130" title="Permanent link">&para;</a></h3>
+<p><strong>Upstash Context7 "ContextCrush" MCP instruction injection</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0)</li>
+<li><strong>Airlock fit:</strong> strongest</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-75130">https://nvd.nist.gov/vuln/detail/CVE-2026-75130</a></li>
+<li><strong>Advisory:</strong> <a href="https://www.vulncheck.com/advisories/context7-prompt-injection-via-custom-ai-instructions">https://www.vulncheck.com/advisories/context7-prompt-injection-via-custom-ai-instructions</a></li>
+<li><strong>Write-up:</strong> <a href="https://noma.security/blog/contextcrush-context7-the-mcp-server-vulnerability/">https://noma.security/blog/contextcrush-context7-the-mcp-server-vulnerability/</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_75130_context7_contextcrush.py"><code>tests/cves/test_cve_2026_75130_context7_contextcrush.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>Context7 through 2.1.2 serves a per-library <strong>Custom AI Instructions</strong>
+("Custom Rules") field through its MCP server without sanitising it.
+An attacker registers a library in the public Context7 registry and
+embeds instructions in that field; when any developer later asks their
+coding agent about that library, the text is inserted directly into the
+model's working context as though it were documentation. No
+user interaction with the attacker is required beyond a routine
+documentation request.</p>
+<p>Noma Security's proof of concept chained three legs through the
+connected agent's own, already-authorised tools:</p>
+<div class="highlight"><pre><span></span><code>1. Search the workspace for ``.env`` files and read them.
+2. File the contents as a **GitHub issue** on an attacker-owned
+   repository.
+3. Delete local folders on the victim's machine.
+</code></pre></div>
+<p>NVD records two very different scores. v3.1 rates it 9.0 Critical.
+v4.0 rates it 6.4 Medium — because it scores <code>VC:N/VI:N/VA:N</code> with
+<code>SC:H/SI:H/SA:H</code>: Context7 itself is unharmed and the entire impact
+lands on the <em>connected downstream system</em>. That gap is not a
+disagreement about how bad this is; it is an accurate description of
+the class, and the reason a server-side fix does not protect an agent
+talking to some other poisoned source. Upstash accepted the findings
+and shipped rule sanitisation with guardrails to production within
+days.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>Nothing in the chain crosses a network boundary the agent was not
+already authorised to cross. The agent may read files. It may call the
+GitHub tool. It may delete. Every individual call is in-policy for an
+authenticated principal — what is wrong is the <em>arguments</em>: a <code>.env</code>
+path nobody asked for, an issue body full of credentials, a delete
+nobody requested. A transport or identity layer sees three authorised
+calls and has nothing to object to. That is an argument-level failure,
+which is the seam this library exists to cover.</p>
+<p><a id="cve-2026-75130"></a></p>
 
 
 
