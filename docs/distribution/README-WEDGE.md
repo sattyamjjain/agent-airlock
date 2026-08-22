@@ -23,7 +23,7 @@ One factual sentence, reused verbatim across every list:
 
 > [!NOTE]
 > **Refresh the test count** to the current README **TEST-BADGE** value at the
-> moment you submit each PR (badge is regenerated every release). As of v0.8.80
+> moment you submit each PR (badge is regenerated every release). As of v0.8.81
 > it is **4,106**.
 
 ## PyPI description (already on-message)
