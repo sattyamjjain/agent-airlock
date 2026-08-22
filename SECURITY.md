@@ -101,18 +101,36 @@ We aim to respond within 48 hours and will work with you to understand and addre
 
 ## Security Audit Results
 
-Last audit: 2026-01-31
+Last audit: **2026-08-22** (was 2026-01-31 — the block below had gone seven months stale
+and still listed findings that no longer exist; it is now re-run and re-dated at release).
 
 ### Static Analysis (Bandit)
 
-| Finding | Severity | Status | Notes |
-|---------|----------|--------|-------|
-| B110: try_except_pass (4x) | Low | Acknowledged | Intentional - ignoring MCP progress reporting errors |
-| B105: hardcoded_password_string | Low | False Positive | Enum value name, not actual password |
+Re-run 2026-08-22 with `bandit -c pyproject.toml -r src/agent_airlock/`, which is the exact
+command CI runs — `-c` makes the `[tool.bandit]` block in `pyproject.toml` authoritative.
 
-### Dependency Scan (Safety)
+| Metric | Result |
+|---|---|
+| Lines of code scanned | 48,420 |
+| High severity | **0** |
+| Medium severity | **0** |
+| Low severity | **0** |
+| `# nosec` suppressions in `src/` | 29, every one carrying a stated reason (same line or the line above) |
 
-**Result:** 0 vulnerabilities found in 73 scanned packages
+`[tool.bandit]` sets **no `skips`** — B101 (`assert_used`) in particular is deliberately not
+suppressed globally, because it once caught two narrowing asserts in the CIMD trust-anchor
+guard that `python -O` would have stripped. Suppression is per-site and must carry a reason.
+
+The B110 / B105 findings this table used to list no longer appear in the run. The honest
+statement is that they do not appear — the table reports what the scanner returns today, not
+a reconstruction of why each historical finding cleared.
+
+### Dependency Scan
+
+The installed core is **Pydantic-only** — `pydantic>=2.0,<3.0`, plus `tomli` on Python 3.10.
+That is enforced by the `bare-install` CI job rather than asserted here, and it is the
+reason the dependency-vulnerability surface is close to nil: there are two runtime
+dependencies to scan. Optional extras pull more, and are the caller's choice to audit.
 
 ### ReDoS Analysis
 

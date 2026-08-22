@@ -1,6 +1,7 @@
 """CVE-2026-42271 (LiteLLM MCP-bridge subprocess command/args/env RCE).
 
-LiteLLM 1.74.2–1.83.6 (CVSS 8.7, CWE-78, **CISA KEV 2026-06-09**, actively
+LiteLLM 1.74.2–1.83.6 (CVSS v3.1 **8.8 High** / v4.0 **8.7 High**, CWE-78,
+**CISA KEV, added 2026-06-08**, actively
 exploited): the MCP server preview endpoints
 ``POST /mcp-rest/test/connection`` and ``POST /mcp-rest/test/tools/list``
 accepted a full MCP server config (stdio-transport ``command`` / ``args``

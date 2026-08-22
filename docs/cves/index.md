@@ -34,12 +34,31 @@ catalog and the tests stay in lockstep.
 | [CVE-2025-68143](#cve-2025-68143) | Anthropic mcp-server-git `git_init` path traversal | 8.2 (High) | Strong |
 | [CVE-2025-68144](#cve-2025-68144) | Anthropic mcp-server-git argument injection | 8.1 (High) | Strongest |
 | [CVE-2025-68145](#cve-2025-68145) | mcp-server-git `--repository` root not enforced | 7.1 (High) | Strong |
+| [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
+| [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
+| [CVE-2026-21520](#cve-2026-21520) | Capsule ShareLeak / PipeLeak | — | — |
+| [CVE-2026-23744](#cve-2026-23744) | MCPJam Inspector unauthenticated public bind | 9.8 | — |
+| [CVE-2026-25874](#cve-2026-25874) | HuggingFace LeRobot pickle-deserialization RCE | 9.3 | — |
 | [CVE-2026-26118](#cve-2026-26118) | Microsoft Azure MCP Server SSRF (IMDS token theft) | 8.8 (High) | Strong |
 | [CVE-2026-27825](#cve-2026-27825) | mcp-atlassian arbitrary file write via download_path | 9.1 (Critical) | Strong |
 | [CVE-2026-27826](#cve-2026-27826) | mcp-atlassian SSRF via `X-Atlassian-*-Url` headers | 7.5 (High, AV:A/PR:N/UI:N, C:H) | Partial |
+| [CVE-2026-30615](#cve-2026-30615) | (Windsurf zero-click MCP config) — spawn-time config pin | — | — |
+| [CVE-2026-30615](#cve-2026-30615) | Windsurf zero-click MCP config auto-load | — | — |
 | [CVE-2026-30616](#cve-2026-30616) | MCP STDIO transport command-injection (Ox Security class) | 9.8 (Critical) | Strongest |
-| [CVE-2026-40933](#cve-2026-40933) | Flowise MCP-stdio adapter RCE regression | — | — |
-| [CVE-2026-42271](#cve-2026-42271) | CISA KEV regression fixture (LiteLLM MCP command injection) | — | — |
+| [CVE-2026-32625](#cve-2026-32625) | (LibreChat MCP server-URL env-interpolation secret leak) | 9.6 | — |
+| [CVE-2026-33032](#cve-2026-33032) | "MCPwn" — nginx-ui missing /mcp_message auth middleware | 9.8 | — |
+| [CVE-2026-39884](#cve-2026-39884) | flux159/mcp-server-kubernetes argv injection | — | — |
+| [CVE-2026-40933](#cve-2026-40933) | Flowise MCP-stdio adapter RCE regression | 9.9 | — |
+| [CVE-2026-41349](#cve-2026-41349) | OpenClaw agentic consent-bypass | 8.8 | — |
+| [CVE-2026-41361](#cve-2026-41361) | OpenClaw IPv6 SSRF guard bypass | 7.1 | — |
+| [CVE-2026-42271](#cve-2026-42271) | CISA KEV regression fixture (LiteLLM MCP command injection) | 3.1 | — |
+| [CVE-2026-42271](#cve-2026-42271) | (LiteLLM MCP-bridge subprocess command/args/env RCE) | — | — |
+| [CVE-2026-44211](#cve-2026-44211) | Cline Kanban cross-origin WebSocket hijack | 9.7 | — |
+| [CVE-2026-47390](#cve-2026-47390) | SSRF-protection bypass via alternate IP encodings | — | — |
+| [CVE-2026-48782](#cve-2026-48782) | SafeURL IPv6-transition cloud-metadata SSRF bypass | — | — |
+| [CVE-2026-5023](#cve-2026-5023) | codebase-mcp RepoMix OS command injection | — | — |
+| [CVE-2026-53820](#cve-2026-53820) | OpenClaw exec-denylist bypass at MCP loopback spawn | 6.9 | — |
+| [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
 
 ## Details
@@ -48,7 +67,17 @@ catalog and the tests stay in lockstep.
 
 **Flowise CustomMCP RCE via JS ``Function()`` constructor**
 
+- **Advisory:** [https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/](https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/)
 - **Regression test:** [`tests/cves/test_cve_2025_59528_flowise.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2025_59528_flowise.py)
+
+**Vulnerability**
+
+Flowise's ``/api/v1/node-load-method/customMCP`` passed user-supplied
+strings directly into JavaScript ``Function()`` and ``eval``. CVSS 10.0.
+Patched in v3.0.6 (Sept 2025) but CSA documented active exploitation
+in April 2026 — ~12-15K instances still exposed.
+This regression codifies the offending token set (``Function(``,
+``new Function``, ``eval(``, ``Deno.eval``, ``vm.runInNewContext``) so
 
 <a id="cve-2025-59528"></a>
 
@@ -179,6 +208,96 @@ prefix) so it catches the three common escape variants:
 
 <a id="cve-2025-68145"></a>
 
+### CVE-2026-11393
+
+**AgentCore CLI triple-quote codegen RCE**
+
+- **Advisory:** [https://www.thehackerwire.com/agentcore-cli-rce-via-triple-quote-neutralization-bypass-cve-2026-11393/](https://www.thehackerwire.com/agentcore-cli-rce-via-triple-quote-neutralization-bypass-cve-2026-11393/)
+- **Regression test:** [`tests/cves/test_cve_2026_11393_codegen_delimiter.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_11393_codegen_delimiter.py)
+
+**Vulnerability**
+
+AWS AgentCore CLI < 0.14.2 (CVSS 9, CWE-94, published 2026-06-08)
+generates Python source by interpolating a model-/user-controlled
+``collaborationInstruction`` into a code string **without neutralising
+triple-quote characters**. A crafted instruction containing ``"""``
+closes the generated literal and injects statements that execute when
+another account user imports the agent — RCE on the AgentCore Runtime
+
+<a id="cve-2026-11393"></a>
+
+### CVE-2026-11624
+
+**MCP HTTP-transport Origin/Host DNS-rebinding**
+
+- **CVSS:** 9.4
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-11624](https://nvd.nist.gov/vuln/detail/CVE-2026-11624)
+- **Advisory:** [https://github.com/googleapis/mcp-toolbox/issues/3113](https://github.com/googleapis/mcp-toolbox/issues/3113)
+- **Regression test:** [`tests/cves/test_cve_2026_11624_mcp_origin_host.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_11624_mcp_origin_host.py)
+
+**Vulnerability**
+
+Google MCP Toolbox for Databases < 0.25.0 (CWE-346 Origin Validation Error,
+CVSS 9.4): the MCP server exposed an HTTP/SSE transport that did **not
+validate the ``Origin`` (or ``Host``) header**, so a browser the developer
+visits can DNS-rebind to ``127.0.0.1`` and script MCP tool calls at the local
+server (file reads, command execution, database access). Fixed in 0.25.0 with
+an ``--allowed-hosts`` flag alongside ``--allowed-origins``, warning when
+
+<a id="cve-2026-11624"></a>
+
+### CVE-2026-21520
+
+**Capsule ShareLeak / PipeLeak**
+
+- **Regression test:** [`tests/cves/test_cve_2026_21520_capsule_indirect_injection.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_21520_capsule_indirect_injection.py)
+
+**Vulnerability**
+
+Pins the deny-by-default + denied-exfil-sinks + reauth-on-untrusted
+posture of :func:`capsule_indirect_injection_cve_2026_21520_defaults`
+end-to-end:
+- Eagerly-constructed defaults are byte-identical to a fresh factory call.
+- Empty ``allowed_tools`` denies any read-side call (default_deny).
+- Every canonical exfil sink in the bundle is denied by name AND by glob.
+
+<a id="cve-2026-21520"></a>
+
+### CVE-2026-23744
+
+**MCPJam Inspector unauthenticated public bind**
+
+- **CVSS:** 9.8
+- **Advisory:** [https://github.com/advisories/GHSA-232v-j27c-5pp6](https://github.com/advisories/GHSA-232v-j27c-5pp6)
+- **Regression test:** [`tests/cves/test_cve_2026_23744_mcpjam.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_23744_mcpjam.py)
+
+**Vulnerability**
+
+Primary source (cited per v0.5.1+ convention):
+- GHSA-232v-j27c-5pp6 / CVE-2026-23744 (CVSS 9.8, fixed 1.4.3):
+  <https://github.com/advisories/GHSA-232v-j27c-5pp6>
+
+<a id="cve-2026-23744"></a>
+
+### CVE-2026-25874
+
+**HuggingFace LeRobot pickle-deserialization RCE**
+
+- **CVSS:** 9.3
+- **Advisory:** [https://www.sentinelone.com/vulnerability-database/cve-2026-25874/](https://www.sentinelone.com/vulnerability-database/cve-2026-25874/)
+- **Regression test:** [`tests/cves/test_cve_2026_25874_lerobot.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_25874_lerobot.py)
+
+**Vulnerability**
+
+LeRobot's async-inference PolicyServer / robot-client call ``pickle.loads()``
+on payloads received over an **unauthenticated, non-TLS** gRPC channel
+(``SendObservations`` / ``SendPolicyInstructions`` / ``GetActions``). An
+unauthenticated, network-reachable attacker reaches arbitrary OS command
+execution by sending a crafted pickle blob (CVSS 9.3, published
+2026-04-23, unpatched as of disclosure).
+
+<a id="cve-2026-25874"></a>
+
 ### CVE-2026-26118
 
 **Microsoft Azure MCP Server SSRF (IMDS token theft)**
@@ -277,6 +396,41 @@ they reach application code.
 
 <a id="cve-2026-27826"></a>
 
+### CVE-2026-30615
+
+**(Windsurf zero-click MCP config) — spawn-time config pin**
+
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-30615](https://nvd.nist.gov/vuln/detail/CVE-2026-30615)
+- **Advisory:** [https://www.tenable.com/cve/CVE-2026-30615](https://www.tenable.com/cve/CVE-2026-30615)
+- **Regression test:** [`tests/cves/test_cve_2026_30615_mcp_config_pin.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30615_mcp_config_pin.py)
+
+**Vulnerability**
+
+Companion to ``test_cve_2026_30615_zero_click.py`` (which covers the
+*config-file* diff guard). This suite covers the **spawn-time** half: the
+``mcp_config_pin`` preset / :class:`McpConfigPinSet`, which fingerprints the
+resolved STDIO spawn config at invocation time and **fails closed** (raises,
+never warns) on an injected or mutated server — catching the zero-click
+pattern even when the mutation never touched a watched config file.
+
+<a id="cve-2026-30615"></a>
+
+### CVE-2026-30615
+
+**Windsurf zero-click MCP config auto-load**
+
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-30615](https://nvd.nist.gov/vuln/detail/CVE-2026-30615)
+- **Advisory:** [https://www.tenable.com/cve/CVE-2026-30615](https://www.tenable.com/cve/CVE-2026-30615)
+- **Regression test:** [`tests/cves/test_cve_2026_30615_zero_click.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30615_zero_click.py)
+
+**Vulnerability**
+
+Primary source (cited per v0.5.1+ convention):
+- NVD: https://nvd.nist.gov/vuln/detail/CVE-2026-30615
+- Tenable: https://www.tenable.com/cve/CVE-2026-30615
+
+<a id="cve-2026-30615"></a>
+
 ### CVE-2026-30616
 
 **MCP STDIO transport command-injection (Ox Security class)**
@@ -348,21 +502,271 @@ see ``docs/cves/index.md`` fit-matrix notes.
 
 <a id="cve-2026-30616"></a>
 
+### CVE-2026-32625
+
+**(LibreChat MCP server-URL env-interpolation secret leak)**
+
+- **CVSS:** 9.6
+- **Advisory:** [https://github.com/danny-avila/LibreChat/security/advisories/GHSA-6vqg-rgpm-qvf9](https://github.com/danny-avila/LibreChat/security/advisories/GHSA-6vqg-rgpm-qvf9)
+- **Regression test:** [`tests/cves/test_cve_2026_32625_mcp_env_interpolation.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_32625_mcp_env_interpolation.py)
+
+**Vulnerability**
+
+LibreChat ≤ 0.8.3 (CVSS 9.6, CWE-200, published 2026-06-02) resolves
+``${VAR}`` placeholders in a user-supplied MCP server URL against the
+host ``process.env`` during schema validation, so an authenticated user
+exfiltrates server-side secrets (``JWT_SECRET`` / ``CREDS_KEY`` /
+``MONGO_URI``) by embedding them in a URL that dials an attacker host.
+Patched in 0.8.4-rc1.
+
+<a id="cve-2026-32625"></a>
+
+### CVE-2026-33032
+
+**"MCPwn" — nginx-ui missing /mcp_message auth middleware**
+
+- **CVSS:** 9.8
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-33032](https://nvd.nist.gov/vuln/detail/CVE-2026-33032)
+- **Advisory:** [https://www.rapid7.com/blog/post/etr-cve-2026-33032-nginx-ui-missing-mcp-authentication/](https://www.rapid7.com/blog/post/etr-cve-2026-33032-nginx-ui-missing-mcp-authentication/)
+- **Regression test:** [`tests/cves/test_cve_2026_33032_mcpwn.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_33032_mcpwn.py)
+
+**Vulnerability**
+
+letting unauthenticated clients invoke 12 destructive MCP tools.
+CVSS 9.8, ~2,689 exposed instances, actively exploited in April 2026.
+
+agent-airlock doesn't ship nginx-ui, but we're the canonical place for
+the "would my MCPProxyGuard have caught a missing-auth on a destructive
+tool?" question. This module proves the preset fires on the exact
+nginx-ui tool inventory and on an IP-allowlist-only bypass attempt.
+
+Primary sources
+---------------
+- NVD: https://nvd.nist.gov/vuln/detail/CVE-2026-33032
+- Rapid7 ETR (2026-04-15):
+  https://www.rapid7.com/blog/post/etr-cve-2026-33032-nginx-ui-missing-mcp-authentication/
+
+<a id="cve-2026-33032"></a>
+
+### CVE-2026-39884
+
+**flux159/mcp-server-kubernetes argv injection**
+
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-39884](https://nvd.nist.gov/vuln/detail/CVE-2026-39884)
+- **Advisory:** [https://www.sentinelone.com/vulnerability-database/cve-2026-39884/](https://www.sentinelone.com/vulnerability-database/cve-2026-39884/)
+- **Regression test:** [`tests/cves/test_cve_2026_39884_kubectl.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_39884_kubectl.py)
+
+**Vulnerability**
+
+Primary source (cited per v0.5.1+ convention):
+- <https://www.sentinelone.com/vulnerability-database/cve-2026-39884/> (2026-04-14, fixed in 3.5.0)
+- <https://nvd.nist.gov/vuln/detail/CVE-2026-39884>
+
+<a id="cve-2026-39884"></a>
+
 ### CVE-2026-40933
 
 **Flowise MCP-stdio adapter RCE regression**
 
+- **CVSS:** 9.9
+- **Advisory:** [https://advisories.gitlab.com/npm/flowise-components/CVE-2026-40933/](https://advisories.gitlab.com/npm/flowise-components/CVE-2026-40933/)
 - **Regression test:** [`tests/cves/test_cve_2026_40933_flowise_mcp_stdio.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_40933_flowise_mcp_stdio.py)
 
+**Vulnerability**
+
+Flowise <= 3.0.x lets an authenticated user define a CustomMCP server
+with the **stdio** transport, supplying an arbitrary ``command`` +
+``args`` that Flowise serialises straight into a child-process spawn on
+the server — no sandbox, no argv sanitisation. CVSS 9.9. Fixed upstream
+in Flowise 3.1.0.
+This regression pins the agent-airlock-side control:
+
 <a id="cve-2026-40933"></a>
+
+### CVE-2026-41349
+
+**OpenClaw agentic consent-bypass**
+
+- **CVSS:** 8.8
+- **Advisory:** [https://www.thehackerwire.com/vulnerability/CVE-2026-41349/](https://www.thehackerwire.com/vulnerability/CVE-2026-41349/)
+- **Regression test:** [`tests/cves/test_cve_2026_41349_consent_bypass.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_41349_consent_bypass.py)
+
+**Vulnerability**
+
+Primary source (cited per v0.5.1+ convention):
+- <https://www.thehackerwire.com/vulnerability/CVE-2026-41349/> (CVSS 8.8,
+  disclosed 2026-04-23).
+The fix surface is :meth:`SecurityPolicy.freeze` +
+:meth:`SecurityPolicy.verify_frozen`, plus the
+``openclaw_cve_2026_41349_defaults()`` preset that returns a frozen
+
+<a id="cve-2026-41349"></a>
+
+### CVE-2026-41361
+
+**OpenClaw IPv6 SSRF guard bypass**
+
+- **CVSS:** 7.1
+- **Advisory:** [https://www.redpacketsecurity.com/cve-alert-cve-2026-41361-openclaw-openclaw/](https://www.redpacketsecurity.com/cve-alert-cve-2026-41361-openclaw-openclaw/)
+- **Regression test:** [`tests/cves/test_cve_2026_41361_ipv6_ssrf.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_41361_ipv6_ssrf.py)
+
+**Vulnerability**
+
+Primary source (cited per v0.5.1+ convention):
+- <https://www.redpacketsecurity.com/cve-alert-cve-2026-41361-openclaw-openclaw/>
+  (CVSS 7.1, disclosed 2026-04-23).
+The bypass was that OpenClaw's IPv6 guard covered only the four
+canonical ranges (``::/128``, ``::1/128``, ``fe80::/10``, ``fc00::/7``)
+and left IPv4-mapped / NAT64 / 6to4 / documentation ranges routable.
+
+<a id="cve-2026-41361"></a>
 
 ### CVE-2026-42271
 
 **CISA KEV regression fixture (LiteLLM MCP command injection)**
 
+- **CVSS:** 3.1
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-42271,](https://nvd.nist.gov/vuln/detail/CVE-2026-42271,)
 - **Regression test:** [`tests/cves/test_cve_2026_42271_kev_regression.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_42271_kev_regression.py)
 
+**Vulnerability**
+
+This complements ``test_cve_2026_42271_mcp_subprocess_arg.py`` (which unit-tests
+the guard's internals) by reproducing the **actual HTTP request-body shape** of
+the two affected LiteLLM endpoints and proving the deny-by-default preset blocks
+it end-to-end. It is a credibility-proof of *existing* coverage of an
+actively-exploited KEV CVE — not a new guard.
+NVD verbatim (https://nvd.nist.gov/vuln/detail/CVE-2026-42271, retrieved
+
 <a id="cve-2026-42271"></a>
+
+### CVE-2026-42271
+
+**(LiteLLM MCP-bridge subprocess command/args/env RCE)**
+
+- **Advisory:** [https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271](https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271)
+- **Regression test:** [`tests/cves/test_cve_2026_42271_mcp_subprocess_arg.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_42271_mcp_subprocess_arg.py)
+
+**Vulnerability**
+
+LiteLLM 1.74.2–1.83.6 (CVSS v3.1 **8.8 High** / v4.0 **8.7 High**, CWE-78,
+**CISA KEV, added 2026-06-08**, actively
+exploited): the MCP server preview endpoints
+``POST /mcp-rest/test/connection`` and ``POST /mcp-rest/test/tools/list``
+accepted a full MCP server config (stdio-transport ``command`` / ``args``
+/ ``env``) in the request body and spawned it as a subprocess on the
+
+<a id="cve-2026-42271"></a>
+
+### CVE-2026-44211
+
+**Cline Kanban cross-origin WebSocket hijack**
+
+- **CVSS:** 9.7
+- **Advisory:** [https://advisories.gitlab.com/npm/cline/CVE-2026-44211/](https://advisories.gitlab.com/npm/cline/CVE-2026-44211/)
+- **Regression test:** [`tests/cves/test_cve_2026_44211_ws_origin.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_44211_ws_origin.py)
+
+**Vulnerability**
+
+Cline Kanban server (npm ``kanban`` < 2.13.0, CVSS 9.7, CWE-1385 + CWE-306,
+published 2026-06): the agent's control WebSocket server on
+``127.0.0.1:3484`` accepts every upgrade **without validating the ``Origin``
+header**. Because browsers do not apply same-origin/CORS to ``ws://``, any
+website the developer visits can open a WebSocket to the loopback control
+server and drive the agent (leak workspace data, inject prompts → RCE, kill
+
+<a id="cve-2026-44211"></a>
+
+### CVE-2026-47390
+
+**SSRF-protection bypass via alternate IP encodings**
+
+- **Advisory:** [https://www.cve.org/CVERecord?id=CVE-2026-47390](https://www.cve.org/CVERecord?id=CVE-2026-47390)
+- **Regression test:** [`tests/cves/test_cve_2026_47390_ssrf_egress.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_47390_ssrf_egress.py)
+
+**Vulnerability**
+
+CWE-918: an agent egress filter that validates the *literal hostname string*
+of an outbound URL — rather than the **resolved IP** — is bypassed by encoding
+a loopback / link-local / cloud-metadata address in a form ``ipaddress``
+rejects but ``socket.inet_aton`` (and the HTTP client / kernel) resolves
+straight back to an internal address, or by DNS rebinding.
+This suite pins, per the brief:
+
+<a id="cve-2026-47390"></a>
+
+### CVE-2026-48782
+
+**SafeURL IPv6-transition cloud-metadata SSRF bypass**
+
+- **Advisory:** [https://github.com/pydantic/pydantic-ai/security/advisories/GHSA-cg7w-rg45-pc59](https://github.com/pydantic/pydantic-ai/security/advisories/GHSA-cg7w-rg45-pc59)
+- **Regression test:** [`tests/cves/test_cve_2026_48782_safeurl_ipv6_metadata.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_48782_safeurl_ipv6_metadata.py)
+
+**Vulnerability**
+
+pydantic-ai 1.56.0–1.101.0 / 2.0.0b1–b2 (CWE-918 SSRF): the cloud-metadata
+blocklist compared the *hostname string*, so encoding the metadata IP
+``169.254.169.254`` in an IPv6-transition form (IPv4-mapped, IPv4-compatible,
+6to4, Teredo) or as a decimal/octal/hex integer slipped past it while the HTTP
+client still connected to the metadata endpoint — exposing cloud IAM
+credentials. This is an **incomplete-fix** follow-up to CVE-2026-46678 (which
+
+<a id="cve-2026-48782"></a>
+
+### CVE-2026-5023
+
+**codebase-mcp RepoMix OS command injection**
+
+- **Advisory:** [https://www.sentinelone.com/vulnerability-database/cve-2026-5023/](https://www.sentinelone.com/vulnerability-database/cve-2026-5023/)
+- **Regression test:** [`tests/cves/test_cve_2026_5023_codebase_mcp.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_5023_codebase_mcp.py)
+
+**Vulnerability**
+
+Primary source (cited per v0.5.1+ convention):
+- <https://www.sentinelone.com/vulnerability-database/cve-2026-5023/>
+  (unpatched upstream as of 2026-04-24).
+The package ``codebase-mcp`` wrapped the RepoMix CLI and shelled out
+with user-controlled paths across four handlers. This preset refuses
+to run those handlers unless the caller explicitly opts into
+
+<a id="cve-2026-5023"></a>
+
+### CVE-2026-53820
+
+**OpenClaw exec-denylist bypass at MCP loopback spawn**
+
+- **CVSS:** 6.9
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-53820](https://nvd.nist.gov/vuln/detail/CVE-2026-53820)
+- **Regression test:** [`tests/cves/test_cve_2026_53820_loopback_spawn.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_53820_loopback_spawn.py)
+
+**Vulnerability**
+
+OpenClaw < 2026.5.12 (exec-denylist bypass, CVSS 6.9, CWE-693 Protection
+Mechanism Failure): the bundled MCP loopback session-spawn path let an
+authenticated caller reach a denylisted command because the **surface**
+command checked against the exec restriction differs from the **effective**
+command actually spawned — a name that passes the surface check resolves, via
+an alias / wrapper binary / shell, to a denied executable.
+
+<a id="cve-2026-53820"></a>
+
+### CVE-2026-6980
+
+**GitPilot-MCP repo_path injection**
+
+- **Advisory:** [https://www.redpacketsecurity.com/cve-alert-cve-2026-6980-divyanshu-hash-gitpilot-mcp/](https://www.redpacketsecurity.com/cve-alert-cve-2026-6980-divyanshu-hash-gitpilot-mcp/)
+- **Regression test:** [`tests/cves/test_cve_2026_6980_gitpilot.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_6980_gitpilot.py)
+
+**Vulnerability**
+
+Primary source (cited per v0.5.1+ convention):
+- RedPacket Security CVE alert (2026-04-25):
+  https://www.redpacketsecurity.com/cve-alert-cve-2026-6980-divyanshu-hash-gitpilot-mcp/
+- vulnerability.circl.lu
+Vendor unresponsive; project does not version. Preset matches by
+tool-name regex only.
+
+<a id="cve-2026-6980"></a>
 
 ### CVE-2026-75130
 
