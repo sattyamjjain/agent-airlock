@@ -252,7 +252,7 @@ A benchmark number is a claim too — report the run you actually got, including
 - [x] Warm sandbox pool (SandboxPool class)
 - [x] Function serialization (cloudpickle)
 - [x] E2B integration (execute_in_sandbox)
-- [ ] File mounting (deferred to Phase 5)
+- [x] File mounting (`sandbox.mount_files()`)
 
 ### Phase 3: Policy Engine
 - [x] SecurityPolicy class with allow/deny lists
@@ -346,10 +346,12 @@ See `PRODUCTION_ROADMAP.md` for full details.
 - [x] India-specific PII (Aadhaar, PAN, UPI, IFSC)
 
 **Future Roadmap:**
-- [ ] Redis-backed distributed rate limiting
-- [ ] Performance benchmarks in CI
+- [x] Redis-backed distributed rate limiting (`redis_rate_limit.py`, `[redis]` extra)
+- [x] Performance benchmarks in CI (smoke run, not a latency gate — v0.8.80)
 - [ ] Additional framework integrations
 
-**Current Version:** v0.5.0 "April 2026"
+**Current Version:** see `pyproject.toml` / `agent_airlock.__version__` — this line is
+not gated, so it is a pointer rather than a number that can rot (it read v0.5.0 while
+the package was v0.8.79).
 
 <!-- END MANUAL -->

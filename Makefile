@@ -1,4 +1,4 @@
-.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release verify-corpus
+.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-links check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release verify-corpus
 
 help:
 	@echo "Targets:"
@@ -11,6 +11,7 @@ help:
 	@echo "  test-badge              Regenerate the TEST-BADGE block in README.md"
 	@echo "  egress-bench            Run the CVE egress-bench walker against tests/cves/fixtures/"
 	@echo "  verify-corpus           Verify wild_payload_corpus MANIFEST.sha256"
+	@echo "  check-links             Dead relative-link gate (README + docs/)"
 	@echo "  check-changelog         Post-release drift gate (fails if [Unreleased] has entries after a release)"
 	@echo "  check-changelog-release Pre-tag gate (fails if [Unreleased] is empty)"
 	@echo "  check-benchmark-freshness         Structural gate (every benchmark row carries a date)"
@@ -45,6 +46,9 @@ test-badge:
 
 egress-bench:
 	python3 scripts/egress_bench.py --format tap
+
+check-links:
+	python3 scripts/check_links.py
 
 check-changelog:
 	python3 scripts/check_changelog.py

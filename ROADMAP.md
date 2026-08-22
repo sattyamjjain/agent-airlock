@@ -74,6 +74,26 @@ is genuinely out of scope and saying so in the legend instead of leaving it as a
 
 ## Later
 
+**Write the seven missing feature doc pages.**
+
+Fixing the README's dead links in v0.8.80 surfaced this rather than created it: seven shipped
+features have no documentation page at all, and the README rows for them were pointing at
+files that had never been written. They now point at the source module, which is honest but
+thin. The features and their code:
+
+| Feature | Code | Doc |
+|---|---|---|
+| `airlock attest receipt` | `attest/` | partial — `docs/attest/layer-contract.md` covers the contract block only |
+| `airlock console` | `cli/console.py` | none |
+| `policy_bundle.lock` | `pack/` | none |
+| `airlock studio` | `studio/` | none |
+| `airlock graph serve` | `cli/graph.py` | none |
+| `airlock policy compile / explain` | `policy_compiler/` | none |
+| `airlock kill-switch` | `kill_switch/` | none |
+
+`scripts/check_links.py` now prevents the 404s from coming back, but a gate that stops you
+linking a page you never wrote is not the same as writing it.
+
 **Close the `sandbox=True` validation gap.**
 
 With a real sandbox backend, `@Airlock` serialises the *undecorated* function into the

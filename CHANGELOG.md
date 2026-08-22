@@ -9,6 +9,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.80] - 2026-08-22
+
+A backlog-clearing release. No library behaviour changes. Every item came out of a sweep for
+work this repo had recorded as pending, or was publishing without anything watching it.
+
+### Fixed
+
+- **Nine dead links across eight targets in the README.** `docs/API.md`,
+  `docs/attest/receipt.md` (×2), `docs/cli/console.md`, `docs/pack/policy-bundle-lock.md`,
+  `docs/studio/quickstart.md`, `docs/graph.md`, `docs/policy-as-prompt.md`,
+  `docs/kill-switch.md` — two of those directories (`docs/pack/`, `docs/studio/`) had never
+  existed. Every one sat in the README's own documentation table, so the reader most likely
+  to click them was the reader deciding whether to trust the project. The features are all
+  real; only the doc pages were missing, so each link now points at something that exists
+  (`docs/api/airlock.md`, `docs/attest/layer-contract.md`, or the source module).
+  **Seven shipped features still have no doc page** — that is now a roadmap item instead of
+  eight 404s.
+- **The CVE catalog was publishing 12 of 31 CVE-numbered regressions.** The generator
+  skipped any module whose docstring header it could not parse, warned, and **exited 0** —
+  while `marketplace.json` told readers to "see the generated catalog" to substantiate a
+  count of 38. The link did not support the claim and nothing failed. The parser now accepts
+  the four header shapes actually in the tree and harvests URLs / CVSS already present in
+  each docstring, so **the catalog went 12 → 31** without a single fabricated field: a module
+  with no CVSS anywhere renders an em dash.
+- `CVE-2026-42271` carried **CVSS 8.7** in its docstring and **8.8** in the README. Both are
+  right — 8.7 is v4.0, 8.8 is v3.1 — and neither said so. Now labelled. Its CISA KEV date was
+  also off by one (2026-06-09 → **2026-06-08**, per NVD).
+- Three `# nosec` suppressions were reported as unexplained by an audit script; on inspection
+  all three carry their reason on the preceding line. The claim was corrected, not the code.
+
+### Added
+
+- **`scripts/check_links.py` — a dead-relative-link gate**, wired into the CI docs job and
+  `make check-links`. Nothing checked links, which is exactly why eight of them rotted; this
+  is the same shape of fix as the benchmark-freshness gate (v0.8.75) and for the same reason.
+  Relative links only — fetching external URLs would make it flaky on rate limits rather than
+  on repo defects. 27 tests, including the false-positive cases that would otherwise get the
+  gate switched off within a week (fenced Python whose `preset["check"](args)` looks like a
+  link, inline code, bare anchors, directory targets).
+- **The catalog generator now fails closed.** `--check` raises `UnparseableCVEModule` and
+  exits 1 when any `test_cve_*.py` cannot be read, instead of publishing it as absent.
+  `--write` stays lenient so an author mid-edit can still regenerate. 20 tests.
+- **The pytest-benchmark suite now runs in CI.** It is `--ignore`d by the default addopts, so
+  before this release it ran only via `make bench` — which no CI job called. It could break
+  silently, and the README quotes its median-84µs figure for the full `@Airlock` path.
+  Deliberately **not** a latency threshold: shared runners are noisy enough that
+  `--benchmark-compare-fail` would flap, and a gate that flaps is a gate that gets switched
+  off. This asserts the suite still executes and still produces numbers.
+
+### Changed
+
+- The published CVE claim now states the split it actually has: **38 regression modules, of
+  which 31 are CVE-numbered and listed in the catalog.** The other seven are advisory
+  regressions with no CVE id of their own, plus umbrella modules whose CVEs already appear.
+  Forcing those into a table keyed by CVE id would have meant inventing ids or leaving blank
+  keys. Both numbers are asserted by `tests/test_cve_catalog_gate.py`.
+- **`SECURITY.md`'s audit block was seven months stale** ("Last audit: 2026-01-31") and still
+  listed B110/B105 findings that no longer appear. Re-run and re-dated **2026-08-22** with
+  the exact command CI uses: 48,420 LOC scanned, **0 high / 0 medium / 0 low**, 29 `# nosec`
+  suppressions each carrying a stated reason. It now reports what the scanner returns rather
+  than reconstructing why each historical finding cleared.
+- **`CLAUDE.md` had three checkboxes marked pending that had already shipped** — file
+  mounting (`sandbox.mount_files()`), Redis-backed distributed rate limiting
+  (`redis_rate_limit.py`, the `[redis]` extra, its own test module), and performance
+  benchmarks in CI (true as of this release). Its "Current Version" line read **v0.5.0**
+  while the package was v0.8.79; it is now a pointer to `__version__` rather than a number
+  that can rot.
+- GitHub Actions bumped off the Node 20 deprecation: `checkout@v4→v5`,
+  `setup-python@v5→v6`, `upload-artifact@v4→v5` (17 pins). Each tag was verified to exist
+  upstream before shipping, because a bad action pin fails every job.
+
+### Notes
+
+- **The published nulls remain untouched** — the 0/24 injection null, the n=6 multi-harness
+  null with its [0.0%, 39.0%] interval, and the AgentDojo subset intervals.
+- Three roadmap items are **not** done and cannot be closed from here: the AgentDojo
+  cross-family run and the `--trials 18` injection run both need real API budget, and the
+  `sandbox=True` validation gap is an architectural change affecting every tool. They stay in
+  `ROADMAP.md` as open work rather than being quietly dropped.
+
 ## [0.8.79] - 2026-08-21
 
 A housekeeping release with no code changes to the library itself. Every item is a claim this
