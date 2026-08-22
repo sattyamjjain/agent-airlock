@@ -72,9 +72,15 @@ are identical to the `python -m agent_airlock.cli.<name>` long form.
 Repo-level directories outside the package: `tests/`, `benchmarks/` (agentdojo, blockrate,
 harness_injection, mcp_conformance, scantools_mcptox, toolprivbench, vs_gateway),
 `scripts/` (the `check_*` claim gates and `smoke_*` guard drivers), `docs/`, `examples/`,
-`demo/` (runnable live demo), `presets/`, `schemas/`, `tools/`, `.claude-plugin/`
-(marketplace manifest), and `site/` — **committed mkdocs build output; never hand-edit
-it, regenerate instead.**
+`demo/` (runnable live demo), `presets/`, `schemas/`, `tools/`, and `.claude-plugin/`
+(marketplace manifest).
+
+**There is no committed `site/`.** The docs site is served from the `gh-pages` branch,
+which `mkdocs gh-deploy --force` rebuilds from `docs/` on every push to `main`. A second
+copy used to be committed here; it was a duplicate of the same build that nothing served
+and that drifted from `docs/` between releases (99 of 135 files out of date when it was
+removed in v0.8.81). If you run `mkdocs build` locally it writes `site/`, which is now
+gitignored — do not add it back.
 
 ```
 src/agent_airlock/

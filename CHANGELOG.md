@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.81] - 2026-08-22
+
+**Repository hygiene. The published artifact is byte-for-byte unaffected** — neither of the
+things removed here was ever in the wheel or the sdist, and that was verified by building
+both and inspecting them rather than assumed. Recorded as a release anyway because this
+repo's gates tie the version, the changelog and the badge together, and skipping the entry
+would be the drift those gates exist to catch.
+
+### Removed
+
+- **The committed `site/` directory — 135 files, 7.1 MB.** It was a second copy of the
+  mkdocs build that nothing served: GitHub Pages is configured to publish the **`gh-pages`
+  branch** (verified via the Pages API: `source.branch: gh-pages`, `source.path: /`), and
+  `mkdocs gh-deploy --force` rebuilds that branch from `docs/` on every push to `main`. The
+  committed copy was therefore a duplicate artifact that drifted quietly between releases —
+  **99 of its files were out of date** against a fresh build when it was removed, and its
+  last commit was six days older than the live site. `site/` is now in `.gitignore`, so a
+  local `mkdocs build` cannot re-commit it, and `CLAUDE.md` no longer describes it as
+  committed build output.
+- **48 stale local branches**, leaving only `main` and `gh-pages`. Thirty were heads of
+  merged pull requests that squash-merge leaves looking permanently unmerged; eighteen were
+  already ancestors of `main` and were removed with `git branch -d`, which refuses anything
+  unmerged.
+
+  Worth recording because the naive version of this is dangerous: `git branch --no-merged
+  main` listed **31** branches, and the 31st was **`gh-pages`** — the branch serving the
+  live documentation. Every branch was checked against the merged-PR list before deletion
+  and `gh-pages` was excluded explicitly; the docs site was confirmed still returning HTTP
+  200 afterwards.
+
 ## [0.8.80] - 2026-08-22
 
 A backlog-clearing release. No library behaviour changes. Every item came out of a sweep for

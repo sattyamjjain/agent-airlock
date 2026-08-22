@@ -69,3 +69,10 @@ Thumbs.db
 
 # demo run artifact (generated fresh each run)
 demo/airlock_audit.jsonl
+
+# mkdocs build output. NOT committed: GitHub Pages serves the `gh-pages` branch,
+# which `mkdocs gh-deploy --force` rebuilds from docs/ on every push to main. The
+# copy that used to live here was a second, always-stale artifact of the same build
+# — 135 files / 7.1 MB that nothing served and that drifted from docs/ between
+# releases (99 files out of date when it was removed in v0.8.81).
+site/
