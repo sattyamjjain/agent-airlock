@@ -318,6 +318,14 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
         "adaptive attackers. Treat this as a coverage / regression baseline, not an ASR result."
     )
     out.append("")
+    # One-line pointer to the prior-art record. Deliberately placed under the honest-scope
+    # limitations rather than beside the headline: the reader who has just been told this is
+    # a self-corpus is the one who should be pointed at externally measured work.
+    out.append(
+        "**Prior art.** External research this library's premise rests on — and where no "
+        "head-to-head against it has been run — is recorded in [`PRIOR_ART.md`](PRIOR_ART.md)."
+    )
+    out.append("")
     # Deterministic cross-tool comparison (block-rate + cited incumbent scope,
     # NO latency — latency is wall-clock and lives in
     # benchmarks/blockrate/RESULTS.md so this file's --check stays a stable gate).

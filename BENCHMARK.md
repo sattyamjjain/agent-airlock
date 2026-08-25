@@ -87,6 +87,8 @@
 - **Signature/syntax-based, not semantic.** Individual guards match known sink/token shapes; in isolation several are evadable (e.g. aliasing `eval`). Detection here is a property of the *suite* (defense-in-depth), not of any single guard.
 - **Self-corpus.** Payloads derive from agent-airlock's own CVE fixtures, so a high detection number is expected and is **not** evidence of robustness against novel or adaptive attackers. Treat this as a coverage / regression baseline, not an ASR result.
 
+**Prior art.** External research this library's premise rests on — and where no head-to-head against it has been run — is recorded in [`PRIOR_ART.md`](PRIOR_ART.md).
+
 ---
 
 ## Cross-tool block-rate comparison
