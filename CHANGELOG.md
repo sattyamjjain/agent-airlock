@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.82] - 2026-08-25
+
+**A credibility record, not a feature. No public API surface changes** — this release adds
+one documentation file and the gate that keeps it accurate.
+
+### Documentation
+
+- **`PRIOR_ART.md` records arXiv:2608.18351** (Alexander Tu, Michael Tu; submitted
+  18 Aug 2026 — *Task-Conditioned Least-Privilege Learning for Executable Terminal and MCP
+  Agents*), including its **98.48% vs 64.36%** safe-success figures — 2,896 evaluation
+  episodes spanning all 500 held-out tasks, after post-training Qwen3.5-4B over 1,500 tasks
+  — its reduction of excess-authority error events **from 4.56% to 0.79%**, and its own
+  conclusion that learned restraint "does not replace permission gates and sandboxing".
+  **It states where this library has run no head-to-head against it:** nobody has run this
+  gate on their 500 held-out tasks, so the honest claim is complementarity and not
+  superiority.
+
+  The record quotes **both** halves of the abstract on purpose, including its opening claim
+  that "Traditional permission gating systems alone for validating agent environments are
+  insufficient" — the half that does *not* flatter this library. Quoting only the closing
+  sentence would have misrepresented a paper arguing that neither layer suffices alone.
+
+  Linked from `README.md` and from `BENCHMARK.md`. The BENCHMARK.md pointer is emitted by
+  `scripts/generate_benchmark.py` rather than hand-written, because that file is generated
+  and a hand-edit would be erased by the next `make benchmark`.
+
+- The paper is **not** added to `docs/owasp-agentic-2026-coverage.md`, which was the
+  obvious candidate. That matrix is generated from `agentic_coverage.yaml` and byte-diffed
+  by a test; every row maps a risk id to a **guard module, a preset and a test path in this
+  repository**, and a paper has none of the three. A row would have required inventing them
+  or widening a machine-checked schema to hold a citation. The reasoning is written down in
+  `PRIOR_ART.md` instead of left implicit.
+
+### Added
+
+- `tests/test_prior_art_record.py` — 17 tests gating the verbatim quotes, every recorded
+  figure, and the two sentences a later edit would most likely soften: the no-head-to-head
+  statement, and the abstract's opening claim about permission gating. A drifting quote of
+  someone else's result is a misattribution rather than a typo, and nothing else in the
+  suite would have caught it.
+
 ## [0.8.81] - 2026-08-22
 
 **Repository hygiene. The published artifact is byte-for-byte unaffected** — neither of the
