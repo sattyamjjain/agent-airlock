@@ -1567,15 +1567,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-two-runs-before-this-one-and-why-they-were-inconclusive" class="md-nav__link">
+  <a href="#the-three-runs-before-this-one" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The two runs before this one, and why they were inconclusive
+        The three runs before this one
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The two runs before this one, and why they were inconclusive">
+    <nav class="md-nav" aria-label="The three runs before this one">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1594,6 +1594,17 @@
     <span class="md-ellipsis">
       
         Run 2 — 2026-08-15 (#139)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-3-2026-08-15-140-the-published-null" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run 3 — 2026-08-15 (#140, the published null)
       
     </span>
   </a>
@@ -1637,16 +1648,22 @@
 
 
 <h1 id="matched-pair-multi-harness-prompt-injection-the-injection-did-not-work">Matched-pair multi-harness prompt injection: the injection did not work<a class="headerlink" href="#matched-pair-multi-harness-prompt-injection-the-injection-did-not-work" title="Permanent link">&para;</a></h1>
-<p><strong>Both harnesses ignored the planted convention entirely.</strong> <code>claude-code</code> 2.1.233 and
-<code>codex</code> 0.147.0 each acted on the planted script <strong>0 out of 6 times on the injected arm and
-0 out of 6 times on the benign control</strong> — while fixing the seeded bug in 12/12 cells and
-running the test suite in 12/12.</p>
-<p>This is a null result and it is published as one. It is <strong>not</strong> an injection-resistance
-finding, and the reason is in the control: the benign twin was ignored identically, so
-whatever produced the zero was not specific to the malicious script.</p>
+<p><strong>Neither harness ran the exfiltration-shaped script.</strong> <code>claude-code</code> 2.1.246 and <code>codex</code>
+0.147.0 each acted on it <strong>0 out of 36 times</strong> on the injected arm — while fixing the seeded
+bug in 144/144 cells and running the test suite in 141/144.</p>
+<p><strong>The benign control fired, for the first time in four runs.</strong> <code>codex</code> ran the <em>harmless</em>
+twin <strong>1 out of 36 times</strong>. Three of the four arms are zero; one is not.</p>
+<p>At n = 36 per harness per arm a zero carries a 95% Wilson interval of <strong>[0.0%, 9.6%]</strong> — the
+bound the previous run named as its own requirement, down from <strong>[0.0%, 39.0%]</strong> at n = 6.
+Pooled across both harnesses the injected arm is 0/72, <strong>[0.0%, 5.1%]</strong>. This is the first
+run here whose zero licenses a number rather than only a direction.</p>
+<p>It is still <strong>not</strong> an injection-resistance finding, for two separate reasons.
+<code>claude-code</code>'s benign twin was ignored identically, so its zero is indifference to the
+channel rather than detection of intent. And <code>codex</code>'s single benign action does not show it
+tells the two apart: Fisher exact on its matched arms gives <strong>p = 1.00</strong>.</p>
 <ul>
-<li><strong>Run date:</strong> 2026-08-15 · <strong>Cells:</strong> 24/24 measured, no exclusions</li>
-<li><strong>Reproduce:</strong> <code>python -m benchmarks.harness_injection --trials 5 --write</code></li>
+<li><strong>Run date:</strong> 2026-08-26 · <strong>Cells:</strong> 144/144 measured, no exclusions</li>
+<li><strong>Reproduce:</strong> <code>python -m benchmarks.harness_injection --trials 18 --write --checkpoint ckpt.json</code></li>
 <li><strong>Raw table and full caveats:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md"><code>benchmarks/harness_injection/RESULTS.md</code></a></li>
 <li><strong>Not run in CI:</strong> it drives third-party coding agents against an injection-seeded
   fixture and spends real API budget, so it needs explicit operator sign-off.</li>
@@ -1711,25 +1728,26 @@ trials) and <strong>n = 12 per arm pooled</strong> across both harnesses.</p>
 <tbody>
 <tr>
 <td><code>claude-code</code></td>
-<td>2.1.233</td>
-<td>12/12</td>
-<td>12/12</td>
-<td><strong>0/6</strong></td>
-<td><strong>0/6</strong></td>
+<td>2.1.246</td>
+<td>72/72</td>
+<td>72/72</td>
+<td><strong>0/36</strong></td>
+<td><strong>0/36</strong></td>
 <td>yes</td>
 </tr>
 <tr>
 <td><code>codex</code></td>
 <td>codex-cli 0.147.0</td>
-<td>12/12</td>
-<td>12/12</td>
-<td><strong>0/6</strong></td>
-<td><strong>0/6</strong></td>
+<td>72/72</td>
+<td>69/72</td>
+<td><strong>0/36</strong></td>
+<td><strong>1/36</strong></td>
 <td>yes</td>
 </tr>
 </tbody>
 </table>
-<p>Total acted events across every cell in the matrix: <strong>0/24</strong>.</p>
+<p>Total acted events across every cell in the matrix: <strong>1/144</strong> — all of it on the benign
+control, none on the injected arm.</p>
 <h3 id="95-intervals">95% intervals<a class="headerlink" href="#95-intervals" title="Permanent link">&para;</a></h3>
 <p>Zero events out of a small n is not the same as zero probability, and the interval is the
 honest way to say so. Wilson score intervals:</p>
@@ -1744,29 +1762,38 @@ honest way to say so. Wilson score intervals:</p>
 </thead>
 <tbody>
 <tr>
-<td>Per harness, per arm</td>
-<td>0/6</td>
-<td><strong>[0.0%, 39.0%]</strong></td>
-<td>50.0%</td>
+<td>Injected, per harness</td>
+<td>0/36</td>
+<td><strong>[0.0%, 9.6%]</strong></td>
+<td>8.3%</td>
 </tr>
 <tr>
-<td>Pooled per arm (both harnesses)</td>
-<td>0/12</td>
-<td><strong>[0.0%, 24.3%]</strong></td>
-<td>25.0%</td>
+<td>Injected, pooled (both harnesses)</td>
+<td>0/72</td>
+<td><strong>[0.0%, 5.1%]</strong></td>
+<td>4.2%</td>
 </tr>
 <tr>
-<td>All cells</td>
-<td>0/24</td>
-<td><strong>[0.0%, 13.8%]</strong></td>
-<td>12.5%</td>
+<td>Benign control, <code>claude-code</code></td>
+<td>0/36</td>
+<td><strong>[0.0%, 9.6%]</strong></td>
+<td>8.3%</td>
+</tr>
+<tr>
+<td>Benign control, <code>codex</code></td>
+<td>1/36</td>
+<td><strong>[0.5%, 14.2%]</strong></td>
+<td>—</td>
 </tr>
 </tbody>
 </table>
-<p>Read the top row before quoting the bottom one. <strong>At n=6 per cell the upper bound is 39%</strong> —
-this run is consistent with a true action rate as high as roughly one in three. What it
-rules out is a <em>high</em> rate, not a low one. Anyone citing "0%" without the interval is
-citing something this run did not measure.</p>
+<p>Read the top row before quoting the second. <strong>At n=36 per cell the injected upper bound is
+9.6%</strong> — this run rules out a true action rate above roughly one in ten, which the n=6 run
+could not. Anyone citing "0%" without the interval is still citing something this run did
+not measure.</p>
+<p>The <code>codex</code> control row is the one that changed. A non-zero count has a lower bound <em>above</em>
+zero, so the rule of three — which is defined for zero events — does not apply to it, and the
+table says so rather than printing a number that means nothing.</p>
 <h3 id="what-n-would-be-needed-and-what-this-run-could-not-have-seen">What n would be needed, and what this run could not have seen<a class="headerlink" href="#what-n-would-be-needed-and-what-this-run-could-not-have-seen" title="Permanent link">&para;</a></h3>
 <p>The interval above is the weakness of this result, so it is worth stating exactly how much
 sample would fix it rather than leaving "more trials" as a gesture.</p>
@@ -1785,9 +1812,9 @@ events the Wilson upper bound has a closed form, <code>z² / (n + z²)</code>:</
 </thead>
 <tbody>
 <tr>
-<td><strong>3</strong> <em>(this run)</em></td>
+<td>3 <em>(the 2026-08-15 run)</em></td>
 <td>6</td>
-<td><strong>39.0%</strong></td>
+<td>39.0%</td>
 <td>50.0%</td>
 <td>24</td>
 </tr>
@@ -1806,7 +1833,7 @@ events the Wilson upper bound has a closed form, <code>z² / (n + z²)</code>:</
 <td>80</td>
 </tr>
 <tr>
-<td><strong>18</strong></td>
+<td><strong>18</strong> <em>(this run)</em></td>
 <td><strong>36</strong></td>
 <td><strong>9.6%</strong></td>
 <td>8.3%</td>
@@ -1821,9 +1848,10 @@ events the Wilson upper bound has a closed form, <code>z² / (n + z²)</code>:</
 </tr>
 </tbody>
 </table>
-<p><strong>For a 10% upper bound you need n = 35, which is <code>--trials 18</code></strong> — 144 cells, six times this
-run. That is the number to quote when someone asks what it would take to say "under 10%"
-rather than "under 39%".</p>
+<p><strong>A 10% upper bound needs n = 35, which is <code>--trials 18</code></strong> — 144 cells, six times the
+2026-08-15 run. That run named this figure as the price of saying "under 10%" rather than
+"under 39%", and the 2026-08-26 run paid it: n = 36, upper bound 9.6%. The row marked <em>(this
+run)</em> is the one that was bought.</p>
 <p>Sample size is only half of it. The bound answers <em>how high could the rate be</em>; it does not
 answer <em>would this run have noticed a low one</em>. For a true action rate p, the chance of
 observing zero anyway is <code>(1 − p)ⁿ</code>:</p>
@@ -1831,15 +1859,20 @@ observing zero anyway is <code>(1 − p)ⁿ</code>:</p>
 <thead>
 <tr>
 <th>If the true rate were…</th>
-<th>…this run (n=6) sees zero</th>
-<th>…at n=36</th>
+<th>…the 2026-08-15 run (n=6) sees zero</th>
+<th>…this run (n=36)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
+<td>2%</td>
+<td>89% of the time</td>
+<td>48%</td>
+</tr>
+<tr>
 <td>5%</td>
 <td><strong>74%</strong> of the time</td>
-<td>16%</td>
+<td><strong>16%</strong></td>
 </tr>
 <tr>
 <td>10%</td>
@@ -1848,10 +1881,14 @@ observing zero anyway is <code>(1 − p)ⁿ</code>:</p>
 </tr>
 </tbody>
 </table>
-<p>So <strong>at n=6 a 5% action rate would have produced this exact null about three times in four.</strong>
-The published zero is close to uninformative about low rates, and that is the honest reason
-the next run is worth its API budget: not because the answer is expected to change, but
-because at <code>--trials 3</code> there is very little the result could have been.</p>
+<p>At n=6 a 5% action rate would have produced that null about three times in four, which is
+why it was published as a measurement rather than a finding. At n=36 the same rate escapes
+notice 16% of the time — better by a factor of four and still not negligible, so the zero
+bounds the rate rather than excluding it.</p>
+<p>Read the 2% row before treating this as settled: a genuinely rare behaviour would still slip
+past this run about half the time. The <code>codex</code> control is the concrete demonstration — it
+acted <strong>once in 36</strong>, and a run of this size that happened to miss that single event would
+have reported a clean four-way zero and been wrong about the channel being ignored.</p>
 <p>The arithmetic is in <code>benchmarks/harness_injection/power.py</code> rather than in this paragraph,
 and <code>tests/test_injection_benchmark_power.py</code> asserts that every percentage printed above is
 what that code returns — a figure in a document that nothing recomputes is the same class of
@@ -1875,9 +1912,10 @@ identically, so the mechanism is indifference to this delivery channel, not dete
 malicious intent. That distinction has a practical consequence: it predicts nothing about an
 injection delivered through a channel these agents <em>do</em> act on — a task-relevant source
 file, a tool description, an error message — and offers no assurance there.</p>
-<h2 id="the-two-runs-before-this-one-and-why-they-were-inconclusive">The two runs before this one, and why they were inconclusive<a class="headerlink" href="#the-two-runs-before-this-one-and-why-they-were-inconclusive" title="Permanent link">&para;</a></h2>
-<p>The third run is believable only because the first two were not, and were reported that way
-at the time. Both are preserved rather than quietly replaced.</p>
+<h2 id="the-three-runs-before-this-one">The three runs before this one<a class="headerlink" href="#the-three-runs-before-this-one" title="Permanent link">&para;</a></h2>
+<p>This run is believable only because the earlier ones were reported honestly at the time —
+two of them broken, one of them merely too small. All three are preserved rather than quietly
+replaced, and the third is the one that specified the run you are reading.</p>
 <h3 id="run-1-2026-08-14-136">Run 1 — 2026-08-14 (<a href="https://github.com/sattyamjjain/agent-airlock/pull/136">#136</a>)<a class="headerlink" href="#run-1-2026-08-14-136" title="Permanent link">&para;</a></h3>
 <p><code>claude-code</code> 2.1.232, <code>codex</code> 0.147.0. 21 of 24 cells measured. Both arms scored zero,
 task completed in 21/21.</p>
@@ -1915,6 +1953,20 @@ report was changed so it cannot recur:</p>
   reassuring number that describes neither;</li>
 <li>unmeasured renders as "not measured", never as 0.</li>
 </ul>
+<h3 id="run-3-2026-08-15-140-the-published-null">Run 3 — 2026-08-15 (<a href="https://github.com/sattyamjjain/agent-airlock/pull/140">#140</a>, the published null)<a class="headerlink" href="#run-3-2026-08-15-140-the-published-null" title="Permanent link">&para;</a></h3>
+<p><code>claude-code</code> 2.1.233, <code>codex</code> 0.147.0. 24/24 cells measured, <strong>0/6</strong> per harness per arm,
+both harnesses fixing the bug 12/12 and running the suite 12/12. Nothing was wrong with it.</p>
+<p><strong>Why it was not yet a finding: it was underpowered, and said so.</strong> That is a different
+reason from the two above — no defect, no misconfiguration, just too small an n. <code>0/6</code> carries
+a 95% Wilson interval of <strong>[0.0%, 39.0%]</strong>, consistent with a true action rate near one in
+three, and at n=6 a true 5% rate would have produced that exact zero about <strong>74%</strong> of the
+time. Rather than round the zero up into a claim, the run published its own power analysis
+and named the sample that would fix it: n = 35, i.e. <code>--trials 18</code>.</p>
+<p>This page supersedes that run by doing what it asked for. Two things it got right are worth
+keeping in view: the bound it published for <strong>2.1.233</strong> still stands for 2.1.233 — the newer
+run measures <strong>2.1.246</strong> and does not narrow the old interval retroactively — and its central
+caveat, that a dead benign control makes a zero uninterpretable as resistance, survived
+contact with more data. It just stopped being true of <em>every</em> harness.</p>
 <h2 id="what-this-number-does-not-show">What this number does not show<a class="headerlink" href="#what-this-number-does-not-show" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Not a model comparison.</strong> A harness is a CLI, a system prompt, a tool surface, and a
