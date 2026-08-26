@@ -67,8 +67,10 @@ BENCHMARKS: dict[str, tuple[str, str]] = {
     ),
     "benchmarks.harness_injection": (
         "Matched-pair multi-harness prompt injection",
-        "python -m benchmarks.harness_injection --trials 5 --write  "
-        "(drives third-party coding agents; costs real API budget)",
+        "python -m benchmarks.harness_injection --trials 18 --write "
+        "--checkpoint ckpt.json  "
+        "(drives third-party coding agents; ~100 min of real API budget — the "
+        "checkpoint makes an interrupted run resumable instead of a total loss)",
     ),
     "benchmarks/mcp_conformance/RESULTS.md": (
         "MCP spec conformance",

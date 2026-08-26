@@ -288,7 +288,9 @@ def render_results_md(report: RunReport, date: str) -> str:
         "## Reproduce",
         "",
         "```bash",
-        "python -m benchmarks.harness_injection --trials 5 --write",
+        # Reflect the run that produced this file. A hardcoded count told the reader to
+        # reproduce at a different n than the numbers above were measured at.
+        f"python -m benchmarks.harness_injection --trials {report.trials} --write",
         "```",
         "",
     ]

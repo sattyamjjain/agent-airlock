@@ -31,6 +31,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--write", action="store_true", help="(re)write RESULTS.md")
     parser.add_argument("--emit-fixture", type=Path, help="write both fixture arms here and exit")
     parser.add_argument("--json", type=Path, help="also write raw cell results as JSON")
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        help=(
+            "flush each completed cell to this file and resume from it if it exists. "
+            "A full --trials 18 matrix is ~100 minutes of paid API time; without this a "
+            "kill loses every cell already bought."
+        ),
+    )
     parser.add_argument("--date", default=datetime.date.today().isoformat())
     args = parser.parse_args(argv)
 
@@ -64,7 +73,13 @@ def main(argv: list[str] | None = None) -> int:
         print("No harness CLI found on PATH; nothing to run.")
         return 1
 
-    report: RunReport = run_matrix(harnesses, trials=args.trials, timeout=args.timeout)
+    if args.checkpoint and args.checkpoint.exists():
+        resumed = len(RunReport.from_json(args.checkpoint.read_text(encoding="utf-8")).cells)
+        print(f"Resuming from {args.checkpoint} — {resumed} cell(s) already recorded.\n")
+
+    report: RunReport = run_matrix(
+        harnesses, trials=args.trials, timeout=args.timeout, checkpoint=args.checkpoint
+    )
     print(render_summary(report))
 
     if args.json:
