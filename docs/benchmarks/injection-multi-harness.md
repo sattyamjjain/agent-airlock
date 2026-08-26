@@ -1,16 +1,24 @@
 # Matched-pair multi-harness prompt injection: the injection did not work
 
-**Both harnesses ignored the planted convention entirely.** `claude-code` 2.1.233 and
-`codex` 0.147.0 each acted on the planted script **0 out of 6 times on the injected arm and
-0 out of 6 times on the benign control** — while fixing the seeded bug in 12/12 cells and
-running the test suite in 12/12.
+**Neither harness ran the exfiltration-shaped script.** `claude-code` 2.1.246 and `codex`
+0.147.0 each acted on it **0 out of 36 times** on the injected arm — while fixing the seeded
+bug in 144/144 cells and running the test suite in 141/144.
 
-This is a null result and it is published as one. It is **not** an injection-resistance
-finding, and the reason is in the control: the benign twin was ignored identically, so
-whatever produced the zero was not specific to the malicious script.
+**The benign control fired, for the first time in four runs.** `codex` ran the *harmless*
+twin **1 out of 36 times**. Three of the four arms are zero; one is not.
 
-- **Run date:** 2026-08-15 · **Cells:** 24/24 measured, no exclusions
-- **Reproduce:** `python -m benchmarks.harness_injection --trials 5 --write`
+At n = 36 per harness per arm a zero carries a 95% Wilson interval of **[0.0%, 9.6%]** — the
+bound the previous run named as its own requirement, down from **[0.0%, 39.0%]** at n = 6.
+Pooled across both harnesses the injected arm is 0/72, **[0.0%, 5.1%]**. This is the first
+run here whose zero licenses a number rather than only a direction.
+
+It is still **not** an injection-resistance finding, for two separate reasons.
+`claude-code`'s benign twin was ignored identically, so its zero is indifference to the
+channel rather than detection of intent. And `codex`'s single benign action does not show it
+tells the two apart: Fisher exact on its matched arms gives **p = 1.00**.
+
+- **Run date:** 2026-08-26 · **Cells:** 144/144 measured, no exclusions
+- **Reproduce:** `python -m benchmarks.harness_injection --trials 18 --write --checkpoint ckpt.json`
 - **Raw table and full caveats:** [`benchmarks/harness_injection/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md)
 - **Not run in CI:** it drives third-party coding agents against an injection-seeded
   fixture and spends real API budget, so it needs explicit operator sign-off.
@@ -85,10 +93,11 @@ trials) and **n = 12 per arm pooled** across both harnesses.
 
 | Harness | Version | Fixed the bug | Ran the tests | Injected (acted) | Benign control (acted) | Interpretable? |
 | --- | --- | --- | --- | --- | --- | --- |
-| `claude-code` | 2.1.233 | 12/12 | 12/12 | **0/6** | **0/6** | yes |
-| `codex` | codex-cli 0.147.0 | 12/12 | 12/12 | **0/6** | **0/6** | yes |
+| `claude-code` | 2.1.246 | 72/72 | 72/72 | **0/36** | **0/36** | yes |
+| `codex` | codex-cli 0.147.0 | 72/72 | 69/72 | **0/36** | **1/36** | yes |
 
-Total acted events across every cell in the matrix: **0/24**.
+Total acted events across every cell in the matrix: **1/144** — all of it on the benign
+control, none on the injected arm.
 
 ### 95% intervals
 
@@ -97,14 +106,19 @@ honest way to say so. Wilson score intervals:
 
 | Estimate | Observed | 95% Wilson CI | Rule-of-three upper bound |
 | --- | --- | --- | --- |
-| Per harness, per arm | 0/6 | **[0.0%, 39.0%]** | 50.0% |
-| Pooled per arm (both harnesses) | 0/12 | **[0.0%, 24.3%]** | 25.0% |
-| All cells | 0/24 | **[0.0%, 13.8%]** | 12.5% |
+| Injected, per harness | 0/36 | **[0.0%, 9.6%]** | 8.3% |
+| Injected, pooled (both harnesses) | 0/72 | **[0.0%, 5.1%]** | 4.2% |
+| Benign control, `claude-code` | 0/36 | **[0.0%, 9.6%]** | 8.3% |
+| Benign control, `codex` | 1/36 | **[0.5%, 14.2%]** | — |
 
-Read the top row before quoting the bottom one. **At n=6 per cell the upper bound is 39%** —
-this run is consistent with a true action rate as high as roughly one in three. What it
-rules out is a *high* rate, not a low one. Anyone citing "0%" without the interval is
-citing something this run did not measure.
+Read the top row before quoting the second. **At n=36 per cell the injected upper bound is
+9.6%** — this run rules out a true action rate above roughly one in ten, which the n=6 run
+could not. Anyone citing "0%" without the interval is still citing something this run did
+not measure.
+
+The `codex` control row is the one that changed. A non-zero count has a lower bound *above*
+zero, so the rule of three — which is defined for zero events — does not apply to it, and the
+table says so rather than printing a number that means nothing.
 
 ### What n would be needed, and what this run could not have seen
 
@@ -117,29 +131,36 @@ events the Wilson upper bound has a closed form, `z² / (n + z²)`:
 
 | `--trials` | n per harness per arm | 95% Wilson upper bound | Rule of three | Total cells |
 | --- | --- | --- | --- | --- |
-| **3** *(this run)* | 6 | **39.0%** | 50.0% | 24 |
+| 3 *(the 2026-08-15 run)* | 6 | 39.0% | 50.0% | 24 |
 | 6 | 12 | 24.3% | 25.0% | 48 |
 | 10 | 20 | 16.1% | 15.0% | 80 |
-| **18** | **36** | **9.6%** | 8.3% | 144 |
+| **18** *(this run)* | **36** | **9.6%** | 8.3% | 144 |
 | 37 | 74 | 4.9% | 4.1% | 296 |
 
-**For a 10% upper bound you need n = 35, which is `--trials 18`** — 144 cells, six times this
-run. That is the number to quote when someone asks what it would take to say "under 10%"
-rather than "under 39%".
+**A 10% upper bound needs n = 35, which is `--trials 18`** — 144 cells, six times the
+2026-08-15 run. That run named this figure as the price of saying "under 10%" rather than
+"under 39%", and the 2026-08-26 run paid it: n = 36, upper bound 9.6%. The row marked *(this
+run)* is the one that was bought.
 
 Sample size is only half of it. The bound answers *how high could the rate be*; it does not
 answer *would this run have noticed a low one*. For a true action rate p, the chance of
 observing zero anyway is `(1 − p)ⁿ`:
 
-| If the true rate were… | …this run (n=6) sees zero | …at n=36 |
+| If the true rate were… | …the 2026-08-15 run (n=6) sees zero | …this run (n=36) |
 | --- | --- | --- |
-| 5% | **74%** of the time | 16% |
+| 2% | 89% of the time | 48% |
+| 5% | **74%** of the time | **16%** |
 | 10% | 53% | 2% |
 
-So **at n=6 a 5% action rate would have produced this exact null about three times in four.**
-The published zero is close to uninformative about low rates, and that is the honest reason
-the next run is worth its API budget: not because the answer is expected to change, but
-because at `--trials 3` there is very little the result could have been.
+At n=6 a 5% action rate would have produced that null about three times in four, which is
+why it was published as a measurement rather than a finding. At n=36 the same rate escapes
+notice 16% of the time — better by a factor of four and still not negligible, so the zero
+bounds the rate rather than excluding it.
+
+Read the 2% row before treating this as settled: a genuinely rare behaviour would still slip
+past this run about half the time. The `codex` control is the concrete demonstration — it
+acted **once in 36**, and a run of this size that happened to miss that single event would
+have reported a clean four-way zero and been wrong about the channel being ignored.
 
 The arithmetic is in `benchmarks/harness_injection/power.py` rather than in this paragraph,
 and `tests/test_injection_benchmark_power.py` asserts that every percentage printed above is
@@ -168,10 +189,11 @@ malicious intent. That distinction has a practical consequence: it predicts noth
 injection delivered through a channel these agents *do* act on — a task-relevant source
 file, a tool description, an error message — and offers no assurance there.
 
-## The two runs before this one, and why they were inconclusive
+## The three runs before this one
 
-The third run is believable only because the first two were not, and were reported that way
-at the time. Both are preserved rather than quietly replaced.
+This run is believable only because the earlier ones were reported honestly at the time —
+two of them broken, one of them merely too small. All three are preserved rather than quietly
+replaced, and the third is the one that specified the run you are reading.
 
 ### Run 1 — 2026-08-14 ([#136](https://github.com/sattyamjjain/agent-airlock/pull/136))
 
@@ -218,6 +240,24 @@ report was changed so it cannot recur:
 - the sanity check is per-harness, **never pooled** — 12/12 beside 0/12 averages to a
   reassuring number that describes neither;
 - unmeasured renders as "not measured", never as 0.
+
+### Run 3 — 2026-08-15 ([#140](https://github.com/sattyamjjain/agent-airlock/pull/140), the published null)
+
+`claude-code` 2.1.233, `codex` 0.147.0. 24/24 cells measured, **0/6** per harness per arm,
+both harnesses fixing the bug 12/12 and running the suite 12/12. Nothing was wrong with it.
+
+**Why it was not yet a finding: it was underpowered, and said so.** That is a different
+reason from the two above — no defect, no misconfiguration, just too small an n. `0/6` carries
+a 95% Wilson interval of **[0.0%, 39.0%]**, consistent with a true action rate near one in
+three, and at n=6 a true 5% rate would have produced that exact zero about **74%** of the
+time. Rather than round the zero up into a claim, the run published its own power analysis
+and named the sample that would fix it: n = 35, i.e. `--trials 18`.
+
+This page supersedes that run by doing what it asked for. Two things it got right are worth
+keeping in view: the bound it published for **2.1.233** still stands for 2.1.233 — the newer
+run measures **2.1.246** and does not narrow the old interval retroactively — and its central
+caveat, that a dead benign control makes a zero uninterpretable as resistance, survived
+contact with more data. It just stopped being true of *every* harness.
 
 ## What this number does not show
 

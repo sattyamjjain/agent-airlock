@@ -43,10 +43,12 @@ __all__ = [
     "PowerRow",
     "Z_95",
     "describe",
+    "fisher_exact_two_sided",
     "power_table",
     "probability_of_observing_zero",
     "rule_of_three_upper_bound",
     "trials_for_upper_bound",
+    "wilson_interval",
     "wilson_upper_bound_for_zero",
 ]
 
@@ -210,3 +212,78 @@ def describe(trials: int, *, harnesses: int = 2, arms: int = 2) -> str:
         f"  For a 10% upper bound you need n = {needed}, i.e. "
         f"--trials {math.ceil(needed / AIRLOCK_MODES)}."
     )
+
+
+def wilson_interval(successes: int, n: int, z: float = Z_95) -> tuple[float, float]:
+    """Two-sided Wilson score interval for ``successes`` out of ``n``.
+
+    The zero-event closed form above covers every interval this benchmark published through
+    2026-08-15, because every arm was zero. The 2026-08-26 run broke that: ``codex`` acted on
+    the **benign control** once, so the results table now carries a non-zero count and needs
+    the general form. Published percentages come from this module rather than a calculator,
+    which is the whole reason it exists.
+
+    Args:
+        successes: Observed events.
+        n: Trials. Must be positive.
+        z: Normal quantile; defaults to :data:`Z_95`.
+
+    Returns:
+        ``(lower, upper)`` as proportions in ``[0, 1]``.
+
+    Raises:
+        ValueError: If ``n`` is not positive or ``successes`` is outside ``[0, n]``.
+    """
+    if n <= 0:
+        raise ValueError(f"n must be positive, got {n}")
+    if not 0 <= successes <= n:
+        raise ValueError(f"successes must be in [0, {n}], got {successes}")
+    denominator = n + z * z
+    centre = (successes + z * z / 2) / denominator
+    spread = (z / denominator) * math.sqrt(successes * (n - successes) / n + z * z / 4)
+    return max(0.0, centre - spread), min(1.0, centre + spread)
+
+
+def fisher_exact_two_sided(a: int, b: int, c: int, d: int) -> float:
+    """Two-sided Fisher exact p for the 2x2 table ``[[a, b], [c, d]]``.
+
+    Used for the only comparison this benchmark actually cares about: whether an arm's
+    action rate differs from its matched twin. With one event across two equally sized arms
+    the answer is ``1.0`` — under the null that event is equally likely to land on either
+    side — and stating that plainly is the point. An asymmetry a reader can see in the table
+    is not automatically an asymmetry the data supports.
+
+    Args:
+        a: Row 1 successes.
+        b: Row 1 failures.
+        c: Row 2 successes.
+        d: Row 2 failures.
+
+    Returns:
+        The two-sided p-value: the total probability of every table with these margins that
+        is no more likely than the observed one.
+
+    Raises:
+        ValueError: If any cell is negative or the table is empty.
+    """
+    if min(a, b, c, d) < 0:
+        raise ValueError("cell counts must be non-negative")
+    total = a + b + c + d
+    if total == 0:
+        raise ValueError("table must not be empty")
+
+    row1, col1 = a + b, a + c
+
+    def probability(successes: int) -> float:
+        return (
+            math.comb(row1, successes)
+            * math.comb(total - row1, col1 - successes)
+            / math.comb(total, col1)
+        )
+
+    observed = probability(a)
+    lo = max(0, col1 - (total - row1))
+    hi = min(row1, col1)
+    # 1e-9 slack so a table that is mathematically as-likely-as the observed one is not
+    # dropped by float error, which would understate the p-value.
+    return sum(p for k in range(lo, hi + 1) if (p := probability(k)) <= observed * (1 + 1e-9))

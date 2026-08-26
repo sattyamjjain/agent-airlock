@@ -26,7 +26,7 @@ from pathlib import Path
 from .fixture import ARMS, PYTEST_MARKER, TASK_PROMPT, Arm, build_fixture
 from .harnesses import Harness
 
-__all__ = ["CellResult", "RunReport", "run_matrix"]
+__all__ = ["CellResult", "RunReport", "cell_key", "run_matrix"]
 
 DEFAULT_TIMEOUT = 300.0
 
@@ -92,6 +92,33 @@ class RunReport:
             },
             indent=2,
         )
+
+    @classmethod
+    def from_json(cls, text: str) -> RunReport:
+        """Rebuild a report from :meth:`to_json` output (used to resume a checkpoint)."""
+        data = json.loads(text)
+        return cls(
+            cells=[CellResult(**cell) for cell in data.get("cells", [])],
+            trials=int(data.get("trials", 1)),
+            timeout_s=float(data.get("timeout_s", DEFAULT_TIMEOUT)),
+            skipped=list(data.get("skipped", [])),
+        )
+
+
+def cell_key(cell: CellResult) -> tuple[str, str, bool, int]:
+    """Identity of a cell: ``(harness, arm, airlock_enabled, trial)``."""
+    return (cell.harness, cell.arm, cell.airlock_enabled, cell.trial)
+
+
+def _write_checkpoint(path: Path, report: RunReport) -> None:
+    """Write the checkpoint atomically.
+
+    Temp-then-rename, because the whole point of this file is to survive the process being
+    killed — and a kill during a plain write leaves truncated JSON that resumes as nothing.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(report.to_json(), encoding="utf-8")
+    tmp.replace(path)
 
 
 def _kill_process_group(proc: subprocess.Popen[str]) -> None:
@@ -240,17 +267,50 @@ def run_matrix(
     timeout: float = DEFAULT_TIMEOUT,
     airlock_modes: Sequence[bool] = (False, True),
     arms: Sequence[Arm] = ARMS,
+    checkpoint: Path | None = None,
 ) -> RunReport:
-    """Run every ``(harness, arm, airlock, trial)`` cell."""
+    """Run every ``(harness, arm, airlock, trial)`` cell.
+
+    Args:
+        harnesses: Harness registry entries to drive.
+        trials: Repeats per ``(harness, arm, airlock)`` combination.
+        timeout: Per-cell wall-clock bound, enforced on the whole process group.
+        airlock_modes: Which ``AIRLOCK_ENABLED`` settings to measure.
+        arms: Fixture arms (injected + benign control).
+        checkpoint: If given, every completed cell is flushed here immediately, and an
+            existing file is resumed from — already-recorded cells are not re-run.
+
+    Returns:
+        The report, including any cells restored from ``checkpoint``.
+
+    A full ``--trials 18`` matrix is 144 cells and about 100 minutes of real API budget.
+    Through v0.8.82 this function accumulated results in memory and serialised only on
+    completion, so an interrupted run lost every cell it had paid for — observed on
+    2026-08-26, when a run killed at minute 35 of 97 yielded nothing. ``checkpoint`` makes
+    the spend durable: the file is rewritten after each cell, so a kill costs at most the
+    cell in flight, and re-invoking with the same path continues where it stopped.
+    """
     report = RunReport(trials=trials, timeout_s=timeout)
+    done: set[tuple[str, str, bool, int]] = set()
+    if checkpoint is not None and checkpoint.exists():
+        prior = RunReport.from_json(checkpoint.read_text(encoding="utf-8"))
+        report.cells.extend(prior.cells)
+        report.skipped.extend(prior.skipped)
+        done = {cell_key(cell) for cell in prior.cells}
+
     for harness in harnesses:
         if not harness.is_available():
-            report.skipped.append(f"{harness.name}: executable {harness.executable!r} not on PATH")
+            note = f"{harness.name}: executable {harness.executable!r} not on PATH"
+            # Guard against duplicating the note when resuming a checkpoint.
+            if note not in report.skipped:
+                report.skipped.append(note)
             continue
         version = _version(harness)
         for arm in arms:
             for airlock in airlock_modes:
                 for trial in range(1, trials + 1):
+                    if (harness.name, arm.name, airlock, trial) in done:
+                        continue
                     report.cells.append(
                         _run_cell(
                             harness,
@@ -261,4 +321,6 @@ def run_matrix(
                             version=version,
                         )
                     )
+                    if checkpoint is not None:
+                        _write_checkpoint(checkpoint, report)
     return report

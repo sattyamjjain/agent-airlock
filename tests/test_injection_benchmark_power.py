@@ -24,17 +24,28 @@ from benchmarks.harness_injection.power import (
     AIRLOCK_MODES,
     Z_95,
     describe,
+    fisher_exact_two_sided,
     power_table,
     probability_of_observing_zero,
     rule_of_three_upper_bound,
     trials_for_upper_bound,
+    wilson_interval,
     wilson_upper_bound_for_zero,
 )
 
 _DOC = Path(__file__).resolve().parents[1] / "docs" / "benchmarks" / "injection-multi-harness.md"
 
-#: (n, the percentage the doc publishes for it). These three rows are the published run.
-_PUBLISHED_INTERVALS = [(6, "39.0%"), (12, "24.3%"), (24, "13.8%")]
+#: (n, the percentage the doc publishes for it) — every zero-event bound the doc prints.
+#: Updated for the 2026-08-26 run: the n=24 "all cells" row went away when the matrix stopped
+#: being all-zero, and n=36 / n=72 arrived as the bounds that run actually licenses.
+_PUBLISHED_INTERVALS = [
+    (6, "39.0%"),
+    (12, "24.3%"),
+    (20, "16.1%"),
+    (36, "9.6%"),
+    (72, "5.1%"),
+    (74, "4.9%"),
+]
 
 
 class TestTheTableNeverOverstatesItsPower:
@@ -160,3 +171,72 @@ class TestTheRunnerExposesTrials:
         out = capsys.readouterr().out
         assert "Power at --trials 18" in out
         assert "9.6%" in out
+
+
+class TestGeneralWilsonInterval:
+    """The 2026-08-26 run put a non-zero count in the results table for the first time."""
+
+    @pytest.mark.parametrize("n", [6, 12, 24, 36, 72, 144])
+    def test_it_reproduces_the_zero_event_closed_form(self, n: int) -> None:
+        """Two derivations of the same quantity must agree, or one of them is wrong."""
+        lower, upper = wilson_interval(0, n)
+        assert lower == 0.0
+        assert upper == pytest.approx(wilson_upper_bound_for_zero(n), abs=1e-12)
+
+    def test_the_published_codex_benign_interval(self) -> None:
+        lower, upper = wilson_interval(1, 36)
+        assert (f"{lower * 100:.1f}%", f"{upper * 100:.1f}%") == ("0.5%", "14.2%")
+
+    def test_a_non_zero_count_has_a_lower_bound_above_zero(self) -> None:
+        """An observed event means the rate is not zero, and the interval must say so."""
+        assert wilson_interval(1, 36)[0] > 0.0
+
+    @pytest.mark.parametrize("bad", [(-1, 10), (11, 10), (0, 0), (0, -5)])
+    def test_it_rejects_impossible_inputs(self, bad: tuple[int, int]) -> None:
+        with pytest.raises(ValueError):
+            wilson_interval(*bad)
+
+
+class TestFisherExactTwoSided:
+    """One event across two equal arms is not evidence of a difference between them."""
+
+    def test_the_published_codex_asymmetry_is_not_significant(self) -> None:
+        """benign 1/36 vs injected 0/36 — the table looks asymmetric, the data does not."""
+        assert fisher_exact_two_sided(1, 35, 0, 36) == pytest.approx(1.0)
+
+    def test_the_pooled_asymmetry_is_not_significant_either(self) -> None:
+        assert fisher_exact_two_sided(1, 71, 0, 72) == pytest.approx(1.0)
+
+    def test_a_real_separation_does_reach_significance(self) -> None:
+        """Guard against a function that just always returns 1.0."""
+        assert fisher_exact_two_sided(30, 6, 2, 34) < 0.001
+
+    def test_it_is_symmetric_in_the_rows(self) -> None:
+        assert fisher_exact_two_sided(1, 35, 0, 36) == pytest.approx(
+            fisher_exact_two_sided(0, 36, 1, 35)
+        )
+
+    def test_p_is_a_probability(self) -> None:
+        for table in ((1, 35, 0, 36), (5, 31, 2, 34), (0, 10, 0, 10)):
+            assert 0.0 <= fisher_exact_two_sided(*table) <= 1.0
+
+    @pytest.mark.parametrize("bad", [(-1, 1, 1, 1), (0, 0, 0, 0)])
+    def test_it_rejects_impossible_tables(self, bad: tuple[int, int, int, int]) -> None:
+        with pytest.raises(ValueError):
+            fisher_exact_two_sided(*bad)
+
+
+class TestTheLiveControlIntervalIsPublishedAndReproducible:
+    """The 1/36 benign row is the doc's first non-zero interval; gate it like the others."""
+
+    def test_the_bounds_come_out_of_the_code(self) -> None:
+        lower, upper = wilson_interval(1, 36)
+        assert (f"{lower * 100:.1f}%", f"{upper * 100:.1f}%") == ("0.5%", "14.2%")
+
+    def test_they_appear_in_the_doc(self) -> None:
+        text = _DOC.read_text(encoding="utf-8")
+        assert "[0.5%, 14.2%]" in text
+
+    def test_the_doc_states_the_asymmetry_is_not_significant(self) -> None:
+        """A lopsided table published without its p-value is the thing to prevent."""
+        assert "p = 1.00" in _DOC.read_text(encoding="utf-8")
