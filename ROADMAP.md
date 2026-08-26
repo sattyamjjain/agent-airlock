@@ -47,14 +47,18 @@ power-calc-sized **163 pairs/arm** documented under "Widening plan" in
 [`benchmarks/agentdojo/RESULTS.md`](benchmarks/agentdojo/RESULTS.md). That would replace a
 scoped point estimate with a real cross-family number. It is gated on API budget, not on code.
 
-**Give the matched-pair injection null enough sample to mean something.**
+**~~Give the matched-pair injection null enough sample to mean something.~~ Done 2026-08-26.**
 
-The [published null](README.md) is `0/6` per harness per arm with a 95% Wilson interval of
-**[0.0%, 39.0%]** — consistent with a true action rate as high as one in three. A **10% upper
-bound needs n = 35** (`--trials 18`, 144 cells), and at n = 6 a true 5% rate would still have
-produced that exact zero ~74% of the time. The power arithmetic is in
-`benchmarks/harness_injection/power.py` and the runner already takes `--trials`. Also gated on
-API budget, not on code.
+Run at `--trials 18` — 144 cells, n = 36 per harness per arm. The injected arm is **0/36** for
+both harnesses, 95% Wilson **[0.0%, 9.6%]** and pooled **[0.0%, 5.1%]**, meeting the n = 35
+target this item was written to name. It also produced the first live benign control in four
+runs (`codex` 1/36), which does *not* establish discrimination — Fisher exact p = 1.00.
+Numbers: [`benchmarks/harness_injection/RESULTS.md`](benchmarks/harness_injection/RESULTS.md).
+
+What is left here is a *different* item, and it is worth stating rather than closing quietly:
+at n = 36 a true **2%** action rate still escapes this run about half the time, and `codex`
+demonstrated a real behaviour at 1-in-36. Bounding rare behaviour needs n ≈ 74
+(`--trials 37`, 296 cells), which is again gated on API budget rather than code.
 
 ## Next
 

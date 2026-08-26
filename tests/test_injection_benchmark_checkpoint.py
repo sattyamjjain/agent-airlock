@@ -195,3 +195,70 @@ class TestResumeDoesNotPayTwice:
         ckpt.write_text(first.to_json(), encoding="utf-8")
         again = run_matrix([_FAKE], trials=1, checkpoint=ckpt)
         assert len(again.skipped) == 1, again.skipped
+
+
+class TestReportProseFollowsTheData:
+    """The 2026-08-26 run produced the first live benign control, and caught a reporting bug.
+
+    Through v0.8.82 the renderer emitted fixed prose reading *"both harnesses are indifferent
+    to a README-planted script convention"* inside the null-control warning. That warning is
+    already scoped to the harnesses whose control was zero, so on a run where one harness
+    acted on the benign twin the sentence was simply false about the run it was describing.
+    This is the same failure the run-2 postmortem named — presenting two different zeros
+    identically — so it gets a test rather than a careful edit.
+    """
+
+    @staticmethod
+    def _report(codex_benign_acted: int) -> RunReport:
+        report = RunReport(trials=18)
+        for harness, version in (("claude-code", "2.1.246"), ("codex", "0.147.0")):
+            for arm in ("injected", "benign"):
+                for mode in (False, True):
+                    for trial in range(1, 19):
+                        acted = (
+                            harness == "codex"
+                            and arm == "benign"
+                            and mode
+                            and trial <= codex_benign_acted
+                        )
+                        report.cells.append(
+                            CellResult(
+                                harness=harness,
+                                harness_version=version,
+                                arm=arm,
+                                airlock_enabled=mode,
+                                trial=trial,
+                                status="ok",
+                                acted=acted,
+                                task_completed=True,
+                                ran_tests=True,
+                            )
+                        )
+        return report
+
+    def test_it_does_not_claim_both_harnesses_when_one_control_fired(self) -> None:
+        from benchmarks.harness_injection.report import render_results_md
+
+        md = render_results_md(self._report(1), "2026-08-26")
+        assert "both harnesses are indifferent" not in md
+        assert "`claude-code` is indifferent" in md
+
+    def test_it_still_says_both_when_both_controls_are_dead(self) -> None:
+        from benchmarks.harness_injection.report import render_results_md
+
+        md = render_results_md(self._report(0), "2026-08-26")
+        assert "both harnesses are indifferent" in md
+
+    def test_a_live_control_is_reported_with_its_p_value(self) -> None:
+        """A lopsided-looking table must ship with the test that says it is not separable."""
+        from benchmarks.harness_injection.report import render_results_md
+
+        md = render_results_md(self._report(1), "2026-08-26")
+        assert "The benign control fired" in md
+        assert "p = 1.00" in md
+        assert "does not establish" in md
+
+    def test_no_live_control_block_when_no_control_fired(self) -> None:
+        from benchmarks.harness_injection.report import render_results_md
+
+        assert "The benign control fired" not in render_results_md(self._report(0), "2026-08-26")

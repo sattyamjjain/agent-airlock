@@ -9,6 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.83] - 2026-08-26
+
+**The matched-pair injection null now has enough sample to mean something — and the benign
+control fired for the first time.** Re-run at `--trials 18`: 144 cells, n = 36 per harness
+per arm, no exclusions.
+
+### Benchmarks
+
+- **The injected arm is 0/36 for both harnesses**, 95% Wilson **[0.0%, 9.6%]** per harness
+  per arm and **[0.0%, 5.1%]** pooled (0/72) — meeting the n = 35 target the 2026-08-15 run
+  named as its own requirement, down from **[0.0%, 39.0%]** at n = 6. At this sample a true
+  5% action rate escapes notice 16% of the time rather than ~74%. `claude-code` **2.1.246**
+  and `codex` **codex-cli 0.147.0**; bug fixed in 144/144 cells, suite run in 141/144.
+
+- **`codex` acted on the benign control once (1/36) — the first live control in four runs.**
+  Every previous run had a dead control on every harness, which is precisely why a zero on
+  the injected arm could never be read as resistance. This breaks that symmetry for one
+  harness: `codex` demonstrably *does* act on a README-planted script convention, so its
+  injected zero is a choice rather than blanket indifference to the channel.
+
+  **It is not evidence that `codex` distinguishes the two.** Fisher exact on its matched arms
+  gives **p = 1.00** — with one event across two equal arms the event is equally likely to
+  land on either side. An asymmetry visible in a table is not an asymmetry the data supports,
+  and the published write-up says so next to the table rather than leaving a reader to infer
+  significance from a lopsided-looking row.
+
+- **The comparison is not a clean n increase.** `claude-code` moved **2.1.233 → 2.1.246**
+  between the published null and this run. The tighter interval belongs to 2.1.246; the
+  earlier interval stands for 2.1.233 and is **not** narrowed retroactively. Stated in the
+  README row, the docs page and the run history rather than left for a reader to notice.
+
+### Fixed
+
+- **The results renderer published a false sentence on this run.** Its null-control warning
+  is scoped per-harness, but the prose inside it was fixed text reading *"both harnesses are
+  indifferent to a README-planted script convention"*. With one live control that was simply
+  untrue of the run being described — the same failure the run-2 postmortem named, which was
+  presenting two different zeros identically. The prose is now generated from the harness
+  list, and a run with a live control additionally renders a block stating what that
+  establishes (the channel is not universally ignored) and what it does not (discrimination,
+  p = 1.00). Four tests pin it, including one asserting the "both harnesses" wording still
+  appears when both controls really are dead.
+
+### Added
+
+- `power.wilson_interval(successes, n)` — the general two-sided Wilson score interval. Every
+  interval published through 2026-08-15 was a zero-event case, which has a closed form; the
+  live control needs the general one. Tested to reproduce the closed form exactly at every n
+  the docs quote, so the two derivations cannot silently disagree.
+- `power.fisher_exact_two_sided(a, b, c, d)` — exact test for the matched arms, stdlib
+  `math.comb` only. The repo's rule is that published percentages come from code; a published
+  claim about *significance* should not be the exception.
+
 ## [0.8.82] - 2026-08-25
 
 **A credibility record, not a feature. No public API surface changes** — this release adds

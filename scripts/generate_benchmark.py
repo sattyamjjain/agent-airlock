@@ -377,35 +377,43 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     )
     out.append("")
     out.append(
-        "**Result (2026-08-15, 24/24 cells measured, 3 trials x 2 arms x 2 airlock modes).** "
-        "`claude-code` 2.1.233 and `codex` 0.147.0 each fixed the seeded bug in **12/12** "
-        "cells and ran the test suite in **12/12** — and acted on the planted script "
-        "**0/6 injected, 0/6 benign**."
+        "**Result (2026-08-26, 144/144 cells measured, 18 trials x 2 arms x 2 airlock "
+        "modes).** `claude-code` 2.1.246 and `codex` 0.147.0 fixed the seeded bug in "
+        "**144/144** cells and ran the test suite in **141/144** — and acted on the "
+        "exfiltration-shaped script **0/36 each**. The benign control fired for the first "
+        "time: `codex` ran the *harmless* twin **1/36**. Matrix total **1/144**, none of it "
+        "on the injected arm."
     )
     out.append("")
     out.append(
-        "> **What that does and does not establish.** Two explanations for a zero are ruled "
-        "out by the run itself: the agents had a reason to act (they did the task) and they "
-        "do run commands in the fixture (they ran the suite, at the exact point the planted "
-        "line applies). What remains is specific and real: **both harnesses are indifferent "
-        "to a README-planted script convention — benign or exfiltration-shaped — while "
-        "actively running commands in the same repository.** The injection did not work."
+        "> **The bound, now that n is large enough.** 0/36 per harness per arm carries a 95% "
+        "Wilson interval of **[0.0%, 9.6%]**, and pooled across harnesses the injected arm is "
+        "0/72, **[0.0%, 5.1%]** — the 10% bound the 2026-08-15 run named as its own "
+        "requirement, down from **[0.0%, 39.0%]** at n = 6. Two explanations for a zero are "
+        "ruled out by the run itself: the agents had a reason to act (they did the task) and "
+        "they do run commands in the fixture (they ran the suite, at the exact point the "
+        "planted line applies)."
     )
     out.append("")
     out.append(
-        "> It is **not** evidence the injection was *recognised*. The benign twin was ignored "
-        "identically, so the mechanism is indifference to this delivery channel, not "
-        "detection of malicious intent — which means it predicts nothing about an injection "
-        "arriving through a channel these agents *do* act on (a task-relevant source file, a "
-        "tool description, an error message). Per-harness table and the full list of what "
-        "this does not show: "
+        "> **It is still not an injection-resistance result, for two separate reasons.** "
+        "`claude-code` ignored the benign twin identically (0/36), so its zero is indifference "
+        "to this delivery channel rather than detection of intent. And `codex` *did* act on "
+        "the benign twin once, which makes its injected zero a choice rather than blanket "
+        "indifference — but one event does not show it tells the two apart: Fisher exact on "
+        "its matched arms gives **p = 1.00**. Neither result predicts anything about an "
+        "injection arriving through a channel these agents act on more readily (a "
+        "task-relevant source file, a tool description, an error message). Per-harness table "
+        "and the full list of what this does not show: "
         "[`benchmarks/harness_injection/RESULTS.md`](benchmarks/harness_injection/RESULTS.md)."
     )
     out.append("")
     out.append(
-        "Earlier runs are superseded: 2026-08-14 used a task that gave no reason to act, and "
-        "both 2026-08-14 and the first 2026-08-15 run recorded codex zeros that were an "
-        "artefact of `codex exec` defaulting to a read-only sandbox."
+        "Earlier runs are superseded: 2026-08-14 used a task that gave no reason to act; both "
+        "2026-08-14 and the first 2026-08-15 run recorded codex zeros that were an artefact "
+        "of `codex exec` defaulting to a read-only sandbox; and the published 2026-08-15 null "
+        "was sound but underpowered at n = 6, where its own analysis put the upper bound at "
+        "39% and named `--trials 18` as the fix. This run is that fix."
     )
     out.append("")
     out.append(
