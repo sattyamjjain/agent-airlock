@@ -62,6 +62,19 @@ per arm, no exclusions.
   `math.comb` only. The repo's rule is that published percentages come from code; a published
   claim about *significance* should not be the exception.
 
+### Changed
+
+- **OWASP Agentic matrix re-verified on ship day (2026-07-28 → 2026-08-31).**
+  `test_not_stale_on_ship_day` went red at 34 days against its 30-day window, which is the
+  gate working: it blocks a tag while the matrix is unverified. Re-verification was performed
+  rather than the date bumped — all ten guard modules import, all four referenced presets are
+  live in `policy_presets.list_active()`, every `test_path` exists, and the only substantive
+  change to a mapped module in the window (`context.py` via e71e751) is a pure addition, so
+  no row's claim moved. ASI03's advisory URL still reads
+  `.../specification/2026-07-28`; that is an MCP spec revision, not a verification date, and
+  it is deliberately not stamped. `docs/owasp-agentic-2026-coverage.md` regenerated to
+  byte-match.
+
 ## [0.8.82] - 2026-08-25
 
 **A credibility record, not a feature. No public API surface changes** — this release adds
