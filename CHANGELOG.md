@@ -9,6 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A gate that compares the declared version to the registry, not to the repo.**
+  `scripts/check_registry_parity.py`. On 2026-08-31 `pyproject.toml`,
+  `agent_airlock.__version__`, the README badge and a written `## [0.8.83]` section all
+  said 0.8.83 while PyPI served 0.8.82, and nothing was red — because every version check
+  the repo owned compares one repo-internal surface to another (`check_version_tagged.py`
+  against the git tags, `check_changelog_heading.py` against the CHANGELOG, the
+  `__init__`/`pyproject` parity test against the build metadata). All three passed. The
+  repo was perfectly consistent about a version nobody could install.
+
+  Two conditions, both only live while the repo is ahead: **more than one release ahead**
+  of PyPI (an earlier version was declared and never published), and **more than
+  `MAX_UNPUBLISHED_DAYS = 3` unpublished** (the bump commit's own date says the release was
+  forgotten rather than in flight). A clean minor or major rollover counts as one release,
+  so a legitimate `0.9.0` does not trip it. The registry being *ahead* of the repo fails
+  too, with its own message.
+
+  Lenient by construction, following `check_version_tagged.py`: an unreachable PyPI, an
+  unparseable version, or a shallow checkout with no bump commit all print a note and pass.
+  A registry outage that turns the repo red is how a gate gets switched off.
+
+  `--distance-only` drops the age check, and that split is the design rather than a
+  convenience. At publish time the repo is *always* ahead of the registry — that is what
+  publishing means — so the age half would fail the very release that resolves it. A gate
+  that blocks its own remedy is a deadlock. So `ci.yml` runs the full check in the existing
+  `version-tag-guard` job (main pushes, where the drift lives) and `publish.yml` runs
+  `--distance-only` beside the benchmark-freshness gate, where it still catches a release
+  that silently skips a version.
+
+- `tests/test_registry_parity_gate.py` — 25 tests, none of which touch the network. They
+  seed synthetic versions rather than asserting today's real pair passes: the live pair is
+  equal for most of the repo's life, so it would pass just as happily if `evaluate` were
+  `return []`. The regression test is the literal 2026-08-31 state (repo 0.8.83, PyPI
+  0.8.82, five days unpublished) and it fails, as does the seeded-ahead path through
+  `main()`. `--distance-only` on the same seed is asserted to *pass*, pinning the
+  no-deadlock property.
+
+  Adding them moved a published number, so the README TEST-BADGE was regenerated
+  (**4,164 → 4,189**) and the five `docs/distribution/` submission drafts that quote it were
+  refreshed to match. `tests/test_numeric_claim_parity.py` failed on all five until they
+  were, which is that gate working rather than a chore discovered by reading.
+
+### Verified
+
+- **0.8.83 smoke-tested against the published wheel**, in a clean venv from
+  `pip install --no-cache-dir agent-airlock==0.8.83` — not a local build. Seven checks
+  through a real preset path: the registry loads (76 active), `owasp_mcp_top_10_2026_policy`
+  builds a `SecurityPolicy`, an allowlisted tool executes, an invented `exfiltrate_to`
+  argument is stripped before the tool sees it, strict validation refuses to coerce
+  `"not-an-int"`, and an unlisted tool is denied. 7/7.
+
+- **Every published injection figure reproduces from the tag.** `power.py` extracted from
+  `v0.8.83` (byte-identical to the working tree) and run on the clean venv's interpreter,
+  stdlib only: 0/36 → **[0.0%, 9.6%]**, 0/72 → **[0.0%, 5.1%]**, `codex`'s matched arms
+  `[1,35; 0,36]` → **p = 1.00**, and the benign control 1/36 → **[0.5%, 14.2%]**. All four
+  match the published strings exactly. No number moved, so `BENCHMARK.md` and
+  `PRIOR_ART.md` are untouched.
+
+  Recorded because it is a standing confusion: these functions are **not** importable from
+  the installed package. `from agent_airlock.power import ...` raises `ModuleNotFoundError`
+  and always will — the wheel ships `packages = ["src/agent_airlock"]`, and `benchmarks/`
+  is repo tooling. Nothing published claims otherwise (`docs/benchmarks/injection-multi-harness.md`
+  already points at `benchmarks/harness_injection/power.py`), so there is no false claim to
+  retract; a benchmark figure is reproduced from a checkout at the tag, which is what the
+  README's reproduce line already tells you to do.
+
 ## [0.8.83] - 2026-08-26
 
 **The matched-pair injection null now has enough sample to mean something — and the benign

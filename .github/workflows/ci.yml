@@ -148,6 +148,13 @@ jobs:
       - name: Declared version must have a conformant CHANGELOG heading
         run: python3 scripts/check_changelog_heading.py
 
+      # One seam further out than the two gates above: those compare repo surfaces to
+      # each other, which is why a repo that agreed with itself about an unpublished
+      # 0.8.83 passed both. This one compares against PyPI. Lenient when PyPI is
+      # unreachable. See scripts/check_registry_parity.py.
+      - name: Declared version must not have outrun PyPI
+        run: python3 scripts/check_registry_parity.py
+
   security:
     runs-on: ubuntu-latest
     steps:

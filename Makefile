@@ -1,4 +1,4 @@
-.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-links check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release verify-corpus
+.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-links check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release check-registry-parity check-registry-parity-distance verify-corpus
 
 help:
 	@echo "Targets:"
@@ -61,3 +61,9 @@ check-benchmark-freshness:
 
 check-benchmark-freshness-release:
 	python3 scripts/check_benchmark_freshness.py --release
+
+check-registry-parity:
+	python3 scripts/check_registry_parity.py
+
+check-registry-parity-distance:
+	python3 scripts/check_registry_parity.py --distance-only

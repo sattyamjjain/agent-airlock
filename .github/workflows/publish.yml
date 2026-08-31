@@ -50,6 +50,14 @@ jobs:
       - name: Refuse to publish a benchmark claim older than 30 days
         run: python3 scripts/check_benchmark_freshness.py --release
 
+      # GATE: refuse to publish a release that silently skips a version. --distance-only
+      # on purpose: at publish time the repo is ALWAYS ahead of the registry, so the
+      # unpublished-age half of this gate would fail the very release that resolves it.
+      # A gate that blocks its own remedy is a deadlock. The distance half has no such
+      # problem. See scripts/check_registry_parity.py.
+      - name: Refuse to publish a version that skips one
+        run: python3 scripts/check_registry_parity.py --distance-only
+
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
