@@ -1,4 +1,4 @@
-.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-links check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release check-registry-parity check-registry-parity-distance verify-corpus
+.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-links check-docs check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release check-registry-parity check-registry-parity-distance verify-corpus
 
 help:
 	@echo "Targets:"
@@ -49,6 +49,13 @@ egress-bench:
 
 check-links:
 	python3 scripts/check_links.py
+
+# The CI 'docs' job runs `mkdocs build --strict`, where a link that leaves the docs/
+# tree is a warning and a warning is a failure. check_links.py does NOT catch it: it
+# resolves relative links from the repo root, so ../../PRIOR_ART.md passes there and
+# fails here. Needs the [docs] extra.
+check-docs:
+	mkdocs build --strict
 
 check-changelog:
 	python3 scripts/check_changelog.py

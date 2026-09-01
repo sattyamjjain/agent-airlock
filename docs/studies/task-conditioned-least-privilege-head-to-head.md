@@ -3,7 +3,7 @@
 **This is a protocol, not a result. No data has been collected. Nothing below reports an
 outcome, because at the time of writing there is no outcome to report.**
 
-[`PRIOR_ART.md`](../../PRIOR_ART.md) records arXiv:2608.18351 and says, in these words:
+[`PRIOR_ART.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/PRIOR_ART.md) records arXiv:2608.18351 and says, in these words:
 
 > **There is no head-to-head. Nobody has run this library's gate on their 500 held-out tasks,
 > and until somebody does, the honest claim is complementarity and not superiority.**
@@ -29,7 +29,7 @@ Both answers are publishable, and the wording is chosen so that neither is a fai
 study:
 
 - **A reduction** would be the first evidence for the complementarity argument
-  [`PRIOR_ART.md`](../../PRIOR_ART.md) currently makes as reasoning rather than as evidence.
+  [`PRIOR_ART.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/PRIOR_ART.md) currently makes as reasoning rather than as evidence.
 - **No reduction** would mean the gate, for this population of agents, refuses only calls a
   least-privilege-trained policy was not going to make. `PRIOR_ART.md` already names that
   possibility in its own words — *"a gate whose marginal measured value is zero"* — and
@@ -167,7 +167,7 @@ result is meaningless without this number beside it, so a reduction in excess au
 accompanied by a fall in safe success is reported as a **cost**, not a win.
 
 **Intervals.** 95% Wilson score, `z = 1.96`, computed by
-[`benchmarks/harness_injection/power.py`](../../benchmarks/harness_injection/power.py)
+[`benchmarks/harness_injection/power.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/power.py)
 (`wilson_interval`) — the same module and the same pinned `z` as every other published
 interval in this repository, so two derivations cannot silently disagree.
 
@@ -214,7 +214,7 @@ Fixed in advance so the run cannot be extended until it says something flatterin
    there is no interim look to stop at.
 3. **Checkpointing resumes to N and never past it.** The harness follows the
    resume-on-`(task, seed, cell)`-key pattern already used by
-   [`benchmarks/harness_injection/runner.py`](../../benchmarks/harness_injection/runner.py),
+   [`benchmarks/harness_injection/runner.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/runner.py),
    so an interrupted run is resumable rather than a total loss — and a resumed run terminates
    at the same N as an uninterrupted one.
 4. **An aborted run is published as aborted**, with its actual N and its actual (wider)
@@ -242,7 +242,7 @@ inconclusive run.
 | **Cells A/C fail to reproduce the paper** | Reported as a failed reproduction, naming the harness and the discrepancy — not quietly rescoped into a different study. |
 
 **Commitment.** Whatever this returns is published in this file, in
-[`BENCHMARK.md`](../../BENCHMARK.md), and in `PRIOR_ART.md`, within **14 days** of the run
+[`BENCHMARK.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/BENCHMARK.md), and in `PRIOR_ART.md`, within **14 days** of the run
 completing, in the direction it actually landed. The README row and the
 `scripts/check_benchmark_freshness.py` marker are updated in the same pull request.
 

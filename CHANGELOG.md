@@ -89,6 +89,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a reproduction of their method is not their system, and may not be used to retire the
   no-head-to-head sentence.
 
+### Fixed
+
+- **The CI `docs` job caught a link pattern nothing local was watching.** The
+  pre-registration first landed linking out of the docs tree (`../../PRIOR_ART.md`,
+  `../../BENCHMARK.md`, and two `benchmarks/harness_injection/*.py` files). `check_links.py`
+  passed, because it resolves relative links from the **repo root** and those targets exist
+  there. `mkdocs build --strict` does not: it resolves within `docs/` only, where a link that
+  leaves the tree is a warning and a warning is a failure. Five warnings, one red job, eight
+  green ones.
+
+  Converted to absolute `blob/main` URLs, which is what every other `docs/` page already does
+  for root-level and source files — that new file was the only one in the repo using the
+  `../../*.md` form. Added `make check-docs` so the gate has a local entry point: the two
+  checks look interchangeable and are not, and the comment on the target says which one
+  catches what.
+
 ### Changed
 
 - **README positioning sharpened against the 2027 protocol direction.** Three sentences at the
