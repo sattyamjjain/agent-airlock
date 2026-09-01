@@ -1662,7 +1662,7 @@
 <h1 id="pre-registration-deny-by-default-gate-vs-task-conditioned-least-privilege-post-training">Pre-registration: deny-by-default gate vs. task-conditioned least-privilege post-training<a class="headerlink" href="#pre-registration-deny-by-default-gate-vs-task-conditioned-least-privilege-post-training" title="Permanent link">&para;</a></h1>
 <p><strong>This is a protocol, not a result. No data has been collected. Nothing below reports an
 outcome, because at the time of writing there is no outcome to report.</strong></p>
-<p><a href="../../PRIOR_ART.md"><code>PRIOR_ART.md</code></a> records arXiv:2608.18351 and says, in these words:</p>
+<p><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/PRIOR_ART.md"><code>PRIOR_ART.md</code></a> records arXiv:2608.18351 and says, in these words:</p>
 <blockquote>
 <p><strong>There is no head-to-head. Nobody has run this library's gate on their 500 held-out tasks,
 and until somebody does, the honest claim is complementarity and not superiority.</strong></p>
@@ -1685,7 +1685,7 @@ success?</p>
 study:</p>
 <ul>
 <li><strong>A reduction</strong> would be the first evidence for the complementarity argument
-  <a href="../../PRIOR_ART.md"><code>PRIOR_ART.md</code></a> currently makes as reasoning rather than as evidence.</li>
+  <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/PRIOR_ART.md"><code>PRIOR_ART.md</code></a> currently makes as reasoning rather than as evidence.</li>
 <li><strong>No reduction</strong> would mean the gate, for this population of agents, refuses only calls a
   least-privilege-trained policy was not going to make. <code>PRIOR_ART.md</code> already names that
   possibility in its own words — <em>"a gate whose marginal measured value is zero"</em> — and
@@ -1841,7 +1841,7 @@ two cells. A gate can drive excess authority to zero by refusing everything. The
 result is meaningless without this number beside it, so a reduction in excess authority
 accompanied by a fall in safe success is reported as a <strong>cost</strong>, not a win.</p>
 <p><strong>Intervals.</strong> 95% Wilson score, <code>z = 1.96</code>, computed by
-<a href="../../benchmarks/harness_injection/power.py"><code>benchmarks/harness_injection/power.py</code></a>
+<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/power.py"><code>benchmarks/harness_injection/power.py</code></a>
 (<code>wilson_interval</code>) — the same module and the same pinned <code>z</code> as every other published
 interval in this repository, so two derivations cannot silently disagree.</p>
 <p><strong>Paired test.</strong> McNemar's exact test on discordant pairs. <strong>This function does not exist in
@@ -1908,7 +1908,7 @@ result worth publishing.</p>
    there is no interim look to stop at.</li>
 <li><strong>Checkpointing resumes to N and never past it.</strong> The harness follows the
    resume-on-<code>(task, seed, cell)</code>-key pattern already used by
-   <a href="../../benchmarks/harness_injection/runner.py"><code>benchmarks/harness_injection/runner.py</code></a>,
+   <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/runner.py"><code>benchmarks/harness_injection/runner.py</code></a>,
    so an interrupted run is resumable rather than a total loss — and a resumed run terminates
    at the same N as an uninterrupted one.</li>
 <li><strong>An aborted run is published as aborted</strong>, with its actual N and its actual (wider)
@@ -1955,7 +1955,7 @@ inconclusive run.</p>
 </tbody>
 </table>
 <p><strong>Commitment.</strong> Whatever this returns is published in this file, in
-<a href="../../BENCHMARK.md"><code>BENCHMARK.md</code></a>, and in <code>PRIOR_ART.md</code>, within <strong>14 days</strong> of the run
+<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/BENCHMARK.md"><code>BENCHMARK.md</code></a>, and in <code>PRIOR_ART.md</code>, within <strong>14 days</strong> of the run
 completing, in the direction it actually landed. The README row and the
 <code>scripts/check_benchmark_freshness.py</code> marker are updated in the same pull request.</p>
 <p>A null result ships as a null result. The repository already does this — the multi-harness
