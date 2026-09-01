@@ -52,6 +52,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refreshed to match. `tests/test_numeric_claim_parity.py` failed on all five until they
   were, which is that gate working rather than a chore discovered by reading.
 
+### Registered
+
+- **Pre-registered the head-to-head this repo has been naming as absent since 2026-08-25.**
+  [`docs/studies/task-conditioned-least-privilege-head-to-head.md`](docs/studies/task-conditioned-least-privilege-head-to-head.md),
+  **registered 2026-09-01 against repo state `0085d3f`, with no data collected.**
+  `PRIOR_ART.md` has said since `222e187` that *"there is no head-to-head... the honest claim
+  is complementarity and not superiority"*. This is the protocol for removing that sentence,
+  fixed before the numbers exist.
+
+  **The date is the point.** A protocol published before the data is a credibility asset; the
+  identical document written afterwards is a rationalisation, and the only thing separating
+  them is a timestamp on the record. So the registration section names the parent commit, the
+  pinned airlock version, and states plainly that no data has been collected — and the file
+  itself explains that a document cannot contain the hash of the commit that introduces it,
+  naming the `git log --diff-filter=A` invocation that recovers it. If the commit adding the
+  protocol is ever the same commit that adds a result, it was not a pre-registration.
+
+  Fixed in advance: the question (phrased so a null is publishable), the four-cell matched
+  design, **the in-envelope benign control** and the pre-committed rule that a control firing
+  *withdraws the interpretation* rather than the number, the primary metric (the exact number
+  `PRIOR_ART.md` already named as unmeasured), the stopping rule, and a table of results that
+  would make this library look worse with a 14-day commitment to publish them anyway.
+
+  Two admissions the protocol makes against itself, both computed from
+  `benchmarks/harness_injection/power.py` rather than asserted: at n = 2,896 the design
+  **cannot resolve a halving** of the 0.79% residual (12/2,896 overlaps the gate-off
+  interval), and the paired statistic it requires — McNemar exact — **does not exist in this
+  repository yet**, so it must be implemented and tested before the run rather than chosen
+  after seeing the data. The publishable null is bounded: zero discordant pairs would cap the
+  gate's marginal benefit at 95% **[0.00%, 0.13%]**.
+
+  **The study cannot run today, and says so.** Checked 2026-09-01: arXiv:2608.18351 ships no
+  public code, weights, harness or task set, and is under IEEE review. Execution is gated on
+  artifact access, and reimplementation is explicitly ruled out as a route to a head-to-head —
+  a reproduction of their method is not their system, and may not be used to retire the
+  no-head-to-head sentence.
+
+### Changed
+
+- **README positioning sharpened against the 2027 protocol direction.** Three sentences at the
+  top of *Where this sits*, all dated and linked rather than asserted: the
+  [MCP roadmap](https://modelcontextprotocol.io/development/roadmap) (updated **2026-08-22**)
+  targets DPoP, Workload Identity Federation (SEP-1933) and RFC 8693 token exchange for the
+  protocol itself alongside progressive tool discovery, and the platform gateways already hold
+  the network boundary — Azure API Management extended `llm-content-safety` over MCP
+  tool-call arguments and A2A payloads at Build 2026, and AWS Bedrock AgentCore Gateway ships
+  ingress and egress authentication with human-approval gates.
+
+  The framing is deliberately **not** defensive: identity and transport moving up the stack is
+  stated as a good thing, with no claim that the gateways are inadequate. What is claimed is a
+  different layer, named precisely — identity answers *who is calling*, a gateway answers *may
+  this call pass*, and neither answers whether a specific argument in a specific tool call is
+  well-formed, in-contract and free of arguments the model invented, because that needs the
+  tool's own `inputSchema` at the moment of invocation.
+
+  Claim surface re-checked for anything contradicting it: nothing in `README.md` or `docs/`
+  claims to replace a gateway, an identity layer or OAuth, and no self-branding as a firewall
+  survives — the de-branding landed in v0.6.x and is held by
+  `test_shipped_source_and_docs_do_not_self_brand_as_firewall`. The remaining "firewall"
+  strings are CHANGELOG history, other vendors' product names, and distribution guidance
+  saying not to use the word.
+
 ### Verified
 
 - **0.8.83 smoke-tested against the published wheel**, in a clean venv from
