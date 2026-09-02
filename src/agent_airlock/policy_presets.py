@@ -5729,6 +5729,83 @@ def no_false_success_defaults(
     }
 
 
+@preset
+def mcp_tool_definition_pin_defaults(
+    *,
+    enforce: bool = True,
+) -> dict[str, Any]:
+    """Pin a tool's definition on approval and deny on drift (v0.8.84+, OWASP ASI04).
+
+    Closes the rug-pull leg of ASI04. ``mcp_attested_admission_defaults`` verifies a signed
+    clearance and then gates on ``allowed_tools``, which is a set of tool **names** — a
+    server that keeps the name may change the description and ``inputSchema`` the name
+    refers to, and the pre-existing stack admits that call. This preset pins the definition
+    itself and refuses it when it moves.
+
+    Composes with, and does not replace, ``mcp_description_manifest_guard_defaults`` (is the
+    description honest about the contract) and ``mcp_schema_2020_12_contract_defaults`` (can
+    the contract be redefined by a fetched document). This one answers only: is this the
+    contract that was approved?
+
+    Args:
+        enforce: ``False`` makes ``check_tool`` observe and report without raising, for an
+            operator who wants to see drift before refusing on it. Defaults to ``True``.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` keys, plus:
+
+        - ``approve(definition)`` — pin a reviewed definition; returns its digest.
+        - ``check_tool(definition)`` — raises
+          :class:`~agent_airlock.mcp_spec.tool_definition_pin_guard.ToolDefinitionDriftError`
+          on an unpinned or drifted tool.
+        - ``inspect(definition)`` — the
+          :class:`~agent_airlock.mcp_spec.tool_definition_pin_guard.ToolDefinitionDecision`
+          without raising.
+        - ``guard`` — the underlying ``ToolDefinitionPinGuard``.
+        - ``drift_error`` — the ``ToolDefinitionDriftError`` type.
+
+    References:
+        - OWASP Top 10 for Agentic Applications (2026), ASI04 Agentic Supply Chain
+          Vulnerabilities.
+    """
+    from .mcp_spec.tool_definition_pin_guard import (
+        ToolDefinitionDecision,
+        ToolDefinitionDriftError,
+        ToolDefinitionPinGuard,
+    )
+
+    guard = ToolDefinitionPinGuard(enforce=enforce)
+
+    def _approve(definition: Mapping[str, Any]) -> str:
+        return guard.approve(definition)
+
+    def _check_tool(definition: Mapping[str, Any]) -> ToolDefinitionDecision:
+        return guard.validate(definition)
+
+    def _inspect(definition: Mapping[str, Any]) -> ToolDefinitionDecision:
+        return guard.check(definition)
+
+    return {
+        "preset_id": "mcp_tool_definition_pin",
+        "severity": "high",
+        "default_action": "deny",
+        "owasp": "ASI04",
+        "approve": _approve,
+        "check_tool": _check_tool,
+        "inspect": _inspect,
+        "guard": guard,
+        "drift_error": ToolDefinitionDriftError,
+        "advisory_url": (
+            "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/"
+        ),
+    }
+
+
+# Named preset constant for ergonomic opt-in.
+MCP_TOOL_DEFINITION_PIN = mcp_tool_definition_pin_defaults()
+
+
 __all__ = [
     # Factory functions (stateless; use these for dynamic overrides)
     "gtg_1002_defense_policy",
@@ -5867,4 +5944,7 @@ __all__ = [
     "mcp_tasks_2026_07_28_defaults",
     "mcp_elicitation_provenance_2026_07_defaults",
     "mcp_attested_admission_defaults",
+    # V0.8.84 ASI04 rug-pull: pin a tool definition on approval, deny on drift.
+    "mcp_tool_definition_pin_defaults",
+    "MCP_TOOL_DEFINITION_PIN",
 ]

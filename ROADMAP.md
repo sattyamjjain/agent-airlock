@@ -17,6 +17,24 @@ Shape is Now / Next / Later, ordered by how bounded the work is, not by importan
 
 ## Shipped since this file was last accurate
 
+- **OWASP ASI04 answered rather than raised (v0.8.84).** The question was whether ASI04 is
+  Partial because coverage is incomplete or because part of it is out of scope for an
+  in-process argument validator. Enumerated against the codebase, the answer is both.
+
+  Uncovered but in scope, now implemented: **tool-definition rug-pull**. A tool approved once
+  could be re-served under the same name with a changed description or `inputSchema`.
+  `attested_admission` gates on tool *names*, so nothing refused that call.
+  `mcp_spec/tool_definition_pin_guard.py` pins the contract and denies on drift.
+
+  Out of scope by architecture, now stated in the legend rather than left as an open gap:
+  model checkpoint compromise, on-disk package compromise, and AIBOM/SCA inventory. Each names
+  the layer that covers it.
+
+  The row also under-credited three guards already in the tree
+  (`description_manifest_guard`, `schema_ref_guard`, `attested_admission`). The coverage label
+  is still Partial. Issue [#124](https://github.com/sattyamjjain/agent-airlock/issues/124) was
+  closed 2026-08-06 without the coverage being raised, and this is the work that closed it.
+
 - **An MCP conformance suite is run and the result is published.**
   ([#122](https://github.com/sattyamjjain/agent-airlock/issues/122), closed 2026-08-05.)
   The README no longer says "no MCP conformance suite has been run against this package";
@@ -62,19 +80,9 @@ demonstrated a real behaviour at 1-in-36. Bounding rare behaviour needs n ≈ 74
 
 ## Next
 
-**Raise OWASP ASI04 (Agentic Supply Chain) coverage from Partial.**
-([#124](https://github.com/sattyamjjain/agent-airlock/issues/124) was closed 2026-08-06 — but
-the matrix row still reads **Partial** today, so the issue was closed and the coverage was
-not raised. Recording that rather than letting a closed ticket imply otherwise.)
-
-The OWASP Agentic Security coverage matrix marks **ASI04** as *Partial* — the README legend's
-word for a meaningful control shipping without full mitigation claimed. Today that row is the
-Ox MCP STDIO sanitizer, the CVE regression suite, session-snapshot integrity, and the
-spawn-time config pin. The README is also explicit about *why* it stays Partial: on-disk
-supply-chain compromise that lands before any tool call exists to validate is the wrong layer
-for an in-process argument validator, and that boundary is stated deliberately. Raising this
-row means either covering more of the runtime supply-chain class, or concluding the remainder
-is genuinely out of scope and saying so in the legend instead of leaving it as an open gap.
+_The ASI04 item that sat here was resolved in v0.8.84. It is recorded under
+"Shipped since this file was last accurate" rather than deleted, because a roadmap that
+quietly drops items reads the same as one that never had them._
 
 ## Later
 
