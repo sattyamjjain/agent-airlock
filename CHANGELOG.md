@@ -9,6 +9,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(no entries yet)
+
+## [0.8.84] - 2026-09-02
+
+### Added
+
+- **`mcp_spec/tool_definition_pin_guard.py`, closing the ASI04 rug-pull leg.** A tool is
+  approved once, then pinned by a `sha256` digest over its `name`, `description` and
+  `inputSchema`. If the same server later serves the same name with a different contract,
+  the call is refused and the decision names which field moved.
+
+  This gap was verified absent before it was filled. `attested_admission` gates on
+  `allowed_tools: frozenset[str]`, which is a set of tool *names*, and it checks membership
+  by name. So a server could keep the name `send_report` and change what it does. A grep for
+  tool-definition hashing or pinning returned nothing anywhere in the tree. The mechanism is
+  not new to this repo. `mcp/cimd.py` already pins a Client ID Metadata Document and denies
+  on drift. This points the same mechanism at a different object.
+
+  Deny-by-default, with no trust-on-first-use. An unapproved tool is refused, not learned. A
+  rotation is never accepted automatically. The only way forward is another explicit
+  `approve()`, which is an operator decision.
+
+  `policy_presets.mcp_tool_definition_pin_defaults` is registered, tagged `ASI04`, and brings
+  the preset count to 77. 23 tests cover both directions. Positive fixtures are description
+  drift, schema widening, a reopened `additionalProperties`, multi-field drift and the
+  unpinned case. Benign fixtures assert that key reordering, unpinned sibling keys and a
+  re-approved rotation are all allowed, because an over-firing supply-chain control is one
+  that gets switched off.
+
+- **`tests/owasp_agentic_coverage/test_readme_docs_parity.py`.** The OWASP matrix is published
+  twice, in `README.md` and in the generated `docs/owasp-agentic-2026-coverage.md`. The
+  byte-diff test protected the generated copy from drifting away from its own YAML source.
+  Nothing protected the two surfaces from drifting away from each other.
+
+  The gate compares the risk ID set and the coverage label per ID, which is the security
+  claim, plus the risk name after normalising presentation. `Memory & Context Poisoning` and
+  `Memory and Context Poisoning` are the same row and both spellings are live today. Module
+  lists are deliberately not compared, because the README cites every contributing module and
+  the YAML schema holds exactly one per risk. Comparing those would produce a permanently red
+  gate, and a permanently red gate gets deleted.
+
+  Five seeded-mismatch tests assert the comparison actually fails, since a parity gate nobody
+  has watched fail is the defect it exists to prevent. Verified by flipping the live ASI04
+  row to Full and confirming the failure names the coverage disagreement.
+
+### Changed
+
+- **ASI04 stays Partial, and the legend now explains what that means.** The question was
+  whether ASI04 is Partial because coverage is incomplete or because part of it is
+  architecturally out of scope. The evidenced answer is both, and the README was describing
+  the split in the wrong place.
+
+  A fourth legend category is added: **out of scope (boundary)**. Some sub-behaviours are not
+  unimplemented, they are unobservable from where this library runs. Calling those "Partial"
+  implies a gap that more work here would close, and more work here would not. Three ASI04
+  legs move into it, each naming the layer that can cover it. Model checkpoint compromise
+  goes to model signing at load time, because airlock never sees weights. On-disk package
+  compromise, such as the 2026-08-04 `keyv` npm worm, goes to build and CI scanning. AIBOM
+  and SCA inventory goes to the build pipeline.
+
+  The coverage label itself is unchanged. Moving a row to Full because the awkward parts were
+  relabelled would be the flattering answer rather than the honest one.
+
+- **The ASI04 row now credits what already shipped.** The row cited the STDIO sanitizer, the
+  CVE suite, session integrity and the config pin. It did not cite three guards that were
+  already in the tree and are squarely ASI04. `description_manifest_guard` handles tool and
+  description poisoning, and its own docstring calls it "the classic tool-poisoning shape".
+  `schema_ref_guard` handles schema poisoning, where a fetched document can redefine the
+  contract after review. `attested_admission` handles signed-clearance provenance. The row
+  was understating the library, which is a less common failure here than overstating it, but
+  it is still a matrix that did not match the code.
+
+- `ROADMAP.md` moves the ASI04 item out of Next, recording what was implemented, what was
+  reclassified as a boundary, and that issue #124 was closed on 2026-08-06 without the
+  coverage being raised.
+
 ### Added
 
 - **A gate that compares the declared version to the registry, not to the repo.**

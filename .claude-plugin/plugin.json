@@ -1,9 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/schemas/plugin.schema.json",
   "name": "agent-airlock",
-  "version": "0.8.83",
+  "version": "0.8.84",
   "description": "A deny-by-default type-checker and contract layer for AI agent tool calls: strict Pydantic argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks. In-process, Pydantic-only.",
-  "summary": "A deny-by-default type-checker and contract layer for AI agent tool calls — the in-process check that runs beneath your MCP gateway.",
+  "summary": "A deny-by-default type-checker and contract layer for AI agent tool calls \u2014 the in-process check that runs beneath your MCP gateway.",
   "homepage": "https://github.com/sattyamjjain/agent-airlock",
   "repository": {
     "type": "git",
