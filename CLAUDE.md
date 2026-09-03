@@ -170,7 +170,7 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   Each layer exists because an earlier one proved insufficient for a specific CVE.
 - **Guard triple, split across two files** — `<Name>Guard` + `<Name>Decision` +
   `<Name>Verdict` in `mcp_spec/` (re-exported via its `__all__`), and the matching
-  `*_defaults()` factory in `policy_presets.py`, `@preset`-registered (51 of 51 are).
+  `*_defaults()` factory in `policy_presets.py`, `@preset`-registered (53 of 53 are).
   A guard with no registered preset never shows up in `list_active()`.
 - **Deny-by-default** — unknown tier, unregistered manifest, and unpinned spec revision all
   fail closed. New branches should preserve that direction.
@@ -193,8 +193,8 @@ carrying `fix_hints` for the model to retry against, rather than raising.
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-History is dominated by `feat:` and `fix:`, with recurring `bench:` and `docs:` work
-(last 120 commits: 41 `feat:`, 21 `fix:`, 11 `bench:`, 10 `docs:`). Three themes drive
+History is dominated by `feat:` and `fix:`, with recurring `docs:` and `bench:` work
+(last 120 commits: 51 `feat:`, 23 `fix:`, 13 `docs:`, 11 `bench:`). Three themes drive
 most recent development:
 
 1. **Per-CVE guards.** Most `feat:` commits add one guard for one named advisory
