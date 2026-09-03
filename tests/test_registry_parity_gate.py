@@ -20,9 +20,13 @@ from __future__ import annotations
 
 import pytest
 from scripts.check_registry_parity import (
+    MAX_DOCUMENTED_AHEAD,
     MAX_RELEASES_AHEAD,
     MAX_UNPUBLISHED_DAYS,
     evaluate,
+    evaluate_documented_vs_tagged,
+    newest_documented_version,
+    newest_tagged_version,
     parse_version,
     releases_ahead,
 )
@@ -32,6 +36,57 @@ from scripts import check_registry_parity as gate
 #: The exact state of the world this gate was written for.
 SHIPPED_REPO = "0.8.83"
 SHIPPED_REGISTRY = "0.8.82"
+
+#: A CHANGELOG that documents a release the tags never reached. ``0.8.85`` is written and
+#: dated while the newest tag is still ``v0.8.83``, which means ``0.8.84`` was written up
+#: and never cut. This is the 2026-09-02 failure, one cycle later — the point at which it
+#: becomes visible.
+CHANGELOG_AHEAD = """\
+# Changelog
+
+All notable changes to Agent-Airlock are documented here.
+
+---
+
+## [Unreleased]
+
+(no entries yet)
+
+## [0.8.85] - 2026-09-03
+
+### Added
+
+- A bidirectional version guard.
+
+## [0.8.84] - 2026-09-02
+
+### Added
+
+- Tool-definition pinning.
+
+## [0.8.83] - 2026-08-26
+
+### Fixed
+
+- An older thing.
+"""
+
+#: Raw ``git tag --list`` output for a repo whose tags stop at 0.8.83. Deliberately mixed
+#: with non-release refs: the parser must ignore them rather than choke.
+TAGS_BEHIND = "nightly\nv0.8.81\nv0.8.82\nv0.8.83\nv0.8.9\n"
+
+
+@pytest.fixture(autouse=True)
+def _neutral_changelog_tag_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the CHANGELOG-vs-tag condition to "indeterminate" for tests not about it.
+
+    ``main`` gained a third condition that reads the real repository. Without this, every
+    test that reaches ``main`` would silently also assert something about today's CHANGELOG,
+    and a real drift would redden tests that are not about it. The tests that *are* about
+    condition 3 set their own values, which win over this fixture.
+    """
+    monkeypatch.setattr(gate, "documented_version", lambda: None)
+    monkeypatch.setattr(gate, "tagged_version", lambda: None)
 
 
 class TestTheConditionThatShipped:
@@ -178,3 +233,140 @@ class TestLiveRepoState:
     def test_constants_are_the_documented_thresholds(self) -> None:
         assert MAX_RELEASES_AHEAD == 1
         assert MAX_UNPUBLISHED_DAYS == 3
+
+
+class TestChangelogAheadOfTags:
+    """Condition 3: the CHANGELOG documented a release that was never tagged.
+
+    On 2026-09-02 the repo wrote and dated a full ``## [0.8.84] - 2026-09-02`` section and
+    never cut the tag. Nothing was red: ``check_version_tagged.py`` grants a one-commit
+    grace and the bump *was* HEAD, ``check_changelog_heading.py`` found its heading and
+    stopped, and this gate's distance check saw the one release of separation that is
+    normal between a bump and a release.
+
+    The lesson generalises past the incident: a guard that only checks one direction of
+    drift is a guard against one kind of mistake.
+    """
+
+    def test_a_changelog_ahead_of_the_tags_fails(self) -> None:
+        """The fixture CHANGELOG documents 0.8.85 while tags stop at 0.8.83."""
+        documented = newest_documented_version(CHANGELOG_AHEAD)
+        tagged = newest_tagged_version(TAGS_BEHIND)
+        assert (documented, tagged) == ("0.8.85", "0.8.83")
+
+        failures = evaluate_documented_vs_tagged(documented, tagged)
+        assert failures, (
+            "CHANGELOG documents 0.8.85 with tags stopping at v0.8.83 — 0.8.84 was written "
+            "up and never cut. If this passes, condition 3 is decorative."
+        )
+
+    def test_the_failure_names_both_surfaces_and_the_remedy(self) -> None:
+        """A gate that fails without naming the remedy gets worked around, not obeyed."""
+        (message,) = evaluate_documented_vs_tagged("0.8.85", "0.8.83")
+        assert "0.8.85" in message and "v0.8.83" in message
+        assert "git tag -a v0.8.85" in message
+        assert "gh release create" in message
+        assert "[Unreleased]" in message, "the roll-back path must be offered too"
+
+    def test_main_exits_1_on_that_pair(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """End-to-end through main: the wiring, not only the arithmetic."""
+        monkeypatch.setattr(gate, "declared_version", lambda: "0.8.85")
+        monkeypatch.setattr(gate, "registry_version", lambda: "0.8.85")
+        monkeypatch.setattr(gate, "bump_age_days", lambda _v: 0)
+        monkeypatch.setattr(gate, "documented_version", lambda: "0.8.85")
+        monkeypatch.setattr(gate, "tagged_version", lambda: "0.8.83")
+        assert gate.main([]) == 1
+
+    def test_it_fails_at_publish_time_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unlike the age check, this condition cannot deadlock its own remedy.
+
+        Tagging is what fixes it, and the tag exists before publish.yml runs, so the
+        condition is safe to enforce in ``--distance-only`` mode.
+        """
+        monkeypatch.setattr(gate, "declared_version", lambda: "0.8.85")
+        monkeypatch.setattr(gate, "registry_version", lambda: "0.8.85")
+        monkeypatch.setattr(gate, "bump_age_days", lambda _v: 0)
+        monkeypatch.setattr(gate, "documented_version", lambda: "0.8.85")
+        monkeypatch.setattr(gate, "tagged_version", lambda: "0.8.83")
+        assert gate.main(["--distance-only"]) == 1
+
+
+class TestChangelogConditionBoundary:
+    """Where condition 3 deliberately stops, so the boundary is a decision on the record."""
+
+    def test_one_cycle_ahead_passes_by_design(self) -> None:
+        """The 2026-09-02 state itself passes — and that is the documented threshold.
+
+        One dated section ahead of the newest tag is the ordinary state for the minutes
+        between writing the release commit and pushing the tag. A gate firing there would
+        fire on every release and be switched off within a week. The single-cycle case is
+        condition 2's age check; this one catches the release *after* it.
+        """
+        assert evaluate_documented_vs_tagged("0.8.84", "0.8.83") == []
+
+    def test_equal_passes(self) -> None:
+        assert evaluate_documented_vs_tagged("0.8.84", "0.8.84") == []
+
+    def test_a_clean_minor_rollover_is_one_release_not_a_gap(self) -> None:
+        assert evaluate_documented_vs_tagged("0.9.0", "0.8.83") == []
+
+    def test_a_rollover_that_also_skips_a_patch_fails(self) -> None:
+        assert evaluate_documented_vs_tagged("0.9.1", "0.8.83")
+
+    def test_a_tag_ahead_of_the_changelog_is_not_this_gates_seam(self) -> None:
+        """check_changelog_heading.py owns that direction; two gates, one owner is worse."""
+        assert evaluate_documented_vs_tagged("0.8.83", "0.8.84") == []
+
+
+class TestChangelogConditionIsLenient:
+    """Indeterminate must never mean red — that is how a gate gets switched off."""
+
+    @pytest.mark.parametrize(
+        ("documented", "tagged"),
+        [(None, "0.8.83"), ("0.8.85", None), (None, None)],
+    )
+    def test_missing_surfaces_pass(self, documented: str | None, tagged: str | None) -> None:
+        assert evaluate_documented_vs_tagged(documented, tagged) == []
+
+    def test_a_tagless_checkout_passes(self) -> None:
+        """publish.yml checks out without fetch-tags, so this is its routine state."""
+        assert newest_tagged_version("") is None
+        assert evaluate_documented_vs_tagged("0.8.85", newest_tagged_version("")) == []
+
+    def test_unparseable_versions_pass(self) -> None:
+        assert evaluate_documented_vs_tagged("main", "0.8.83") == []
+
+
+class TestChangelogParsing:
+    def test_unreleased_is_not_a_documented_release(self) -> None:
+        """An undated [Unreleased] section makes no claim to have shipped."""
+        assert newest_documented_version("## [Unreleased]\n\n(no entries yet)\n") is None
+
+    def test_it_picks_the_newest_not_the_first(self) -> None:
+        out_of_order = (
+            "## [0.8.83] - 2026-08-26\n## [0.8.85] - 2026-09-03\n## [0.8.84] - 2026-09-02\n"
+        )
+        assert newest_documented_version(out_of_order) == "0.8.85"
+
+    def test_a_four_component_hotfix_outranks_its_base(self) -> None:
+        """0.5.7.1 and 0.5.6.1 shipped; truncating to a triple would tie them."""
+        assert (
+            newest_documented_version("## [0.5.7] - 2026-01-01\n## [0.5.7.1] - 2026-01-02\n")
+            == "0.5.7.1"
+        )
+
+    def test_non_release_refs_are_ignored(self) -> None:
+        assert newest_tagged_version(TAGS_BEHIND) == "0.8.83"
+
+    def test_no_headings_at_all(self) -> None:
+        assert newest_documented_version("# Changelog\n\nnothing here\n") is None
+
+
+class TestLiveChangelogTagPair:
+    """The real pair, asserted last and for what it is worth."""
+
+    def test_the_repo_is_not_currently_documenting_an_untagged_release(self) -> None:
+        assert evaluate_documented_vs_tagged(gate.documented_version(), gate.tagged_version()) == []
+
+    def test_the_threshold_is_the_documented_one(self) -> None:
+        assert MAX_DOCUMENTED_AHEAD == 1

@@ -11,6 +11,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.8.85] - 2026-09-03
+
+### Added
+
+- **A third condition in `check_registry_parity.py`: the CHANGELOG documented a release that
+  was never tagged.** The newest dated `## [x.y.z] - YYYY-MM-DD` heading is compared against
+  the newest `vX.Y.Z` git tag, and more than one release cycle of separation fails.
+
+  The mechanism, stated plainly, because it is the point and not the incident: **a guard
+  that only checks one direction of drift is a guard against one kind of mistake.** The two
+  conditions added on 2026-08-31 (`0085d3f`) compared the declared version against PyPI —
+  one direction, the one that had just burned us. On 2026-09-02 the repo wrote and dated a
+  full `## [0.8.84] - 2026-09-02` section and never cut the tag, and nothing was red:
+  `check_version_tagged.py` grants a one-commit grace and the bump commit *was* `HEAD`;
+  `check_changelog_heading.py` found its heading and stopped there; and this gate's own
+  distance check saw the single release of separation that is normal between a bump and a
+  release. Three green gates, one documented release nobody could install. The same two
+  surfaces can disagree in more than one way, and covering the direction that burned you
+  last time says nothing about the others.
+
+  **What it does not catch, on the record.** At `MAX_DOCUMENTED_AHEAD = 1` this would *not*
+  have failed on 2026-09-02 itself. One dated section ahead of the newest tag is the
+  ordinary state for the minutes between writing the release commit and pushing the tag, and
+  a gate that fires there fires on every release and is switched off within a week. What it
+  catches is the next one: the moment an `0.8.85` section is written while the tags still
+  stop at `v0.8.83`, the untagged `0.8.84` becomes visible and the gate fails. The
+  single-cycle stall is condition 2's job — its `MAX_UNPUBLISHED_DAYS` age check on the
+  pyproject-vs-PyPI axis would have reddened the 2026-09-02 drift on 2026-09-05. The three
+  conditions compose: distance catches the gap, age catches the stall, this catches
+  documentation that ran ahead of what shipped.
+
+  Lenient in every indeterminate direction, like the rest of the gate: no dated headings, no
+  release tags (`publish.yml` checks out without `fetch-tags`, so this is its routine state),
+  or an unparseable pair all pass rather than redden. A tag *ahead* of the CHANGELOG is
+  deliberately not covered here — that is `check_changelog_heading.py`'s seam, and two gates
+  with one owner is worse than one.
+
+  21 new tests (25 to 46 in `tests/test_registry_parity_gate.py`), including a fixture
+  CHANGELOG documenting `0.8.85` against tags stopping at `v0.8.83`. Neutering the condition
+  fails 5 of them, which is the check that the tests witness the failure rather than
+  describe it.
+
+### Changed
+
+- **README leads with the limitation instead of burying it.** The head-to-head
+  pre-registration filed 2026-09-01 (`1dd00f5`) was reachable only from the documentation
+  table near line 1678. Its single strongest claim is a limitation, so that is what now sits
+  in the opening: there is no head-to-head against task-conditioned least-privilege
+  post-training (arXiv:2608.18351), nobody has run this library's gate on those 500 held-out
+  tasks, and the honest claim is complementarity rather than superiority. The sentence is
+  `PRIOR_ART.md`'s own, on the record since `222e187` (2026-08-25); no adjective was added to
+  soften it, and the note that the protocol cannot run until the authors release their
+  harness and task set is stated in the same breath rather than left as an absence.
+
 ## [0.8.84] - 2026-09-02
 
 ### Added

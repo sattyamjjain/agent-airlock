@@ -19,7 +19,8 @@ against the **external registry**, which is the only surface a user actually rec
 
 What it checks
 --------------
-Two failure conditions, both only meaningful while the repo is *ahead* of the registry:
+Three failure conditions. The first two are only meaningful while the repo is *ahead* of
+the registry:
 
 1. **Distance.** More than one release ahead of PyPI means an earlier version was declared
    and never published — the drift already happened and went unnoticed. A single patch
@@ -28,6 +29,44 @@ Two failure conditions, both only meaningful while the repo is *ahead* of the re
 2. **Age.** One release ahead is normal for hours and suspicious for days. Past
    :data:`MAX_UNPUBLISHED_DAYS`, the bump commit's own date says the release was forgotten
    rather than in flight.
+3. **Documented-but-never-tagged.** The newest dated ``## [x.y.z] - YYYY-MM-DD`` heading in
+   ``CHANGELOG.md``, against the newest ``vX.Y.Z`` git tag. More than
+   :data:`MAX_DOCUMENTED_AHEAD` ahead means a release was *written up* and never cut.
+
+Why the third condition exists
+------------------------------
+Conditions 1 and 2 were added on 2026-08-31 and they check exactly one direction of drift:
+the declared version running ahead of the registry. On 2026-09-02 the repo declared
+``0.8.84``, wrote and dated a full ``## [0.8.84] - 2026-09-02`` CHANGELOG section, and never
+tagged it. Nothing was red, because every existing check was satisfied:
+``check_version_tagged.py`` grants a one-commit grace and the bump commit *was* ``HEAD``;
+``check_changelog_heading.py`` found its heading and stopped there; and this gate's own
+distance check saw exactly one release of separation, which is the normal state between a
+bump and a release.
+
+The lesson is the general one, not the specific one: **a guard that only checks one
+direction of drift is a guard against one kind of mistake.** The same two surfaces can
+disagree in more than one way, and covering the direction that burned you last time says
+nothing about the others. Condition 3 closes the direction that documentation runs ahead of
+what was actually shipped.
+
+What condition 3 does *not* catch, stated plainly
+-------------------------------------------------
+At :data:`MAX_DOCUMENTED_AHEAD` = 1 this condition **would not have failed on 2026-09-02
+itself**. One dated section ahead of the newest tag is the ordinary state for the minutes
+between writing the release commit and pushing the tag, and a gate that fires there would
+fire on every release and be switched off within a week.
+
+What it catches is the *next* one: the moment a ``0.8.85`` section is written while the tags
+still stop at ``0.8.83``, the untagged ``0.8.84`` becomes visible and the gate fails. The
+single-cycle case is left to condition 2, whose :data:`MAX_UNPUBLISHED_DAYS` age check on the
+pyproject-vs-PyPI axis would have reddened the 2026-09-02 drift on 2026-09-05. The three
+conditions are meant to compose: distance catches the gap, age catches the stall, and this
+one catches documentation that ran ahead of what shipped.
+
+Deliberately *not* covered here: a tag ahead of the CHANGELOG. That is a real drift too, but
+it is ``check_changelog_heading.py``'s seam — it already requires the declared version to
+have a conformant heading — and duplicating it here would give two gates one owner.
 
 Two modes
 ---------
@@ -64,6 +103,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _PYPROJECT = _ROOT / "pyproject.toml"
+_CHANGELOG = _ROOT / "CHANGELOG.md"
 
 #: PyPI JSON endpoint for the published project.
 PYPI_URL = "https://pypi.org/pypi/agent-airlock/json"
@@ -77,7 +117,20 @@ MAX_RELEASES_AHEAD = 1
 #: A version may sit unpublished this long before the bump reads as forgotten.
 MAX_UNPUBLISHED_DAYS = 3
 
+#: How far the newest dated CHANGELOG heading may run ahead of the newest git tag. One is
+#: the normal state: the section is written and dated in the release commit, and the tag
+#: lands moments later. Two means a release was documented and never cut.
+MAX_DOCUMENTED_AHEAD = 1
+
 _VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)")
+
+#: ``## [x.y.z] - YYYY-MM-DD``, optionally followed by a title. Three or four components:
+#: 0.5.7.1 and 0.5.6.1 shipped as historical hotfixes. Same shape as the regex in
+#: ``check_changelog_heading.py``; the two must agree on what a release heading looks like.
+_CHANGELOG_HEADING = re.compile(r"^## \[(\d+(?:\.\d+){2,3})\] - (\d{4}-\d{2}-\d{2})( .*)?$")
+
+#: ``v1.2.3`` / ``v0.5.7.1``. Anything else in ``git tag --list`` is not a release tag.
+_TAG_RE = re.compile(r"^v(\d+(?:\.\d+){2,3})$")
 
 Version = tuple[int, int, int]
 
@@ -193,6 +246,129 @@ def evaluate(
     return []
 
 
+def _order_key(version: str) -> tuple[int, int, int, int]:
+    """Sort key that keeps a four-component hotfix above its three-component base.
+
+    ``parse_version`` deliberately truncates to a triple, which would tie ``0.5.7.1`` with
+    ``0.5.7`` and make "newest" ambiguous for the two historical hotfix releases. Ordering
+    uses the fourth component; the ahead-count still uses the triple.
+    """
+    parts = [int(x) for x in version.split(".")]
+    parts += [0] * (4 - len(parts))
+    return parts[0], parts[1], parts[2], parts[3]
+
+
+def newest_documented_version(changelog_text: str) -> str | None:
+    """The newest *dated* release heading in a CHANGELOG.
+
+    ``## [Unreleased]`` is skipped on purpose: it carries no date and no claim to have
+    shipped, which is exactly the state this check wants people in before a tag exists.
+
+    Args:
+        changelog_text: Full contents of ``CHANGELOG.md``.
+
+    Returns:
+        The version string of the newest dated heading, or None if there are none.
+    """
+    found = [
+        match.group(1)
+        for line in changelog_text.splitlines()
+        if (match := _CHANGELOG_HEADING.match(line))
+    ]
+    return max(found, key=_order_key) if found else None
+
+
+def newest_tagged_version(tag_output: str) -> str | None:
+    """The newest release version in ``git tag --list`` output.
+
+    Args:
+        tag_output: Raw newline-separated stdout of ``git tag --list``.
+
+    Returns:
+        The version string of the newest ``vX.Y.Z`` tag, or None if there are none.
+    """
+    found = [
+        match.group(1)
+        for line in tag_output.splitlines()
+        if (match := _TAG_RE.match(line.strip()))
+    ]
+    return max(found, key=_order_key) if found else None
+
+
+def evaluate_documented_vs_tagged(
+    documented: str | None,
+    tagged: str | None,
+) -> list[str]:
+    """Fail when the CHANGELOG documents a release further ahead than the tags go.
+
+    Pure: no filesystem, no git, no clock. Both surfaces arrive as already-extracted
+    strings so the condition is testable without a repository.
+
+    Lenient in every indeterminate direction, matching the rest of this gate: no dated
+    headings, no release tags, or an unparseable pair all return no failures. A gate that
+    reddens a shallow clone is a gate that gets switched off.
+
+    Args:
+        documented: Newest dated CHANGELOG version, or None.
+        tagged: Newest git tag version, or None.
+
+    Returns:
+        A list of human-readable failures; empty means this condition passes.
+    """
+    if documented is None or tagged is None:
+        return []
+
+    try:
+        ahead = releases_ahead(parse_version(documented), parse_version(tagged))
+    except ValueError:
+        return []
+
+    # Equal, behind, or a single cycle of separation: the normal states. "Behind" means a
+    # tag exists with no dated section yet, which is check_changelog_heading.py's seam.
+    if ahead is not None and -1 <= ahead <= MAX_DOCUMENTED_AHEAD:
+        return []
+
+    gap = "several releases" if ahead is None else f"{ahead} releases"
+    return [
+        f"CHANGELOG.md documents {documented} but the newest git tag is v{tagged} — {gap} "
+        f"ahead (max {MAX_DOCUMENTED_AHEAD}). A release was written up and never cut, so "
+        f"the CHANGELOG describes a version nobody can install. Tag it:\n"
+        f"      git tag -a v{documented} -m v{documented} && git push origin v{documented}\n"
+        f"      gh release create v{documented} --notes-file <the CHANGELOG section>\n"
+        f"    or, if {documented} is not meant to ship, move that section back under "
+        f"[Unreleased]."
+    ]
+
+
+def documented_version() -> str | None:
+    """Newest dated CHANGELOG heading, or None when CHANGELOG.md is absent/unreadable."""
+    try:
+        return newest_documented_version(_CHANGELOG.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+
+
+def tagged_version() -> str | None:
+    """Newest release tag, or None when git is unavailable or the clone carries no tags.
+
+    ``publish.yml`` checks out without ``fetch-tags``, so this is routinely None there and
+    the condition simply does not apply.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "tag", "--list"],
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0:
+        return None
+    return newest_tagged_version(result.stdout)
+
+
 def declared_version() -> str:
     """Read ``[project].version`` out of ``pyproject.toml``."""
     match = re.search(r'^version\s*=\s*"([^"]+)"', _PYPROJECT.read_text(encoding="utf-8"), re.M)
@@ -281,6 +457,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"check_registry_parity: {exc} — skipping (not a hard fail).")
         return 0
 
+    # Runs in both modes: this condition has no age component, so it cannot deadlock a
+    # publish the way the unpublished-age check would.
+    documented = documented_version()
+    tagged = tagged_version()
+    failures += evaluate_documented_vs_tagged(documented, tagged)
+
     if failures:
         print("\ncheck_registry_parity: FAIL", file=sys.stderr)
         for item in failures:
@@ -288,7 +470,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     scope = "distance only" if args.distance_only else "distance and age"
-    print(f"check_registry_parity: OK — repo {repo}, PyPI {registry} ({scope}).")
+    changelog_scope = (
+        f", CHANGELOG {documented} vs tag v{tagged}"
+        if documented and tagged
+        else ", CHANGELOG/tag comparison skipped"
+    )
+    print(
+        f"check_registry_parity: OK — repo {repo}, PyPI {registry} "
+        f"({scope}{changelog_scope})."
+    )
     return 0
 
 
