@@ -20,15 +20,21 @@ from __future__ import annotations
 
 import pytest
 from scripts.check_registry_parity import (
+    GRANDFATHERED_UNTAGGED,
     MAX_DOCUMENTED_AHEAD,
     MAX_RELEASES_AHEAD,
     MAX_UNPUBLISHED_DAYS,
+    MAX_UNRELEASED_AHEAD,
+    documented_versions,
     evaluate,
+    evaluate_declared_vs_tagged,
     evaluate_documented_vs_tagged,
+    has_dated_heading,
     newest_documented_version,
     newest_tagged_version,
     parse_version,
     releases_ahead,
+    tagged_versions,
 )
 
 from scripts import check_registry_parity as gate
@@ -85,8 +91,8 @@ def _neutral_changelog_tag_pair(monkeypatch: pytest.MonkeyPatch) -> None:
     and a real drift would redden tests that are not about it. The tests that *are* about
     condition 3 set their own values, which win over this fixture.
     """
-    monkeypatch.setattr(gate, "documented_version", lambda: None)
-    monkeypatch.setattr(gate, "tagged_version", lambda: None)
+    monkeypatch.setattr(gate, "repo_documented_versions", list)
+    monkeypatch.setattr(gate, "repo_tagged_versions", set)
 
 
 class TestTheConditionThatShipped:
@@ -236,35 +242,59 @@ class TestLiveRepoState:
 
 
 class TestChangelogAheadOfTags:
-    """Condition 3: the CHANGELOG documented a release that was never tagged.
+    """Condition 3: a dated CHANGELOG heading with no tag behind it.
 
-    On 2026-09-02 the repo wrote and dated a full ``## [0.8.84] - 2026-09-02`` section and
-    never cut the tag. Nothing was red: ``check_version_tagged.py`` grants a one-commit
-    grace and the bump *was* HEAD, ``check_changelog_heading.py`` found its heading and
-    stopped, and this gate's distance check saw the one release of separation that is
-    normal between a bump and a release.
+    Two incidents, one shape. On 2026-09-02 the repo wrote and dated a full
+    ``## [0.8.84] - 2026-09-02`` section and never cut the tag. Nothing was red:
+    ``check_version_tagged.py`` grants a one-commit grace and the bump *was* HEAD,
+    ``check_changelog_heading.py`` found its heading and stopped, and this gate's
+    then-distance check saw the one release of separation that reads as normal.
 
-    The lesson generalises past the incident: a guard that only checks one direction of
-    drift is a guard against one kind of mistake.
+    On 2026-09-03 the commit that added condition 3 did it again at ``0.8.85`` — and
+    passed its own gate, because ``MAX_DOCUMENTED_AHEAD`` was 1. Both states are asserted
+    here, because the threshold that let the second one through was the reason for the
+    third.
     """
 
+    def test_todays_exact_state_fails(self) -> None:
+        """2026-09-04 08:30 UTC: dated [0.8.85], newest tag v0.8.84. This must be red.
+
+        The state a human had to notice, on the second consecutive morning. If this
+        passes, the gate is decorative and the next recurrence is also invisible.
+        """
+        failures = evaluate_documented_vs_tagged(["0.8.85", "0.8.84"], {"0.8.84", "0.8.83"})
+        assert failures, "the state that recurred twice must fail"
+        assert "0.8.85" in failures[0]
+
+    def test_yesterdays_state_fails_too(self) -> None:
+        """2026-09-02: dated [0.8.84], newest tag v0.8.83 — the original incident.
+
+        Under the old distance threshold this passed. It is the same shape as today's,
+        which is the whole argument for checking existence instead of distance.
+        """
+        assert evaluate_documented_vs_tagged(["0.8.84", "0.8.83"], {"0.8.83"})
+
     def test_a_changelog_ahead_of_the_tags_fails(self) -> None:
-        """The fixture CHANGELOG documents 0.8.85 while tags stop at 0.8.83."""
-        documented = newest_documented_version(CHANGELOG_AHEAD)
-        tagged = newest_tagged_version(TAGS_BEHIND)
-        assert (documented, tagged) == ("0.8.85", "0.8.83")
+        """The fixture CHANGELOG dates 0.8.85 and 0.8.84 while tags stop at v0.8.83."""
+        documented = documented_versions(CHANGELOG_AHEAD)
+        tagged = tagged_versions(TAGS_BEHIND)
+        assert documented[:2] == ["0.8.85", "0.8.84"]
+        assert newest_tagged_version(TAGS_BEHIND) == "0.8.83"
 
         failures = evaluate_documented_vs_tagged(documented, tagged)
-        assert failures, (
-            "CHANGELOG documents 0.8.85 with tags stopping at v0.8.83 — 0.8.84 was written "
-            "up and never cut. If this passes, condition 3 is decorative."
-        )
+        assert failures, "two dated sections have no tag; if this passes, condition 3 is dead"
+
+    def test_it_names_every_untagged_version_not_just_the_newest(self) -> None:
+        """A gate that reports one of two holes sends you round the loop twice."""
+        (message,) = evaluate_documented_vs_tagged(["0.8.85", "0.8.84"], {"0.8.83"})
+        assert "0.8.85" in message and "0.8.84" in message
 
     def test_the_failure_names_both_surfaces_and_the_remedy(self) -> None:
         """A gate that fails without naming the remedy gets worked around, not obeyed."""
-        (message,) = evaluate_documented_vs_tagged("0.8.85", "0.8.83")
+        (message,) = evaluate_documented_vs_tagged(["0.8.85"], {"0.8.83"})
         assert "0.8.85" in message and "v0.8.83" in message
         assert "git tag -a v0.8.85" in message
+        assert "git push --atomic" in message, "the atomic push is how you avoid tripping it"
         assert "gh release create" in message
         assert "[Unreleased]" in message, "the roll-back path must be offered too"
 
@@ -273,8 +303,8 @@ class TestChangelogAheadOfTags:
         monkeypatch.setattr(gate, "declared_version", lambda: "0.8.85")
         monkeypatch.setattr(gate, "registry_version", lambda: "0.8.85")
         monkeypatch.setattr(gate, "bump_age_days", lambda _v: 0)
-        monkeypatch.setattr(gate, "documented_version", lambda: "0.8.85")
-        monkeypatch.setattr(gate, "tagged_version", lambda: "0.8.83")
+        monkeypatch.setattr(gate, "repo_documented_versions", lambda: ["0.8.85", "0.8.84"])
+        monkeypatch.setattr(gate, "repo_tagged_versions", lambda: {"0.8.83"})
         assert gate.main([]) == 1
 
     def test_it_fails_at_publish_time_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -286,36 +316,99 @@ class TestChangelogAheadOfTags:
         monkeypatch.setattr(gate, "declared_version", lambda: "0.8.85")
         monkeypatch.setattr(gate, "registry_version", lambda: "0.8.85")
         monkeypatch.setattr(gate, "bump_age_days", lambda _v: 0)
-        monkeypatch.setattr(gate, "documented_version", lambda: "0.8.85")
-        monkeypatch.setattr(gate, "tagged_version", lambda: "0.8.83")
+        monkeypatch.setattr(gate, "repo_documented_versions", lambda: ["0.8.85"])
+        monkeypatch.setattr(gate, "repo_tagged_versions", lambda: {"0.8.83"})
         assert gate.main(["--distance-only"]) == 1
 
 
-class TestChangelogConditionBoundary:
-    """Where condition 3 deliberately stops, so the boundary is a decision on the record."""
+class TestTheThresholdIsZero:
+    """The boundary, on the record, because moving it is what caused the recurrence."""
 
-    def test_one_cycle_ahead_passes_by_design(self) -> None:
-        """The 2026-09-02 state itself passes — and that is the documented threshold.
+    def test_one_cycle_ahead_no_longer_passes(self) -> None:
+        """The regression test for the fix itself.
 
-        One dated section ahead of the newest tag is the ordinary state for the minutes
-        between writing the release commit and pushing the tag. A gate firing there would
-        fire on every release and be switched off within a week. The single-cycle case is
-        condition 2's age check; this one catches the release *after* it.
+        This exact assertion was inverted on 2026-09-03 — it asserted ``== []`` and was
+        named ``test_one_cycle_ahead_passes_by_design``. The design was wrong, so the
+        assertion flipped rather than being deleted: the record of what changed is the
+        point.
         """
-        assert evaluate_documented_vs_tagged("0.8.84", "0.8.83") == []
+        assert evaluate_documented_vs_tagged(["0.8.84"], {"0.8.83"})
+
+    def test_the_threshold_is_zero(self) -> None:
+        assert MAX_DOCUMENTED_AHEAD == 0
 
     def test_equal_passes(self) -> None:
-        assert evaluate_documented_vs_tagged("0.8.84", "0.8.84") == []
+        assert evaluate_documented_vs_tagged(["0.8.84"], {"0.8.84"}) == []
 
-    def test_a_clean_minor_rollover_is_one_release_not_a_gap(self) -> None:
-        assert evaluate_documented_vs_tagged("0.9.0", "0.8.83") == []
+    def test_every_dated_section_tagged_passes(self) -> None:
+        assert evaluate_documented_vs_tagged(["0.8.84", "0.8.83"], {"0.8.84", "0.8.83"}) == []
 
-    def test_a_rollover_that_also_skips_a_patch_fails(self) -> None:
-        assert evaluate_documented_vs_tagged("0.9.1", "0.8.83")
+    def test_a_clean_minor_rollover_still_needs_its_tag(self) -> None:
+        """Rollover leniency belongs to the distance conditions, not to an existence check."""
+        assert evaluate_documented_vs_tagged(["0.9.0"], {"0.8.83"})
+        assert evaluate_documented_vs_tagged(["0.9.0"], {"0.9.0", "0.8.83"}) == []
 
     def test_a_tag_ahead_of_the_changelog_is_not_this_gates_seam(self) -> None:
         """check_changelog_heading.py owns that direction; two gates, one owner is worse."""
-        assert evaluate_documented_vs_tagged("0.8.83", "0.8.84") == []
+        assert evaluate_documented_vs_tagged(["0.8.83"], {"0.8.84", "0.8.83"}) == []
+
+    def test_a_mid_history_hole_fails_not_only_the_newest(self) -> None:
+        """The old condition compared maxima, so a gap under the tag line was invisible."""
+        assert evaluate_documented_vs_tagged(["0.8.85", "0.8.84"], {"0.8.85", "0.8.83"})
+
+
+class TestUnreleasedIsWhereTheAllowanceLives:
+    """pyproject may run ahead of the tags only while its section is still [Unreleased]."""
+
+    def test_one_ahead_while_unreleased_passes(self) -> None:
+        """The in-flight state the strict threshold depends on being available."""
+        assert evaluate_declared_vs_tagged("0.8.86", {"0.8.85"}, declared_is_dated=False) == []
+
+    def test_two_ahead_while_unreleased_fails(self) -> None:
+        """A version in between was never cut."""
+        assert evaluate_declared_vs_tagged("0.8.87", {"0.8.85"}, declared_is_dated=False)
+
+    def test_a_dated_declared_version_is_the_other_conditions_business(self) -> None:
+        """Once dated, the existence check owns it — no distance allowance applies."""
+        assert evaluate_declared_vs_tagged("0.8.86", {"0.8.85"}, declared_is_dated=True) == []
+
+    def test_the_unreleased_allowance_is_one(self) -> None:
+        assert MAX_UNRELEASED_AHEAD == 1
+
+    def test_no_tags_passes(self) -> None:
+        assert evaluate_declared_vs_tagged("0.8.86", set(), declared_is_dated=False) == []
+
+    def test_unparseable_declared_version_passes(self) -> None:
+        assert evaluate_declared_vs_tagged("main", {"0.8.85"}, declared_is_dated=False) == []
+
+    def test_the_two_conditions_compose_on_the_real_release_shape(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Feature work: bumped, undated, one ahead, all tags present. Must be green."""
+        monkeypatch.setattr(gate, "declared_version", lambda: "0.8.86")
+        monkeypatch.setattr(gate, "registry_version", lambda: "0.8.85")
+        monkeypatch.setattr(gate, "bump_age_days", lambda _v: 0)
+        monkeypatch.setattr(gate, "repo_documented_versions", lambda: ["0.8.85", "0.8.84"])
+        monkeypatch.setattr(gate, "repo_tagged_versions", lambda: {"0.8.85", "0.8.84"})
+        assert gate.main([]) == 0
+
+
+class TestGrandfatheredHistory:
+    """Three versions predate consistent tagging. The exception is named, not silent."""
+
+    def test_the_known_untagged_history_passes(self) -> None:
+        assert evaluate_documented_vs_tagged(["0.3.0", "0.1.1", "0.1.0"], {"0.4.0"}) == []
+
+    def test_grandfather_list_is_closed(self) -> None:
+        """If this fails, someone widened the exception instead of cutting a release.
+
+        A grandfather list that grows is a gate being switched off one entry at a time,
+        so the contents are pinned rather than merely the behaviour.
+        """
+        assert sorted(GRANDFATHERED_UNTAGGED) == ["0.1.0", "0.1.1", "0.3.0"]
+
+    def test_a_new_untagged_version_is_not_covered_by_it(self) -> None:
+        assert evaluate_documented_vs_tagged(["0.8.85", "0.3.0"], {"0.8.84"})
 
 
 class TestChangelogConditionIsLenient:
@@ -323,50 +416,68 @@ class TestChangelogConditionIsLenient:
 
     @pytest.mark.parametrize(
         ("documented", "tagged"),
-        [(None, "0.8.83"), ("0.8.85", None), (None, None)],
+        [([], {"0.8.83"}), (["0.8.85"], set()), ([], set())],
     )
-    def test_missing_surfaces_pass(self, documented: str | None, tagged: str | None) -> None:
+    def test_missing_surfaces_pass(self, documented: list[str], tagged: set[str]) -> None:
         assert evaluate_documented_vs_tagged(documented, tagged) == []
 
     def test_a_tagless_checkout_passes(self) -> None:
         """publish.yml checks out without fetch-tags, so this is its routine state."""
-        assert newest_tagged_version("") is None
-        assert evaluate_documented_vs_tagged("0.8.85", newest_tagged_version("")) == []
-
-    def test_unparseable_versions_pass(self) -> None:
-        assert evaluate_documented_vs_tagged("main", "0.8.83") == []
+        assert tagged_versions("") == set()
+        assert evaluate_documented_vs_tagged(["0.8.85"], tagged_versions("")) == []
 
 
 class TestChangelogParsing:
     def test_unreleased_is_not_a_documented_release(self) -> None:
         """An undated [Unreleased] section makes no claim to have shipped."""
+        assert documented_versions("## [Unreleased]\n\n(no entries yet)\n") == []
         assert newest_documented_version("## [Unreleased]\n\n(no entries yet)\n") is None
 
-    def test_it_picks_the_newest_not_the_first(self) -> None:
+    def test_it_returns_newest_first_not_file_order(self) -> None:
         out_of_order = (
             "## [0.8.83] - 2026-08-26\n## [0.8.85] - 2026-09-03\n## [0.8.84] - 2026-09-02\n"
         )
-        assert newest_documented_version(out_of_order) == "0.8.85"
+        assert documented_versions(out_of_order) == ["0.8.85", "0.8.84", "0.8.83"]
 
     def test_a_four_component_hotfix_outranks_its_base(self) -> None:
         """0.5.7.1 and 0.5.6.1 shipped; truncating to a triple would tie them."""
-        assert (
-            newest_documented_version("## [0.5.7] - 2026-01-01\n## [0.5.7.1] - 2026-01-02\n")
-            == "0.5.7.1"
-        )
+        assert documented_versions("## [0.5.7] - 2026-01-01\n## [0.5.7.1] - 2026-01-02\n") == [
+            "0.5.7.1",
+            "0.5.7",
+        ]
 
     def test_non_release_refs_are_ignored(self) -> None:
+        assert tagged_versions(TAGS_BEHIND) == {"0.8.81", "0.8.82", "0.8.83", "0.8.9"}
         assert newest_tagged_version(TAGS_BEHIND) == "0.8.83"
 
     def test_no_headings_at_all(self) -> None:
-        assert newest_documented_version("# Changelog\n\nnothing here\n") is None
+        assert documented_versions("# Changelog\n\nnothing here\n") == []
+
+    def test_has_dated_heading_separates_dated_from_unreleased(self) -> None:
+        """The [Unreleased]/dated distinction the whole allowance rests on."""
+        text = "## [Unreleased]\n\n- a thing\n\n## [0.8.85] - 2026-09-03\n"
+        assert has_dated_heading(text, "0.8.85")
+        assert not has_dated_heading(text, "0.8.86")
 
 
-class TestLiveChangelogTagPair:
-    """The real pair, asserted last and for what it is worth."""
+class TestLiveRepoChangelogTagPair:
+    """The real repository, asserted last. This is the check that would have caught it."""
 
-    def test_the_repo_is_not_currently_documenting_an_untagged_release(self) -> None:
-        assert evaluate_documented_vs_tagged(gate.documented_version(), gate.tagged_version()) == []
+    def test_no_dated_section_is_currently_untagged(self) -> None:
+        """Reads the actual CHANGELOG and the actual tags — no fixtures, no monkeypatch."""
+        failures = evaluate_documented_vs_tagged(
+            gate.repo_documented_versions(), gate.repo_tagged_versions()
+        )
+        assert failures == [], failures
 
-    def test_the_threshold_is_the_documented_one(self) -> None:
-        assert MAX_DOCUMENTED_AHEAD == 1
+    def test_the_declared_version_is_within_its_allowance(self) -> None:
+        declared = gate.declared_version()
+        documented = gate.repo_documented_versions()
+        assert (
+            evaluate_declared_vs_tagged(
+                declared,
+                gate.repo_tagged_versions(),
+                declared_is_dated=declared in set(documented),
+            )
+            == []
+        )

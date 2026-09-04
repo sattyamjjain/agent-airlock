@@ -3,6 +3,27 @@
 **This is a protocol, not a result. No data has been collected. Nothing below reports an
 outcome, because at the time of writing there is no outcome to report.**
 
+## Status — checked 2026-09-04: still blocked, not abandoned
+
+| | |
+|---|---|
+| **Waiting on** | An artifact from arXiv:2608.18351 — the evaluation harness, the 500 held-out tasks, the sufficient-authority envelopes, and the authors' selected seed (§2) |
+| **Wait started** | **2026-09-01**, the pre-registration date |
+| **Last checked** | **2026-09-04** (day 3) |
+| **What that check was** | The arXiv abstract page for [2608.18351](https://arxiv.org/abs/2608.18351) still shows `[v1] 18 Aug 2026` — no revised version, no linked code, no linked dataset, no artifact section. A GitHub search for the work returns no repository belonging to the authors. |
+| **Next check due** | 2026-10-01, then monthly until the wait ends or this protocol is retired |
+
+**This block exists because a pre-registration carrying no dated status is
+indistinguishable from an abandoned one**, and this repository's argument for
+pre-registering at all is that it is not abandoned. If "last checked" above is more than a
+month stale, that staleness is itself the finding: either the check lapsed or the protocol
+was quietly dropped, and both are worth knowing before trusting anything else in this file.
+
+Retiring it is also a legitimate outcome. §2 already commits to the condition — if the
+artifact never becomes available, this protocol stays unexecuted and `PRIOR_ART.md` keeps
+saying there is no head-to-head. An unexecuted pre-registration is not a failed study; an
+undated one is just a claim about intent.
+
 [`PRIOR_ART.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/PRIOR_ART.md) records arXiv:2608.18351 and says, in these words:
 
 > **There is no head-to-head. Nobody has run this library's gate on their 500 held-out tasks,
@@ -264,7 +285,7 @@ commitment, and this paragraph is the record against which to hold it.**
 | **Repo state registered against** | **`0085d3f`** (`fix(release): the repo said 0.8.83 shipped and PyPI said 0.8.82, and gate it`) |
 | **agent-airlock version at registration** | `0.8.83` |
 | **Data collected at registration** | **none** |
-| **Status** | **registered, not started — blocked on artifact access (§2)** |
+| **Status** | **registered, not started — blocked on artifact access (§2)**; current wait state and last-checked date are in the Status block at the top |
 
 A document cannot contain the hash of the commit that introduces it. The landing commit is
 the timestamped record and is recoverable with:
