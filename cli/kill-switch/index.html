@@ -1437,10 +1437,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#status-the-primitives-are-wired-the-delivery-is-not" class="md-nav__link">
+  <a href="#status-operational-as-of-v0886" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Status: the primitives are wired, the delivery is not
+        Status: operational as of v0.8.86
       
     </span>
   </a>
@@ -1760,10 +1760,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#status-the-primitives-are-wired-the-delivery-is-not" class="md-nav__link">
+  <a href="#status-operational-as-of-v0886" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Status: the primitives are wired, the delivery is not
+        Status: operational as of v0.8.86
       
     </span>
   </a>
@@ -1837,106 +1837,150 @@
 <h1 id="airlock-kill-switch-hmac-signed-freeze-with-quorum-reset"><code>airlock kill-switch</code> — HMAC-signed freeze with quorum reset<a class="headerlink" href="#airlock-kill-switch-hmac-signed-freeze-with-quorum-reset" title="Permanent link">&para;</a></h1>
 <p><strong>Landed in v0.5.9.</strong> Implementation <code>src/agent_airlock/kill_switch/</code>; CLI
 <code>src/agent_airlock/cli/kill_switch.py</code>.</p>
-<h2 id="status-the-primitives-are-wired-the-delivery-is-not">Status: the primitives are wired, the delivery is not<a class="headerlink" href="#status-the-primitives-are-wired-the-delivery-is-not" title="Permanent link">&para;</a></h2>
-<p><strong>Verified against v0.8.85 on 2026-09-04.</strong> Three things this page has to say before it
-describes anything, because each of them is load-bearing and none is visible from the
-command's output:</p>
-<ol>
-<li><strong>No airlock-protected process is frozen by this.</strong> <code>KillSwitchListener</code> is never
-   constructed, polled, or consulted anywhere in the <code>@Airlock</code> call path — the only
-   references to it outside <code>kill_switch/</code> are the CLI and the CLI dispatcher table.
-   Triggering the switch halts tool calls <strong>only if you wire the listener into your own
-   process</strong> and check <code>is_frozen()</code> yourself. (<code>SecurityPolicy.is_frozen()</code> is an unrelated
-   method meaning "this policy was produced by <code>freeze()</code>"; it is not the kill switch.)</li>
-<li><strong>No cross-process transport ships.</strong> <code>NATSTransportStub</code>, <code>RedisTransportStub</code> and
-   <code>S3TransportStub</code> all subclass <code>_StubTransport</code>, which delegates to an in-process
-   <code>InMemoryTransport</code>. Nothing leaves the process. "Cluster-wide" requires you to implement
-   the two-method <code>BroadcastTransport</code> protocol against a real bus.</li>
-<li><strong>The CLI does not persist anything.</strong> <code>trigger</code> and <code>reset</code> each construct a fresh
-   <code>InMemoryTransport()</code>, publish into it, print <code>OK</code>, and exit — the broadcast is discarded
-   with the process. <code>arm</code> validates the key length and prints; no state is written
-   anywhere. The commands are smoke tests for key material, not operational controls.</li>
-</ol>
-<p>What <em>is</em> real and tested: HMAC-SHA256 signing and constant-time verification, the signed
-envelope format, the listener state machine, and the M-of-N reset quorum. Those are the
-parts the example below exercises end to end.</p>
+<h2 id="status-operational-as-of-v0886">Status: operational as of v0.8.86<a class="headerlink" href="#status-operational-as-of-v0886" title="Permanent link">&para;</a></h2>
+<p><strong>Through v0.8.85 this froze nothing.</strong> The HMAC signing, the envelope, the listener state
+machine and the M-of-N quorum were all correct and all inert, because
+<code>KillSwitchListener</code> was never constructed inside the library — the only references
+outside <code>kill_switch/</code> were the CLI and the CLI dispatcher table. Triggering the switch
+halted no tool call anywhere.</p>
+<p>Three things changed:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>before v0.8.85</th>
+<th>now</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>@Airlock</code> consults the switch</td>
+<td>never</td>
+<td>yes, ahead of every other gate</td>
+</tr>
+<tr>
+<td>Cross-process transport</td>
+<td>NATS/Redis/S3 were stubs delegating to an in-process queue</td>
+<td><code>RedisStreamTransport</code> under the <code>[redis]</code> extra</td>
+</tr>
+<tr>
+<td>CLI <code>trigger</code> / <code>reset</code></td>
+<td>published into a transport discarded at exit, printed <code>OK</code></td>
+<td>require a real transport, or <strong>fail</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>It is opt-in and it is two steps.</strong> A process must both construct a listener <em>and</em>
+register it; constructing one alone still changes nothing:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.kill_switch</span><span class="w"> </span><span class="kn">import</span> <span class="n">HMACBroadcastSigner</span><span class="p">,</span> <span class="n">KillSwitchListener</span><span class="p">,</span> <span class="n">registry</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.kill_switch.transports</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedisStreamTransport</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">registry</span><span class="o">.</span><span class="n">install</span><span class="p">(</span><span class="n">KillSwitchListener</span><span class="p">(</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">signers</span><span class="o">=</span><span class="p">(</span><span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-a"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">KEY</span><span class="p">),),</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">transport</span><span class="o">=</span><span class="n">RedisStreamTransport</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span><span class="s2">"redis://localhost:6379/0"</span><span class="p">),</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">))</span>
+</code></pre></div>
+<p>After <code>install</code>, a blocked call returns <code>block_reason: "kill_switch"</code> — a distinct reason
+from <code>policy_violation</code>, because "an operator halted the fleet" and "this call is
+forbidden" need different responses.</p>
 <h2 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h2>
 <p>An operator signs a <code>trigger</code> broadcast with a shared key. Every process running a
 <code>KillSwitchListener</code> that holds a matching key sees <code>state == TRIGGERED</code> on its next
 <code>poll()</code> and reports <code>is_frozen()</code>. Returning to service needs a quorum of <em>distinct</em>
 keyids — 2-of-3 by default — so one compromised key cannot unilaterally re-enable agents.</p>
 <p>The wire envelope is compact JSON with sorted keys, signed over its canonical form:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span><span class="nt">"action"</span><span class="p">:</span><span class="s2">"trigger"</span><span class="p">,</span><span class="nt">"keyid"</span><span class="p">:</span><span class="s2">"ops-a"</span><span class="p">,</span><span class="nt">"reason"</span><span class="p">:</span><span class="s2">"prod incident 412"</span><span class="p">,</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w"> </span><span class="nt">"signature"</span><span class="p">:</span><span class="s2">"&lt;hex hmac-sha256&gt;"</span><span class="p">,</span><span class="nt">"ts_epoch"</span><span class="p">:</span><span class="mf">1757000000.0</span><span class="p">,</span><span class="nt">"version"</span><span class="p">:</span><span class="mi">1</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span><span class="nt">"action"</span><span class="p">:</span><span class="s2">"trigger"</span><span class="p">,</span><span class="nt">"keyid"</span><span class="p">:</span><span class="s2">"ops-a"</span><span class="p">,</span><span class="nt">"reason"</span><span class="p">:</span><span class="s2">"prod incident 412"</span><span class="p">,</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w"> </span><span class="nt">"signature"</span><span class="p">:</span><span class="s2">"&lt;hex hmac-sha256&gt;"</span><span class="p">,</span><span class="nt">"ts_epoch"</span><span class="p">:</span><span class="mf">1757000000.0</span><span class="p">,</span><span class="nt">"version"</span><span class="p">:</span><span class="mi">1</span><span class="p">}</span>
 </code></pre></div>
 <p><code>version</code> is <code>BROADCAST_VERSION</code>, bumped only on incompatible payload changes. Signing keys
 must be at least 32 bytes; shorter keys raise <code>InvalidBroadcastSignature</code> at construction.</p>
 <h2 id="runnable-example">Runnable example<a class="headerlink" href="#runnable-example" title="Permanent link">&para;</a></h2>
-<p>This is the working surface. Output shown is from an actual run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.kill_switch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">HMACBroadcastSigner</span><span class="p">,</span> <span class="n">InMemoryTransport</span><span class="p">,</span> <span class="n">KillSwitchBroadcast</span><span class="p">,</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">KillSwitchListener</span><span class="p">,</span> <span class="n">KillSwitchState</span><span class="p">,</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="p">)</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">transport</span> <span class="o">=</span> <span class="n">InMemoryTransport</span><span class="p">()</span>          <span class="c1"># process-local; see limitation 2 above</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">ops_a</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-a"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"a"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">ops_b</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-b"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"b"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">listener</span> <span class="o">=</span> <span class="n">KillSwitchListener</span><span class="p">(</span><span class="n">signers</span><span class="o">=</span><span class="p">(</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">ops_b</span><span class="p">),</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">listener</span><span class="o">.</span><span class="n">is_frozen</span><span class="p">())</span>            <span class="c1"># disarmed False</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"prod incident 412"</span><span class="p">)</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">listener</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">listener</span><span class="o">.</span><span class="n">is_frozen</span><span class="p">())</span>            <span class="c1"># triggered True</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># One key is not enough to come back: the default quorum is 2-of-3.</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"all clear"</span><span class="p">)</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="n">listener</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">listener</span><span class="o">.</span><span class="n">quorum_progress</span><span class="p">())</span>      <span class="c1"># triggered (1, 2)</span>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_b</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"all clear"</span><span class="p">)</span>
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="n">listener</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
-<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">listener</span><span class="o">.</span><span class="n">is_frozen</span><span class="p">())</span>            <span class="c1"># disarmed False</span>
-<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>
-<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="c1"># A broadcast signed by a key the listener does not hold is dropped, not applied.</span>
-<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="n">intruder</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-a"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"z"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>  <span class="c1"># right keyid, wrong key</span>
-<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">intruder</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"forged"</span><span class="p">)</span>
-<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">poll</span><span class="p">(),</span> <span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>                 <span class="c1"># 0 disarmed</span>
+<p>The whole feature in one script. Output is from an actual run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.kill_switch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">HMACBroadcastSigner</span><span class="p">,</span> <span class="n">InMemoryTransport</span><span class="p">,</span> <span class="n">KillSwitchBroadcast</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">KillSwitchListener</span><span class="p">,</span> <span class="n">registry</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="p">)</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nd">@Airlock</span><span class="p">()</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">deploy</span><span class="p">(</span><span class="n">target</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="k">return</span> <span class="sa">f</span><span class="s2">"deployed to </span><span class="si">{</span><span class="n">target</span><span class="si">}</span><span class="s2">"</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="n">bus</span> <span class="o">=</span> <span class="n">InMemoryTransport</span><span class="p">()</span>          <span class="c1"># swap for RedisStreamTransport to cross processes</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">ops_a</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-a"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"a"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="n">ops_b</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-b"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"b"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="n">listener</span> <span class="o">=</span> <span class="n">KillSwitchListener</span><span class="p">(</span><span class="n">signers</span><span class="o">=</span><span class="p">(</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">ops_b</span><span class="p">),</span> <span class="n">transport</span><span class="o">=</span><span class="n">bus</span><span class="p">,</span> <span class="n">poll_interval_seconds</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="n">registry</span><span class="o">.</span><span class="n">install</span><span class="p">(</span><span class="n">listener</span><span class="p">)</span>         <span class="c1"># &lt;- without this, @Airlock never asks</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="s2">"|"</span><span class="p">,</span> <span class="n">deploy</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">))</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="c1"># armed | deployed to prod</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">bus</span><span class="p">)</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"incident 412"</span><span class="p">)</span>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="nb">print</span><span class="p">(</span><span class="n">deploy</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">)[</span><span class="s2">"block_reason"</span><span class="p">])</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="c1"># kill_switch     -- the decorated function is now refused</span>
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>
+<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a><span class="c1"># One key is not enough to come back: the default quorum is 2-of-3.</span>
+<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">bus</span><span class="p">)</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"all clear"</span><span class="p">)</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a><span class="nb">print</span><span class="p">(</span><span class="n">deploy</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">)[</span><span class="s2">"block_reason"</span><span class="p">],</span> <span class="n">listener</span><span class="o">.</span><span class="n">quorum_progress</span><span class="p">())</span>
+<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a><span class="c1"># kill_switch (1, 2)</span>
+<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>
+<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_b</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">bus</span><span class="p">)</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"all clear"</span><span class="p">)</span>
+<a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a><span class="nb">print</span><span class="p">(</span><span class="n">deploy</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">))</span>
+<a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a><span class="c1"># deployed to prod</span>
+<a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a>
+<a id="__codelineno-2-33" name="__codelineno-2-33" href="#__codelineno-2-33"></a><span class="c1"># A broadcast signed by a key the listener does not hold is dropped, not applied.</span>
+<a id="__codelineno-2-34" name="__codelineno-2-34" href="#__codelineno-2-34"></a><span class="n">intruder</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-a"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"z"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>   <span class="c1"># right keyid, wrong key</span>
+<a id="__codelineno-2-35" name="__codelineno-2-35" href="#__codelineno-2-35"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">intruder</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">bus</span><span class="p">)</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"forged"</span><span class="p">)</span>
+<a id="__codelineno-2-36" name="__codelineno-2-36" href="#__codelineno-2-36"></a><span class="nb">print</span><span class="p">(</span><span class="n">deploy</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">))</span>
+<a id="__codelineno-2-37" name="__codelineno-2-37" href="#__codelineno-2-37"></a><span class="c1"># deployed to prod</span>
 </code></pre></div>
-<p>Note the last block: the forged message claims a keyid the listener trusts, and is still
-rejected, because acceptance is decided by the MAC and not by the claimed identity.</p>
+<p>Two things worth reading twice. The forged message claims a keyid the listener trusts and
+is still rejected, because acceptance is decided by the MAC and not by the claimed
+identity. And the same key voting to reset five times is still one vote — the quorum
+counts distinct keyids, so a single compromised key cannot re-enable a fleet.</p>
 <h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AIRLOCK_KILL_SWITCH_KEY</span><span class="o">=</span><span class="s2">"&lt;&gt;= 32 bytes, hex or raw&gt;"</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>arm<span class="w"> </span>ops-a
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>trigger<span class="w"> </span><span class="s2">"prod incident 412"</span><span class="w"> </span>--keyid<span class="w"> </span>ops-a
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>reset<span class="w"> </span><span class="s2">"all clear"</span><span class="w"> </span>--keyid<span class="w"> </span>ops-a<span class="w"> </span>--quorum<span class="w"> </span><span class="m">2</span>-of-3
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AIRLOCK_KILL_SWITCH_KEY</span><span class="o">=</span><span class="s2">"&lt;&gt;= 32 bytes, hex or raw&gt;"</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AIRLOCK_KILL_SWITCH_REDIS_URL</span><span class="o">=</span><span class="s2">"redis://localhost:6379/0"</span><span class="w">   </span><span class="c1"># or --redis-url</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>status<span class="w">  </span>--keyid<span class="w"> </span>ops-a
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>trigger<span class="w"> </span><span class="s2">"prod incident 412"</span><span class="w"> </span>--keyid<span class="w"> </span>ops-a
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>reset<span class="w">   </span><span class="s2">"all clear"</span><span class="w"> </span>--keyid<span class="w"> </span>ops-a<span class="w"> </span>--quorum<span class="w"> </span><span class="m">2</span>-of-3
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>arm<span class="w">     </span>ops-a<span class="w">          </span><span class="c1"># validates key material, reads fleet state</span>
 </code></pre></div>
-<p><code>--key-env</code> overrides the variable name on any subcommand. Real output:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>OK: kill-switch armed for keyid='ops-a'
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>OK: trigger queued (reason='prod incident 412', transport=InMemoryTransport)
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>OK: reset queued (quorum=2-of-3, reason='all clear', transport=InMemoryTransport)
+<p><code>--key-env</code> and <code>--stream-key</code> override the key variable and the Redis stream on any
+subcommand. <code>status</code> exits 1 when the fleet is frozen, so it composes in a shell check.</p>
+<p><strong>Without a transport, the publishing commands fail rather than reporting success:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>no broadcast transport configured — this command would reach no process.
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>  Pass --redis-url redis://host:6379/0, or set AIRLOCK_KILL_SWITCH_REDIS_URL.
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  Requires the redis extra: pip install "agent-airlock[redis]"
 </code></pre></div>
-<p>Read <code>transport=InMemoryTransport</code> in that output literally: the message went into a queue
-that is discarded when the command exits.</p>
+<p>That refusal is the point. Until v0.8.86 these commands printed
+<code>OK: trigger queued (transport=InMemoryTransport)</code> and reached nothing.</p>
 <h2 id="what-this-does-not-cover">What this does not cover<a class="headerlink" href="#what-this-does-not-cover" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong><code>--quorum</code> is echoed, never enforced.</strong> The flag is printed back and otherwise unused;
-  the CLI's <code>reset</code> path constructs no <code>ResetQuorum</code> at all. <code>--quorum 9-of-9</code> is accepted
-  and reported as <code>9-of-9</code>. Quorum is enforced only by <code>KillSwitchListener</code>, via its
-  <code>reset_quorum_threshold</code> / <code>reset_quorum_total</code> fields.</li>
-<li><strong><code>KillSwitchState.ARMED</code> is never assigned.</strong> The enum member exists; the listener only
-  ever moves between <code>DISARMED</code> and <code>TRIGGERED</code>. There is no armed-but-not-triggered state
-  in the implementation, which is also why <code>arm</code> writes nothing.</li>
-<li><strong>There is no 5-second timer.</strong> The listener docstring mentions a 5 s interval "per
-  spec"; <code>poll()</code> is caller-driven and nothing in the package schedules it. The latency to
-  freeze is whatever your own loop provides.</li>
-<li><strong>A short signing key raises an uncaught traceback</strong> from the CLI rather than a clean
-  message.</li>
+<li><strong>A freeze takes effect within one poll interval, not instantly.</strong> The listener polls at
+  most once per <code>poll_interval_seconds</code> (5 s by default) so a transport read does not land
+  on every tool call. Set it to <code>0</code> to poll on every call. A process that makes no tool
+  calls never polls, and is therefore never frozen — the switch stops <em>calls</em>, not
+  processes.</li>
+<li><strong>Transport failures fail open by default.</strong> If a poll raises, the previous state is kept
+  and the error is logged, because a kill switch that halts every agent when its own
+  transport hiccups is an outage generator. This is the opposite of the library's usual
+  deny-by-default posture, so it is a deliberate exception: pass <code>strict=True</code> to
+  <code>registry.install</code> to freeze on transport errors instead.</li>
+<li><strong><code>--quorum</code> does not travel in the broadcast.</strong> The threshold is listener configuration
+  (<code>reset_quorum_threshold</code> / <code>reset_quorum_total</code>). The CLI now parses and validates the
+  flag — <code>--quorum 9-of-3</code> is rejected rather than echoed — but uses it only to tell you
+  how many more votes are needed.</li>
+<li><strong>NATS and S3 transports are still stubs</strong> that delegate to an in-process queue, as is
+  the deprecated <code>RedisTransportStub</code>. Only <code>RedisStreamTransport</code> crosses a process
+  boundary. Anything else needs the two-method <code>BroadcastTransport</code> protocol implemented
+  against your own bus.</li>
+<li><strong>There is no replay protection.</strong> <code>ts_epoch</code> is signed but never checked for freshness,
+  so a captured <code>reset</code> envelope stays valid indefinitely. Two captured votes from two
+  distinct keyids would disarm a fleet.</li>
 <li><strong><code>docs/kill-switch.md</code>, cited as the feature spec by the package docstring, does not
-  exist.</strong> This page is not that spec; it documents the code as it stands.</li>
-<li><strong>Nothing is authenticated but the broadcast.</strong> There is no replay protection: <code>ts_epoch</code>
-  is signed but never checked for freshness, so a captured <code>reset</code> envelope stays valid.</li>
+  exist.</strong> This page documents the code as it stands.</li>
 </ul>
 
 

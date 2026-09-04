@@ -1465,10 +1465,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#status-the-library-layer-works-the-cli-round-trip-does-not" class="md-nav__link">
+  <a href="#status-working-as-of-v0886" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Status: the library layer works, the CLI round-trip does not
+        Status: working as of v0.8.86
       
     </span>
   </a>
@@ -1771,10 +1771,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#status-the-library-layer-works-the-cli-round-trip-does-not" class="md-nav__link">
+  <a href="#status-working-as-of-v0886" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Status: the library layer works, the CLI round-trip does not
+        Status: working as of v0.8.86
       
     </span>
   </a>
@@ -1859,41 +1859,42 @@
 <h1 id="policy_bundlelock-hash-pinned-preset-bundles"><code>policy_bundle.lock</code> — hash-pinned preset bundles<a class="headerlink" href="#policy_bundlelock-hash-pinned-preset-bundles" title="Permanent link">&para;</a></h1>
 <p><strong>Landed in v0.6.0.</strong> Implementation <code>src/agent_airlock/pack/lock.py</code>; CLI
 <code>airlock pack lock</code> and <code>airlock replay --bundle-lock</code>.</p>
-<h2 id="status-the-library-layer-works-the-cli-round-trip-does-not">Status: the library layer works, the CLI round-trip does not<a class="headerlink" href="#status-the-library-layer-works-the-cli-round-trip-does-not" title="Permanent link">&para;</a></h2>
-<p><strong>Verified against v0.8.85 on 2026-09-04: <code>airlock pack lock --verify</code> fails on all three
-packs that ship in the box.</strong> This is stated first because the feature's whole purpose is
-reproducibility, and it is not currently reproducible through the CLI:</p>
+<h2 id="status-working-as-of-v0886">Status: working as of v0.8.86<a class="headerlink" href="#status-working-as-of-v0886" title="Permanent link">&para;</a></h2>
+<p><strong>Verified 2026-09-04: <code>airlock pack lock</code> then <code>--verify</code> passes on all three packs that
+ship in the box</strong>, and the digest is byte-identical across separate processes.</p>
+<p>It did not, through v0.8.85, and the two causes are worth keeping on the record because
+one of them is the more dangerous shape:</p>
 <table>
 <thead>
 <tr>
 <th>Shipped pack</th>
-<th><code>airlock pack lock</code></th>
-<th><code>--verify</code> immediately after</th>
+<th>before v0.8.86</th>
+<th>now</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>claude-code-ci</code></td>
-<td><strong>crashes</strong> — <code>TypeError: 'StdioGuardConfig' object is not iterable</code></td>
-<td>never reached</td>
+<td><strong>crashed</strong> — <code>TypeError: 'StdioGuardConfig' object is not iterable</code></td>
+<td>4 presets pinned, verifies</td>
 </tr>
 <tr>
 <td><code>copilot-agent-ci</code></td>
-<td>writes a lockfile</td>
-<td><strong>FAIL</strong> — <code>archived_mcp_server_advisory_defaults</code> "drifted" seconds after generation</td>
+<td>wrote a lockfile that <strong>failed its own verification seconds later</strong></td>
+<td>3 presets pinned, verifies</td>
 </tr>
 <tr>
 <td><code>gemini-cli-ci</code></td>
-<td>writes a lockfile</td>
-<td><strong>FAIL</strong> — same preset, same reason</td>
+<td>same</td>
+<td>3 presets pinned, verifies</td>
 </tr>
 </tbody>
 </table>
-<p>Both causes are identified below under <a href="#what-does-not-work">What does not work</a>. The
-hashing, rendering, parsing and drift-detection functions in <code>pack/lock.py</code> are correct and
-covered by <code>tests/pack/test_lock.py</code>, which passes dictionaries directly; what fails is the
-preset data the CLI feeds them. <strong>Until that is fixed, a lockfile produced by
-<code>airlock pack lock</code> is not a pin</strong> — treat the Python API as the working surface.</p>
+<p>The crash was the louder bug; the unstable digest was the worse one. A control that
+reports drift on an unchanged bundle gets switched off, and had the digest been made
+stable the careless way — hashing a callable by name only — it would have reported <em>no</em>
+drift on a bundle that had genuinely changed. Both failure directions are now regression
+tests in <code>tests/pack/test_lock_hash_stability.py</code>.</p>
 <h2 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h2>
 <p>A lockfile records a SHA-256 over each active preset's canonical JSON form, so a policy
 bundle can be pinned the way <code>Cargo.lock</code> and <code>uv.lock</code> pin dependencies. <code>verify_lock</code>
@@ -1948,37 +1949,30 @@ other exits 3.</p>
 <p>Key ordering does not affect the hash — <code>json.dumps(..., sort_keys=True)</code> canonicalises
 first — so reordering a preset dict is not drift. Changing a value is.</p>
 <h2 id="what-does-not-work">What does not work<a class="headerlink" href="#what-does-not-work" title="Permanent link">&para;</a></h2>
-<p><strong>1. A preset carrying a bare function hashes differently in every process.</strong>
-<code>_canonicalise</code> handles primitives, sequences, sets, dicts, enums and dataclasses, then
-falls back to <code>repr(value)</code>. A plain function's <code>repr</code> embeds its address:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>"&lt;function archived_mcp_server_advisory_defaults.&lt;locals&gt;.check at 0x1057c2200&gt;"
-</code></pre></div>
-<p>so its SHA-256 changes on every run. <code>archived_mcp_server_advisory_defaults</code> puts a closure
-under <code>check</code>, which is why two of the three shipped packs fail <code>--verify</code> immediately.
-Presets whose values are all data hash stably; the two co-installed with it in those packs
-(<code>copilot_agent_cnc_2026_04</code>, <code>lan_unauth_mcp_guard</code>) were byte-identical across runs.</p>
-<p><strong>2. <code>airlock pack lock</code> crashes on a preset that is not a mapping.</strong> Both the CLI
-(<code>cli/pack.py</code>) and the replay path (<code>cli/replay.py</code>) build <code>preset_data</code> with
-<code>dict(data)</code>. <code>PackInstaller.install().composed</code> usually yields dicts, but
-<code>stdio_guard_ox_defaults</code> yields a <code>StdioGuardConfig</code> dataclass, and <code>dict()</code> raises on it.
-<code>hash_preset</code> itself would have handled the dataclass — <code>_canonicalise</code> already routes
-<code>__dataclass_fields__</code> through <code>asdict</code> — so the coercion is what fails, not the hashing.</p>
-<p><strong>3. <code>airlock_version</code> is recorded but never enforced.</strong> The field is written into the
+<p><strong>1. A change to a check function's <em>body</em> is not detected.</strong> A callable is canonicalised
+as its qualified name plus its captured closure values, so re-parameterising a guard
+factory <em>is</em> drift, but editing the code inside <code>check</code> is not — the bytes of the function
+are not hashed. Hashing bytecode would tie a lockfile to one Python version, which is
+worse for a lockfile. Implementation changes are covered by the <code>airlock_version</code> field,
+which is provenance rather than a constraint (below).</p>
+<p><strong>2. <code>airlock_version</code> is recorded but never enforced.</strong> The field is written into the
 lockfile and read back by <code>parse_lock</code>, and <code>verify_lock</code> ignores it: a lockfile generated
-by 0.6.0 verifies without complaint under 0.8.85. Only <code>schema_version</code> is checked, and
-only for equality with <code>1</code>. The module docstring's "content hash + airlock version
-constraint" describes an intent, not the code.</p>
-<p><strong>4. The lockfile is unsigned.</strong> It carries hashes, not a MAC, and regenerating it is one
+by 0.6.0 verifies without complaint under 0.8.86. Only <code>schema_version</code> is checked, and
+only for equality with <code>1</code>.</p>
+<p><strong>3. The lockfile is unsigned.</strong> It carries hashes, not a MAC, and regenerating it is one
 command. It detects <em>drift</em>, not <em>tampering</em> — anyone who can edit the bundle can re-emit
 a matching lock. Manifest signing is a separate mechanism (<code>airlock pack verify</code>, with
 <code>AIRLOCK_PACK_SIGNING_KEY</code>).</p>
-<p><strong>5. The parser accepts a restricted grammar, not TOML.</strong> <code>parse_lock</code> is a hand-written
+<p><strong>4. The parser accepts a restricted grammar, not TOML.</strong> <code>parse_lock</code> is a hand-written
 line parser kept for the 3.10 floor, and it does not implement arrays, inline tables,
 multi-line strings or nested sections. <code>foo = [1, 2]</code> parses as the <em>string</em> <code>[1, 2]</code>
 rather than a list, and no error is raised. Only the shape this file renders is supported.</p>
-<p><strong>6. It pins a pack manifest, not the live policy.</strong> <code>--bundle-lock</code> verifies the presets
+<p><strong>5. It pins a pack manifest, not the live policy.</strong> <code>--bundle-lock</code> verifies the presets
 composed from <code>--bundle-manifest</code>. It does not observe the <code>SecurityPolicy</code> a running
 process actually built, so a policy assembled in code is outside its scope.</p>
+<p><strong>6. A preset containing a value with an address-bearing <code>repr</code> is refused, not hashed.</strong>
+<code>UnstableHashError</code> names the preset and the type. This is deliberate: the alternative is
+a digest that differs in every process, which is the bug this release fixed.</p>
 
 
 
