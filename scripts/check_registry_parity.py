@@ -153,6 +153,8 @@ MAX_DOCUMENTED_AHEAD = 0
 MAX_UNRELEASED_AHEAD = 1
 
 #: Dated headings from before this repo tagged consistently (2026-01-31 / 2026-02-01).
+#: ``0.1.0`` and ``0.1.1`` also fall below the oldest tag and would be skipped anyway;
+#: they are named here so the history is on the record rather than merely out of range.
 #: Frozen by construction: ``test_grandfather_list_is_closed`` fails if it grows.
 GRANDFATHERED_UNTAGGED = frozenset({"0.1.0", "0.1.1", "0.3.0"})
 
@@ -357,6 +359,14 @@ def evaluate_documented_vs_tagged(documented: Sequence[str], tagged: set[str]) -
     headings, or no release tags at all, returns no failures. A gate that reddens a shallow
     clone is a gate that gets switched off.
 
+    **A tag set only vouches for the range it covers.** ``publish.yml`` checks out the
+    release tag alone, so ``tagged`` there is a single version and every older heading
+    would look untagged. That is a checkout artefact, not drift — and it is not
+    hypothetical: the first release cut after this condition landed (v0.8.86) was blocked
+    by exactly that false positive, reporting 113 "untagged" sections against a complete
+    and correct history. Headings below the oldest tag present are therefore skipped: about
+    them, this checkout knows nothing.
+
     Args:
         documented: Dated CHANGELOG versions.
         tagged: Versions that have a release tag.
@@ -367,10 +377,13 @@ def evaluate_documented_vs_tagged(documented: Sequence[str], tagged: set[str]) -
     if not documented or not tagged:
         return []
 
+    floor = _order_key(min(tagged, key=_order_key))
     missing = [
         version
         for version in documented
-        if version not in tagged and version not in GRANDFATHERED_UNTAGGED
+        if _order_key(version) >= floor
+        and version not in tagged
+        and version not in GRANDFATHERED_UNTAGGED
     ]
     if not missing:
         return []

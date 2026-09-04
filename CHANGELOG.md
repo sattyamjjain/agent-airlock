@@ -51,6 +51,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   boundary assertion that permitted this bug was inverted rather than deleted, so the
   record of what changed survives in the suite.
 
+- **The condition added in v0.8.85 had a false positive that blocked its own first
+  release.** `publish.yml` checks out the release tag alone, so `git tag --list` returns a
+  single version there. Checking *every* dated heading against that set reported 113
+  sections as untagged against a complete and correct history, and refused to publish
+  v0.8.86 thirty seconds after the gate shipped.
+
+  The condition was right; its unstated assumption that the tag set is complete was not.
+  **A tag set only vouches for the range it covers**, so headings below the oldest tag
+  present are now skipped — about those, that checkout knows nothing. This is the same
+  leniency the rest of the gate already applied to an unreachable registry and a shallow
+  clone, extended to the case that actually occurred. Drift *inside* the covered range
+  still fails, including a hole below the newest tag.
+
+  Worth stating plainly: it failed closed, blocking a release rather than waving one
+  through, and the first release after it landed found it. The regression test reproduces
+  the publish-checkout shape exactly. The same commit also fixes the file's "live repo"
+  tests, which routed through the autouse fixture's stubs and therefore asserted on
+  nothing — they now read `CHANGELOG.md` and `git tag --list` directly.
+
 - **`airlock pack lock --verify` failed on all three packs that ship in the box.** Two
   causes, verified 2026-09-04, and the quieter one was the dangerous one.
 

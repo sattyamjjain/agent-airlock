@@ -18,6 +18,9 @@ switched off the first time PyPI is down.
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 import pytest
 from scripts.check_registry_parity import (
     GRANDFATHERED_UNTAGGED,
@@ -80,6 +83,25 @@ All notable changes to Agent-Airlock are documented here.
 #: Raw ``git tag --list`` output for a repo whose tags stop at 0.8.83. Deliberately mixed
 #: with non-release refs: the parser must ignore them rather than choke.
 TAGS_BEHIND = "nightly\nv0.8.81\nv0.8.82\nv0.8.83\nv0.8.9\n"
+
+
+def _real_repo_surfaces() -> tuple[list[str], set[str]]:
+    """The actual CHANGELOG headings and git tags, bypassing the autouse fixture.
+
+    The fixture below patches ``gate.repo_documented_versions`` / ``gate.repo_tagged_versions``
+    so unrelated tests are not coupled to today's repo state. Tests that genuinely mean to
+    assert on the repository must therefore read it themselves.
+    """
+    root = Path(__file__).resolve().parents[1]
+    try:
+        changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    except OSError:
+        return [], set()
+    result = subprocess.run(
+        ["git", "tag", "--list"], cwd=root, capture_output=True, text=True, check=False
+    )
+    tags = tagged_versions(result.stdout) if result.returncode == 0 else set()
+    return documented_versions(changelog), tags
 
 
 @pytest.fixture(autouse=True)
@@ -393,6 +415,46 @@ class TestUnreleasedIsWhereTheAllowanceLives:
         assert gate.main([]) == 0
 
 
+class TestAPartialTagCheckoutIsIndeterminate:
+    """The false positive that blocked v0.8.86, thirty seconds after this gate shipped.
+
+    ``publish.yml`` checks out the release tag alone, so ``git tag --list`` returns one
+    version. Checking *every* dated heading against that set reported 113 sections as
+    untagged against a complete and correct history, and refused to publish. The condition
+    was right; its assumption that the tag set is complete was not.
+
+    A tag set only vouches for the range it covers. Below the oldest tag present, the
+    checkout has no information and the gate must say nothing — the same leniency the rest
+    of this file applies to a missing registry or a shallow clone.
+    """
+
+    def test_the_publish_checkout_shape_does_not_false_positive(self) -> None:
+        """One tag, a full CHANGELOG: the exact state that blocked the v0.8.86 publish."""
+        documented = [f"0.8.{n}" for n in range(86, 0, -1)] + ["0.7.6", "0.5.0", "0.1.2"]
+        assert evaluate_documented_vs_tagged(documented, {"0.8.86"}) == [], (
+            "a tag-only checkout must be indeterminate, not a 113-section failure"
+        )
+
+    def test_it_still_fails_when_the_newest_heading_is_untagged(self) -> None:
+        """The floor must not swallow the drift this condition exists for."""
+        assert evaluate_documented_vs_tagged(["0.8.87", "0.8.86"], {"0.8.86", "0.8.85"})
+
+    def test_a_hole_above_the_floor_still_fails(self) -> None:
+        """Skipping headings below the oldest tag must not skip one inside the range."""
+        assert evaluate_documented_vs_tagged(["0.8.86", "0.8.85"], {"0.8.86", "0.8.84"})
+
+    def test_headings_below_the_oldest_tag_are_skipped(self) -> None:
+        assert evaluate_documented_vs_tagged(["0.9.0", "0.4.0"], {"0.9.0"}) == []
+
+    def test_the_live_repo_survives_a_tag_only_checkout(self) -> None:
+        """Reads the real CHANGELOG against a single tag, as publish.yml would."""
+        documented, tagged = _real_repo_surfaces()
+        if not documented or not tagged:
+            pytest.skip("no CHANGELOG headings or no tags available")
+        newest = max(tagged, key=gate._order_key)
+        assert evaluate_documented_vs_tagged(documented, {newest}) == []
+
+
 class TestGrandfatheredHistory:
     """Three versions predate consistent tagging. The exception is named, not silent."""
 
@@ -461,23 +523,29 @@ class TestChangelogParsing:
 
 
 class TestLiveRepoChangelogTagPair:
-    """The real repository, asserted last. This is the check that would have caught it."""
+    """The real repository, asserted last. This is the check that would have caught it.
+
+    These read the filesystem and git directly rather than through ``gate.repo_*``: the
+    autouse fixture patches those to "indeterminate" for every other test in this file, so
+    routing through them here would assert on stubs and witness nothing.
+    """
 
     def test_no_dated_section_is_currently_untagged(self) -> None:
         """Reads the actual CHANGELOG and the actual tags — no fixtures, no monkeypatch."""
-        failures = evaluate_documented_vs_tagged(
-            gate.repo_documented_versions(), gate.repo_tagged_versions()
-        )
+        documented, tagged = _real_repo_surfaces()
+        if not documented or not tagged:
+            pytest.skip("no CHANGELOG headings or no tags available")
+        failures = evaluate_documented_vs_tagged(documented, tagged)
         assert failures == [], failures
 
     def test_the_declared_version_is_within_its_allowance(self) -> None:
+        documented, tagged = _real_repo_surfaces()
+        if not tagged:
+            pytest.skip("no tags available")
         declared = gate.declared_version()
-        documented = gate.repo_documented_versions()
         assert (
             evaluate_declared_vs_tagged(
-                declared,
-                gate.repo_tagged_versions(),
-                declared_is_dated=declared in set(documented),
+                declared, tagged, declared_is_dated=declared in set(documented)
             )
             == []
         )
