@@ -46,7 +46,9 @@ make format        # ruff format + ruff check --fix
 make bench         # pytest-benchmark suite
 ```
 
-Repo-specific gates (each also runs in CI):
+Repo-specific gates. Most run in CI; `check-changelog` / `check-changelog-release` are
+release-time targets referenced by no workflow, and `check-changelog` is red by design
+while work accumulates under `[Unreleased]`:
 
 ```bash
 make benchmark               # regenerate BENCHMARK.md (block-rate corpus)

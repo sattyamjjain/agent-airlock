@@ -47,6 +47,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   boundary assertion that permitted this bug was inverted rather than deleted, so the
   record of what changed survives in the suite.
 
+- **`airlock pack lock --verify` failed on all three packs that ship in the box.** Two
+  causes, verified 2026-09-04, and the quieter one was the dangerous one.
+
+  `_canonicalise` fell through to `repr(value)` for any type it did not recognise, and a
+  function's `repr` embeds its memory address. `archived_mcp_server_advisory_defaults`
+  puts a closure under `check`, so its SHA-256 **differed in every process**: the lockfile
+  verified green in the run that wrote it and red in every run afterwards, seconds later.
+  A control that reports drift on an unchanged bundle gets switched off.
+
+  A callable is now canonicalised as its qualified name **plus its captured closure
+  values**. The name alone would have been the careless fix: two differently-parameterised
+  guard factories would collide, and a drift detector that reports *no* drift on a changed
+  bundle is worse than the noise it replaced. Both directions are regression-tested.
+  Anything still reaching the `repr` path with an address-bearing repr now raises
+  `UnstableHashError` naming the preset, and a reference cycle is refused rather than
+  recursed — refusing beats a digest that can never verify.
+
+  Separately, `claude-code-ci` crashed outright: `cli/pack.py` and `cli/replay.py` both
+  coerced every composed preset with `dict(data)`, and `stdio_guard_ox_defaults` yields a
+  `StdioGuardConfig` dataclass. `hash_preset` already handled dataclasses; the coercion was
+  the bug. `build_lock` / `verify_lock` now take a `Mapping[str, Any]`.
+
+- **The kill switch froze nothing.** `KillSwitchListener` was never constructed inside the
+  library — the only references outside `kill_switch/` were the CLI and the CLI dispatcher
+  table — so the HMAC signing, the signed envelope, the state machine and the M-of-N quorum
+  were all correct and all **inert**. Triggering the switch halted no tool call anywhere,
+  while the README called it a "cluster-wide freeze".
+
+  `@Airlock` now consults it before every other gate, including ghost-argument validation:
+  a freeze means stop, not stop-after-checking-whether-the-arguments-were-well-formed.
+  Blocked calls carry a distinct `BlockReason.KILL_SWITCH` rather than `POLICY_VIOLATION`,
+  for the same reason the `ESCALATION_*` reasons are distinct — "an operator halted the
+  fleet" and "this call is forbidden" need different responses, and collapsing them hides
+  an active incident behind a routine denial.
+
+  It stays opt-in and it is two steps: construct a `KillSwitchListener` **and**
+  `registry.install()` it. Polling is bounded by `poll_interval_seconds` (5 s default — the
+  interval the original spec named and never implemented), so a freeze takes effect within
+  one interval rather than instantly. Transport errors keep the last known state and log,
+  because a kill switch that halts every agent when its own transport hiccups is an outage
+  generator; that is the opposite of this library's usual posture, so `strict=True` inverts
+  it deliberately rather than by omission. `KillSwitchState.ARMED` is finally assigned.
+
+- **The kill-switch CLI reported success for operations that reached nothing.** Every
+  subcommand built a throwaway `InMemoryTransport`, published into it, printed `OK` and
+  exited. `--quorum` was echoed without being parsed (`--quorum 9-of-9` was accepted) and
+  `arm` printed `OK` after only checking the key length. Publishing now requires a real
+  transport (`--redis-url` / `AIRLOCK_KILL_SWITCH_REDIS_URL`) and **fails** without one;
+  `--quorum` is parsed and an impossible quorum rejected, with a note that the threshold is
+  listener configuration and does not travel in the broadcast; `arm` reports what it
+  actually did; and a new `status` subcommand reads fleet state, exiting 1 when frozen.
+
 ### Changed
 
 - **The published null now leads the README instead of trailing the wins table.** The
@@ -57,11 +109,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   standing between a reviewer and the honest summary of what this library has and has not
   measured.
 
-- **Two README capability claims cut back to what the code does.** `policy_bundle.lock` no
-  longer claims "`Cargo.lock` semantics" — Cargo.lock's defining property is
-  reproducibility, and the CLI round-trip is not reproducible (below). `airlock kill-switch`
-  no longer claims a "cluster-wide freeze": no cross-process transport ships and the
-  listener is not wired into the `@Airlock` call path.
+- **Two README capability claims reconciled with the code — by fixing the code.** Writing
+  the two doc pages found that `policy_bundle.lock` could not honour "`Cargo.lock`
+  semantics" (whose defining property is reproducibility) and that `airlock kill-switch`
+  was not a "cluster-wide freeze" (nothing consulted the listener, and no transport left
+  the process). Both claims were first cut back to what the code did, then the code was
+  fixed and the rows rewritten to the new truth: the lockfile round-trips, and the switch
+  is wired into the call path with a real Redis transport. What the rows no longer do is
+  imply either is automatic — the switch is opt-in per process, and the lockfile digest
+  covers a check function's captured config rather than its body.
+
+- **`docs/cli/kill-switch.md` and `docs/cli/policy-bundle-lock.md` rewritten** to the fixed
+  behaviour, keeping the before/after on the record. Their limits sections are now the
+  *remaining* limits: the lockfile digest does not cover a check function's body (only its
+  captured config), `airlock_version` is recorded but not enforced, the lockfile is
+  unsigned, and the TOML parser accepts a restricted grammar; the kill switch has no replay
+  protection, freezes within a poll interval rather than instantly, and fails open on
+  transport errors by default.
+
+- **`CLAUDE.md` corrected.** It claimed the repo-specific gates "each also runs in CI",
+  which is not true of `check-changelog` / `check-changelog-release`: those are
+  release-time targets referenced by no workflow, and the former is red by design while
+  work accumulates under `[Unreleased]`.
 
 ### Added
 
@@ -93,6 +162,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   artifact access, waiting since 2026-09-01. A pre-registration carrying no dated status is
   indistinguishable from an abandoned one, and the argument for pre-registering at all is
   that it is not abandoned.
+
+- **`RedisStreamTransport`** (`[redis]` extra) — the first kill-switch transport that
+  actually leaves the process. Backed by a Redis **stream**, not pub/sub, because pub/sub
+  is fire-and-forget: a worker starting *after* the trigger would never see it and would
+  come back up unfrozen mid-incident. A stream is durable and ordered, so a cold-starting
+  worker replays from `0-0`, sees the trigger and freezes itself; replay is safe because
+  the listener is idempotent, and a reset submits a *keyid* into a set so one operator's
+  vote never advances the quorum on its own. Each process keeps its own cursor.
+  `NATSTransportStub`, `S3TransportStub` and the now-deprecated `RedisTransportStub` remain
+  process-local stubs, and now say so.
+
+- **32 regression tests** in `tests/pack/test_lock_hash_stability.py` and
+  `tests/kill_switch/test_kill_switch_wiring.py`. Neutering either fix fails 8 of them. The
+  hash-stability suite spawns real interpreters for its cross-process check, because an
+  in-process comparison passes on address reuse and would have missed the bug entirely.
 
 ## [0.8.85] - 2026-09-03
 

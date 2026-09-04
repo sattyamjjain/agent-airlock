@@ -3,23 +3,25 @@
 **Landed in v0.6.0.** Implementation `src/agent_airlock/pack/lock.py`; CLI
 `airlock pack lock` and `airlock replay --bundle-lock`.
 
-## Status: the library layer works, the CLI round-trip does not
+## Status: working as of v0.8.86
 
-**Verified against v0.8.85 on 2026-09-04: `airlock pack lock --verify` fails on all three
-packs that ship in the box.** This is stated first because the feature's whole purpose is
-reproducibility, and it is not currently reproducible through the CLI:
+**Verified 2026-09-04: `airlock pack lock` then `--verify` passes on all three packs that
+ship in the box**, and the digest is byte-identical across separate processes.
 
-| Shipped pack | `airlock pack lock` | `--verify` immediately after |
+It did not, through v0.8.85, and the two causes are worth keeping on the record because
+one of them is the more dangerous shape:
+
+| Shipped pack | before v0.8.86 | now |
 |---|---|---|
-| `claude-code-ci` | **crashes** — `TypeError: 'StdioGuardConfig' object is not iterable` | never reached |
-| `copilot-agent-ci` | writes a lockfile | **FAIL** — `archived_mcp_server_advisory_defaults` "drifted" seconds after generation |
-| `gemini-cli-ci` | writes a lockfile | **FAIL** — same preset, same reason |
+| `claude-code-ci` | **crashed** — `TypeError: 'StdioGuardConfig' object is not iterable` | 4 presets pinned, verifies |
+| `copilot-agent-ci` | wrote a lockfile that **failed its own verification seconds later** | 3 presets pinned, verifies |
+| `gemini-cli-ci` | same | 3 presets pinned, verifies |
 
-Both causes are identified below under [What does not work](#what-does-not-work). The
-hashing, rendering, parsing and drift-detection functions in `pack/lock.py` are correct and
-covered by `tests/pack/test_lock.py`, which passes dictionaries directly; what fails is the
-preset data the CLI feeds them. **Until that is fixed, a lockfile produced by
-`airlock pack lock` is not a pin** — treat the Python API as the working surface.
+The crash was the louder bug; the unstable digest was the worse one. A control that
+reports drift on an unchanged bundle gets switched off, and had the digest been made
+stable the careless way — hashing a callable by name only — it would have reported *no*
+drift on a bundle that had genuinely changed. Both failure directions are now regression
+tests in `tests/pack/test_lock_hash_stability.py`.
 
 ## What it does
 
@@ -91,42 +93,32 @@ first — so reordering a preset dict is not drift. Changing a value is.
 
 ## What does not work
 
-**1. A preset carrying a bare function hashes differently in every process.**
-`_canonicalise` handles primitives, sequences, sets, dicts, enums and dataclasses, then
-falls back to `repr(value)`. A plain function's `repr` embeds its address:
+**1. A change to a check function's *body* is not detected.** A callable is canonicalised
+as its qualified name plus its captured closure values, so re-parameterising a guard
+factory *is* drift, but editing the code inside `check` is not — the bytes of the function
+are not hashed. Hashing bytecode would tie a lockfile to one Python version, which is
+worse for a lockfile. Implementation changes are covered by the `airlock_version` field,
+which is provenance rather than a constraint (below).
 
-```
-"<function archived_mcp_server_advisory_defaults.<locals>.check at 0x1057c2200>"
-```
-
-so its SHA-256 changes on every run. `archived_mcp_server_advisory_defaults` puts a closure
-under `check`, which is why two of the three shipped packs fail `--verify` immediately.
-Presets whose values are all data hash stably; the two co-installed with it in those packs
-(`copilot_agent_cnc_2026_04`, `lan_unauth_mcp_guard`) were byte-identical across runs.
-
-**2. `airlock pack lock` crashes on a preset that is not a mapping.** Both the CLI
-(`cli/pack.py`) and the replay path (`cli/replay.py`) build `preset_data` with
-`dict(data)`. `PackInstaller.install().composed` usually yields dicts, but
-`stdio_guard_ox_defaults` yields a `StdioGuardConfig` dataclass, and `dict()` raises on it.
-`hash_preset` itself would have handled the dataclass — `_canonicalise` already routes
-`__dataclass_fields__` through `asdict` — so the coercion is what fails, not the hashing.
-
-**3. `airlock_version` is recorded but never enforced.** The field is written into the
+**2. `airlock_version` is recorded but never enforced.** The field is written into the
 lockfile and read back by `parse_lock`, and `verify_lock` ignores it: a lockfile generated
-by 0.6.0 verifies without complaint under 0.8.85. Only `schema_version` is checked, and
-only for equality with `1`. The module docstring's "content hash + airlock version
-constraint" describes an intent, not the code.
+by 0.6.0 verifies without complaint under 0.8.86. Only `schema_version` is checked, and
+only for equality with `1`.
 
-**4. The lockfile is unsigned.** It carries hashes, not a MAC, and regenerating it is one
+**3. The lockfile is unsigned.** It carries hashes, not a MAC, and regenerating it is one
 command. It detects *drift*, not *tampering* — anyone who can edit the bundle can re-emit
 a matching lock. Manifest signing is a separate mechanism (`airlock pack verify`, with
 `AIRLOCK_PACK_SIGNING_KEY`).
 
-**5. The parser accepts a restricted grammar, not TOML.** `parse_lock` is a hand-written
+**4. The parser accepts a restricted grammar, not TOML.** `parse_lock` is a hand-written
 line parser kept for the 3.10 floor, and it does not implement arrays, inline tables,
 multi-line strings or nested sections. `foo = [1, 2]` parses as the *string* `[1, 2]`
 rather than a list, and no error is raised. Only the shape this file renders is supported.
 
-**6. It pins a pack manifest, not the live policy.** `--bundle-lock` verifies the presets
+**5. It pins a pack manifest, not the live policy.** `--bundle-lock` verifies the presets
 composed from `--bundle-manifest`. It does not observe the `SecurityPolicy` a running
 process actually built, so a policy assembled in code is outside its scope.
+
+**6. A preset containing a value with an address-bearing `repr` is refused, not hashed.**
+`UnstableHashError` names the preset and the type. This is deliberate: the alternative is
+a digest that differs in every process, which is the bug this release fixed.

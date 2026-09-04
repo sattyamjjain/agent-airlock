@@ -1,11 +1,15 @@
 """Policy-bundle lockfile (``policy_bundle.lock``) — v0.6.0+.
 
-Mirrors ``Cargo.lock`` / ``uv.lock`` semantics for airlock policy:
-``airlock pack`` emits a TOML lockfile listing every active preset
-with a content hash + airlock version constraint. ``airlock replay
+``airlock pack lock`` emits a TOML lockfile listing every active
+preset with a SHA-256 of its canonical form, and ``airlock replay
 --bundle-lock`` refuses to run if any preset hash drifted from the
 lock — so a CI bot, a compliance audit, and a paid-seat reproducer
-all get the same enforcement guarantee for "the policy on Tuesday".
+all get the same answer for "the policy on Tuesday".
+
+The lockfile also *records* the generating ``airlock_version``, but
+``verify_lock`` does not enforce it: a lock written by 0.6.0 verifies
+under 0.8.86 as long as the preset hashes match. It is provenance,
+not a constraint, and this docstring said "constraint" until v0.8.86.
 
 Lockfile shape::
 
@@ -27,6 +31,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +64,24 @@ class LockfileFormatError(AirlockError):
     """Raised when a lockfile is unparseable or missing required fields."""
 
 
+class UnstableHashError(AirlockError):
+    """Raised when a preset value cannot be hashed reproducibly.
+
+    A lockfile whose hashes differ between processes is worse than no lockfile: it
+    verifies green in the run that wrote it and red in every run afterwards, so the
+    control looks present while detecting nothing. Refusing is the only honest option.
+
+    Attributes:
+        preset_id: The preset being hashed, when the caller supplied one.
+        offending: ``repr()`` of the value that could not be hashed stably.
+    """
+
+    def __init__(self, message: str, *, preset_id: str | None = None, offending: str = "") -> None:
+        self.preset_id = preset_id
+        self.offending = offending
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class LockEntry:
     """One pinned preset row."""
@@ -81,35 +105,118 @@ class PolicyBundleLock:
 # ---------------------------------------------------------------------------
 
 
-def _canonicalise(value: Any) -> Any:
+#: ``<... object at 0x7f...>``. CPython's default ``repr`` embeds the object's address,
+#: which differs in every process, so a hash built from it is not reproducible.
+_ADDRESS_REPR = re.compile(r" at 0x[0-9a-fA-F]+")
+
+#: Guards against a preset that contains a reference cycle. Presets are configuration, so
+#: real nesting is shallow; anything past this is a cycle or a mistake.
+_MAX_CANONICAL_DEPTH = 64
+
+
+def _callable_identity(value: Any) -> str:
+    """A process-stable name for a callable.
+
+    ``repr`` of a function carries its address; its qualified name does not, and is the
+    same string in every process that imports the same module.
+    """
+    module = getattr(value, "__module__", "") or ""
+    qualname = getattr(value, "__qualname__", "") or getattr(value, "__name__", "")
+    return f"{module}.{qualname}" if qualname else repr(value)
+
+
+def _canonicalise(value: Any, _depth: int = 0) -> Any:
     """Render ``value`` into a JSON-stable canonical form.
 
-    Frozensets, dataclasses, and ``Capability`` enums commonly show up
-    in preset dicts; they need explicit handling because
-    ``json.dumps`` does not know how to serialise them.
+    Frozensets, dataclasses, and ``Capability`` enums commonly show up in preset dicts;
+    they need explicit handling because ``json.dumps`` does not know how to serialise them.
+
+    Callables need it for a different reason. Guard factories put a closure in the preset
+    (``archived_mcp_server_advisory_defaults`` puts one under ``check``), and a function's
+    ``repr`` embeds its memory address — so before v0.8.86 such a preset hashed differently
+    in every process and ``airlock pack lock --verify`` could never pass. A callable is now
+    canonicalised as its qualified name **plus its captured closure values**: the name
+    alone would let two differently-parameterised factories collide, which in a drift
+    detector is a false negative and worse than the noise it replaced.
+
+    Args:
+        value: The value to canonicalise.
+        _depth: Recursion depth, used only to fail a cyclic structure loudly.
+
+    Returns:
+        A JSON-serialisable structure with deterministic ordering.
+
+    Raises:
+        UnstableHashError: If ``value`` nests past :data:`_MAX_CANONICAL_DEPTH`, or if it
+            falls through to the ``repr`` path with an address-bearing ``repr``.
     """
+    if _depth > _MAX_CANONICAL_DEPTH:
+        raise UnstableHashError(
+            f"preset value nests deeper than {_MAX_CANONICAL_DEPTH} levels — "
+            "a reference cycle cannot be hashed",
+            offending=type(value).__name__,
+        )
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if isinstance(value, (list, tuple)):
-        return [_canonicalise(v) for v in value]
+        return [_canonicalise(v, _depth + 1) for v in value]
     if isinstance(value, (set, frozenset)):
-        return sorted(_canonicalise(v) for v in value)
+        return sorted(_canonicalise(v, _depth + 1) for v in value)
     if isinstance(value, dict):
-        return {str(k): _canonicalise(v) for k, v in sorted(value.items())}
-    # Enums (``str, Enum``) carry a ``.value``; anything else falls back
-    # to its ``str()`` form so a hash is at least computable.
+        return {str(k): _canonicalise(v, _depth + 1) for k, v in sorted(value.items())}
+    # Enums (``str, Enum``) carry a ``.value``.
     if hasattr(value, "value") and isinstance(value.value, (str, int, bool)):
         return value.value
-    if hasattr(value, "__dataclass_fields__"):
+    if hasattr(value, "__dataclass_fields__") and not isinstance(value, type):
         from dataclasses import asdict
 
-        return _canonicalise(asdict(value))
-    return repr(value)
+        return _canonicalise(asdict(value), _depth + 1)
+    if callable(value):
+        entry: dict[str, Any] = {"__callable__": _callable_identity(value)}
+        closure = getattr(value, "__closure__", None)
+        if closure:
+            captured: list[Any] = []
+            for cell in closure:
+                try:
+                    captured.append(_canonicalise(cell.cell_contents, _depth + 1))
+                except ValueError:
+                    captured.append(None)  # cell not yet filled
+            entry["__closure__"] = captured
+        return entry
+    rendered = repr(value)
+    if _ADDRESS_REPR.search(rendered):
+        raise UnstableHashError(
+            f"cannot hash {type(value).__name__} reproducibly: its repr() embeds a memory "
+            f"address, so the digest would differ in every process. Give the type a stable "
+            f"__repr__, make it a dataclass, or keep it out of the preset.",
+            offending=rendered,
+        )
+    return rendered
 
 
-def hash_preset(preset_data: dict[str, Any]) -> str:
-    """Return the SHA-256 of a preset's canonical JSON form."""
-    canonical = _canonicalise(preset_data)
+def hash_preset(preset_data: Any, *, preset_id: str | None = None) -> str:
+    """Return the SHA-256 of a preset's canonical JSON form.
+
+    Args:
+        preset_data: The preset. Usually a mapping, but guard factories may return a
+            dataclass config object, which canonicalises the same way.
+        preset_id: Optional id, attached to :class:`UnstableHashError` for a message that
+            names the offending preset rather than only the offending type.
+
+    Returns:
+        The hex SHA-256 of the canonical JSON encoding.
+
+    Raises:
+        UnstableHashError: If any value cannot be hashed reproducibly.
+    """
+    try:
+        canonical = _canonicalise(preset_data)
+    except UnstableHashError as exc:
+        if preset_id and exc.preset_id is None:
+            raise UnstableHashError(
+                f"preset {preset_id!r}: {exc}", preset_id=preset_id, offending=exc.offending
+            ) from exc
+        raise
     encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -120,7 +227,7 @@ def hash_preset(preset_data: dict[str, Any]) -> str:
 
 
 def build_lock(
-    preset_data: dict[str, dict[str, Any]],
+    preset_data: Mapping[str, Any],
     *,
     airlock_version: str,
     generated_at: datetime | None = None,
@@ -128,7 +235,7 @@ def build_lock(
     """Build a :class:`PolicyBundleLock` from a ``preset_id -> data`` map."""
     when = generated_at or datetime.now(tz=timezone.utc)
     entries = tuple(
-        LockEntry(preset_id=pid, content_sha256=hash_preset(data))
+        LockEntry(preset_id=pid, content_sha256=hash_preset(data, preset_id=pid))
         for pid, data in sorted(preset_data.items())
     )
     return PolicyBundleLock(
@@ -245,7 +352,7 @@ def read_lock(path: Path) -> PolicyBundleLock:
 
 def verify_lock(
     lock: PolicyBundleLock,
-    preset_data: dict[str, dict[str, Any]],
+    preset_data: Mapping[str, Any],
 ) -> None:
     """Raise :class:`LockfileDriftError` on the first hash mismatch."""
     expected = {e.preset_id: e.content_sha256 for e in lock.entries}
@@ -255,9 +362,9 @@ def verify_lock(
                 f"preset {preset_id!r} present in bundle but not in lockfile",
                 preset_id=preset_id,
                 expected_sha256="",
-                actual_sha256=hash_preset(data),
+                actual_sha256=hash_preset(data, preset_id=preset_id),
             )
-        actual = hash_preset(data)
+        actual = hash_preset(data, preset_id=preset_id)
         if actual != expected[preset_id]:
             raise LockfileDriftError(
                 f"preset {preset_id!r} content hash drifted from lockfile",
@@ -282,6 +389,7 @@ __all__ = [
     "LockfileDriftError",
     "LockfileFormatError",
     "PolicyBundleLock",
+    "UnstableHashError",
     "build_lock",
     "hash_preset",
     "parse_lock",

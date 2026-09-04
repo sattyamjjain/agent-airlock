@@ -131,9 +131,15 @@ class KillSwitchBroadcast:
 class KillSwitchListener:
     """Per-process listener.
 
-    Calls ``poll()`` on a configurable interval (5 s default per
-    spec); each accepted broadcast updates ``state``. Verifying any
-    one of the registered signers' MACs is sufficient.
+    Each accepted broadcast updates ``state``; verifying any one of the
+    registered signers' MACs is sufficient. :meth:`poll` reads every
+    pending message unconditionally, while :meth:`poll_if_due` respects
+    ``poll_interval_seconds`` and is what the ``@Airlock`` call path uses
+    so a transport read does not land on every tool call.
+
+    Register one with ``agent_airlock.kill_switch.registry.install`` to
+    have ``@Airlock`` consult it. Constructing a listener alone changes
+    nothing — through v0.8.85 nothing in the library ever did.
     """
 
     signers: tuple[HMACBroadcastSigner, ...]
@@ -143,13 +149,22 @@ class KillSwitchListener:
     state: KillSwitchState = KillSwitchState.DISARMED
     last_action_ts: float = 0.0
     last_reason: str = ""
+    poll_interval_seconds: float = 5.0
+    """Minimum seconds between transport reads driven by :meth:`poll_if_due`.
+
+    5 s is the interval the original feature spec named and never implemented. A freeze
+    therefore takes effect within one interval, not instantly; set it to 0 to poll on
+    every call.
+    """
     _quorum: ResetQuorum = field(init=False)
+    _last_poll: float = field(init=False, default=0.0)
 
     def __post_init__(self) -> None:
         self._quorum = ResetQuorum(
             threshold=self.reset_quorum_threshold,
             total=self.reset_quorum_total,
         )
+        self._last_poll = 0.0
 
     def is_frozen(self) -> bool:
         """Whether agents must halt new tool calls right now."""
@@ -182,6 +197,18 @@ class KillSwitchListener:
                     self._quorum.reset()
                 # else: still need more signers — stays TRIGGERED.
         return n
+
+    def poll_if_due(self) -> int:
+        """Poll only if ``poll_interval_seconds`` has elapsed since the last read.
+
+        Returns:
+            The number of broadcasts accepted, or 0 when the interval has not elapsed.
+        """
+        now = time.monotonic()
+        if self._last_poll and (now - self._last_poll) < self.poll_interval_seconds:
+            return 0
+        self._last_poll = now
+        return self.poll()
 
     def quorum_progress(self) -> tuple[int, int]:
         return (len(self._quorum.votes), self._quorum.threshold)

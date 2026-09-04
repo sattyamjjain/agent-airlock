@@ -1,8 +1,13 @@
 """Pluggable transport layer for kill-switch broadcasts.
 
-The runtime ships only an in-memory transport plus stubs for NATS /
-Redis / S3. Real transports require optional deps the runtime never
-forces; users implement the protocol with their preferred client.
+The core ships :class:`InMemoryTransport` (process-local) and, under the ``[redis]``
+extra, :class:`RedisStreamTransport` — a real durable cross-process transport. NATS and
+S3 remain stubs.
+
+**The stubs do not leave the process.** ``NATSTransportStub``, ``RedisTransportStub`` and
+``S3TransportStub`` all delegate to an in-process queue, which is why the kill switch
+could not freeze a fleet before v0.8.86. ``RedisTransportStub`` is now a deprecated alias
+kept for import compatibility; use :class:`RedisStreamTransport`.
 """
 
 from __future__ import annotations
@@ -61,7 +66,11 @@ class NATSTransportStub(_StubTransport):
 
 
 class RedisTransportStub(_StubTransport):
-    """Redis pub/sub transport stub."""
+    """Deprecated: does NOT leave the process. Use :class:`RedisStreamTransport`.
+
+    Kept so existing imports do not break. It delegates to an in-process queue, so a
+    fleet wired to it is not actually connected.
+    """
 
     name = "redis"
 
@@ -72,9 +81,19 @@ class S3TransportStub(_StubTransport):
     name = "s3"
 
 
+def __getattr__(name: str) -> object:
+    """Lazily expose the optional Redis transport without importing redis at load."""
+    if name == "RedisStreamTransport":
+        from .redis_stream import RedisStreamTransport
+
+        return RedisStreamTransport
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
     "BroadcastTransport",
     "InMemoryTransport",
+    "RedisStreamTransport",
     "NATSTransportStub",
     "RedisTransportStub",
     "S3TransportStub",

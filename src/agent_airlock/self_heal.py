@@ -41,6 +41,11 @@ class BlockReason(str, Enum):
     ESCALATION_REQUIRED = "escalation_required"
     ESCALATION_DENIED = "escalation_denied"
     ESCALATION_TIMEOUT = "escalation_timeout"
+    # V0.8.86: an operator froze the fleet. Distinct from POLICY_VIOLATION for the same
+    # reason the three above are: "an operator halted everything" and "this call is
+    # forbidden" need different responses, and collapsing them hides an active incident
+    # behind a routine denial.
+    KILL_SWITCH = "kill_switch"
     # V0.8.74 resource-amplification reasons (issue #142).
     AMPLIFICATION_EXCEEDED = "amplification_exceeded"
     # V0.8.77 capability-handle reasons (MCP 2026-07-28 / SEP-2567). One per failure mode,
