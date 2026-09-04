@@ -94,6 +94,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 def _cmd_lock(args: argparse.Namespace) -> int:
     """Emit / verify ``policy_bundle.lock`` for a pack."""
     import json as _json
+    from collections.abc import Mapping
     from pathlib import Path as _Path
 
     from .. import __version__ as airlock_version
@@ -113,7 +114,13 @@ def _cmd_lock(args: argparse.Namespace) -> int:
     manifest = load_manifest(path)
     installer = PackInstaller()
     installed = installer.install(manifest)
-    preset_data = {pid: dict(data) for pid, data in installed.composed.items()}
+    # Not ``dict(data)``: ``composed`` usually yields mappings, but a guard factory may
+    # yield a dataclass config (``stdio_guard_ox_defaults`` -> ``StdioGuardConfig``) and
+    # ``dict()`` raises on it. ``hash_preset`` canonicalises either shape.
+    preset_data = {
+        pid: dict(data) if isinstance(data, Mapping) else data
+        for pid, data in installed.composed.items()
+    }
     lock = build_lock(preset_data, airlock_version=airlock_version)
 
     out_path = _Path(args.output) if args.output else path.parent / "policy_bundle.lock"

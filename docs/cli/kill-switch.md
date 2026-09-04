@@ -3,30 +3,38 @@
 **Landed in v0.5.9.** Implementation `src/agent_airlock/kill_switch/`; CLI
 `src/agent_airlock/cli/kill_switch.py`.
 
-## Status: the primitives are wired, the delivery is not
+## Status: operational as of v0.8.86
 
-**Verified against v0.8.85 on 2026-09-04.** Three things this page has to say before it
-describes anything, because each of them is load-bearing and none is visible from the
-command's output:
+**Through v0.8.85 this froze nothing.** The HMAC signing, the envelope, the listener state
+machine and the M-of-N quorum were all correct and all inert, because
+`KillSwitchListener` was never constructed inside the library — the only references
+outside `kill_switch/` were the CLI and the CLI dispatcher table. Triggering the switch
+halted no tool call anywhere.
 
-1. **No airlock-protected process is frozen by this.** `KillSwitchListener` is never
-   constructed, polled, or consulted anywhere in the `@Airlock` call path — the only
-   references to it outside `kill_switch/` are the CLI and the CLI dispatcher table.
-   Triggering the switch halts tool calls **only if you wire the listener into your own
-   process** and check `is_frozen()` yourself. (`SecurityPolicy.is_frozen()` is an unrelated
-   method meaning "this policy was produced by `freeze()`"; it is not the kill switch.)
-2. **No cross-process transport ships.** `NATSTransportStub`, `RedisTransportStub` and
-   `S3TransportStub` all subclass `_StubTransport`, which delegates to an in-process
-   `InMemoryTransport`. Nothing leaves the process. "Cluster-wide" requires you to implement
-   the two-method `BroadcastTransport` protocol against a real bus.
-3. **The CLI does not persist anything.** `trigger` and `reset` each construct a fresh
-   `InMemoryTransport()`, publish into it, print `OK`, and exit — the broadcast is discarded
-   with the process. `arm` validates the key length and prints; no state is written
-   anywhere. The commands are smoke tests for key material, not operational controls.
+Three things changed:
 
-What *is* real and tested: HMAC-SHA256 signing and constant-time verification, the signed
-envelope format, the listener state machine, and the M-of-N reset quorum. Those are the
-parts the example below exercises end to end.
+| | before v0.8.85 | now |
+|---|---|---|
+| `@Airlock` consults the switch | never | yes, ahead of every other gate |
+| Cross-process transport | NATS/Redis/S3 were stubs delegating to an in-process queue | `RedisStreamTransport` under the `[redis]` extra |
+| CLI `trigger` / `reset` | published into a transport discarded at exit, printed `OK` | require a real transport, or **fail** |
+
+**It is opt-in and it is two steps.** A process must both construct a listener *and*
+register it; constructing one alone still changes nothing:
+
+```python
+from agent_airlock.kill_switch import HMACBroadcastSigner, KillSwitchListener, registry
+from agent_airlock.kill_switch.transports import RedisStreamTransport
+
+registry.install(KillSwitchListener(
+    signers=(HMACBroadcastSigner(keyid="ops-a", key=KEY),),
+    transport=RedisStreamTransport.from_url("redis://localhost:6379/0"),
+))
+```
+
+After `install`, a blocked call returns `block_reason: "kill_switch"` — a distinct reason
+from `policy_violation`, because "an operator halted the fleet" and "this call is
+forbidden" need different responses.
 
 ## What it does
 
@@ -47,79 +55,101 @@ must be at least 32 bytes; shorter keys raise `InvalidBroadcastSignature` at con
 
 ## Runnable example
 
-This is the working surface. Output shown is from an actual run:
+The whole feature in one script. Output is from an actual run:
 
 ```python
+from agent_airlock import Airlock
 from agent_airlock.kill_switch import (
     HMACBroadcastSigner, InMemoryTransport, KillSwitchBroadcast,
-    KillSwitchListener, KillSwitchState,
+    KillSwitchListener, registry,
 )
 
-transport = InMemoryTransport()          # process-local; see limitation 2 above
+@Airlock()
+def deploy(target: str) -> str:
+    return f"deployed to {target}"
+
+bus = InMemoryTransport()          # swap for RedisStreamTransport to cross processes
 ops_a = HMACBroadcastSigner(keyid="ops-a", key=b"a" * 32)
 ops_b = HMACBroadcastSigner(keyid="ops-b", key=b"b" * 32)
 
-listener = KillSwitchListener(signers=(ops_a, ops_b), transport=transport)
-print(listener.state.value, listener.is_frozen())            # disarmed False
+listener = KillSwitchListener(signers=(ops_a, ops_b), transport=bus, poll_interval_seconds=0)
+registry.install(listener)         # <- without this, @Airlock never asks
+print(listener.state.value, "|", deploy(target="prod"))
+# armed | deployed to prod
 
-KillSwitchBroadcast(signer=ops_a, transport=transport).trigger(reason="prod incident 412")
-listener.poll()
-print(listener.state.value, listener.is_frozen())            # triggered True
+KillSwitchBroadcast(signer=ops_a, transport=bus).trigger(reason="incident 412")
+print(deploy(target="prod")["block_reason"])
+# kill_switch     -- the decorated function is now refused
 
 # One key is not enough to come back: the default quorum is 2-of-3.
-KillSwitchBroadcast(signer=ops_a, transport=transport).reset(reason="all clear")
-listener.poll()
-print(listener.state.value, listener.quorum_progress())      # triggered (1, 2)
+KillSwitchBroadcast(signer=ops_a, transport=bus).reset(reason="all clear")
+print(deploy(target="prod")["block_reason"], listener.quorum_progress())
+# kill_switch (1, 2)
 
-KillSwitchBroadcast(signer=ops_b, transport=transport).reset(reason="all clear")
-listener.poll()
-print(listener.state.value, listener.is_frozen())            # disarmed False
+KillSwitchBroadcast(signer=ops_b, transport=bus).reset(reason="all clear")
+print(deploy(target="prod"))
+# deployed to prod
 
 # A broadcast signed by a key the listener does not hold is dropped, not applied.
-intruder = HMACBroadcastSigner(keyid="ops-a", key=b"z" * 32)  # right keyid, wrong key
-KillSwitchBroadcast(signer=intruder, transport=transport).trigger(reason="forged")
-print(listener.poll(), listener.state.value)                 # 0 disarmed
+intruder = HMACBroadcastSigner(keyid="ops-a", key=b"z" * 32)   # right keyid, wrong key
+KillSwitchBroadcast(signer=intruder, transport=bus).trigger(reason="forged")
+print(deploy(target="prod"))
+# deployed to prod
 ```
 
-Note the last block: the forged message claims a keyid the listener trusts, and is still
-rejected, because acceptance is decided by the MAC and not by the claimed identity.
+Two things worth reading twice. The forged message claims a keyid the listener trusts and
+is still rejected, because acceptance is decided by the MAC and not by the claimed
+identity. And the same key voting to reset five times is still one vote — the quorum
+counts distinct keyids, so a single compromised key cannot re-enable a fleet.
 
 ## Commands
 
 ```bash
 export AIRLOCK_KILL_SWITCH_KEY="<>= 32 bytes, hex or raw>"
+export AIRLOCK_KILL_SWITCH_REDIS_URL="redis://localhost:6379/0"   # or --redis-url
 
-airlock kill-switch arm ops-a
+airlock kill-switch status  --keyid ops-a
 airlock kill-switch trigger "prod incident 412" --keyid ops-a
-airlock kill-switch reset "all clear" --keyid ops-a --quorum 2-of-3
+airlock kill-switch reset   "all clear" --keyid ops-a --quorum 2-of-3
+airlock kill-switch arm     ops-a          # validates key material, reads fleet state
 ```
 
-`--key-env` overrides the variable name on any subcommand. Real output:
+`--key-env` and `--stream-key` override the key variable and the Redis stream on any
+subcommand. `status` exits 1 when the fleet is frozen, so it composes in a shell check.
+
+**Without a transport, the publishing commands fail rather than reporting success:**
 
 ```
-OK: kill-switch armed for keyid='ops-a'
-OK: trigger queued (reason='prod incident 412', transport=InMemoryTransport)
-OK: reset queued (quorum=2-of-3, reason='all clear', transport=InMemoryTransport)
+no broadcast transport configured — this command would reach no process.
+  Pass --redis-url redis://host:6379/0, or set AIRLOCK_KILL_SWITCH_REDIS_URL.
+  Requires the redis extra: pip install "agent-airlock[redis]"
 ```
 
-Read `transport=InMemoryTransport` in that output literally: the message went into a queue
-that is discarded when the command exits.
+That refusal is the point. Until v0.8.86 these commands printed
+`OK: trigger queued (transport=InMemoryTransport)` and reached nothing.
 
 ## What this does not cover
 
-- **`--quorum` is echoed, never enforced.** The flag is printed back and otherwise unused;
-  the CLI's `reset` path constructs no `ResetQuorum` at all. `--quorum 9-of-9` is accepted
-  and reported as `9-of-9`. Quorum is enforced only by `KillSwitchListener`, via its
-  `reset_quorum_threshold` / `reset_quorum_total` fields.
-- **`KillSwitchState.ARMED` is never assigned.** The enum member exists; the listener only
-  ever moves between `DISARMED` and `TRIGGERED`. There is no armed-but-not-triggered state
-  in the implementation, which is also why `arm` writes nothing.
-- **There is no 5-second timer.** The listener docstring mentions a 5 s interval "per
-  spec"; `poll()` is caller-driven and nothing in the package schedules it. The latency to
-  freeze is whatever your own loop provides.
-- **A short signing key raises an uncaught traceback** from the CLI rather than a clean
-  message.
+- **A freeze takes effect within one poll interval, not instantly.** The listener polls at
+  most once per `poll_interval_seconds` (5 s by default) so a transport read does not land
+  on every tool call. Set it to `0` to poll on every call. A process that makes no tool
+  calls never polls, and is therefore never frozen — the switch stops *calls*, not
+  processes.
+- **Transport failures fail open by default.** If a poll raises, the previous state is kept
+  and the error is logged, because a kill switch that halts every agent when its own
+  transport hiccups is an outage generator. This is the opposite of the library's usual
+  deny-by-default posture, so it is a deliberate exception: pass `strict=True` to
+  `registry.install` to freeze on transport errors instead.
+- **`--quorum` does not travel in the broadcast.** The threshold is listener configuration
+  (`reset_quorum_threshold` / `reset_quorum_total`). The CLI now parses and validates the
+  flag — `--quorum 9-of-3` is rejected rather than echoed — but uses it only to tell you
+  how many more votes are needed.
+- **NATS and S3 transports are still stubs** that delegate to an in-process queue, as is
+  the deprecated `RedisTransportStub`. Only `RedisStreamTransport` crosses a process
+  boundary. Anything else needs the two-method `BroadcastTransport` protocol implemented
+  against your own bus.
+- **There is no replay protection.** `ts_epoch` is signed but never checked for freshness,
+  so a captured `reset` envelope stays valid indefinitely. Two captured votes from two
+  distinct keyids would disarm a fleet.
 - **`docs/kill-switch.md`, cited as the feature spec by the package docstring, does not
-  exist.** This page is not that spec; it documents the code as it stands.
-- **Nothing is authenticated but the broadcast.** There is no replay protection: `ts_epoch`
-  is signed but never checked for freshness, so a captured `reset` envelope stays valid.
+  exist.** This page documents the code as it stands.

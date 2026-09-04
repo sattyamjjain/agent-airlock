@@ -209,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     if args.bundle_lock and args.bundle_manifest:
+        from collections.abc import Mapping
         from pathlib import Path as _Path
 
         from ..pack import (
@@ -223,7 +224,10 @@ def main(argv: list[str] | None = None) -> int:
         try:
             manifest = load_manifest(_Path(args.bundle_manifest))
             installed = PackInstaller().install(manifest)
-            preset_data = {pid: dict(data) for pid, data in installed.composed.items()}
+            preset_data = {
+                pid: dict(data) if isinstance(data, Mapping) else data
+                for pid, data in installed.composed.items()
+            }
             lock = read_lock(_Path(args.bundle_lock))
             verify_lock(lock, preset_data)
         except (LockfileDriftError, LockfileFormatError) as exc:

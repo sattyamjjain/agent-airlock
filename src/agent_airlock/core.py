@@ -82,6 +82,8 @@ from .honeypot import (
     should_soft_block,
     should_use_honeypot,
 )
+from .kill_switch.registry import get as _kill_switch_get
+from .kill_switch.registry import is_frozen as _kill_switch_frozen
 from .network import NetworkBlockedError, network_airgap
 from .policy import (
     PolicyEscalation,
@@ -444,6 +446,38 @@ class Airlock:
                 agent_id=context.agent_id,
                 session_id=context.session_id,
             )
+
+            # Step 0: the kill switch, ahead of every other gate (V0.8.86).
+            # A freeze means stop, not "stop after checking whether the arguments were
+            # well-formed", so this runs before ghost-argument validation. No-op unless a
+            # listener was installed via kill_switch.registry.install(); polling is bounded
+            # by the listener's poll_interval_seconds so it is not a per-call transport read.
+            if _kill_switch_frozen():
+                listener = _kill_switch_get()
+                reason = listener.last_reason if listener else ""
+                logger.warning("airlock_kill_switch_block", function=func_name, reason=reason)
+                frozen_error = AirlockResponse.blocked_response(
+                    reason=BlockReason.KILL_SWITCH,
+                    error=(
+                        f"AIRLOCK_BLOCK: kill switch engaged; '{func_name}' refused."
+                        + (f" Operator reason: {reason}" if reason else "")
+                    ),
+                    fix_hints=[
+                        "An operator has frozen all tool calls for this fleet",
+                        "This is not a per-call denial: retrying or changing arguments "
+                        "will not help until the switch is reset",
+                        "Resetting requires the configured multi-key quorum",
+                    ],
+                    metadata={"function": func_name, "operator_reason": reason},
+                )
+                self._safe_invoke_callback(
+                    self.config.on_blocked,
+                    "on_blocked",
+                    func_name,
+                    "kill switch engaged",
+                    {"violation_type": "kill_switch", "operator_reason": reason},
+                )
+                return kwargs, start_time, context, frozen_error, None
 
             # Step 1: Validate and handle ghost arguments
             cleaned_kwargs, _, ghost_error = self._validate_ghost_arguments(func, func_name, kwargs)
