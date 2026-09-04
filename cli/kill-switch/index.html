@@ -10,27 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/scan-tools/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/cli/kill-switch/">
       
       
+        <link rel="prev" href="../../cves/">
+      
+      
+        <link rel="next" href="../policy-bundle-lock/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>airlock scan-tools — a static contract / type-checker for MCP tool calls - Agent-Airlock</title>
+        <title>Kill switch - Agent-Airlock</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#airlock-scan-tools-a-static-contract-type-checker-for-mcp-tool-calls" class="md-skip">
+        <a href="#airlock-kill-switch-hmac-signed-freeze-with-quorum-reset" class="md-skip">
           Skip to content
         </a>
       
@@ -90,7 +94,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="Agent-Airlock" class="md-header__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
+    <a href="../.." title="Agent-Airlock" class="md-header__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -110,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              airlock scan-tools — a static contract / type-checker for MCP tool calls
+              Kill switch
             
           </span>
         </div>
@@ -223,7 +227,7 @@
   
   
     <li class="md-tabs__item">
-      <a href=".." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -244,7 +248,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../getting-started/installation/" class="md-tabs__link">
+        <a href="../../getting-started/installation/" class="md-tabs__link">
           
   
   
@@ -264,7 +268,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../guide/concepts/" class="md-tabs__link">
+        <a href="../../guide/concepts/" class="md-tabs__link">
           
   
   
@@ -284,7 +288,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../api/airlock/" class="md-tabs__link">
+        <a href="../../api/airlock/" class="md-tabs__link">
           
   
   
@@ -304,7 +308,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../examples/basic/" class="md-tabs__link">
+        <a href="../../examples/basic/" class="md-tabs__link">
           
   
   
@@ -322,7 +326,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../cves/" class="md-tabs__link">
+      <a href="../../cves/" class="md-tabs__link">
         
   
   
@@ -339,11 +343,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../cli/kill-switch/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
           
   
   
@@ -363,7 +369,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../observability/semconv/" class="md-tabs__link">
+        <a href="../../observability/semconv/" class="md-tabs__link">
           
   
   
@@ -381,7 +387,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../SECURITY/" class="md-tabs__link">
+      <a href="../../SECURITY/" class="md-tabs__link">
         
   
   
@@ -419,7 +425,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../changelog/" class="md-tabs__link">
+      <a href="../../changelog/" class="md-tabs__link">
         
   
   
@@ -454,7 +460,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="Agent-Airlock" class="md-nav__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
+    <a href="../.." title="Agent-Airlock" class="md-nav__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -484,7 +490,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -565,7 +571,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -593,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -621,7 +627,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/configuration/" class="md-nav__link">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
         
   
   
@@ -710,7 +716,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/concepts/" class="md-nav__link">
+      <a href="../../guide/concepts/" class="md-nav__link">
         
   
   
@@ -738,7 +744,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/validation/" class="md-nav__link">
+      <a href="../../guide/validation/" class="md-nav__link">
         
   
   
@@ -766,7 +772,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/policy/" class="md-nav__link">
+      <a href="../../guide/policy/" class="md-nav__link">
         
   
   
@@ -794,7 +800,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/sanitization/" class="md-nav__link">
+      <a href="../../guide/sanitization/" class="md-nav__link">
         
   
   
@@ -822,7 +828,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/sandbox/" class="md-nav__link">
+      <a href="../../guide/sandbox/" class="md-nav__link">
         
   
   
@@ -850,7 +856,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/mcp/" class="md-nav__link">
+      <a href="../../guide/mcp/" class="md-nav__link">
         
   
   
@@ -939,7 +945,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/airlock/" class="md-nav__link">
+      <a href="../../api/airlock/" class="md-nav__link">
         
   
   
@@ -967,7 +973,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -995,7 +1001,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/policy/" class="md-nav__link">
+      <a href="../../api/policy/" class="md-nav__link">
         
   
   
@@ -1023,7 +1029,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/sanitizer/" class="md-nav__link">
+      <a href="../../api/sanitizer/" class="md-nav__link">
         
   
   
@@ -1051,7 +1057,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/sandbox/" class="md-nav__link">
+      <a href="../../api/sandbox/" class="md-nav__link">
         
   
   
@@ -1079,7 +1085,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/mcp/" class="md-nav__link">
+      <a href="../../api/mcp/" class="md-nav__link">
         
   
   
@@ -1168,7 +1174,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/basic/" class="md-nav__link">
+      <a href="../../examples/basic/" class="md-nav__link">
         
   
   
@@ -1196,7 +1202,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/policy/" class="md-nav__link">
+      <a href="../../examples/policy/" class="md-nav__link">
         
   
   
@@ -1224,7 +1230,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/pii/" class="md-nav__link">
+      <a href="../../examples/pii/" class="md-nav__link">
         
   
   
@@ -1252,7 +1258,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/sandbox/" class="md-nav__link">
+      <a href="../../examples/sandbox/" class="md-nav__link">
         
   
   
@@ -1287,7 +1293,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cves/" class="md-nav__link">
+      <a href="../../cves/" class="md-nav__link">
         
   
   
@@ -1311,28 +1317,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
-        
-          
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
             
   
   
@@ -1350,7 +1359,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1365,10 +1374,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../cli/kill-switch/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kill switch
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1384,6 +1420,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#status-the-primitives-are-wired-the-delivery-is-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status: the primitives are wired, the delivery is not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runnable-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runnable example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-does-not-cover" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this does not cover
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1396,7 +1507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/policy-bundle-lock/" class="md-nav__link">
+      <a href="../policy-bundle-lock/" class="md-nav__link">
         
   
   
@@ -1424,7 +1535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/egress-bench/" class="md-nav__link">
+      <a href="../egress-bench/" class="md-nav__link">
         
   
   
@@ -1513,7 +1624,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../observability/semconv/" class="md-nav__link">
+      <a href="../../observability/semconv/" class="md-nav__link">
         
   
   
@@ -1548,7 +1659,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../SECURITY/" class="md-nav__link">
+      <a href="../../SECURITY/" class="md-nav__link">
         
   
   
@@ -1602,7 +1713,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../changelog/" class="md-nav__link">
+      <a href="../../changelog/" class="md-nav__link">
         
   
   
@@ -1649,38 +1760,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#install-invoke" class="md-nav__link">
+  <a href="#status-the-primitives-are-wired-the-delivery-is-not" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install &amp; invoke
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Install &amp; invoke">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#inputs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Inputs
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#grades-and-checks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Grades and checks
+        Status: the primitives are wired, the delivery is not
       
     </span>
   </a>
@@ -1688,10 +1771,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#policies" class="md-nav__link">
+  <a href="#what-it-does" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Policies
+        What it does
       
     </span>
   </a>
@@ -1699,38 +1782,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#exit-codes-ci" class="md-nav__link">
+  <a href="#runnable-example" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Exit codes (CI)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Exit codes (CI)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#ci-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CI example
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#coverage-measured-reported-as-is" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Coverage — measured, reported as-is
+        Runnable example
       
     </span>
   </a>
@@ -1738,10 +1793,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#programmatic-use" class="md-nav__link">
+  <a href="#commands" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Programmatic use
+        Commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-does-not-cover" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this does not cover
       
     </span>
   </a>
@@ -1768,190 +1834,110 @@
   
 
 
-<h1 id="airlock-scan-tools-a-static-contract-type-checker-for-mcp-tool-calls"><code>airlock scan-tools</code> — a static contract / type-checker for MCP tool calls<a class="headerlink" href="#airlock-scan-tools-a-static-contract-type-checker-for-mcp-tool-calls" title="Permanent link">&para;</a></h1>
-<p><code>scan-tools</code> is a <strong>static type-checker for AI tool declarations</strong>. It answers one
-question per tool:</p>
-<blockquote>
-<p>Does this tool's <em>declared contract</em> fit inside a least-privilege
-<code>SecurityPolicy</code> envelope?</p>
-</blockquote>
-<p>It is deliberately <strong>not</strong> two things it is often confused with:</p>
-<ul>
-<li><strong>Not the runtime <code>@Airlock</code> decorator.</strong> <code>@Airlock</code> validates and enforces at
-  <em>call time</em> (ghost-arg stripping, strict Pydantic validation, policy checks,
-  sandboxing). <code>scan-tools</code> runs <em>before</em> your agent ever loads the tools — on the
-  declarations themselves — so you catch an over-broad or trust-widening contract in
-  CI, not in production.</li>
-<li><strong>Not a content-signature tool-poisoning scanner.</strong> <a href="https://github.com/invariantlabs-ai/mcp-scan">MCP-Scan (Invariant
-  Labs)</a> and <a href="https://www.esentire.com/">eSentire's
-  MCP-Scanner</a> scan tool metadata for known
-  <em>poisoning signatures</em>. <code>scan-tools</code> checks the <strong>type contract</strong> against a
-  policy. The two overlap only on the description-poisoning subset (which
-  <code>scan-tools</code> covers by reusing the shipped Server-Card guard); the distinct value
-  is the contract checks — argument surface, type constraints, capability caps —
-  that a signature scanner does not perform.</li>
-</ul>
-<p>Pydantic-only, zero-dep core.</p>
-<h2 id="install-invoke">Install &amp; invoke<a class="headerlink" href="#install-invoke" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"agent-airlock&gt;=0.8.42"</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>airlock-scan-tools<span class="w"> </span>./tools/<span class="w"> </span>--policy<span class="w"> </span>strict
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>python<span class="w"> </span>-m<span class="w"> </span>agent_airlock.cli.scan_tools<span class="w"> </span>./mcp.json<span class="w"> </span>--output<span class="w"> </span>json
+<h1 id="airlock-kill-switch-hmac-signed-freeze-with-quorum-reset"><code>airlock kill-switch</code> — HMAC-signed freeze with quorum reset<a class="headerlink" href="#airlock-kill-switch-hmac-signed-freeze-with-quorum-reset" title="Permanent link">&para;</a></h1>
+<p><strong>Landed in v0.5.9.</strong> Implementation <code>src/agent_airlock/kill_switch/</code>; CLI
+<code>src/agent_airlock/cli/kill_switch.py</code>.</p>
+<h2 id="status-the-primitives-are-wired-the-delivery-is-not">Status: the primitives are wired, the delivery is not<a class="headerlink" href="#status-the-primitives-are-wired-the-delivery-is-not" title="Permanent link">&para;</a></h2>
+<p><strong>Verified against v0.8.85 on 2026-09-04.</strong> Three things this page has to say before it
+describes anything, because each of them is load-bearing and none is visible from the
+command's output:</p>
+<ol>
+<li><strong>No airlock-protected process is frozen by this.</strong> <code>KillSwitchListener</code> is never
+   constructed, polled, or consulted anywhere in the <code>@Airlock</code> call path — the only
+   references to it outside <code>kill_switch/</code> are the CLI and the CLI dispatcher table.
+   Triggering the switch halts tool calls <strong>only if you wire the listener into your own
+   process</strong> and check <code>is_frozen()</code> yourself. (<code>SecurityPolicy.is_frozen()</code> is an unrelated
+   method meaning "this policy was produced by <code>freeze()</code>"; it is not the kill switch.)</li>
+<li><strong>No cross-process transport ships.</strong> <code>NATSTransportStub</code>, <code>RedisTransportStub</code> and
+   <code>S3TransportStub</code> all subclass <code>_StubTransport</code>, which delegates to an in-process
+   <code>InMemoryTransport</code>. Nothing leaves the process. "Cluster-wide" requires you to implement
+   the two-method <code>BroadcastTransport</code> protocol against a real bus.</li>
+<li><strong>The CLI does not persist anything.</strong> <code>trigger</code> and <code>reset</code> each construct a fresh
+   <code>InMemoryTransport()</code>, publish into it, print <code>OK</code>, and exit — the broadcast is discarded
+   with the process. <code>arm</code> validates the key length and prints; no state is written
+   anywhere. The commands are smoke tests for key material, not operational controls.</li>
+</ol>
+<p>What <em>is</em> real and tested: HMAC-SHA256 signing and constant-time verification, the signed
+envelope format, the listener state machine, and the M-of-N reset quorum. Those are the
+parts the example below exercises end to end.</p>
+<h2 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h2>
+<p>An operator signs a <code>trigger</code> broadcast with a shared key. Every process running a
+<code>KillSwitchListener</code> that holds a matching key sees <code>state == TRIGGERED</code> on its next
+<code>poll()</code> and reports <code>is_frozen()</code>. Returning to service needs a quorum of <em>distinct</em>
+keyids — 2-of-3 by default — so one compromised key cannot unilaterally re-enable agents.</p>
+<p>The wire envelope is compact JSON with sorted keys, signed over its canonical form:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span><span class="nt">"action"</span><span class="p">:</span><span class="s2">"trigger"</span><span class="p">,</span><span class="nt">"keyid"</span><span class="p">:</span><span class="s2">"ops-a"</span><span class="p">,</span><span class="nt">"reason"</span><span class="p">:</span><span class="s2">"prod incident 412"</span><span class="p">,</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w"> </span><span class="nt">"signature"</span><span class="p">:</span><span class="s2">"&lt;hex hmac-sha256&gt;"</span><span class="p">,</span><span class="nt">"ts_epoch"</span><span class="p">:</span><span class="mf">1757000000.0</span><span class="p">,</span><span class="nt">"version"</span><span class="p">:</span><span class="mi">1</span><span class="p">}</span>
 </code></pre></div>
-<blockquote>
-<p>The shipped console script is <code>airlock-scan-tools</code> (hyphenated), matching
-<code>airlock-explain</code> / <code>airlock-conformance</code>. The unified <code>airlock scan-tools</code>
-space-form lands with the deferred CLI-dispatcher PR (see <code>pyproject.toml</code>).</p>
-</blockquote>
-<h3 id="inputs">Inputs<a class="headerlink" href="#inputs" title="Permanent link">&para;</a></h3>
-<p><code>scan-tools</code> accepts any of:</p>
-<ul>
-<li>a single <code>.json</code> tool definition (<code>{"name": …, "inputSchema": …}</code>),</li>
-<li>a server card / tool-list export (<code>{"tools": [ … ]}</code>),</li>
-<li>a bare list of tool defs (<code>[ … ]</code>),</li>
-<li>an MCP client config with <strong>inlined</strong> tool schemas
-  (<code>{"mcpServers": {"srv": {"command": …, "tools": [ … ]}}}</code>),</li>
-<li>a <strong>directory</strong> of any of the above (known config names — <code>mcp.json</code>,
-  <code>claude_desktop_config.json</code>, <code>.mcp.json</code> — are loaded first, then any <code>*.json</code>).</li>
-</ul>
-<p>A config that only registers server <em>commands</em> with no inlined tool schemas yields
-zero tools to check — there is nothing to statically type-check, and the loader says
-so rather than inventing schemas.</p>
-<h2 id="grades-and-checks">Grades and checks<a class="headerlink" href="#grades-and-checks" title="Permanent link">&para;</a></h2>
-<p>Each tool is graded <strong>pass / warn / fail</strong>. The run's exit code is the worst grade.</p>
-<table>
-<thead>
-<tr>
-<th>Code</th>
-<th>Grade</th>
-<th>What it means</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>SCAN001</code></td>
-<td>fail</td>
-<td>The tool is denied / not allow-listed by the least-privilege policy (<code>SecurityPolicy.check_tool_allowed</code>).</td>
-</tr>
-<tr>
-<td><code>SCAN002</code></td>
-<td>fail</td>
-<td>The tool description carries injected instructions (Server-Card trust boundary). Reuses the shipped <code>mcp_spec_2026_07</code> guard.</td>
-</tr>
-<tr>
-<td><code>SCAN003</code></td>
-<td>fail</td>
-<td>A <strong>destructive/mutating</strong> tool declares an open argument surface (<code>additionalProperties</code> not <code>false</code>) — a ghost/hallucinated-argument vector into a high-blast-radius op.</td>
-</tr>
-<tr>
-<td><code>SCAN004</code></td>
-<td>warn</td>
-<td>A non-destructive tool declares an open argument surface.</td>
-</tr>
-<tr>
-<td><code>SCAN005</code></td>
-<td>warn</td>
-<td>A property has no type constraint, or a sensitive string arg (<code>path</code>/<code>url</code>/<code>command</code>/…) has no <code>enum</code>/<code>pattern</code>/<code>format</code>/<code>maxLength</code>.</td>
-</tr>
-<tr>
-<td><code>SCAN006</code></td>
-<td>fail</td>
-<td>The tool's inferred capability is <strong>denied or not granted</strong> by the policy's <code>CapabilityPolicy</code>.</td>
-</tr>
-<tr>
-<td><code>SCAN007</code></td>
-<td>warn</td>
-<td>The tool needs a sandbox-gated capability; the policy allows it only under sandbox execution.</td>
-</tr>
-<tr>
-<td><code>SCAN008</code></td>
-<td>warn</td>
-<td>A declared OAuth <code>issuer</code> is malformed (SEP-2468 / RFC 9207 companion; the live <code>iss</code> check is a runtime concern).</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Capability inference</strong> (most authoritative first): an explicit <code>capabilities</code>
-list of <code>Capability</code> member names → MCP <code>annotations</code>
-(<code>destructiveHint</code> / <code>readOnlyHint</code> / <code>openWorldHint</code>, real MCP-spec fields) → a
-coarse tool-name heuristic (documented as a heuristic).</p>
-<h2 id="policies">Policies<a class="headerlink" href="#policies" title="Permanent link">&para;</a></h2>
-<p><code>--policy</code> maps 1:1 to a <strong>shipped</strong> <code>SecurityPolicy</code> constant — no invented policy:</p>
-<table>
-<thead>
-<tr>
-<th><code>--policy</code></th>
-<th>Constant</th>
-<th>Behaviour</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>permissive</code></td>
-<td><code>PERMISSIVE_POLICY</code></td>
-<td>Allow all; only contract / type / trust checks bite.</td>
-</tr>
-<tr>
-<td><code>read-only</code></td>
-<td><code>READ_ONLY_POLICY</code></td>
-<td><code>read_*</code>/<code>get_*</code>/<code>list_*</code> allowed; <code>write_*</code>/<code>delete_*</code> denied (SCAN001).</td>
-</tr>
-<tr>
-<td><code>strict</code> <em>(default)</em></td>
-<td><code>STRICT_POLICY</code></td>
-<td>STRICT capability caps: <code>PROCESS_SHELL</code>/<code>FILESYSTEM_DELETE</code> denied, write not granted, DANGEROUS requires sandbox (SCAN006/SCAN007).</td>
-</tr>
-<tr>
-<td><code>deny-by-default</code></td>
-<td><code>CAMOUFLAGE_RESISTANT_POLICY</code></td>
-<td>Empty allow-list + <code>default_deny</code>: every tool must be opted in by name (maximal posture).</td>
-</tr>
-</tbody>
-</table>
-<h2 id="exit-codes-ci">Exit codes (CI)<a class="headerlink" href="#exit-codes-ci" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>0</code> — all tools pass.</li>
-<li><code>1</code> — warnings only (under-specified contracts).</li>
-<li><code>2</code> — at least one failure.</li>
-</ul>
-<h3 id="ci-example">CI example<a class="headerlink" href="#ci-example" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># .github/workflows/mcp-contract.yml</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mcp-tool-contract</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">pull_request</span><span class="p p-Indicator">]</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">jobs</span><span class="p">:</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">scan-tools</span><span class="p">:</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/setup-python@v5</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> python-version</span><span class="p">:</span><span class="w"> </span><span class="s">"3.12"</span><span class="w"> </span><span class="p p-Indicator">}</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install "agent-airlock&gt;=0.8.42"</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">      </span><span class="c1"># Fail the build on any contract FAIL (exit 2). Drop `|| [ $? -eq 1 ]`</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">      </span><span class="c1"># to also fail on warnings.</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airlock-scan-tools --policy strict ./tools/</span>
+<p><code>version</code> is <code>BROADCAST_VERSION</code>, bumped only on incompatible payload changes. Signing keys
+must be at least 32 bytes; shorter keys raise <code>InvalidBroadcastSignature</code> at construction.</p>
+<h2 id="runnable-example">Runnable example<a class="headerlink" href="#runnable-example" title="Permanent link">&para;</a></h2>
+<p>This is the working surface. Output shown is from an actual run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.kill_switch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">HMACBroadcastSigner</span><span class="p">,</span> <span class="n">InMemoryTransport</span><span class="p">,</span> <span class="n">KillSwitchBroadcast</span><span class="p">,</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">KillSwitchListener</span><span class="p">,</span> <span class="n">KillSwitchState</span><span class="p">,</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="p">)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">transport</span> <span class="o">=</span> <span class="n">InMemoryTransport</span><span class="p">()</span>          <span class="c1"># process-local; see limitation 2 above</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">ops_a</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-a"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"a"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">ops_b</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-b"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"b"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">listener</span> <span class="o">=</span> <span class="n">KillSwitchListener</span><span class="p">(</span><span class="n">signers</span><span class="o">=</span><span class="p">(</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">ops_b</span><span class="p">),</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">listener</span><span class="o">.</span><span class="n">is_frozen</span><span class="p">())</span>            <span class="c1"># disarmed False</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"prod incident 412"</span><span class="p">)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">listener</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">listener</span><span class="o">.</span><span class="n">is_frozen</span><span class="p">())</span>            <span class="c1"># triggered True</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># One key is not enough to come back: the default quorum is 2-of-3.</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_a</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"all clear"</span><span class="p">)</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="n">listener</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">listener</span><span class="o">.</span><span class="n">quorum_progress</span><span class="p">())</span>      <span class="c1"># triggered (1, 2)</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">ops_b</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"all clear"</span><span class="p">)</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="n">listener</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">listener</span><span class="o">.</span><span class="n">is_frozen</span><span class="p">())</span>            <span class="c1"># disarmed False</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="c1"># A broadcast signed by a key the listener does not hold is dropped, not applied.</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="n">intruder</span> <span class="o">=</span> <span class="n">HMACBroadcastSigner</span><span class="p">(</span><span class="n">keyid</span><span class="o">=</span><span class="s2">"ops-a"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="sa">b</span><span class="s2">"z"</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>  <span class="c1"># right keyid, wrong key</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="n">KillSwitchBroadcast</span><span class="p">(</span><span class="n">signer</span><span class="o">=</span><span class="n">intruder</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"forged"</span><span class="p">)</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="nb">print</span><span class="p">(</span><span class="n">listener</span><span class="o">.</span><span class="n">poll</span><span class="p">(),</span> <span class="n">listener</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>                 <span class="c1"># 0 disarmed</span>
 </code></pre></div>
-<h2 id="coverage-measured-reported-as-is">Coverage — measured, reported as-is<a class="headerlink" href="#coverage-measured-reported-as-is" title="Permanent link">&para;</a></h2>
-<p><code>python -m benchmarks.scantools_mcptox</code> runs <code>scan-tools</code> over fixtures
-reconstructed from the tool-poisoning technique in
-<a href="https://arxiv.org/abs/2508.14925"><strong>MCPTox</strong> (arXiv:2508.14925)</a> and reports:</p>
-<ul>
-<li><strong>69.2% static contract-checking coverage</strong> of the injection-shaped descriptions,</li>
-<li><strong>100% precision</strong> (no false positives on clean descriptions).</li>
-</ul>
-<p>This is a <em>static</em> coverage number on labeled fixtures — <strong>not</strong> MCPTox's
-model-in-the-loop Attack Success Rate (up to 72% across 1,312 cases on 45 live
-servers), which is a property of agents, not of a static checker. The
-<code>declarative_side_effect</code> fixtures (a malicious side effect stated with no
-imperative marker) are honest misses, which is why coverage is 69.2%, not 100%. See
-<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/scantools_mcptox/RESULTS.md"><code>benchmarks/scantools_mcptox/RESULTS.md</code></a>.</p>
-<h2 id="programmatic-use">Programmatic use<a class="headerlink" href="#programmatic-use" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.scan</span><span class="w"> </span><span class="kn">import</span> <span class="n">scan_tools</span><span class="p">,</span> <span class="n">resolve_policy</span><span class="p">,</span> <span class="n">load_tool_defs</span>
+<p>Note the last block: the forged message claims a keyid the listener trusts, and is still
+rejected, because acceptance is decided by the MAC and not by the claimed identity.</p>
+<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AIRLOCK_KILL_SWITCH_KEY</span><span class="o">=</span><span class="s2">"&lt;&gt;= 32 bytes, hex or raw&gt;"</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">loaded</span> <span class="o">=</span> <span class="n">load_tool_defs</span><span class="p">(</span><span class="s2">"./tools/"</span><span class="p">)</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">report</span> <span class="o">=</span> <span class="n">scan_tools</span><span class="p">(</span><span class="n">loaded</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span> <span class="n">resolve_policy</span><span class="p">(</span><span class="s2">"strict"</span><span class="p">),</span> <span class="n">policy_name</span><span class="o">=</span><span class="s2">"strict"</span><span class="p">)</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">exit_code</span><span class="p">)</span>                 <span class="c1"># 0 / 1 / 2</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">report</span><span class="o">.</span><span class="n">failed</span><span class="p">:</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">tool_name</span><span class="p">,</span> <span class="p">[</span><span class="n">v</span><span class="o">.</span><span class="n">code</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">violations</span><span class="p">])</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>arm<span class="w"> </span>ops-a
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>trigger<span class="w"> </span><span class="s2">"prod incident 412"</span><span class="w"> </span>--keyid<span class="w"> </span>ops-a
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>airlock<span class="w"> </span>kill-switch<span class="w"> </span>reset<span class="w"> </span><span class="s2">"all clear"</span><span class="w"> </span>--keyid<span class="w"> </span>ops-a<span class="w"> </span>--quorum<span class="w"> </span><span class="m">2</span>-of-3
 </code></pre></div>
+<p><code>--key-env</code> overrides the variable name on any subcommand. Real output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>OK: kill-switch armed for keyid='ops-a'
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>OK: trigger queued (reason='prod incident 412', transport=InMemoryTransport)
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>OK: reset queued (quorum=2-of-3, reason='all clear', transport=InMemoryTransport)
+</code></pre></div>
+<p>Read <code>transport=InMemoryTransport</code> in that output literally: the message went into a queue
+that is discarded when the command exits.</p>
+<h2 id="what-this-does-not-cover">What this does not cover<a class="headerlink" href="#what-this-does-not-cover" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><code>--quorum</code> is echoed, never enforced.</strong> The flag is printed back and otherwise unused;
+  the CLI's <code>reset</code> path constructs no <code>ResetQuorum</code> at all. <code>--quorum 9-of-9</code> is accepted
+  and reported as <code>9-of-9</code>. Quorum is enforced only by <code>KillSwitchListener</code>, via its
+  <code>reset_quorum_threshold</code> / <code>reset_quorum_total</code> fields.</li>
+<li><strong><code>KillSwitchState.ARMED</code> is never assigned.</strong> The enum member exists; the listener only
+  ever moves between <code>DISARMED</code> and <code>TRIGGERED</code>. There is no armed-but-not-triggered state
+  in the implementation, which is also why <code>arm</code> writes nothing.</li>
+<li><strong>There is no 5-second timer.</strong> The listener docstring mentions a 5 s interval "per
+  spec"; <code>poll()</code> is caller-driven and nothing in the package schedules it. The latency to
+  freeze is whatever your own loop provides.</li>
+<li><strong>A short signing key raises an uncaught traceback</strong> from the CLI rather than a clean
+  message.</li>
+<li><strong><code>docs/kill-switch.md</code>, cited as the feature spec by the package docstring, does not
+  exist.</strong> This page is not that spec; it documents the code as it stands.</li>
+<li><strong>Nothing is authenticated but the broadcast.</strong> There is no replay protection: <code>ts_epoch</code>
+  is signed but never checked for freshness, so a captured <code>reset</code> envelope stays valid.</li>
+</ul>
 
 
 
@@ -2038,10 +2024,10 @@ imperative marker) are honest misses, which is why coverage is 69.2%, not 100%. 
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
