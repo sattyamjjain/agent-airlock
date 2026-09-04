@@ -86,6 +86,10 @@ nav:
     - PII Masking: examples/pii.md
     - Sandbox Execution: examples/sandbox.md
   - CVE Catalog: cves/index.md
+  - CLI:
+    - Kill switch: cli/kill-switch.md
+    - Policy bundle lock: cli/policy-bundle-lock.md
+    - Egress bench: cli/egress-bench.md
   - Observability:
     - OTel Semantic Conventions: observability/semconv.md
   - Security: SECURITY.md

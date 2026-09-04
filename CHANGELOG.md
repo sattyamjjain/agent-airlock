@@ -9,7 +9,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(no entries yet)
+> Deliberately undated and unbumped: `pyproject.toml` stays at the released `0.8.85`.
+> Bumping here has no green state — see "the two gates were not jointly satisfiable" below.
+
+### Fixed
+
+- **`check_registry_parity.py` condition 3 now checks existence, not distance.** It was
+  added on 2026-09-03 with `MAX_DOCUMENTED_AHEAD = 1`, and the commit that added it
+  reproduced the exact failure it was written for: `pyproject.toml` bumped to `0.8.85`, a
+  dated `## [0.8.85] - 2026-09-03` section written, no tag cut — passing its own gate. The
+  repo spent a second consecutive day one dated release ahead of its own tag, and a human
+  found it, not CI.
+
+  The threshold was measuring the wrong property. **A dated CHANGELOG heading is a claim
+  that a version shipped, and the check on a claim is whether the artifact backing it
+  exists — not how far away it is.** Distance cannot separate a thirty-second publishing
+  window from a release nobody cut: both are exactly one ahead. Existence can. Every dated
+  `## [x.y.z] - YYYY-MM-DD` heading must now have a matching `vX.Y.Z` tag, with no
+  allowance, and the three pre-discipline versions (`0.1.0`, `0.1.1`, `0.3.0`) are
+  grandfathered by name in a frozen set rather than by a threshold that also hides live
+  drift. Checking every heading rather than only the newest also closes a hole the maxima
+  comparison had: a gap *below* the tag line was invisible.
+
+- **The two gates were not jointly satisfiable, which is why the state kept recurring.**
+  `check_changelog_heading.py` requires the declared version to carry a dated heading, so
+  bumping `pyproject.toml` forced a dated section to be written — which is precisely the
+  untagged-claim state condition 3 now fails. Verified both directions on 2026-09-04:
+  bumping to `0.8.86` with entries under `[Unreleased]` fails `check_changelog_heading`;
+  bumping and dating `[0.8.86]` without a tag fails `check_registry_parity`. The allowance
+  therefore moved to where the in-flight state actually lives: `pyproject.toml` may run one
+  release past the newest tag **only while its section is still `[Unreleased]`**
+  (`MAX_UNRELEASED_AHEAD`). Feature work no longer bumps the version; the release commit
+  bumps, dates and tags together via `git push --atomic origin main vX.Y.Z`. The procedure
+  is in the module docstring, because a gate whose remedy is undocumented gets switched off.
+
+  21 new tests, including the 2026-09-04 and 2026-09-02 states as explicit regressions. The
+  boundary assertion that permitted this bug was inverted rather than deleted, so the
+  record of what changed survives in the suite.
+
+### Changed
+
+- **The published null now leads the README instead of trailing the wins table.** The
+  matched-pair multi-harness prompt-injection result (n = 36 per harness per arm, last
+  verified 2026-08-26) sits above the block-rate table on the first screen, wording
+  unchanged. A benchmark section that shows the wins first and the nulls after the fold
+  reads as marketing regardless of what the nulls say; the ordering was the only thing
+  standing between a reviewer and the honest summary of what this library has and has not
+  measured.
+
+- **Two README capability claims cut back to what the code does.** `policy_bundle.lock` no
+  longer claims "`Cargo.lock` semantics" — Cargo.lock's defining property is
+  reproducibility, and the CLI round-trip is not reproducible (below). `airlock kill-switch`
+  no longer claims a "cluster-wide freeze": no cross-process transport ships and the
+  listener is not wired into the `@Airlock` call path.
+
+### Added
+
+- **`docs/cli/kill-switch.md` and `docs/cli/policy-bundle-lock.md`**, the two documented
+  surfaces that had no page, both linked from the README and added to the docs nav. Each
+  states what is *not* wired before describing what is, and both limits sections are
+  findings from writing them rather than restatements of the code comments:
+
+  - `airlock pack lock --verify` **fails on all three packs that ship in the box**, verified
+    2026-09-04. `claude-code-ci` crashes during generation (`TypeError: 'StdioGuardConfig'
+    object is not iterable` — the CLI coerces every composed preset with `dict(data)`, and
+    one preset is a dataclass). `copilot-agent-ci` and `gemini-cli-ci` generate a lockfile
+    that fails its own verification seconds later, because
+    `archived_mcp_server_advisory_defaults` carries a closure under `check` and
+    `_canonicalise` falls back to `repr()`, which embeds the function's memory address — so
+    the SHA-256 differs in every process. Not fixed here; documented, with the cause
+    located.
+  - The kill switch's `KillSwitchListener` is never consulted in the `@Airlock` call path,
+    the NATS/Redis/S3 transports are stubs that delegate to an in-process queue, the CLI's
+    `trigger`/`reset` publish into a transport discarded at process exit, `--quorum` is
+    echoed but never enforced (`--quorum 9-of-9` is accepted), `KillSwitchState.ARMED` is
+    never assigned, and there is no replay protection on the signed envelope. The HMAC
+    signing, the envelope, the listener state machine and the M-of-N quorum are real, and
+    the page's example exercises those end to end.
+
+- **A dated status block at the top of the task-conditioned least-privilege
+  pre-registration.** Checked 2026-09-04: arXiv:2608.18351 still shows `[v1] 18 Aug 2026`
+  with no linked code or data and no authors' repository, so the study remains blocked on
+  artifact access, waiting since 2026-09-01. A pre-registration carrying no dated status is
+  indistinguishable from an abandoned one, and the argument for pre-registering at all is
+  that it is not abandoned.
 
 ## [0.8.85] - 2026-09-03
 
