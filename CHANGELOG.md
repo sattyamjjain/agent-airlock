@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(no entries yet)
+
+## [0.8.86] - 2026-09-04
+
 > Deliberately undated and unbumped: `pyproject.toml` stays at the released `0.8.85`.
 > Bumping here has no green state — see "the two gates were not jointly satisfiable" below.
 
