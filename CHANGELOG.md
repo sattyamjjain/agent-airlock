@@ -56,6 +56,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vendor's advisory batch cannot become forty issues; held-back CVEs are never
   recorded as filed, so they resurface on a later run.
 
+- **`docs/adapters.md`** — documents the commerce-adapter contract: the
+  `CommerceAdapter` Protocol, the `(agent_id, counterparty, amount_cents)` triple,
+  the per-vendor coercion table, what a new adapter must implement, and a worked
+  example that runs as written.
+
+  Two findings are recorded rather than papered over. First, scope:
+  `integrations/adapters/` is not the framework integration surface — it is three
+  payload normalizers serving `AgentCommerceCaps` and nothing else. The framework
+  surface is the 21 modules in `integrations/` plus `mcp.py`. Second, the contract
+  is half-wired: `register_adapter()` consumes only `.name` (for ledger
+  attribution), and nothing under `src/` ever calls `parse_request`. Callers invoke
+  it themselves and pass the triple to `check_and_debit`. The Protocol reads as
+  though the engine consumes it; it does not.
+
 ## [0.8.86] - 2026-09-04
 
 > Deliberately undated and unbumped: `pyproject.toml` stays at the released `0.8.85`.

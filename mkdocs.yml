@@ -85,6 +85,7 @@ nav:
     - Policy Examples: examples/policy.md
     - PII Masking: examples/pii.md
     - Sandbox Execution: examples/sandbox.md
+  - Commerce Adapters: adapters.md
   - CVE Catalog: cves/index.md
   - CLI:
     - Kill switch: cli/kill-switch.md
