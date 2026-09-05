@@ -46,18 +46,28 @@ make format        # ruff format + ruff check --fix
 make bench         # pytest-benchmark suite
 ```
 
-Repo-specific gates. Most run in CI; `check-changelog` / `check-changelog-release` are
-release-time targets referenced by no workflow, and `check-changelog` is red by design
-while work accumulates under `[Unreleased]`:
+Repo-specific claim gates:
 
 ```bash
-make benchmark               # regenerate BENCHMARK.md (block-rate corpus)
+make benchmark               # regenerate BENCHMARK.md (guard-suite block-rate corpus)
 make test-badge              # regenerate the TEST-BADGE block in README.md
 make egress-bench            # CVE egress walker over tests/cves/fixtures/
 make verify-corpus           # verify wild_payload_corpus MANIFEST.sha256
-make check-changelog         # post-release drift gate
-make check-changelog-release # pre-tag gate ([Unreleased] must be non-empty)
+make check-links             # dead relative-link gate (README + docs/)
+make check-docs              # mkdocs build --strict
+make check-benchmark-freshness  # every benchmark row carries a date
+make check-registry-parity      # declared version must not outrun PyPI
+make check-changelog            # post-release drift gate
+make check-changelog-release    # pre-tag gate ([Unreleased] must be non-empty)
 ```
+
+Which of those actually gate a merge: `ci.yml` runs `check-docs`, `check-links` and
+`check-registry-parity`, and calls `check_changelog_heading.py`, `check_core_deps.py`,
+`check_version_tagged.py` and `generate_benchmark.py --check` directly. `publish.yml`
+adds the two release-only forms, `check_benchmark_freshness.py --release` and
+`check_registry_parity.py --distance-only`. **No workflow runs the `check-changelog`
+pair or the bare `check-benchmark-freshness`** — run those by hand, and expect
+`check-changelog` to be red by design while work accumulates under `[Unreleased]`.
 
 Docker integration tests are **opt-in**: default `addopts` carries `-m 'not docker'`.
 Run them explicitly with `pytest -m docker`.
@@ -102,7 +112,7 @@ src/agent_airlock/
 ├── VACCINE      filesystem.py, network.py, honeypot.py, vaccine.py,
 │                camouflage_resistant.py, ssrf_egress_guard.py, sequence_guard.py,
 │                action_contradiction_gate.py, tool_output_trust_guard.py
-├── mcp_spec/    per-CVE / per-spec-revision MCP guards — 47 modules, has own CLAUDE.md
+├── mcp_spec/    per-CVE / per-spec-revision MCP guards — largest subpackage, own CLAUDE.md
 ├── mcp/         cimd.py — pinned CIMD trust anchor, denies on drift
 ├── data/        dated snapshots (model pricing, advisory blast radius)
 ├── fixtures/    dated pattern files (e.g. redaction_patterns_2026_04.txt)
@@ -171,9 +181,11 @@ carrying `fix_hints` for the model to retry against, rather than raising.
 - **Defense-in-depth** — validation → policy → capability → filesystem → network → sandbox.
   Each layer exists because an earlier one proved insufficient for a specific CVE.
 - **Guard triple, split across two files** — `<Name>Guard` + `<Name>Decision` +
-  `<Name>Verdict` in `mcp_spec/` (re-exported via its `__all__`), and the matching
-  `*_defaults()` factory in `policy_presets.py`, `@preset`-registered (53 of 53 are).
-  A guard with no registered preset never shows up in `list_active()`.
+  `<Name>Verdict` in `mcp_spec/`, and the matching `*_defaults()` factory in
+  `policy_presets.py`, `@preset`-registered (every `*_defaults()` is). A guard with no
+  registered preset never shows up in `list_active()`. Guards are **not** re-exported from
+  `mcp_spec/__init__.py` — its `__all__` carries only the protocol surface, so import a
+  guard from its own module.
 - **Deny-by-default** — unknown tier, unregistered manifest, and unpinned spec revision all
   fail closed. New branches should preserve that direction.
 - **Config priority** — `AIRLOCK_*` env > constructor > `airlock.toml`.
@@ -195,9 +207,8 @@ carrying `fix_hints` for the model to retry against, rather than raising.
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-History is dominated by `feat:` and `fix:`, with recurring `docs:` and `bench:` work
-(last 120 commits: 51 `feat:`, 23 `fix:`, 13 `docs:`, 11 `bench:`). Three themes drive
-most recent development:
+History is dominated by `feat:` and `fix:`, with recurring `docs:` and `bench:` work.
+Three themes drive most recent development:
 
 1. **Per-CVE guards.** Most `feat:` commits add one guard for one named advisory
    (`mcp_spec/*_guard.py`), its preset defaults, and a regression fixture. Commit messages
@@ -217,6 +228,10 @@ most recent development:
 Practical consequence: **do not add a capability claim to README, docs, or a preset
 description unless code and a test back it.** There is tooling that will fail the build on it.
 A benchmark number is a claim too — report the run you actually got, including a zero.
+
+The same rule applies to this file. Counts of modules, classes or commits rot on every
+merge and are not gated by anything, so prefer the structural fact plus the command that
+recounts it over a number pasted into prose.
 
 <!-- END AUTO-MANAGED -->
 
