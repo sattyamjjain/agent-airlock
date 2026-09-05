@@ -34,6 +34,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   No `docker-compose.yml`: only one service is involved. The test runner stays on the
   host and the backend spawns containers itself.
 
+- **CVE watcher (`.github/workflows/cve-watcher.yml` + `scripts/cve_watcher.py`).**
+  Polls NVD's keyword feed every 6 hours, diffs against this repo's ledger
+  (`docs/cves/index.md` plus the `tests/cves/` filenames) and against existing
+  `cve-response` issues open *and* closed, and files a triage issue for anything new.
+
+  The mechanism is shared with the sibling repo `agent-audit-kit`, where these
+  lessons were learned in production; the content is this repo's own. Query keywords
+  and the description-corroboration filter are derived from what `docs/cves/`
+  actually tracks — which is why `langchain`/`langgraph` are **absent** despite the
+  LangChain integrations: the CVE catalog contains no LangChain advisory, so querying
+  for them would file issues this repo has no guard story for.
+
+  Carries over the false-positive guards that matter: NVD's `keywordSearch` matches
+  indexed fields, so a bare "mcp" returns NVIDIA nForce chipset CVEs, and
+  AI-authored-patch attribution lines mean bare "claude" cannot count on its own.
+  Both are asserted in `tests/test_cve_watcher.py`.
+
+  Explicitly **not** a release gate — `publish.yml` does not block on open issues and
+  this does not add such a gate. The per-run and queue-depth caps exist only so one
+  vendor's advisory batch cannot become forty issues; held-back CVEs are never
+  recorded as filed, so they resurface on a later run.
+
 ## [0.8.86] - 2026-09-04
 
 > Deliberately undated and unbumped: `pyproject.toml` stays at the released `0.8.85`.
