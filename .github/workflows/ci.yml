@@ -74,6 +74,62 @@ jobs:
       # The `coverage-badge -o coverage.svg` step went with it: nothing in the repo
       # ever referenced the file it wrote.
 
+  # ---------------------------------------------------------------------------
+  # The four `docker`-marked tests (tests/test_sandbox_backend_docker_integration.py).
+  #
+  # Separate from `test` on purpose: these need a live Docker daemon, so an
+  # infrastructure wobble must not redden the matrix job that covers the other
+  # ~4,281 tests. The default `addopts` carries `-m 'not docker'`, so `test`
+  # never sees them.
+  #
+  # They cannot run against a stock `python:3.11-slim`. DockerBackend executes
+  # its payload with `network_mode="none"` and the generated script opens with
+  # `import cloudpickle`, and cloudpickle pickles the test helpers *by
+  # reference* — so the container must import the test module itself, and
+  # therefore pytest and agent_airlock too. Verified: against python:3.11-slim
+  # 3 of the 4 fail with ModuleNotFoundError: No module named 'cloudpickle'.
+  # The Dockerfile exists to satisfy exactly that.
+  #
+  # The `docker` Python SDK is in no extra (not even [dev]), so it is installed
+  # explicitly here — without it DockerBackend.is_available() is False and all
+  # four tests skip.
+  # ---------------------------------------------------------------------------
+  docker-sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" docker
+
+      # PYTHON_VERSION matches the interpreter above so host and container
+      # agree; cloudpickle's by-reference payloads tolerate a mismatch, but
+      # pinning both sides removes the variable.
+      - name: Build the sandbox image
+        run: docker build --build-arg PYTHON_VERSION=3.11 -t agent-airlock-sandbox:local .
+
+      # A skip is not a pass. `_skip_unless_docker` skips when the daemon or
+      # the image is missing, which would let this job go green having executed
+      # nothing — the same "zeros reading as results" failure the benchmark
+      # harness was fixed for. Assert all four actually ran.
+      - name: Run the docker-marked tests
+        env:
+          AIRLOCK_DOCKER_TEST_IMAGE: agent-airlock-sandbox:local
+        run: |
+          set -o pipefail
+          pytest -m docker -v --no-cov | tee docker-tests.log
+          grep -q "4 passed" docker-tests.log || {
+            echo "::error::expected 4 docker-marked tests to pass; they skipped or were filtered out"
+            exit 1
+          }
+
   bare-install:
     # The zero-core-dependency claim, enforced as an EXHAUSTIVE allowlist. A bare
     # `pip install agent-airlock` (no extras) must resolve to Pydantic + its transitive

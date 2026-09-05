@@ -9,7 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(no entries yet)
+### Added
+
+- **Dockerfile + `docker-sandbox` CI job — the four `docker`-marked tests now actually
+  run.** They never could before. `DockerBackend` executes its payload with
+  `network_mode="none"` and the generated in-container script opens with
+  `import cloudpickle`, which a stock `python:3.11-slim` does not have and cannot
+  install with no network. Worse, cloudpickle serializes the test helpers **by
+  reference** (a ~111-byte payload naming
+  `tests.test_sandbox_backend_docker_integration`), so the container has to import
+  the test module itself — and therefore `pytest` and `agent_airlock` too.
+
+  Measured, not assumed: against `python:3.11-slim`, 3 of the 4 fail with
+  `ModuleNotFoundError: No module named 'cloudpickle'`; against the image built here,
+  4 pass. The image bakes in the package, pytest, cloudpickle and the `tests/`
+  package, and drops root.
+
+  The tests take the image from `AIRLOCK_DOCKER_TEST_IMAGE` (default
+  `agent-airlock-sandbox:local`) and skip with a build hint when it is absent. The CI
+  job is separate from `test` so a daemon outage cannot redden the matrix, and it
+  asserts `4 passed` rather than trusting a green exit — `_skip_unless_docker` would
+  otherwise let the job pass having executed nothing.
+
+  No `docker-compose.yml`: only one service is involved. The test runner stays on the
+  host and the backend spawns containers itself.
 
 ## [0.8.86] - 2026-09-04
 

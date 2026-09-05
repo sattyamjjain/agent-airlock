@@ -35,7 +35,8 @@ BADGE_TEMPLATE = """{start}
 **Test suite:** {total:,} tests · **Coverage:** {coverage} · **v{version}**<br>
 <sub>Coverage runs {run:,} of {total:,}; the {excluded} excluded are \
 {benchmarks} benchmark tests (not correctness tests) and {docker} docker-marked \
-(need a daemon).</sub>
+(need a daemon — they run in CI's `docker-sandbox` job, against the image built \
+from the Dockerfile at the repo root).</sub>
 {end}"""
 
 

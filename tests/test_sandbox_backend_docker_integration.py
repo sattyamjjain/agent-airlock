@@ -1,8 +1,14 @@
 """Docker sandbox backend integration tests (v0.5.1+).
 
-These tests require a running Docker daemon AND the ``python:3.11-slim``
-image locally available. They are **opt-in** via ``pytest -m docker``:
+These tests require a running Docker daemon AND the sandbox image built
+from this repo's ``Dockerfile``. A stock ``python:3.11-slim`` will not do:
+``DockerBackend`` runs its payload with ``network_mode="none"`` and the
+generated script begins ``import cloudpickle``, and cloudpickle pickles the
+helpers below **by reference**, so the container also has to import this
+module (and therefore ``pytest`` and ``agent_airlock``). The Dockerfile
+header spells this out. They are **opt-in** via ``pytest -m docker``:
 
+    docker build -t agent-airlock-sandbox:local .
     pytest -m docker tests/test_sandbox_backend_docker_integration.py
 
 The default ``pytest`` invocation excludes them (see ``pyproject.toml``
@@ -15,6 +21,7 @@ prevent the honesty bug in issue #2 from regressing.
 
 from __future__ import annotations
 
+import os
 import time
 
 import pytest
@@ -24,10 +31,30 @@ from agent_airlock.sandbox_backend import DockerBackend
 pytestmark = pytest.mark.docker
 
 
+# Overridable so CI can point at a tag it just built; the default is the
+# tag the Dockerfile header documents.
+SANDBOX_IMAGE = os.environ.get("AIRLOCK_DOCKER_TEST_IMAGE", "agent-airlock-sandbox:local")
+
+
+def _image_present(image: str) -> bool:
+    """True when *image* is already in the local daemon's image store."""
+    try:
+        import docker
+
+        docker.from_env().images.get(image)
+        return True
+    except Exception:
+        return False
+
+
 def _skip_unless_docker() -> DockerBackend:
-    backend = DockerBackend(image="python:3.11-slim")
+    backend = DockerBackend(image=SANDBOX_IMAGE)
     if not backend.is_available():
         pytest.skip("Docker daemon not reachable")
+    if not _image_present(SANDBOX_IMAGE):
+        pytest.skip(
+            f"sandbox image {SANDBOX_IMAGE!r} not built - run `docker build -t {SANDBOX_IMAGE} .`"
+        )
     return backend
 
 

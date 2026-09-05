@@ -250,7 +250,8 @@ recounts it over a number pasted into prose.
   that motivated it.
 - Every `feat:` needs at least one regression test.
 - Run `make lint` and `pytest -m "not docker"` before committing.
-- CI gates are `test`, `bare-install`, `lint`, `version-tag-guard`, `security`, `docs`.
+- CI gates are `test`, `docker-sandbox`, `bare-install`, `lint`, `version-tag-guard`,
+  `security`, `docs`.
   `bare-install` is the one that enforces the Pydantic-only core — if you add an import
   that is not in an extra, that job fails, not the test suite.
 - Six guards additionally carry a `scripts/smoke_*.py` end-to-end driver runnable outside
