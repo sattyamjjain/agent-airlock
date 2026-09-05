@@ -10,9 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/owasp-agentic-2026-coverage/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/adapters/">
       
       
+        <link rel="prev" href="../examples/sandbox/">
+      
+      
+        <link rel="next" href="../cves/">
       
       
         
@@ -23,7 +27,7 @@
     
     
       
-        <title>Owasp agentic 2026 coverage - Agent-Airlock</title>
+        <title>Commerce Adapters - Agent-Airlock</title>
       
     
     
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#owasp-agentic-v201-coverage" class="md-skip">
+        <a href="#commerce-adapters" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Owasp agentic 2026 coverage
+              Commerce Adapters
             
           </span>
         </div>
@@ -320,9 +324,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../adapters/" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -1303,10 +1309,37 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../adapters/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commerce Adapters
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1322,6 +1355,109 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#read-this-first-what-integrationsadapters-is-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read this first: what integrations/adapters/ is not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The contract
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The contract">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#coercion-is-the-contracts-real-content" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coercion is the contract's real content
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-divergence-parse_request-is-caller-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The divergence: parse_request is caller-side
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#import-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import paths
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#writing-a-new-adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a new adapter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worked-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worked example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1688,6 +1824,97 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#read-this-first-what-integrationsadapters-is-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read this first: what integrations/adapters/ is not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The contract
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The contract">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#coercion-is-the-contracts-real-content" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coercion is the contract's real content
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-divergence-parse_request-is-caller-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The divergence: parse_request is caller-side
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#import-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import paths
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#writing-a-new-adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a new adapter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worked-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worked example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1706,116 +1933,238 @@
   
 
 
-<!-- @generated from src/agent_airlock/owasp_agentic_coverage/agentic_coverage.yaml — do not edit by hand; regenerated and byte-diffed in tests/owasp_agentic_coverage/test_coverage_completeness.py -->
-
-<h1 id="owasp-agentic-v201-coverage">OWASP Agentic v2.01 coverage<a class="headerlink" href="#owasp-agentic-v201-coverage" title="Permanent link">&para;</a></h1>
-<p>Spec: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/
-Last verified (global): 2026-08-31</p>
+<h1 id="commerce-adapters">Commerce adapters<a class="headerlink" href="#commerce-adapters" title="Permanent link">&para;</a></h1>
+<h2 id="read-this-first-what-integrationsadapters-is-not">Read this first: what <code>integrations/adapters/</code> is not<a class="headerlink" href="#read-this-first-what-integrationsadapters-is-not" title="Permanent link">&para;</a></h2>
+<p><code>src/agent_airlock/integrations/adapters/</code> is <strong>not</strong> the framework integration
+surface. It is a three-file sub-package serving one engine —
+<code>AgentCommerceCaps</code> — and nothing else in the codebase imports it.</p>
+<p>The framework integration surface is the layer above it,
+<code>src/agent_airlock/integrations/*.py</code>, which carries a module per framework:
+Anthropic (Messages, Claude Agent SDK, Managed Agents), OpenAI Guardrails,
+LangChain, LangGraph ToolNode, CrewAI, PydanticAI, smolagents, Gemini and GPT
+tool-shape adapters, Google Model Armor, and more, plus <code>agent_airlock/mcp.py</code>
+for FastMCP. That surface is broad; counting the three files in <code>adapters/</code> as
+"the integrations" undercounts it by an order of magnitude.</p>
+<p>So the two words are doing different jobs in this repo:</p>
 <table>
 <thead>
 <tr>
-<th>Risk ID</th>
-<th>Risk</th>
-<th>Guard module</th>
-<th>Preset</th>
-<th>Test</th>
-<th>Last verified</th>
-<th>Advisory</th>
+<th></th>
+<th><code>integrations/*.py</code></th>
+<th><code>integrations/adapters/*.py</code></th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>ASI01</td>
-<td>Agent Goal Hijack (Partial)</td>
-<td><code>agent_airlock.validator</code></td>
-<td><code>owasp_mcp_top_10_2026_policy</code></td>
-<td><code>tests/test_validator.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">link</a></td>
+<td>Job</td>
+<td>Bind <code>@Airlock</code> into a framework's tool-calling path</td>
+<td>Normalize one vendor's payment payload</td>
 </tr>
 <tr>
-<td>ASI02</td>
-<td>Tool Misuse and Exploitation (Full)</td>
-<td><code>agent_airlock.safe_types</code></td>
-<td><code>flowise_cve_2025_59528_defaults</code></td>
-<td><code>tests/test_safe_types.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/">link</a></td>
+<td>Consumer</td>
+<td>The framework</td>
+<td><code>AgentCommerceCaps</code> only</td>
 </tr>
 <tr>
-<td>ASI03</td>
-<td>Identity and Privilege Abuse (Partial)</td>
-<td><code>agent_airlock.mcp_spec.step_up_scope_guard</code></td>
-<td><code>mcp_step_up_scope_2026_07_defaults</code></td>
-<td><code>tests/test_mcp_step_up_scope_preset.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://modelcontextprotocol.io/specification/2026-07-28">link</a></td>
-</tr>
-<tr>
-<td>ASI04</td>
-<td>Agentic Supply Chain Vulnerabilities (Partial)</td>
-<td><code>agent_airlock.mcp_spec.stdio_command_injection_guard</code></td>
-<td><code>stdio_guard_ox_defaults</code></td>
-<td><code>tests/mcp_spec/test_stdio_command_injection_guard.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">link</a></td>
-</tr>
-<tr>
-<td>ASI05</td>
-<td>Unexpected Code Execution / RCE (Full)</td>
-<td><code>agent_airlock.capabilities</code></td>
-<td><code>flowise_cve_2025_59528_defaults</code></td>
-<td><code>tests/test_capabilities.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-flowise-mcp-rce-exploitation-20260409-csa/">link</a></td>
-</tr>
-<tr>
-<td>ASI06</td>
-<td>Memory and Context Poisoning (Partial)</td>
-<td><code>agent_airlock.context</code></td>
-<td><code>owasp_mcp_top_10_2026_policy</code></td>
-<td><code>tests/test_context.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">link</a></td>
-</tr>
-<tr>
-<td>ASI07</td>
-<td>Insecure Inter-Agent Communication (Partial)</td>
-<td><code>agent_airlock.a2a</code></td>
-<td><code>owasp_mcp_top_10_2026_policy</code></td>
-<td><code>tests/test_a2a.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">link</a></td>
-</tr>
-<tr>
-<td>ASI08</td>
-<td>Cascading Failures (Full)</td>
-<td><code>agent_airlock.circuit_breaker</code></td>
-<td><code>owasp_mcp_top_10_2026_policy</code></td>
-<td><code>tests/test_new_features.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">link</a></td>
-</tr>
-<tr>
-<td>ASI09</td>
-<td>Human-Agent Trust Exploitation (Partial)</td>
-<td><code>agent_airlock.honeypot</code></td>
-<td><code>owasp_mcp_top_10_2026_policy</code></td>
-<td><code>tests/test_honeypot.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">link</a></td>
-</tr>
-<tr>
-<td>ASI10</td>
-<td>Rogue Agents (Monitor-only)</td>
-<td><code>agent_airlock.anomaly</code></td>
-<td><code>owasp_mcp_top_10_2026_policy</code></td>
-<td><code>tests/test_anomaly.py</code></td>
-<td>2026-08-31</td>
-<td><a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">link</a></td>
+<td>Contract</td>
+<td>Per-framework; no common interface</td>
+<td>One <code>Protocol</code>, documented below</td>
 </tr>
 </tbody>
 </table>
+<p>The rest of this page is about the second column.</p>
+<h2 id="the-contract">The contract<a class="headerlink" href="#the-contract" title="Permanent link">&para;</a></h2>
+<p>Defined as a <code>Protocol</code> in
+<code>src/agent_airlock/integrations/agent_commerce_caps.py</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">CommerceAdapter</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="sd">"""The minimal adapter interface."""</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">parse_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">        </span><span class="sd">"""Return (agent_id, counterparty, amount_cents)."""</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="o">...</span>
+</code></pre></div>
+<p>That is the whole interface. All three shipped adapters —
+<code>GenericWebhookAdapter</code>, <code>ProjectDealAdapter</code>, <code>StripeAgenticAdapter</code> — satisfy
+it identically, and the shape they share goes slightly beyond the <code>Protocol</code>:</p>
+<ul>
+<li>a <code>@dataclass</code>, with</li>
+<li><code>name: str</code> carrying a <strong>default</strong> (<code>"generic-webhook"</code>, <code>"project-deal"</code>,
+  <code>"stripe-agentic"</code>), so the adapter is constructible with no arguments;</li>
+<li><code>parse_request</code> as the only method, pure, no I/O, no validation, no raising;</li>
+<li>a module-level <code>__all__</code>, and a re-export from <code>adapters/__init__.py</code>.</li>
+</ul>
+<p>The canonical triple is <code>(agent_id, counterparty, amount_cents)</code>. Amounts are
+<strong>integer minor units</strong> — cents, not dollars, never a float.</p>
+<h3 id="coercion-is-the-contracts-real-content">Coercion is the contract's real content<a class="headerlink" href="#coercion-is-the-contracts-real-content" title="Permanent link">&para;</a></h3>
+<p>Each adapter's substance is where it digs the triple out of a vendor's shape,
+and each tolerates the canonical key names as a fallback:</p>
+<table>
+<thead>
+<tr>
+<th>Adapter</th>
+<th><code>agent_id</code> from</th>
+<th><code>counterparty</code> from</th>
+<th><code>amount_cents</code> from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GenericWebhookAdapter</code></td>
+<td><code>agent_id</code></td>
+<td><code>counterparty</code></td>
+<td><code>amount_cents</code></td>
+</tr>
+<tr>
+<td><code>ProjectDealAdapter</code></td>
+<td><code>buyer_agent_id</code> → <code>agent_id</code></td>
+<td><code>seller_id</code> → <code>counterparty</code></td>
+<td><code>amount.minor_units</code> (or a bare <code>amount</code>)</td>
+</tr>
+<tr>
+<td><code>StripeAgenticAdapter</code></td>
+<td><code>metadata.airlock_agent_id</code> → <code>agent_id</code></td>
+<td><code>customer</code> → <code>counterparty</code></td>
+<td><code>amount</code></td>
+</tr>
+</tbody>
+</table>
+<p>Missing fields coerce to <code>""</code> / <code>0</code> rather than raising. That is deliberate and
+consistent across all three: the adapter is a shape mapper, and the engine is
+what refuses a bad value (<code>check_and_debit</code> returns
+<code>Decision(allowed=False, reason="negative debit refused")</code> for a negative
+amount). Do not add validation to a new adapter — it would be the only one that
+raises, and callers do not expect it.</p>
+<h2 id="the-divergence-parse_request-is-caller-side">The divergence: <code>parse_request</code> is caller-side<a class="headerlink" href="#the-divergence-parse_request-is-caller-side" title="Permanent link">&para;</a></h2>
+<p>The three adapters agree with each other. Where the contract is only half wired
+is between the adapter and the engine:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">register_adapter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">adapter</span><span class="p">:</span> <span class="n">CommerceAdapter</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">adapter_name</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">name</span>
+</code></pre></div>
+<p><code>register_adapter</code> consumes <strong>only</strong> <code>.name</code>, which is then stamped on each
+ledger row for attribution. Nothing under <code>src/</code> ever calls <code>parse_request</code> —
+verified by grep; the only mentions outside the adapter modules are the
+<code>Protocol</code> declaration itself and the tests.</p>
+<p>The practical consequence, and the thing most likely to trip up someone writing
+a fourth adapter: <strong>you call <code>parse_request</code> yourself.</strong> Registering an adapter
+does not put it in the request path. The flow is</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>raw vendor payload
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>      │
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>      ▼   you call this
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>adapter.parse_request(raw) ──► (agent_id, counterparty, amount_cents)
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>      │
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>      ▼   you pass the triple
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>caps.check_and_debit(agent_id, counterparty, amount_cents) ──► Decision
+</code></pre></div>
+<p>not</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>raw payload ──► caps.&lt;something&gt;(raw)   # does not exist
+</code></pre></div>
+<p>Whether that is a gap worth closing is a design question, not a documentation
+one. It is recorded here because the <code>Protocol</code> reads as though the engine
+consumes it, and it does not.</p>
+<h2 id="import-paths">Import paths<a class="headerlink" href="#import-paths" title="Permanent link">&para;</a></h2>
+<p>Only <code>AgentCommerceCaps</code> is exported from the package root. <code>Cap</code>, <code>CapsConfig</code>,
+<code>Decision</code>, <code>LedgerStore</code>, <code>SQLiteLedgerStore</code> and <code>CommerceAdapter</code> are not in
+<code>agent_airlock.__all__</code> and must be imported from the module:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentCommerceCaps</span>          <span class="c1"># works</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.integrations.agent_commerce_caps</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># everything else</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">Cap</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">CapsConfig</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">CommerceAdapter</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">SQLiteLedgerStore</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">)</span>
+</code></pre></div>
+<p>The three shipped adapters come from <code>agent_airlock.integrations.adapters</code>.</p>
+<h2 id="writing-a-new-adapter">Writing a new adapter<a class="headerlink" href="#writing-a-new-adapter" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Create <code>src/agent_airlock/integrations/adapters/&lt;vendor&gt;_adapter.py</code>.</li>
+<li>Declare a <code>@dataclass</code> with <code>name: str = "&lt;vendor-slug&gt;"</code>. The slug lands in
+   the ledger's <code>adapter</code> column, so make it stable and greppable.</li>
+<li>Implement <code>parse_request(self, raw: dict[str, Any]) -&gt; tuple[str, str, int]</code>.
+   Coerce with <code>str(...)</code> / <code>int(...)</code>, fall back to the canonical key names,
+   and default to <code>""</code> / <code>0</code> rather than raising.</li>
+<li>Add <code>__all__ = ["&lt;Vendor&gt;Adapter"]</code>, then re-export from
+   <code>adapters/__init__.py</code> and add it to that module's <code>__all__</code>.</li>
+<li>Add a test to <code>tests/integrations/test_agent_commerce_caps.py</code> in the
+   <code>TestAdapters</code> class, asserting the triple for a realistic payload.</li>
+<li>Document the vendor payload shape in the class docstring as a
+   <code>.. code-block:: json</code> sample, as the three shipped adapters do.</li>
+</ol>
+<p>There is no registry to update and no entry point to declare. An adapter is
+discovered by being imported.</p>
+<h2 id="worked-example">Worked example<a class="headerlink" href="#worked-example" title="Permanent link">&para;</a></h2>
+<p>A minimal fourth adapter, end to end. This runs as written:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.integrations.agent_commerce_caps</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">AgentCommerceCaps</span><span class="p">,</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">Cap</span><span class="p">,</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">CapsConfig</span><span class="p">,</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">SQLiteLedgerStore</span><span class="p">,</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="p">)</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="nd">@dataclass</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="k">class</span><span class="w"> </span><span class="nc">LemonSqueezyAdapter</span><span class="p">:</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">    </span><span class="sd">"""Lemon Squeezy order webhook:</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="sd">    .. code-block:: json</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="sd">        {</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="sd">          "data": {</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="sd">            "attributes": {</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="sd">              "store_id": "vendor-x",</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="sd">              "total": 4200,</span>
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="sd">              "custom_data": {"airlock_agent_id": "agent-buyer"}</span>
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a><span class="sd">            }</span>
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a><span class="sd">          }</span>
+<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a><span class="sd">        }</span>
+<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a><span class="sd">    """</span>
+<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a>
+<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"lemon-squeezy"</span>
+<a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a>
+<a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">parse_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a>        <span class="n">attrs</span> <span class="o">=</span> <span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"data"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"attributes"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+<a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a>        <span class="n">custom</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"custom_data"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+<a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a>        <span class="k">return</span> <span class="p">(</span>
+<a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a>            <span class="nb">str</span><span class="p">(</span><span class="n">custom</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"airlock_agent_id"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
+<a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a>            <span class="nb">str</span><span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"store_id"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
+<a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a>            <span class="nb">int</span><span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"total"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+<a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a>        <span class="p">)</span>
+<a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a>
+<a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a>
+<a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a><span class="n">caps</span> <span class="o">=</span> <span class="n">AgentCommerceCaps</span><span class="p">(</span>
+<a id="__codelineno-5-42" name="__codelineno-5-42" href="#__codelineno-5-42"></a>    <span class="n">config</span><span class="o">=</span><span class="n">CapsConfig</span><span class="p">(</span><span class="n">caps</span><span class="o">=</span><span class="p">(</span><span class="n">Cap</span><span class="p">(</span><span class="n">amount_cents</span><span class="o">=</span><span class="mi">5_000</span><span class="p">,</span> <span class="n">window</span><span class="o">=</span><span class="s2">"day"</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="s2">"counterparty"</span><span class="p">),)),</span>
+<a id="__codelineno-5-43" name="__codelineno-5-43" href="#__codelineno-5-43"></a>    <span class="n">store</span><span class="o">=</span><span class="n">SQLiteLedgerStore</span><span class="p">(),</span>
+<a id="__codelineno-5-44" name="__codelineno-5-44" href="#__codelineno-5-44"></a><span class="p">)</span>
+<a id="__codelineno-5-45" name="__codelineno-5-45" href="#__codelineno-5-45"></a><span class="n">adapter</span> <span class="o">=</span> <span class="n">LemonSqueezyAdapter</span><span class="p">()</span>
+<a id="__codelineno-5-46" name="__codelineno-5-46" href="#__codelineno-5-46"></a><span class="n">caps</span><span class="o">.</span><span class="n">register_adapter</span><span class="p">(</span><span class="n">adapter</span><span class="p">)</span>  <span class="c1"># attribution only — see the divergence above</span>
+<a id="__codelineno-5-47" name="__codelineno-5-47" href="#__codelineno-5-47"></a>
+<a id="__codelineno-5-48" name="__codelineno-5-48" href="#__codelineno-5-48"></a><span class="n">webhook</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-5-49" name="__codelineno-5-49" href="#__codelineno-5-49"></a>    <span class="s2">"data"</span><span class="p">:</span> <span class="p">{</span>
+<a id="__codelineno-5-50" name="__codelineno-5-50" href="#__codelineno-5-50"></a>        <span class="s2">"attributes"</span><span class="p">:</span> <span class="p">{</span>
+<a id="__codelineno-5-51" name="__codelineno-5-51" href="#__codelineno-5-51"></a>            <span class="s2">"store_id"</span><span class="p">:</span> <span class="s2">"vendor-x"</span><span class="p">,</span>
+<a id="__codelineno-5-52" name="__codelineno-5-52" href="#__codelineno-5-52"></a>            <span class="s2">"total"</span><span class="p">:</span> <span class="mi">4_200</span><span class="p">,</span>
+<a id="__codelineno-5-53" name="__codelineno-5-53" href="#__codelineno-5-53"></a>            <span class="s2">"custom_data"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"airlock_agent_id"</span><span class="p">:</span> <span class="s2">"agent-buyer"</span><span class="p">},</span>
+<a id="__codelineno-5-54" name="__codelineno-5-54" href="#__codelineno-5-54"></a>        <span class="p">}</span>
+<a id="__codelineno-5-55" name="__codelineno-5-55" href="#__codelineno-5-55"></a>    <span class="p">}</span>
+<a id="__codelineno-5-56" name="__codelineno-5-56" href="#__codelineno-5-56"></a><span class="p">}</span>
+<a id="__codelineno-5-57" name="__codelineno-5-57" href="#__codelineno-5-57"></a>
+<a id="__codelineno-5-58" name="__codelineno-5-58" href="#__codelineno-5-58"></a><span class="n">agent_id</span><span class="p">,</span> <span class="n">counterparty</span><span class="p">,</span> <span class="n">amount_cents</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">parse_request</span><span class="p">(</span><span class="n">webhook</span><span class="p">)</span>
+<a id="__codelineno-5-59" name="__codelineno-5-59" href="#__codelineno-5-59"></a>
+<a id="__codelineno-5-60" name="__codelineno-5-60" href="#__codelineno-5-60"></a><span class="n">first</span> <span class="o">=</span> <span class="n">caps</span><span class="o">.</span><span class="n">check_and_debit</span><span class="p">(</span><span class="n">agent_id</span><span class="p">,</span> <span class="n">counterparty</span><span class="p">,</span> <span class="n">amount_cents</span><span class="p">)</span>
+<a id="__codelineno-5-61" name="__codelineno-5-61" href="#__codelineno-5-61"></a><span class="nb">print</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">allowed</span><span class="p">,</span> <span class="n">first</span><span class="o">.</span><span class="n">debit_id</span><span class="p">)</span>
+<a id="__codelineno-5-62" name="__codelineno-5-62" href="#__codelineno-5-62"></a><span class="c1"># True 1</span>
+<a id="__codelineno-5-63" name="__codelineno-5-63" href="#__codelineno-5-63"></a>
+<a id="__codelineno-5-64" name="__codelineno-5-64" href="#__codelineno-5-64"></a><span class="n">second</span> <span class="o">=</span> <span class="n">caps</span><span class="o">.</span><span class="n">check_and_debit</span><span class="p">(</span><span class="n">agent_id</span><span class="p">,</span> <span class="n">counterparty</span><span class="p">,</span> <span class="n">amount_cents</span><span class="p">)</span>
+<a id="__codelineno-5-65" name="__codelineno-5-65" href="#__codelineno-5-65"></a><span class="nb">print</span><span class="p">(</span><span class="n">second</span><span class="o">.</span><span class="n">allowed</span><span class="p">,</span> <span class="n">second</span><span class="o">.</span><span class="n">reason</span><span class="p">)</span>
+<a id="__codelineno-5-66" name="__codelineno-5-66" href="#__codelineno-5-66"></a><span class="c1"># False cap breach: scope=counterparty window=day spent=42.00 + debit=42.00 &gt; cap=50.00</span>
+</code></pre></div>
+<p><code>Cap.window</code> is one of <code>"minute" | "hour" | "day" | "week"</code>; <code>Cap.scope</code> is one
+of <code>"agent" | "counterparty" | "global"</code>. <code>SQLiteLedgerStore()</code> defaults to
+<code>:memory:</code> — pass a path for a ledger that survives the process.</p>
 
 
 
