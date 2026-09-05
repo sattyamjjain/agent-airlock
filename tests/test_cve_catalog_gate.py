@@ -184,3 +184,66 @@ class TestThePublishedSplitIsAccurate:
     def test_the_catalog_row_count_equals_the_cve_numbered_count(self) -> None:
         rows = len(re.findall(r"^\| \[CVE-", _CATALOG.read_text(encoding="utf-8"), re.M))
         assert rows == self._module_counts()[1]
+
+
+class TestTheCatalogsOwnCIClaim:
+    """The catalog tells readers CI checks it. That has to be true.
+
+    From the day it was written, ``docs/cves/index.md`` said "CI runs
+    ``python3 scripts/gen_cve_catalog.py --check`` on every PR, so the catalog
+    and the tests stay in lockstep." Nothing ran it — the script appeared in no
+    workflow and no Makefile target. The row count was gated (see
+    ``test_the_catalog_row_count_equals_the_cve_numbered_count``), but a drifted
+    title, CVSS or advisory URL inside a ``tests/cves/`` docstring would have
+    shipped with the catalog silently out of date.
+
+    This is the same class of defect the repo already gates elsewhere: a
+    documented gate that does not exist is worse than no documented gate,
+    because it stops anyone from looking.
+    """
+
+    _WORKFLOWS = _ROOT / ".github" / "workflows"
+
+    def _claims_ci_checks_it(self) -> bool:
+        text = _CATALOG.read_text(encoding="utf-8")
+        return "gen_cve_catalog.py --check" in text and "CI runs" in text
+
+    @staticmethod
+    def _uncommented(text: str) -> str:
+        """Drop YAML comment lines.
+
+        Without this the assertion below matches the *comment* that explains the
+        step rather than the step itself, and would keep passing after someone
+        deleted the `run:` line — a gate that cannot fail, which is the exact
+        defect this class exists to prevent. Caught by negative control.
+        """
+        return "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+
+    def test_the_claim_is_backed_by_a_workflow(self) -> None:
+        if not self._claims_ci_checks_it():
+            pytest.skip("catalog no longer claims CI checks it")
+        hits = [
+            p.name
+            for p in sorted(self._WORKFLOWS.glob("*.yml"))
+            if "gen_cve_catalog.py --check"
+            in self._uncommented(p.read_text(encoding="utf-8"))
+        ]
+        assert hits, (
+            "docs/cves/index.md says CI runs `gen_cve_catalog.py --check` on every "
+            "PR, but no workflow under .github/workflows/ invokes it. Either wire "
+            "the gate up or stop claiming it."
+        )
+
+    def test_the_makefile_exposes_the_same_gate(self) -> None:
+        makefile = (_ROOT / "Makefile").read_text(encoding="utf-8")
+        assert "check-cve-catalog:" in makefile, (
+            "every other claim gate has a make target; this one should too"
+        )
+
+    def test_the_committed_catalog_is_actually_in_sync(self) -> None:
+        """What `--check` asserts, asserted here too so it fails in the suite."""
+        from scripts.gen_cve_catalog import collect, render
+
+        assert render(collect()).strip() in _CATALOG.read_text(encoding="utf-8").strip()

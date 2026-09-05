@@ -70,6 +70,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it themselves and pass the triple to `check_and_debit`. The Protocol reads as
   though the engine consumes it; it does not.
 
+### Fixed
+
+- **`docs/cves/index.md` claimed a CI gate that did not exist.** Since it was
+  written the catalog has told readers "CI runs `python3 scripts/gen_cve_catalog.py
+  --check` on every PR, so the catalog and the tests stay in lockstep." No workflow
+  ran it, and no Makefile target exposed it. `test_cve_catalog_gate.py` gates the
+  committed file's *row count*, so a drifted title, CVSS or advisory URL inside a
+  `tests/cves/` docstring would have shipped with the catalog silently stale.
+
+  Fixed by making the claim true rather than by deleting it: `make
+  check-cve-catalog` now exists and the `docs` CI job runs
+  `gen_cve_catalog.py --check`. The catalog was already in sync, so the gate is
+  green on arrival — it closes a hole rather than reporting one.
+
+  Three tests keep it honest: the documented claim must be backed by a workflow
+  that actually invokes it, the make target must exist, and the committed catalog
+  must match the generator. The first was written wrong on the first attempt — it
+  matched the string inside the explanatory YAML *comment*, so it would have kept
+  passing after someone deleted the `run:` line. A negative control caught it; it
+  now strips comment lines and fails correctly when the step is removed.
+
 ## [0.8.86] - 2026-09-04
 
 > Deliberately undated and unbumped: `pyproject.toml` stays at the released `0.8.85`.

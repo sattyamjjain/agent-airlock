@@ -54,6 +54,7 @@ make test-badge              # regenerate the TEST-BADGE block in README.md
 make egress-bench            # CVE egress walker over tests/cves/fixtures/
 make verify-corpus           # verify wild_payload_corpus MANIFEST.sha256
 make check-links             # dead relative-link gate (README + docs/)
+make check-cve-catalog       # docs/cves/index.md matches the tests/cves/ suite
 make check-docs              # mkdocs build --strict
 make check-benchmark-freshness  # every benchmark row carries a date
 make check-registry-parity      # declared version must not outrun PyPI
@@ -61,9 +62,10 @@ make check-changelog            # post-release drift gate
 make check-changelog-release    # pre-tag gate ([Unreleased] must be non-empty)
 ```
 
-Which of those actually gate a merge: `ci.yml` runs `check-docs`, `check-links` and
-`check-registry-parity`, and calls `check_changelog_heading.py`, `check_core_deps.py`,
-`check_version_tagged.py` and `generate_benchmark.py --check` directly. `publish.yml`
+Which of those actually gate a merge: `ci.yml` runs `check-docs`, `check-links`,
+`check-cve-catalog` and `check-registry-parity`, and calls `check_changelog_heading.py`,
+`check_core_deps.py`, `check_version_tagged.py` and `generate_benchmark.py --check`
+directly. `publish.yml`
 adds the two release-only forms, `check_benchmark_freshness.py --release` and
 `check_registry_parity.py --distance-only`. **No workflow runs the `check-changelog`
 pair or the bare `check-benchmark-freshness`** — run those by hand, and expect

@@ -274,3 +274,12 @@ jobs:
       # flaky on rate limits rather than on repo defects.
       - name: Refuse dead relative links in markdown
         run: python3 scripts/check_links.py
+
+      # docs/cves/index.md has claimed since it was written that "CI runs
+      # `python3 scripts/gen_cve_catalog.py --check` on every PR". Nothing did:
+      # the script was referenced by no workflow and no Makefile target. The
+      # catalog's row count is gated by test_cve_catalog_gate.py, but a drifted
+      # title, CVSS or advisory URL in a tests/cves/ docstring would not have
+      # been caught. Now the claim is true.
+      - name: CVE catalog matches the regression suite
+        run: python3 scripts/gen_cve_catalog.py --check
