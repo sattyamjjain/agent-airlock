@@ -217,9 +217,7 @@ class TestTheCatalogsOwnCIClaim:
         deleted the `run:` line — a gate that cannot fail, which is the exact
         defect this class exists to prevent. Caught by negative control.
         """
-        return "\n".join(
-            line for line in text.splitlines() if not line.lstrip().startswith("#")
-        )
+        return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
     def test_the_claim_is_backed_by_a_workflow(self) -> None:
         if not self._claims_ci_checks_it():
@@ -227,8 +225,7 @@ class TestTheCatalogsOwnCIClaim:
         hits = [
             p.name
             for p in sorted(self._WORKFLOWS.glob("*.yml"))
-            if "gen_cve_catalog.py --check"
-            in self._uncommented(p.read_text(encoding="utf-8"))
+            if "gen_cve_catalog.py --check" in self._uncommented(p.read_text(encoding="utf-8"))
         ]
         assert hits, (
             "docs/cves/index.md says CI runs `gen_cve_catalog.py --check` on every "
