@@ -1832,7 +1832,7 @@ escapes the sandbox, a <code>${SECRET}</code> smuggled into a URL, a pickle blob
 tool. Gateways and prompt-firewalls check the <em>prompt</em> and allow/deny whole <em>tools</em> —
 but almost nothing validates the <em>arguments</em> at the function boundary, which is where
 the actual damage happens.</p>
-<p>Agent-Airlock is a small MIT-licensed Python decorator that does that:</p>
+<p>Agent-Airlock is a small Apache-2.0 licensed Python decorator that does that:</p>
 <ul>
 <li>strips "ghost" arguments the LLM hallucinated (params not in your signature)</li>
 <li>validates types with Pydantic in strict mode (no silent <code>"100"</code> → <code>100</code> coercion)</li>
@@ -1893,7 +1893,7 @@ production incidents live:</p>
 they operate at the network/prompt layer. <strong>Nobody validates the argument payload at the
 function boundary</strong> — the WAF-for-tool-arguments layer.</p>
 <h3 id="what-i-built">What I built<a class="headerlink" href="#what-i-built" title="Permanent link">&para;</a></h3>
-<p><a href="https://github.com/sattyamjjain/agent-airlock">Agent-Airlock</a> is an MIT Python decorator
+<p><a href="https://github.com/sattyamjjain/agent-airlock">Agent-Airlock</a> is an Apache-2.0 Python decorator
 that treats tool-call arguments as untrusted input:</p>
 <ul>
 <li><strong>Ghost-argument stripping</strong> — drops params the model invented that aren't in your
@@ -1962,7 +1962,7 @@ both.</p>
 <h3 id="try-it">Try it<a class="headerlink" href="#try-it" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>agent-airlock
 </code></pre></div>
-<p>It's MIT, solo-maintained, and early. The benchmark is reproducible and the corpus is in
+<p>It's Apache-2.0, solo-maintained, and early. The benchmark is reproducible and the corpus is in
 the repo — if you can craft a payload that gets through (or a benign input that shouldn't
 be blocked), that's exactly the issue I want.</p>
 <hr />

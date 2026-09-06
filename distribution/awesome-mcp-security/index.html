@@ -1764,7 +1764,7 @@ Confirm the canonical list repo before opening the PR.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Add agent-airlock (in-process least-privilege for MCP tool calls)
 </code></pre></div>
 <h2 id="pr-body">PR body<a class="headerlink" href="#pr-body" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>agent-airlock is an MIT, Pydantic-only decorator that enforces
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>agent-airlock is an Apache-2.0, Pydantic-only decorator that enforces
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>least-privilege at the tool-call seam: deny-by-default SecurityPolicy, strict
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>argument validation, ghost-argument stripping, output PII/secret masking, and
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>opt-in per-CVE / MCP-spec (SEP) presets. Runs in-process (microsecond overhead),
