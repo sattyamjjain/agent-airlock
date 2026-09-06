@@ -25,13 +25,13 @@ lists.
 **One-liner (awesome-list bullet format):**
 
 ```markdown
-- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) - A type-checker for AI tool calls: strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks. Ships CVE-targeted guards with a reproducible block-rate benchmark. (Python, MIT)
+- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) - A type-checker for AI tool calls: strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks. Ships CVE-targeted guards with a reproducible block-rate benchmark. (Python, Apache-2.0)
 ```
 
 **Shorter variant (for terse lists):**
 
 ```markdown
-- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) - In-process, per-argument tool-call validation for MCP servers & agents (ghost-arg stripping, strict Pydantic, self-healing retries). Python, MIT.
+- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) - In-process, per-argument tool-call validation for MCP servers & agents (ghost-arg stripping, strict Pydantic, self-healing retries). Python, Apache-2.0.
 ```
 
 **Plain description (for forms / "about" fields):**
@@ -39,7 +39,7 @@ lists.
 > agent-airlock validates the arguments an LLM passes to your tools, in-process: it strips
 > hallucinated ("ghost") arguments, enforces strict Pydantic types, returns self-healing
 > error hints the model can retry, and ships guards for known MCP CVE classes — with a
-> reproducible block-rate benchmark. MIT, Python 3.10+.
+> reproducible block-rate benchmark. Apache-2.0, Python 3.10+.
 
 ## Target lists + how to submit
 

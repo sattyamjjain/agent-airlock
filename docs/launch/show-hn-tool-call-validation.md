@@ -29,7 +29,7 @@ Lead every one of them with the benchmark, not the tool.
 > but almost nothing validates the *arguments* at the function boundary, which is where
 > the actual damage happens.
 >
-> Agent-Airlock is a small MIT-licensed Python decorator that does that:
+> Agent-Airlock is a small Apache-2.0 licensed Python decorator that does that:
 >
 > - strips "ghost" arguments the LLM hallucinated (params not in your signature)
 > - validates types with Pydantic in strict mode (no silent `"100"` → `100` coercion)
@@ -103,7 +103,7 @@ function boundary** — the WAF-for-tool-arguments layer.
 
 ### What I built
 
-[Agent-Airlock](https://github.com/sattyamjjain/agent-airlock) is an MIT Python decorator
+[Agent-Airlock](https://github.com/sattyamjjain/agent-airlock) is an Apache-2.0 Python decorator
 that treats tool-call arguments as untrusted input:
 
 - **Ghost-argument stripping** — drops params the model invented that aren't in your
@@ -166,7 +166,7 @@ both.
 pip install agent-airlock
 ```
 
-It's MIT, solo-maintained, and early. The benchmark is reproducible and the corpus is in
+It's Apache-2.0, solo-maintained, and early. The benchmark is reproducible and the corpus is in
 the repo — if you can craft a payload that gets through (or a benign input that shouldn't
 be blocked), that's exactly the issue I want.
 

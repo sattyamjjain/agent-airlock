@@ -195,4 +195,5 @@ Feel free to open an issue with the "question" label if you have questions about
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the
+Apache License 2.0.

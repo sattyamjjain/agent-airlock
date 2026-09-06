@@ -39,7 +39,7 @@ category). Verify the exact section name + alphabetical order in the target
 repo's current README before opening the PR.
 
 ```markdown
-- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) — Deny-by-default contract/type-checker layer for AI tool calls: strict Pydantic arg validation, ghost-argument stripping, self-healing retries, least-privilege tool scope. Reproducible block-rate benchmark (100% block / 0% false-positive on a self-curated corpus) vs LlamaFirewall & Invariant. Python, MIT.
+- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) — Deny-by-default contract/type-checker layer for AI tool calls: strict Pydantic arg validation, ghost-argument stripping, self-healing retries, least-privilege tool scope. Reproducible block-rate benchmark (100% block / 0% false-positive on a self-curated corpus) vs LlamaFirewall & Invariant. Python, Apache-2.0.
 ```
 
 Candidate lists (full table in [`launch/distribution-submissions.md`](launch/distribution-submissions.md)):

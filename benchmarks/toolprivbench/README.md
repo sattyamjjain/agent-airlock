@@ -1,6 +1,6 @@
 # ToolPrivBench-style least-privilege block-rate benchmark
 
-A public, MIT, re-runnable benchmark that measures how agent-airlock's
+A public, Apache-2.0, re-runnable benchmark that measures how agent-airlock's
 **deny-by-default + least-privilege** runtime policy handles **over-privileged
 tool selection**, mapped to the OWASP Agentic Top-10.
 
@@ -60,5 +60,5 @@ over-privileged tools — it's a claim that the in-process deny-by-default
 contract blocks the call regardless of what the model selects. The complementary low-privilege
 allow-rate is reported to show the policy is precise, not a blunt deny-all.
 
-MIT-licensed, like the rest of agent-airlock. This is a public number + a
+Apache-2.0 licensed, like the rest of agent-airlock. This is a public number + a
 reproducible harness — not a paid feature.

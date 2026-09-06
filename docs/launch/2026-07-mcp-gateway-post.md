@@ -29,7 +29,7 @@ over HN's limit, so it goes in the first line of the comment, not the title fiel
 
 **First comment** (post as author right away — this is what carries the thread):
 
-> I maintain a small MIT library that type-checks the arguments an AI agent passes to a
+> I maintain a small Apache-2.0 library that type-checks the arguments an AI agent passes to a
 > tool, in-process, at the function boundary. Docker shipped a native MCP Gateway, and the
 > obvious question landed in my inbox a few times: doesn't the gateway already do this? So
 > I stopped guessing and measured it.
@@ -97,7 +97,7 @@ over HN's limit, so it goes in the first line of the comment, not the title fiel
 > arguing.
 >
 > Setup: one corpus of 12 malformed tool-call payloads + 3 benign controls, sent through
-> both a live Docker MCP Gateway v2.0.1 and my library (agent-airlock, MIT). For the
+> both a live Docker MCP Gateway v2.0.1 and my library (agent-airlock, Apache-2.0). For the
 > gateway I send a real MCP `tools/call` through it to an echo backend that validates
 > nothing, so I can tell whether the gateway forwarded or blocked each one.
 >

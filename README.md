@@ -18,7 +18,7 @@
 
 <!-- Secondary Badges Row -->
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green?style=flat-square)](https://opensource.org/licenses/Apache-2.0)
 [![GitHub stars](https://img.shields.io/github/stars/sattyamjjain/agent-airlock?style=flat-square&logo=github)](https://github.com/sattyamjjain/agent-airlock/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
@@ -1467,7 +1467,7 @@ def delete_user(user_id: str) -> dict:
 | **Self-Healing** | ❌ | ❌ | **✅** |
 | **E2B Sandboxing** | ❌ | ❌ | **✅ Native** |
 | **Your Data** | Their servers | Their servers | **Never leaves you** |
-| **Source Code** | Closed | Closed | **MIT Licensed** |
+| **Source Code** | Closed | Closed | **Apache-2.0 Licensed** |
 
 > **On the competitor columns.** They are read off each vendor's public materials, not from
 > testing their products, and the two vendor columns are the weakest rows on this page —

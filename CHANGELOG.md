@@ -70,6 +70,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it themselves and pass the triple to `check_and_debit`. The Protocol reads as
   though the engine consumes it; it does not.
 
+### Changed
+
+- **Relicensed from MIT to Apache License 2.0.** `LICENSE` is now the canonical
+  Apache-2.0 text (202 lines, sha256
+  `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`) with the
+  appendix boilerplate filled in as `Copyright 2026 Sattyam Jain`. `pyproject.toml`
+  carries `license = "Apache-2.0"` and the Apache classifier, and the built wheel's
+  metadata reports `License-Expression: Apache-2.0` with the LICENSE packaged.
+
+  Every downstream statement of the licence moved with it, so nothing keeps telling
+  readers MIT: the plugin manifest, CONTRIBUTING's contributor grant, the README and
+  docs badges, the README comparison table, the two benchmark packages, and the
+  distribution/launch drafts.
+
+  Two MIT strings are deliberately left alone. The CHANGELOG entries under earlier
+  releases are a record of what shipped at the time and are not rewritten. The `MIT`
+  in `benchmarks/harness_injection/fixture.py` is fabricated content inside a
+  synthetic README used as a prompt-injection fixture — it describes a fictional
+  repository, not this one, and editing it would change benchmark input.
+
+  Provenance, since a relicence turns on who holds copyright:
+  `git log --format='%an' | sort -u` returns two identities — `Sattyam jain
+  <sattyamjain96@gmail.com>` (121 commits) and `sattyamj-attri
+  <sattyam.jain@attri.ai>` (81). Both are the same person, no third party has
+  authored or been credited on a commit, and the sole author confirmed the work is
+  not employer-owned before the relicence was applied.
+
 ### Fixed
 
 - **`docs/cves/index.md` claimed a CI gate that did not exist.** Since it was

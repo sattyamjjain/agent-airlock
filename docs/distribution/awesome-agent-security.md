@@ -28,7 +28,7 @@ validate → policy → execute → sanitize seam in-process: deny-by-default
 least-privilege SecurityPolicy, strict typed argument validation, ghost-argument
 stripping, output PII/secret masking, capability gating, and opt-in per-CVE /
 MCP-spec presets. Integrates with LangChain, LangGraph, PydanticAI, OpenAI
-Agents, Anthropic, CrewAI, and more. MIT, Pydantic-only core, 4,322 tests.
+Agents, Anthropic, CrewAI, and more. Apache-2.0, Pydantic-only core, 4,322 tests.
 
 Repo: https://github.com/sattyamjjain/agent-airlock
 PyPI: https://pypi.org/project/agent-airlock/

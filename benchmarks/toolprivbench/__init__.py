@@ -1,6 +1,6 @@
 """ToolPrivBench-style least-privilege block-rate benchmark for agent-airlock.
 
-Public, MIT, re-runnable. Measures whether agent-airlock's deny-by-default
+Public, Apache-2.0, re-runnable. Measures whether agent-airlock's deny-by-default
 runtime policy mechanically blocks over-privileged tool selection (and its
 transient-failure amplifier) across the ToolPrivBench domains / risk patterns,
 mapped to the OWASP Agentic Top-10. See ``README.md`` and ``RESULTS.md``.

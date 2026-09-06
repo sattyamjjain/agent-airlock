@@ -7,7 +7,7 @@ record of the drafted comment. Portal submission remains a maintainer
 action; do not treat this document as a filed comment.
 
 **Commenter:** Sattyam Jain (open-source maintainer, agent-airlock)
-**Project:** https://github.com/sattyamjjain/agent-airlock (MIT, Python)
+**Project:** https://github.com/sattyamjjain/agent-airlock (Apache-2.0, Python)
 **Date drafted:** 2026-04-21
 **Responding to:** https://www.nist.gov/itl/ai-risk-management-framework/ai-rmf-v2-public-comment-2026-04-18
 

@@ -22,7 +22,7 @@ Add agent-airlock (in-process least-privilege for MCP tool calls)
 ## PR body
 
 ```
-agent-airlock is an MIT, Pydantic-only decorator that enforces
+agent-airlock is an Apache-2.0, Pydantic-only decorator that enforces
 least-privilege at the tool-call seam: deny-by-default SecurityPolicy, strict
 argument validation, ghost-argument stripping, output PII/secret masking, and
 opt-in per-CVE / MCP-spec (SEP) presets. Runs in-process (microsecond overhead),

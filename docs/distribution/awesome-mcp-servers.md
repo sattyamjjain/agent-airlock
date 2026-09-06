@@ -29,7 +29,7 @@ Add agent-airlock to Tools (least-privilege security layer for MCP tool calls)
 agent-airlock is a security/utility library for MCP tool calls (not a server):
 a deny-by-default @Airlock decorator that strict-validates tool arguments, strips
 ghost arguments, masks PII/secrets in output, and ships opt-in per-CVE and
-MCP-spec (SEP) presets. FastMCP integration via @secure_tool. MIT, Pydantic-only core,
+MCP-spec (SEP) presets. FastMCP integration via @secure_tool. Apache-2.0, Pydantic-only core,
 4,322 tests. Listed under Tools/Clients since it wraps servers rather than being
 one.
 

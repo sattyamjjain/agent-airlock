@@ -25,7 +25,7 @@ Add agent-airlock (least-privilege tool-call validation for LLM agents)
 agent-airlock guards the LLM→tool boundary in-process: it strict-validates tool
 arguments (Pydantic, no coercion), strips hallucinated/ghost arguments, enforces
 a deny-by-default least-privilege policy, and masks PII/secrets in tool output
-(13 PII types incl. India DPDP). Opt-in per-CVE and MCP-spec presets. MIT,
+(13 PII types incl. India DPDP). Opt-in per-CVE and MCP-spec presets. Apache-2.0,
 Pydantic-only core, 4,322 tests.
 
 Repo: https://github.com/sattyamjjain/agent-airlock
