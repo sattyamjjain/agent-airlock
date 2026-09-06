@@ -111,6 +111,25 @@ Corpus: **210** tool calls — **106** malicious (must block), **104** benign (m
 | Tool-argument injection (eval / subprocess / env / codegen) | 6/6 (100.0%) | 0/0 (0.0%) |
 | Benign controls (false-positive set) | 0/0 (0.0%) | 0/104 (0.0%) |
 
+### agent-airlock per OWASP Agentic slot (v2.01)
+
+Every one of the ten slots is listed. A slot the corpus does not reach is shown as **n=0**, not omitted — which of the ten this benchmark *cannot* speak to is the column worth reading first. An item that genuinely maps to two slots is counted in both, so the malicious column sums to more than the corpus size.
+
+| Slot | Risk | Malicious n | Blocked | Block-rate | Benign n | False positives |
+|---|---|---|---|---|---|---|
+| ASI01 | Agent Goal Hijack (Partial) | 20 | 20 | 100.0% | 20 | 0 |
+| ASI02 | Tool Misuse and Exploitation (Full) | 22 | 22 | 100.0% | 21 | 0 |
+| ASI03 | Identity and Privilege Abuse (Partial) | 21 | 21 | 100.0% | 21 | 0 |
+| ASI04 | Agentic Supply Chain Vulnerabilities (Partial) | 23 | 23 | 100.0% | 21 | 0 |
+| ASI05 | Unexpected Code Execution / RCE (Full) | 5 | 5 | 100.0% | 2 | 0 |
+| ASI06 | Memory and Context Poisoning (Partial) | 20 | 20 | 100.0% | 20 | 0 |
+| ASI07 | Insecure Inter-Agent Communication (Partial) | **0** | — | _not measured_ | **0** | — |
+| ASI08 | Cascading Failures (Full) | **0** | — | _not measured_ | **0** | — |
+| ASI09 | Human-Agent Trust Exploitation (Partial) | **0** | — | _not measured_ | **0** | — |
+| ASI10 | Rogue Agents (Monitor-only) | **0** | — | _not measured_ | **0** | — |
+
+Unmapped corpus items (no slot claimed): **0** malicious, **1** benign. An item is left unmapped when no slot fits it honestly; the count is published rather than absorbed into a neighbouring row.
+
 ### Incumbent scope (cited, not re-run)
 
 - **Meta LlamaFirewall** — model-in-the-loop (PromptGuard 2 + AlignmentCheck + regex/CodeShield). Targets prompt-injection / jailbreak inputs, agent-misalignment via chain-of-thought auditing, and insecure-code outputs (CodeShield). Tool-argument exploit shapes (subprocess/env/codegen) and least-privilege tool *selection* are not its stated detection targets; PromptGuard/AlignmentCheck are LLM scanners requiring model weights. Source: <https://github.com/meta-llama/PurpleLlama/tree/main/LlamaFirewall>

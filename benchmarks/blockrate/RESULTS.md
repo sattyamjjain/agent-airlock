@@ -1,12 +1,12 @@
 # Cross-tool block-rate comparison — results
 
-Last run: **2026-08-17** (re-run; identical result to 2026-06-29). Corpus: **210** tool calls.
+Last run: **2026-09-06**. Corpus: **210** tool calls.
 
 ## Headline
 
 - agent-airlock block-rate (malicious blocked): **100.0%**
 - agent-airlock false-positive rate (benign blocked): **0.0%**
-- Per-decision latency: **p50 0.0015 ms**, **p95 0.0210 ms** (in-process, no model call, no network)
+- Per-decision latency: **p50 0.0018 ms**, **p95 0.0249 ms** (in-process, no model call, no network)
 
 The latency line is why this is a different layer from model-in-the-loop guardrails: a deny-by-default policy / argument guard decides in microseconds with no model inference, no API round-trip, and a deterministic verdict.
 
@@ -29,6 +29,25 @@ Corpus: **210** tool calls — **106** malicious (must block), **104** benign (m
 | Over-privileged tool selection (ToolPrivBench-derived) | 100/100 (100.0%) | 0/0 (0.0%) |
 | Tool-argument injection (eval / subprocess / env / codegen) | 6/6 (100.0%) | 0/0 (0.0%) |
 | Benign controls (false-positive set) | 0/0 (0.0%) | 0/104 (0.0%) |
+
+### agent-airlock per OWASP Agentic slot (v2.01)
+
+Every one of the ten slots is listed. A slot the corpus does not reach is shown as **n=0**, not omitted — which of the ten this benchmark *cannot* speak to is the column worth reading first. An item that genuinely maps to two slots is counted in both, so the malicious column sums to more than the corpus size.
+
+| Slot | Risk | Malicious n | Blocked | Block-rate | Benign n | False positives |
+|---|---|---|---|---|---|---|
+| ASI01 | Agent Goal Hijack (Partial) | 20 | 20 | 100.0% | 20 | 0 |
+| ASI02 | Tool Misuse and Exploitation (Full) | 22 | 22 | 100.0% | 21 | 0 |
+| ASI03 | Identity and Privilege Abuse (Partial) | 21 | 21 | 100.0% | 21 | 0 |
+| ASI04 | Agentic Supply Chain Vulnerabilities (Partial) | 23 | 23 | 100.0% | 21 | 0 |
+| ASI05 | Unexpected Code Execution / RCE (Full) | 5 | 5 | 100.0% | 2 | 0 |
+| ASI06 | Memory and Context Poisoning (Partial) | 20 | 20 | 100.0% | 20 | 0 |
+| ASI07 | Insecure Inter-Agent Communication (Partial) | **0** | — | _not measured_ | **0** | — |
+| ASI08 | Cascading Failures (Full) | **0** | — | _not measured_ | **0** | — |
+| ASI09 | Human-Agent Trust Exploitation (Partial) | **0** | — | _not measured_ | **0** | — |
+| ASI10 | Rogue Agents (Monitor-only) | **0** | — | _not measured_ | **0** | — |
+
+Unmapped corpus items (no slot claimed): **0** malicious, **1** benign. An item is left unmapped when no slot fits it honestly; the count is published rather than absorbed into a neighbouring row.
 
 ### Incumbent scope (cited, not re-run)
 

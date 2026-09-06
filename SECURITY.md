@@ -85,6 +85,14 @@ worth trusting on where it does:
 
 ## Reporting a Vulnerability
 
+> **Triaging a disclosed CVE rather than reporting a new one?** See
+> [`docs/cve-triage.md`](docs/cve-triage.md) — it defines what this library can and
+> cannot guard, and the disposition vocabulary every `cve-response` issue is closed
+> with. Most disclosed MCP CVEs are server-side authorization defects that a
+> tool-call contract layer is structurally not in the path of; that page says so
+> explicitly rather than leaving them open.
+
+
 If you discover a security vulnerability in Agent-Airlock, please report it responsibly:
 
 1. **Do NOT create a public GitHub issue**

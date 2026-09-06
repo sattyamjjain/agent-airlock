@@ -9,6 +9,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(no entries yet)
+
+## [0.8.87] - 2026-09-06
+
+### Added
+
+- **Every block-rate corpus item now carries an OWASP Agentic slot, and the block
+  rate is reported per slot.** Two artifacts described the same ten risks and never
+  met: `agentic_coverage.yaml` asserted "Full" / "Partial" / "Monitor-only" in a
+  `risk_name` string evidenced by a test path and never by a number, while
+  `benchmarks/blockrate` published 100% over 106 malicious items with no OWASP
+  dimension at all.
+
+  `ToolCall` gains `owasp_asi` (`str | tuple[str, ...] | None`, default `None`, so
+  nothing breaks). Over-privileged items inherit the id ToolPrivBench already
+  crosswalks rather than re-deriving it, so the two benchmarks cannot drift apart.
+  Items that map to two slots record both.
+
+  **The honest finding is the empty rows.** Four of the ten slots have no corpus
+  item at all and are published as explicit `n=0` rather than omitted:
+
+  - **ASI07 Insecure Inter-Agent Communication** — n=0, not measured
+  - **ASI08 Cascading Failures** — n=0, not measured, **and labelled `(Full)`**
+  - **ASI09 Human-Agent Trust Exploitation** — n=0, not measured
+  - **ASI10 Rogue Agents** — n=0, not measured
+
+  ASI08 is the one that matters: a full-coverage claim resting on CircuitBreaker /
+  RetryPolicy / rate-limit code with zero cascading-failure items behind it. It now
+  says `not measured (n=0)` on its own row. One benign control (`benign-query`) is
+  deliberately left unmapped and counted at the bottom rather than padded into a
+  neighbouring row.
+
+  Measured slots: ASI01 100.0% (n=20), ASI02 100.0% (n=22), ASI03 100.0% (n=21),
+  ASI04 100.0% (n=23), ASI05 100.0% (n=5), ASI06 100.0% (n=20).
+
+  `agentic_coverage.yaml` entries gain a `measured_block_rate` field (public schema),
+  and a test asserts every `(Full)` row carries either a measurement or an explicit
+  unmeasured marker — plus a live-run cross-check that the published number equals
+  what the benchmark produces now.
+
+- **`docs/cve-triage.md`** — what this library can and cannot guard, and the
+  disposition vocabulary every `cve-response` issue is closed with. Linked from
+  `SECURITY.md` and from the watcher's issue template.
+
+### Changed
+
+- **CVE watcher now separates argument-shaped candidates from triage-required
+  records.** Its first 48 hours produced ten issues — nine HIGH, one CRITICAL — of
+  which six were dispositioned out of scope: five server-side authorization defects
+  and one DNS-rebinding TOCTOU inside a gateway, none of them things a tool-call
+  contract layer is in the path of.
+
+  The fix is not a narrower keyword feed; all ten were genuine MCP-ecosystem CVEs, so
+  tightening relevance would have dropped true positives to solve a volume problem.
+  `classify_shape()` splits on **shape** instead — a sink word in the description or
+  an argument-shaped CWE (77/78/88/94/95/116/150/502/1336) marks a record
+  `cve-candidate` and opens an issue; everything else is listed in the run summary and
+  not filed, while staying in the dedup state so nothing is lost. Per-run cap lowered
+  from 5 to 3. The criterion is written down in `docs/cve-triage.md` and pinned by a
+  test that replays all ten of those first CVEs with the disposition a human gave each
+  one, asserting the classifier would have opened **four** issues rather than ten.
+
+- **README no longer loads a third-party animated SVG.** The header fetched
+  `readme-typing-svg.demolab.com` on every page view of a library whose pitch is that
+  it makes no network calls in the guard path, and the animated tagline sat above the
+  line that explains the product. Replaced with static markdown; the wedge line is now
+  the first thing rendered. Badges kept.
+
 ### Added
 
 - **Dockerfile + `docker-sandbox` CI job — the four `docker`-marked tests now actually

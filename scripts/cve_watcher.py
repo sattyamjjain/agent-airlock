@@ -84,7 +84,7 @@ DEFERRED_LABEL = "cve-deferred"
 # run. Nothing is dropped: `filed_cves` records only what is actually emitted,
 # so a held-back CVE is found again next run — which is also why the NVD
 # window is 7 days rather than the cron interval.
-MAX_NEW_PER_RUN = int(os.environ.get("AIRLOCK_CVE_MAX_NEW_PER_RUN", "5"))
+MAX_NEW_PER_RUN = int(os.environ.get("AIRLOCK_CVE_MAX_NEW_PER_RUN", "3"))
 MAX_OPEN_UNTRIAGED = int(os.environ.get("AIRLOCK_CVE_MAX_OPEN_UNTRIAGED", "10"))
 WINDOW_HOURS = int(os.environ.get("AIRLOCK_CVE_WINDOW_HOURS", "168"))
 
@@ -142,6 +142,80 @@ _HARDWARE_NOISE_RE = re.compile(
     r"nforce|\bmcp\d{2,}\b|southbridge|chipset",
     re.IGNORECASE,
 )
+
+
+# ---------------------------------------------------------------------------
+# Shape classifier (added 2026-09-06 after the first live queue).
+#
+# The watcher's first 48 hours produced ten issues, of which six were
+# dispositioned out-of-scope: five server-side authorization/authentication
+# defects and one DNS-rebinding TOCTOU inside a gateway. None of those is
+# something a tool-call contract layer can express a guard for, and ten open
+# HIGH/CRITICAL issues on a security library's tracker reads as an unpatched
+# backlog regardless of the truth.
+#
+# The fix is not a narrower keyword feed — every one of the ten was a genuine
+# MCP-ecosystem CVE, so tightening `is_relevant` would drop true positives to
+# solve a volume problem. What separates them is *shape*: whether the defect
+# lives in an argument the caller supplies (which airlock can refuse) or in the
+# server's own authorization logic (which it cannot see).
+#
+# The criterion is written down in docs/cve-triage.md, and
+# tests/test_cve_watcher.py pins it against all ten of those first real CVEs
+# with the disposition a human gave each one.
+
+#: CWEs describing a defect carried *in an argument* — the seam this library
+#: sits on. Injection, neutralization and deserialization classes.
+ARGUMENT_SHAPED_CWES: frozenset[str] = frozenset(
+    {
+        "CWE-77",  # command injection
+        "CWE-78",  # OS command injection
+        "CWE-88",  # argument injection
+        "CWE-94",  # code injection
+        "CWE-95",  # eval injection
+        "CWE-116",  # improper encoding/escaping of output
+        "CWE-150",  # improper neutralization of escape/meta characters
+        "CWE-502",  # unsafe deserialization
+        "CWE-1336",  # template injection
+    }
+)
+
+#: Sink words that upgrade a record to a candidate regardless of its CWE. A
+#: server-side authorization CVE can still hand the attacker an argument-shaped
+#: primitive — CVE-2026-79748 is CWE-862 (missing authz) but the primitive is an
+#: attacker-supplied stdio spawn config reaching child_process.spawn, which
+#: McpSubprocessArgInjectionGuard already refuses. Deliberately excludes generic
+#: authorization vocabulary so the six out-of-scope records stay out.
+_SINK_RE = re.compile(
+    r"child_process|\bspawn\b|subprocess|\bexec\b|\beval\b|\bargv\b"
+    r"|command[- ]safety|\bmetachar|stop-parsing|\bshell\b|\bstdio\b"
+    r"|deserializ|\bpickle\b|template injection|interpolat"
+    r"|\bjq filter|\bfilters?\b(?=[^.]*validat)|execute .{0,40}function"
+    r"|\bSQL\b|FROM[- ]clause",
+    re.IGNORECASE,
+)
+
+CANDIDATE_LABEL = "cve-candidate"
+TRIAGE_LABEL = "cve-triage-required"
+
+
+def classify_shape(description: str, cwes: list[str] | tuple[str, ...] = ()) -> str:
+    """Return ``"candidate"`` or ``"triage-required"`` for one NVD record.
+
+    ``candidate`` means the defect is carried in an argument a caller supplies,
+    so agent-airlock could plausibly express a deny-by-default guard for it.
+    ``triage-required`` means it is not visible at the tool-call boundary on the
+    evidence in the description — usually server-side authorization.
+
+    This is a **triage prior, not a verdict**. A human still dispositions every
+    issue; the label only decides whether a tracker row is opened now or the
+    record is listed in the run log for a human to pull forward.
+    """
+    if _SINK_RE.search(description or ""):
+        return "candidate"
+    if any(c in ARGUMENT_SHAPED_CWES for c in cwes):
+        return "candidate"
+    return "triage-required"
 
 
 def is_relevant(description: str) -> bool:
@@ -292,12 +366,22 @@ def extract(vuln: dict[str, Any]) -> dict[str, Any]:
         if d.get("lang") == "en":
             desc = d.get("value", "")
             break
+    cwes = sorted(
+        {
+            d.get("value", "")
+            for w in cve.get("weaknesses") or []
+            for d in w.get("description") or []
+            if str(d.get("value", "")).startswith("CWE-")
+        }
+    )
     return {
         "id": cve.get("id"),
         "published": cve.get("published"),
         "cvss": cvss,
         "severity": severity,
         "description": desc,
+        "cwes": cwes,
+        "shape": classify_shape(desc, cwes),
     }
 
 

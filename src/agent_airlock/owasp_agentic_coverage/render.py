@@ -39,6 +39,23 @@ class CoverageEntry:
     test_path: str
     last_verified: str
     advisory_url: str
+    measured_block_rate: str = ""
+    """Measured block-rate for this risk, or an explicit unmeasured marker.
+
+    Two shapes only, both self-describing with the sample size attached:
+
+    * ``"100.0% (n=22)"`` — measured by ``benchmarks/blockrate`` over items
+      mapped to this slot.
+    * ``"not measured (n=0)"`` — the corpus contains no item for this slot.
+
+    Empty string means the matrix predates the field. It is optional in the
+    loader because the OWASP **LLM** matrix (``coverage.yaml``) shares this
+    parser and carries no measurement; the Agentic matrix is asserted complete
+    by its own test instead.
+
+    A coverage label of ``(Full)`` with neither shape is the claim this field
+    exists to prevent: an unbacked assertion of full coverage.
+    """
 
 
 @dataclass(frozen=True)
@@ -194,6 +211,7 @@ def load_coverage(path: Path | None = None) -> Coverage:
                 test_path=str(entry_raw["test_path"]),
                 last_verified=str(entry_raw["last_verified"]),
                 advisory_url=str(entry_raw["advisory_url"]),
+                measured_block_rate=str(entry_raw.get("measured_block_rate") or ""),
             )
         )
 
@@ -214,13 +232,16 @@ def render_markdown(coverage: Coverage) -> str:
         f"Spec: {coverage.spec_url}",
         f"Last verified (global): {coverage.last_verified_global}",
         "",
-        "| Risk ID | Risk | Guard module | Preset | Test | Last verified | Advisory |",
-        "|---------|------|--------------|--------|------|---------------|----------|",
+        "| Risk ID | Risk | Guard module | Preset | Test | Last verified | "
+        "Measured block-rate | Advisory |",
+        "|---------|------|--------------|--------|------|---------------|"
+        "---------------------|----------|",
     ]
     for e in coverage.entries:
         lines.append(
             f"| {e.risk_id} | {e.risk_name} | `{e.guard_module}` | "
             f"`{e.preset}` | `{e.test_path}` | {e.last_verified} | "
+            f"{e.measured_block_rate or '—'} | "
             f"[link]({e.advisory_url}) |"
         )
     lines.append("")
@@ -242,6 +263,7 @@ def render_json(coverage: Coverage) -> str:
                 "test_path": e.test_path,
                 "last_verified": e.last_verified,
                 "advisory_url": e.advisory_url,
+                "measured_block_rate": e.measured_block_rate,
             }
             for e in coverage.entries
         ],

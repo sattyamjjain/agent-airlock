@@ -9,6 +9,7 @@ OWASP Agentic Top-10 (``agentic_coverage.yaml``). The cross-file checks — ever
 from __future__ import annotations
 
 import importlib
+import re
 from pathlib import Path
 
 import pytest
@@ -246,3 +247,127 @@ class TestMcpTopTenMapping:
             "preset docstring still marks an MCP category '(reserved)' — MCP06/MCP08 are "
             "named categories (Intent Flow Subversion / Lack of Audit and Telemetry)."
         )
+
+
+# ---------------------------------------------------------------------------
+# measured_block_rate
+# ---------------------------------------------------------------------------
+
+_MEASURED_RE = re.compile(r"^\d+\.\d% \(n=\d+\)$")
+_UNMEASURED_RE = re.compile(r"^not measured \(n=0\)$")
+
+
+def has_evidence(measured_block_rate: str) -> bool:
+    """True iff the value is a measurement or an explicit unmeasured marker.
+
+    Anything else — empty, prose, a bare percentage with no sample size — is
+    treated as absent. A rate without its ``n`` is not evidence: 100% of two
+    items and 100% of two hundred are not the same claim.
+    """
+    value = (measured_block_rate or "").strip()
+    return bool(_MEASURED_RE.match(value) or _UNMEASURED_RE.match(value))
+
+
+class TestMeasuredBlockRate:
+    """A coverage label must be backed by a number or an explicit 'no number'.
+
+    Before this field the matrix asserted "Full", "Partial" and "Monitor-only"
+    in a ``risk_name`` string, evidenced by a test path and never by a rate,
+    while ``benchmarks/blockrate`` published 100% over 106 malicious items with
+    no OWASP dimension at all. The two artifacts described the same ten risks
+    and never met.
+
+    The case this class exists to stop is a ``(Full)`` with neither a measured
+    rate nor an admission that nothing was measured. ASI08 is exactly that
+    shape today: labelled ``(Full)`` on the strength of CircuitBreaker /
+    RetryPolicy / rate-limit code, with a block-rate corpus that contains zero
+    cascading-failure items. It now says so out loud.
+    """
+
+    def test_every_agentic_entry_carries_evidence(self, agentic) -> None:
+        missing = [e.risk_id for e in agentic.entries if not has_evidence(e.measured_block_rate)]
+        assert not missing, (
+            f"entries with no measured rate and no explicit unmeasured marker: {missing}. "
+            'Add `measured_block_rate: "NN.N% (n=NN)"` or '
+            '`measured_block_rate: "not measured (n=0)"`.'
+        )
+
+    def test_full_coverage_claims_are_backed(self, agentic) -> None:
+        """The load-bearing one: '(Full)' with no evidence at all."""
+        offenders = [
+            e.risk_id
+            for e in agentic.entries
+            if "(Full)" in e.risk_name and not has_evidence(e.measured_block_rate)
+        ]
+        assert not offenders, (
+            f"{offenders} claim (Full) coverage without a measured block-rate or an "
+            "explicit 'not measured (n=0)' marker. A full-coverage claim with neither "
+            "is the assertion this field exists to prevent."
+        )
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("100.0% (n=22)", True),
+            ("84.4% (n=45)", True),
+            ("not measured (n=0)", True),
+            ("", False),
+            ("   ", False),
+            ("100%", False),  # no sample size
+            ("100.0%", False),  # no sample size
+            ("high", False),
+            ("not measured", False),  # no explicit n
+            ("Full", False),
+        ],
+    )
+    def test_evidence_predicate(self, value: str, expected: bool) -> None:
+        assert has_evidence(value) is expected
+
+    def test_a_full_claim_with_no_evidence_is_caught(self, tmp_path: Path) -> None:
+        """Negative control: the gate must actually fail on the shape it targets."""
+        bad = tmp_path / "agentic.yaml"
+        bad.write_text(
+            'spec_version: "v2.01"\n'
+            'spec_url: "https://example.com"\n'
+            'last_verified_global: "2026-09-06"\n'
+            "entries:\n"
+            '  - risk_id: "ASI08"\n'
+            '    risk_name: "Cascading Failures (Full)"\n'
+            '    guard_module: "agent_airlock.circuit_breaker"\n'
+            '    preset: "owasp_mcp_top_10_2026_policy"\n'
+            '    test_path: "tests/test_new_features.py"\n'
+            '    last_verified: "2026-09-06"\n'
+            '    advisory_url: "https://example.com"\n',
+            encoding="utf-8",
+        )
+        loaded = load_coverage(bad)
+        offenders = [
+            e.risk_id
+            for e in loaded.entries
+            if "(Full)" in e.risk_name and not has_evidence(e.measured_block_rate)
+        ]
+        assert offenders == ["ASI08"]
+
+    def test_published_rates_match_a_live_benchmark_run(self, agentic) -> None:
+        """The published number must equal what the benchmark produces now.
+
+        This is the join the work item is about: re-run the corpus, aggregate per
+        OWASP slot, and compare against what the shipped matrix claims. A corpus
+        edit that changes a slot's population fails here until the yaml is
+        regenerated, so the two artifacts cannot drift apart again.
+        """
+        from benchmarks.blockrate.report import asi_breakdown
+        from benchmarks.blockrate.runner import run_blockrate
+
+        stats = asi_breakdown(run_blockrate(measure_latency=False))
+        for e in agentic.entries:
+            s = stats[e.risk_id]
+            expected = (
+                f"not measured (n={s.malicious_total})"
+                if s.malicious_total == 0
+                else f"{s.block_rate * 100:.1f}% (n={s.malicious_total})"
+            )
+            assert e.measured_block_rate == expected, (
+                f"{e.risk_id}: matrix says {e.measured_block_rate!r}, a live run says "
+                f"{expected!r}. Regenerate agentic_coverage.yaml and the docs page."
+            )

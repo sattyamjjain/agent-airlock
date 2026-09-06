@@ -11,6 +11,11 @@ Two renderers, because two consumers with different determinism needs:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from agent_airlock.owasp_agentic_coverage.render import COVERAGE_PATH, load_coverage
+
+from .corpus import ASI_SLOTS, asi_slots
 from .runner import BlockRateReport
 
 _CATEGORY_TITLES = {
@@ -19,9 +24,106 @@ _CATEGORY_TITLES = {
     "benign": "Benign controls (false-positive set)",
 }
 
+#: Risk names are read from the shipped coverage matrix rather than restated
+#: here, so the benchmark table and ``agentic_coverage.yaml`` cannot drift into
+#: disagreeing about what a slot is called.
+_AGENTIC_COVERAGE_PATH = COVERAGE_PATH.parent / "agentic_coverage.yaml"
+
 
 def _pct(x: float) -> str:
     return f"{x * 100:.1f}%"
+
+
+@dataclass
+class AsiStats:
+    """Per-slot counts. ``malicious_total == 0`` is a reported result, not a gap."""
+
+    malicious_total: int = 0
+    malicious_blocked: int = 0
+    benign_total: int = 0
+    benign_false_positives: int = 0
+
+    @property
+    def block_rate(self) -> float:
+        return self.malicious_blocked / self.malicious_total if self.malicious_total else 0.0
+
+
+def asi_breakdown(report: BlockRateReport) -> dict[str, AsiStats]:
+    """Aggregate the run per OWASP Agentic slot.
+
+    Every one of the ten slots is present in the result, including those the
+    corpus never reaches — a slot with no items is the most informative row on
+    the page, so it is counted and rendered rather than dropped. An item mapped
+    to two slots counts once in each: the columns are per-slot coverage, not a
+    partition of the corpus, and the totals therefore exceed the corpus size.
+    """
+    out = {slot: AsiStats() for slot in ASI_SLOTS}
+    for call, blocked in report.results:
+        for slot in asi_slots(call):
+            stats = out.setdefault(slot, AsiStats())
+            if call.expected_block:
+                stats.malicious_total += 1
+                stats.malicious_blocked += int(blocked)
+            else:
+                stats.benign_total += 1
+                stats.benign_false_positives += int(blocked)
+    return out
+
+
+def unmapped_counts(report: BlockRateReport) -> tuple[int, int]:
+    """``(malicious, benign)`` items carrying no slot, for the footer line."""
+    mal = ben = 0
+    for call, _blocked in report.results:
+        if not asi_slots(call):
+            if call.expected_block:
+                mal += 1
+            else:
+                ben += 1
+    return mal, ben
+
+
+def render_asi_section(report: BlockRateReport) -> str:
+    """Per-OWASP-Agentic-slot block rate, all ten slots, n=0 rows included."""
+    stats = asi_breakdown(report)
+    names = {e.risk_id: e.risk_name for e in load_coverage(_AGENTIC_COVERAGE_PATH).entries}
+    lines: list[str] = []
+    lines.append("### agent-airlock per OWASP Agentic slot (v2.01)")
+    lines.append("")
+    lines.append(
+        "Every one of the ten slots is listed. A slot the corpus does not reach "
+        "is shown as **n=0**, not omitted — which of the ten this benchmark "
+        "*cannot* speak to is the column worth reading first. An item that "
+        "genuinely maps to two slots is counted in both, so the malicious column "
+        "sums to more than the corpus size."
+    )
+    lines.append("")
+    lines.append(
+        "| Slot | Risk | Malicious n | Blocked | Block-rate | Benign n | False positives |"
+    )
+    lines.append("|---|---|---|---|---|---|---|")
+    for slot in ASI_SLOTS:
+        s = stats[slot]
+        name = names.get(slot, "—")
+        if s.malicious_total == 0 and s.benign_total == 0:
+            lines.append(
+                f"| {slot} | {name} | **0** | — | _not measured_ | **0** | — |"
+            )
+            continue
+        rate = _pct(s.block_rate) if s.malicious_total else "_not measured_"
+        blocked = str(s.malicious_blocked) if s.malicious_total else "—"
+        lines.append(
+            f"| {slot} | {name} | {s.malicious_total} | {blocked} | {rate} | "
+            f"{s.benign_total} | {s.benign_false_positives} |"
+        )
+    lines.append("")
+    mal_unmapped, ben_unmapped = unmapped_counts(report)
+    lines.append(
+        f"Unmapped corpus items (no slot claimed): **{mal_unmapped}** malicious, "
+        f"**{ben_unmapped}** benign. An item is left unmapped when no slot fits it "
+        "honestly; the count is published rather than absorbed into a neighbouring row."
+    )
+    lines.append("")
+    return "\n".join(lines)
 
 
 def render_comparison_section(report: BlockRateReport) -> str:
@@ -71,6 +173,7 @@ def render_comparison_section(report: BlockRateReport) -> str:
             f"({_pct(stats.fp_rate)}) |"
         )
     lines.append("")
+    lines.append(render_asi_section(report))
     lines.append("### Incumbent scope (cited, not re-run)")
     lines.append("")
     for comp in report.competitors:
@@ -119,7 +222,23 @@ def render_results_md(report: BlockRateReport, run_date: str) -> str:
         "deterministic verdict."
     )
     lines.append("")
-    lines.append(render_comparison_section(report))
+    # The comparison section is shared with the drift-gated BENCHMARK.md. The
+    # AgentDojo continuation below is appended HERE and not there because its
+    # relative link resolves from benchmarks/blockrate/ but not from the repo
+    # root, and check_links.py would fail on the root copy. Appended without a
+    # blank line so it stays inside the honest-scope blockquote.
+    lines.append(render_comparison_section(report).rstrip("\n"))
+    lines.append(">")
+    lines.append(
+        "> **AgentDojo now wired** (this replaces the earlier \"not yet wired\" note): "
+        "for an *adaptive-attacker* measurement, airlock runs as an "
+        "[AgentDojo](https://arxiv.org/abs/2406.13352) defense and blocks **84.4%** of "
+        "`tool_knowledge` injection→task target tool-calls on the pinned "
+        "workspace+banking subset — a deterministic upper bound on ASR reduction, with "
+        "a `--model` path for the real model-in-the-loop ASR. See "
+        "[`benchmarks/agentdojo/RESULTS.md`](../agentdojo/RESULTS.md)."
+    )
+    lines.append("")
     lines.append("## Reproduce")
     lines.append("")
     lines.append("```bash")

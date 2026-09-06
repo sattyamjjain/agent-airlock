@@ -24,6 +24,7 @@ from typing import Any
 import pytest
 from scripts.cve_watcher import (
     already_tracked,
+    classify_shape,
     collect_new_cves,
     extract,
     is_relevant,
@@ -234,3 +235,163 @@ class TestExtract:
         got = extract(_nvd("CVE-2026-99010", "MCP flaw.", cvss=None))
         assert got["cvss"] is None
         assert got["severity"] is None
+
+
+# ---------------------------------------------------------------------------
+# Shape classifier, pinned against the first real queue
+# ---------------------------------------------------------------------------
+
+#: The ten CVEs the watcher filed in its first 48 hours (2026-09-05/06), with
+#: the description and CWEs as NVD served them and the disposition a human
+#: actually gave each issue. Six were closed out-of-scope, four kept.
+#:
+#: This is the classifier's regression corpus precisely because it is not
+#: synthetic: it is the queue that made the criterion necessary. If a change to
+#: `_SINK_RE` or `ARGUMENT_SHAPED_CWES` starts re-opening the six server-side
+#: authorization CVEs, or starts dropping the four argument-shaped ones, it
+#: fails here.
+_FIRST_QUEUE: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
+    (
+        "CVE-2026-85178",
+        "Helicone's VaultManager.getDecryptedProviderKeyById() function in the GET "
+        "/v1/vault/key/{providerKeyId} endpoint fails to validate the requester's "
+        "organization against the vault key's organization identifier.",
+        ("CWE-639",),
+        "triage-required",
+    ),
+    (
+        "CVE-2026-18905",
+        "IBM ContextForge MCP Gateway could allow a remote authenticated attacker to "
+        "obtain sensitive information due to a DNS rebinding vulnerability during tool "
+        "invocation.",
+        ("CWE-918",),
+        "triage-required",
+    ),
+    (
+        "CVE-2026-84779",
+        "Subscriber Broken Access Control in Agentimus - AI SEO, llms.txt & MCP for AI "
+        "Agents <= 1.51.0 versions.",
+        ("CWE-862",),
+        "triage-required",
+    ),
+    (
+        "CVE-2026-79746",
+        "when a bearer key with accessType: 'servers' is used against a group route, "
+        "isBearerKeyAllowedForRequest grants access to the entire group as long as any "
+        "single server in that group appears in the key",
+        ("CWE-863",),
+        "triage-required",
+    ),
+    (
+        "CVE-2026-77822",
+        "IBM ContextForge MCP Gateway could allow a remote authenticated attacker to "
+        "obtain sensitive information due to server-side request forgery via DNS "
+        "rebinding.",
+        ("CWE-918",),
+        "triage-required",
+    ),
+    (
+        "CVE-2026-85620",
+        "Postgres MCP Pro 0.3.0 contains a restricted-mode bypass vulnerability where "
+        "function-name validation is not applied to RangeFunction nodes in FROM clauses. "
+        "Attackers can execute file-reading functions like pg_read_file through "
+        "FROM-clause syntax to read arbitrary files despite restricted-mode protections.",
+        ("CWE-863",),
+        "candidate",
+    ),
+    (
+        "CVE-2026-18486",
+        "IBM ContextForge MCP Gateway could allow a remote authenticated attacker to "
+        "obtain sensitive credentials and escalate privileges due to improper validation "
+        "of jq filters.",
+        ("CWE-200",),
+        "candidate",
+    ),
+    (
+        "CVE-2026-19591",
+        "OpenAI Codex CLI misclassified certain PowerShell commands as safe because their "
+        "command-safety parser interpreted PowerShell's stop-parsing token (--%) "
+        "differently than PowerShell itself.",
+        ("CWE-150",),
+        "candidate",
+    ),
+    (
+        "CVE-2026-79744",
+        "MCPHub's PUT /api/system-config endpoint (handler updateSystemConfig) performs no "
+        "authorization check. It is protected only by the app-wide authentication "
+        "middleware and a rate limiter - it never inspects req.user.",
+        ("CWE-269", "CWE-862"),
+        "triage-required",
+    ),
+    (
+        "CVE-2026-79748",
+        "the POST /api/servers and PUT /api/servers/:name endpoints in MCPHub create/update "
+        "MCP server configurations and then immediately spawn the configured stdio process "
+        "via child_process.spawn.",
+        ("CWE-862",),
+        "candidate",
+    ),
+)
+
+
+class TestShapeClassifier:
+    """Separate what airlock could guard from what it structurally cannot.
+
+    The distinction is not severity and not keyword relevance — all ten of these
+    are genuine MCP-ecosystem CVEs and five are CVSS >= 8.6. It is whether the
+    defect is carried in an argument the caller supplies.
+    """
+
+    @pytest.mark.parametrize(
+        "cve,description,cwes,expected",
+        [(c, d, w, e) for c, d, w, e in _FIRST_QUEUE],
+        ids=[c for c, _d, _w, _e in _FIRST_QUEUE],
+    )
+    def test_matches_the_human_disposition(
+        self, cve: str, description: str, cwes: tuple[str, ...], expected: str
+    ) -> None:
+        assert classify_shape(description, cwes) == expected
+
+    def test_the_first_queue_would_have_opened_four_not_ten(self) -> None:
+        """The volume claim, asserted rather than asserted-in-prose."""
+        shapes = [classify_shape(d, w) for _c, d, w, _e in _FIRST_QUEUE]
+        assert shapes.count("candidate") == 4
+        assert shapes.count("triage-required") == 6
+
+    def test_server_side_authz_alone_is_not_a_candidate(self) -> None:
+        assert classify_shape("The endpoint performs no authorization check.", ("CWE-862",)) == (
+            "triage-required"
+        )
+
+    def test_an_argument_shaped_cwe_alone_is_enough(self) -> None:
+        assert classify_shape("Some MCP defect with no sink word.", ("CWE-77",)) == "candidate"
+
+    def test_a_sink_word_upgrades_a_server_side_cwe(self) -> None:
+        """CVE-2026-79748's shape: missing authz, but the primitive is a spawn."""
+        assert (
+            classify_shape("no authz check; then calls child_process.spawn", ("CWE-862",))
+            == "candidate"
+        )
+
+    def test_empty_description_is_triage_required(self) -> None:
+        assert classify_shape("", ()) == "triage-required"
+
+
+class TestExtractCarriesShape:
+    def test_extract_populates_cwes_and_shape(self) -> None:
+        record = {
+            "cve": {
+                "id": "CVE-2026-00001",
+                "published": "2026-09-06T00:00:00.000",
+                "descriptions": [{"lang": "en", "value": "MCP server spawns child_process."}],
+                "weaknesses": [{"description": [{"value": "CWE-862"}]}],
+            }
+        }
+        got = extract(record)
+        assert got["cwes"] == ["CWE-862"]
+        assert got["shape"] == "candidate"
+
+    def test_missing_weaknesses_do_not_raise(self) -> None:
+        got = extract(_nvd("CVE-2026-00002", "An MCP authorization defect."))
+        assert got["cwes"] == []
+        assert got["shape"] == "triage-required"

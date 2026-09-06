@@ -87,6 +87,7 @@ nav:
     - Sandbox Execution: examples/sandbox.md
   - Commerce Adapters: adapters.md
   - CVE Catalog: cves/index.md
+  - CVE Triage Rule: cve-triage.md
   - CLI:
     - Kill switch: cli/kill-switch.md
     - Policy bundle lock: cli/policy-bundle-lock.md
