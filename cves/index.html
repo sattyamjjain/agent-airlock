@@ -1518,6 +1518,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-19591" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-19591
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-21520" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2291,6 +2302,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-19591" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-19591
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-21520" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2679,6 +2701,12 @@ catalog and the tests stay in lockstep.</p>
 <td>—</td>
 </tr>
 <tr>
+<td><a href="#cve-2026-19591">CVE-2026-19591</a></td>
+<td>Codex command-safety parser disagreed with PowerShell about <code>--%</code></td>
+<td>8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150</td>
+<td>Strong</td>
+</tr>
+<tr>
 <td><a href="#cve-2026-21520">CVE-2026-21520</a></td>
 <td>Capsule ShareLeak / PipeLeak</td>
 <td>—</td>
@@ -2977,6 +3005,54 @@ visits can DNS-rebind to <code>127.0.0.1</code> and script MCP tool calls at the
 server (file reads, command execution, database access). Fixed in 0.25.0 with
 an <code>--allowed-hosts</code> flag alongside <code>--allowed-origins</code>, warning when</p>
 <p><a id="cve-2026-11624"></a></p>
+<h3 id="cve-2026-19591">CVE-2026-19591<a class="headerlink" href="#cve-2026-19591" title="Permanent link">&para;</a></h3>
+<p><strong>Codex command-safety parser disagreed with PowerShell about <code>--%</code></strong></p>
+<ul>
+<li><strong>CVSS:</strong> 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150</li>
+<li><strong>Airlock fit:</strong> strong</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-19591">https://nvd.nist.gov/vuln/detail/CVE-2026-19591</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/openai/codex/pull/22643">https://github.com/openai/codex/pull/22643</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_19591_codex_stop_parsing.py"><code>tests/cves/test_cve_2026_19591_codex_stop_parsing.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>The OpenAI Codex CLI and Codex Desktop misclassified certain PowerShell
+commands as safe because their command-safety parser interpreted
+PowerShell's stop-parsing token (<code>--%</code>) differently than PowerShell
+itself. A user opening an attacker-prepared repository could have Codex
+run a file-writing Git command <strong>without requesting approval</strong>. If the
+write lands, it can modify Codex's own configuration; if Codex later
+loads that configuration it launches an attacker-controlled MCP server
+and executes code as the user. Upstream's fix does not add <code>--%</code> to a
+denylist of characters — it treats stop-parsing forms as <strong>unsupported</strong>
+in the AST-backed command flattener and routes them to the conservative
+path.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>This is not a new guard. It is the failure mode
+:class:<code>~agent_airlock.mcp_spec.stdio_command_injection_guard.StdioCommandInjectionGuard</code>
+already exists to prevent — a safety decision taken over an argv model
+that does not match what the shell will actually build — and the guard
+was missing the token that breaks the model. v0.8.89 adds it.</p>
+<p>The interesting part is <em>why a metachar list was the wrong shape for the
+fix</em>, and these tests pin that:</p>
+<ol>
+<li><strong>Whole-element, never substring.</strong> <code>--%</code> is PowerShell's
+   stop-parsing token only when it stands alone. Folding it into
+   <code>DEFAULT_SHELL_METACHARS</code> would have used substring matching and
+   denied ordinary arguments like <code>date +--%Y</code> — noise, with no
+   attack blocked in exchange.</li>
+<li><strong>Checked before the metachar walk.</strong> After the token, the rest of
+   the argv goes to the native command verbatim. A metachar verdict
+   over those elements is an answer about a command line PowerShell
+   will not construct. The token has to short-circuit, and the negative
+   control below asserts it does: a payload carrying <em>both</em> a
+   stop-parsing token and a shell metachar must report the token, not
+   the metachar.</li>
+</ol>
+<p>The guard does not and cannot fix Codex. What it does is refuse the
+same class of argv at the tool-call boundary, so an agent routed
+through airlock does not inherit its own parser's disagreement with the
+shell.</p>
+<p><a id="cve-2026-19591"></a></p>
 <h3 id="cve-2026-21520">CVE-2026-21520<a class="headerlink" href="#cve-2026-21520" title="Permanent link">&para;</a></h3>
 <p><strong>Capsule ShareLeak / PipeLeak</strong></p>
 <ul>
