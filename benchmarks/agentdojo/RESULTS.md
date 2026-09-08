@@ -143,6 +143,18 @@ widening.
 
 <!-- CROSS-MODEL-RUNS: append newest below; never edit dated blocks -->
 
+### 2026-09-08 · deterministic bound only (no model, no API key, no cost)
+
+Re-ran `python -m benchmarks.agentdojo.run` with no `--model` on 2026-09-08.
+Result 1 reproduced **exactly**: `524/609 pairs blocked = 86.0%` across all four
+pinned suites.
+
+**Nothing model-in-the-loop was re-run.** Result 2's ASR figures below still date
+from 2026-08-08. The model pass needs provider API keys and cost $5.16 last time,
+so it is not re-run per release; the README dates the two halves separately rather
+than letting the free half's freshness stand in for the paid half. When the paid
+pass is next run, it goes below as its own dated block.
+
 ### 2026-08-08 · cross-model (gpt-4o-mini-2024-07-18, gpt-4o-2024-05-13)
 
 `agentdojo 0.1.35`, attack `tool_knowledge`, benchmark `v1.2.1`, caps <= 5 user / <= 3 injection per suite.
