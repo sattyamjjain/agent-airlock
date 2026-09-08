@@ -11,6 +11,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.8.90] - 2026-09-09
+
+### Added
+
+- **README has a `## License` section again.** It was removed in `a18dacf` (a README
+  restructure) and never restored, so after the relicense the only statements were a badge
+  and one comparison-table cell. It now names Apache-2.0, records the 2026-09-06 relicence
+  and that earlier releases stay MIT under the terms they shipped under, repeats the
+  `LICENSE` digest that is asserted on every test run, and states plainly that there is no
+  paid tier and nothing behind a licence gate.
+
+### Changed
+
+- **`make check-docs` builds outside the repo.** `mkdocs build --strict` defaults to
+  `./site/`, leaving ~8M of gitignored HTML in the working root between runs. Beyond being
+  stale, it was actively misleading tooling: anything that classifies a project by scanning
+  for `*.html` within a few levels read this Pydantic-only Python library as a web app. The
+  target now builds to `$TMPDIR/agent-airlock-mkdocs-check`. CI invokes `mkdocs` directly on
+  a throwaway runner and is untouched, so this changes local hygiene only.
+
+- **ToolPrivBench re-run and re-dated: 2026-08-17 → 2026-09-08.** 100 scenarios, over-priv
+  100.0% blocked, low-priv 100.0% allowed, OPUR 100.0% → 0.0% — reproduced exactly. The
+  harness is deterministic and offline (`scenarios.py`: "No network access"), so it is free
+  to re-run every release rather than left to age against the 30-day claim gate. Recorded as
+  a dated block in `benchmarks/toolprivbench/RESULTS.md`.
+
+### Fixed
+
+- **The native-gateway benchmark can no longer be re-run, and that is now written down.**
+  `docker mcp` moved v0.42.1 → v0.43.3. The harness catalog
+  (`airlock-bench-catalog.yaml`, `version: 3`) still loads and the gateway still starts, but
+  it now discovers `0 tools listed in 19.125µs`, so there is no `tools/call` surface for the
+  corpus and `regen.py` times out on `initialize`. v0.43.3's own `catalog create` calls a v3
+  file a *legacy* catalog, so this is a schema migration on Docker's side — the daemon, the
+  plugin and the echo-oracle image all built and ran.
+
+  **Nothing was dated forward.** `gateway_measurement.json` is byte-identical after the
+  failed attempt and the README marker stays at 2026-08-17, so the row will trip
+  `check_benchmark_freshness --release` on **2026-09-16**. Advancing the date would have
+  been precisely the dishonesty that gate exists to catch. Re-enabling the row means
+  migrating the catalog and re-validating a head-to-head against a *newer* gateway build —
+  a new measurement that may return a different number, which would itself be the finding.
+  Recorded in `benchmarks/vs_gateway/RESULTS.md`.
+
+### Housekeeping
+
+- Eight merged local branches and two merged remote branches deleted; only `main` and
+  `gh-pages` remain. No open issues, no open PRs.
+
 ## [0.8.89] - 2026-09-08
 
 ### Added

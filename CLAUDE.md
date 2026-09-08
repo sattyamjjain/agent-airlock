@@ -93,8 +93,12 @@ harness_injection, mcp_conformance, scantools_mcptox, toolprivbench, vs_gateway)
 which `mkdocs gh-deploy --force` rebuilds from `docs/` on every push to `main`. A second
 copy used to be committed here; it was a duplicate of the same build that nothing served
 and that drifted from `docs/` between releases (99 of 135 files out of date when it was
-removed in v0.8.81). If you run `mkdocs build` locally it writes `site/`, which is now
-gitignored — do not add it back.
+removed in v0.8.81). A bare `mkdocs build` still writes `site/`, which is gitignored — do
+not add it back. `make check-docs` no longer does: it builds to
+`$TMPDIR/agent-airlock-mkdocs-check` instead, so validating the docs leaves no artifacts
+in the tree. That is not only tidiness — ~8M of stale HTML in the working root made
+tooling that classifies a project by scanning for `*.html` read this Python library as a
+web app. CI calls `mkdocs build --strict` directly on a throwaway runner and is unaffected.
 
 ```
 src/agent_airlock/

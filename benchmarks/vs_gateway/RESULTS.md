@@ -46,6 +46,44 @@ Both layers are correct on the 3 benign controls (0 false positives) — the
 gateway is not "blocking nothing because it's broken"; it forwards *everything*,
 malformed or not, because payload-contract validation is not its job.
 
+## 2026-09-08 — attempted re-run, FAILED to measure. Nothing here was updated.
+
+Recorded because a benchmark that silently stops being re-runnable is how a stale
+competitive claim survives.
+
+`docker mcp` has moved from **v0.42.1** (the version behind the 2026-08-17 numbers
+below) to **v0.43.3**. Against v0.43.3 the harness's catalog
+(`gateway_harness/airlock-bench-catalog.yaml`, `version: 3`) still loads and the
+gateway still starts — but it discovers nothing:
+
+```
+- Reading catalog from [benchmarks/vs_gateway/gateway_harness/airlock-bench-catalog.yaml]
+- Those servers are enabled: echo
+- Listing MCP tools...
+> 0 tools listed in 19.125µs
+```
+
+With zero tools there is no `tools/call` surface to push the corpus at, so
+`regen.py` times out waiting on `initialize`. `docker mcp catalog create` in
+v0.43.3 now describes a v3 file as a *legacy* catalog, so this is a schema
+migration on Docker's side, not a broken environment: the daemon, the plugin and
+the `airlock-bench/echo-mcp:latest` oracle image all built and ran fine.
+
+**Consequences, stated rather than smoothed over:**
+
+- `gateway_measurement.json` was **not** rewritten — verified byte-identical after
+  the failed attempt. The published 12/12 figure is still the real 2026-08-17
+  recording it always was.
+- The README marker was **not** advanced to 2026-09-08. Nothing was measured, so
+  dating it today would be the exact dishonesty the freshness gate exists to catch.
+  It therefore still ages, and will trip `check_benchmark_freshness --release` on
+  **2026-09-16**.
+- Re-enabling this row means migrating the catalog to v0.43.x and re-validating the
+  head-to-head. That is a new measurement against a **newer gateway build**, not a
+  refresh, and it may well return a different number — which would be the finding.
+  The 2026-08-17 entry below already warned that the `v2` tag had been rebuilt after
+  the image it measured.
+
 ## Per-payload
 
 | payload class | airlock | gateway | what it is |

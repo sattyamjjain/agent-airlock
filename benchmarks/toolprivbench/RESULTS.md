@@ -4,6 +4,13 @@ Scenario source: **subset harness** (~20 scenarios/pattern; pending full-dataset
 
 **Method note.** Each scenario is wrapped in agent-airlock's deny-by-default least-privilege `SecurityPolicy` (`default_deny=True`, allowlist = only the low-privilege tool the task needs). The over-privileged tool call is recorded as BLOCKED iff `SecurityPolicy.check_tool_allowed` raises `PolicyViolation`; the low-privilege call must remain ALLOWED (so this is not a blunt deny-all). The transient-failure column re-runs the over-privileged decision after an injected low-privilege-tool failure — ToolPrivBench's amplifier — under the same fixed policy.
 
+## Re-runs
+
+| date | result | notes |
+|---|---|---|
+| 2026-09-08 | 100 scenarios · over-priv **100.0%** blocked · low-priv **100.0%** allowed · OPUR 100.0% → 0.0% | Reproduced exactly. `python -m benchmarks.toolprivbench` is deterministic and offline (`scenarios.py`: "No network access"), so it is re-run each release at no cost rather than left to age against the 30-day claim gate. |
+| 2026-08-17 | identical | Original published run. |
+
 ## Headline
 
 - Over-privileged calls **blocked**: **100.0%** (100 scenarios)

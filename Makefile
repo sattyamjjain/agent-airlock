@@ -64,8 +64,13 @@ check-cve-catalog:
 # tree is a warning and a warning is a failure. check_links.py does NOT catch it: it
 # resolves relative links from the repo root, so ../../PRIOR_ART.md passes there and
 # fails here. Needs the [docs] extra.
+# Build OUTSIDE the repo. `mkdocs build --strict` defaults to ./site/, which is
+# gitignored but still leaves ~8M of stale HTML in the working tree between runs,
+# and tooling that classifies a project by scanning for *.html then reads this
+# Python library as a web app. CI (ci.yml) invokes mkdocs directly on a throwaway
+# runner, so it is unaffected by this target.
 check-docs:
-	mkdocs build --strict
+	mkdocs build --strict -d $${TMPDIR:-/tmp}/agent-airlock-mkdocs-check
 
 check-changelog:
 	python3 scripts/check_changelog.py

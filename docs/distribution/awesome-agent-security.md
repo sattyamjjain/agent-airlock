@@ -6,7 +6,7 @@
 
 - **Target list:** `awesome-agent-security` <!-- verify canonical repo URL -->
 - **Section:** Tools / Runtime defenses
-- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.8.89 = 4,380).
+- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.8.90 = 4,380).
 
 ## Entry (list format)
 
