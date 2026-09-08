@@ -11,6 +11,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.8.89] - 2026-09-08
+
+### Added
+
+- **`StdioCommandInjectionGuard` refuses shell stop-parsing tokens (CVE-2026-19591,
+  CVSS 8.8, CWE-150).** PowerShell's `--%` stops the parser: everything after it goes
+  to the native command verbatim, so an argv-shaped safety scan stops describing what
+  will actually run. In CVE-2026-19591 the OpenAI Codex CLI's own command-safety parser
+  lowered PowerShell AST elements into argv-like words, disagreed with PowerShell about
+  that token, and approved a file-writing command without asking — a chain ending in a
+  rewritten Codex config launching an attacker-controlled MCP server.
+
+  This is not a new guard and not a new module. It is the failure mode the v0.7.6 guard
+  already existed to prevent, missing the one token that breaks the model.
+
+  **Two design decisions are pinned by tests rather than left to be inferred:**
+
+  - **Whole-element matching, not substring.** `--%` is the stop-parsing token only when
+    it stands alone, so it is *not* in `DEFAULT_SHELL_METACHARS` — that set is matched by
+    substring, which would deny `date +--%Y`, `curl -w '--%{http_code}'` and
+    `git log --pretty=--%h` while blocking nothing extra. It lives in a new
+    `DEFAULT_STOP_PARSING_TOKENS` instead, and a test asserts it stays out of the
+    metachar set so a later "simplification" fails loudly.
+  - **Checked before the metachar walk.** Once the token appears, a metachar verdict over
+    the remaining elements answers a question about a command line the shell will not
+    build. A payload carrying both must report the token; a negative control asserts a
+    metachar alone still reports as a metachar.
+
+  Upstream took the same position — openai/codex#22643 treats stop-parsing forms as
+  *unsupported* rather than adding a character to a denylist.
+
+  API, all additive: `StdioCommandInjectionVerdict.DENY_STOP_PARSING_TOKEN`,
+  `StdioCommandInjectionDecision.matched_stop_parsing_token` (defaulted, so the three
+  existing construction sites and any positional caller are unaffected),
+  `DEFAULT_STOP_PARSING_TOKENS`, and a `stop_parsing_tokens=` constructor argument
+  defaulting to that set. Pass `frozenset()` to opt out where no PowerShell is reachable.
+  Operators on `mcp_stdio_command_injection_preset_defaults` or the Flowise preset get it
+  without changing anything.
+
+- **A gate on the relicense's own checksum claim.** `TestLicenseChecksumClaim` in
+  `tests/test_numeric_claim_parity.py` hashes `LICENSE` and compares it to the digest and
+  line count the changelog publishes. See Fixed.
+
+### Fixed
+
+- **v0.8.87 published a wrong sha256 for `LICENSE`.** The relicense entry told readers the
+  Apache-2.0 text is "202 lines, sha256 `cfc7749b…`". The line count was right; the digest
+  was not, and never had been — `LICENSE` has not changed since `dfa398c` and has always
+  hashed to `d102e62d1a9e4c6b5030334eb87c41e54ca35533e4bcbe5c6833e06cd29b33cb`.
+
+  A reader who ran `shasum -a 256 LICENSE` — the only reason to publish a digest — got a
+  mismatch, and the reasonable conclusion was that the licence file had been tampered
+  with. Corrected in place, because a wrong digest is an error in the record rather than a
+  record of what shipped, and now asserted by a test with a negative control. The
+  half-right claim is the lesson: verifying the easy half is not verifying the claim.
+
+### Changed
+
+- **CVE queue: three of the four remaining issues dispositioned.** CVE-2026-19591 (#159)
+  ships the guard change above. The other two close as out of scope, with the reason in
+  `tests/cves/README.md` where it is checkable rather than only in an issue comment:
+
+  - **CVE-2026-18486** (#160, IBM ContextForge MCP Gateway ≤ 1.0.7, CWE-200) — jq-filter
+    evaluation leaking `JWT_SECRET_KEY` and database credentials, used to forge admin
+    tokens. **No public source states the filter shape**: IBM's bulletin is the only
+    disclosure, there is no GHSA and no upstream advisory, and the remediation is "upgrade
+    and rotate credentials". The exposure is of the gateway's own secrets from inside its
+    evaluator, not a value passing through a tool call. A guard would have to invent the
+    threat shape, and a guessed pattern is worse than none.
+  - **CVE-2026-85620** (#161, Postgres MCP Pro 0.3.0, CWE-863) — `SafeSqlDriver` checks
+    function names only on `FuncCall` AST nodes, so a function in a `FROM` clause parses
+    as `RangeFunction`, sits in `ALLOWED_NODE_TYPES`, and is never name-checked:
+    `SELECT * FROM pg_read_file('/etc/passwd')` returns the file while
+    `SELECT pg_read_file(...)` is blocked. This one *does* leave an argument at the
+    boundary, so the refusal needs a better reason than "out of scope": catching it
+    requires a real SQL parser, the Pydantic-only core forbids that dependency, and a
+    regex approximation would be **precisely the defect this CVE is** — a validator that
+    covers some syntax positions and silently misses others. Shipping that would be
+    reproducing the bug and calling it a guard.
+
+- Regression suite: 39 → 40 modules, 32 → 33 CVE-numbered.
+
+### Verified, not changed
+
+- **The MIT → Apache-2.0 relicense is complete.** A word-boundary sweep
+  (`git ls-files -z | xargs -0 grep -nIE '\bMIT\b'`) over every tracked file returns nine
+  hits: eight in `CHANGELOG.md` (the relicense entry itself and two historical entries,
+  all deliberately unrewritten) and `benchmarks/harness_injection/fixture.py:132`, the
+  fictional README inside a prompt-injection fixture, where editing it would change
+  benchmark input. Badge, `CONTRIBUTING.md`, `pyproject.toml` classifier and `license`,
+  and `.claude-plugin/plugin.json` all read Apache-2.0; there is no `CITATION.cff`, no
+  SPDX header anywhere in the tree, and no `docs/` page stating a licence. Nothing was
+  changed for its own sake.
+
+  A bare `grep MIT` reports 45 hits. The other 36 are `NEAR_LIMIT`, `RATE_LIMITED`,
+  `MITRE`, `GRACE_COMMITS`, `ADMITTED`, `SUBMITTED` and `LIMIT` — editing on that number
+  would corrupt unrelated code.
+
 ## [0.8.88] - 2026-09-08
 
 ### Added
@@ -221,7 +319,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Relicensed from MIT to Apache License 2.0.** `LICENSE` is now the canonical
   Apache-2.0 text (202 lines, sha256
-  `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`) with the
+  `d102e62d1a9e4c6b5030334eb87c41e54ca35533e4bcbe5c6833e06cd29b33cb`) with the
   appendix boilerplate filled in as `Copyright 2026 Sattyam Jain`. `pyproject.toml`
   carries `license = "Apache-2.0"` and the Apache classifier, and the built wheel's
   metadata reports `License-Expression: Apache-2.0` with the LICENSE packaged.

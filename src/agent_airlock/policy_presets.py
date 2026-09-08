@@ -2740,10 +2740,24 @@ def mcp_stdio_command_injection_preset_defaults(
     :class:`agent_airlock.mcp_spec.stdio_command_injection_guard.StdioCommandInjectionGuard`
     with a default block-list of shell metachars (``;``, ``&&``,
     ``||``, ``|``, newline, backtick, ``$(``) plus a path-traversal
-    detector (``../`` outside an operator-supplied cwd allowlist).
+    detector (``../`` outside an operator-supplied cwd allowlist),
+    and — since v0.8.89 — refuses a **stop-parsing token** (``--%``)
+    appearing as a whole argv element.
 
-    Primary source:
+    The stop-parsing check is not a third metachar. Once ``--%`` is
+    present, PowerShell hands everything after it to the native command
+    verbatim, so the argv the guard was given stops describing the
+    command line that will be built, and a metachar verdict over the
+    remaining elements answers the wrong question. The guard refuses
+    instead of reasoning about it — the position upstream took in
+    openai/codex#22643 after CVE-2026-19591 (CVSS 8.8, CWE-150), where
+    Codex's own command-safety parser disagreed with PowerShell about
+    that token and approved a command it should not have.
+
+    Primary sources:
       https://www.helpnetsecurity.com/2026/05/05/ai-agent-security-skills-blind-spots/
+      https://nvd.nist.gov/vuln/detail/CVE-2026-19591
+      https://github.com/openai/codex/pull/22643
     """
     return {
         "preset_id": "mcp_stdio_command_injection_2026_05_05",

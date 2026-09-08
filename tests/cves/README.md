@@ -21,27 +21,39 @@ with the same shape.
 | CVE-2026-27825 | `test_cve_2026_27825_mcp_atlassian_arbitrary_write.py` | strong | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27825/) |
 | CVE-2026-27826 | `test_cve_2026_27826_mcp_atlassian_header_ssrf.py` | partial (if URL is a tool param) | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27826/) |
 | CVE-2026-79748 | `test_cve_2026_79748_mcphub_spawn_config.py` | partial (spawn primitive only, not the missing authz) | [GHSA-mx89-jjx9-gjr8](https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8) |
+| CVE-2026-19591 | `test_cve_2026_19591_codex_stop_parsing.py` | strong | [openai/codex#22643](https://github.com/openai/codex/pull/22643) |
 
 ## Out of scope (documented, not tested)
 
-Two CVEs from the April 2026 corpus are **out of scope for runtime
-middleware** and are not included in this suite. The table below
-documents why; the operator must solve these at the transport or
-server-framework layer.
+These CVEs are **out of scope for runtime middleware** and are not included
+in this suite. The table below documents why; the operator must solve them at
+the transport or server-framework layer. Out-of-scope is the expected outcome
+of triage, not an admission — see [`docs/cve-triage.md`](../../docs/cve-triage.md)
+for the disposition vocabulary.
 
 | CVE | Vendor | Why out-of-scope |
 |---|---|---|
 | CVE-2026-33032 | nginx-ui ≤ 2.3.4 | Missing `AuthRequired()` middleware on `/mcp_message` endpoint. agent-airlock wraps the tool execution path but cannot add auth to HTTP endpoints that never call into it. |
 | CVE-2026-23744 | `@mcpjam/inspector` ≤ 1.4.2 | Missing auth on `/api/mcp/connect` plus arbitrary-package install. Same class as CVE-2026-33032; not reachable from a tool decorator. |
+| CVE-2026-18486 | IBM ContextForge MCP Gateway ≤ 1.0.7 | CWE-200. "Improper validation of jq filters" leaking `JWT_SECRET_KEY` and database credentials, which the attacker then uses to forge admin tokens. **No public source states the filter shape.** IBM's bulletin is the only disclosure (no GHSA, no upstream advisory), its remediation is "upgrade and rotate credentials", and the exposure is of the gateway's *own* secrets from inside its filter evaluator — not a value passing through a tool call. A guard here would have to invent the threat shape, and a guessed pattern is worse than none. |
+| CVE-2026-85620 | Postgres MCP Pro 0.3.0 | CWE-863. `SafeSqlDriver`'s allowlist checks function names only on `FuncCall` AST nodes; a function in a `FROM` clause parses as `RangeFunction`, which is in `ALLOWED_NODE_TYPES` and never name-checked — so `SELECT * FROM pg_read_file('/etc/passwd')` returns the file while `SELECT pg_read_file(...)` is blocked. Blocking this needs a real SQL parser to walk the AST. The Pydantic-only core forbids that dependency, and a regex approximation would be **the same defect this CVE is**: a validator that covers some syntax positions and silently misses others. Solve it by upgrading postgres-mcp, or with a read-only DB role that lacks `pg_read_file`. |
 
-**Why CVE-2026-79748 is tested and these two are not**, given all three are
-missing-authorization defects: the split is the *primitive* the missing check
-hands the attacker, not the CWE. CVE-2026-79748 hands over a stdio spawn config
-(`command` / `args` / `env`) heading for `child_process.spawn` — a shape this
-library already refuses. CVE-2026-33032 hands over an MCP message to an
-unauthenticated endpoint and CVE-2026-23744 an arbitrary package install;
-neither leaves an argument at a boundary agent-airlock sits on. The rule is
-written down in [`docs/cve-triage.md`](../../docs/cve-triage.md).
+**Why CVE-2026-79748 is tested while CVE-2026-33032 and CVE-2026-23744 are
+not**, given all three are missing-authorization defects: the split is the
+*primitive* the missing check hands the attacker, not the CWE. CVE-2026-79748
+hands over a stdio spawn config (`command` / `args` / `env`) heading for
+`child_process.spawn` — a shape this library already refuses. CVE-2026-33032
+hands over an MCP message to an unauthenticated endpoint and CVE-2026-23744 an
+arbitrary package install; neither leaves an argument at a boundary
+agent-airlock sits on.
+
+The same rule decides the two 2026-09 additions, and it cuts differently in
+each. CVE-2026-85620 *does* leave an argument at the boundary — a SQL string —
+but reading it correctly requires an AST the core cannot parse, and the
+approximation would reproduce the CVE. CVE-2026-18486 leaves no argument shape
+anyone has published. Both are refusals for stated, checkable reasons rather
+than for lack of interest. The vocabulary is written down in
+[`docs/cve-triage.md`](../../docs/cve-triage.md).
 
 ## How to add a new CVE test
 

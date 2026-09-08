@@ -36,6 +36,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2025-68145](#cve-2025-68145) | mcp-server-git `--repository` root not enforced | 7.1 (High) | Strong |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
+| [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
 | [CVE-2026-21520](#cve-2026-21520) | Capsule ShareLeak / PipeLeak | — | — |
 | [CVE-2026-23744](#cve-2026-23744) | MCPJam Inspector unauthenticated public bind | 9.8 | — |
 | [CVE-2026-25874](#cve-2026-25874) | HuggingFace LeRobot pickle-deserialization RCE | 9.3 | — |
@@ -246,6 +247,61 @@ server (file reads, command execution, database access). Fixed in 0.25.0 with
 an ``--allowed-hosts`` flag alongside ``--allowed-origins``, warning when
 
 <a id="cve-2026-11624"></a>
+
+### CVE-2026-19591
+
+**Codex command-safety parser disagreed with PowerShell about `--%`**
+
+- **CVSS:** 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-19591](https://nvd.nist.gov/vuln/detail/CVE-2026-19591)
+- **Advisory:** [https://github.com/openai/codex/pull/22643](https://github.com/openai/codex/pull/22643)
+- **Regression test:** [`tests/cves/test_cve_2026_19591_codex_stop_parsing.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_19591_codex_stop_parsing.py)
+
+**Vulnerability**
+
+The OpenAI Codex CLI and Codex Desktop misclassified certain PowerShell
+commands as safe because their command-safety parser interpreted
+PowerShell's stop-parsing token (``--%``) differently than PowerShell
+itself. A user opening an attacker-prepared repository could have Codex
+run a file-writing Git command **without requesting approval**. If the
+write lands, it can modify Codex's own configuration; if Codex later
+loads that configuration it launches an attacker-controlled MCP server
+and executes code as the user. Upstream's fix does not add ``--%`` to a
+denylist of characters — it treats stop-parsing forms as **unsupported**
+in the AST-backed command flattener and routes them to the conservative
+path.
+
+**Airlock mitigation**
+
+This is not a new guard. It is the failure mode
+:class:`~agent_airlock.mcp_spec.stdio_command_injection_guard.StdioCommandInjectionGuard`
+already exists to prevent — a safety decision taken over an argv model
+that does not match what the shell will actually build — and the guard
+was missing the token that breaks the model. v0.8.89 adds it.
+
+The interesting part is *why a metachar list was the wrong shape for the
+fix*, and these tests pin that:
+
+1. **Whole-element, never substring.** ``--%`` is PowerShell's
+   stop-parsing token only when it stands alone. Folding it into
+   ``DEFAULT_SHELL_METACHARS`` would have used substring matching and
+   denied ordinary arguments like ``date +--%Y`` — noise, with no
+   attack blocked in exchange.
+2. **Checked before the metachar walk.** After the token, the rest of
+   the argv goes to the native command verbatim. A metachar verdict
+   over those elements is an answer about a command line PowerShell
+   will not construct. The token has to short-circuit, and the negative
+   control below asserts it does: a payload carrying *both* a
+   stop-parsing token and a shell metachar must report the token, not
+   the metachar.
+
+The guard does not and cannot fix Codex. What it does is refuse the
+same class of argv at the tool-call boundary, so an agent routed
+through airlock does not inherit its own parser's disagreement with the
+shell.
+
+<a id="cve-2026-19591"></a>
 
 ### CVE-2026-21520
 

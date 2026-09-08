@@ -242,8 +242,8 @@ def _catalog_modules() -> list[Path]:
     constituent CVEs already have their own rows here. Forcing those into a table keyed by
     CVE id would either invent ids or leave blank keys.
 
-    So the split is real and the published wording has to match it: **39 regression
-    modules, of which 32 are CVE-numbered and appear below.** That sentence is asserted by
+    So the split is real and the published wording has to match it: **40 regression
+    modules, of which 33 are CVE-numbered and appear below.** That sentence is asserted by
     ``tests/test_cve_catalog_gate.py`` against both numbers, so neither can drift.
     """
     return sorted(TESTS_DIR.glob("test_cve_*.py"))

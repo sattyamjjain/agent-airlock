@@ -209,3 +209,54 @@ class TestEgressBenchDocClaims:
             f"egress-bench doc claims zero slips but a live walk leaves {unblocked} payload(s) "
             "unblocked"
         )
+
+
+class TestLicenseChecksumClaim:
+    """The relicense entry publishes a sha256 for ``LICENSE``. It must be the real one.
+
+    v0.8.87's changelog told readers the Apache-2.0 text is "202 lines, sha256
+    ``cfc7749b...``" — an unusually checkable claim, and it was wrong. ``LICENSE``
+    has never changed since the relicence commit ``dfa398c`` and has always hashed
+    to ``d102e62d...``. Nothing verified it, so a reader running ``shasum -a 256
+    LICENSE`` got a mismatch and the reasonable conclusion was that the licence
+    file had been tampered with.
+
+    The line count was right, which is the trap: a claim can be half-verified and
+    still mislead. This asserts both halves against the file on disk, so the
+    published digest cannot drift from the licence it vouches for.
+    """
+
+    LICENSE = _ROOT / "LICENSE"
+    CHANGELOG = _ROOT / "CHANGELOG.md"
+
+    _SHA_RE = re.compile(r"sha256\s*\n?\s*`([0-9a-f]{64})`")
+    _LINES_RE = re.compile(r"canonical\s*\n?\s*Apache-2\.0 text \((\d+) lines")
+
+    def _claim(self) -> tuple[str, int]:
+        text = self.CHANGELOG.read_text(encoding="utf-8")
+        sha = self._SHA_RE.search(text)
+        lines = self._LINES_RE.search(text)
+        assert sha, "CHANGELOG no longer states a LICENSE sha256"
+        assert lines, "CHANGELOG no longer states a LICENSE line count"
+        return sha.group(1), int(lines.group(1))
+
+    def test_published_sha256_matches_the_license_on_disk(self) -> None:
+        import hashlib
+
+        claimed, _ = self._claim()
+        actual = hashlib.sha256(self.LICENSE.read_bytes()).hexdigest()
+        assert claimed == actual, (
+            f"CHANGELOG publishes LICENSE sha256 {claimed} but the file hashes to {actual}. "
+            "Either LICENSE changed and the claim was not updated, or the claim was never "
+            "correct. Fix the claim, not the licence."
+        )
+
+    def test_published_line_count_matches(self) -> None:
+        _, claimed = self._claim()
+        actual = len(self.LICENSE.read_text(encoding="utf-8").splitlines())
+        assert claimed == actual, f"CHANGELOG claims {claimed} LICENSE lines; file has {actual}"
+
+    def test_the_license_is_actually_apache_2(self) -> None:
+        head = self.LICENSE.read_text(encoding="utf-8")[:400]
+        assert "Apache License" in head
+        assert "Version 2.0" in head
