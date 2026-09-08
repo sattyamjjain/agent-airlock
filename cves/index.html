@@ -1798,6 +1798,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#cve-2026-79748" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-79748
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2560,6 +2571,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#cve-2026-79748" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-79748
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2799,6 +2821,12 @@ catalog and the tests stay in lockstep.</p>
 <td>Upstash Context7 "ContextCrush" MCP instruction injection</td>
 <td>9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0)</td>
 <td>Strongest</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-79748">CVE-2026-79748</a></td>
+<td>MCPHub server-config endpoints spawn attacker-supplied stdio commands</td>
+<td>9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862</td>
+<td>Partial</td>
 </tr>
 </tbody>
 </table>
@@ -3409,6 +3437,45 @@ nobody requested. A transport or identity layer sees three authorised
 calls and has nothing to object to. That is an argument-level failure,
 which is the seam this library exists to cover.</p>
 <p><a id="cve-2026-75130"></a></p>
+<h3 id="cve-2026-79748">CVE-2026-79748<a class="headerlink" href="#cve-2026-79748" title="Permanent link">&para;</a></h3>
+<p><strong>MCPHub server-config endpoints spawn attacker-supplied stdio commands</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-79748">https://nvd.nist.gov/vuln/detail/CVE-2026-79748</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8">https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_79748_mcphub_spawn_config.py"><code>tests/cves/test_cve_2026_79748_mcphub_spawn_config.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>MCPHub before 0.12.15 exposes <code>POST /api/servers</code> and
+<code>PUT /api/servers/:name</code>, which create or update an MCP server
+configuration and then <strong>immediately spawn the configured stdio process
+via <code>child_process.spawn</code></strong>. Authentication is required, but no
+authorization check restricts the endpoints to admins, and neither the
+<code>command</code> nor the <code>args</code> field is allowlisted or sanitised. Any
+authenticated non-admin user can therefore submit a configuration with
+<code>command: "/bin/sh"</code> and arbitrary args and execute it as MCPHub's OS
+user — <strong>commonly root</strong> in the published Docker image and in npx /
+systemd deployments. Fixed in 0.12.15 (PR #770).</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>This CVE has two halves and agent-airlock reaches exactly one of them.</p>
+<p>The <strong>assigned weakness is CWE-862 Missing Authorization</strong> — the same class
+as CVE-2026-33032 (nginx-ui) and CVE-2026-23744 (mcpjam), both of which are
+listed out-of-scope in <code>tests/cves/README.md</code>. Nothing in this library can
+add an admin check to an HTTP route that never calls into it, and this
+fixture does not pretend otherwise.</p>
+<p>What <em>is</em> reachable is the <strong>primitive the missing check hands the
+attacker</strong>: a request-controlled stdio spawn config (<code>command</code> / <code>args</code>
+/ <code>env</code>) arriving at a <code>child_process.spawn</code> sink. That is byte-for-byte
+the shape :class:<code>~agent_airlock.mcp_spec.subprocess_arg_guard.McpSubprocessArgInjectionGuard</code>
+already refuses for the KEV-listed CVE-2026-42271, so this is a
+<strong>second-defence regression fixture against an existing guard, not a new
+guard</strong>. A deployment that routes its spawn configs through the guard
+survives the authorization hole; one that does not, does not.</p>
+<p>Per <code>docs/cve-triage.md</code>: where the CVE's <em>class</em> and its <em>primitive</em>
+split, the primitive decides whether a second-defence test is worth adding.
+This is that case, written down.</p>
+<p><a id="cve-2026-79748"></a></p>
 
 
 
