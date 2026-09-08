@@ -20,6 +20,7 @@ with the same shape.
 | CVE-2026-26118 | `test_cve_2026_26118_azure_mcp_ssrf.py` | strong (already in v0.4.1) | [MSRC](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-26118) |
 | CVE-2026-27825 | `test_cve_2026_27825_mcp_atlassian_arbitrary_write.py` | strong | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27825/) |
 | CVE-2026-27826 | `test_cve_2026_27826_mcp_atlassian_header_ssrf.py` | partial (if URL is a tool param) | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27826/) |
+| CVE-2026-79748 | `test_cve_2026_79748_mcphub_spawn_config.py` | partial (spawn primitive only, not the missing authz) | [GHSA-mx89-jjx9-gjr8](https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8) |
 
 ## Out of scope (documented, not tested)
 
@@ -32,6 +33,15 @@ server-framework layer.
 |---|---|---|
 | CVE-2026-33032 | nginx-ui ≤ 2.3.4 | Missing `AuthRequired()` middleware on `/mcp_message` endpoint. agent-airlock wraps the tool execution path but cannot add auth to HTTP endpoints that never call into it. |
 | CVE-2026-23744 | `@mcpjam/inspector` ≤ 1.4.2 | Missing auth on `/api/mcp/connect` plus arbitrary-package install. Same class as CVE-2026-33032; not reachable from a tool decorator. |
+
+**Why CVE-2026-79748 is tested and these two are not**, given all three are
+missing-authorization defects: the split is the *primitive* the missing check
+hands the attacker, not the CWE. CVE-2026-79748 hands over a stdio spawn config
+(`command` / `args` / `env`) heading for `child_process.spawn` — a shape this
+library already refuses. CVE-2026-33032 hands over an MCP message to an
+unauthenticated endpoint and CVE-2026-23744 an arbitrary package install;
+neither leaves an argument at a boundary agent-airlock sits on. The rule is
+written down in [`docs/cve-triage.md`](../../docs/cve-triage.md).
 
 ## How to add a new CVE test
 

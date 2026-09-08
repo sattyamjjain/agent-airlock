@@ -60,6 +60,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-53820](#cve-2026-53820) | OpenClaw exec-denylist bypass at MCP loopback spawn | 6.9 | — |
 | [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
+| [CVE-2026-79748](#cve-2026-79748) | MCPHub server-config endpoints spawn attacker-supplied stdio commands | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862 | Partial |
 
 ## Details
 
@@ -820,3 +821,51 @@ calls and has nothing to object to. That is an argument-level failure,
 which is the seam this library exists to cover.
 
 <a id="cve-2026-75130"></a>
+
+### CVE-2026-79748
+
+**MCPHub server-config endpoints spawn attacker-supplied stdio commands**
+
+- **CVSS:** 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-79748](https://nvd.nist.gov/vuln/detail/CVE-2026-79748)
+- **Advisory:** [https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8](https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8)
+- **Regression test:** [`tests/cves/test_cve_2026_79748_mcphub_spawn_config.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_79748_mcphub_spawn_config.py)
+
+**Vulnerability**
+
+MCPHub before 0.12.15 exposes ``POST /api/servers`` and
+``PUT /api/servers/:name``, which create or update an MCP server
+configuration and then **immediately spawn the configured stdio process
+via ``child_process.spawn``**. Authentication is required, but no
+authorization check restricts the endpoints to admins, and neither the
+``command`` nor the ``args`` field is allowlisted or sanitised. Any
+authenticated non-admin user can therefore submit a configuration with
+``command: "/bin/sh"`` and arbitrary args and execute it as MCPHub's OS
+user — **commonly root** in the published Docker image and in npx /
+systemd deployments. Fixed in 0.12.15 (PR #770).
+
+**Airlock mitigation**
+
+This CVE has two halves and agent-airlock reaches exactly one of them.
+
+The **assigned weakness is CWE-862 Missing Authorization** — the same class
+as CVE-2026-33032 (nginx-ui) and CVE-2026-23744 (mcpjam), both of which are
+listed out-of-scope in ``tests/cves/README.md``. Nothing in this library can
+add an admin check to an HTTP route that never calls into it, and this
+fixture does not pretend otherwise.
+
+What *is* reachable is the **primitive the missing check hands the
+attacker**: a request-controlled stdio spawn config (``command`` / ``args``
+/ ``env``) arriving at a ``child_process.spawn`` sink. That is byte-for-byte
+the shape :class:`~agent_airlock.mcp_spec.subprocess_arg_guard.McpSubprocessArgInjectionGuard`
+already refuses for the KEV-listed CVE-2026-42271, so this is a
+**second-defence regression fixture against an existing guard, not a new
+guard**. A deployment that routes its spawn configs through the guard
+survives the authorization hole; one that does not, does not.
+
+Per ``docs/cve-triage.md``: where the CVE's *class* and its *primitive*
+split, the primitive decides whether a second-defence test is worth adding.
+This is that case, written down.
+
+<a id="cve-2026-79748"></a>

@@ -11,6 +11,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.8.88] - 2026-09-08
+
+### Added
+
+- **CVE-2026-79748 (CRITICAL, CVSS 9.9) regression fixture — the spawn half.**
+  MCPHub before 0.12.15 exposes `POST /api/servers` and `PUT /api/servers/:name`,
+  which write an MCP server configuration and immediately spawn its stdio process
+  via `child_process.spawn`. Authentication is required but no authorization check
+  restricts the endpoints to admins, and neither `command` nor `args` is
+  allowlisted, so any authenticated non-admin reaches command execution as
+  MCPHub's OS user — commonly root in the published Docker image.
+
+  `tests/cves/test_cve_2026_79748_mcphub_spawn_config.py` is a **second-defence
+  fixture against the existing `McpSubprocessArgInjectionGuard`, not a new guard**:
+  the create body, the update body, a program smuggled through `args[0]`, and a
+  `NODE_OPTIONS` env primitive are all refused, and the operator's real
+  `npx`-launched server still registers.
+
+  **What it does not cover is stated in the fixture, not implied.** The assigned
+  weakness is **CWE-862 Missing Authorization** — the same class as CVE-2026-33032
+  and CVE-2026-23744, both already recorded out-of-scope. Nothing here can add an
+  admin check to an Express route that never calls into this library. A
+  `TestScopeBoundary` class asserts that the guard cannot distinguish an admin
+  caller from a non-admin one, and that the preset's `cves` tuple is *not* extended
+  to name this CVE: the preset addresses CVE-2026-42271, and it refuses this CVE's
+  payload without addressing this CVE. Those are different claims. `Airlock fit`
+  is published as **Partial**.
+
+  One detail worth pinning, and now pinned by a test: CWE-862 is not in the
+  watcher's `ARGUMENT_SHAPED_CWES`, so the CWE signal alone would have dropped the
+  highest-severity record the watcher has ever seen into the run-summary list
+  instead of opening an issue. The literal string `child_process` in the NVD
+  description is what admitted it. Dropping the sink-word signal would have cost a
+  CRITICAL.
+
+  Advisory: <https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8>
+
+- **`tests/cves/README.md` now says why one missing-authorization CVE is tested
+  and two are not.** Three entries now carry CWE-862 and land in different tables;
+  the deciding factor is the primitive the missing check hands the attacker, not
+  the CWE. Written down next to the out-of-scope table rather than left to be
+  inferred.
+
+### Changed
+
+- **The repository `homepage` field is set to
+  <https://sattyamjjain.github.io/agent-airlock/>.** It was null while
+  `has_pages` was true and PyPI already advertised the docs site, so the sidebar
+  link was missing on the one surface most visitors land on first.
+
+### Notes
+
+- **The Apache-2.0 relicense already reached PyPI in 0.8.87; this release is not
+  what carries it.** Recorded here because the opposite is easy to assume from the
+  commit order. `dfa398c` (the relicense) is an ancestor of tag `v0.8.87`, and the
+  published artifact confirms it independently of any build log: installing
+  `agent-airlock==0.8.87` from PyPI into a clean venv reports
+  `License-Expression: Apache-2.0`, the classifier
+  `License :: OSI Approved :: Apache Software License`, and ships
+  `agent_airlock-0.8.87.dist-info/licenses/LICENSE` opening "Apache License /
+  Version 2.0, January 2004". A word-boundary sweep
+  (`git ls-files -z | xargs -0 grep -nIE '\bMIT\b'`) finds exactly one surviving
+  `MIT` outside `CHANGELOG.md` — `benchmarks/harness_injection/fixture.py:132`,
+  the synthetic prompt-injection fixture that is deliberately left alone. A naive
+  `grep MIT` reports roughly thirty more, all of them `RATE_LIMIT`, `NEAR_LIMIT`,
+  `MITRE`, `ADMITTED`, `SUBMITTED` and `LIMIT 1`; acting on that number would edit
+  unrelated code.
+
+- **`cve-deferred` was not applied to #157 and #159, and that is deliberate.**
+  `open_untriaged_count()` in `scripts/cve_watcher.py` counts open `cve-response`
+  issues that lack `cve-deferred`, so the label *removes* an issue from
+  back-pressure. Both were dispositioned `in-scope-and-scheduled`, which
+  `docs/cve-triage.md` defines as staying open until the work lands; `cve-deferred`
+  belongs to `in-scope-and-deferred-until-<DATE>` (#160, #161), which carries a
+  date. Labelling the CRITICAL as deferred would have silenced the only
+  back-pressure the watcher had. #157 is closed by the fixture above; #159 stays
+  open and scheduled. Separately, the CVE-catalog gate (`gen_cve_catalog.py`)
+  parses `tests/cves/` docstrings and reads no GitHub label at all.
+
 ## [0.8.87] - 2026-09-06
 
 ### Added

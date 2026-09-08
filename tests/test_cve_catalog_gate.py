@@ -10,8 +10,8 @@ no gate noticed, because the gate only compared the file against the generator's
 Two things are asserted here, and they are different:
 
 1. **Completeness** — every `test_cve_*.py` module reaches the catalog. This is the bug.
-2. **Honesty of the split** — 38 regression modules exist, 31 are CVE-numbered, and the
-   published wording says both rather than implying the catalog holds all 38. The other
+2. **Honesty of the split** — 39 regression modules exist, 32 are CVE-numbered, and the
+   published wording says both rather than implying the catalog holds all 39. The other
    seven are advisory regressions with no CVE id, plus umbrellas whose CVEs already appear.
 """
 
@@ -157,7 +157,7 @@ class TestNothingIsInvented:
 
 
 class TestThePublishedSplitIsAccurate:
-    """38 modules, 31 CVE-numbered. Both numbers must appear, and both must be true."""
+    """39 modules, 32 CVE-numbered. Both numbers must appear, and both must be true."""
 
     @staticmethod
     def _module_counts() -> tuple[int, int]:
@@ -167,8 +167,8 @@ class TestThePublishedSplitIsAccurate:
 
     def test_the_two_counts_are_what_the_tree_holds(self) -> None:
         total, cve_numbered = self._module_counts()
-        assert total == 38
-        assert cve_numbered == 31
+        assert total == 39
+        assert cve_numbered == 32
 
     def test_the_marketplace_states_both_numbers(self) -> None:
         text = (_ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
