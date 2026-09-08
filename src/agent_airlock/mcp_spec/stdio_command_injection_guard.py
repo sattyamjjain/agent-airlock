@@ -98,7 +98,12 @@ class StdioCommandInjectionVerdict(str, enum.Enum):
     ALLOW = "allow"
     DENY_SHELL_METACHAR = "deny_shell_metachar"
     DENY_PATH_TRAVERSAL = "deny_path_traversal"
-    DENY_STOP_PARSING_TOKEN = "deny_stop_parsing_token"
+    # Bandit's B105 heuristic keys on the identifier ending in ``TOKEN`` and reads
+    # the literal as a credential. It is a stable reason code in a str-Enum of
+    # verdicts, alongside the two above; there is no secret here. Renaming the
+    # member to dodge the heuristic would make the worse name win, and the value
+    # is part of the public wire contract (``decision.verdict.value``).
+    DENY_STOP_PARSING_TOKEN = "deny_stop_parsing_token"  # nosec B105
 
 
 @dataclass(frozen=True)
