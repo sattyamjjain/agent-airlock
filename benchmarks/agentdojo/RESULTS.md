@@ -143,6 +143,94 @@ widening.
 
 <!-- CROSS-MODEL-RUNS: append newest below; never edit dated blocks -->
 
+### Cross-family widening: code unblocked 2026-09-09, no arm run yet
+
+**No pilot ran. Zero of three arms. Nothing below this heading is a result.**
+
+Recorded to the same rule the `vs_gateway` benchmark is held to: an arm that did not run
+is named, not dropped, and no date moves forward on work that did not happen.
+
+#### Which arms ran
+
+| arm | provider | status | why |
+|---|---|---|---|
+| OpenAI | `openai` | **did not run** | no `OPENAI_API_KEY` in the environment |
+| Anthropic | `anthropic` | **did not run** | no `ANTHROPIC_API_KEY` in the environment |
+| Together | `together` | **did not run** | no `TOGETHER_API_KEY` in the environment |
+
+No partial arm, no cached replay, no estimate. The `45% → 10%` and the 2026-08-08
+cross-model block above remain the only model-in-the-loop numbers this benchmark has, and
+they are still **one family (OpenAI)**.
+
+#### What did get fixed, and why it mattered more than a pilot would have
+
+The widening was documented as "gated on API budget, not on code". That was wrong, and a
+pilot run today would have produced a **meaningless Together number** rather than a small
+one.
+
+`model_registry_shim._infer()` had no Together branch. Together serves open models under an
+`org/model` slug, and every such id fell through to the function's Anthropic default:
+
+```
+meta-llama/Llama-3.3-70B-Instruct-Turbo  ->  ('anthropic', 'Claude')
+mistralai/Mixtral-8x7B-Instruct-v0.1     ->  ('anthropic', 'Claude')
+Qwen/Qwen2.5-72B-Instruct-Turbo          ->  ('anthropic', 'Claude')
+```
+
+Two independent failures follow, and both are silent:
+
+1. **Wrong client.** `get_llm("anthropic", ...)` builds `anthropic.Anthropic()`, not the
+   OpenAI-compatible client pointed at `https://api.together.xyz/v1`. The arm cannot reach
+   Together at all.
+2. **Wrong self-name — the one that would have produced a number.** The `tool_knowledge`
+   attack addresses the model by `MODEL_NAMES[model_id]`. A Llama or Qwen model addressed
+   as "Claude" is a differently-worded attack, so any ASR it produced would not be
+   comparable to the OpenAI arm it was meant to sit beside. This is precisely the failure
+   the shim's own docstring says it exists to prevent for Claude ids.
+
+`ensure_registered()` also only auto-registered ids starting with `claude`, so
+`--model meta-llama/...` registered nothing and `ModelsEnum(...)` raised before any of the
+above could even be reached.
+
+Everything *downstream* of the registry was genuinely wired, which is why the claim looked
+true: agentdojo 0.1.35 supports `together` and `together-prompting`, `_MODEL_PRICES` carries
+Together list prices, and the OpenAI-SDK cost hook meters Together because Together is
+OpenAI-compatible. The single missing link was the registry branch.
+
+Fixed in v0.8.91: `_infer()` routes `org/model` slugs to `together` with per-family
+self-names (reproducing agentdojo's own `Mixtral` / `AI assistant` entries rather than
+inventing them), and `ensure_registered()` auto-registers slugs. Eight regression tests in
+`tests/test_agentdojo_model_registry_shim.py`; removing the branch fails seven of them.
+
+#### Before the paid run, one thing still needs a number
+
+`_MODEL_PRICES` has no entry for the current Claude 4/5 ids the shim registers, nor for
+Together models beyond the two agentdojo ships. Unpriced models record **$0.00**, which
+`CostMeter` reports as unmeasured rather than free — but a pilot would still come back with
+no dollar figure for those arms. List prices should be set before spending, not after, so
+the recorded cost is a measurement rather than a reconstruction.
+
+#### To run the pilot
+
+Set the keys and run. Roughly 10–20 pairs per arm keeps it bounded; the harness caps by
+task rather than by pair, so `--max-user-tasks 3 --max-injection-tasks 2` over four suites
+is the nearest bounded knob.
+
+```bash
+export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  TOGETHER_API_KEY=...
+python -m benchmarks.agentdojo.run \
+  --model gpt-4o-mini-2024-07-18 \
+  --model claude-haiku-4-5-20251001 \
+  --model meta-llama/Llama-3.3-70B-Instruct-Turbo \
+  --max-user-tasks 3 --max-injection-tasks 2 \
+  --out benchmarks/agentdojo/RESULTS.md
+```
+
+Whatever comes back is a **pilot**: at 10–20 pairs/arm the Wilson intervals will be far too
+wide to separate families, so it establishes that the three arms execute and produces a
+first directional reading — not a cross-family result. The power calculation says 163
+pairs/arm for that, and `power_sample_size()` in `run.py` is where that number comes from.
+
 ### 2026-09-08 · deterministic bound only (no model, no API key, no cost)
 
 Re-ran `python -m benchmarks.agentdojo.run` with no `--model` on 2026-09-08.

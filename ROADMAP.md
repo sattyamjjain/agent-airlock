@@ -63,7 +63,23 @@ The harness is already built for this: the model-registry shim carries current C
 Together is wired. What remains is a keyed run over OpenAI + Anthropic + Together at the
 power-calc-sized **163 pairs/arm** documented under "Widening plan" in
 [`benchmarks/agentdojo/RESULTS.md`](benchmarks/agentdojo/RESULTS.md). That would replace a
-scoped point estimate with a real cross-family number. It is gated on API budget, not on code.
+scoped point estimate with a real cross-family number.
+
+**Correction, 2026-09-09: "It is gated on API budget, not on code" was false, and
+"Together is wired" was half true.** agentdojo's `together` provider, the price table and
+the OpenAI-SDK cost hook were all in place — but the registry shim, the one component that
+has to put an id into agentdojo's tables, had no Together branch. `_infer()` returned
+`("anthropic", "Claude")` for every `org/model` slug, and `ensure_registered()` only
+auto-registered ids starting with `claude`, so `--model meta-llama/…` registered nothing
+and `ModelsEnum(...)` raised. Forced through `--register-model`, the arm would have been
+built against `anthropic.Anthropic()` with the attack addressing a Llama model as "Claude"
+— a number that looks like a result and means nothing. Fixed in v0.8.91 with eight
+regression tests and a verified negative control.
+
+So the item is unchanged in substance but honest in status: **the code blocker is now
+removed, and it is genuinely gated on API budget alone.** No pilot arm has run — see
+"Cross-family widening" in [`benchmarks/agentdojo/RESULTS.md`](benchmarks/agentdojo/RESULTS.md)
+for exactly which arms did not run and why.
 
 **~~Give the matched-pair injection null enough sample to mean something.~~ Done 2026-08-26.**
 
