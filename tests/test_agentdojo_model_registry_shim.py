@@ -76,6 +76,59 @@ class TestModelRegistryShim:
         assert "some-vendor-model-x1" in added
         assert "some-vendor-model-x1" in {m.value for m in ModelsEnum}
 
+    def test_together_slug_routes_to_together_not_anthropic(self) -> None:
+        """The regression this class was missing.
+
+        Before the ``"/"`` branch in ``_infer``, every Together id fell through to the
+        Anthropic default: the run would be built against ``anthropic.Anthropic()``
+        instead of Together's OpenAI-compatible endpoint, and the attack would address a
+        Llama model as "Claude". Both are silent, and the resulting ASR would have been
+        meaningless rather than merely wrong — which is the failure this shim exists to
+        prevent for Claude ids in the first place.
+        """
+        mid = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+        member = register_model(mid)
+        assert MODEL_PROVIDERS[member] == "together"
+        assert MODEL_NAMES[mid] != "Claude"
+
+    @pytest.mark.parametrize(
+        ("model_id", "expected_name"),
+        [
+            ("mistralai/Mixtral-8x7B-Instruct-v0.1", "Mixtral"),
+            ("Qwen/Qwen2.5-72B-Instruct-Turbo", "Qwen"),
+            ("deepseek-ai/DeepSeek-V3", "DeepSeek"),
+            ("meta-llama/Llama-3.3-70B-Instruct-Turbo", "AI assistant"),
+            ("some-lab/Unrecognised-Model-v1", "AI assistant"),
+        ],
+    )
+    def test_together_self_names(self, model_id: str, expected_name: str) -> None:
+        # The self-name is what the attack addresses the model by. Mixtral and the
+        # Llama fallback reproduce agentdojo 0.1.35's own entries rather than
+        # second-guessing them.
+        register_model(model_id)
+        assert MODEL_PROVIDERS[ModelsEnum(model_id)] == "together"
+        assert MODEL_NAMES[model_id] == expected_name
+
+    def test_ensure_registered_auto_adds_a_together_slug(self) -> None:
+        # `--model <together id>` used to register nothing at all, so ModelsEnum(...)
+        # raised and the arm could not run without --register-model.
+        added = ensure_registered(["togethercomputer/probe-model-x1"])
+        assert added == ["togethercomputer/probe-model-x1"]
+        assert MODEL_PROVIDERS[ModelsEnum("togethercomputer/probe-model-x1")] == "together"
+
+    def test_an_unclassifiable_bare_id_is_still_not_auto_registered(self) -> None:
+        # Negative control for the widened auto-registration: a bare id that is neither
+        # a Claude id nor a slug must still require an explicit --register-model, so a
+        # typo fails loudly instead of being invented as a new model.
+        assert ensure_registered(["gpt-4o-typo-that-does-not-exist"]) == []
+
+    def test_together_prompting_can_be_forced_for_models_without_native_tools(self) -> None:
+        # Not inferable from the id, so it is passed explicitly. Pinned because the
+        # docstring promises this escape hatch.
+        mid = "meta-llama/Llama-3-8b-chat-hf"
+        member = register_model(mid, provider="together-prompting")
+        assert MODEL_PROVIDERS[member] == "together-prompting"
+
     def test_register_current_models_registers_defaults(self) -> None:
         register_current_models()
         known = {m.value for m in ModelsEnum}

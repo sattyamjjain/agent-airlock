@@ -65,11 +65,41 @@ def _derive_member_name(model_id: str) -> str:
     return name or "MODEL"
 
 
+#: Self-names for Together-served open models, matched as a substring of the slug.
+#: The self-name is what the ``tool_knowledge`` / ``important_instructions`` attack
+#: addresses the model by, so a wrong one makes the resulting ASR meaningless — this
+#: is the same reasoning that made the shim patch ``MODEL_NAMES`` in the first place.
+#: The two entries agentdojo 0.1.35 ships are reproduced exactly rather than
+#: second-guessed: ``mistralai/Mixtral-8x7B-Instruct-v0.1`` -> ``"Mixtral"`` and
+#: ``meta-llama/Llama-3-70b-chat-hf`` -> ``"AI assistant"``.
+_TOGETHER_SELF_NAMES: tuple[tuple[str, str], ...] = (
+    ("mixtral", "Mixtral"),
+    ("mistral", "Mistral"),
+    ("qwen", "Qwen"),
+    ("deepseek", "DeepSeek"),
+    ("gemma", "Gemma"),
+    ("llama", "AI assistant"),
+)
+
+
 def _infer(model_id: str) -> tuple[str, str]:
     """Infer ``(provider, self_name)`` from a model id.
 
     Defaults to Anthropic/Claude because that is this shim's reason for existing; the other
     prefixes are handled so an operator can register a mixed set through one entry point.
+
+    **Together ids are matched on the ``org/model`` slug shape.** Together serves open
+    models under a namespaced slug and neither OpenAI nor Anthropic ids contain ``"/"``,
+    so the separator is an unambiguous discriminator. Before this branch existed every
+    Together id fell through to the Anthropic default below, which was silently wrong in
+    two compounding ways: the run would be built against ``anthropic.Anthropic()`` rather
+    than Together's OpenAI-compatible endpoint, and the attack would address a Llama or
+    Qwen model as "Claude". That is the exact class of meaningless number this shim's
+    docstring says it exists to prevent, so it is inferred rather than left to the caller.
+
+    The provider is ``"together"`` (agentdojo's native tool-calling path). Older models
+    without native function calling need ``"together-prompting"``; that is not inferable
+    from the id, so pass it explicitly: ``register_model(mid, provider="together-prompting")``.
     """
     mid = model_id.lower()
     if mid.startswith("claude"):
@@ -80,6 +110,11 @@ def _infer(model_id: str) -> tuple[str, str]:
         return "google", "AI model developed by Google"
     if mid.startswith("command"):
         return "cohere", "Command R"
+    if "/" in model_id:
+        for needle, self_name in _TOGETHER_SELF_NAMES:
+            if needle in mid:
+                return "together", self_name
+        return "together", "AI assistant"
     return "anthropic", "Claude"
 
 
@@ -153,9 +188,25 @@ def register_current_models(extra: Iterable[str] = ()) -> list[str]:
     return added
 
 
+def _is_auto_registerable(model_id: str) -> bool:
+    """True for ids this shim will register from ``--model`` without ``--register-model``.
+
+    Two shapes qualify, and both are ones agentdojo 0.1.35 cannot resolve on its own:
+
+    * a Claude id — its ``ModelsEnum`` lists only retired ``claude-3-x``;
+    * an ``org/model`` slug — a Together-served open model.
+
+    Anything else still needs an explicit ``--register-model``, so a typo in an OpenAI id
+    fails loudly at ``ModelsEnum(...)`` instead of being silently invented as a new model.
+    """
+    return model_id.lower().startswith("claude") or "/" in model_id
+
+
 def ensure_registered(models: Iterable[str], extra: Iterable[str] = ()) -> list[str]:
     """Register what a run needs: every ``extra`` id, and any ``--model`` id agentdojo does
-    not already know that looks like a Claude id (so ``--model claude-opus-5`` just works).
+    not already know that this shim can classify unambiguously — a Claude id, or a
+    Together ``org/model`` slug. So ``--model claude-opus-5`` and
+    ``--model meta-llama/Llama-3.3-70B-Instruct-Turbo`` both just work.
 
     Returns the ids newly registered (for the harness to log). Does not register the whole
     default set — only what the requested run actually references.
@@ -173,6 +224,6 @@ def ensure_registered(models: Iterable[str], extra: Iterable[str] = ()) -> list[
     for model_id in extra:
         _add(model_id)
     for model_id in models:
-        if model_id not in known and model_id.lower().startswith("claude"):
+        if model_id not in known and _is_auto_registerable(model_id):
             _add(model_id)
     return added

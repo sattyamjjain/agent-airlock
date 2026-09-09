@@ -11,6 +11,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.8.91] - 2026-09-09
+
+### Fixed
+
+- **The AgentDojo Together arm could never have run, and both the README and ROADMAP said
+  it could.** ROADMAP's "Now" item stated the cross-family widening "is gated on API
+  budget, not on code" and that "Together is wired"; the README repeated the second half.
+  The first was false and the second was half true.
+
+  `model_registry_shim._infer()` had no Together branch. Together serves open models under
+  an `org/model` slug, and every such id fell through to the function's Anthropic default:
+
+  ```
+  meta-llama/Llama-3.3-70B-Instruct-Turbo  ->  ('anthropic', 'Claude')
+  mistralai/Mixtral-8x7B-Instruct-v0.1     ->  ('anthropic', 'Claude')
+  ```
+
+  Two silent failures follow. The run would be built against `anthropic.Anthropic()`
+  instead of Together's OpenAI-compatible endpoint — so the arm could not reach Together at
+  all. And the `tool_knowledge` attack, which addresses the model by
+  `MODEL_NAMES[model_id]`, would address a Llama model as **"Claude"** — a differently
+  worded attack whose ASR is not comparable to the arm it was meant to sit beside. That is
+  the exact class of meaningless-but-plausible number the shim's own docstring says it
+  exists to prevent for Claude ids. `ensure_registered()` compounded it by auto-registering
+  only ids starting with `claude`, so `--model meta-llama/…` registered nothing and
+  `ModelsEnum(...)` raised first.
+
+  Everything downstream of the registry was genuinely wired, which is why the claim looked
+  true: agentdojo 0.1.35 supports `together` / `together-prompting`, `_MODEL_PRICES` carries
+  Together list prices, and the OpenAI-SDK cost hook meters Together because Together is
+  OpenAI-compatible. The one missing link was the registry branch — the component that has
+  to put the id in the table.
+
+  `_infer()` now routes `org/model` slugs to `together` with per-family self-names,
+  reproducing agentdojo's own `Mixtral` and `AI assistant` entries rather than inventing
+  them, and `ensure_registered()` auto-registers slugs. A bare unrecognised id still
+  requires explicit `--register-model`, so a typo fails loudly instead of being invented as
+  a new model. Eight regression tests; removing the branch fails seven of them.
+
+  The Anthropic path was verified and needed no change: all four ids in
+  `DEFAULT_CURRENT_CLAUDE` register with `provider=anthropic` and `self_name='Claude'`
+  across all three agentdojo tables.
+
+### Changed
+
+- **README and ROADMAP now state the widening's real status.** The README's AgentDojo
+  paragraph says plainly that **no cross-family run has happened** and that its numbers are
+  still one family. ROADMAP's "Now" item keeps the same objective but carries a dated
+  correction of the "gated on API budget, not on code" claim, and now says what is true:
+  the code blocker is removed, so it is *now* gated on budget alone.
+
+### Notes
+
+- **The cross-family pilot did not run. Zero of three arms.** No `OPENAI_API_KEY`,
+  `ANTHROPIC_API_KEY` or `TOGETHER_API_KEY` in the environment, and no `.env`. Recorded arm
+  by arm under "Cross-family widening" in `benchmarks/agentdojo/RESULTS.md`, to the same
+  rule `vs_gateway` is held to: an arm that did not run is named rather than dropped, and no
+  date moves forward on work that did not happen. No partial arm, no cached replay, no
+  estimate — and no claim that a first cross-family data point exists, because none does.
+
+  In hindsight the ordering was fortunate. A pilot run before this fix would have returned a
+  Together number produced by an attack addressing Llama as "Claude" — a result-shaped
+  artifact that would have been published as the first cross-family data point.
+
+- **One prerequisite remains before spending.** `_MODEL_PRICES` has no entry for the current
+  Claude 4/5 ids the shim registers, nor for Together models beyond the two agentdojo ships.
+  Unpriced models record `$0.00`, which `CostMeter` reports as unmeasured rather than free —
+  but the arms would still come back with no dollar figure. List prices belong in the table
+  before the run, so the recorded cost is a measurement and not a reconstruction.
+
+- `benchmarks/` ships in neither the wheel nor the sdist (`[tool.hatch.build.targets.sdist]`
+  includes only `/src`), so this fix changes nothing in the installed package. It is released
+  because the README correction ships in the PyPI long_description.
+
 ## [0.8.90] - 2026-09-09
 
 ### Added
