@@ -3,7 +3,7 @@
 **Paper:** [Convergent Detour Hijacking: Task-Preserving Resource Amplification in
 Skill-Based LLM Agents](https://arxiv.org/abs/2608.12273) (arXiv:2608.12273, 2026-08-12)
 **Regression fixture:** [`tests/test_detour_hijacking.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/test_detour_hijacking.py)
-**Open gap:** [#142](https://github.com/sattyamjjain/agent-airlock/issues/142)
+**Closed:** [#142](https://github.com/sattyamjjain/agent-airlock/issues/142) (2026-08-17, shipped in v0.8.74 — see "Partly visible now" below)
 
 ## The attack
 
@@ -57,15 +57,25 @@ Six calls where two were needed. An outcome checker sees one identical answer tw
 contract layer sees two calls and six. That difference is the finding, and it is asserted in
 `TestPerRunRecordMakesRecruitedCallsVisible`.
 
-### Not visible today
+### Partly visible now
 
-Three limits, each with a test that fails if it is ever fixed silently.
+This section used to open "Not visible today" and list three limits, the first of which was
+**no cost or token accounting on the record**. That shipped in v0.8.74 and this page did not
+say so. What follows separates what landed from what genuinely remains; the two limits below
+it each still have a test that fails if they are ever fixed silently.
 
-**No cost or token accounting on the record.** `AuditRecord` has no field for either, so the
-quantity the paper measures cannot be read off the log even in principle. `duration_ms` is
-tool execution time, not the agent's end-to-end wall time, and summing it does not
-reconstruct the 92.45% figure because it excludes model latency, which is where a detour
-spends most of what it wastes.
+**Call-count amplification is on the record. Tokens are, only if you supply them.**
+`SecurityPolicy.amplification_budget` plus `AmplificationGuard` count calls per run against a
+declared baseline, and `AuditRecord` carries `run_call_count`, `run_baseline_calls`,
+`run_amplification_ratio` and `run_input_tokens`. The unit is **calls**, deliberately: the
+paper's token and wall-time figures are not universally observable at this seam, so
+`run_input_tokens` is populated only from a caller-supplied `_airlock_input_tokens` and is
+**never estimated**.
+
+What still does not reconstruct is the paper's own quantity. `duration_ms` is tool execution
+time, not the agent's end-to-end wall time, and summing it does not reproduce the 92.45%
+figure because it excludes model latency — which is where a detour spends most of what it
+wastes. A call-count ratio is a proxy for that, not a measurement of it.
 
 **No run identity without a harness context.** `session_id` is populated from a context
 object passed as the first positional argument. A harness that does not supply one still

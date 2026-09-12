@@ -19,6 +19,22 @@ is genuinely environment-dependent — optional-extra tests gated by ``importors
 collect only where their extra is installed, so a live re-count differs between a
 fat local env and CI's ``.[dev]``. What must never drift is the *disclosure*, and
 that is what this guard pins.
+
+A worked example of that environment-dependence, recorded here because it looks
+like an off-by-one bug and is not. The badge's ``run`` figure comes from
+``--collect-only``, but a full run reports **one more** than it:
+
+    $ pytest tests/test_agentdojo_model_registry_shim.py --collect-only
+    no tests collected
+    $ pytest tests/test_agentdojo_model_registry_shim.py
+    SKIPPED [1] ...:14: agentdojo is a bench-only extra
+    1 skipped
+
+That module calls ``pytest.importorskip`` at *module* level (line 14), so with the
+``[bench]`` extra absent it contributes 0 at collection and 1 skip at execution.
+Install ``agentdojo`` and the same module contributes its real tests to both. The
+gap is the mechanism working, not a miscount — do not "fix" the badge script over
+it, and do not assert collection and execution totals are equal.
 """
 
 from __future__ import annotations

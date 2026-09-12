@@ -248,9 +248,14 @@ jobs:
           path: sbom.json
 
   docs:
-    # Strict build: a broken internal link or a nav/file mismatch fails CI,
-    # rather than shipping a docs site with dead links. Same build the Pages
-    # deploy (.github/workflows/docs.yml) runs, minus the push.
+    # Strict build: a broken internal link fails CI, rather than shipping a docs
+    # site with dead links. Same build the Pages deploy (.github/workflows/docs.yml)
+    # runs, minus the push.
+    #
+    # This said "or a nav/file mismatch" and that was wrong: mkdocs reports a page
+    # missing from nav at INFO, which --strict does not escalate. The build exits 0
+    # today with dozens of pages outside the nav. Only WARNING-level problems (a link
+    # leaving docs/, a dead internal reference) actually fail here.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

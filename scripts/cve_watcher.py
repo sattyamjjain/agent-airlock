@@ -186,12 +186,29 @@ ARGUMENT_SHAPED_CWES: frozenset[str] = frozenset(
 #: attacker-supplied stdio spawn config reaching child_process.spawn, which
 #: McpSubprocessArgInjectionGuard already refuses. Deliberately excludes generic
 #: authorization vocabulary so the six out-of-scope records stay out.
+#:
+#: ``manipulation of the argument`` is the VulDB-sourced NVD phrasing that names
+#: the defective parameter outright ("Executing manipulation of the argument
+#: ``url`` can lead to server-side request forgery" — CVE-2026-19753,
+#: mcp-rdf-explorer, CWE-918). That record is argument-shaped by this module's
+#: own definition and ``ssrf_egress_guard.py`` already refuses the shape, but it
+#: classified ``triage-required`` and no issue was ever opened.
+#:
+#: It is matched here as a sink word rather than by adding **CWE-918** to
+#: :data:`ARGUMENT_SHAPED_CWES`, and the distinction is the whole point. The two
+#: CWE-918 records in the pinned first queue (CVE-2026-18905, CVE-2026-77822)
+#: are IBM ContextForge **DNS rebinding**: the URL the caller supplies is
+#: legitimate and the *network layer* betrays it after validation, so there is
+#: no bad argument for airlock to refuse. A human dispositioned both
+#: ``triage-required`` and was right. Promoting the CWE wholesale would overturn
+#: those two decisions; matching the phrase that names a manipulated argument
+#: separates the cases, which ``TestSsrfArgumentShape`` pins in both directions.
 _SINK_RE = re.compile(
     r"child_process|\bspawn\b|subprocess|\bexec\b|\beval\b|\bargv\b"
     r"|command[- ]safety|\bmetachar|stop-parsing|\bshell\b|\bstdio\b"
     r"|deserializ|\bpickle\b|template injection|interpolat"
     r"|\bjq filter|\bfilters?\b(?=[^.]*validat)|execute .{0,40}function"
-    r"|\bSQL\b|FROM[- ]clause",
+    r"|\bSQL\b|FROM[- ]clause|manipulation of the argument",
     re.IGNORECASE,
 )
 

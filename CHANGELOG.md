@@ -11,6 +11,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.9.1] - 2026-09-12
+
+### Fixed
+
+This release is a claims sweep. Nothing here is a new feature; every entry is a place
+where the repo asserted something the code contradicted. A project that gates on its own
+claims has to hold itself to that, and an audit found ten that had drifted.
+
+- **The CVE watcher could not see the class it guards.** `ssrf_egress_guard.py` exists
+  because of CVE-2026-47390 (CWE-918), yet `cve_watcher.py` classified
+  CVE-2026-19753 (mcp-rdf-explorer, CWE-918, HIGH 7.3) as `triage-required` and never
+  opened an issue — despite NVD describing it as *"manipulation of the argument `url`"*,
+  which is argument-shaped by the watcher's own definition.
+
+  Fixed by adding `manipulation of the argument` to `_SINK_RE`, **not** by adding CWE-918
+  to `ARGUMENT_SHAPED_CWES`. That distinction is the substance: the two CWE-918 records in
+  the pinned first queue (CVE-2026-18905, CVE-2026-77822) are IBM ContextForge **DNS
+  rebinding**, where the supplied URL is legitimate and the network layer betrays it after
+  validation. A human dispositioned both `triage-required` and was right; promoting the CWE
+  wholesale would have silently overturned them. `TestSsrfArgumentShape` pins both
+  directions.
+
+- **`tests/cves/README.md` contradicted its own suite.** It listed CVE-2026-33032 and
+  CVE-2026-23744 as "not included in this suite" and carried a section explaining why they
+  were untested. Both test files exist and 18 tests pass. They assert *adjacent* primitives
+  (`MCPProxyGuard` on the nginx-ui tool inventory; `BindAddressGuard` on the public bind),
+  never the missing auth check — so the out-of-scope reasoning was right and only the
+  "untested" claim was wrong. Added a `Tested?` column that says which is which. The Layout
+  table also read as an index while covering 9 of 33 files; it now says it is a selection
+  and points at the generated, CI-gated `docs/cves/index.md`.
+
+- **PydanticAI output sanitisation silently did nothing on 2.x.** `output_validate` was
+  removed in PydanticAI 2.x (verified absent on 2.43.0 while `toolsets` still works), and
+  `_maybe_attach_output_validate` returned quietly when it found no attribute. A caller with
+  the default `attach_output_validate=True` therefore believed model output was sanitised
+  when it was not. It now emits a `UserWarning` naming exactly what did not happen, and
+  saying tool arguments are still validated so the warning is not misread as total failure.
+
+- **Two latency tests failed on an idle machine.** `test_p99_under_1_5ms` and
+  `test_meta_chain_under_2ms_p99` took the 99th value of a single 100-sample batch — the
+  *second-worst* sample — so one scheduler hiccup decided the result. They failed 2 of 3
+  clean runs and could redden CI with no code change, which is the worst kind of flake in a
+  repo that gates on a green suite: it teaches you to ignore red. Both now take the best of
+  five batches, with the measured distribution recorded inline
+  (p50 0.704–0.716 ms; a loaded run gave batches [1.318, 1.346, 2.331, 3.433, 4.574] ms).
+  The ceilings are unchanged and a 1.5x regression still fails.
+
+- **Six stale or dangling references**, each pointing somewhere that does not exist:
+  `CLAUDE.md` → `PRODUCTION_ROADMAP.md` (no such file, not in git history);
+  `attest/signer.py` → "lands in v0.5.9 (issue #75)" (past v0.9.0; issue #75 404s);
+  `sandbox_backend.py` → "tracked in #6" (closed 2026-05-03 without it landing);
+  `docs/security/detour-hijacking.md` → "Open gap: #142" (closed 2026-08-17, and its
+  cost-accounting bullet was answered by `AmplificationGuard` in v0.8.74 — the page now
+  separates what shipped from what genuinely remains);
+  `gen_cve_catalog.py` → `scripts/check_cve_catalog.py` (never existed; the gate is
+  `gen_cve_catalog.py --check`);
+  `ROADMAP.md` → "seven missing doc pages" (it is five — `policy_bundle.lock` and
+  `kill-switch` both got pages on 2026-09-04, five days *before* that file was last edited).
+
+- **Two unenforced automation claims.** `README.md` said the test badge is "regenerated from
+  pytest on every release via `scripts/update_test_badge.py`"; no workflow has ever run it.
+  It now says it is run by hand and names the gates that actually catch drift
+  (`test_badge_version.py`, `test_numeric_claim_parity.py`). `ci.yml`'s `docs` job said
+  "a broken internal link **or a nav/file mismatch** fails CI"; `mkdocs build --strict`
+  exits 0 today with dozens of pages outside the nav, because that is an `INFO`, not a
+  `WARNING`.
+
+### Not changed, and why
+
+- An audit flagged the badge's collected-vs-executed count as an off-by-one. It is not a
+  defect: `tests/test_agentdojo_model_registry_shim.py` calls `pytest.importorskip` at
+  *module* level, contributing 0 tests at collection and 1 skip at execution when the
+  `[bench]` extra is absent. Verified directly, and recorded in
+  `tests/test_badge_test_count_honesty.py` so the next person does not re-investigate it.
+  The badge script is unchanged.
+
 ## [0.9.0] - 2026-09-12
 
 ### Added

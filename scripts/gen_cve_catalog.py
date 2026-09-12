@@ -18,8 +18,10 @@ Each CVE regression test module starts with a structured docstring:
 
 This script parses those headers and emits a single markdown page with a
 summary table plus per-CVE detail sections. The output is checked into the
-repo so reviewers can diff it on PRs; `scripts/check_cve_catalog.py` in CI
-verifies the checked-in file matches what the generator would produce.
+repo so reviewers can diff it on PRs; this script's own `--check` mode, run by
+CI's `docs` job, verifies the checked-in file matches what the generator would
+produce. (This line used to name `scripts/check_cve_catalog.py`, which has never
+existed — the gate is `gen_cve_catalog.py --check`.)
 
 Usage:
     python3 scripts/gen_cve_catalog.py > docs/cves/index.md

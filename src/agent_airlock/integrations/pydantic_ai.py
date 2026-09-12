@@ -209,10 +209,33 @@ class PydanticAIAdapter:
     def _maybe_attach_output_validate(self, agent: Any) -> None:
         """Wire ``agent.output_validate`` to the airlock sanitizer (v1.88+).
 
-        If the attribute is absent (older PydanticAI), this silently
-        skips — the version-mismatch warning has already fired.
+        When the attribute is absent the hook cannot be attached, and this
+        **warns** rather than returning quietly.
+
+        The quiet return was a real defect. PydanticAI **2.x removed
+        ``output_validate``** (verified absent on 2.43.0 while ``toolsets``
+        still works), so on 2.x the tool walk succeeded, this method found no
+        attribute, returned, and the caller was left with
+        ``attach_output_validate=True`` and no output sanitisation. Believing
+        a sanitiser is attached when it is not is worse than knowing it is
+        off, which is the same reasoning the Google ADK adapter applies to
+        tool entries it cannot guard.
+
+        The version-drift warning does not cover this: it only fires for real
+        ``pydantic_ai.*`` objects outside
+        :data:`SUPPORTED_PYDANTIC_AI_VERSIONS`, and it says behaviour is
+        best-effort, not that output sanitisation is off.
         """
         if not hasattr(agent, "output_validate"):
+            warnings.warn(
+                "agent-airlock could not attach output sanitisation: this agent has no "
+                "`output_validate` attribute (PydanticAI 2.x removed it). Tool arguments "
+                "are still validated, but model output is NOT sanitised by this adapter. "
+                "Pass attach_output_validate=False to silence this, or sanitise output "
+                "yourself with agent_airlock.sanitizer.sanitize_output.",
+                UserWarning,
+                stacklevel=4,
+            )
             return
         from ..sanitizer import sanitize_output
 
