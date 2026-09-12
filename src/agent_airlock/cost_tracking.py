@@ -121,8 +121,39 @@ class BudgetConfig:
     warn_at_percentage: float = 80.0  # Warn when reaching this % of budget
 
 
-# Default pricing per 1K tokens (as of 2026)
+# Default pricing per 1K tokens.
+#
+# Anthropic rows read from https://platform.claude.com/docs/en/about-claude/pricing
+# on 2026-09-12; the per-million figures there are divided by 1000 for this table's
+# unit. Base input/output only — prompt-caching multipliers, the 50% Batch discount
+# and the 1.1x us-only data-residency multiplier stack on top and are not modelled.
+#
+# This is a *fallback* table for CostTracker, not a rate card: pass `pricing=` to
+# override, and note `"default"` catches anything unlisted rather than returning
+# zero, so an unknown model is over-estimated rather than silently free.
+# `agent_airlock.data/anthropic_pricing_2026_09.json` is the dated, loadable
+# snapshot (see `load_anthropic_pricing`); this dict is the in-process default.
 DEFAULT_PRICING: dict[str, dict[str, Decimal]] = {
+    "claude-opus-5": {
+        "input": Decimal("0.005"),
+        "output": Decimal("0.025"),
+    },
+    "claude-sonnet-5": {
+        "input": Decimal("0.002"),
+        "output": Decimal("0.010"),
+    },
+    "claude-haiku-4-5": {
+        "input": Decimal("0.001"),
+        "output": Decimal("0.005"),
+    },
+    "claude-opus-4-7": {
+        "input": Decimal("0.005"),
+        "output": Decimal("0.025"),
+    },
+    "claude-sonnet-4-6": {
+        "input": Decimal("0.003"),
+        "output": Decimal("0.015"),
+    },
     "gpt-4o": {
         "input": Decimal("0.0025"),
         "output": Decimal("0.01"),

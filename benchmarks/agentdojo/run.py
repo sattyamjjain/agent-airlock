@@ -681,13 +681,28 @@ _MODEL_PRICES: dict[str, tuple[float, float]] = {
     "claude-3-5-sonnet": (3.00, 15.00),
     "claude-3-7-sonnet": (3.00, 15.00),
     "claude-3-opus": (15.00, 75.00),
+    # Current Claude ids, i.e. the ones model_registry_shim.DEFAULT_CURRENT_CLAUDE
+    # registers. Read from https://platform.claude.com/docs/en/about-claude/pricing
+    # on 2026-09-12 (base input/output per million; caching, Batch and data-residency
+    # multipliers are not modelled here and would only ever reduce or raise the figure
+    # by a stated factor). Longest prefixes first — _price_usd returns on the FIRST
+    # startswith() hit, so "claude-opus-5" must not sit behind a "claude-opus" key.
+    "claude-opus-5": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-opus-4-7": (5.00, 25.00),
+    "claude-opus-4-6": (5.00, 25.00),
+    "claude-opus-4-5": (5.00, 25.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-sonnet-4-5": (3.00, 15.00),
+    "claude-haiku-4-5": (1.00, 5.00),
     # Together (open models) list price — the 3rd family for the widened run. Cost is
     # captured by the OpenAI-client SDK hook (Together is OpenAI-compatible).
     "mistralai/Mixtral-8x7B-Instruct-v0.1": (0.60, 0.60),
     "meta-llama/Llama-3-70b-chat-hf": (0.88, 0.88),
-    # NOTE: current Claude (4/5) ids the model-registry shim registers are not priced here
-    # yet — set their list price before running the paid Anthropic arm, or their cost records
-    # as $0 ("unmeasured") rather than a fabricated number.
+    # Every model the widening plan names is now priced, so a cross-family run records
+    # measured dollars rather than $0.00. A Together model *outside* the two above is
+    # still unpriced and would record $0.00 — price it before running it, not after.
 }
 
 

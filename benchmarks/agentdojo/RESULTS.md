@@ -202,13 +202,37 @@ self-names (reproducing agentdojo's own `Mixtral` / `AI assistant` entries rathe
 inventing them), and `ensure_registered()` auto-registers slugs. Eight regression tests in
 `tests/test_agentdojo_model_registry_shim.py`; removing the branch fails seven of them.
 
-#### Before the paid run, one thing still needs a number
+#### Pricing: resolved 2026-09-12
 
-`_MODEL_PRICES` has no entry for the current Claude 4/5 ids the shim registers, nor for
-Together models beyond the two agentdojo ships. Unpriced models record **$0.00**, which
-`CostMeter` reports as unmeasured rather than free — but a pilot would still come back with
-no dollar figure for those arms. List prices should be set before spending, not after, so
-the recorded cost is a measurement rather than a reconstruction.
+This section used to read "before the paid run, one thing still needs a number":
+`_MODEL_PRICES` had no entry for the current Claude 4/5 ids the shim registers, so three of
+the four would have recorded **$0.00** — which `CostMeter` reports as unmeasured rather than
+free, but a pilot would still have come back with no dollar figure for the Anthropic arm.
+
+Priced now, from the
+[official card](https://platform.claude.com/docs/en/about-claude/pricing) read on
+2026-09-12 (per million, base input/output):
+
+| model | input | output |
+|---|---|---|
+| `claude-opus-5` | $5 | $25 |
+| `claude-sonnet-5` | $2 | $10 |
+| `claude-haiku-4-5` | $1 | $5 |
+| `mistralai/Mixtral-8x7B-Instruct-v0.1` | $0.60 | $0.60 |
+
+Every model the widening plan names is covered, so a cross-family run now records measured
+dollars. `TestEveryRegisterableModelIsPriced` in `tests/test_agentdojo_crossmodel.py` fails
+the next time a model is added to the shim without a price, which keeps the ordering this
+section asked for: list prices set before spending, not after.
+
+A Together model *outside* the two agentdojo ships is still unpriced and would record
+$0.00 — price it before running it.
+
+**Estimated cost of the widened run**, extrapolated from the measured 2026-08-08 figures
+(`gpt-4o-mini` $0.2383 and `gpt-4o` $4.9213, both at n=60): at the power-calc-sized 163
+pairs/arm, an economy three-family run (`gpt-4o-mini` + `claude-haiku-4-5` + Mixtral-8x7B)
+lands around **$3–6 total**; substituting frontier models on every arm takes it to roughly
+**$45–75**. Still an estimate, not a measurement — the run has not happened.
 
 #### To run the pilot
 

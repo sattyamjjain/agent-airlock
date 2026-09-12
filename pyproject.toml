@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.9.1"
+version = "0.10.0"
 description = "A type-checker and contract layer for AI agent tool calls, deny-by-default, in-process, Pydantic-only. Strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks."
 readme = "README.md"
 license = "Apache-2.0"
@@ -70,10 +70,26 @@ logging = [
 # Pulls AgentDojo, used ONLY by benchmarks/agentdojo/. NEVER a core dependency —
 # the airlock core stays zero-dep and the harness gates the import.
 bench = [
-    "agentdojo",
+    # Floored, not bare. This was an unconstrained `agentdojo`, the only
+    # dependency in the file with no version specifier at all, so a resolver was
+    # free to pick anything. agentdojo 0.1.35 is the latest release and the
+    # package is unmaintained, which makes a floor cheap and a surprise upgrade
+    # the thing worth preventing.
+    "agentdojo>=0.1.35",
 ]
+# E2B Firecracker micro-VM execution.
+# Install with: pip install "agent-airlock[sandbox]"
+# `e2b-code-interpreter` is a SEPARATE PyPI distribution and was missing here:
+# sandbox.py imports `from e2b_code_interpreter import Sandbox`, but `e2b` has
+# never declared it as a dependency (checked 1.7.0 and 2.49.1), so this extra
+# never installed what the code imports and the E2B path could not work from a
+# clean `[sandbox]` install. The tests skipped rather than failed, which is what
+# hid it. Verified on e2b 2.49.1 + e2b-code-interpreter 2.10.0:
+# `E2BBackend.is_available()` is True and 114 sandbox tests pass.
+# The <2.0 ceiling is lifted for the same run.
 sandbox = [
-    "e2b>=1.0,<2.0",
+    "e2b>=1.0,<3.0",
+    "e2b-code-interpreter>=1.0,<3.0",
     "cloudpickle>=3.0",
 ]
 # Modal-backed sandbox (v0.8.11+, issue #30).
@@ -84,15 +100,23 @@ modal = [
     "modal>=0.65",
     "cloudpickle>=3.0",
 ]
+# MCP / FastMCP.
+# Install with: pip install "agent-airlock[mcp]"
+# The <3.0 FastMCP ceiling excluded 4.x, which works: `secure_tool` registers and
+# guards tools on both. What changed across the major is what `@mcp.tool` RETURNS
+# (2.x a FunctionTool carrying `.name`, 4.x the original function), and the tool
+# registry accessor (`get_tools` -> `list_tools`). Only four tests asserting the
+# 2.x return shape needed fixing; see `_registered_tool_names` in tests/test_mcp.py.
+# Verified on 2.14.7 and 4.0.3: 24 passed, 1 skipped on both.
 mcp = [
     "mcp>=1.0",
-    "fastmcp>=2.0,<3.0",
+    "fastmcp>=2.0,<5.0",
 ]
 # Claude Agent SDK (renamed from Claude Code SDK in Sept 2025).
 # Install with: pip install "agent-airlock[claude-agent]"
 # See: https://pypi.org/project/claude-agent-sdk/
 claude-agent = [
-    "claude-agent-sdk>=0.1.58,<0.2.0",
+    "claude-agent-sdk>=0.1.58,<0.3.0",
 ]
 # Google Cloud Model Armor — opt-in prompt/response classifier.
 # Install with: pip install "agent-airlock[model-armor]"
@@ -133,7 +157,7 @@ attested = [
 # v1.88.0 floor pin: that's the release that introduced output_validate
 # / output_process hooks the adapter binds to (PR pydantic/pydantic-ai#4859).
 pydantic-ai = [
-    "pydantic-ai>=1.88.0,<2.0",
+    "pydantic-ai>=1.88.0,<3.0",
 ]
 # CrewAI canonical-leg adapter (v0.7.2+, ADD-1 2026-05-05; closes #5).
 # Install with: pip install "agent-airlock[crewai]"

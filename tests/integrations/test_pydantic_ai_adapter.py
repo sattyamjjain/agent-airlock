@@ -144,8 +144,11 @@ class TestPydanticAIAdapter:
         """The ``[pydantic-ai]`` extra must pin ``>=1.88.0,<2.0``."""
         pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
         text = pyproject.read_text(encoding="utf-8")
-        assert "pydantic-ai>=1.88.0,<2.0" in text, (
-            "[pydantic-ai] extra must keep pydantic-ai>=1.88.0,<2.0 pin"
+        assert "pydantic-ai>=1.88.0,<3.0" in text, (
+            "[pydantic-ai] extra must keep the pydantic-ai>=1.88.0,<3.0 pin. The "
+            "ceiling was <2.0, which excluded the 2.x line entirely (stable since "
+            "2026-06-23). 2.x keeps `agent.toolsets`, so the tool walk is unchanged; "
+            "it drops `output_validate`, which the adapter now warns about."
         )
 
     def test_supported_versions_tuple_documented(self) -> None:

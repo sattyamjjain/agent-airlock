@@ -110,3 +110,51 @@ class TestAppendOnlyLog:
         p.write_text("# nope\n", encoding="utf-8")
         with pytest.raises(ValueError, match="no append marker"):
             append_run_to_results(p, "### 2026-08-05 · x\n\nbody")
+
+
+class TestEveryRegisterableModelIsPriced:
+    """An unpriced model records $0.00, which is a number that looks like a result.
+
+    ``CostMeter`` reports $0.00 as *unmeasured* rather than free, but a paid arm
+    still comes back with no dollar figure — and the widening plan's whole point
+    is a defensible cost per arm. Until 2026-09-12 three of the four ids
+    ``model_registry_shim.DEFAULT_CURRENT_CLAUDE`` registers had no entry in
+    ``_MODEL_PRICES``, so the Anthropic arm could not have reported its spend.
+
+    This gate fails the next time someone adds a model to the shim without
+    pricing it, which is the ordering the benchmark's own README asks for:
+    "List prices should be set before spending, not after."
+    """
+
+    def test_every_default_claude_id_is_priced(self) -> None:
+        from benchmarks.agentdojo.model_registry_shim import DEFAULT_CURRENT_CLAUDE
+        from benchmarks.agentdojo.run import _price_usd
+
+        unpriced = [m for m in DEFAULT_CURRENT_CLAUDE if _price_usd(m, 1_000_000, 0) == 0.0]
+        assert not unpriced, (
+            f"model_registry_shim registers {unpriced} but _MODEL_PRICES has no entry, "
+            "so a paid arm using them would record $0.00. Add the list price with its "
+            "source and date before running, not after."
+        )
+
+    def test_the_widening_plans_together_model_is_priced(self) -> None:
+        """The third family named in benchmarks/agentdojo/RESULTS.md."""
+        from benchmarks.agentdojo.run import _price_usd
+
+        assert _price_usd("mistralai/Mixtral-8x7B-Instruct-v0.1", 1_000_000, 0) > 0.0
+
+    def test_prefix_match_does_not_shadow_a_current_id(self) -> None:
+        """``_price_usd`` returns on the first ``startswith`` hit, so order matters.
+
+        A bare ``claude-opus`` key inserted above ``claude-opus-5`` would silently
+        price Opus 5 at the older model's rate. Assert the rate actually resolved,
+        not merely that something non-zero came back.
+        """
+        from benchmarks.agentdojo.run import _price_usd
+
+        # 1M input tokens at the published $5/MTok base input rate.
+        assert _price_usd("claude-opus-5", 1_000_000, 0) == pytest.approx(5.00)
+        # 1M output tokens at $25/MTok.
+        assert _price_usd("claude-opus-5", 0, 1_000_000) == pytest.approx(25.00)
+        # Sonnet 5 must not pick up Sonnet 4.6's $3/$15.
+        assert _price_usd("claude-sonnet-5", 1_000_000, 0) == pytest.approx(2.00)
