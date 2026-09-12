@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Security middleware for MCP servers - Intercept, validate, and sandbox AI agent tool calls">
+        <meta name="description" content="A deny-by-default contract layer for AI agent tool calls - strict argument validation, ghost-argument stripping and self-healing retries, in-process and Pydantic-only">
       
       
       
@@ -2593,12 +2593,17 @@
 
 
 <h1 id="agent-airlock">Agent-Airlock<a class="headerlink" href="#agent-airlock" title="Permanent link">&para;</a></h1>
-<p><strong>Security middleware for MCP servers - Intercept, validate, and sandbox AI agent tool calls</strong></p>
-<p><a href="https://badge.fury.io/py/agent-airlock"><img alt="PyPI version" src="https://badge.fury.io/py/agent-airlock.svg" /></a>
-<a href="https://www.python.org/downloads/"><img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10+-blue.svg" /></a>
-<a href="https://opensource.org/licenses/Apache-2.0"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache_2.0-yellow.svg" /></a></p>
+<p><strong>A deny-by-default contract layer for AI agent tool calls</strong></p>
+<p><a href="https://pypi.org/project/agent-airlock/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/agent-airlock?logo=pypi&amp;logoColor=white&amp;color=3775A9" /></a>
+<a href="https://www.python.org/downloads/"><img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10+-3776AB?logo=python&amp;logoColor=white" /></a>
+<a href="https://opensource.org/licenses/Apache-2.0"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache_2.0-green" /></a></p>
 <h2 id="what-is-agent-airlock">What is Agent-Airlock?<a class="headerlink" href="#what-is-agent-airlock" title="Permanent link">&para;</a></h2>
-<p>Agent-Airlock is the <strong>open-source, developer-first alternative</strong> to enterprise MCP security solutions. It provides a simple decorator-based API to secure your AI agent tool calls with <strong>6 layers of defense-in-depth</strong>.</p>
+<p>An LLM decides which tool to call and what arguments to pass it. Agent-Airlock is the
+contract at that boundary: strict argument validation with no type coercion, stripping of
+parameters the model invented, and structured <code>fix_hints</code> the model can retry against.</p>
+<p>It runs <strong>in-process</strong> — not a proxy, gateway or sidecar — because the process executing
+the tool is the only place the real Python arguments exist. The installed core depends on
+Pydantic and nothing else.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">UnknownArgsMode</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">unknown_args_mode</span><span class="o">=</span><span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">BLOCK</span><span class="p">)</span>

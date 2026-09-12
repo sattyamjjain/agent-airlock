@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Security middleware for MCP servers - Intercept, validate, and sandbox AI agent tool calls">
+        <meta name="description" content="A deny-by-default contract layer for AI agent tool calls - strict argument validation, ghost-argument stripping and self-healing retries, in-process and Pydantic-only">
       
       
       
@@ -2175,10 +2175,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-version-summary" class="md-nav__link">
+  <a href="#releases" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick Version Summary
+        Releases
       
     </span>
   </a>
@@ -2186,116 +2186,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#latest-release-v040-enterprise" class="md-nav__link">
+  <a href="#roadmap" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Latest Release: V0.4.0 "Enterprise"
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Latest Release: V0.4.0 &#34;Enterprise&#34;">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#new-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ✨ New Features
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#improvements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🔧 Improvements
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#v030-vaccine" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        V0.3.0 "Vaccine"
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="V0.3.0 &#34;Vaccine&#34;">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#new-features_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ✨ New Features
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#upgrade-guide" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Upgrade Guide
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Upgrade Guide">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#from-v030-to-v040" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        From V0.3.0 to V0.4.0
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#from-v01x-to-v030" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        From V0.1.x to V0.3.0
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#contributing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Contributing
+        Roadmap
       
     </span>
   </a>
@@ -2337,10 +2231,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-version-summary" class="md-nav__link">
+  <a href="#releases" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick Version Summary
+        Releases
       
     </span>
   </a>
@@ -2348,116 +2242,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#latest-release-v040-enterprise" class="md-nav__link">
+  <a href="#roadmap" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Latest Release: V0.4.0 "Enterprise"
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Latest Release: V0.4.0 &#34;Enterprise&#34;">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#new-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ✨ New Features
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#improvements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🔧 Improvements
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#v030-vaccine" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        V0.3.0 "Vaccine"
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="V0.3.0 &#34;Vaccine&#34;">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#new-features_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ✨ New Features
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#upgrade-guide" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Upgrade Guide
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Upgrade Guide">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#from-v030-to-v040" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        From V0.3.0 to V0.4.0
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#from-v01x-to-v030" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        From V0.1.x to V0.3.0
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#contributing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Contributing
+        Roadmap
       
     </span>
   </a>
@@ -2485,103 +2273,29 @@
 
 
 <h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
-<p>For the complete changelog with all versions and detailed release notes, see the <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md">CHANGELOG.md</a> file in the project root.</p>
-<h2 id="quick-version-summary">Quick Version Summary<a class="headerlink" href="#quick-version-summary" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Version</th>
-<th>Codename</th>
-<th>Highlights</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>0.4.0</strong></td>
-<td>"Enterprise"</td>
-<td>UnknownArgsMode, Safe Types, Capability Gating, Circuit Breaker, Cost Tracking, Retry Policies, OpenTelemetry, MCP Proxy Guard</td>
-</tr>
-<tr>
-<td><strong>0.3.0</strong></td>
-<td>"Vaccine"</td>
-<td>Filesystem path validation, Network egress control, Honeypot deception, Framework vaccination</td>
-</tr>
-<tr>
-<td><strong>0.2.0</strong></td>
-<td>-</td>
-<td>Security hardening, Production roadmap</td>
-</tr>
-<tr>
-<td><strong>0.1.5</strong></td>
-<td>-</td>
-<td>Streaming support, Context propagation, Dynamic policy resolution, Conversation tracking</td>
-</tr>
-<tr>
-<td><strong>0.1.3</strong></td>
-<td>-</td>
-<td>Framework compatibility (LangChain, OpenAI SDK, PydanticAI, etc.), Signature preservation</td>
-</tr>
-<tr>
-<td><strong>0.1.1</strong></td>
-<td>-</td>
-<td>Policy engine, Output sanitization, FastMCP integration, Audit logging</td>
-</tr>
-<tr>
-<td><strong>0.1.0</strong></td>
-<td>-</td>
-<td>Core validator, E2B sandbox integration, Configuration system</td>
-</tr>
-</tbody>
-</table>
-<hr />
-<h2 id="latest-release-v040-enterprise">Latest Release: V0.4.0 "Enterprise"<a class="headerlink" href="#latest-release-v040-enterprise" title="Permanent link">&para;</a></h2>
-<h3 id="new-features">✨ New Features<a class="headerlink" href="#new-features" title="Permanent link">&para;</a></h3>
+<p>The complete, authoritative changelog lives in
+<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md"><code>CHANGELOG.md</code></a>
+at the repository root. It follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>
+and <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>, and it is gated: a released
+version must carry a dated heading (<code>scripts/check_changelog_heading.py</code>) and must not
+strand entries under <code>[Unreleased]</code> (<code>scripts/check_changelog.py</code>), both enforced in CI.</p>
+<div class="admonition note">
+<p class="admonition-title">This page used to duplicate it, and drifted</p>
+<p>Until v0.10.4 this page carried a hand-maintained "Quick Version Summary" table that
+stopped at <strong>v0.4.0 "Enterprise"</strong> while the project shipped through v0.10.x. A docs-site
+nav entry pointing at an abandoned-looking summary is worse than one pointing at the real
+thing, so the summary is gone rather than re-synced — a second hand-maintained copy would
+only drift again.</p>
+</div>
+<h2 id="releases">Releases<a class="headerlink" href="#releases" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>UnknownArgsMode</strong>: Explicit <code>BLOCK</code>, <code>STRIP_AND_LOG</code>, <code>STRIP_SILENT</code> modes (replaces <code>strict_mode</code>)</li>
-<li><strong>Safe Types</strong>: <code>SafePath</code>, <code>SafePathStrict</code>, <code>SafeURL</code>, <code>SafeURLAllowHttp</code></li>
-<li><strong>Capability Gating</strong>: <code>@requires(Capability.FILESYSTEM_READ)</code> decorator</li>
-<li><strong>Pluggable Sandbox Backends</strong>: E2B, Docker, Local</li>
-<li><strong>Circuit Breaker</strong>: Prevent cascading failures with CLOSED/OPEN/HALF_OPEN states</li>
-<li><strong>Cost Tracking</strong>: Budget limits with soft/hard thresholds and alerts</li>
-<li><strong>Retry Policies</strong>: Exponential backoff with jitter support</li>
-<li><strong>OpenTelemetry</strong>: Distributed tracing with span attributes and metrics</li>
-<li><strong>MCP Proxy Guard</strong>: Token passthrough prevention, session binding</li>
-<li><strong>CLI Tools</strong>: <code>airlock doctor</code>, <code>airlock verify</code></li>
+<li><strong><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md">Full changelog</a></strong> — every version, with the reasoning</li>
+<li><strong><a href="https://github.com/sattyamjjain/agent-airlock/releases">GitHub Releases</a></strong> — per-tag notes</li>
+<li><strong><a href="https://pypi.org/project/agent-airlock/#history">PyPI release history</a></strong> — what is installable</li>
 </ul>
-<h3 id="improvements">🔧 Improvements<a class="headerlink" href="#improvements" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Enhanced audit logging with OpenTelemetry export support</li>
-<li>Better error messages for capability denials</li>
-<li>Improved thread safety in rate limiters and circuit breakers</li>
-</ul>
-<hr />
-<h2 id="v030-vaccine">V0.3.0 "Vaccine"<a class="headerlink" href="#v030-vaccine" title="Permanent link">&para;</a></h2>
-<h3 id="new-features_1">✨ New Features<a class="headerlink" href="#new-features_1" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Filesystem Path Validation</strong>: <code>os.path.commonpath()</code> (CVE-resistant)</li>
-<li><strong>Network Egress Control</strong>: <code>network_airgap()</code> context manager</li>
-<li><strong>Honeypot Deception</strong>: Return fake data instead of errors</li>
-<li><strong>Framework Vaccination</strong>: <code>vaccinate("langchain")</code> automatic security</li>
-</ul>
-<hr />
-<h2 id="upgrade-guide">Upgrade Guide<a class="headerlink" href="#upgrade-guide" title="Permanent link">&para;</a></h2>
-<h3 id="from-v030-to-v040">From V0.3.0 to V0.4.0<a class="headerlink" href="#from-v030-to-v040" title="Permanent link">&para;</a></h3>
-<p><strong>UnknownArgsMode migration:</strong>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Old (deprecated)</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">strict_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># New (V0.4.0)</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnknownArgsMode</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">unknown_args_mode</span><span class="o">=</span><span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">BLOCK</span><span class="p">)</span>
-</code></pre></div></p>
-<h3 id="from-v01x-to-v030">From V0.1.x to V0.3.0<a class="headerlink" href="#from-v01x-to-v030" title="Permanent link">&para;</a></h3>
-<p>No breaking changes - all V0.3.0 features are opt-in.</p>
-<hr />
-<h2 id="contributing">Contributing<a class="headerlink" href="#contributing" title="Permanent link">&para;</a></h2>
-<p>See <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> for guidelines.</p>
-<p>Report issues at <a href="https://github.com/sattyamjjain/agent-airlock/issues">GitHub Issues</a>.</p>
-<hr />
-<p><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md">View full changelog →</a></p>
+<h2 id="roadmap">Roadmap<a class="headerlink" href="#roadmap" title="Permanent link">&para;</a></h2>
+<p>What is <em>not</em> done, and why, is tracked in
+<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/ROADMAP.md"><code>ROADMAP.md</code></a>.</p>
 
 
 
