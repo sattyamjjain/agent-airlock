@@ -1786,10 +1786,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#not-visible-today" class="md-nav__link">
+  <a href="#partly-visible-now" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Not visible today
+        Partly visible now
       
     </span>
   </a>
@@ -1847,7 +1847,7 @@
 <p><strong>Paper:</strong> <a href="https://arxiv.org/abs/2608.12273">Convergent Detour Hijacking: Task-Preserving Resource Amplification in
 Skill-Based LLM Agents</a> (arXiv:2608.12273, 2026-08-12)
 <strong>Regression fixture:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/test_detour_hijacking.py"><code>tests/test_detour_hijacking.py</code></a>
-<strong>Open gap:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/issues/142">#142</a></p>
+<strong>Closed:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/issues/142">#142</a> (2026-08-17, shipped in v0.8.74 — see "Partly visible now" below)</p>
 <h2 id="the-attack">The attack<a class="headerlink" href="#the-attack" title="Permanent link">&para;</a></h2>
 <p>Convergent Detour Hijacking (CDH) is text-only and runtime-independent. It needs no exploit,
 no malformed argument, and no dangerous tool. It works like this:</p>
@@ -1888,13 +1888,22 @@ into a run and the count is directly readable:</p>
 <p>Six calls where two were needed. An outcome checker sees one identical answer twice; the
 contract layer sees two calls and six. That difference is the finding, and it is asserted in
 <code>TestPerRunRecordMakesRecruitedCallsVisible</code>.</p>
-<h3 id="not-visible-today">Not visible today<a class="headerlink" href="#not-visible-today" title="Permanent link">&para;</a></h3>
-<p>Three limits, each with a test that fails if it is ever fixed silently.</p>
-<p><strong>No cost or token accounting on the record.</strong> <code>AuditRecord</code> has no field for either, so the
-quantity the paper measures cannot be read off the log even in principle. <code>duration_ms</code> is
-tool execution time, not the agent's end-to-end wall time, and summing it does not
-reconstruct the 92.45% figure because it excludes model latency, which is where a detour
-spends most of what it wastes.</p>
+<h3 id="partly-visible-now">Partly visible now<a class="headerlink" href="#partly-visible-now" title="Permanent link">&para;</a></h3>
+<p>This section used to open "Not visible today" and list three limits, the first of which was
+<strong>no cost or token accounting on the record</strong>. That shipped in v0.8.74 and this page did not
+say so. What follows separates what landed from what genuinely remains; the two limits below
+it each still have a test that fails if they are ever fixed silently.</p>
+<p><strong>Call-count amplification is on the record. Tokens are, only if you supply them.</strong>
+<code>SecurityPolicy.amplification_budget</code> plus <code>AmplificationGuard</code> count calls per run against a
+declared baseline, and <code>AuditRecord</code> carries <code>run_call_count</code>, <code>run_baseline_calls</code>,
+<code>run_amplification_ratio</code> and <code>run_input_tokens</code>. The unit is <strong>calls</strong>, deliberately: the
+paper's token and wall-time figures are not universally observable at this seam, so
+<code>run_input_tokens</code> is populated only from a caller-supplied <code>_airlock_input_tokens</code> and is
+<strong>never estimated</strong>.</p>
+<p>What still does not reconstruct is the paper's own quantity. <code>duration_ms</code> is tool execution
+time, not the agent's end-to-end wall time, and summing it does not reproduce the 92.45%
+figure because it excludes model latency — which is where a detour spends most of what it
+wastes. A call-count ratio is a proxy for that, not a measurement of it.</p>
 <p><strong>No run identity without a harness context.</strong> <code>session_id</code> is populated from a context
 object passed as the first positional argument. A harness that does not supply one still
 gets every call logged, but the records are anonymous and cannot be assembled into a run at
