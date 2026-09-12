@@ -402,8 +402,16 @@ class TestSdkGating:
     def test_version_drift_emits_userwarning(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import types
 
+        # Both keys, deliberately. The adapter runs ``import google.adk as _adk``,
+        # which resolves the parent package first, so seeding only ``google.adk``
+        # passes on a machine that happens to have some other google-namespace
+        # package installed and fails on one that does not. That exact skew was
+        # green locally (anaconda ships a ``google`` namespace) and red on CI.
+        fake_google = types.ModuleType("google")
         fake_adk = types.ModuleType("google.adk")
         fake_adk.__version__ = "99.0.0"  # type: ignore[attr-defined]
+        fake_google.adk = fake_adk  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "google", fake_google)
         monkeypatch.setitem(sys.modules, "google.adk", fake_adk)
 
         class _FakeRealAgent:
