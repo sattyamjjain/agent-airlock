@@ -88,9 +88,22 @@ nav:
   - Commerce Adapters: adapters.md
   - CVE Catalog: cves/index.md
   - CVE Triage Rule: cve-triage.md
+  - Framework Integrations:
+    - Compatibility matrix: COMPATIBILITY.md
+    - Google ADK: integrations/google-adk.md
+    - PydanticAI: integrations/pydantic-ai.md
+    - CrewAI: integrations/crewai.md
+    - Claude Agent SDK: integrations/anthropic-claude-agent-sdk.md
+    - Managed Agents: integrations/managed-agents.md
   - CLI:
     - Kill switch: cli/kill-switch.md
     - Policy bundle lock: cli/policy-bundle-lock.md
+    - Policy compile / explain: cli/policy-compile-explain.md
+    - Attest receipt: cli/attest-receipt.md
+    - Console: cli/console.md
+    - Graph serve: cli/graph-serve.md
+    - Studio: cli/studio.md
+    - Scan tools: scan-tools.md
     - Egress bench: cli/egress-bench.md
   - Observability:
     - OTel Semantic Conventions: observability/semconv.md

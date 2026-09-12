@@ -11,6 +11,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.2] - 2026-09-12
+
+### Fixed
+
+- **`airlock policy compile` passed off a keyword match as a compilation.** No LLM
+  backend ships with the runtime — the registry is empty on a fresh install — so the CLI
+  falls back to a built-in stub that recognises three fixed phrases. Anything else fell
+  through to a catch-all rule with no relationship to the request, printed as
+  authoritative YAML with no provenance:
+
+  ```
+  $ airlock policy compile "block any tool that deletes records"
+  rules:
+    - rule_id: catch_all
+      condition: missing_auth_header     # nothing to do with deletes
+      action: warn
+  ```
+
+  The same three-line rule came back for every unrecognised input; only `description`
+  echoed the text. A user could reasonably deploy that believing their English had been
+  translated. The CLI now says what produced the output, and says it loudly when nothing
+  matched. Notices go to **stderr**, so `compile ... > policy.yaml` still writes a clean
+  file. Found by running the command while writing its documentation.
+
+### Added
+
+**The five missing feature doc pages, closing the ROADMAP "Later" item.**
+
+| page | feature |
+|---|---|
+| `docs/cli/policy-compile-explain.md` | `airlock policy compile / explain` |
+| `docs/cli/attest-receipt.md` | `airlock attest receipt` |
+| `docs/cli/console.md` | `airlock console` |
+| `docs/cli/graph-serve.md` | `airlock graph serve` |
+| `docs/cli/studio.md` | `airlock studio` |
+
+Each was written by **running the command and documenting what it did**, not by reading
+the source and describing what it should do. That is what surfaced the `policy compile`
+defect above.
+
+Each carries an "Honest scope" section naming what the feature does *not* do, because a
+doc page that only lists capabilities is how the gap between claim and code opens in the
+first place:
+
+- `attest receipt` — **every shipped signer is HMAC-SHA256, including `--kms-stub`.**
+  A symmetric MAC means anyone who can verify a receipt can forge one; verification
+  proves possession of the shared key, not authorship. There is no KMS or Sigstore
+  implementation in this package.
+- `graph serve` — live updates are a 5-second client poll, not a push; the queued
+  WebSocket transport never landed. The graph shows only calls that reached `@Airlock`.
+- `graph serve` / `studio` — `--host 0.0.0.0` binds publicly with **no authentication**.
+- `console` — a rehearsal surface; toggling a preset changes what it replays, not what a
+  running agent does.
+
+### Changed
+
+- ROADMAP's "Later" doc-pages item closed, with its own count history recorded: it said
+  seven, it was five, and the two it mis-listed had shipped pages five days before that
+  file was last edited.
+- `mkdocs.yml` nav gains a **Framework Integrations** section (the compatibility matrix
+  plus the five adapter pages, which were all written and none of them reachable) and the
+  five new CLI pages. 49 pages remain outside the nav on purpose — CVE write-ups, launch
+  posts, benchmark notes and distribution drafts are reference material, not a guide, and
+  burying the guide under them would be the worse failure.
+
 ## [0.10.1] - 2026-09-12
 
 ### Added

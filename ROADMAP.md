@@ -102,30 +102,37 @@ quietly drops items reads the same as one that never had them._
 
 ## Later
 
-**Write the seven missing feature doc pages.**
+**~~Write the seven missing feature doc pages.~~ Done 2026-09-12 (v0.10.2).**
 
 Fixing the README's dead links in v0.8.80 surfaced this rather than created it: shipped
 features with no documentation page at all, whose README rows pointed at files that had
-never been written. They now point at the source module, which is honest but thin.
+never been written.
 
-**This said "seven" until v0.9.1, and it was five.** `policy_bundle.lock` and
-`airlock kill-switch` both got real pages on 2026-09-04 — five days *before* this file was
-last edited — and the table below still listed them as `none`. A roadmap that under-claims
-is the same defect as one that over-claims: it is a row that does not match the tree. The
-features and their code:
+The count was wrong twice, in both directions, which is its own small lesson about
+untracked prose. It said **seven**; two of those (`policy_bundle.lock`, `kill-switch`)
+already had real pages written on 2026-09-04, five days before this file was last edited,
+so it was **five**. All five are now written:
 
 | Feature | Code | Doc |
 |---|---|---|
-| `airlock attest receipt` | `attest/` | partial — `docs/attest/layer-contract.md` covers the contract block only |
-| `airlock console` | `cli/console.py` | none |
-| ~~`policy_bundle.lock`~~ | `pack/` | **done** — `docs/cli/policy-bundle-lock.md` (2026-09-04) |
-| `airlock studio` | `studio/` | none |
-| `airlock graph serve` | `cli/graph.py` | none |
-| `airlock policy compile / explain` | `policy_compiler/` | none |
-| ~~`airlock kill-switch`~~ | `kill_switch/` | **done** — `docs/cli/kill-switch.md` (2026-09-04) |
+| `airlock attest receipt` | `attest/` | `docs/cli/attest-receipt.md` |
+| `airlock console` | `cli/console.py` | `docs/cli/console.md` |
+| `policy_bundle.lock` | `pack/` | `docs/cli/policy-bundle-lock.md` |
+| `airlock studio` | `studio/` | `docs/cli/studio.md` |
+| `airlock graph serve` | `cli/graph.py` | `docs/cli/graph-serve.md` |
+| `airlock policy compile / explain` | `policy_compiler/` | `docs/cli/policy-compile-explain.md` |
+| `airlock kill-switch` | `kill_switch/` | `docs/cli/kill-switch.md` |
 
-`scripts/check_links.py` now prevents the 404s from coming back, but a gate that stops you
-linking a page you never wrote is not the same as writing it.
+Each was written by running the command and documenting what it did, not by reading the
+source and describing what it should do. That surfaced a defect in the process:
+`airlock policy compile` defaults to a keyword-matching stub and printed authoritative
+YAML unrelated to the request, with no indication. It now says so. Each page also carries
+an "Honest scope" section naming what the feature does **not** do — the HMAC-only signers
+behind `attest receipt`, the 5-second poll behind `graph serve`, the unauthenticated bind
+on `studio` and `graph serve`.
+
+`scripts/check_links.py` prevents the 404s from coming back; writing the pages is what
+this item was actually for.
 
 **Close the `sandbox=True` validation gap.**
 
