@@ -252,6 +252,12 @@ from .integrations.crewai import (
     CrewAIMissingError,
 )
 
+# V0.9.0 — Google ADK canonical-leg adapter.
+from .integrations.google_adk import (
+    GoogleADKAdapter,
+    GoogleADKMissingError,
+)
+
 # V0.7.4 — Managed Agents Outcomes-rubric guard (ADD-1 2026-05-09).
 from .integrations.managed_agents_outcomes_guard import (
     MANAGED_AGENTS_OUTCOMES_2026_05_06_DEFAULT_FIELD,
@@ -734,7 +740,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.8.91"
+__version__ = "0.9.0"
 
 __all__ = [
     # Core
@@ -863,6 +869,9 @@ __all__ = [
     # V0.7.2 — CrewAI canonical-leg trio (ADD-1; closes #5)
     "CrewAIAdapter",
     "CrewAIMissingError",
+    # V0.9.0 — Google ADK canonical-leg adapter
+    "GoogleADKAdapter",
+    "GoogleADKMissingError",
     # V0.7.4 — Managed Agents Outcomes-rubric guard (ADD-1 2026-05-09)
     "MANAGED_AGENTS_OUTCOMES_2026_05_06_DEFAULT_FIELD",
     "ManagedAgentsOutcomesGuard",

@@ -47,6 +47,7 @@ _ADAPTER_SHIPPED_MODULES: tuple[tuple[str, str], ...] = (
     ("integrations/gpt5_5_tool_shape_adapter.py", "gpt5_5_tool_shape_adapter.py"),
     ("integrations/pydantic_ai.py", "pydantic_ai.py"),
     ("integrations/crewai.py", "crewai.py"),
+    ("integrations/google_adk.py", "google_adk.py"),
     ("mcp/__init__.py", "agent_airlock/mcp"),
 )
 
