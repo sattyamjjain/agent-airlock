@@ -216,6 +216,36 @@ class TestCreateSecureMCPServer:
             create_secure_mcp_server("test")
 
 
+def _registered_tool_names(mcp: object) -> set[str]:
+    """Tool names registered with a FastMCP server, across 2.x and 4.x.
+
+    What ``@mcp.tool`` *returns* changed between majors: FastMCP 2.x hands back a
+    ``FunctionTool`` (carrying ``.name``), 4.x hands back the original function
+    (carrying ``.__name__``). These tests used to assert on the return value, so
+    they passed on 2.14.7 and failed on 4.0.3 without anything being wrong.
+
+    Registration is the invariant that actually matters and it holds in both, so
+    that is what is asserted now. The accessor moved too — 2.x exposes an async
+    ``get_tools()`` returning a dict, 4.x an async ``list_tools()`` returning a
+    sequence of tools — so both are probed.
+    """
+    import asyncio
+    import inspect
+
+    for attr in ("get_tools", "list_tools"):
+        accessor = getattr(mcp, attr, None)
+        if accessor is None:
+            continue
+        result = asyncio.run(accessor()) if inspect.iscoroutinefunction(accessor) else accessor()
+        if isinstance(result, dict):
+            return set(result)
+        return {str(getattr(tool, "name", tool)) for tool in result}
+    raise AssertionError(
+        "no FastMCP tool-registry accessor found (tried get_tools, list_tools); "
+        "a new major may have moved it again"
+    )
+
+
 @pytest.mark.skipif(
     not _check_fastmcp_available(),
     reason="FastMCP not installed",
@@ -237,8 +267,7 @@ class TestWithFastMCP:
         # secure_tool returns a FunctionTool registered with the server
         # We verify the tool was registered and has correct attributes
         assert my_tool is not None
-        assert hasattr(my_tool, "name")
-        assert my_tool.name == "my_tool"
+        assert "my_tool" in _registered_tool_names(mcp)
 
     def test_create_secure_mcp_server(self) -> None:
         from agent_airlock.mcp import create_secure_mcp_server
@@ -252,8 +281,7 @@ class TestWithFastMCP:
         # secure decorator returns a FunctionTool registered with the server
         # We verify the tool was registered and has correct attributes
         assert my_tool is not None
-        assert hasattr(my_tool, "name")
-        assert my_tool.name == "my_tool"
+        assert "my_tool" in _registered_tool_names(mcp)
 
     def test_secure_tool_with_policy(self) -> None:
         from fastmcp import FastMCP
@@ -269,8 +297,7 @@ class TestWithFastMCP:
 
         # Verify the tool was registered with correct name
         assert allowed_tool is not None
-        assert hasattr(allowed_tool, "name")
-        assert allowed_tool.name == "allowed_tool"
+        assert "allowed_tool" in _registered_tool_names(mcp)
 
     def test_secure_tool_with_sandbox(self) -> None:
         from fastmcp import FastMCP
@@ -285,8 +312,7 @@ class TestWithFastMCP:
 
         # Verify the tool was registered with correct name
         assert sandboxed_tool is not None
-        assert hasattr(sandboxed_tool, "name")
-        assert sandboxed_tool.name == "sandboxed_tool"
+        assert "sandboxed_tool" in _registered_tool_names(mcp)
 
 
 class TestMCPContextExtractor:

@@ -25,6 +25,7 @@ from agent_airlock.budget.agent_sdk_credit import (
     AgentSDKCreditBudget,
     AgentSDKCreditDecision,
     AgentSDKCreditVerdict,
+    load_anthropic_pricing,
     load_anthropic_pricing_2026_06,
 )
 
@@ -141,3 +142,49 @@ class TestBadConstruction:
     def test_zero_credit_rejected(self) -> None:
         with pytest.raises(ValueError, match="positive"):
             AgentSDKCreditBudget(monthly_credit_usd=0.0)
+
+
+class TestDatedPricingSnapshots:
+    """Snapshots are dated and immutable: a new rate card is a new file.
+
+    A receipt written against June prices has to stay reproducible, so the June
+    table is kept byte-for-byte rather than edited when rates move. It is stale
+    on purpose — by 2026-09 Anthropic had cut Opus 4.6/4.7 from $15/$75 to
+    $5/$25 and raised Haiku 4.5 from $0.80/$4 to $1/$5 — and that staleness is
+    history, not drift.
+    """
+
+    def test_current_snapshot_prices_the_claude_5_family(self) -> None:
+        pricing = load_anthropic_pricing()
+        for model in ("claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"):
+            assert model in pricing, f"{model} missing from the current snapshot"
+            assert pricing[model]["input_usd_per_million"] > 0
+            assert pricing[model]["output_usd_per_million"] > 0
+
+    def test_current_rates_match_the_published_card(self) -> None:
+        """Read from platform.claude.com on 2026-09-12. Base input/output only."""
+        pricing = load_anthropic_pricing()
+        assert pricing["claude-opus-5"] == {
+            "input_usd_per_million": 5.0,
+            "output_usd_per_million": 25.0,
+        }
+        assert pricing["claude-sonnet-5"] == {
+            "input_usd_per_million": 2.0,
+            "output_usd_per_million": 10.0,
+        }
+        assert pricing["claude-haiku-4-5"] == {
+            "input_usd_per_million": 1.0,
+            "output_usd_per_million": 5.0,
+        }
+
+    def test_the_june_snapshot_is_preserved_unchanged(self) -> None:
+        """The compat loader must pin June, not follow the current card."""
+        june = load_anthropic_pricing_2026_06()
+        assert june["claude-opus-4-7"] == {
+            "input_usd_per_million": 15.0,
+            "output_usd_per_million": 75.0,
+        }, "the 2026-06 snapshot must keep its own (now superseded) rates"
+
+    def test_the_two_snapshots_actually_differ(self) -> None:
+        """A negative control: if these ever agree, one of them stopped being a snapshot."""
+        assert load_anthropic_pricing() != load_anthropic_pricing_2026_06()

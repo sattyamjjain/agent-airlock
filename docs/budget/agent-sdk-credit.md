@@ -68,22 +68,41 @@ decision in their own policy check.
 
 ## Pricing table
 
-The packaged fixture
-`src/agent_airlock/data/anthropic_pricing_2026_06.json` carries the
-2026-06-01 Anthropic API list rates:
+Snapshots are **dated and immutable**: when rates move, a new file ships and the
+old one stays byte-for-byte, so a receipt written against June prices is still
+reproducible in September.
+
+The current fixture is
+`src/agent_airlock/data/anthropic_pricing_2026_09.json`, read from the
+[official pricing page](https://platform.claude.com/docs/en/about-claude/pricing)
+on 2026-09-12:
 
 ```json
 {
-  "claude-opus-4-6":   {"input_usd_per_million": 15.0, "output_usd_per_million": 75.0},
-  "claude-opus-4-7":   {"input_usd_per_million": 15.0, "output_usd_per_million": 75.0},
-  "claude-sonnet-4-6": {"input_usd_per_million":  3.0, "output_usd_per_million": 15.0},
-  "claude-haiku-4-5":  {"input_usd_per_million":  0.80, "output_usd_per_million":  4.0}
+  "claude-opus-5":     {"input_usd_per_million": 5.0, "output_usd_per_million": 25.0},
+  "claude-sonnet-5":   {"input_usd_per_million": 2.0, "output_usd_per_million": 10.0},
+  "claude-haiku-4-5":  {"input_usd_per_million": 1.0, "output_usd_per_million":  5.0},
+  "claude-opus-4-8":   {"input_usd_per_million": 5.0, "output_usd_per_million": 25.0},
+  "claude-opus-4-7":   {"input_usd_per_million": 5.0, "output_usd_per_million": 25.0},
+  "claude-sonnet-4-6": {"input_usd_per_million": 3.0, "output_usd_per_million": 15.0}
 }
 ```
 
-Load programmatically via `load_anthropic_pricing_2026_06()`.
-Operators on enterprise / annual contracts override with their own
-rate card via the `override_pricing=` kwarg.
+**Base input and output only.** Prompt-caching multipliers (1.25x / 2x on write,
+0.1x on read), the 50% Batch API discount, the 1.1x us-only data-residency
+multiplier and fast-mode premium pricing all stack on top and are deliberately
+not encoded — a budget primitive that silently applied a discount would
+under-count.
+
+Load programmatically via `load_anthropic_pricing()`. The previous snapshot is
+still loadable via `load_anthropic_pricing_2026_06()`, which now reads the June
+file **explicitly** rather than "whatever is current", so code pinned to that
+name keeps the rates it was written against. Note it is superseded on three of
+its four entries: Opus 4.6 and 4.7 were $15/$75 and are now $5/$25; Haiku 4.5 was
+$0.80/$4 and is now $1/$5.
+
+Operators on enterprise / annual contracts override with their own rate card via
+the `override_pricing=` kwarg.
 
 ## Unknown models
 

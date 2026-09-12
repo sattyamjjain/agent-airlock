@@ -75,6 +75,7 @@ from .budget.agent_sdk_credit import (
     AgentSDKCreditBudget,
     AgentSDKCreditDecision,
     AgentSDKCreditVerdict,
+    load_anthropic_pricing,
     load_anthropic_pricing_2026_06,
 )
 
@@ -740,7 +741,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.9.1"
+__version__ = "0.10.0"
 
 __all__ = [
     # Core
@@ -993,6 +994,7 @@ __all__ = [
     "AgentSDKCreditBudget",
     "AgentSDKCreditDecision",
     "AgentSDKCreditVerdict",
+    "load_anthropic_pricing",
     "load_anthropic_pricing_2026_06",
     # V0.7.0 — Redis-backed distributed rate limiter (#1)
     "RedisRateLimit",

@@ -48,13 +48,21 @@ from ..policy import SecurityPolicy
 logger = structlog.get_logger("agent-airlock.integrations.pydantic_ai")
 
 
-SUPPORTED_PYDANTIC_AI_VERSIONS: tuple[str, ...] = ("1.88.0", "1.89.0", "1.89.1")
+SUPPORTED_PYDANTIC_AI_VERSIONS: tuple[str, ...] = ("1.88.0", "1.89.0", "1.89.1", "2.43.0")
 """PydanticAI versions this adapter has been smoke-tested against.
 
 A user running an unsupported version sees a :class:`UserWarning`
 (via ``warnings.warn``) at ``wrap_agent`` time but no hard failure —
 the public surface tested is the toolsets walk, which has been stable
 since v1.88.0. Update this tuple when a new version is verified.
+
+**2.43.0 was verified by introspection, and it is not fully equivalent
+to the 1.x entries.** ``agent.toolsets`` is unchanged (a list of
+toolsets, each with a ``tools`` dict of ``Tool`` objects carrying
+``.function``), so the walk works. But ``output_validate`` is **gone**
+in 2.x, so :meth:`PydanticAIAdapter._maybe_attach_output_validate`
+cannot attach the sanitiser and warns instead. Tool-argument validation
+is identical; model-output sanitisation is not available.
 """
 
 _INSTALL_HINT = (

@@ -48,7 +48,14 @@ logger = structlog.get_logger("agent-airlock.budget.agent_sdk_credit")
 
 
 _PRICING_PACKAGE = "agent_airlock.data"
-_PRICING_RESOURCE_NAME = "anthropic_pricing_2026_06.json"
+
+#: Superseded snapshot, kept so history stays loadable. It was stale on three of
+#: its four entries by 2026-09: Opus 4.6 and 4.7 at 15.0/75.0 (now 5.0/25.0) and
+#: Haiku 4.5 at 0.80/4.0 (now 1.0/5.0).
+_PRICING_RESOURCE_2026_06 = "anthropic_pricing_2026_06.json"
+
+#: Current snapshot, read from the official pricing page on 2026-09-12.
+_PRICING_RESOURCE_NAME = "anthropic_pricing_2026_09.json"
 
 
 # Anthropic 2026-06-15 billing-split tier USD caps. Operators reference
@@ -98,8 +105,22 @@ class AgentSDKCreditDecision:
     last_call_usd: float
 
 
-def load_anthropic_pricing_2026_06() -> dict[str, dict[str, float]]:
-    """Load the packaged 2026-06 Anthropic pricing table.
+def load_anthropic_pricing(
+    resource_name: str = _PRICING_RESOURCE_NAME,
+) -> dict[str, dict[str, float]]:
+    """Load a packaged Anthropic pricing snapshot. Defaults to the current one.
+
+    Snapshots are dated and immutable: a new rate card ships as a new file rather
+    than editing an old one, so a receipt written against June prices stays
+    reproducible. ``resource_name`` selects an older snapshot by filename.
+
+    Base input/output rates only. Prompt-caching multipliers, the Batch API
+    discount, the us-only data-residency multiplier and fast-mode pricing all
+    stack on top and are deliberately not encoded — see the fixture's ``note``.
+
+    Args:
+        resource_name: Packaged snapshot filename. Defaults to the current
+            snapshot (2026-09).
 
     Returns:
         Dict keyed by model id with ``input_usd_per_million`` /
@@ -109,13 +130,11 @@ def load_anthropic_pricing_2026_06() -> dict[str, dict[str, float]]:
         FileNotFoundError: Pricing fixture missing (broken install).
         ValueError: Pricing fixture present but malformed.
     """
-    raw = (files(_PRICING_PACKAGE) / _PRICING_RESOURCE_NAME).read_text(encoding="utf-8")
+    raw = (files(_PRICING_PACKAGE) / resource_name).read_text(encoding="utf-8")
     payload = json.loads(raw)
     models = payload.get("models")
     if not isinstance(models, dict):
-        raise ValueError(
-            f"pricing fixture {_PRICING_RESOURCE_NAME} malformed: 'models' must be a dict"
-        )
+        raise ValueError(f"pricing fixture {resource_name} malformed: 'models' must be a dict")
     out: dict[str, dict[str, float]] = {}
     for model_id, rates in models.items():
         if not isinstance(rates, dict):
@@ -125,6 +144,21 @@ def load_anthropic_pricing_2026_06() -> dict[str, dict[str, float]]:
             "output_usd_per_million": float(rates["output_usd_per_million"]),
         }
     return out
+
+
+def load_anthropic_pricing_2026_06() -> dict[str, dict[str, float]]:
+    """Load the 2026-06 snapshot specifically. Kept for API compatibility.
+
+    This was the only loader until v0.9.2, when a 2026-09 snapshot superseded
+    it. It now reads the June file **explicitly** rather than "whatever the
+    current snapshot is", so code pinned to this name keeps getting the rates it
+    was written against instead of silently moving when a new card ships.
+
+    Prefer :func:`load_anthropic_pricing` for current rates. Note the June table
+    is stale in three places: Opus 4.6 and 4.7 at 15.0/75.0 (now 5.0/25.0) and
+    Haiku 4.5 at 0.80/4.0 (now 1.0/5.0).
+    """
+    return load_anthropic_pricing(_PRICING_RESOURCE_2026_06)
 
 
 class AgentSDKCreditBudget:
@@ -262,5 +296,6 @@ __all__ = [
     "AgentSDKCreditBudget",
     "AgentSDKCreditDecision",
     "AgentSDKCreditVerdict",
+    "load_anthropic_pricing",
     "load_anthropic_pricing_2026_06",
 ]

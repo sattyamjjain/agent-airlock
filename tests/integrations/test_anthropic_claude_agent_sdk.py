@@ -103,8 +103,11 @@ class TestAnthropicClaudeAgentSDKAdapter:
         """
         pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
         text = pyproject.read_text(encoding="utf-8")
-        assert "claude-agent-sdk>=0.1.58,<0.2.0" in text, (
-            "[claude-agent] extra must pin claude-agent-sdk>=0.1.58,<0.2.0 (v0.7.3)"
+        assert "claude-agent-sdk>=0.1.58,<0.3.0" in text, (
+            "[claude-agent] extra must pin claude-agent-sdk>=0.1.58,<0.3.0. The "
+            "ceiling was <0.2.0, which this module's own docstring called out as "
+            "excluding the line Opus 4.7 needs (v0.2.111+). Verified on 0.2.152: "
+            "all tests in this file pass."
         )
 
     def test_supported_versions_tuple_documented(self) -> None:

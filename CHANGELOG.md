@@ -11,6 +11,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.0] - 2026-09-12
+
+### Fixed
+
+- **`[sandbox]` never installed what `sandbox.py` imports.** The extra pinned `e2b` and
+  `cloudpickle`, but the code does `from e2b_code_interpreter import Sandbox` — and
+  `e2b-code-interpreter` is a **separate PyPI distribution** that `e2b` has never declared
+  as a dependency (checked on 1.7.0 and 2.49.1). So `pip install "agent-airlock[sandbox]"`
+  produced an install where the E2B path could not work. The tests *skipped* rather than
+  failed, which is what hid it. Verified on e2b 2.49.1 + e2b-code-interpreter 2.10.0:
+  `E2BBackend.is_available()` is now True and 114 sandbox tests pass.
+
+- **Four extras had ceilings that excluded the current release.** Each was verified by
+  installing the real version in a clean venv and running the repo's own tests against it,
+  not by reading release notes:
+
+  | extra | was | now | verified on | result |
+  |---|---|---|---|---|
+  | `pydantic-ai` | `<2.0` | `<3.0` | 2.43.0 | `toolsets` walk unchanged; `output_validate` gone (see below) |
+  | `mcp` (fastmcp) | `<3.0` | `<5.0` | 4.0.3 | 24 passed / 1 skipped, same as on 2.14.7 |
+  | `claude-agent` | `<0.2.0` | `<0.3.0` | 0.2.152 | whole adapter test module passes unchanged |
+  | `sandbox` (e2b) | `<2.0` | `<3.0` | 2.49.1 | 114 sandbox tests pass |
+
+  The `claude-agent` ceiling mattered most: that module's own docstring said the 0.2.x line
+  was "intentionally out of scope", while noting Opus 4.7 requires v0.2.111+ — so the extra
+  could not install the SDK the current model needs.
+
+  FastMCP 4 does **not** break `secure_tool`; it registers and guards tools on both majors.
+  What changed is what `@mcp.tool` *returns* (2.x a `FunctionTool` carrying `.name`, 4.x the
+  original function) and the registry accessor (`get_tools` → `list_tools`). Four tests
+  asserted the 2.x return shape; they now assert the invariant that actually matters —
+  registration with the server — via `_registered_tool_names`, which works on both.
+
+- **`[bench]` pinned `agentdojo` with no version specifier at all**, the only dependency in
+  the file with none. Floored at `>=0.1.35`.
+
+- **Three pricing tables disagreed, and the one the benchmark uses was missing the models it
+  runs.** Three of the four ids `model_registry_shim.DEFAULT_CURRENT_CLAUDE` registers had
+  no entry in `_MODEL_PRICES`, so the Anthropic arm of the cross-family run would have
+  recorded **$0.00** — reported as unmeasured rather than free, but still no dollar figure.
+  All rates below are read from the
+  [official card](https://platform.claude.com/docs/en/about-claude/pricing) on 2026-09-12,
+  base input/output per million; caching, Batch, data-residency and fast-mode multipliers
+  stack on top and are deliberately not encoded.
+
+  `TestEveryRegisterableModelIsPriced` now fails the next time a model is added to the shim
+  without a price, keeping the ordering the benchmark asked for: set list prices before
+  spending, not after. It also asserts the resolved *rate*, not merely a non-zero result,
+  because `_price_usd` returns on the first `startswith` hit and a bare `claude-opus` key
+  would silently price Opus 5 at an older model's rate.
+
+### Added
+
+- **`load_anthropic_pricing()`** and a dated `data/anthropic_pricing_2026_09.json`.
+  Snapshots are immutable: when rates move a new file ships and the old one stays
+  byte-for-byte, so a receipt written against June prices stays reproducible.
+  `load_anthropic_pricing_2026_06()` keeps working and now reads the June file
+  **explicitly** rather than "whatever is current", so code pinned to that name keeps the
+  rates it was written against. A negative-control test asserts the two snapshots differ.
+
+  The June table was stale on three of its four entries: Opus 4.6 and 4.7 at $15/$75 (now
+  $5/$25) and Haiku 4.5 at $0.80/$4 (now $1/$5). That is dated history, not drift, which is
+  why it is preserved rather than corrected.
+
+### Changed
+
+- `SUPPORTED_PYDANTIC_AI_VERSIONS` gains `2.43.0` and `SUPPORTED_SDK_VERSIONS` gains
+  `0.2.152`, each with a docstring recording what was verified. The PydanticAI entry says
+  plainly that 2.x is **not** fully equivalent to the 1.x entries: tool-argument validation
+  is identical, model-output sanitisation is unavailable because the hook was removed.
+- `benchmarks/agentdojo/RESULTS.md` now carries a cost estimate for the widened run,
+  extrapolated from the measured 2026-08-08 figures: roughly **$3–6** for an economy
+  three-family run at 163 pairs/arm, **$45–75** with frontier models throughout. Labelled
+  an estimate, because the run still has not happened.
+
 ## [0.9.1] - 2026-09-12
 
 ### Fixed

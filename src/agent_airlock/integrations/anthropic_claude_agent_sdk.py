@@ -56,7 +56,7 @@ from .claude_task_budget import build_output_config, build_task_budget_headers
 logger = structlog.get_logger("agent-airlock.integrations.anthropic_claude_agent_sdk")
 
 
-SUPPORTED_SDK_VERSIONS: tuple[str, ...] = ("0.1.58", "0.1.73")
+SUPPORTED_SDK_VERSIONS: tuple[str, ...] = ("0.1.58", "0.1.73", "0.2.152")
 """Pinned SDK versions this adapter has been smoke-tested against.
 
 The Claude Agent SDK has churned twice between Sep-2025 and May-2026
@@ -71,9 +71,13 @@ permission prompts and PreToolUse hooks). This adapter forwards the
 field into the audit-receipt body when present and remains backward-
 compatible with 0.1.58 payloads where ``duration_ms`` is absent.
 
-The 0.2.x line (Opus 4.7 requires Agent SDK v0.2.111+) is
-intentionally **out of scope** for this floor — that's a separate
-forward-bump candidate.
+**0.2.x is now in scope.** This used to read "intentionally out of
+scope for this floor — a separate forward-bump candidate", while the
+pyproject ceiling of ``<0.2.0`` meant the extra could not install the
+line Opus 4.7 requires (v0.2.111+). Verified on **0.2.152**: the
+adapter's whole test module passes unchanged, and ``ClaudeSDKClient``,
+``tool`` and ``ClaudeAgentOptions`` are all still exported. The ceiling
+is now ``<0.3.0``.
 """
 
 _INSTALL_HINT = (
