@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/distribution/awesome-llm-security/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/integrations/google-adk/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Draft PR — awesome-llm-security - Agent-Airlock</title>
+        <title>Google ADK - Agent-Airlock</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#draft-pr-awesome-llm-security" class="md-skip">
+        <a href="#google-adk" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Draft PR — awesome-llm-security
+              Google ADK
             
           </span>
         </div>
@@ -1741,10 +1741,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#entry-list-format" class="md-nav__link">
+  <a href="#why-an-adapter-not-just-airlock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Entry (list format)
+        Why an adapter (not just @Airlock())
       
     </span>
   </a>
@@ -1752,10 +1752,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-title" class="md-nav__link">
+  <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR title
+        Install
       
     </span>
   </a>
@@ -1763,10 +1763,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pr-body" class="md-nav__link">
+  <a href="#quickstart" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PR body
+        Quickstart
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-adapter-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the adapter does
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-not-covered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is not covered
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verified-against" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verified against
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#primary-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Primary sources
       
     </span>
   </a>
@@ -1793,32 +1837,187 @@
   
 
 
-<h1 id="draft-pr-awesome-llm-security">Draft PR — awesome-llm-security<a class="headerlink" href="#draft-pr-awesome-llm-security" title="Permanent link">&para;</a></h1>
-<blockquote>
-<p><strong>Status: DRAFT for the operator to submit.</strong> Nothing here is auto-submitted.
-Confirm the canonical list repo before opening the PR.</p>
-</blockquote>
+<h1 id="google-adk">Google ADK<a class="headerlink" href="#google-adk" title="Permanent link">&para;</a></h1>
+<p><code>agent_airlock.integrations.google_adk</code> is the canonical adapter for
+<a href="https://google.github.io/adk-docs/">Google's Agent Development Kit</a>.</p>
+<p>Google renamed Vertex AI to the <strong>Gemini Enterprise Agent Platform</strong> at
+Cloud Next '26 (announced 2026-04-22), folding Agentspace and Agent
+Builder under one umbrella and naming ADK as that platform's code-first
+development kit. ADK is therefore the supported way to write
+tool-calling agents against Gemini in an enterprise account, and until
+v0.9.0 it had no agent-airlock adapter.</p>
+<h2 id="why-an-adapter-not-just-airlock">Why an adapter (not just <code>@Airlock()</code>)<a class="headerlink" href="#why-an-adapter-not-just-airlock" title="Permanent link">&para;</a></h2>
+<p>Because for a large class of ADK tools, <code>@Airlock()</code> on its own does not
+work at all. ADK injects a <code>tool_context</code> argument into any tool that
+asks for one — session state, memory, artifacts all arrive through it.
+Decorate such a tool directly and it fails <strong>at import time</strong>, before any
+call happens:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">google.adk.tools.tool_context</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolContext</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nd">@Airlock</span><span class="p">()</span>                      <span class="c1"># raises here, at decoration</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">remember</span><span class="p">(</span><span class="n">fact</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tool_context</span><span class="p">:</span> <span class="n">ToolContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span> <span class="o">...</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pydantic.errors.PydanticSchemaGenerationError: Unable to generate
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pydantic-core schema for &lt;class 'google.adk.agents.context.Context'&gt;
+</code></pre></div>
+<p><code>Airlock</code> validates through <code>pydantic.validate_call(strict=True)</code>, and
+<code>ToolContext</code> (an alias of <code>google.adk.agents.context.Context</code> in ADK
+2.9.0) is an arbitrary type Pydantic cannot build a schema for.</p>
+<p><code>tool_context</code> is supplied by the ADK runtime, never by the model — ADK
+itself excludes it from the declaration the model sees. So the adapter
+relaxes exactly those runtime-injected parameters for the validator
+(<code>ADK_INJECTED_PARAMS</code>, mirroring ADK's own <code>_ignore_params</code>) and leaves
+every model-supplied parameter under strict validation. The argument
+boundary agent-airlock exists to guard is unchanged; the parameters the
+model cannot reach stop breaking it.</p>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"agent-airlock[google-adk]"</span>
+</code></pre></div>
+<p>The extra pins <code>google-adk&gt;=2.0,&lt;3.0</code>. The adapter was introspected
+against <strong>2.9.0</strong> (published 2026-09-10) — see
+<code>SUPPORTED_GOOGLE_ADK_VERSIONS</code>. A different version emits a
+<code>UserWarning</code> at <code>wrap_agent</code> time and no hard failure.</p>
+<h2 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">google.adk.agents</span><span class="w"> </span><span class="kn">import</span> <span class="n">Agent</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.integrations.google_adk</span><span class="w"> </span><span class="kn">import</span> <span class="n">wrap_agent</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_weather</span><span class="p">(</span><span class="n">city</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="sd">"""Get the weather.</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="sd">    Args:</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="sd">        city: City name.</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="sd">    """</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"city"</span><span class="p">:</span> <span class="n">city</span><span class="p">,</span> <span class="s2">"temp"</span><span class="p">:</span> <span class="mi">22</span><span class="p">}</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_records</span><span class="p">(</span><span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">    </span><span class="sd">"""Delete records.</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="sd">    Args:</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="sd">        table: Table name.</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="sd">    """</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"deleted"</span><span class="p">:</span> <span class="n">table</span><span class="p">}</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="n">agent</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">"ops"</span><span class="p">,</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">"gemini-2.0-flash"</span><span class="p">,</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">get_weather</span><span class="p">,</span> <span class="n">delete_records</span><span class="p">],</span>
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a><span class="p">)</span>
+<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>
+<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a><span class="n">wrap_agent</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">SecurityPolicy</span><span class="p">(</span>
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>    <span class="n">allowed_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"get_weather"</span><span class="p">],</span>
+<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>    <span class="n">denied_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"delete_*"</span><span class="p">],</span>
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="p">))</span>
+</code></pre></div>
+<p>Every tool call now routes through ghost-argument stripping, Pydantic
+strict validation with <code>fix_hints</code> on failure, and the policy. A denied
+tool returns the <code>AirlockResponse</code> blocked dict rather than raising —
+that is the repo-wide contract, so the model gets a structured refusal
+it can act on.</p>
+<p>A full runnable script, which needs no API key and no network, is
+<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/examples/google_adk_integration.py"><code>examples/google_adk_integration.py</code></a>.</p>
+<h2 id="what-the-adapter-does">What the adapter does<a class="headerlink" href="#what-the-adapter-does" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>Walks <code>agent.tools</code>.</strong> In ADK 2.9.0 that is
+   <code>list[Callable | BaseTool | BaseToolset]</code>, and ADK keeps bare
+   callables bare rather than wrapping them into <code>FunctionTool</code> at
+   construction. The adapter handles both.</p>
+</li>
+<li>
+<p><strong>Replaces the callable, keeps the contract.</strong> For a bare callable
+   the list entry is swapped; for a <code>BaseTool</code> carrying <code>.func</code> only
+   <code>.func</code> moves, so the <code>name</code> and <code>description</code> ADK computed at tool
+   construction survive untouched.</p>
+</li>
+<li>
+<p><strong>Relaxes runtime-injected parameters</strong> (<code>tool_context</code>,
+   <code>input_stream</code>) for the validator only. Safe because ADK drops those
+   by <em>name</em>, never building a schema for their type — asserted against
+   real ADK in the test suite, so an ADK that switched to type-based
+   detection would fail the build rather than silently leak
+   <code>tool_context</code> into the model-visible schema.</p>
+</li>
+<li>
+<p><strong>Reports what it could not guard</strong> instead of skipping it silently.</p>
+</li>
+</ol>
+<h2 id="what-is-not-covered">What is <em>not</em> covered<a class="headerlink" href="#what-is-not-covered" title="Permanent link">&para;</a></h2>
+<p>Stated plainly, because a user who believes a tool is guarded when it is
+not is worse off than one who is told.</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Guarded</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bare callable in <code>tools</code></td>
+<td>Yes</td>
+<td>Replaced in the list</td>
+</tr>
+<tr>
+<td><code>FunctionTool</code> / any <code>BaseTool</code> with <code>.func</code></td>
+<td>Yes</td>
+<td><code>.func</code> replaced in place</td>
+</tr>
+<tr>
+<td>Async tools</td>
+<td>Yes</td>
+<td>Wrapped as a coroutine function</td>
+</tr>
+<tr>
+<td><code>BaseToolset</code> (including MCP toolsets)</td>
+<td><strong>No</strong></td>
+<td><code>get_tools</code> is <code>async</code> and rebuilds its list per call, so there is no static callable to rewrite</td>
+</tr>
+<tr>
+<td>Built-ins like <code>GoogleSearchTool</code></td>
+<td><strong>No</strong></td>
+<td>Execute model-side; there is no local callable to guard</td>
+</tr>
+</tbody>
+</table>
+<p>Both unguarded rows raise a <code>UserWarning</code> naming the entry. Pass
+<code>warn_on_unwrappable=False</code> to silence it once you have read it.</p>
+<p>Two further boundaries worth naming:</p>
 <ul>
-<li><strong>Target list:</strong> <code>awesome-llm-security</code> <!-- verify canonical repo URL, e.g. corca-ai/awesome-llm-security --></li>
-<li><strong>Section:</strong> Tools / Defense (or "Frameworks / Guardrails")</li>
-<li><strong>Refresh the test count</strong> to the current README TEST-BADGE at submission time (v0.9.0 = 4,414).</li>
+<li>The adapter guards the <strong>tool-call argument boundary</strong>. It does not
+  intercept ADK's <code>before_tool_callback</code> / <code>after_tool_callback</code>, and it
+  does not inspect model output.</li>
+<li>ADK is not imported at module load, so <code>import agent_airlock</code> stays
+  clean without the extra. Passing a stub agent (any object with a
+  <code>tools</code> list) works with no ADK installed — that is the test seam.
+  Real ADK objects (<code>__module__</code> starting with <code>google.adk</code>) do trigger
+  the import check and raise <code>GoogleADKMissingError</code> with an install
+  hint if the extra is missing.</li>
 </ul>
-<h2 id="entry-list-format">Entry (list format)<a class="headerlink" href="#entry-list-format" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) — in-process least-privilege decorator for AI tool calls; deny-by-default, PII masking, per-CVE presets, 4,414 tests.
-</code></pre></div>
-<h2 id="pr-title">PR title<a class="headerlink" href="#pr-title" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Add agent-airlock (least-privilege tool-call validation for LLM agents)
-</code></pre></div>
-<h2 id="pr-body">PR body<a class="headerlink" href="#pr-body" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>agent-airlock guards the LLM→tool boundary in-process: it strict-validates tool
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>arguments (Pydantic, no coercion), strips hallucinated/ghost arguments, enforces
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>a deny-by-default least-privilege policy, and masks PII/secrets in tool output
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>(13 PII types incl. India DPDP). Opt-in per-CVE and MCP-spec presets. Apache-2.0,
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>Pydantic-only core, 4,414 tests.
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>Repo: https://github.com/sattyamjjain/agent-airlock
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>PyPI: https://pypi.org/project/agent-airlock/
-</code></pre></div>
+<h2 id="verified-against">Verified against<a class="headerlink" href="#verified-against" title="Permanent link">&para;</a></h2>
+<p>Every structural fact above was introspected against <code>google-adk</code>
+2.9.0, not recalled:</p>
+<ul>
+<li><code>LlmAgent.tools</code> is the tool collection, typed
+  <code>list[Callable | BaseTool | BaseToolset]</code></li>
+<li><code>FunctionTool</code> is not a Pydantic model; the user callable is <code>.func</code></li>
+<li><code>FunctionTool._ignore_params == ['tool_context', 'input_stream']</code></li>
+<li><code>BaseToolset.get_tools</code> is <code>async</code></li>
+<li><code>FunctionTool._get_declaration()</code> compares <strong>equal</strong> before and after
+  the wrap</li>
+</ul>
+<p>The last one is the claim that matters to a user, and it is pinned by
+<code>TestAgainstRealAdk</code> in
+<code>tests/integrations/test_google_adk_adapter.py</code>, which runs wherever the
+extra is installed and skips where it is not.</p>
+<h2 id="primary-sources">Primary sources<a class="headerlink" href="#primary-sources" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://google.github.io/adk-docs/">ADK documentation</a></li>
+<li><a href="https://github.com/google/adk-python">google/adk-python</a></li>
+<li><a href="https://pypi.org/project/google-adk/2.9.0/"><code>google-adk</code> 2.9.0 on PyPI</a> — published 2026-09-10, the release this adapter was introspected against</li>
+<li><a href="https://cloud.google.com/products/gemini-enterprise-agent-platform">Gemini Enterprise Agent Platform (formerly Vertex AI)</a> — announced at Google Cloud Next '26, 2026-04-22</li>
+</ul>
 
 
 
