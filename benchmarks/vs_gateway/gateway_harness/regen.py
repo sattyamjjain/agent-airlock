@@ -21,6 +21,7 @@ import datetime
 import json
 import os
 import select
+import shutil
 import subprocess
 import threading
 import time
@@ -31,6 +32,31 @@ from benchmarks.vs_gateway.corpus import load_corpus
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATALOG = os.path.join(HERE, "airlock-bench-catalog.yaml")
 FIXTURE = os.path.join(os.path.dirname(HERE), "gateway_measurement.json")
+
+#: Where `docker mcp gateway run --catalog` will look. As of the Docker MCP
+#: plugin v0.43.x the flag is documented "Catalog paths must resolve under
+#: ~/.docker/mcp/catalogs/", and an absolute path elsewhere is accepted at the
+#: CLI but resolves to nothing — the gateway starts, enables no server and
+#: reports `0 tools listed`.
+#:
+#: That is what broke the 2026-09-08 re-run, and it was misdiagnosed at the time
+#: as the `version: 3` catalog schema having gone legacy. The schema is fine:
+#: staging this exact file under the expected directory and passing its bare
+#: name lists all 10 tools on v0.43.3.
+CATALOG_STAGE_DIR = os.path.expanduser("~/.docker/mcp/catalogs")
+CATALOG_BASENAME = "airlock-bench-catalog.yaml"
+
+
+def _stage_catalog() -> str:
+    """Copy the repo catalog where the plugin expects it. Returns the bare name.
+
+    Staged on every run rather than assumed present, so the harness is
+    reproducible on a fresh machine and cannot silently measure a stale copy
+    someone left behind.
+    """
+    os.makedirs(CATALOG_STAGE_DIR, exist_ok=True)
+    shutil.copyfile(CATALOG, os.path.join(CATALOG_STAGE_DIR, CATALOG_BASENAME))
+    return CATALOG_BASENAME
 
 
 class GatewayClient:
@@ -125,13 +151,14 @@ def _version(cmd: list[str]) -> str:
 
 
 def main() -> int:
+    catalog_ref = _stage_catalog()
     cmd = [
         "docker",
         "mcp",
         "gateway",
         "run",
         "--catalog",
-        CATALOG,
+        catalog_ref,
         "--servers",
         "echo",
         "--transport",

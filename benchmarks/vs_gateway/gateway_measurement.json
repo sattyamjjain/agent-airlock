@@ -1,11 +1,11 @@
 {
   "_comment": "RECORDED live measurement of a native Docker MCP Gateway against the vs_gateway corpus. Regenerate with benchmarks/vs_gateway/gateway_harness/regen.py (needs Docker). The shipped bench replays this fixture so it runs without Docker.",
   "provenance": {
-    "measured_utc_date": "2026-08-17",
+    "measured_utc_date": "2026-09-12",
     "gateway_product": "Docker AI MCP Gateway",
     "gateway_image_version": "2.0.1",
-    "docker_mcp_cli_version": "v0.42.1",
-    "docker_engine_version": "29.4.3",
+    "docker_mcp_cli_version": "v0.43.3",
+    "docker_engine_version": "29.7.2",
     "mcp_protocol_version": "2025-06-18",
     "transport": "stdio",
     "method": "Each corpus item sent as a real MCP tools/call through the running gateway to an echo-oracle backend that performs NO validation. PASS = backend echoed the args (gateway forwarded); BLOCK = gateway returned a JSON-RPC error before the backend saw the call.",

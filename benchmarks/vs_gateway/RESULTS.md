@@ -46,6 +46,51 @@ Both layers are correct on the 3 benign controls (0 false positives) — the
 gateway is not "blocking nothing because it's broken"; it forwards *everything*,
 malformed or not, because payload-contract validation is not its job.
 
+## 2026-09-12 — re-measured successfully. The 2026-09-08 diagnosis was wrong.
+
+**Result: unchanged.** Gateway 0/12 malformed payloads blocked, airlock 12/12, 0/3
+benign false positives on both — identical to 2026-08-17, now on a newer CLI.
+
+| | 2026-08-17 | 2026-09-12 |
+|---|---|---|
+| `docker mcp` CLI | v0.42.1 | **v0.43.3** |
+| Docker engine | 29.4.3 | **29.7.2** |
+| Gateway image | 2.0.1 | 2.0.1 |
+| gateway blocked | 0/12 | **0/12** |
+| airlock blocked | 12/12 | **12/12** |
+
+The only diff in `gateway_measurement.json` is the date and the two version strings.
+All 15 corpus records still read `PASS`.
+
+### What actually broke on 2026-09-08, since the entry below gets it wrong
+
+Not a schema migration. The `version: 3` catalog is fine and loads on v0.43.3.
+
+`docker mcp gateway run --catalog` documents its argument as *"Catalog paths must
+resolve under `~/.docker/mcp/catalogs/`"*. The harness passed an **absolute path into
+the repo**. Older plugin versions accepted that; v0.43.x resolves it to nothing, and
+the failure is silent in the worst way — the gateway starts, reports
+`Those servers are enabled: echo`, and then lists `0 tools`. It looks like a catalog
+the gateway read and found empty, which is what led to "the v3 schema is legacy".
+
+Staging that same unmodified file under `~/.docker/mcp/catalogs/` and passing its bare
+name lists all ten tools:
+
+```
+- Reading catalog from [airlock-bench-catalog.yaml]
+- Those servers are enabled: echo
+  > echo: (10 tools)
+> 10 tools listed in 339.441333ms
+```
+
+`regen.py` now stages the catalog itself on every run, so the harness is reproducible
+on a fresh machine and cannot silently measure a stale copy someone left behind.
+
+The lesson worth keeping: **a plugin flag quietly narrowed what it accepts, and the
+failure mode was an empty result rather than an error.** An empty result reads as a
+finding. The 2026-09-08 entry was right to refuse to re-date the row on it, and wrong
+about why it happened — both are left standing below rather than edited away.
+
 ## 2026-09-08 — attempted re-run, FAILED to measure. Nothing here was updated.
 
 Recorded because a benchmark that silently stops being re-runnable is how a stale
@@ -83,6 +128,12 @@ the `airlock-bench/echo-mcp:latest` oracle image all built and ran fine.
   refresh, and it may well return a different number — which would be the finding.
   The 2026-08-17 entry below already warned that the `v2` tag had been rebuilt after
   the image it measured.
+
+  **Resolved 2026-09-12 — and the diagnosis above is wrong.** No schema migration was
+  needed. `--catalog` on v0.43.x only resolves paths under `~/.docker/mcp/catalogs/`,
+  and an absolute repo path silently yields zero tools instead of an error. See the
+  2026-09-12 entry above. The row was re-measured, not re-dated, and the number did
+  not change.
 
 ## Per-payload
 
