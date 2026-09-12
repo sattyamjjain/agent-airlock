@@ -1529,6 +1529,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-19753" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-19753
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-21520" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1799,10 +1810,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-75062" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-75062
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-75130" class="md-nav__link">
     <span class="md-ellipsis">
       
         CVE-2026-75130
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-78575" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-78575
       
     </span>
   </a>
@@ -2313,6 +2346,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-19753" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-19753
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-21520" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2583,10 +2627,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-75062" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-75062
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-75130" class="md-nav__link">
     <span class="md-ellipsis">
       
         CVE-2026-75130
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-78575" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-78575
       
     </span>
   </a>
@@ -2704,6 +2770,12 @@ catalog and the tests stay in lockstep.</p>
 <td><a href="#cve-2026-19591">CVE-2026-19591</a></td>
 <td>Codex command-safety parser disagreed with PowerShell about <code>--%</code></td>
 <td>8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150</td>
+<td>Strong</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-19753">CVE-2026-19753</a></td>
+<td>mcp-rdf-explorer explore_url takes an attacker-supplied URL into SSRF</td>
+<td>7.3 (HIGH) — CWE-918</td>
 <td>Strong</td>
 </tr>
 <tr>
@@ -2845,10 +2917,22 @@ catalog and the tests stay in lockstep.</p>
 <td>—</td>
 </tr>
 <tr>
+<td><a href="#cve-2026-75062">CVE-2026-75062</a></td>
+<td>Google langfun lf.query evaluates model-generated Python unsandboxed</td>
+<td>9.2 (CRITICAL) — CWE-95, CWE-1188</td>
+<td>Partial</td>
+</tr>
+<tr>
 <td><a href="#cve-2026-75130">CVE-2026-75130</a></td>
 <td>Upstash Context7 "ContextCrush" MCP instruction injection</td>
 <td>9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0)</td>
 <td>Strongest</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-78575">CVE-2026-78575</a></td>
+<td>IBM Langflow MCP stdio server config takes unvalidated command-line arguments</td>
+<td>8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78</td>
+<td>Partial</td>
 </tr>
 <tr>
 <td><a href="#cve-2026-79748">CVE-2026-79748</a></td>
@@ -3053,6 +3137,26 @@ same class of argv at the tool-call boundary, so an agent routed
 through airlock does not inherit its own parser's disagreement with the
 shell.</p>
 <p><a id="cve-2026-19591"></a></p>
+<h3 id="cve-2026-19753">CVE-2026-19753<a class="headerlink" href="#cve-2026-19753" title="Permanent link">&para;</a></h3>
+<p><strong>mcp-rdf-explorer explore_url takes an attacker-supplied URL into SSRF</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 7.3 (HIGH) — CWE-918</li>
+<li><strong>Airlock fit:</strong> strong</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-19753">https://nvd.nist.gov/vuln/detail/CVE-2026-19753</a></li>
+<li><strong>Advisory:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-19753">https://nvd.nist.gov/vuln/detail/CVE-2026-19753</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_19753_rdf_explorer_ssrf.py"><code>tests/cves/test_cve_2026_19753_rdf_explorer_ssrf.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>"A vulnerability was detected in Model Context Protocol mcp-rdf-explorer
+1.0.0. Affected is the function <code>explore_url</code> of the file <code>src/index.ts</code>.
+Executing manipulation of the argument <code>url</code> can lead to server-side
+request forgery."</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>The defect is carried in a tool argument the caller supplies, named in the
+advisory, reaching an outbound fetch. That is the seam <code>SSRFEgressGuard</code>
+sits on, and the guard refuses cloud metadata, loopback, link-local and
+IPv4-mapped-IPv6 targets while admitting a real SPARQL endpoint.</p>
+<p><a id="cve-2026-19753"></a></p>
 <h3 id="cve-2026-21520">CVE-2026-21520<a class="headerlink" href="#cve-2026-21520" title="Permanent link">&para;</a></h3>
 <p><strong>Capsule ShareLeak / PipeLeak</strong></p>
 <ul>
@@ -3468,6 +3572,37 @@ an alias / wrapper binary / shell, to a denied executable.</p>
 Vendor unresponsive; project does not version. Preset matches by
 tool-name regex only.</p>
 <p><a id="cve-2026-6980"></a></p>
+<h3 id="cve-2026-75062">CVE-2026-75062<a class="headerlink" href="#cve-2026-75062" title="Permanent link">&para;</a></h3>
+<p><strong>Google langfun lf.query evaluates model-generated Python unsandboxed</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 9.2 (CRITICAL) — CWE-95, CWE-1188</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-75062">https://nvd.nist.gov/vuln/detail/CVE-2026-75062</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/google/langfun/issues/725">https://github.com/google/langfun/issues/725</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_75062_langfun_eval.py"><code>tests/cves/test_cve_2026_75062_langfun_eval.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>"Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval
+Injection') in the default <code>lf.query</code> Python protocol in Google langfun
+versions prior to 0.1.2 allows remote unauthenticated attackers to execute
+arbitrary Python code in the context of the host application via crafted
+prompt inputs that cause the model to generate executable Python expressions
+evaluated without a sandbox."</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>This is the exploitation class <code>EvalRCEGuard</code>'s own docstring names — "a
+model-derived string reaches a Python runtime evaluator" — and the guard
+refuses the disclosed payload shapes while admitting the arithmetic the
+protocol exists to evaluate.</p>
+<p>It is <code>partial</code> for a reason worth stating rather than burying. The defect
+is that langfun calls an evaluator on model output <strong>at all</strong>; the sandbox is
+missing inside langfun, not at a tool-call boundary. agent-airlock only sees
+this if the generated expression passes through an airlocked tool argument.
+Where it does, the guard refuses it. Where langfun evaluates internally,
+nothing in this library is on the path, and no arrangement of presets changes
+that — upgrade to langfun 0.1.2.</p>
+<p>So this fixture pins the primitive, not the patch: <strong>if a model-generated
+expression carrying an eval sink reaches a guarded argument, it is refused.</strong></p>
+<p><a id="cve-2026-75062"></a></p>
 <h3 id="cve-2026-75130">CVE-2026-75130<a class="headerlink" href="#cve-2026-75130" title="Permanent link">&para;</a></h3>
 <p><strong>Upstash Context7 "ContextCrush" MCP instruction injection</strong></p>
 <ul>
@@ -3513,6 +3648,54 @@ nobody requested. A transport or identity layer sees three authorised
 calls and has nothing to object to. That is an argument-level failure,
 which is the seam this library exists to cover.</p>
 <p><a id="cve-2026-75130"></a></p>
+<h3 id="cve-2026-78575">CVE-2026-78575<a class="headerlink" href="#cve-2026-78575" title="Permanent link">&para;</a></h3>
+<p><strong>IBM Langflow MCP stdio server config takes unvalidated command-line arguments</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-78575">https://nvd.nist.gov/vuln/detail/CVE-2026-78575</a></li>
+<li><strong>Advisory:</strong> <a href="https://www.ibm.com/support/pages/node/7286666">https://www.ibm.com/support/pages/node/7286666</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_78575_langflow_mcp_stdio.py"><code>tests/cves/test_cve_2026_78575_langflow_mcp_stdio.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>IBM Langflow OSS 1.0.0 through 1.11.5 "could allow a remote authenticated
+attacker to execute arbitrary commands due to improper validation of
+command-line arguments in the MCP stdio server configuration."</p>
+<p>Its sibling <strong>CVE-2026-81941</strong> (same bulletin, CWE-284, also CVSS 8.8) is the
+authorization half: an authenticated <em>non-administrative</em> user can build a
+flow whose MCP Tools component uses the local stdio subprocess transport,
+bypassing both <code>LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY</code> and
+<code>LANGFLOW_BLOCK_CODE_INTERPRETER_COMPONENTS</code> — the two server-side controls
+meant to prevent exactly this.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>Same split as CVE-2026-79748 (MCPHub). Nothing here can restore Langflow's
+admin-only flag — that is CVE-2026-81941's half, it lives in Langflow's
+authorization layer, and this fixture does not pretend to reach it.</p>
+<p>What <em>is</em> reachable is the primitive the missing check hands over: an
+attacker-controlled stdio <code>command</code> / <code>args</code> pair heading for a
+subprocess spawn. That is the shape agent-airlock already refuses for
+CVE-2026-40933 (Flowise) and CVE-2026-42271 (LiteLLM).</p>
+<p>The reason this file exists rather than being folded into those: <strong>neither
+stdio guard covers this CVE on its own, and they fail in opposite
+directions.</strong> Measured, not assumed:</p>
+<p>============================  ======================  ======================
+payload                       metachar guard          allowlist guard
+============================  ======================  ======================
+<code>uvx ... "x.json; rm -rf /"</code>  <strong>blocks</strong>              allows (cmd allowlisted)
+<code>/bin/bash -c id</code>            allows (no metachar)    <strong>blocks</strong>
+<code>python -c "__import__..."</code>  allows (no metachar)    <strong>blocks</strong>
+============================  ======================  ======================</p>
+<p><code>StdioCommandInjectionGuard</code> is a shell-metacharacter detector, so an
+interpreter flag carries a payload straight past it — and that is precisely
+the shape Langflow's bulletin describes. <code>McpSubprocessArgInjectionGuard</code>
+allowlists the <em>command</em>, so once a launcher is allowlisted a metacharacter
+riding in its arguments goes through.</p>
+<p>Run together they cover every disclosed shape and still admit the legitimate
+component, which <code>test_running_both_guards_covers_every_disclosed_shape</code>
+asserts end to end. That is a composition requirement rather than a bug in
+either guard, and it is pinned here so the pairing cannot be dropped from a
+preset on the belief that one is redundant.</p>
+<p><a id="cve-2026-78575"></a></p>
 <h3 id="cve-2026-79748">CVE-2026-79748<a class="headerlink" href="#cve-2026-79748" title="Permanent link">&para;</a></h3>
 <p><strong>MCPHub server-config endpoints spawn attacker-supplied stdio commands</strong></p>
 <ul>
