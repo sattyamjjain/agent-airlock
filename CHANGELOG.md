@@ -11,6 +11,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.3] - 2026-09-12
+
+### Fixed
+
+- **The vs_gateway benchmark was about to go stale on a misdiagnosis.** The 2026-09-08
+  re-run attempt failed, was honestly recorded as a failure, and concluded that the
+  harness's `version: 3` catalog had gone legacy in `docker mcp` v0.43.x — a schema
+  migration on Docker's side. The row was left un-dated and was due to trip
+  `check_benchmark_freshness --release` on **2026-09-16**.
+
+  That diagnosis was wrong. The schema is fine. `docker mcp gateway run --catalog`
+  documents its argument as *"Catalog paths must resolve under
+  `~/.docker/mcp/catalogs/`"*, and the harness passed an **absolute path into the
+  repo**. Older plugin versions accepted it; v0.43.x resolves it to nothing — and does
+  so silently, reporting `Those servers are enabled: echo` and then `0 tools listed`.
+  An empty result reads like a finding, which is how it got read.
+
+  Staging that same unmodified catalog under the expected directory lists all ten
+  tools. `regen.py` now stages it on every run, so the harness is reproducible on a
+  fresh machine and cannot silently measure a stale copy someone left behind.
+
+  **Re-measured, not re-dated. The number did not move:**
+
+  | | 2026-08-17 | 2026-09-12 |
+  |---|---|---|
+  | `docker mcp` CLI | v0.42.1 | **v0.43.3** |
+  | Docker engine | 29.4.3 | **29.7.2** |
+  | gateway blocked | 0/12 | **0/12** |
+  | airlock blocked | 12/12 | **12/12** |
+  | benign false positives | 0/3 both | **0/3 both** |
+
+  The only diff in `gateway_measurement.json` is the date and the two version strings;
+  all 15 corpus records still read `PASS`. Both the failed 2026-09-08 entry and its
+  wrong diagnosis are left standing in `RESULTS.md` with the correction beside them,
+  rather than edited away.
+
+- **Two claim gates that no workflow ran are now wired into CI.**
+
+  `check_benchmark_freshness.py`'s **default** mode — the structural one, whose own
+  docstring calls it "safe to run on every commit" — had never been run by anything;
+  only `--release` was wired, and only on a published GitHub Release. A benchmark row
+  that quietly lost its date marker would have gone unnoticed for exactly the window
+  in which an edit could introduce it. `--release` stays release-only, because a row
+  legitimately ages between releases.
+
+  `check_changelog.py`'s default mode — a released version must not still have entries
+  stranded under `[Unreleased]` — existed only as a Makefile target, i.e. it depended
+  on a human remembering. Its `--release` mode stays unwired on purpose: it requires
+  `[Unreleased]` to be non-empty and is red by design outside a release window.
+
 ## [0.10.2] - 2026-09-12
 
 ### Fixed

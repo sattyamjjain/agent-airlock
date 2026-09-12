@@ -288,3 +288,25 @@ jobs:
       # been caught. Now the claim is true.
       - name: CVE catalog matches the regression suite
         run: python3 scripts/gen_cve_catalog.py --check
+
+      # Structural benchmark-freshness gate. Its own docstring says it is "safe to
+      # run on every commit", and until v0.10.3 nothing ran it: only the --release
+      # variant was wired, and only on a published GitHub Release. So a benchmark
+      # row that quietly lost its date marker entirely would go unnoticed between
+      # releases — exactly the window in which an edit would introduce it.
+      #
+      # This is the DEFAULT mode, which checks every row carries a marker. It does
+      # NOT check age; --release does that, stays in publish.yml, and is the one
+      # that must not run here (a row legitimately ages between releases).
+      - name: Every benchmark row must carry a freshness marker
+        run: python3 scripts/check_benchmark_freshness.py
+
+      # Post-release CHANGELOG drift: a released version must not still have
+      # entries sitting under [Unreleased]. Also previously unwired — it existed
+      # only as `make check-changelog`, i.e. it depended on a human remembering.
+      #
+      # Note this is the default mode, not --release. The --release mode requires
+      # [Unreleased] to be NON-empty and is therefore red by design outside a
+      # release window; wiring that one here would fail every ordinary PR.
+      - name: CHANGELOG must not strand entries under [Unreleased]
+        run: python3 scripts/check_changelog.py
