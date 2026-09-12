@@ -132,3 +132,64 @@ class TestParserRejectsBadYAML:
         with pytest.raises(PolicyCompileError, match="policy_id"):
             c2.compile("anything")
         _REGISTRY.pop("broken", None)
+
+
+class TestTheStubBackendAnnouncesItself:
+    """`airlock policy compile` must not pass off a keyword match as a compilation.
+
+    The CLI defaults to ``--backend stub``, which is a keyword matcher over a
+    handful of fixed phrases, not a model. Anything it does not recognise falls
+    through to a catch-all rule whose body is unrelated to the request:
+
+        $ airlock policy compile "block any tool that deletes records"
+        rules:
+          - rule_id: catch_all
+            condition: missing_auth_header     # <- nothing to do with deletes
+            action: warn
+
+    That output is valid YAML and looks authoritative, so printing it with no
+    provenance invites a user to deploy a policy that does not say what they
+    asked for. The notice goes to **stderr** so redirecting stdout to a file
+    still produces a clean policy.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _use_the_real_cli_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`_REGISTRY` is module-global, so a sibling test's stub can win.
+
+        ``_ensure_default_backend`` only fills an empty ``"stub"`` slot, so a
+        test that registered its own backend earlier in the session silently
+        changes what the CLI does here. Clearing the slot makes this class
+        exercise the shipped default regardless of test order.
+        """
+        from agent_airlock.policy_compiler.compiler import _REGISTRY
+
+        monkeypatch.delitem(_REGISTRY, "stub", raising=False)
+
+    def _run(self, text: str, capsys: pytest.CaptureFixture[str]) -> tuple[str, str]:
+        from agent_airlock.cli.policy import main
+
+        assert main(["compile", text]) == 0
+        captured = capsys.readouterr()
+        return captured.out, captured.err
+
+    def test_unmatched_text_warns_that_it_is_a_placeholder(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out, err = self._run("block any tool that deletes records", capsys)
+        assert "rule_id: catch_all" in out
+        assert "NOT a translation" in err
+        assert "register_llm_backend" in err
+
+    def test_matched_text_still_names_the_matcher(self, capsys: pytest.CaptureFixture[str]) -> None:
+        out, err = self._run("block any MCP server bound to 0.0.0.0 without auth", capsys)
+        assert "refuse_public_bind" in out
+        assert "keyword matcher" in err
+        assert "NOT a translation" not in err, "a real match must not raise the loud warning"
+
+    def test_the_notice_never_contaminates_stdout(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """`compile ... > policy.yaml` has to yield a loadable file."""
+        out, _ = self._run("block any tool that deletes records", capsys)
+        assert "warning:" not in out
+        assert "note:" not in out
+        assert out.startswith("policy_id:")

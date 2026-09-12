@@ -57,11 +57,43 @@ def _ensure_default_backend() -> None:
         register_llm_backend("stub", _stub_backend)
 
 
+#: Emitted by :func:`_stub_backend` when no keyword matched. Its presence in the
+#: output means the English was not translated at all.
+_CATCH_ALL_MARKER = "rule_id: catch_all"
+
+
 def _cmd_compile(args: argparse.Namespace) -> int:
     _ensure_default_backend()
     compiler = PolicyCompiler(backend=args.backend)
     compiled = compiler.compile(args.text)
     print(compiled.yaml, end="")
+
+    # Say what produced this. The default backend is a keyword matcher, not a
+    # model: it recognises a handful of phrases and otherwise emits a catch-all
+    # rule whose body has nothing to do with the request. Printing valid-looking
+    # YAML with no provenance invites a user to trust a policy that does not say
+    # what they asked for — `compile "block any tool that deletes records"`
+    # returns a rule about `missing_auth_header`.
+    #
+    # Notices go to stderr so `airlock policy compile ... > policy.yaml` still
+    # produces a clean file.
+    if args.backend == "stub":
+        if _CATCH_ALL_MARKER in compiled.yaml:
+            print(
+                "warning: no LLM backend is registered, so this was produced by the "
+                "built-in keyword matcher — and none of its keywords matched your text. "
+                "The rule above is a placeholder, NOT a translation of what you asked "
+                "for. Register a real backend with register_llm_backend() before "
+                "relying on this output.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "note: produced by the built-in keyword matcher, not a model. It "
+                "recognises a small fixed set of phrases; register a real backend with "
+                "register_llm_backend() for general English.",
+                file=sys.stderr,
+            )
     return 0
 
 
