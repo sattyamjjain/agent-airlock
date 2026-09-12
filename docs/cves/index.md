@@ -37,6 +37,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
+| [CVE-2026-19753](#cve-2026-19753) | mcp-rdf-explorer explore_url takes an attacker-supplied URL into SSRF | 7.3 (HIGH) — CWE-918 | Strong |
 | [CVE-2026-21520](#cve-2026-21520) | Capsule ShareLeak / PipeLeak | — | — |
 | [CVE-2026-23744](#cve-2026-23744) | MCPJam Inspector unauthenticated public bind | 9.8 | — |
 | [CVE-2026-25874](#cve-2026-25874) | HuggingFace LeRobot pickle-deserialization RCE | 9.3 | — |
@@ -60,7 +61,9 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-5023](#cve-2026-5023) | codebase-mcp RepoMix OS command injection | — | — |
 | [CVE-2026-53820](#cve-2026-53820) | OpenClaw exec-denylist bypass at MCP loopback spawn | 6.9 | — |
 | [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
+| [CVE-2026-75062](#cve-2026-75062) | Google langfun lf.query evaluates model-generated Python unsandboxed | 9.2 (CRITICAL) — CWE-95, CWE-1188 | Partial |
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
+| [CVE-2026-78575](#cve-2026-78575) | IBM Langflow MCP stdio server config takes unvalidated command-line arguments | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Partial |
 | [CVE-2026-79748](#cve-2026-79748) | MCPHub server-config endpoints spawn attacker-supplied stdio commands | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862 | Partial |
 
 ## Details
@@ -302,6 +305,32 @@ through airlock does not inherit its own parser's disagreement with the
 shell.
 
 <a id="cve-2026-19591"></a>
+
+### CVE-2026-19753
+
+**mcp-rdf-explorer explore_url takes an attacker-supplied URL into SSRF**
+
+- **CVSS:** 7.3 (HIGH) — CWE-918
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-19753](https://nvd.nist.gov/vuln/detail/CVE-2026-19753)
+- **Advisory:** [https://nvd.nist.gov/vuln/detail/CVE-2026-19753](https://nvd.nist.gov/vuln/detail/CVE-2026-19753)
+- **Regression test:** [`tests/cves/test_cve_2026_19753_rdf_explorer_ssrf.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_19753_rdf_explorer_ssrf.py)
+
+**Vulnerability**
+
+"A vulnerability was detected in Model Context Protocol mcp-rdf-explorer
+1.0.0. Affected is the function ``explore_url`` of the file ``src/index.ts``.
+Executing manipulation of the argument ``url`` can lead to server-side
+request forgery."
+
+**Airlock mitigation**
+
+The defect is carried in a tool argument the caller supplies, named in the
+advisory, reaching an outbound fetch. That is the seam ``SSRFEgressGuard``
+sits on, and the guard refuses cloud metadata, loopback, link-local and
+IPv4-mapped-IPv6 targets while admitting a real SPARQL endpoint.
+
+<a id="cve-2026-19753"></a>
 
 ### CVE-2026-21520
 
@@ -825,6 +854,45 @@ tool-name regex only.
 
 <a id="cve-2026-6980"></a>
 
+### CVE-2026-75062
+
+**Google langfun lf.query evaluates model-generated Python unsandboxed**
+
+- **CVSS:** 9.2 (CRITICAL) — CWE-95, CWE-1188
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-75062](https://nvd.nist.gov/vuln/detail/CVE-2026-75062)
+- **Advisory:** [https://github.com/google/langfun/issues/725](https://github.com/google/langfun/issues/725)
+- **Regression test:** [`tests/cves/test_cve_2026_75062_langfun_eval.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_75062_langfun_eval.py)
+
+**Vulnerability**
+
+"Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval
+Injection') in the default ``lf.query`` Python protocol in Google langfun
+versions prior to 0.1.2 allows remote unauthenticated attackers to execute
+arbitrary Python code in the context of the host application via crafted
+prompt inputs that cause the model to generate executable Python expressions
+evaluated without a sandbox."
+
+**Airlock mitigation**
+
+This is the exploitation class ``EvalRCEGuard``'s own docstring names — "a
+model-derived string reaches a Python runtime evaluator" — and the guard
+refuses the disclosed payload shapes while admitting the arithmetic the
+protocol exists to evaluate.
+
+It is ``partial`` for a reason worth stating rather than burying. The defect
+is that langfun calls an evaluator on model output **at all**; the sandbox is
+missing inside langfun, not at a tool-call boundary. agent-airlock only sees
+this if the generated expression passes through an airlocked tool argument.
+Where it does, the guard refuses it. Where langfun evaluates internally,
+nothing in this library is on the path, and no arrangement of presets changes
+that — upgrade to langfun 0.1.2.
+
+So this fixture pins the primitive, not the patch: **if a model-generated
+expression carrying an eval sink reaches a guarded argument, it is refused.**
+
+<a id="cve-2026-75062"></a>
+
 ### CVE-2026-75130
 
 **Upstash Context7 "ContextCrush" MCP instruction injection**
@@ -877,6 +945,66 @@ calls and has nothing to object to. That is an argument-level failure,
 which is the seam this library exists to cover.
 
 <a id="cve-2026-75130"></a>
+
+### CVE-2026-78575
+
+**IBM Langflow MCP stdio server config takes unvalidated command-line arguments**
+
+- **CVSS:** 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-78575](https://nvd.nist.gov/vuln/detail/CVE-2026-78575)
+- **Advisory:** [https://www.ibm.com/support/pages/node/7286666](https://www.ibm.com/support/pages/node/7286666)
+- **Regression test:** [`tests/cves/test_cve_2026_78575_langflow_mcp_stdio.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_78575_langflow_mcp_stdio.py)
+
+**Vulnerability**
+
+IBM Langflow OSS 1.0.0 through 1.11.5 "could allow a remote authenticated
+attacker to execute arbitrary commands due to improper validation of
+command-line arguments in the MCP stdio server configuration."
+
+Its sibling **CVE-2026-81941** (same bulletin, CWE-284, also CVSS 8.8) is the
+authorization half: an authenticated *non-administrative* user can build a
+flow whose MCP Tools component uses the local stdio subprocess transport,
+bypassing both ``LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY`` and
+``LANGFLOW_BLOCK_CODE_INTERPRETER_COMPONENTS`` — the two server-side controls
+meant to prevent exactly this.
+
+**Airlock mitigation**
+
+Same split as CVE-2026-79748 (MCPHub). Nothing here can restore Langflow's
+admin-only flag — that is CVE-2026-81941's half, it lives in Langflow's
+authorization layer, and this fixture does not pretend to reach it.
+
+What *is* reachable is the primitive the missing check hands over: an
+attacker-controlled stdio ``command`` / ``args`` pair heading for a
+subprocess spawn. That is the shape agent-airlock already refuses for
+CVE-2026-40933 (Flowise) and CVE-2026-42271 (LiteLLM).
+
+The reason this file exists rather than being folded into those: **neither
+stdio guard covers this CVE on its own, and they fail in opposite
+directions.** Measured, not assumed:
+
+============================  ======================  ======================
+payload                       metachar guard          allowlist guard
+============================  ======================  ======================
+``uvx ... "x.json; rm -rf /"``  **blocks**              allows (cmd allowlisted)
+``/bin/bash -c id``            allows (no metachar)    **blocks**
+``python -c "__import__..."``  allows (no metachar)    **blocks**
+============================  ======================  ======================
+
+``StdioCommandInjectionGuard`` is a shell-metacharacter detector, so an
+interpreter flag carries a payload straight past it — and that is precisely
+the shape Langflow's bulletin describes. ``McpSubprocessArgInjectionGuard``
+allowlists the *command*, so once a launcher is allowlisted a metacharacter
+riding in its arguments goes through.
+
+Run together they cover every disclosed shape and still admit the legitimate
+component, which ``test_running_both_guards_covers_every_disclosed_shape``
+asserts end to end. That is a composition requirement rather than a bug in
+either guard, and it is pinned here so the pairing cannot be dropped from a
+preset on the belief that one is redundant.
+
+<a id="cve-2026-78575"></a>
 
 ### CVE-2026-79748
 

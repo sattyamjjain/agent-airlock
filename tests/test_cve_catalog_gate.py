@@ -157,7 +157,7 @@ class TestNothingIsInvented:
 
 
 class TestThePublishedSplitIsAccurate:
-    """40 modules, 33 CVE-numbered. Both numbers must appear, and both must be true."""
+    """43 modules, 36 CVE-numbered. Both numbers must appear, and both must be true."""
 
     @staticmethod
     def _module_counts() -> tuple[int, int]:
@@ -167,8 +167,8 @@ class TestThePublishedSplitIsAccurate:
 
     def test_the_two_counts_are_what_the_tree_holds(self) -> None:
         total, cve_numbered = self._module_counts()
-        assert total == 40
-        assert cve_numbered == 33
+        assert total == 43
+        assert cve_numbered == 36
 
     def test_the_marketplace_states_both_numbers(self) -> None:
         text = (_ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
