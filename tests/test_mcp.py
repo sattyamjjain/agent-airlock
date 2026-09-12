@@ -216,10 +216,6 @@ class TestCreateSecureMCPServer:
             create_secure_mcp_server("test")
 
 
-@pytest.mark.skipif(
-    not _check_fastmcp_available(),
-    reason="FastMCP not installed",
-)
 def _registered_tool_names(mcp: object) -> set[str]:
     """Tool names registered with a FastMCP server, across 2.x and 4.x.
 
@@ -250,6 +246,10 @@ def _registered_tool_names(mcp: object) -> set[str]:
     )
 
 
+@pytest.mark.skipif(
+    not _check_fastmcp_available(),
+    reason="FastMCP not installed",
+)
 class TestWithFastMCP:
     """Tests that require FastMCP to be installed."""
 
