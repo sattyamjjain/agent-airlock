@@ -11,6 +11,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.9.0] - 2026-09-12
+
+### Added
+
+- **Google ADK adapter — `integrations/google_adk.py`.** Google renamed Vertex AI to the
+  Gemini Enterprise Agent Platform at Cloud Next '26 (announced 2026-04-22) and named ADK
+  as that platform's code-first development kit. ADK had no agent-airlock adapter until
+  now: `grep -rniI -E "google[-_ ]?adk|agent[-_ ]development[-_ ]kit"` over the tree
+  returned nothing.
+
+  `wrap_agent(agent, policy)` walks `agent.tools` and replaces each tool callable with the
+  `@Airlock()`-decorated version. The tool contract the model sees is unchanged —
+  `FunctionTool._get_declaration()` compares **equal** before and after the wrap, so name,
+  description and `parameters_json_schema` all survive.
+
+  The minor bump is because this is new public surface: `GoogleADKAdapter` and
+  `GoogleADKMissingError` are now exported from the top-level namespace, and
+  `[google-adk]` is a new extra pinning `google-adk>=2.0,<3.0`.
+
+- **The reason it is an adapter and not a documentation page.** ADK injects a
+  `tool_context` argument into any tool that asks for one. A bare `@Airlock()` on such a
+  tool fails **at decoration time**, before any call happens:
+
+  ```
+  pydantic.errors.PydanticSchemaGenerationError: Unable to generate pydantic-core
+  schema for <class 'google.adk.agents.context.Context'>
+  ```
+
+  `Airlock` validates through `pydantic.validate_call(strict=True)`, and `ToolContext` is
+  an arbitrary type with no Pydantic schema. Since ADK supplies that argument and the model
+  never does, the adapter relaxes exactly those runtime-injected parameters
+  (`ADK_INJECTED_PARAMS`, mirroring ADK's own `FunctionTool._ignore_params`) and leaves
+  every model-supplied parameter under strict validation. A negative-control test asserts
+  the bare decorator still fails, so if `Airlock` ever grows arbitrary-type tolerance the
+  suite says so rather than quietly carrying a redundant shim.
+
+  Relaxing the annotation is safe because ADK drops those parameters by **name**, never
+  building a schema for their type. That is asserted against real ADK rather than assumed.
+
+- **What the adapter does not guard, reported rather than skipped.** `BaseToolset`
+  (including MCP toolsets) rebuilds its tools per call through an `async get_tools`, so
+  there is no static callable to rewrite; ADK built-ins such as `GoogleSearchTool` execute
+  model-side and have no local callable at all. Both raise a `UserWarning` naming the
+  entry. Silence is the wrong default for a deny-by-default layer: a user who believes a
+  toolset is guarded when it is not is worse off than one who is told.
+
+### Verified against
+
+- **`google-adk` 2.9.0**, published 2026-09-10 — the release every structural fact in the
+  module was introspected against, not recalled: `LlmAgent.tools` as the tool collection
+  (`list[Callable | BaseTool | BaseToolset]`, with bare callables kept bare),
+  `FunctionTool.func` as the user callable, `BaseToolset.get_tools` being async, and
+  `_ignore_params == ['tool_context', 'input_stream']`.
+
+  A user on a different ADK version gets a `UserWarning` at `wrap_agent` time and **no
+  hard failure** — the surface relied on is the `tools` list walk.
+  `SUPPORTED_GOOGLE_ADK_VERSIONS` carries the verified set.
+
+- The two tests that compare against the real ADK declaration builder run wherever the
+  `[google-adk]` extra is installed and skip where it is not, so the claim is
+  machine-checked on an install that can actually check it. The other 30 run against stubs
+  with no ADK present, matching how `integrations/pydantic_ai.py` is tested.
+
+### Changed
+
+- Adapter-shipped framework count **11 → 12** in the README's honest-split paragraph, its
+  Complete Examples table, `docs/adapters.md`, and the
+  `_ADAPTER_SHIPPED_MODULES` tuple in `tests/test_readme_framework_claims.py` that gates
+  the number. `[all]` now includes `google-adk`.
+
 ## [0.8.91] - 2026-09-09
 
 ### Fixed
