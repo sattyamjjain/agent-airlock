@@ -11,6 +11,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.4] - 2026-09-12
+
+### Changed
+
+- **The README was 1,822 lines / 18,206 words / 156 KB. It is now 285 / 2,050 / 17 KB.**
+
+  Measured against comparable projects on the day it was cut, the old one was an outlier by
+  an order of magnitude — and the correlation ran the wrong way:
+
+  | project | README words | stars |
+  |---|---|---|
+  | pydantic | 267 | 28,759 |
+  | openai-agents-python | 803 | 29,385 |
+  | modelcontextprotocol/python-sdk | 600 | 24,273 |
+  | pydantic-ai | 1,762 | 19,877 |
+  | e2b-dev/E2B | 390 | 13,762 |
+  | guardrails-ai/guardrails | 1,010 | 7,398 |
+  | protectai/llm-guard | 502 | 3,205 |
+  | **agent-airlock (before)** | **18,206** | — |
+
+  The most-starred projects had the shortest READMEs. Ours was 10x the longest comparable.
+
+  **Length was the symptom; ordering was the disease.** The first thing a visitor read,
+  in bold and before any badge, was a paragraph about a head-to-head study that had *not
+  been run* — followed by a table of a null result. `pip install` appeared at line 166, the
+  first code at line 196, and a table of contents at line 316. Roughly half the file
+  (lines 347–1237) was a feature catalogue, and `## Installation` sat at line 1484.
+
+  The rigour is this project's best asset and none of it was removed. It moved: the
+  benchmark table keeps every number, every date marker and every caveat that changes how a
+  number should be read, and links to the full write-up instead of inlining it. The
+  published null result is still in the same table as the wins. `PRIOR_ART.md` — which
+  carries the verbatim, gated record of the study with no head-to-head — is linked rather
+  than transcribed into the hero.
+
+  Nothing machine-read was lost. Every gate that parses the README still parses it: the
+  TEST-BADGE block, the adapter-shipped/example-only split and its module tokens, the
+  Complete Examples table and its row count, all six benchmark identifiers with their
+  freshness markers, the OWASP ASI and MCP Top-10 matrices with their coverage labels, the
+  CVE counts, the version pins and the no-full-conformance caveat.
+
+- **Positioning was inconsistent across surfaces.** `docs/index.md` and `mkdocs.yml`'s
+  `site_description` still described "security middleware for MCP servers … 6 layers of
+  defense-in-depth", while the README, `pyproject.toml` and the GitHub repo description had
+  moved to "a deny-by-default contract layer for AI agent tool calls". The docs homepage and
+  the PyPI page made two different first impressions. Realigned on the current framing.
+
+- **`docs/changelog.md` stopped at v0.4.0 "Enterprise"** while the project shipped through
+  v0.10.x, so the docs-site nav had a "Changelog" entry pointing at an abandoned-looking
+  page. The hand-maintained summary is gone rather than re-synced — a second copy would only
+  drift again — and it now points at the gated root `CHANGELOG.md`.
+
+- `SECURITY.md`'s footer said *Last updated: 2026-01-31* while its own audit body was dated
+  2026-08-22.
+
+- `[project.urls]` had `Homepage`, `Repository` and `Source` pointing at the **same** GitHub
+  URL, rendering as three identical links in the PyPI sidebar. Now one row per destination,
+  plus Benchmarks and the CVE catalog.
+
+### Added
+
+- **`tests/test_readme_shape.py`** — a gate on the README itself. Line and word ceilings with
+  ~40% headroom, first code block inside the first 50 lines, `pip install` inside the first
+  60, no table of contents, and the opening section must not be a disclaimer.
+
+  It exists because this regression is easy and gradual: every individual addition was
+  defensible, the file was never rewritten in one sitting, and nothing watched the total.
+  It also pins that the honesty section **survives** — cutting 90% of a README is exactly
+  when the inconvenient parts get lost, so "Null results are published", "never fabricated"
+  and the `PRIOR_ART.md` link are asserted present. Verified by negative control: 6 of its 7
+  tests fail against the pre-rewrite README.
+
+- **`CITATION.cff`** — machine-readable citation metadata. GitHub renders a "Cite this
+  repository" button from it and Zenodo/academic tooling reads it. It was missing.
+
+- **`.github/dependabot.yml`** — notable by its absence in a security library whose CI runs
+  `safety check` and generates an SBOM but never kept its own dependency floors current.
+  Deliberately quiet: weekly, grouped, capped at 3 open PRs per ecosystem, because a bot that
+  opens twenty PRs teaches you to ignore the bot.
+
+- **`SUPPORT.md`** and **`.github/CODEOWNERS`** — GitHub surfaces the first as a support link
+  and uses the second to auto-request a reviewer.
+
+- **Two blind spots closed, both found while auditing what reads the README.**
+
+  `scripts/check_links.py` deliberately skips `#anchor` targets — correct for its job of
+  checking that files exist, but it left the README's own navigation unvalidated. Rename a
+  heading and the nav strip at the top points at nothing, silently. Now gated, scoped to the
+  README: turning it on across all 122 markdown files at once would be a remediation
+  project, not a gate.
+
+  Nothing validated the README as the **PyPI long_description**, which is what it is. It
+  carries raw HTML (`<div>`, `<sub>`, `<details>`), and a malformed render would have been
+  discovered by a human looking at the published project page *after* the release — at which
+  point it cannot be amended, because PyPI does not allow re-uploading a version.
+  `publish.yml` now runs `twine check dist/*` before upload. Verified passing on both the
+  wheel and the sdist for this release.
+
 ## [0.10.3] - 2026-09-12
 
 ### Fixed

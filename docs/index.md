@@ -1,14 +1,20 @@
 # Agent-Airlock
 
-**Security middleware for MCP servers - Intercept, validate, and sandbox AI agent tool calls**
+**A deny-by-default contract layer for AI agent tool calls**
 
-[![PyPI version](https://badge.fury.io/py/agent-airlock.svg)](https://badge.fury.io/py/agent-airlock)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
+[![PyPI version](https://img.shields.io/pypi/v/agent-airlock?logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/agent-airlock/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green)](https://opensource.org/licenses/Apache-2.0)
 
 ## What is Agent-Airlock?
 
-Agent-Airlock is the **open-source, developer-first alternative** to enterprise MCP security solutions. It provides a simple decorator-based API to secure your AI agent tool calls with **6 layers of defense-in-depth**.
+An LLM decides which tool to call and what arguments to pass it. Agent-Airlock is the
+contract at that boundary: strict argument validation with no type coercion, stripping of
+parameters the model invented, and structured `fix_hints` the model can retry against.
+
+It runs **in-process** — not a proxy, gateway or sidecar — because the process executing
+the tool is the only place the real Python arguments exist. The installed core depends on
+Pydantic and nothing else.
 
 ```python
 from agent_airlock import Airlock, UnknownArgsMode

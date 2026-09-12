@@ -1,0 +1,43 @@
+# Dependency updates.
+#
+# Notable by its absence until v0.10.4: this is a security library whose CI runs
+# `safety check` and generates an SBOM, but nothing kept its own dependency floors
+# current. A vulnerability in a transitive dep of an extra would have been reported
+# by `safety` at CI time and then waited for a human to notice.
+#
+# Deliberately quiet. Weekly, grouped, and capped at 3 open PRs per ecosystem, because
+# a bot that opens twenty PRs teaches you to ignore the bot. Security advisories are
+# delivered separately by Dependabot alerts and are not subject to this cap.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      # Off the hour and off :00 — see the same reasoning in cve-watcher.yml.
+      time: "07:23"
+    open-pull-requests-limit: 3
+    groups:
+      # One PR for the dev toolchain rather than one per linter.
+      dev-tooling:
+        patterns: ["pytest*", "ruff", "mypy", "bandit", "safety", "cyclonedx-bom"]
+      docs:
+        patterns: ["mkdocs*", "pymdown-extensions"]
+    commit-message:
+      prefix: "chore(deps)"
+    labels: ["dependencies"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:31"
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(deps)"
+    labels: ["dependencies", "ci"]

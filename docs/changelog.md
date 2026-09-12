@@ -1,81 +1,27 @@
 # Changelog
 
-For the complete changelog with all versions and detailed release notes, see the [CHANGELOG.md](https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md) file in the project root.
+The complete, authoritative changelog lives in
+[`CHANGELOG.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md)
+at the repository root. It follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+and [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and it is gated: a released
+version must carry a dated heading (`scripts/check_changelog_heading.py`) and must not
+strand entries under `[Unreleased]` (`scripts/check_changelog.py`), both enforced in CI.
 
-## Quick Version Summary
+!!! note "This page used to duplicate it, and drifted"
 
-| Version | Codename | Highlights |
-|---------|----------|------------|
-| **0.4.0** | "Enterprise" | UnknownArgsMode, Safe Types, Capability Gating, Circuit Breaker, Cost Tracking, Retry Policies, OpenTelemetry, MCP Proxy Guard |
-| **0.3.0** | "Vaccine" | Filesystem path validation, Network egress control, Honeypot deception, Framework vaccination |
-| **0.2.0** | - | Security hardening, Production roadmap |
-| **0.1.5** | - | Streaming support, Context propagation, Dynamic policy resolution, Conversation tracking |
-| **0.1.3** | - | Framework compatibility (LangChain, OpenAI SDK, PydanticAI, etc.), Signature preservation |
-| **0.1.1** | - | Policy engine, Output sanitization, FastMCP integration, Audit logging |
-| **0.1.0** | - | Core validator, E2B sandbox integration, Configuration system |
+    Until v0.10.4 this page carried a hand-maintained "Quick Version Summary" table that
+    stopped at **v0.4.0 "Enterprise"** while the project shipped through v0.10.x. A docs-site
+    nav entry pointing at an abandoned-looking summary is worse than one pointing at the real
+    thing, so the summary is gone rather than re-synced — a second hand-maintained copy would
+    only drift again.
 
----
+## Releases
 
-## Latest Release: V0.4.0 "Enterprise"
+- **[Full changelog](https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md)** — every version, with the reasoning
+- **[GitHub Releases](https://github.com/sattyamjjain/agent-airlock/releases)** — per-tag notes
+- **[PyPI release history](https://pypi.org/project/agent-airlock/#history)** — what is installable
 
-### ✨ New Features
+## Roadmap
 
-- **UnknownArgsMode**: Explicit `BLOCK`, `STRIP_AND_LOG`, `STRIP_SILENT` modes (replaces `strict_mode`)
-- **Safe Types**: `SafePath`, `SafePathStrict`, `SafeURL`, `SafeURLAllowHttp`
-- **Capability Gating**: `@requires(Capability.FILESYSTEM_READ)` decorator
-- **Pluggable Sandbox Backends**: E2B, Docker, Local
-- **Circuit Breaker**: Prevent cascading failures with CLOSED/OPEN/HALF_OPEN states
-- **Cost Tracking**: Budget limits with soft/hard thresholds and alerts
-- **Retry Policies**: Exponential backoff with jitter support
-- **OpenTelemetry**: Distributed tracing with span attributes and metrics
-- **MCP Proxy Guard**: Token passthrough prevention, session binding
-- **CLI Tools**: `airlock doctor`, `airlock verify`
-
-### 🔧 Improvements
-
-- Enhanced audit logging with OpenTelemetry export support
-- Better error messages for capability denials
-- Improved thread safety in rate limiters and circuit breakers
-
----
-
-## V0.3.0 "Vaccine"
-
-### ✨ New Features
-
-- **Filesystem Path Validation**: `os.path.commonpath()` (CVE-resistant)
-- **Network Egress Control**: `network_airgap()` context manager
-- **Honeypot Deception**: Return fake data instead of errors
-- **Framework Vaccination**: `vaccinate("langchain")` automatic security
-
----
-
-## Upgrade Guide
-
-### From V0.3.0 to V0.4.0
-
-**UnknownArgsMode migration:**
-```python
-# Old (deprecated)
-@Airlock(config=AirlockConfig(strict_mode=True))
-
-# New (V0.4.0)
-from agent_airlock import UnknownArgsMode
-@Airlock(unknown_args_mode=UnknownArgsMode.BLOCK)
-```
-
-### From V0.1.x to V0.3.0
-
-No breaking changes - all V0.3.0 features are opt-in.
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](https://github.com/sattyamjjain/agent-airlock/blob/main/CONTRIBUTING.md) for guidelines.
-
-Report issues at [GitHub Issues](https://github.com/sattyamjjain/agent-airlock/issues).
-
----
-
-[View full changelog →](https://github.com/sattyamjjain/agent-airlock/blob/main/CHANGELOG.md)
+What is *not* done, and why, is tracked in
+[`ROADMAP.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/ROADMAP.md).
