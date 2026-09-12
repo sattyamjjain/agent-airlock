@@ -10,9 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/security/egress-bench/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/cli/console/">
       
       
+        <link rel="prev" href="../attest-receipt/">
+      
+      
+        <link rel="next" href="../graph-serve/">
       
       
         
@@ -23,7 +27,7 @@
     
     
       
-        <title>Agent Egress Bench - Agent-Airlock</title>
+        <title>Console - Agent-Airlock</title>
       
     
     
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#agent-egress-bench" class="md-skip">
+        <a href="#airlock-console-interactive-policy-rehearsal-tui" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Agent Egress Bench
+              Console
             
           </span>
         </div>
@@ -397,11 +401,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../cli/kill-switch/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../kill-switch/" class="md-tabs__link">
           
   
   
@@ -1652,28 +1658,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
-        
-          
-          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
             
   
   
@@ -1691,7 +1700,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1709,7 +1718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/kill-switch/" class="md-nav__link">
+      <a href="../kill-switch/" class="md-nav__link">
         
   
   
@@ -1737,7 +1746,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/policy-bundle-lock/" class="md-nav__link">
+      <a href="../policy-bundle-lock/" class="md-nav__link">
         
   
   
@@ -1765,7 +1774,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/policy-compile-explain/" class="md-nav__link">
+      <a href="../policy-compile-explain/" class="md-nav__link">
         
   
   
@@ -1793,7 +1802,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/attest-receipt/" class="md-nav__link">
+      <a href="../attest-receipt/" class="md-nav__link">
         
   
   
@@ -1818,10 +1827,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../cli/console/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Console
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1837,6 +1873,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#-no-tui-for-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --no-tui for CI
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honest-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honest scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1849,7 +1960,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/graph-serve/" class="md-nav__link">
+      <a href="../graph-serve/" class="md-nav__link">
         
   
   
@@ -1877,7 +1988,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/studio/" class="md-nav__link">
+      <a href="../studio/" class="md-nav__link">
         
   
   
@@ -1933,7 +2044,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/egress-bench/" class="md-nav__link">
+      <a href="../egress-bench/" class="md-nav__link">
         
   
   
@@ -2158,10 +2269,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#output-formats" class="md-nav__link">
+  <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Output formats
+        Install
       
     </span>
   </a>
@@ -2169,10 +2280,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#coverage" class="md-nav__link">
+  <a href="#usage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Coverage
+        Usage
       
     </span>
   </a>
@@ -2180,10 +2291,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fixture-contract" class="md-nav__link">
+  <a href="#-no-tui-for-ci" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Fixture contract
+        --no-tui for CI
       
     </span>
   </a>
@@ -2191,10 +2302,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#adding-a-new-fixture" class="md-nav__link">
+  <a href="#honest-scope" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Adding a new fixture
+        Honest scope
       
     </span>
   </a>
@@ -2202,10 +2313,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#motivating-incident" class="md-nav__link">
+  <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Motivating incident
+        See also
       
     </span>
   </a>
@@ -2232,65 +2343,87 @@
   
 
 
-<h1 id="agent-egress-bench">Agent Egress Bench<a class="headerlink" href="#agent-egress-bench" title="Permanent link">&para;</a></h1>
-<p>The egress bench walks <code>tests/cves/fixtures/*.json</code> and asserts every
-documented payload is blocked by the corresponding preset. It runs in
-three surfaces:</p>
-<ol>
-<li><strong>Local dev loop</strong> — <code>make egress-bench</code></li>
-<li><strong>Programmatic</strong> — <code>python3 -c "from agent_airlock.cli import egress_bench; egress_bench()"</code></li>
-<li><strong>CI</strong> — a GitHub Actions job (sample at
-   <a href="../egress-bench-ci.yml.sample"><code>docs/security/egress-bench-ci.yml.sample</code></a>;
-   a maintainer with <code>workflow</code> scope must copy it into
-   <code>.github/workflows/</code>)</li>
-</ol>
-<h2 id="output-formats">Output formats<a class="headerlink" href="#output-formats" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>tap<span class="w">    </span><span class="c1"># TAP protocol</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>json<span class="w">   </span><span class="c1"># machine-readable</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>md<span class="w">     </span><span class="c1"># Markdown table for PR bodies</span>
+<h1 id="airlock-console-interactive-policy-rehearsal-tui"><code>airlock console</code> — interactive policy-rehearsal TUI<a class="headerlink" href="#airlock-console-interactive-policy-rehearsal-tui" title="Permanent link">&para;</a></h1>
+<p><strong>Landed in v0.6.0.</strong> Implementation <code>src/agent_airlock/cli/console.py</code>.</p>
+<p>A three-pane <a href="https://textual.textualize.io/">Textual</a> app for rehearsing a preset
+chain against a verdict stream before it gates anything real.</p>
+<table>
+<thead>
+<tr>
+<th>pane</th>
+<th>shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>left</td>
+<td>live verdict stream, newest at the top</td>
+</tr>
+<tr>
+<td>top-right</td>
+<td>the active preset chain, each entry toggleable</td>
+</tr>
+<tr>
+<td>bottom-right</td>
+<td>the last 50 verdicts <strong>re-evaluated</strong> against the chain as you edit it</td>
+</tr>
+</tbody>
+</table>
+<p>The bottom-right pane is the point: toggling a preset off does not just change what
+happens next, it replays recent history through the edited chain so you can see what
+that preset was actually catching before you drop it.</p>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"agent-airlock[console]"</span>
 </code></pre></div>
-<h2 id="coverage">Coverage<a class="headerlink" href="#coverage" title="Permanent link">&para;</a></h2>
-<p>The walker emits one TAP line per fixture in <code>tests/cves/fixtures/</code>. Fixtures without a
-dispatcher are reported as <code>SKIP</code> rather than silently dropped, so the plan line counts
-every fixture on disk while only the dispatched ones are graded:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>1..12
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>...
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>ok 6 - CVE-2026-33032 (blocked 12/12)
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>...
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>ok 11 - CVE-2026-30616 (blocked 10/10)
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>ok 12 - OX-DOSSIER-2026-04 (blocked 10/10)
+<p>Textual is behind the extra so the base install stays Pydantic-only. Running the
+command without it prints an install hint rather than a traceback.</p>
+<h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="gp">$ </span>airlock<span class="w"> </span>console<span class="w"> </span>--audit-log<span class="w"> </span>./airlock_audit.jsonl
 </code></pre></div>
-<p>Three graded fixture categories, 32 payloads, zero slips. The remaining fixtures are
-carried for other guards and have no egress dispatcher yet — a <code>SKIP</code> is an honest "not
-measured here", not a pass.</p>
-<p>These three numbers are re-derived from a live walk by
-<code>tests/test_numeric_claim_parity.py::TestEgressBenchDocClaims</code>, so they fail CI if a
-fixture change moves them.</p>
-<h2 id="fixture-contract">Fixture contract<a class="headerlink" href="#fixture-contract" title="Permanent link">&para;</a></h2>
-<p>Every fixture under <code>tests/cves/fixtures/*.json</code> must carry:</p>
+<table>
+<thead>
+<tr>
+<th>flag</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--audit-log PATH</code></td>
+<td>JSON-Lines audit log to stream verdicts from</td>
+</tr>
+<tr>
+<td><code>--no-tui</code></td>
+<td>emit a single JSON snapshot to stdout and exit</td>
+</tr>
+</tbody>
+</table>
+<h2 id="-no-tui-for-ci"><code>--no-tui</code> for CI<a class="headerlink" href="#-no-tui-for-ci" title="Permanent link">&para;</a></h2>
+<p><code>--no-tui</code> skips Textual entirely and prints one JSON object, which is what you want
+in a pipeline or when you just need the current state:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="gp">$ </span>airlock<span class="w"> </span>console<span class="w"> </span>--no-tui
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="go">{</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="go">  "active_presets": [],</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="go">  "verdicts": []</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="go">}</span>
+</code></pre></div>
+<p>Empty output like that is the honest answer for a process with no presets registered
+and no audit log — not an error. Point <code>--audit-log</code> at a real file to get content.</p>
+<h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
 <ul>
-<li>A <code>$schema</code> top-level note explaining what the file documents.</li>
-<li>Either a <code>payloads</code> / <code>destructive_tools</code> / <code>cves</code> array.</li>
-<li>A <code>source</code> per payload citing the primary CVE or write-up URL.</li>
+<li>It is a <strong>rehearsal</strong> surface. Toggling a preset in the console changes what the
+  console replays; it does not reconfigure a running agent. Nothing here writes
+  policy.</li>
+<li>Verdicts come from an audit log, so the console shows what <code>@Airlock</code> already
+  decided. It is not an interceptor and cannot show a call that was never made.</li>
+<li><code>--no-tui</code> does not need the <code>[console]</code> extra to produce its snapshot, but the
+  interactive path does.</li>
 </ul>
-<p>The bench refuses to run (exit 2) on malformed fixtures — this keeps
-the dossier honest.</p>
-<h2 id="adding-a-new-fixture">Adding a new fixture<a class="headerlink" href="#adding-a-new-fixture" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Drop the JSON into <code>tests/cves/fixtures/</code>.</li>
-<li>Add a dispatcher entry to <code>_DISPATCH</code> in
-   <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/scripts/egress_bench.py"><code>scripts/egress_bench.py</code></a> that
-   knows how to unpack the fixture shape and call the matching preset.</li>
-<li>Run <code>make egress-bench</code> locally.</li>
-<li>Commit both the fixture and the dispatcher update together.</li>
-</ol>
-<h2 id="motivating-incident">Motivating incident<a class="headerlink" href="#motivating-incident" title="Permanent link">&para;</a></h2>
-<p>OX Security published the <a href="https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20">"Mother of All AI Supply Chains"
-dossier</a>
-on <strong>2026-04-20</strong> — 10+ coordinated MCP-ecosystem CVEs in a single
-report. Without a fixture walker, a silent regression in any one
-preset could un-catch a previously-covered CVE. The bench makes that
-impossible.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../graph-serve/"><code>airlock graph serve</code></a> — the topology view over the same audit log</li>
+<li><a href="../studio/"><code>airlock studio</code></a> — paste-a-transcript rehearsal in a browser</li>
+</ul>
 
 
 

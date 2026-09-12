@@ -85,7 +85,19 @@
          <lastmod>2026-09-12</lastmod>
     </url>
     <url>
+         <loc>https://sattyamjjain.github.io/agent-airlock/cli/attest-receipt/</loc>
+         <lastmod>2026-09-12</lastmod>
+    </url>
+    <url>
+         <loc>https://sattyamjjain.github.io/agent-airlock/cli/console/</loc>
+         <lastmod>2026-09-12</lastmod>
+    </url>
+    <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/cli/egress-bench/</loc>
+         <lastmod>2026-09-12</lastmod>
+    </url>
+    <url>
+         <loc>https://sattyamjjain.github.io/agent-airlock/cli/graph-serve/</loc>
          <lastmod>2026-09-12</lastmod>
     </url>
     <url>
@@ -94,6 +106,14 @@
     </url>
     <url>
          <loc>https://sattyamjjain.github.io/agent-airlock/cli/policy-bundle-lock/</loc>
+         <lastmod>2026-09-12</lastmod>
+    </url>
+    <url>
+         <loc>https://sattyamjjain.github.io/agent-airlock/cli/policy-compile-explain/</loc>
+         <lastmod>2026-09-12</lastmod>
+    </url>
+    <url>
+         <loc>https://sattyamjjain.github.io/agent-airlock/cli/studio/</loc>
          <lastmod>2026-09-12</lastmod>
     </url>
     <url>

@@ -10,9 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/security/egress-bench/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/cli/attest-receipt/">
       
       
+        <link rel="prev" href="../policy-compile-explain/">
+      
+      
+        <link rel="next" href="../console/">
       
       
         
@@ -23,7 +27,7 @@
     
     
       
-        <title>Agent Egress Bench - Agent-Airlock</title>
+        <title>Attest receipt - Agent-Airlock</title>
       
     
     
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#agent-egress-bench" class="md-skip">
+        <a href="#airlock-attest-receipt-signed-evidence-that-a-run-was-gated" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Agent Egress Bench
+              Attest receipt
             
           </span>
         </div>
@@ -397,11 +401,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../cli/kill-switch/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../kill-switch/" class="md-tabs__link">
           
   
   
@@ -1652,28 +1658,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
-        
-          
-          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
             
   
   
@@ -1691,7 +1700,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1709,7 +1718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/kill-switch/" class="md-nav__link">
+      <a href="../kill-switch/" class="md-nav__link">
         
   
   
@@ -1737,7 +1746,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/policy-bundle-lock/" class="md-nav__link">
+      <a href="../policy-bundle-lock/" class="md-nav__link">
         
   
   
@@ -1765,7 +1774,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/policy-compile-explain/" class="md-nav__link">
+      <a href="../policy-compile-explain/" class="md-nav__link">
         
   
   
@@ -1790,10 +1799,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../cli/attest-receipt/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attest receipt
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1809,6 +1845,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#emit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Emit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#signing-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Signing keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honest-scope-read-this-before-relying-on-a-receipt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honest scope — read this before relying on a receipt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1821,7 +1932,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/console/" class="md-nav__link">
+      <a href="../console/" class="md-nav__link">
         
   
   
@@ -1849,7 +1960,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/graph-serve/" class="md-nav__link">
+      <a href="../graph-serve/" class="md-nav__link">
         
   
   
@@ -1877,7 +1988,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/studio/" class="md-nav__link">
+      <a href="../studio/" class="md-nav__link">
         
   
   
@@ -1933,7 +2044,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/egress-bench/" class="md-nav__link">
+      <a href="../egress-bench/" class="md-nav__link">
         
   
   
@@ -2158,10 +2269,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#output-formats" class="md-nav__link">
+  <a href="#emit" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Output formats
+        Emit
       
     </span>
   </a>
@@ -2169,10 +2280,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#coverage" class="md-nav__link">
+  <a href="#verify" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Coverage
+        Verify
       
     </span>
   </a>
@@ -2180,10 +2291,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fixture-contract" class="md-nav__link">
+  <a href="#signing-keys" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Fixture contract
+        Signing keys
       
     </span>
   </a>
@@ -2191,10 +2302,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#adding-a-new-fixture" class="md-nav__link">
+  <a href="#honest-scope-read-this-before-relying-on-a-receipt" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Adding a new fixture
+        Honest scope — read this before relying on a receipt
       
     </span>
   </a>
@@ -2202,10 +2313,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#motivating-incident" class="md-nav__link">
+  <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Motivating incident
+        See also
       
     </span>
   </a>
@@ -2232,65 +2343,139 @@
   
 
 
-<h1 id="agent-egress-bench">Agent Egress Bench<a class="headerlink" href="#agent-egress-bench" title="Permanent link">&para;</a></h1>
-<p>The egress bench walks <code>tests/cves/fixtures/*.json</code> and asserts every
-documented payload is blocked by the corresponding preset. It runs in
-three surfaces:</p>
-<ol>
-<li><strong>Local dev loop</strong> — <code>make egress-bench</code></li>
-<li><strong>Programmatic</strong> — <code>python3 -c "from agent_airlock.cli import egress_bench; egress_bench()"</code></li>
-<li><strong>CI</strong> — a GitHub Actions job (sample at
-   <a href="../egress-bench-ci.yml.sample"><code>docs/security/egress-bench-ci.yml.sample</code></a>;
-   a maintainer with <code>workflow</code> scope must copy it into
-   <code>.github/workflows/</code>)</li>
-</ol>
-<h2 id="output-formats">Output formats<a class="headerlink" href="#output-formats" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>tap<span class="w">    </span><span class="c1"># TAP protocol</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>json<span class="w">   </span><span class="c1"># machine-readable</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>md<span class="w">     </span><span class="c1"># Markdown table for PR bodies</span>
+<h1 id="airlock-attest-receipt-signed-evidence-that-a-run-was-gated"><code>airlock attest receipt</code> — signed evidence that a run was gated<a class="headerlink" href="#airlock-attest-receipt-signed-evidence-that-a-run-was-gated" title="Permanent link">&para;</a></h1>
+<p><strong>Landed in v0.6.0.</strong> Implementation <code>src/agent_airlock/attest/</code>; CLI
+<code>src/agent_airlock/cli/attest.py</code>.</p>
+<p>A receipt is a small signed JSON document asserting: <em>this run, against this policy
+bundle, over these inputs, on this model, produced these verdicts.</em> It exists so a
+claim about a past run can be checked by someone who was not there.</p>
+<h2 id="emit">Emit<a class="headerlink" href="#emit" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gp">$ </span>airlock<span class="w"> </span>attest<span class="w"> </span>receipt<span class="w"> </span>emit<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span>--policy-bundle-hash<span class="w"> </span>abc123<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span>--inputs-hash<span class="w"> </span>def456<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span>--model-id<span class="w"> </span>claude-opus-5<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span>--kms-stub<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span>--output<span class="w"> </span>receipt.json
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="go">OK: receipt written to receipt.json</span>
 </code></pre></div>
-<h2 id="coverage">Coverage<a class="headerlink" href="#coverage" title="Permanent link">&para;</a></h2>
-<p>The walker emits one TAP line per fixture in <code>tests/cves/fixtures/</code>. Fixtures without a
-dispatcher are reported as <code>SKIP</code> rather than silently dropped, so the plan line counts
-every fixture on disk while only the dispatched ones are graded:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>1..12
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>...
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>ok 6 - CVE-2026-33032 (blocked 12/12)
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>...
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>ok 11 - CVE-2026-30616 (blocked 10/10)
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>ok 12 - OX-DOSSIER-2026-04 (blocked 10/10)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">"inputs_hash"</span><span class="p">:</span><span class="w"> </span><span class="s2">"def456"</span><span class="p">,</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">"model_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"claude-opus-5"</span><span class="p">,</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">"policy_bundle_hash"</span><span class="p">:</span><span class="w"> </span><span class="s2">"abc123"</span><span class="p">,</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">"run_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"run_7a5b2fdcde234f0c9c06d001be1359e2"</span><span class="p">,</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">"schema_version"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">"signature"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"keyid"</span><span class="p">:</span><span class="w"> </span><span class="s2">"kms-stub"</span><span class="p">,</span><span class="w"> </span><span class="nt">"sig"</span><span class="p">:</span><span class="w"> </span><span class="s2">"4a2cec1f03…"</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">"ts"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-09-12T16:05:49Z"</span><span class="p">,</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">"verdicts"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="p">}</span>
 </code></pre></div>
-<p>Three graded fixture categories, 32 payloads, zero slips. The remaining fixtures are
-carried for other guards and have no egress dispatcher yet — a <code>SKIP</code> is an honest "not
-measured here", not a pass.</p>
-<p>These three numbers are re-derived from a live walk by
-<code>tests/test_numeric_claim_parity.py::TestEgressBenchDocClaims</code>, so they fail CI if a
-fixture change moves them.</p>
-<h2 id="fixture-contract">Fixture contract<a class="headerlink" href="#fixture-contract" title="Permanent link">&para;</a></h2>
-<p>Every fixture under <code>tests/cves/fixtures/*.json</code> must carry:</p>
+<table>
+<thead>
+<tr>
+<th>flag</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--policy-bundle-hash</code></td>
+<td>hash of the bundle the run was gated by (<strong>required</strong>)</td>
+</tr>
+<tr>
+<td><code>--inputs-hash</code></td>
+<td>hash of the run's inputs (<strong>required</strong>)</td>
+</tr>
+<tr>
+<td><code>--model-id</code></td>
+<td>model the run used (<strong>required</strong>)</td>
+</tr>
+<tr>
+<td><code>--run-id</code></td>
+<td>defaults to a random id</td>
+</tr>
+<tr>
+<td><code>--verdicts-json PATH</code></td>
+<td>a JSON list of verdicts to embed</td>
+</tr>
+<tr>
+<td><code>--output PATH</code></td>
+<td>defaults to stdout</td>
+</tr>
+<tr>
+<td><code>--contract</code></td>
+<td>embed a derived <code>LayerContract</code> (assume/guarantee) block</td>
+</tr>
+<tr>
+<td><code>--assumes</code></td>
+<td>comma-separated upstream-guarantee identifiers</td>
+</tr>
+</tbody>
+</table>
+<h2 id="verify">Verify<a class="headerlink" href="#verify" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="gp">$ </span>airlock<span class="w"> </span>attest<span class="w"> </span>receipt<span class="w"> </span>verify<span class="w"> </span>receipt.json<span class="w"> </span>--kms-stub
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="go">OK: receipt run_7a5b2fdcde234f0c9c06d001be1359e2 verified by 'kms-stub'</span>
+</code></pre></div>
+<p><code>airlock attest verify &lt;envelope&gt;</code> is the sibling for DSSE attestation envelopes, and
+takes the same key flags.</p>
+<h2 id="signing-keys">Signing keys<a class="headerlink" href="#signing-keys" title="Permanent link">&para;</a></h2>
+<p>All four subcommands share one key-selection surface:</p>
+<table>
+<thead>
+<tr>
+<th>flag</th>
+<th>source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--key-file PATH</code></td>
+<td>key bytes from a file</td>
+</tr>
+<tr>
+<td><code>--env-var NAME</code></td>
+<td>key bytes from an environment variable</td>
+</tr>
+<tr>
+<td><code>--kms-stub</code></td>
+<td>the dev-only stub</td>
+</tr>
+<tr>
+<td><code>--keyid NAME</code></td>
+<td>override the keyid recorded in the signature</td>
+</tr>
+</tbody>
+</table>
+<h2 id="honest-scope-read-this-before-relying-on-a-receipt">Honest scope — read this before relying on a receipt<a class="headerlink" href="#honest-scope-read-this-before-relying-on-a-receipt" title="Permanent link">&para;</a></h2>
 <ul>
-<li>A <code>$schema</code> top-level note explaining what the file documents.</li>
-<li>Either a <code>payloads</code> / <code>destructive_tools</code> / <code>cves</code> array.</li>
-<li>A <code>source</code> per payload citing the primary CVE or write-up URL.</li>
+<li><strong>Every shipped signer is HMAC-SHA256, including <code>--kms-stub</code>.</strong> There is no KMS
+  and no Sigstore Fulcio implementation in this package. <code>KMSStubSigner</code> is named
+  "stub" because it is one: it exercises the envelope shape, the CLI and the verify
+  flow end to end, and it is not a KMS.</li>
 </ul>
-<p>The bench refuses to run (exit 2) on malformed fixtures — this keeps
-the dossier honest.</p>
-<h2 id="adding-a-new-fixture">Adding a new fixture<a class="headerlink" href="#adding-a-new-fixture" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Drop the JSON into <code>tests/cves/fixtures/</code>.</li>
-<li>Add a dispatcher entry to <code>_DISPATCH</code> in
-   <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/scripts/egress_bench.py"><code>scripts/egress_bench.py</code></a> that
-   knows how to unpack the fixture shape and call the matching preset.</li>
-<li>Run <code>make egress-bench</code> locally.</li>
-<li>Commit both the fixture and the dispatcher update together.</li>
-</ol>
-<h2 id="motivating-incident">Motivating incident<a class="headerlink" href="#motivating-incident" title="Permanent link">&para;</a></h2>
-<p>OX Security published the <a href="https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20">"Mother of All AI Supply Chains"
-dossier</a>
-on <strong>2026-04-20</strong> — 10+ coordinated MCP-ecosystem CVEs in a single
-report. Without a fixture walker, a silent regression in any one
-preset could un-catch a previously-covered CVE. The bench makes that
-impossible.</p>
+<p>A symmetric HMAC means <strong>anyone who can verify a receipt can also forge one</strong> —
+  verification proves possession of the shared key, not authorship. For evidence that
+  survives a hostile reader you need an asymmetric signer, which means substituting
+  your own <code>Signer</code>. The protocol is small and the swap changes no envelope shape.</p>
+<ul>
+<li>
+<p>A receipt records <strong>hashes you supply</strong>. Nothing checks that
+  <code>--policy-bundle-hash</code> is the bundle that actually gated the run, or that
+  <code>--inputs-hash</code> matches real inputs. The receipt binds them together and signs the
+  binding; it does not attest that you computed them honestly. Pair it with
+  <a href="../policy-bundle-lock/"><code>policy_bundle.lock</code></a>, which is the piece that makes a
+  bundle hash reproducible.</p>
+</li>
+<li>
+<p><code>verdicts</code> is whatever <code>--verdicts-json</code> contained, or empty. The operator feeds
+  them in; there is no in-process collector that harvests them automatically, and no
+  sliding-window store behind them. Both remain unbuilt.</p>
+</li>
+</ul>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../../attest/layer-contract/">LayerContract</a> — the assume/guarantee block <code>--contract</code> embeds</li>
+<li><a href="../policy-bundle-lock/"><code>airlock policy-bundle-lock</code></a> — making the bundle hash mean something</li>
+</ul>
 
 
 

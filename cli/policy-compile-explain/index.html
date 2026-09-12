@@ -10,9 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/security/egress-bench/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/cli/policy-compile-explain/">
       
       
+        <link rel="prev" href="../policy-bundle-lock/">
+      
+      
+        <link rel="next" href="../attest-receipt/">
       
       
         
@@ -23,7 +27,7 @@
     
     
       
-        <title>Agent Egress Bench - Agent-Airlock</title>
+        <title>Policy compile / explain - Agent-Airlock</title>
       
     
     
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#agent-egress-bench" class="md-skip">
+        <a href="#airlock-policy-compile-explain-english-in-typed-policy-out" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Agent Egress Bench
+              Policy compile / explain
             
           </span>
         </div>
@@ -397,11 +401,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../cli/kill-switch/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../kill-switch/" class="md-tabs__link">
           
   
   
@@ -1652,28 +1658,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
-        
-          
-          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
             
   
   
@@ -1691,7 +1700,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1709,7 +1718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/kill-switch/" class="md-nav__link">
+      <a href="../kill-switch/" class="md-nav__link">
         
   
   
@@ -1737,7 +1746,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/policy-bundle-lock/" class="md-nav__link">
+      <a href="../policy-bundle-lock/" class="md-nav__link">
         
   
   
@@ -1762,10 +1771,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../cli/policy-compile-explain/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy compile / explain
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1781,6 +1817,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#read-this-before-you-use-compile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read this before you use compile
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-the-backend-is-a-protocol-and-ships-empty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the backend is a Protocol and ships empty
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#explain-the-other-direction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        explain — the other direction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honest-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honest scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1793,7 +1904,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/attest-receipt/" class="md-nav__link">
+      <a href="../attest-receipt/" class="md-nav__link">
         
   
   
@@ -1821,7 +1932,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/console/" class="md-nav__link">
+      <a href="../console/" class="md-nav__link">
         
   
   
@@ -1849,7 +1960,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/graph-serve/" class="md-nav__link">
+      <a href="../graph-serve/" class="md-nav__link">
         
   
   
@@ -1877,7 +1988,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/studio/" class="md-nav__link">
+      <a href="../studio/" class="md-nav__link">
         
   
   
@@ -1933,7 +2044,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/egress-bench/" class="md-nav__link">
+      <a href="../egress-bench/" class="md-nav__link">
         
   
   
@@ -2158,10 +2269,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#output-formats" class="md-nav__link">
+  <a href="#read-this-before-you-use-compile" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Output formats
+        Read this before you use compile
       
     </span>
   </a>
@@ -2169,10 +2280,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#coverage" class="md-nav__link">
+  <a href="#why-the-backend-is-a-protocol-and-ships-empty" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Coverage
+        Why the backend is a Protocol and ships empty
       
     </span>
   </a>
@@ -2180,10 +2291,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fixture-contract" class="md-nav__link">
+  <a href="#explain-the-other-direction" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Fixture contract
+        explain — the other direction
       
     </span>
   </a>
@@ -2191,10 +2302,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#adding-a-new-fixture" class="md-nav__link">
+  <a href="#honest-scope" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Adding a new fixture
+        Honest scope
       
     </span>
   </a>
@@ -2202,10 +2313,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#motivating-incident" class="md-nav__link">
+  <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Motivating incident
+        See also
       
     </span>
   </a>
@@ -2232,65 +2343,102 @@
   
 
 
-<h1 id="agent-egress-bench">Agent Egress Bench<a class="headerlink" href="#agent-egress-bench" title="Permanent link">&para;</a></h1>
-<p>The egress bench walks <code>tests/cves/fixtures/*.json</code> and asserts every
-documented payload is blocked by the corresponding preset. It runs in
-three surfaces:</p>
+<h1 id="airlock-policy-compile-explain-english-in-typed-policy-out"><code>airlock policy compile / explain</code> — English in, typed policy out<a class="headerlink" href="#airlock-policy-compile-explain-english-in-typed-policy-out" title="Permanent link">&para;</a></h1>
+<p><strong>Landed in v0.5.9.</strong> Implementation <code>src/agent_airlock/policy_compiler/</code>; CLI
+<code>src/agent_airlock/cli/policy.py</code>.</p>
+<h2 id="read-this-before-you-use-compile">Read this before you use <code>compile</code><a class="headerlink" href="#read-this-before-you-use-compile" title="Permanent link">&para;</a></h2>
+<p><strong>The default backend is a keyword matcher, not a model.</strong> No LLM backend ships with
+the runtime — <code>_REGISTRY</code> is empty on a fresh install — so the CLI falls back to a
+built-in stub that recognises a handful of fixed phrases. Anything it does not
+recognise produces a catch-all rule with <strong>no relationship to what you asked for</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="gp">$ </span>airlock<span class="w"> </span>policy<span class="w"> </span>compile<span class="w"> </span><span class="s2">"block any tool that deletes records"</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="go">policy_id: compiled_user_policy</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="go">description: block any tool that deletes records</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="go">rules:</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="go">  - rule_id: catch_all</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="go">    condition: missing_auth_header      # &lt;- nothing to do with deletes</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="go">    action: warn</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="go">warning: no LLM backend is registered, so this was produced by the built-in keyword</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="go">matcher — and none of its keywords matched your text. The rule above is a</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="go">placeholder, NOT a translation of what you asked for.</span>
+</code></pre></div>
+<p>That warning is new in v0.10.2. Before it, the same command printed valid-looking
+YAML with no provenance at all, which is an invitation to deploy a policy that does
+not say what you meant. Notices go to <strong>stderr</strong>, so <code>airlock policy compile ... &gt;
+policy.yaml</code> still writes a clean file.</p>
+<p>The phrases the stub does recognise:</p>
+<table>
+<thead>
+<tr>
+<th>phrase in your text</th>
+<th>rule emitted</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0.0.0.0</code> or <code>public</code></td>
+<td><code>refuse_public_bind</code> / <code>bind_address_public</code> / block</td>
+</tr>
+<tr>
+<td><code>without auth</code>, <code>no auth</code>, <code>missing auth</code></td>
+<td><code>require_auth</code> / <code>missing_auth_header</code> / block</td>
+</tr>
+<tr>
+<td><code>parallel</code> … <code>above</code> (+ a number)</td>
+<td><code>cap_parallel_calls</code> / <code>parallel_tool_calls_above</code> / block</td>
+</tr>
+<tr>
+<td>anything else</td>
+<td><code>catch_all</code> / <code>missing_auth_header</code> / <strong>warn</strong></td>
+</tr>
+</tbody>
+</table>
+<p>For general English, register a real backend first:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_compiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_llm_backend</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_backend</span><span class="p">(</span><span class="n">system_prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">user_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="o">...</span>  <span class="c1"># call OpenAI / Anthropic / a local model; return the YAML</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="k">return</span> <span class="n">yaml_text</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">register_llm_backend</span><span class="p">(</span><span class="s2">"openai"</span><span class="p">,</span> <span class="n">my_backend</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="gp">$ </span>airlock<span class="w"> </span>policy<span class="w"> </span>compile<span class="w"> </span>--backend<span class="w"> </span>openai<span class="w"> </span><span class="s2">"block any tool that deletes records"</span>
+</code></pre></div>
+<h2 id="why-the-backend-is-a-protocol-and-ships-empty">Why the backend is a Protocol and ships empty<a class="headerlink" href="#why-the-backend-is-a-protocol-and-ships-empty" title="Permanent link">&para;</a></h2>
+<p>Three properties the compiler keeps that a bundled backend would cost:</p>
 <ol>
-<li><strong>Local dev loop</strong> — <code>make egress-bench</code></li>
-<li><strong>Programmatic</strong> — <code>python3 -c "from agent_airlock.cli import egress_bench; egress_bench()"</code></li>
-<li><strong>CI</strong> — a GitHub Actions job (sample at
-   <a href="../egress-bench-ci.yml.sample"><code>docs/security/egress-bench-ci.yml.sample</code></a>;
-   a maintainer with <code>workflow</code> scope must copy it into
-   <code>.github/workflows/</code>)</li>
+<li><strong>Deterministic.</strong> The prompt template is hash-pinned (<code>PROMPT_HASH</code>), so upstream
+   LLM drift surfaces as a CI diff rather than as a quiet behaviour change.</li>
+<li><strong>Cached.</strong> Outputs are keyed by <code>(prompt_hash, request_hash)</code>, so re-running the
+   same English never burns tokens twice.</li>
+<li><strong>Zero core dependency.</strong> No provider SDK is imported, which is what keeps
+   <code>pip install agent-airlock</code> Pydantic-only.</li>
 </ol>
-<h2 id="output-formats">Output formats<a class="headerlink" href="#output-formats" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>tap<span class="w">    </span><span class="c1"># TAP protocol</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>json<span class="w">   </span><span class="c1"># machine-readable</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>python3<span class="w"> </span>scripts/egress_bench.py<span class="w"> </span>--format<span class="w"> </span>md<span class="w">     </span><span class="c1"># Markdown table for PR bodies</span>
+<h2 id="explain-the-other-direction"><code>explain</code> — the other direction<a class="headerlink" href="#explain-the-other-direction" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="gp">$ </span>airlock<span class="w"> </span>policy<span class="w"> </span>explain<span class="w"> </span>compiled.yaml
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="gp">$ </span>cat<span class="w"> </span>compiled.yaml<span class="w"> </span><span class="p">|</span><span class="w"> </span>airlock<span class="w"> </span>policy<span class="w"> </span>explain<span class="w"> </span>-
 </code></pre></div>
-<h2 id="coverage">Coverage<a class="headerlink" href="#coverage" title="Permanent link">&para;</a></h2>
-<p>The walker emits one TAP line per fixture in <code>tests/cves/fixtures/</code>. Fixtures without a
-dispatcher are reported as <code>SKIP</code> rather than silently dropped, so the plan line counts
-every fixture on disk while only the dispatched ones are graded:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>1..12
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>...
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>ok 6 - CVE-2026-33032 (blocked 12/12)
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>...
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>ok 11 - CVE-2026-30616 (blocked 10/10)
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>ok 12 - OX-DOSSIER-2026-04 (blocked 10/10)
-</code></pre></div>
-<p>Three graded fixture categories, 32 payloads, zero slips. The remaining fixtures are
-carried for other guards and have no egress dispatcher yet — a <code>SKIP</code> is an honest "not
-measured here", not a pass.</p>
-<p>These three numbers are re-derived from a live walk by
-<code>tests/test_numeric_claim_parity.py::TestEgressBenchDocClaims</code>, so they fail CI if a
-fixture change moves them.</p>
-<h2 id="fixture-contract">Fixture contract<a class="headerlink" href="#fixture-contract" title="Permanent link">&para;</a></h2>
-<p>Every fixture under <code>tests/cves/fixtures/*.json</code> must carry:</p>
+<p>Takes a compiled policy YAML (or <code>-</code> for stdin) and renders it back as prose, so a
+reviewer can check that the typed chain still matches the intent it was written from.
+This path involves no backend and no keyword matching; it reads what is in the file.</p>
+<h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
 <ul>
-<li>A <code>$schema</code> top-level note explaining what the file documents.</li>
-<li>Either a <code>payloads</code> / <code>destructive_tools</code> / <code>cves</code> array.</li>
-<li>A <code>source</code> per payload citing the primary CVE or write-up URL.</li>
+<li><code>compile</code> output is a <strong>draft</strong>, whichever backend produced it. It is a
+  <code>PolicyChain</code> you should read before loading, not a policy you should trust because
+  a machine emitted it. With a real backend that is the usual LLM caveat; with the
+  stub it is stronger — see the table above.</li>
+<li><code>_REGISTRY</code> is module-global mutable state. A process that registers a backend named
+  <code>"stub"</code> replaces the built-in one for everything in that process, including the
+  CLI. The regression tests isolate against this explicitly.</li>
+<li>The restricted-grammar YAML loader accepts a fixed rule vocabulary. A backend that
+  emits conditions outside it fails to parse rather than loading a rule the engine
+  cannot evaluate.</li>
 </ul>
-<p>The bench refuses to run (exit 2) on malformed fixtures — this keeps
-the dossier honest.</p>
-<h2 id="adding-a-new-fixture">Adding a new fixture<a class="headerlink" href="#adding-a-new-fixture" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Drop the JSON into <code>tests/cves/fixtures/</code>.</li>
-<li>Add a dispatcher entry to <code>_DISPATCH</code> in
-   <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/scripts/egress_bench.py"><code>scripts/egress_bench.py</code></a> that
-   knows how to unpack the fixture shape and call the matching preset.</li>
-<li>Run <code>make egress-bench</code> locally.</li>
-<li>Commit both the fixture and the dispatcher update together.</li>
-</ol>
-<h2 id="motivating-incident">Motivating incident<a class="headerlink" href="#motivating-incident" title="Permanent link">&para;</a></h2>
-<p>OX Security published the <a href="https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20">"Mother of All AI Supply Chains"
-dossier</a>
-on <strong>2026-04-20</strong> — 10+ coordinated MCP-ecosystem CVEs in a single
-report. Without a fixture walker, a silent regression in any one
-preset could un-catch a previously-covered CVE. The bench makes that
-impossible.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../policy-bundle-lock/"><code>airlock policy-bundle-lock</code></a> — pinning a compiled bundle</li>
+<li><a href="../../guide/policy/">Policy guide</a> — writing <code>SecurityPolicy</code> by hand</li>
+</ul>
 
 
 
