@@ -475,4 +475,4 @@ Input validation uses [Pydantic V2](https://docs.pydantic.dev):
 
 ---
 
-*Last updated: 2026-01-31*
+*Last updated: 2026-09-12*

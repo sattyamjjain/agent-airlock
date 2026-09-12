@@ -1,0 +1,9 @@
+# Every path, one maintainer. See MAINTAINERS.md.
+# This exists so PRs get an auto-requested reviewer rather than sitting unassigned.
+*                       @sattyamjjain
+
+# Paths where a review is load-bearing rather than routine.
+/tests/cves/            @sattyamjjain
+/src/agent_airlock/mcp_spec/  @sattyamjjain
+/scripts/check_*.py     @sattyamjjain
+/.github/workflows/     @sattyamjjain

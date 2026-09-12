@@ -61,10 +61,20 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build
+          pip install build twine
 
       - name: Build package
         run: python -m build
+
+      # README.md is the PyPI long_description, and it carries raw HTML (<div>, <sub>,
+      # <details>). Nothing validated that it renders: a malformed README would have been
+      # discovered by a human looking at the published project page, after the release,
+      # with no way to amend it — PyPI does not allow re-uploading a version.
+      #
+      # `twine check` renders the long_description the way PyPI does and fails on markup
+      # it would reject. Cheap, and it runs before upload rather than after.
+      - name: README must render as a valid PyPI long_description
+        run: twine check dist/*
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
