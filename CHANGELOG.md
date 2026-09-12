@@ -11,6 +11,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.1] - 2026-09-12
+
+### Added
+
+Three CVE regression fixtures, closing the open triage queue. Every disposition is
+public on its issue and in `tests/cves/README.md`, because a CVE queue whose closures
+are unexplained is worse than one that is simply long.
+
+- **CVE-2026-78575** (HIGH 8.8, CWE-78) — IBM Langflow MCP stdio config takes unvalidated
+  command-line arguments. `tests/cves/test_cve_2026_78575_langflow_mcp_stdio.py`, fit
+  **partial**.
+
+  The fixture's value is not re-asserting that a stdio spawn is refused; Flowise
+  (CVE-2026-40933) and LiteLLM (CVE-2026-42271) already do that. It is that **neither
+  stdio guard covers this CVE alone, and they fail in opposite directions**:
+
+  | payload | `StdioCommandInjectionGuard` | `McpSubprocessArgInjectionGuard` |
+  |---|---|---|
+  | `uvx ... "x.json; rm -rf /"` | **blocks** | allows (command allowlisted) |
+  | `/bin/bash -c id` | allows (no metachar) | **blocks** |
+  | `python -c "__import__(...)"` | allows (no metachar) | **blocks** |
+
+  The metachar guard is a shell-metacharacter detector, so an interpreter flag walks past
+  it — precisely the shape IBM's bulletin describes. The allowlist guard checks the
+  *command*, so a metacharacter in an allowlisted launcher's arguments goes through. Run
+  together they cover every disclosed shape and still admit a legitimate component;
+  `test_running_both_guards_covers_every_disclosed_shape` asserts that end to end so the
+  pairing cannot be dropped from a preset as redundant.
+
+- **CVE-2026-19753** (HIGH 7.3, CWE-918) — mcp-rdf-explorer `explore_url` SSRF.
+  `tests/cves/test_cve_2026_19753_rdf_explorer_ssrf.py`, fit **strong**: the defect is in
+  a named tool argument reaching an outbound fetch, and `SSRFEgressGuard` refuses IMDS,
+  loopback, link-local and IPv4-mapped-IPv6 targets while still admitting a real SPARQL
+  endpoint.
+
+  This is the CVE the watcher could not see before v0.9.1. The fixture also asserts that
+  the triage classifier and the guard now **agree** — a CVE this library refuses should
+  not be one its own triage drops.
+
+- **CVE-2026-75062** (CRITICAL 9.2, CWE-95) — Google langfun `lf.query` evaluates
+  model-generated Python unsandboxed. `tests/cves/test_cve_2026_75062_langfun_eval.py`,
+  fit **partial**.
+
+  `EvalRCEGuard` refuses the disclosed payload shapes and still admits the arithmetic the
+  protocol exists for. Partial because langfun's defect is that it calls an evaluator on
+  model output *at all* — the missing sandbox is inside langfun, not at a tool-call
+  boundary. Where a generated expression crosses a guarded argument it is refused; where
+  langfun evaluates internally nothing here is on the path, and no preset changes that.
+  Both limits are asserted rather than described.
+
+### Changed
+
+- **CVE-2026-85787** (MEDIUM 6.5, CWE-184, `awslabs.postgres-mcp-server` < 1.1.7) recorded
+  as out of scope in `tests/cves/README.md`, citing the precedent already set for its
+  sibling CVE-2026-85620: separating a read from a write needs the SQL parsed, the
+  Pydantic-only core forbids that dependency, and a regex approximation would be the same
+  defect the CVE *is*. Shipping another incomplete denylist and calling it a guard would
+  reproduce the vulnerability while claiming to fix it.
+
+- CVE regression counts **40 → 43** and CVE-numbered **33 → 36** in the README, the
+  marketplace manifest, and the gate that pins them.
+
 ## [0.10.0] - 2026-09-12
 
 ### Fixed
