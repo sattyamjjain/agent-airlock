@@ -626,7 +626,8 @@ class ManagedSandboxBackend(SandboxBackend):
 
     Why this backend exists:
 
-    - The roadmap (#6) tracks a Managed Agents story for v0.5.0.
+    - A Managed Agents story was tracked in #6 (v0.5.0 roadmap), which
+      closed 2026-05-03 without this landing. It is untracked today.
     - Users need a clear opt-in hook rather than discovering later that
       Managed Agents is not plug-compatible with `E2BBackend`.
 
@@ -641,7 +642,8 @@ class ManagedSandboxBackend(SandboxBackend):
       that wraps an agent loop rather than a single function call.
     - ``warmup()`` and ``shutdown()`` are no-ops.
 
-    Future work (tracked in #6): a session-based ``ManagedAgentExecutor``
+    Future work (**not currently tracked** — #6 is closed): a
+    session-based ``ManagedAgentExecutor``
     that accepts a tool registry and a prompt, then runs a full agent
     loop inside a Managed session. That lives outside the
     ``SandboxBackend`` interface because the shapes disagree. When it

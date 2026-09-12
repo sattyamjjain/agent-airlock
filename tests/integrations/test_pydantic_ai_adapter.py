@@ -151,3 +151,74 @@ class TestPydanticAIAdapter:
     def test_supported_versions_tuple_documented(self) -> None:
         assert "1.89.1" in SUPPORTED_PYDANTIC_AI_VERSIONS
         assert "1.88.0" in SUPPORTED_PYDANTIC_AI_VERSIONS
+
+
+class TestOutputValidateCannotBeSilentlySkipped:
+    """PydanticAI 2.x removed ``output_validate``; the adapter must say so.
+
+    Verified against pydantic-ai 2.43.0 in a scratch venv: ``agent.toolsets``
+    still exists (so the tool walk keeps working) but ``output_validate`` is
+    gone. The adapter used to return quietly in that case, leaving a caller
+    with ``attach_output_validate=True`` and no output sanitisation at all.
+    """
+
+    def test_missing_hook_warns_instead_of_returning_quietly(self) -> None:
+        class _NoOutputValidate:
+            """A 2.x-shaped agent: toolsets, but no output_validate."""
+
+            def __init__(self) -> None:
+                self.toolsets = [_StubToolset({"echo": _StubTool("echo")})]
+
+        agent = _NoOutputValidate()
+        assert not hasattr(agent, "output_validate")
+
+        adapter = PydanticAIAdapter(attach_output_validate=True)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            adapter.wrap_agent(agent)
+
+        assert any(
+            issubclass(w.category, UserWarning) and "output_validate" in str(w.message)
+            for w in caught
+        ), f"expected a UserWarning naming output_validate; got {[str(w.message) for w in caught]}"
+
+    def test_the_warning_says_tools_are_still_guarded(self) -> None:
+        """A user who reads it must not conclude the whole adapter is off."""
+
+        class _NoOutputValidate:
+            def __init__(self) -> None:
+                self.toolsets = [_StubToolset({"echo": _StubTool("echo")})]
+
+        agent = _NoOutputValidate()
+        adapter = PydanticAIAdapter(attach_output_validate=True)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            adapter.wrap_agent(agent)
+
+        message = next(str(w.message) for w in caught if issubclass(w.category, UserWarning))
+        assert "Tool arguments are still validated" in message
+        assert "NOT sanitised" in message
+
+    def test_opting_out_does_not_warn(self) -> None:
+        class _NoOutputValidate:
+            def __init__(self) -> None:
+                self.toolsets = [_StubToolset({"echo": _StubTool("echo")})]
+
+        adapter = PydanticAIAdapter(attach_output_validate=False)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            adapter.wrap_agent(_NoOutputValidate())
+
+        assert not [w for w in caught if issubclass(w.category, UserWarning)]
+
+    def test_a_1x_shaped_agent_still_gets_the_hook(self) -> None:
+        """The warning must not fire where the hook genuinely attaches."""
+        agent = _StubAgent([_StubToolset({"echo": _StubTool("echo")})])
+        adapter = PydanticAIAdapter(attach_output_validate=True)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            adapter.wrap_agent(agent)
+
+        assert callable(agent.output_validate)
+        assert not [w for w in caught if issubclass(w.category, UserWarning)]

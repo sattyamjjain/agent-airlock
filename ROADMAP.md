@@ -104,20 +104,25 @@ quietly drops items reads the same as one that never had them._
 
 **Write the seven missing feature doc pages.**
 
-Fixing the README's dead links in v0.8.80 surfaced this rather than created it: seven shipped
-features have no documentation page at all, and the README rows for them were pointing at
-files that had never been written. They now point at the source module, which is honest but
-thin. The features and their code:
+Fixing the README's dead links in v0.8.80 surfaced this rather than created it: shipped
+features with no documentation page at all, whose README rows pointed at files that had
+never been written. They now point at the source module, which is honest but thin.
+
+**This said "seven" until v0.9.1, and it was five.** `policy_bundle.lock` and
+`airlock kill-switch` both got real pages on 2026-09-04 — five days *before* this file was
+last edited — and the table below still listed them as `none`. A roadmap that under-claims
+is the same defect as one that over-claims: it is a row that does not match the tree. The
+features and their code:
 
 | Feature | Code | Doc |
 |---|---|---|
 | `airlock attest receipt` | `attest/` | partial — `docs/attest/layer-contract.md` covers the contract block only |
 | `airlock console` | `cli/console.py` | none |
-| `policy_bundle.lock` | `pack/` | none |
+| ~~`policy_bundle.lock`~~ | `pack/` | **done** — `docs/cli/policy-bundle-lock.md` (2026-09-04) |
 | `airlock studio` | `studio/` | none |
 | `airlock graph serve` | `cli/graph.py` | none |
 | `airlock policy compile / explain` | `policy_compiler/` | none |
-| `airlock kill-switch` | `kill_switch/` | none |
+| ~~`airlock kill-switch`~~ | `kill_switch/` | **done** — `docs/cli/kill-switch.md` (2026-09-04) |
 
 `scripts/check_links.py` now prevents the 404s from coming back, but a gate that stops you
 linking a page you never wrote is not the same as writing it.

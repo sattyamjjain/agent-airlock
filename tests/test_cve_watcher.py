@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 from scripts.cve_watcher import (
+    ARGUMENT_SHAPED_CWES,
     already_tracked,
     classify_shape,
     collect_new_cves,
@@ -375,6 +376,55 @@ class TestShapeClassifier:
 
     def test_empty_description_is_triage_required(self) -> None:
         assert classify_shape("", ()) == "triage-required"
+
+
+class TestSsrfArgumentShape:
+    """SSRF is argument-shaped only when the argument is the defect.
+
+    The watcher shipped with no way to see CVE-2026-19753 (mcp-rdf-explorer,
+    CWE-918 HIGH 7.3) even though ``ssrf_egress_guard.py`` exists precisely to
+    refuse that shape — it classified ``triage-required`` and no issue was ever
+    opened.
+
+    The fix is a sink word, not a new entry in :data:`ARGUMENT_SHAPED_CWES`,
+    because promoting CWE-918 wholesale would overturn two human dispositions
+    in the pinned first queue. Both directions are asserted here so a later
+    widening of the CWE set fails loudly rather than quietly re-opening them.
+    """
+
+    #: CVE-2026-19753, as NVD served it. The attacker supplies the bad URL.
+    _RDF_EXPLORER = (
+        "A vulnerability was detected in Model Context Protocol mcp-rdf-explorer "
+        "1.0.0. Affected is the function explore_url of the file src/index.ts. "
+        "Executing manipulation of the argument url can lead to server-side "
+        "request forgery."
+    )
+
+    #: CVE-2026-18905 / CVE-2026-77822. The URL is legitimate; DNS betrays it
+    #: *after* validation, so there is no bad argument for airlock to refuse.
+    _DNS_REBIND = (
+        "IBM ContextForge MCP Gateway could allow a remote authenticated attacker "
+        "to obtain sensitive information due to a DNS rebinding vulnerability "
+        "during tool invocation."
+    )
+
+    def test_a_manipulated_argument_is_a_candidate(self) -> None:
+        assert classify_shape(self._RDF_EXPLORER, ("CWE-918",)) == "candidate"
+
+    def test_dns_rebinding_ssrf_stays_triage_required(self) -> None:
+        """The human disposition on the first queue must survive this change."""
+        assert classify_shape(self._DNS_REBIND, ("CWE-918",)) == "triage-required"
+
+    def test_cwe_918_alone_is_still_not_enough(self) -> None:
+        """The CWE is not the signal — the named argument is."""
+        assert "CWE-918" not in ARGUMENT_SHAPED_CWES
+        assert classify_shape("Server-side request forgery.", ("CWE-918",)) == "triage-required"
+
+    def test_the_guard_this_protects_still_exists(self) -> None:
+        """A sink word for a shape nothing refuses would be noise, not triage."""
+        from agent_airlock.ssrf_egress_guard import SSRFEgressGuard
+
+        assert SSRFEgressGuard is not None
 
 
 class TestExtractCarriesShape:

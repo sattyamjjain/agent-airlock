@@ -346,7 +346,9 @@ All major AI frameworks tested and working:
 
 ### Enterprise Production Roadmap (Added 2026-02-01)
 
-See `PRODUCTION_ROADMAP.md` for full details.
+The `PRODUCTION_ROADMAP.md` this line used to point at does not exist and is not in
+git history. The live plan is [`ROADMAP.md`](ROADMAP.md); the checklist below is a
+record of what shipped, not a tracker.
 
 **Already Implemented (v0.1.5):**
 - [x] Async function support (proper async/await)

@@ -4,12 +4,16 @@ Three implementations ship today:
 
 - :class:`FileSigner` — key bytes from a path on disk.
 - :class:`EnvSigner` — key bytes from an environment variable.
-- :class:`KMSStubSigner` — placeholder; the real KMS / Sigstore
-  Fulcio implementations land in v0.5.9 (issue #75).
+- :class:`KMSStubSigner` — placeholder. A real KMS / Sigstore Fulcio
+  signer is **still not implemented**. This said "lands in v0.5.9
+  (issue #75)"; we are past v0.9.0 and issue #75 does not exist, so
+  that was a date and a tracker neither of which was real.
 
-All three sign with HMAC-SHA256, which is replaceable in v0.5.9 by
-swapping the ``sign`` body without changing the :class:`Signer`
-protocol or envelope shape.
+All three sign with HMAC-SHA256, which stays replaceable by swapping
+the ``sign`` body without changing the :class:`Signer` protocol or
+envelope shape — that is why no release is named here: the swap does
+not need one, and naming a version that passes without the work being
+done is how the old claim went stale.
 """
 
 from __future__ import annotations
@@ -69,12 +73,15 @@ class EnvSigner:
 
 @dataclass
 class KMSStubSigner:
-    """Placeholder for AWS / GCP KMS / Sigstore Fulcio (v0.5.9).
+    """Placeholder for AWS / GCP KMS / Sigstore Fulcio. **Not implemented.**
 
-    The v0.5.8 surface uses HMAC-SHA256 with a dev-only key so the
-    envelope shape, CLI, and ``verify_envelope`` flow can be
-    exercised end-to-end. Production deployments must wait for the
-    v0.5.9 KMS adapter or substitute their own :class:`Signer`.
+    Uses HMAC-SHA256 with a dev-only key so the envelope shape, CLI, and
+    ``verify_envelope`` flow can be exercised end-to-end. It is not a KMS
+    signer and does not become one by being installed.
+
+    Production deployments must substitute their own :class:`Signer`. This
+    docstring previously pointed at a "v0.5.9 KMS adapter"; that release
+    shipped long ago without it, so there is no version to wait for.
     """
 
     keyid: str = "kms-stub"
