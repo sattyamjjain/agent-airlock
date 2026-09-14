@@ -9,7 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(no entries yet)
+### Changed
+
+- **CVE-2026-90617 (GH05TCREW PentestAgent, MCP HTTP server) dispositioned out of scope.**
+  NVD records it as os command injection reached through `run_task`, and the watcher's shape
+  classifier filed it because `run_task` is a genuine registered MCP tool taking
+  `{task, target, scope}`, which is the seam this library sits on. The argument does not
+  carry the command. `task` is a natural-language prompt; the shell string is authored
+  downstream by the LLM and run by `LocalRuntime`'s `asyncio.create_subprocess_shell`, which
+  is the product working as designed for a caller that got in. The defect is that the aiohttp
+  `/mcp` routes carry no authentication and bind `0.0.0.0:8080` by default. Upstream PR #101
+  fixes it with `Authorization: Bearer` middleware plus a `127.0.0.1` default and changes no
+  argument or schema. Neither an auth check on someone else's route nor a bind default is
+  expressible at the tool-call boundary, so there is no guard and no fixture. The refusal row
+  and the reasoning are in `tests/cves/README.md`. No code under `src/` changed.
+- Two rotting counts in the same `tests/cves/README.md` section were replaced with the
+  structural fact: "all four rows" became "every row", and "the two 2026-09 additions" now
+  names the two CVEs it means.
 
 ## [0.10.4] - 2026-09-12
 

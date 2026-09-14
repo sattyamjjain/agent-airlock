@@ -43,7 +43,7 @@ layer. Out-of-scope is the expected outcome of triage, not an admission — see
 
 **Two of them are still tested**, and this section used to say they were not.
 A `Tested?` column now records which, because "out of scope" and "untested" are
-different claims and only the first one was ever true for all four rows. Where a
+different claims and only the first one was ever true for every row. Where a
 test exists it asserts an *adjacent* primitive — second defence on the same tool
 inventory — never the missing check itself. That is the same `partial` framing
 CVE-2026-79748 carries in the Layout table above.
@@ -55,6 +55,7 @@ CVE-2026-79748 carries in the Layout table above.
 | CVE-2026-18486 | IBM ContextForge MCP Gateway ≤ 1.0.7 | no | CWE-200. "Improper validation of jq filters" leaking `JWT_SECRET_KEY` and database credentials, which the attacker then uses to forge admin tokens. **No public source states the filter shape.** IBM's bulletin is the only disclosure (no GHSA, no upstream advisory), its remediation is "upgrade and rotate credentials", and the exposure is of the gateway's *own* secrets from inside its filter evaluator — not a value passing through a tool call. A guard here would have to invent the threat shape, and a guessed pattern is worse than none. |
 | CVE-2026-85787 | Amazon awslabs postgres-mcp-server &lt; 1.1.7 | no | CWE-184, "incomplete list of disallowed inputs" in the SQL validation component, letting crafted SQL modify data beyond the read-only scope. **Same class as CVE-2026-85620 below, and refused for the same stated reason**: separating a read from a write needs the SQL parsed, the Pydantic-only core forbids that dependency, and a regex approximation would reproduce the defect — a denylist that covers some syntax and silently misses the rest is what this CVE *is*. Solve it by upgrading to 1.1.7, or with a read-only DB role. |
 | CVE-2026-85620 | Postgres MCP Pro 0.3.0 | no | CWE-863. `SafeSqlDriver`'s allowlist checks function names only on `FuncCall` AST nodes; a function in a `FROM` clause parses as `RangeFunction`, which is in `ALLOWED_NODE_TYPES` and never name-checked — so `SELECT * FROM pg_read_file('/etc/passwd')` returns the file while `SELECT pg_read_file(...)` is blocked. Blocking this needs a real SQL parser to walk the AST. The Pydantic-only core forbids that dependency, and a regex approximation would be **the same defect this CVE is**: a validator that covers some syntax positions and silently misses others. Solve it by upgrading postgres-mcp, or with a read-only DB role that lacks `pg_read_file`. |
+| CVE-2026-90617 | GH05TCREW PentestAgent, rolling release (audited at `cf882da`) | no | CWE-77, CWE-78. NVD: *"This vulnerability affects the function run_task of the file interface/main.py of the component MCP HTTP Server. Performing a manipulation results in os command injection."* The classifier filed it because `run_task` really is a registered MCP tool taking `{task, target, scope}`, which is the seam this library sits on. **The argument does not carry the command.** `task` is a natural-language prompt; the shell string is authored downstream by the LLM and run by `LocalRuntime`'s `asyncio.create_subprocess_shell`, which is the product working as designed for a caller that got in. The defect is that the aiohttp `/mcp` routes carry no authentication and bind `0.0.0.0:8080` by default, so any network client can drive the agent at all. Upstream [PR #101](https://github.com/GH05TCREW/pentestagent/pull/101) fixes it with `Authorization: Bearer` middleware plus a `127.0.0.1` default, and changes no argument or schema. Neither an auth check on someone else's route nor a bind default is expressible at the tool-call boundary. (NVD names `interface/main.py`; at `cf882da` that file only bootstraps the registry, and `run_task` is defined in `pentestagent/mcp/server/mcp_tools.py`.) |
 
 **Why all three of CVE-2026-79748, CVE-2026-33032 and CVE-2026-23744 are
 `partial`**, given all three are missing-authorization defects: the split is the
@@ -68,12 +69,22 @@ next-best thing — that the destructive tool inventory and the public bind are
 themselves refused — and say in their own docstrings that this is not the missing
 auth check.
 
-The same rule decides the two 2026-09 additions, and it cuts differently in
-each. CVE-2026-85620 *does* leave an argument at the boundary — a SQL string —
+The same rule decides CVE-2026-85620 and CVE-2026-18486, and it cuts
+differently in each. CVE-2026-85620 *does* leave an argument at the boundary — a SQL string —
 but reading it correctly requires an AST the core cannot parse, and the
 approximation would reproduce the CVE. CVE-2026-18486 leaves no argument shape
 anyone has published. Both are refusals for stated, checkable reasons rather
-than for lack of interest. The vocabulary is written down in
+than for lack of interest.
+
+CVE-2026-90617 is the `both` case `docs/cve-triage.md` describes, resolved
+without a second-defence test. Its missing authentication is out of scope on the
+same grounds as CVE-2026-33032 and CVE-2026-23744. What separates it from
+CVE-2026-79748 is the primitive the missing check hands over: not a stdio spawn
+config, but a sentence of English aimed at an LLM that is *designed* to run
+commands. Refusing that at the argument boundary would mean classifying prose,
+and on a penetration-testing agent the malicious task and the legitimate one are
+the same string. No adjacent argument is left at a boundary this library sits on,
+so there is no fixture to write. The vocabulary is written down in
 [`docs/cve-triage.md`](../../docs/cve-triage.md).
 
 ## How to add a new CVE test
