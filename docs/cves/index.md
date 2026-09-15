@@ -45,7 +45,6 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-27825](#cve-2026-27825) | mcp-atlassian arbitrary file write via download_path | 9.1 (Critical) | Strong |
 | [CVE-2026-27826](#cve-2026-27826) | mcp-atlassian SSRF via `X-Atlassian-*-Url` headers | 7.5 (High, AV:A/PR:N/UI:N, C:H) | Partial |
 | [CVE-2026-30615](#cve-2026-30615) | (Windsurf zero-click MCP config) — spawn-time config pin | — | — |
-| [CVE-2026-30615](#cve-2026-30615) | Windsurf zero-click MCP config auto-load | — | — |
 | [CVE-2026-30616](#cve-2026-30616) | MCP STDIO transport command-injection (Ox Security class) | 9.8 (Critical) | Strongest |
 | [CVE-2026-32625](#cve-2026-32625) | (LibreChat MCP server-URL env-interpolation secret leak) | 9.6 | — |
 | [CVE-2026-33032](#cve-2026-33032) | "MCPwn" — nginx-ui missing /mcp_message auth middleware | 9.8 | — |
@@ -54,17 +53,18 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-41349](#cve-2026-41349) | OpenClaw agentic consent-bypass | 8.8 | — |
 | [CVE-2026-41361](#cve-2026-41361) | OpenClaw IPv6 SSRF guard bypass | 7.1 | — |
 | [CVE-2026-42271](#cve-2026-42271) | CISA KEV regression fixture (LiteLLM MCP command injection) | 3.1 | — |
-| [CVE-2026-42271](#cve-2026-42271) | (LiteLLM MCP-bridge subprocess command/args/env RCE) | — | — |
 | [CVE-2026-44211](#cve-2026-44211) | Cline Kanban cross-origin WebSocket hijack | 9.7 | — |
 | [CVE-2026-47390](#cve-2026-47390) | SSRF-protection bypass via alternate IP encodings | — | — |
 | [CVE-2026-48782](#cve-2026-48782) | SafeURL IPv6-transition cloud-metadata SSRF bypass | — | — |
 | [CVE-2026-5023](#cve-2026-5023) | codebase-mcp RepoMix OS command injection | — | — |
 | [CVE-2026-53820](#cve-2026-53820) | OpenClaw exec-denylist bypass at MCP loopback spawn | 6.9 | — |
+| [CVE-2026-57124](#cve-2026-57124) | PraisonAI UI /api/mcp/connect spawns caller-chosen local commands | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-306 + CWE-78 | Partial |
 | [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
 | [CVE-2026-75062](#cve-2026-75062) | Google langfun lf.query evaluates model-generated Python unsandboxed | 9.2 (CRITICAL) — CWE-95, CWE-1188 | Partial |
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
 | [CVE-2026-78575](#cve-2026-78575) | IBM Langflow MCP stdio server config takes unvalidated command-line arguments | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Partial |
 | [CVE-2026-79748](#cve-2026-79748) | MCPHub server-config endpoints spawn attacker-supplied stdio commands | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862 | Partial |
+| [CVE-2026-90898](#cve-2026-90898) | Bifrost MCP client registration spawns an unauthenticated stdio command | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-284 + CWE-306 | Partial |
 
 ## Details
 
@@ -488,7 +488,7 @@ they reach application code.
 
 - **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-30615](https://nvd.nist.gov/vuln/detail/CVE-2026-30615)
 - **Advisory:** [https://www.tenable.com/cve/CVE-2026-30615](https://www.tenable.com/cve/CVE-2026-30615)
-- **Regression test:** [`tests/cves/test_cve_2026_30615_mcp_config_pin.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30615_mcp_config_pin.py)
+- **Regression tests:** [`tests/cves/test_cve_2026_30615_mcp_config_pin.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30615_mcp_config_pin.py), [`tests/cves/test_cve_2026_30615_zero_click.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30615_zero_click.py)
 
 **Vulnerability**
 
@@ -498,22 +498,6 @@ Companion to ``test_cve_2026_30615_zero_click.py`` (which covers the
 resolved STDIO spawn config at invocation time and **fails closed** (raises,
 never warns) on an injected or mutated server — catching the zero-click
 pattern even when the mutation never touched a watched config file.
-
-<a id="cve-2026-30615"></a>
-
-### CVE-2026-30615
-
-**Windsurf zero-click MCP config auto-load**
-
-- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-30615](https://nvd.nist.gov/vuln/detail/CVE-2026-30615)
-- **Advisory:** [https://www.tenable.com/cve/CVE-2026-30615](https://www.tenable.com/cve/CVE-2026-30615)
-- **Regression test:** [`tests/cves/test_cve_2026_30615_zero_click.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_30615_zero_click.py)
-
-**Vulnerability**
-
-Primary source (cited per v0.5.1+ convention):
-- NVD: https://nvd.nist.gov/vuln/detail/CVE-2026-30615
-- Tenable: https://www.tenable.com/cve/CVE-2026-30615
 
 <a id="cve-2026-30615"></a>
 
@@ -713,7 +697,8 @@ and left IPv4-mapped / NAT64 / 6to4 / documentation ranges routable.
 
 - **CVSS:** 3.1
 - **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-42271,](https://nvd.nist.gov/vuln/detail/CVE-2026-42271,)
-- **Regression test:** [`tests/cves/test_cve_2026_42271_kev_regression.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_42271_kev_regression.py)
+- **Advisory:** [https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271](https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271)
+- **Regression tests:** [`tests/cves/test_cve_2026_42271_kev_regression.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_42271_kev_regression.py), [`tests/cves/test_cve_2026_42271_mcp_subprocess_arg.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_42271_mcp_subprocess_arg.py)
 
 **Vulnerability**
 
@@ -723,24 +708,6 @@ the two affected LiteLLM endpoints and proving the deny-by-default preset blocks
 it end-to-end. It is a credibility-proof of *existing* coverage of an
 actively-exploited KEV CVE — not a new guard.
 NVD verbatim (https://nvd.nist.gov/vuln/detail/CVE-2026-42271, retrieved
-
-<a id="cve-2026-42271"></a>
-
-### CVE-2026-42271
-
-**(LiteLLM MCP-bridge subprocess command/args/env RCE)**
-
-- **Advisory:** [https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271](https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271)
-- **Regression test:** [`tests/cves/test_cve_2026_42271_mcp_subprocess_arg.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_42271_mcp_subprocess_arg.py)
-
-**Vulnerability**
-
-LiteLLM 1.74.2–1.83.6 (CVSS v3.1 **8.8 High** / v4.0 **8.7 High**, CWE-78,
-**CISA KEV, added 2026-06-08**, actively
-exploited): the MCP server preview endpoints
-``POST /mcp-rest/test/connection`` and ``POST /mcp-rest/test/tools/list``
-accepted a full MCP server config (stdio-transport ``command`` / ``args``
-/ ``env``) in the request body and spawned it as a subprocess on the
 
 <a id="cve-2026-42271"></a>
 
@@ -835,6 +802,53 @@ command actually spawned — a name that passes the surface check resolves, via
 an alias / wrapper binary / shell, to a denied executable.
 
 <a id="cve-2026-53820"></a>
+
+### CVE-2026-57124
+
+**PraisonAI UI /api/mcp/connect spawns caller-chosen local commands**
+
+- **CVSS:** 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-306 + CWE-78
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-57124](https://nvd.nist.gov/vuln/detail/CVE-2026-57124)
+- **Advisory:** [https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-p75f-6fp4-p57w](https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-p75f-6fp4-p57w)
+- **Regression test:** [`tests/cves/test_cve_2026_57124_praisonai_mcp_connect.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_57124_praisonai_mcp_connect.py)
+
+**Vulnerability**
+
+Prior to 4.6.59 the default PraisonAI UI host applications expose
+``POST /api/mcp/connect`` without mandatory authentication and accept
+caller-controlled ``command`` and ``args`` values, which ``PraisonAIUI``
+passes to ``StdioMCPClient`` to start a local process. The UI commands
+(``praisonai ui``, ``praisonai ui agents``, ``praisonai claw``) bind to
+``0.0.0.0`` by default, so a reachable unauthenticated client executes
+commands as the UI service account. The advisory's own proof of concept
+records the decisive detail: the spawned ``touch`` marker file exists even
+though the MCP handshake then fails with ``Connection failed`` — the
+process starts before anything validates that this is really an MCP server.
+Fixed in 4.6.59.
+
+**Airlock mitigation**
+
+Two halves, and agent-airlock reaches exactly one of them, per the split in
+``docs/cve-triage.md``.
+
+The **missing authentication on the route, and the 0.0.0.0 bind, are out of
+scope** — the documented shape, the same class as CVE-2026-33032 and
+CVE-2026-23744. Nothing here can require a credential on someone else's
+endpoint, and the upstream fix in 4.6.59 is the correct layer for it.
+
+What *is* reachable is the **primitive**: ``command`` and ``args`` arriving
+flat in a request body and heading for a stdio spawn. That is the
+CVE-2026-42271 shape, so this is a **second-defence regression fixture
+against an existing guard, not a new guard**.
+
+The handshake detail is what makes an argument-level guard the right second
+defence rather than a redundant one. Because the process starts before the
+MCP handshake is validated, a defence that waits for a well-formed MCP
+session is already too late; the refusal has to happen on the registration
+argument itself.
+
+<a id="cve-2026-57124"></a>
 
 ### CVE-2026-6980
 
@@ -1053,3 +1067,48 @@ split, the primitive decides whether a second-defence test is worth adding.
 This is that case, written down.
 
 <a id="cve-2026-79748"></a>
+
+### CVE-2026-90898
+
+**Bifrost MCP client registration spawns an unauthenticated stdio command**
+
+- **CVSS:** 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-284 + CWE-306
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-90898](https://nvd.nist.gov/vuln/detail/CVE-2026-90898)
+- **Advisory:** [https://github.com/maximhq/bifrost/pull/6757](https://github.com/maximhq/bifrost/pull/6757)
+- **Regression test:** [`tests/cves/test_cve_2026_90898_bifrost_stdio_registration.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_90898_bifrost_stdio_registration.py)
+
+**Vulnerability**
+
+Bifrost registers MCP clients through its management API. A stdio client is
+a ``command`` plus ``args``, and Bifrost **starts that program the moment
+the client is added** — no MCP handshake required. The shipped default is
+``governance.auth_config.is_enabled=false``, and with auth off every caller
+is treated as a local admin, so a single unauthenticated
+``POST /api/mcp/client`` runs a program as the Bifrost process user
+(``appuser`` on the official image). ``transports/v2.1.0`` refuses an
+unauthenticated stdio registration with ``403``; ``transports/v2.0.0``
+still allows it.
+
+**Airlock mitigation**
+
+Two halves, and agent-airlock reaches exactly one of them. This is the
+split ``docs/cve-triage.md`` describes, and it cuts the opposite way from
+CVE-2026-90617, which was dispositioned out of scope because its argument
+carried a natural-language prompt rather than a command.
+
+The **assigned weakness is CWE-306 Missing Authentication** (with CWE-284
+Improper Access Control) — the documented out-of-scope shape, the same
+class as CVE-2026-33032 and CVE-2026-23744. Nothing here can put an auth
+check on someone else's management route, and this fixture does not pretend
+to. The upstream fix is a ``403`` in the handler, which is the correct layer.
+
+What *is* reachable is the **primitive that missing check hands the
+attacker**: a request-controlled stdio spawn config (``command`` / ``args``)
+arriving at a spawn sink. That is the CVE-2026-42271 shape byte for byte, so
+this is a **second-defence regression fixture against an existing guard, not
+a new guard**. A deployment that routes registration payloads through
+:class:`~agent_airlock.mcp_spec.subprocess_arg_guard.McpSubprocessArgInjectionGuard`
+survives the auth hole; one that does not, does not.
+
+<a id="cve-2026-90898"></a>

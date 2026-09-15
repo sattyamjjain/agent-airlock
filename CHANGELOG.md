@@ -11,6 +11,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.5] - 2026-09-15
+
+### Added
+
+- **Two CRITICAL triage issues closed in scope, with regression fixtures.** CVE-2026-90898
+  (Bifrost, CVSS 9.8) and CVE-2026-57124 (PraisonAI, CVSS 9.8) are both the split
+  `docs/cve-triage.md` calls *both*: an unauthenticated HTTP endpoint, which this library
+  cannot reach, handing the caller a `command` plus `args` bound for a stdio spawn, which it
+  already refuses. The missing auth is out of scope in each; the spawn primitive is the
+  CVE-2026-42271 shape, so each gets a second-defence fixture against the existing
+  `McpSubprocessArgInjectionGuard` rather than a new guard. Neither preset claims either CVE.
+
+  The two fixtures also pin something the watcher's own tests did not: filed a day apart,
+  these records are mirror images of each other. Bifrost carries CWE-284 and CWE-306, neither
+  argument-shaped, and was admitted only by the sink word `stdio`. PraisonAI has no sink word
+  in its description at all and was admitted only by CWE-78. Each of `classify_shape`'s two
+  signals is therefore load-bearing exactly once across the pair, which is the concrete
+  argument against simplifying it to one.
+
+  Two integration footguns are asserted rather than described: Bifrost nests the spawn fields
+  under `stdio_config`, so handing the guard the whole request body finds nothing to inspect
+  and allows it; and Bifrost's `envs` is a list of variable names, not the `env` mapping the
+  dangerous-variable check reads, so that leg of CVE-2026-42271 has no analogue there.
+
+### Fixed
+
+- **The CVE catalogue counted 36 rows for 34 CVEs, and the README repeated the number.**
+  `docs/cves/index.md` emitted one row per test *module*, and two CVEs are covered by two
+  modules each (CVE-2026-30615, CVE-2026-42271). Both appeared twice under different titles.
+  Because the anchor is derived from the CVE id, each pair emitted the same `<a id="cve-...">`
+  twice and both summary links pointed at it, so one link in each pair necessarily resolved
+  to the other row's section, on top of the HTML being invalid.
+
+  `--check` could not see any of it. It compares generated output against committed output,
+  and the generator wrote the duplicate into both sides, so the gate was green while the
+  artefact was wrong. A row is now one CVE, listing every module behind it, and
+  `assert_unique_cve_rows()` runs in every mode including `--write`, so a duplicate cannot be
+  written in the first place. `TestOneRowPerCve` covers the anchors, the links and the gate's
+  own ability to fail.
+
+  The three counts this touches were being conflated and are now separated: 45 regression
+  modules, 38 of them CVE-numbered, covering 36 distinct CVEs. The README quotes the last of
+  those and is asserted against the catalogue's row count; `marketplace.json` quotes the first
+  two. The old "36" was a module count that happened to equal today's CVE count only because
+  the catalogue was double-counting.
+
+### Changed
+
+- **The distribution checklist is off DRAFT and dated.** `docs/launch/distribution-submissions.md`
+  had step 1 ticked and step 2 untouched while the README rewrite, the benchmark
+  re-measurement and twelve releases shipped past it. All six target lists were re-verified
+  live on 2026-09-15 and three no longer resolve: `punkpeye/awesome-mcp-servers` scopes itself
+  to "servers ... something you install and run yourself" and points libraries at its
+  `awesome-mcp-devtools` sibling, which replaces it; `wong2/awesome-mcp-servers` states it
+  does not accept PRs and redirects to a server index this file already names a wrong target;
+  and `e2b-dev/awesome-ai-agents` has no security or tooling subsection, which the old row was
+  conditional on. The two "search for it" placeholders now name real repositories. Each of the
+  four surviving rows carries its exact current section heading, what the list requires, a
+  ready-to-paste bullet already in that list's own format, and a state column. The canonical
+  one-liner said "A type-checker for AI tool calls" while `pyproject.toml`, the repo
+  description and the README hero had all moved to the contract-layer framing; it now matches.
+
+- **CVE-2026-90617 (GH05TCREW PentestAgent, MCP HTTP server) dispositioned out of scope.**
+  NVD records it as os command injection reached through `run_task`, and the watcher's shape
+  classifier filed it because `run_task` is a genuine registered MCP tool taking
+  `{task, target, scope}`, which is the seam this library sits on. The argument does not
+  carry the command. `task` is a natural-language prompt; the shell string is authored
+  downstream by the LLM and run by `LocalRuntime`'s `asyncio.create_subprocess_shell`, which
+  is the product working as designed for a caller that got in. The defect is that the aiohttp
+  `/mcp` routes carry no authentication and bind `0.0.0.0:8080` by default. Upstream PR #101
+  fixes it with `Authorization: Bearer` middleware plus a `127.0.0.1` default and changes no
+  argument or schema. Neither an auth check on someone else's route nor a bind default is
+  expressible at the tool-call boundary, so there is no guard and no fixture. The refusal row
+  and the reasoning are in `tests/cves/README.md`. No code under `src/` changed.
+- Two rotting counts in the same `tests/cves/README.md` section were replaced with the
+  structural fact: "all four rows" became "every row", and "the two 2026-09 additions" now
+  names the two CVEs it means.
+
 ## [0.10.4] - 2026-09-12
 
 ### Changed
