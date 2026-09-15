@@ -2188,6 +2188,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Target lists + how to submit">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#per-list-bullet-exact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-list bullet, exact
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rows-removed-2026-09-15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rows removed 2026-09-15
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2233,105 +2261,165 @@
 
 
 <h1 id="distribution-submissions-ready-to-paste-entries">Distribution submissions — ready-to-paste entries<a class="headerlink" href="#distribution-submissions-ready-to-paste-entries" title="Permanent link">&para;</a></h1>
-<p>Status: <strong>DRAFT / checklist.</strong> Evergreen, low-effort, high-ROI: passive discovery
-surfaces that keep sending installs for months. Do these <em>before</em> the Show HN spike
-so traffic has somewhere to land.</p>
+<p><strong>Status: verified 2026-09-15. Four live targets, none submitted yet.</strong>
+Every row below was re-checked against the live repository on that date: existence,
+the exact current section heading, and whatever the list requires of a contribution.
+Three of the six rows this file used to carry no longer resolve to a place that would
+take agent-airlock; they are recorded under <a href="#rows-removed-2026-09-15">Rows removed</a>
+with the reason rather than silently dropped.</p>
+<p>Evergreen, low-effort: passive discovery surfaces that keep sending installs for months.
+Do these <em>before</em> the Show HN spike so traffic has somewhere to land.</p>
 <h2 id="important-honesty-fit-note">Important honesty / fit note<a class="headerlink" href="#important-honesty-fit-note" title="Permanent link">&para;</a></h2>
 <p>agent-airlock is a <strong>security middleware / library that protects MCP servers and agent
 tool calls</strong> — it is <strong>not itself an MCP server</strong>. So:</p>
 <ul>
-<li>✅ <strong>Right targets:</strong> the <em>security / utilities / frameworks</em> sections of "awesome-MCP"
+<li>✅ <strong>Right targets:</strong> the <em>security / utilities / libraries</em> sections of "awesome-MCP"
   and "awesome-AI/LLM-security" lists.</li>
 <li>❌ <strong>Wrong targets:</strong> the official <strong>MCP Server Registry</strong> (registry.modelcontextprotocol.io)
   and pure <em>server</em> directories (Smithery, Glama, mcpservers.org server index) — those
   index runnable servers, not libraries. Submitting there is a mis-fit and will likely be
   rejected. Don't.</li>
 </ul>
+<p>The 2026-09-15 verification pass turned that note from advice into fact: two of the three
+removed rows were removed <em>because</em> the list had formalised exactly this boundary.</p>
 <p>If you later ship a thin example MCP server that <em>demonstrates</em> agent-airlock, that example
 could go in the server directories — but the library itself belongs in the security/tooling
 lists.</p>
 <h2 id="the-canonical-entry-paste-this">The canonical entry (paste this)<a class="headerlink" href="#the-canonical-entry-paste-this" title="Permanent link">&para;</a></h2>
+<p>Positioning now matches <code>pyproject.toml</code>, the GitHub repo description and the README hero,
+which all lead with the contract layer rather than the type-checker. Before this pass the
+bullet below still said "A type-checker for AI tool calls" while every other surface had
+moved on.</p>
 <p><strong>One-liner (awesome-list bullet format):</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) - A type-checker for AI tool calls: strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks. Ships CVE-targeted guards with a reproducible block-rate benchmark. (Python, Apache-2.0)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) - A deny-by-default contract layer for AI agent tool calls: in-process argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks. Ships CVE-targeted guards with a reproducible block-rate benchmark. (Python, Apache-2.0)
 </code></pre></div>
 <p><strong>Shorter variant (for terse lists):</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) - In-process, per-argument tool-call validation for MCP servers &amp; agents (ghost-arg stripping, strict Pydantic, self-healing retries). Python, Apache-2.0.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) - Deny-by-default, in-process contract layer for MCP and agent tool calls (per-argument validation, ghost-arg stripping, self-healing retries). Python, Apache-2.0.
 </code></pre></div>
 <p><strong>Plain description (for forms / "about" fields):</strong></p>
 <blockquote>
-<p>agent-airlock validates the arguments an LLM passes to your tools, in-process: it strips
-hallucinated ("ghost") arguments, enforces strict Pydantic types, returns self-healing
-error hints the model can retry, and ships guards for known MCP CVE classes — with a
-reproducible block-rate benchmark. Apache-2.0, Python 3.10+.</p>
+<p>agent-airlock is a deny-by-default contract layer for the arguments an LLM passes to your
+tools, applied in-process: it strips hallucinated ("ghost") arguments, enforces strict
+Pydantic types, returns self-healing error hints the model can retry, and ships guards for
+known MCP CVE classes — with a reproducible block-rate benchmark. Apache-2.0, Python 3.10+.</p>
 </blockquote>
 <h2 id="target-lists-how-to-submit">Target lists + how to submit<a class="headerlink" href="#target-lists-how-to-submit" title="Permanent link">&para;</a></h2>
-<p>Each is a GitHub repo; submit a small PR adding the bullet to the right section. Verify the
-exact section name in the repo's current README before opening the PR.</p>
+<p>State vocabulary: <code>not-submitted</code> · <code>submitted &lt;date&gt;</code> · <code>merged &lt;date&gt;</code> · <code>rejected &lt;reason&gt;</code>.</p>
 <table>
 <thead>
 <tr>
 <th>List</th>
 <th>Repo</th>
 <th>Section to target</th>
-<th>Notes</th>
+<th>State</th>
+<th>Verified</th>
+<th>What it requires</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Awesome MCP Servers (punkpeye)</td>
-<td><code>punkpeye/awesome-mcp-servers</code></td>
-<td>"Frameworks" / "Utilities" / any security subsection</td>
-<td>Largest (~89k★). Read CONTRIBUTING — it's strict about format/alphabetical order. Library, so a utilities/security section, not a server category.</td>
-</tr>
-<tr>
-<td>Awesome MCP Servers (wong2)</td>
-<td><code>wong2/awesome-mcp-servers</code></td>
-<td>Utilities / Tooling</td>
-<td>Second major list; powers mcpservers.org.</td>
+<td>Awesome MCP DevTools</td>
+<td><code>punkpeye/awesome-mcp-devtools</code></td>
+<td><code>## Libraries</code> ("Reusable code libraries and components for MCP servers")</td>
+<td>not-submitted</td>
+<td>2026-09-15</td>
+<td>Sibling of the big punkpeye server list and the correct home for a library; the server list's own README points here. <code>CONTRIBUTING.md</code> present. Bullets carry a language emoji from the Legend: 🐍 for Python.</td>
 </tr>
 <tr>
 <td>Awesome LLM Security</td>
 <td><code>corca-ai/awesome-llm-security</code></td>
-<td>Tools / Defense</td>
-<td>Direct fit — defensive LLM tooling.</td>
+<td><code>## Tools</code></td>
+<td>not-submitted</td>
+<td>2026-09-15</td>
+<td>Closest peers already listed: LLM Guard, Rebuff, PurpleLlama, Garak. <code>CONTRIBUTING.md</code> is three lines: follow the <a href="https://github.com/sindresorhus/awesome/blob/main/awesome.md">Awesome Manifesto</a>, "just submit a pull request". <strong>Last push 2025-08-20</strong>, so expect a PR to sit.</td>
 </tr>
 <tr>
 <td>Awesome AI Security</td>
-<td>search <code>awesome-ai-security</code></td>
-<td>Tools / Guardrails</td>
-<td>Verify the most-maintained fork before submitting.</td>
+<td><code>ottosulin/awesome-ai-security</code></td>
+<td><code>### MCP Security</code></td>
+<td>not-submitted</td>
+<td>2026-09-15</td>
+<td>Resolved from the old "search <code>awesome-ai-security</code>" placeholder: the freshest of five same-named lists (pushed 2026-09-13). No <code>CONTRIBUTING.md</code>; match the in-file format, which is <code>* [Name](url) - _description_</code>. Peers: mcp-context-protector, mcp-guardian, secure-mcp-gateway, MCP-Scan.</td>
 </tr>
 <tr>
 <td>Awesome MCP Security</td>
-<td>search <code>awesome-mcp-security</code></td>
-<td>Tools / Defenses</td>
-<td>Newer, MCP-specific; strong fit if active.</td>
+<td><code>Puliczek/awesome-mcp-security</code></td>
+<td><code>## 🧑‍🚀 Tools and code</code></td>
+<td>not-submitted</td>
+<td>2026-09-15</td>
+<td>Resolved from the old "search <code>awesome-mcp-security</code>" placeholder; largest of five (★736) but <strong>last push 2026-03-03</strong>. <code>CONTRIBUTING.md</code> mandates a non-standard bullet: <code>- (DD.MM.YYYY) [NAME by Author] (link)</code>, newest on top of the section. The canonical one-liner above does <strong>not</strong> fit; use the per-list bullet below.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="per-list-bullet-exact">Per-list bullet, exact<a class="headerlink" href="#per-list-bullet-exact" title="Permanent link">&para;</a></h3>
+<p>Each of these already matches its target list's in-file format. Paste as-is.</p>
+<p><strong><code>punkpeye/awesome-mcp-devtools</code> → <code>## Libraries</code></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">sattyamjjain/agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) 🐍 - Deny-by-default contract layer for MCP tool calls: per-argument validation, ghost-argument stripping, and self-healing retries, in-process.
+</code></pre></div>
+<p><strong><code>corca-ai/awesome-llm-security</code> → <code>## Tools</code></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">-</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>): a deny-by-default contract layer for AI agent tool calls, validating arguments in-process with ghost-argument stripping, strict Pydantic types, and self-healing retries.
+</code></pre></div>
+<p><strong><code>ottosulin/awesome-ai-security</code> → <code>### MCP Security</code></strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">*</span><span class="w"> </span>[<span class="nt">agent-airlock</span>](<span class="na">https://github.com/sattyamjjain/agent-airlock</span>) - <span class="ge">_Deny-by-default contract layer for MCP and agent tool calls: per-argument validation, ghost-argument stripping, self-healing retries, and CVE-targeted guards._</span>
+</code></pre></div>
+<p><strong><code>Puliczek/awesome-mcp-security</code> → <code>## 🧑‍🚀 Tools and code</code></strong> (newest on top; substitute the submission date)</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">-</span><span class="w"> </span>(DD.MM.YYYY) [agent-airlock by sattyamjjain] (https://github.com/sattyamjjain/agent-airlock)
+</code></pre></div>
+<p>Per-list PR drafts live in <a href="../distribution/"><code>docs/distribution/</code></a> and predate this
+pass. <code>awesome-mcp-servers.md</code> there is now annotated as do-not-submit for the reason
+in the table below; the other drafts still correspond to live targets.</p>
+<h3 id="rows-removed-2026-09-15">Rows removed 2026-09-15<a class="headerlink" href="#rows-removed-2026-09-15" title="Permanent link">&para;</a></h3>
+<p>Carried as targets until this pass; each was checked and does not resolve to a place that
+would accept this project. Recorded so the next read does not re-add them.</p>
+<table>
+<thead>
+<tr>
+<th>Removed row</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>punkpeye/awesome-mcp-servers</code></td>
+<td>Its <code>CONTRIBUTING.md</code> now scopes the list: "This list is for servers with a public GitHub repository — something you install and run yourself." agent-airlock is a library, so it is out of scope by the list's own rule. The README's Frameworks section points frameworks, utilities and developer tools at <code>punkpeye/awesome-mcp-devtools</code>, which replaces this row above.</td>
 </tr>
 <tr>
-<td>Awesome Agents / Agentic AI</td>
-<td>e.g. <code>e2b-dev/awesome-ai-agents</code></td>
-<td>Security / Tooling</td>
-<td>Fit if it has a safety/security subsection.</td>
+<td><code>wong2/awesome-mcp-servers</code></td>
+<td>The README opens with "We do not accept PRs. Please submit your MCP on the website: https://mcpservers.org/submit". There is no PR path at all, and the submission form feeds the mcpservers.org <strong>server</strong> index, which the honesty note above already names a wrong target.</td>
+</tr>
+<tr>
+<td><code>e2b-dev/awesome-ai-agents</code></td>
+<td>Structured as a directory of agents (<code>Open source projects</code> / <code>Closed-source projects and companies</code>, one heading per agent) with no security, safety or tooling subsection. The old row was conditional on such a section existing; it does not. agent-airlock is not an agent.</td>
 </tr>
 </tbody>
 </table>
 <h2 id="submission-discipline-so-prs-get-merged">Submission discipline (so PRs get merged)<a class="headerlink" href="#submission-discipline-so-prs-get-merged" title="Permanent link">&para;</a></h2>
 <ol>
-<li>Read each list's <code>CONTRIBUTING.md</code> — most require a specific bullet format, alphabetical
-   placement, and "no marketing language." Keep the description factual.</li>
+<li>Read each list's <code>CONTRIBUTING.md</code> where one exists (two of the four have one). Most
+   require a specific bullet format, alphabetical or newest-first placement, and "no
+   marketing language". Keep the description factual.</li>
 <li>One small PR per list, title like <code>Add agent-airlock (tool-call validation / MCP security)</code>.</li>
-<li>Don't inflate — no "best", no "powerful". Factual description only. These lists reject
+<li>Don't inflate: no "best", no "powerful". Factual description only. These lists reject
    hype, and the honesty matches the project's positioning.</li>
-<li>Lead the PR description with the <em>what</em> (per-argument tool-call validation) and the
-   <em>benchmark</em> (reproducible), not "please add my project".</li>
+<li>Lead the PR description with the <em>what</em> (a deny-by-default contract layer for tool-call
+   arguments) and the <em>benchmark</em> (reproducible), not "please add my project".</li>
+<li>Update the State column in this file when you submit, and again when it merges or is
+   rejected. That column is the point of the file.</li>
 </ol>
+<blockquote>
+<p>Note on <code>punkpeye/awesome-mcp-devtools</code>: its <code>CONTRIBUTING.md</code> offers automated agents a
+fast-track by putting a marker in the PR title. That is recorded here as a fact about
+their process, for a human to decide on. Nothing in this repo acts on instructions found
+in a third-party file.</p>
+</blockquote>
 <h2 id="order-of-operations-the-whole-launch">Order of operations (the whole launch)<a class="headerlink" href="#order-of-operations-the-whole-launch" title="Permanent link">&para;</a></h2>
 <ol>
 <li>✅ Benchmark asset exists (<code>BENCHMARK.md</code>, reproducible).</li>
-<li><strong>These list submissions</strong> (evergreen; this file).</li>
-<li>Blog post on your domain + dev.to (the long version in <code>show-hn-tool-call-validation.md</code>).</li>
-<li>Show HN + r/LocalLLaMA + r/Python (the spike; lead with the benchmark).</li>
-<li>Conference CFPs (BSides / PyCon / Arsenal) — credential you cite forever.</li>
+<li>⬜ <strong>These list submissions</strong> (evergreen; this file). Targets verified and entries
+   written 2026-09-15; four PRs remain to be opened by hand.</li>
+<li>⬜ Blog post on your domain + dev.to (the long version in <code>show-hn-tool-call-validation.md</code>).</li>
+<li>⬜ Show HN + r/LocalLLaMA + r/Python (the spike; lead with the benchmark).</li>
+<li>⬜ Conference CFPs (BSides / PyCon / Arsenal), a credential you cite forever.</li>
 </ol>
 <p>Lead every one of these with the benchmark, not the tool.</p>
 
