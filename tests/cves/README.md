@@ -12,8 +12,9 @@ with the same shape.
 ## Layout
 
 **This table is a curated selection, not the index.** It carries the rows worth
-reading for the *shape* of a fit, and it has never covered every file — at the time
-of writing it lists 9 of the 33 `test_cve_*.py` modules here. The complete,
+reading for the *shape* of a fit, and it has never covered every file: it lists a
+minority of the `test_cve_*.py` modules here (`ls tests/cves/test_cve_*.py | wc -l`
+counts them). The complete,
 machine-generated catalogue of every CVE in this suite is
 [`docs/cves/index.md`](../../docs/cves/index.md), regenerated from these modules'
 docstrings by `scripts/gen_cve_catalog.py` and gated in CI, so that file cannot
@@ -33,6 +34,8 @@ drift from the suite. This one can, which is why it says so.
 | CVE-2026-19753 | `test_cve_2026_19753_rdf_explorer_ssrf.py` | strong | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19753) |
 | CVE-2026-75062 | `test_cve_2026_75062_langfun_eval.py` | partial (payload shape only; langfun evaluates internally) | [google/langfun#725](https://github.com/google/langfun/issues/725) |
 | CVE-2026-78575 | `test_cve_2026_78575_langflow_mcp_stdio.py` | partial (spawn primitive; needs BOTH stdio guards) | [IBM 7286666](https://www.ibm.com/support/pages/node/7286666) |
+| CVE-2026-90898 | `test_cve_2026_90898_bifrost_stdio_registration.py` | partial (spawn primitive only, not the missing auth) | [maximhq/bifrost#6757](https://github.com/maximhq/bifrost/pull/6757) |
+| CVE-2026-57124 | `test_cve_2026_57124_praisonai_mcp_connect.py` | partial (spawn primitive only, not the missing auth) | [GHSA-p75f-6fp4-p57w](https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-p75f-6fp4-p57w) |
 
 ## Out of scope as a *fix* (the defect itself is not blockable here)
 
