@@ -11,6 +11,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.6] - 2026-09-16
+
+### Fixed
+
+- **`sandbox=True` skipped the argument contract entirely.** The README's first line
+  promises a deny-by-default contract layer. On the sandbox dispatch path that contract did
+  not run at all.
+
+  `@Airlock` builds two things at decoration: the undecorated `func`, and
+  `validated_func`, the Pydantic-strict wrapper. Four dispatch sites chose between them,
+  and all four handed the sandbox the *undecorated* one: `core.py` lines 790 and 802 in the
+  async wrapper (airgapped and plain), 912 and 922 in the sync wrapper. Validation happened
+  on the way *into* `validated_func`, so a path that never called it never validated.
+
+  What an operator was getting: ghost-argument stripping, because `cleaned_kwargs` is
+  computed upstream of the branch, plus the policy, capability, filesystem and budget gates,
+  which all run before dispatch. What they were **not** getting: every `Annotated`
+  validator. `SafePath` did not reject traversal, `SafeURL` did not reject the cloud
+  metadata endpoint, `HandleField` did not reject a handle that was never issued, and strict
+  mode did not reject a coerced type. Silently, with no warning, and only when `sandbox=True`
+  — which is what you write for a tool dangerous enough to want isolated, so the contract
+  went missing exactly where it was most wanted. `SafePath` and `SafeURL` had been in this
+  position since they shipped.
+
+  The wrapper could not simply be sent into the VM: it is a closure, the backend is not
+  assumed to carry it, and `handles.py` already sets out why the per-run ledger cannot
+  travel. So validation is split from execution instead. `validator.create_argument_validator`
+  runs the same `validate_call` under the same strict config against a capture function
+  carrying `func`'s signature, and returns the validated *values*; the four sites now call it
+  first and hand the sandbox those. It is the same machinery rather than a second
+  implementation, so the two paths cannot drift. A refusal propagates to the `except
+  Exception` those sites already sit inside, so it returns the same `AirlockResponse`, the
+  same `BlockReason` and the same `fix_hints` as the local path, and audit records from the
+  two paths agree. The non-sandbox path is untouched.
+
+  Annotations are resolved through `get_type_hints(..., include_extras=True)`. Under
+  `from __future__ import annotations`, which this codebase mandates and tool authors
+  commonly use, `__annotations__` holds strings that the capture function cannot resolve in
+  its own module; reading them raw raises `NameError`, and dropping `include_extras` would
+  degrade every safe type to its base type and silently enforce nothing.
+
+  **What still does not travel into the VM:** the handle ledger. It is in-process by design
+  and validation happens on the parent side of the boundary, before dispatch. Nothing inside
+  the sandbox can consult the ledger, mint a handle, or observe a rejection, so a tool that
+  needs to *issue* handles from inside the sandbox is still outside what this expresses.
+  Shipping the ledger to a remote VM would mean the network call `handles.py` refuses to make.
+
+  `TestSandboxDispatchSkipsTheCheck` pinned the old behaviour and is now
+  `TestSandboxDispatchValidatesFirst`, with one case per annotated type and one per dispatch
+  site. The blockrate benchmark gained a `sandbox=True` arm that measures the path directly:
+  **0/4 contract probes refused before this change, 4/4 after**, with the isolation-backend
+  leg reported as not-run rather than folded in when no backend is present.
+
+
 ## [0.10.5] - 2026-09-15
 
 ### Added
