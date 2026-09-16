@@ -35,6 +35,30 @@ Shape is Now / Next / Later, ordered by how bounded the work is, not by importan
   is still Partial. Issue [#124](https://github.com/sattyamjjain/agent-airlock/issues/124) was
   closed 2026-08-06 without the coverage being raised, and this is the work that closed it.
 
+- **The `sandbox=True` validation gap is closed (v0.10.6).** The README's first line
+  promises a deny-by-default contract layer; on the sandbox dispatch path that contract did
+  not run at all. With a real backend available, `@Airlock` serialised the *undecorated*
+  function into the micro-VM instead of calling the Pydantic-validated wrapper, so no
+  `Annotated` validator ran: `SafePath`, `SafeURL` and `HandleField` alike. Ghost-argument
+  stripping was the only part still in effect, because `cleaned_kwargs` is computed upstream
+  of the branch. An operator who wrote `@Airlock(sandbox=True)` for a *dangerous* tool, which
+  is exactly when the sandbox is reached for, got isolation and no argument contract.
+
+  The wrapper could not simply be shipped into the VM: it is a closure, the backend is not
+  assumed to carry it, and the handle ledger is in-process by design. So validation is split
+  from execution. All four dispatch sites (sync and async, airgapped and not) now validate in
+  the parent through `validator.create_argument_validator` and hand the sandbox the
+  already-validated values. A refusal returns the same `AirlockResponse`, `BlockReason` and
+  `fix_hints` as the local path, so audit records from the two paths agree.
+
+  **What still does not hold:** the ledger is still in-process and still does not travel into
+  the VM. Validation happens on the parent side of the boundary, before dispatch. Nothing
+  inside the sandbox can consult the ledger, mint a handle, or observe a rejection, and a
+  tool that needs to issue handles from inside the sandbox remains outside what this
+  expresses. `TestSandboxDispatchSkipsTheCheck` is now
+  `TestSandboxDispatchValidatesFirst` and pins the fix, one case per annotated type and one
+  per dispatch site.
+
 - **An MCP conformance suite is run and the result is published.**
   ([#122](https://github.com/sattyamjjain/agent-airlock/issues/122), closed 2026-08-05.)
   The README no longer says "no MCP conformance suite has been run against this package";
@@ -133,16 +157,6 @@ on `studio` and `graph serve`.
 
 `scripts/check_links.py` prevents the 404s from coming back; writing the pages is what
 this item was actually for.
-
-**Close the `sandbox=True` validation gap.**
-
-With a real sandbox backend, `@Airlock` serialises the *undecorated* function into the
-micro-VM, so no `Annotated` validator runs on that path — `SafePath`, `SafeURL`, and
-`HandleField` alike. This is documented in `agent_airlock.handles` and pinned by
-`TestSandboxDispatchSkipsTheCheck`, so it cannot regress unnoticed, but it is a real hole:
-validation and isolation should not be mutually exclusive. The fix belongs in the sandbox
-dispatch path and affects every tool, which is why it has not been done as a side effect of a
-feature release.
 
 ---
 
