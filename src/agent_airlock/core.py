@@ -108,7 +108,12 @@ from .self_heal import (
     handle_validation_error,
 )
 from .unknown_args import UnknownArgsMode, handle_unknown_args
-from .validator import GhostArgumentError, create_strict_validator, strip_ghost_arguments
+from .validator import (
+    GhostArgumentError,
+    create_argument_validator,
+    create_strict_validator,
+    strip_ghost_arguments,
+)
 
 logger = structlog.get_logger("agent-airlock")
 
@@ -391,6 +396,12 @@ class Airlock:
         """
         # Create strict validator wrapper
         validated_func = create_strict_validator(func)
+        # The same contract, in a form the sandbox dispatch can use (V0.10.6).
+        # `validated_func` validates on the way into a call, which is no help on a path
+        # that never calls it: `sandbox=True` ships the *undecorated* `func` into the
+        # micro-VM, so every `Annotated` validator was silently skipped there. Built once
+        # here, next to the wrapper it mirrors, rather than per call.
+        validate_sandbox_args = create_argument_validator(func)
         is_async = asyncio.iscoroutinefunction(func)
 
         # Initialize audit logger
@@ -772,16 +783,24 @@ class Airlock:
                     ):
                         with network_airgap(self.config.network_policy):
                             if self.sandbox:
+                                # V0.10.6: validate in the parent before dispatching. On failure the
+                                # ValidationError propagates to the shared `except Exception` below,
+                                # which routes to _handle_error and returns the same AirlockResponse,
+                                # BlockReason and fix_hints the non-sandbox path returns.
+                                v_args, v_kwargs = validate_sandbox_args(args, cleaned_kwargs)
                                 result = await self._execute_in_sandbox_async(
-                                    func, *args, **cleaned_kwargs
+                                    func, *v_args, **v_kwargs
                                 )
                             else:
                                 result = await validated_func(*args, **cleaned_kwargs)  # type: ignore[misc]
                     else:
                         if self.sandbox:
-                            result = await self._execute_in_sandbox_async(
-                                func, *args, **cleaned_kwargs
-                            )
+                            # V0.10.6: validate in the parent before dispatching. On failure the
+                            # ValidationError propagates to the shared `except Exception` below,
+                            # which routes to _handle_error and returns the same AirlockResponse,
+                            # BlockReason and fix_hints the non-sandbox path returns.
+                            v_args, v_kwargs = validate_sandbox_args(args, cleaned_kwargs)
+                            result = await self._execute_in_sandbox_async(func, *v_args, **v_kwargs)
                         else:
                             # Await the async validated function
                             # Type ignore: validated_func preserves async nature of func
@@ -886,12 +905,22 @@ class Airlock:
                     ):
                         with network_airgap(self.config.network_policy):
                             if self.sandbox:
-                                result = self._execute_in_sandbox(func, *args, **cleaned_kwargs)
+                                # V0.10.6: validate in the parent before dispatching. On failure the
+                                # ValidationError propagates to the shared `except Exception` below,
+                                # which routes to _handle_error and returns the same AirlockResponse,
+                                # BlockReason and fix_hints the non-sandbox path returns.
+                                v_args, v_kwargs = validate_sandbox_args(args, cleaned_kwargs)
+                                result = self._execute_in_sandbox(func, *v_args, **v_kwargs)
                             else:
                                 result = validated_func(*args, **cleaned_kwargs)
                     else:
                         if self.sandbox:
-                            result = self._execute_in_sandbox(func, *args, **cleaned_kwargs)
+                            # V0.10.6: validate in the parent before dispatching. On failure the
+                            # ValidationError propagates to the shared `except Exception` below,
+                            # which routes to _handle_error and returns the same AirlockResponse,
+                            # BlockReason and fix_hints the non-sandbox path returns.
+                            v_args, v_kwargs = validate_sandbox_args(args, cleaned_kwargs)
+                            result = self._execute_in_sandbox(func, *v_args, **v_kwargs)
                         else:
                             result = validated_func(*args, **cleaned_kwargs)
 

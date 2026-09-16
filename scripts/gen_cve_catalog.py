@@ -108,11 +108,25 @@ AIRLOCK_FIT_LABEL_RE = re.compile(r"^Airlock fit:\s*([A-Za-z-]+)", re.MULTILINE)
 
 @dataclass
 class CVEEntry:
-    """Parsed metadata for a single CVE regression test."""
+    """Parsed metadata for one CVE, backed by one or more regression tests.
+
+    ``files`` is a list because **a row is one CVE, not one test module**. Two
+    CVEs in this suite are covered by two modules each (CVE-2026-30615 and
+    CVE-2026-42271), and until v0.10.5 each of those emitted its own row: the
+    summary table carried 36 rows for 34 distinct CVEs, and because the anchor
+    is derived from the CVE id, both rows of a pair linked to the same
+    ``#cve-...`` target while the detail section emitted that id twice. One of
+    the two links necessarily landed on the wrong section, and the duplicated
+    HTML ``id`` was invalid besides.
+
+    The gate could not see it: ``--check`` compares generated output to
+    committed output, and both were wrong in the same way. See
+    :func:`assert_unique_cve_rows`.
+    """
 
     cve_id: str
     title: str
-    file: Path
+    files: list[Path]
     advisory: str | None = None
     writeup: str | None = None
     nvd: str | None = None
@@ -154,7 +168,7 @@ def _parse_entry(path: Path, doc: str) -> CVEEntry | None:
         return None
     cve_id, title = matched
 
-    entry = CVEEntry(cve_id=cve_id, title=title, file=path)
+    entry = CVEEntry(cve_id=cve_id, title=title, files=[path])
 
     if m := ADVISORY_RE.search(doc):
         entry.advisory = m.group(1).strip()
@@ -311,7 +325,116 @@ def collect(*, strict: bool = False) -> list[CVEEntry]:
         raise UnparseableCVEModule(skipped)
 
     entries.sort(key=lambda e: e.sort_key)
-    return entries
+    return merge_duplicate_cves(entries)
+
+
+def _metadata_score(entry: CVEEntry) -> int:
+    """How many labelled fields this parse actually recovered."""
+    return sum(
+        field is not None
+        for field in (entry.advisory, entry.writeup, entry.nvd, entry.cvss, entry.airlock_fit)
+    )
+
+
+def merge_duplicate_cves(entries: list[CVEEntry]) -> list[CVEEntry]:
+    """Fold entries that share a CVE id into one row per CVE.
+
+    A row is one CVE, not one test module. Two CVEs here are covered by two
+    modules each, and emitting a row per module produced a table whose ``CVE``
+    column repeated an id while both of its links pointed at a single anchor.
+
+    Which parse supplies the prose, when a group has more than one:
+
+    1. the entry that recovered the most labelled fields (``Advisory:``,
+       ``NVD:``, ``CVSS:``, ``Airlock fit:``, ``Write-up:``), since the older
+       docstring shapes in this suite recover fewer;
+    2. then the longer ``Vulnerability`` + ``Airlock fit`` prose;
+    3. then the filename, so the result is stable across machines.
+
+    Individual metadata fields are coalesced across the whole group rather than
+    taken from the winner alone, so a CVSS that only the loser carried is still
+    published. Every module in the group is listed under ``files`` and rendered,
+    so nothing becomes unreachable; the losing module's full prose remains one
+    click away in its own source file.
+
+    Order is preserved: groups appear at the position of their first entry, so a
+    pre-sorted input stays sorted.
+    """
+    grouped: dict[str, list[CVEEntry]] = {}
+    for entry in entries:
+        grouped.setdefault(entry.cve_id, []).append(entry)
+
+    merged: list[CVEEntry] = []
+    for group in grouped.values():
+        if len(group) == 1:
+            merged.append(group[0])
+            continue
+
+        primary = max(
+            group,
+            key=lambda e: (
+                _metadata_score(e),
+                len(e.description) + len(e.mitigation),
+                e.files[0].name,
+            ),
+        )
+
+        def _first(field: str, _group: list[CVEEntry] = group) -> str | None:
+            for candidate in _group:
+                value = getattr(candidate, field)
+                if value is not None:
+                    return str(value)
+            return None
+
+        merged.append(
+            CVEEntry(
+                cve_id=primary.cve_id,
+                title=primary.title,
+                files=sorted((f for e in group for f in e.files), key=lambda p: p.name),
+                advisory=_first("advisory"),
+                writeup=_first("writeup"),
+                nvd=_first("nvd"),
+                cvss=_first("cvss"),
+                airlock_fit=_first("airlock_fit"),
+                description=primary.description,
+                mitigation=primary.mitigation,
+            )
+        )
+    return merged
+
+
+class DuplicateCVERows(RuntimeError):
+    """The catalog would publish two rows for one CVE id.
+
+    Why this is its own gate rather than a comment: ``--check`` compares the
+    generated output to the committed output, so a generator that emitted a
+    duplicate row wrote it into both sides and the comparison stayed green. The
+    catalog carried 36 rows for 34 distinct CVEs for as long as that was true.
+
+    Duplicate rows are not merely untidy. The anchor is derived from the CVE id,
+    so a repeated id emits the same ``<a id="cve-...">`` twice: the HTML is
+    invalid, and one of the two summary links necessarily resolves to the other
+    row's section.
+    """
+
+    def __init__(self, duplicates: dict[str, int]) -> None:
+        self.duplicates = duplicates
+        listing = "\n".join(f"  - {cve}: {count} rows" for cve, count in sorted(duplicates.items()))
+        super().__init__(
+            f"{len(duplicates)} CVE id(s) would be published more than once:\n{listing}\n\n"
+            "A row is one CVE, not one test module. merge_duplicate_cves() folds "
+            "modules that share an id; if you see this, that fold was bypassed."
+        )
+
+
+def assert_unique_cve_rows(entries: list[CVEEntry]) -> None:
+    """Raise :class:`DuplicateCVERows` if any CVE id appears in more than one entry."""
+    counts: dict[str, int] = {}
+    for entry in entries:
+        counts[entry.cve_id] = counts.get(entry.cve_id, 0) + 1
+    duplicates = {cve: n for cve, n in counts.items() if n > 1}
+    if duplicates:
+        raise DuplicateCVERows(duplicates)
 
 
 HEADER = """# CVE catalog
@@ -369,10 +492,13 @@ def render(entries: list[CVEEntry]) -> str:
             out.append(f"- **Advisory:** [{e.advisory}]({e.advisory})")
         if e.writeup:
             out.append(f"- **Write-up:** [{e.writeup}]({e.writeup})")
-        rel = e.file.relative_to(ROOT).as_posix()
-        out.append(
-            f"- **Regression test:** [`{rel}`](https://github.com/sattyamjjain/agent-airlock/blob/main/{rel})"
+        rels = [f.relative_to(ROOT).as_posix() for f in e.files]
+        links = ", ".join(
+            f"[`{rel}`](https://github.com/sattyamjjain/agent-airlock/blob/main/{rel})"
+            for rel in rels
         )
+        label = "Regression test" if len(rels) == 1 else "Regression tests"
+        out.append(f"- **{label}:** {links}")
         out.append("")
         if e.description:
             out.append("**Vulnerability**")
@@ -412,6 +538,17 @@ def main() -> int:
     except UnparseableCVEModule as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
+
+    # Uniqueness is checked in every mode, not just `--check`. The duplicate-row
+    # defect survived for so long precisely because `--check` only compares two
+    # artefacts that were wrong together; a mode that can still *write* a
+    # duplicate would leave that hole open from the other side.
+    try:
+        assert_unique_cve_rows(entries)
+    except DuplicateCVERows as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+
     content = render(entries)
 
     if args.check:

@@ -72,6 +72,15 @@ BENCHMARKS: dict[str, tuple[str, str]] = {
         "(drives third-party coding agents; ~100 min of real API budget — the "
         "checkpoint makes an interrupted run resumable instead of a total loss)",
     ),
+    # Its own identifier, not the bare module path. The sandbox arm is published as a
+    # separate README row but re-runs from the same command, so keying it on
+    # "benchmarks.blockrate" would match the *first* line carrying that string and leave
+    # this row's date ungated: it could silently lose its marker while the gate stayed
+    # green. The results anchor appears only on this row.
+    "RESULTS.md#sandboxtrue-dispatch-arm": (
+        "`sandbox=True` dispatch parity",
+        "python -m benchmarks.blockrate  (the arm runs inside the same command)",
+    ),
     "benchmarks/mcp_conformance/RESULTS.md": (
         "MCP spec conformance",
         "python benchmarks/mcp_conformance/run.py",

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .report import render_results_md
 from .runner import run_blockrate
+from .sandbox_arm import run_sandbox_arm
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -24,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     report = run_blockrate()
+    arm = run_sandbox_arm()
 
     print("Cross-tool block-rate comparison")
     print(f"  corpus items:                 {report.total}")
@@ -43,9 +45,27 @@ def main(argv: list[str] | None = None) -> int:
     for comp in report.competitors:
         print(f"  {comp.name:22} scope-claimed, not re-run ({comp.approach})")
 
+    print()
+    print("sandbox=True dispatch arm")
+    print(
+        f"  argument contract on sandbox path: "
+        f"{arm.contract_block_rate * 100:5.1f}% refused "
+        f"({arm.probes_blocked_on_sandbox}/{arm.probes_total} probes)"
+    )
+    print(
+        f"  verdict parity vs local path:      "
+        f"{arm.probes_in_parity}/{arm.probes_total} contract, "
+        f"{arm.policy_agreements}/{arm.policy_items} policy"
+    )
+    if arm.backend_available:
+        print(f"  isolation backend execution:       ran on {arm.backend_name}")
+    else:
+        print(f"  isolation backend execution:       NOT RUN ({arm.backend_reason})")
+    print(f"  corpus items the decorator cannot enforce: {arm.undeclared_items}")
+
     if args.write:
         out = Path(__file__).parent / "RESULTS.md"
-        out.write_text(render_results_md(report, args.date), encoding="utf-8")
+        out.write_text(render_results_md(report, args.date, arm), encoding="utf-8")
         print(f"\nwrote {out}")
 
     return 0

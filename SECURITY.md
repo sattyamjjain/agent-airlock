@@ -54,10 +54,13 @@ type-checker and contract layer for the arguments themselves, in-process, at the
 boundary.** The two compose in the obvious direction — containment bounds what a call can do,
 airlock refuses the call before it is made — and they are complementary rather than
 overlapping. Note the ordering that follows from that: airlock validates in the *calling*
-process, before dispatch. Under `sandbox=True` with a real backend, `@Airlock` serialises the
-undecorated function into the micro-VM, so `Annotated` validators (`SafePath`, `SafeURL`,
-`HandleField`) do not run on that path; validate in the parent process, or keep validated
-tools out of the sandbox.
+process, before dispatch. That holds under `sandbox=True` as well (since v0.10.6): the
+arguments are validated in the parent and the sandbox is handed the already-validated
+values, so `Annotated` validators (`SafePath`, `SafeURL`, `HandleField`) apply on both
+paths and refuse with the same `BlockReason`. Before v0.10.6 they did not run on the
+sandbox path at all. What is still true is the direction: validation happens on the parent
+side of the boundary, so nothing *inside* the sandbox can consult the handle ledger or mint
+a handle.
 
 ### Where agent-airlock is the wrong tool
 
