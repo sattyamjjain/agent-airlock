@@ -2319,14 +2319,17 @@ mode.</p>
 <p>The two compose rather than compete: <code>HandleLedger.minted()</code> returns exactly the set
 <code>check_handle(handle, minted=...)</code> expects, so a codebase already using the preset can feed it
 from the ledger instead of hand-maintaining one.</p>
-<p>Two limits, both pinned by tests in <code>tests/test_handle_field.py</code>:</p>
+<p>One limit and one former limit, both pinned by tests in <code>tests/test_handle_field.py</code>:</p>
 <ul>
 <li>A tool whose signature ends in <code>**kwargs</code> declares nothing, so a handle smuggled through it
   is neither ghost-stripped nor <code>HandleField</code>-validated. <code>assert_handles_declared()</code> is the
   one-line front door to point 1 above, which closes it.</li>
-<li>Under <code>sandbox=True</code> with a real backend, <code>@Airlock</code> serialises the <em>undecorated</em> function
-  into the micro-VM, so no <code>Annotated</code> validator runs on that path (<code>SafePath</code> and <code>SafeURL</code>
-  included). Validate in the parent process, or keep validated tools out of the sandbox.</li>
+<li><code>sandbox=True</code> used to skip the check entirely: <code>@Airlock</code> serialised the <em>undecorated</em>
+  function into the micro-VM, so no <code>Annotated</code> validator ran on that path (<code>SafePath</code> and
+  <code>SafeURL</code> included). Fixed in v0.10.6 — arguments are validated in the parent process
+  before dispatch, and the sandbox receives the validated values. The ledger itself is still
+  in-process and does not travel into the VM, so a tool that needs to <em>mint</em> a handle from
+  inside the sandbox remains outside what this expresses.</li>
 </ul>
 <h2 id="the-honest-limit">The honest limit<a class="headerlink" href="#the-honest-limit" title="Permanent link">&para;</a></h2>
 <p>This is a contract layer. It can require a handle to be an explicit, declared parameter, to
