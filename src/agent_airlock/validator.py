@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeVar, get_type_hints
 
 from pydantic import ConfigDict, ValidationError, validate_call
 
@@ -115,6 +115,13 @@ def strip_ghost_arguments(
     return cleaned, ghost_args
 
 
+#: The one strict config both entry points below build on. Shared rather than
+#: repeated so :func:`create_strict_validator` and :func:`create_argument_validator`
+#: cannot drift into enforcing different rules on the two dispatch paths, which is
+#: the exact class of bug the sandbox gap was.
+_STRICT_CONFIG = ConfigDict(strict=True)
+
+
 def create_strict_validator(func: F) -> F:
     """Wrap a function with Pydantic strict validation.
 
@@ -129,7 +136,101 @@ def create_strict_validator(func: F) -> F:
     Returns:
         Wrapped function with strict Pydantic validation.
     """
-    return validate_call(config=ConfigDict(strict=True))(func)
+    return validate_call(config=_STRICT_CONFIG)(func)
+
+
+#: What :func:`create_argument_validator` hands back: takes the call's positional and
+#: keyword arguments, returns the *validated* ones, and raises ``ValidationError`` on
+#: refusal exactly as the wrapped callable would.
+ArgumentValidator = Callable[
+    [tuple[Any, ...], dict[str, Any]], tuple[tuple[Any, ...], dict[str, Any]]
+]
+
+
+def create_argument_validator(func: Callable[..., Any]) -> ArgumentValidator:
+    """Build a validator that returns validated argument *values*, without executing ``func``.
+
+    :func:`create_strict_validator` wraps a function so that validation happens on the way
+    into a call. That is unusable on a dispatch path that does not call the wrapper: the
+    ``sandbox=True`` path serialises the *undecorated* function into the micro-VM, so every
+    ``Annotated`` validator (``SafePath``, ``SafeURL``, ``HandleField``) silently did not
+    run. The wrapper cannot simply be shipped instead, because it is a closure and the
+    ``HandleField`` ledger is in-process by design (see :mod:`agent_airlock.handles`).
+
+    So validation is split from execution. This runs the same coercion and constraint
+    checks against the arguments and hands back the validated values for the caller to
+    dispatch with.
+
+    It is the *same machinery*, not a reimplementation: a capture function is given
+    ``func``'s signature and annotations, wrapped with the same ``validate_call`` and the
+    same :data:`_STRICT_CONFIG`, and returns the arguments Pydantic passed it. A rule that
+    holds on one path therefore holds on the other by construction.
+
+    Annotations are resolved with ``get_type_hints(..., include_extras=True)`` rather than
+    read raw. Under ``from __future__ import annotations`` (which this codebase mandates,
+    and which tool authors commonly use) ``__annotations__`` holds *strings*, and the
+    capture function does not share ``func``'s module globals, so the raw strings raise
+    ``NameError`` at build time. ``include_extras`` is what preserves ``Annotated``; drop it
+    and every safe type degrades to its base type and silently stops enforcing anything.
+
+    Args:
+        func: The undecorated function whose signature declares the contract.
+
+    Returns:
+        An :data:`ArgumentValidator`. Calling it returns ``(args, kwargs)`` with validated
+        values, or raises ``pydantic.ValidationError``. If the validator could not be built
+        at all, calling it raises ``TypeError`` rather than passing the arguments through:
+        a contract that cannot be checked is refused, not waived.
+
+    Note:
+        A parameter with no annotation declares no contract, so nothing is enforced for it.
+        That is true of :func:`create_strict_validator` too, and is the documented
+        ``**kwargs`` limit in :mod:`agent_airlock.handles`, not a new gap.
+    """
+
+    def _capture(*args: Any, **kwargs: Any) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        return args, kwargs
+
+    try:
+        hints: dict[str, Any] = get_type_hints(func, include_extras=True)
+    except Exception:  # pragma: no cover - unresolvable forward ref
+        # Fall back to whatever is literally on the function. This only differs from the
+        # resolved form for modules that postpone evaluation, and such a module would
+        # already be failing in create_strict_validator for the same reason.
+        hints = dict(getattr(func, "__annotations__", {}))
+    hints.pop("return", None)
+
+    build_error: str | None = None
+    validating_capture: Callable[..., tuple[tuple[Any, ...], dict[str, Any]]] | None = None
+    try:
+        signature = inspect.signature(func)
+        signature = signature.replace(
+            parameters=[
+                param.replace(annotation=hints.get(name, param.annotation))
+                for name, param in signature.parameters.items()
+            ],
+            return_annotation=inspect.Signature.empty,
+        )
+        _capture.__signature__ = signature  # type: ignore[attr-defined]
+        _capture.__annotations__ = hints
+        _capture.__name__ = getattr(func, "__name__", "tool")
+        _capture.__qualname__ = getattr(func, "__qualname__", _capture.__name__)
+        validating_capture = validate_call(config=_STRICT_CONFIG)(_capture)
+    except Exception as exc:  # pragma: no cover - degenerate signature
+        build_error = f"{type(exc).__name__}: {exc}"
+
+    def _validate(
+        args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        if validating_capture is None:
+            raise TypeError(
+                f"cannot validate arguments for "
+                f"'{getattr(func, '__name__', 'tool')}' before sandbox dispatch "
+                f"({build_error}). Refusing rather than dispatching unvalidated."
+            )
+        return validating_capture(*args, **kwargs)
+
+    return _validate
 
 
 def format_validation_error(error: ValidationError) -> dict[str, Any]:

@@ -17,6 +17,7 @@ from agent_airlock.owasp_agentic_coverage.render import COVERAGE_PATH, load_cove
 
 from .corpus import ASI_SLOTS, asi_slots
 from .runner import BlockRateReport
+from .sandbox_arm import SandboxArmReport
 
 _CATEGORY_TITLES = {
     "over_privileged_selection": "Over-privileged tool selection (ToolPrivBench-derived)",
@@ -195,7 +196,74 @@ def render_comparison_section(report: BlockRateReport) -> str:
     return "\n".join(lines)
 
 
-def render_results_md(report: BlockRateReport, run_date: str) -> str:
+def render_sandbox_arm_section(arm: SandboxArmReport | None) -> str:
+    """The `sandbox=True` dispatch arm, reported as its own row.
+
+    Kept out of the headline on purpose. The headline is a block-rate over a 210-item
+    corpus; this is a parity measurement over a different, smaller set, and averaging the
+    two would produce a number that answers no question.
+    """
+    lines: list[str] = ["## `sandbox=True` dispatch arm", ""]
+    if arm is None:
+        lines.append("_Not run._")
+        lines.append("")
+        return "\n".join(lines)
+
+    lines.append(
+        "Until v0.10.6 the headline above was measured **entirely on the local path**. "
+        "The sandbox dispatch serialised the *undecorated* function into the micro-VM, so "
+        "no `Annotated` validator ran there at all. This arm measures that path directly."
+    )
+    lines.append("")
+    lines.append("| Leg | Result | Re-run? |")
+    lines.append("|---|---|---|")
+    lines.append(
+        f"| **Argument contract on the sandbox path** (SafePath / SafeURL / HandleField / "
+        f"strict types) | **{_pct(arm.contract_block_rate)}** refused "
+        f"({arm.probes_blocked_on_sandbox}/{arm.probes_total} probes) | ✅ yes |"
+    )
+    lines.append(
+        f"| **Verdict parity, sandbox vs local** | "
+        f"**{arm.probes_in_parity}/{arm.probes_total}** contract probes agree, "
+        f"**{arm.policy_agreements}/{arm.policy_items}** policy items agree | ✅ yes |"
+    )
+    if arm.backend_available:
+        lines.append(
+            f"| **Isolation backend execution** | ran on `{arm.backend_name}` | ✅ yes |"
+        )
+    else:
+        lines.append(
+            f"| **Isolation backend execution** | _not run — {arm.backend_reason}_ | ❌ no |"
+        )
+    lines.append("")
+    lines.append("| Probe | Annotated type | Local path | Sandbox path | Agree |")
+    lines.append("|---|---|---|---|---|")
+    for row in arm.probe_rows:
+        tick = lambda b: "refused" if b else "allowed"  # noqa: E731
+        lines.append(
+            f"| {row['name']} | `{row['type']}` | {tick(row['local_blocked'])} "
+            f"| {tick(row['sandbox_blocked'])} | {'✅' if row['parity'] else '❌'} |"
+        )
+    lines.append("")
+    lines.append(
+        f"**Honest scope.** The backend-execution leg is reported as not-run rather than "
+        f"folded into a pass rate when no backend is present: with neither E2B nor Docker "
+        f"installed, `_execute_in_sandbox` raises and *every* call comes back blocked, "
+        f"benign included, so counting those as blocks would report a fake 100%. The arm "
+        f"separates a contract refusal (raised before dispatch, naming the field) from a "
+        f"backend failure. {arm.undeclared_items} corpus items declare neither a "
+        f"least-privilege allowlist nor an annotated parameter, so the decorator has "
+        f"nothing to enforce for them; they are counted here and not claimed as passes. "
+        f"The four in-process guards the local arm calls directly are not part of the "
+        f"decorator path and are not measured here."
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_results_md(
+    report: BlockRateReport, run_date: str, arm: SandboxArmReport | None = None
+) -> str:
     """Full standalone RESULTS.md including latency, stamped with run_date."""
     lines: list[str] = []
     lines.append("# Cross-tool block-rate comparison — results")
@@ -238,6 +306,8 @@ def render_results_md(report: BlockRateReport, run_date: str) -> str:
         "a `--model` path for the real model-in-the-loop ASR. See "
         "[`benchmarks/agentdojo/RESULTS.md`](../agentdojo/RESULTS.md)."
     )
+    lines.append("")
+    lines.append(render_sandbox_arm_section(arm).rstrip("\n"))
     lines.append("")
     lines.append("## Reproduce")
     lines.append("")

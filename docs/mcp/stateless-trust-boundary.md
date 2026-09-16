@@ -88,14 +88,17 @@ The two compose rather than compete: `HandleLedger.minted()` returns exactly the
 `check_handle(handle, minted=...)` expects, so a codebase already using the preset can feed it
 from the ledger instead of hand-maintaining one.
 
-Two limits, both pinned by tests in `tests/test_handle_field.py`:
+One limit and one former limit, both pinned by tests in `tests/test_handle_field.py`:
 
 - A tool whose signature ends in `**kwargs` declares nothing, so a handle smuggled through it
   is neither ghost-stripped nor `HandleField`-validated. `assert_handles_declared()` is the
   one-line front door to point 1 above, which closes it.
-- Under `sandbox=True` with a real backend, `@Airlock` serialises the *undecorated* function
-  into the micro-VM, so no `Annotated` validator runs on that path (`SafePath` and `SafeURL`
-  included). Validate in the parent process, or keep validated tools out of the sandbox.
+- `sandbox=True` used to skip the check entirely: `@Airlock` serialised the *undecorated*
+  function into the micro-VM, so no `Annotated` validator ran on that path (`SafePath` and
+  `SafeURL` included). Fixed in v0.10.6 — arguments are validated in the parent process
+  before dispatch, and the sandbox receives the validated values. The ledger itself is still
+  in-process and does not travel into the VM, so a tool that needs to *mint* a handle from
+  inside the sandbox remains outside what this expresses.
 
 ## The honest limit
 

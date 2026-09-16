@@ -19,16 +19,21 @@ from __future__ import annotations
 import dataclasses
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from agent_airlock import (
     Airlock,
+    AirlockConfig,
     HandleField,
     HandleLedger,
     HandleRejection,
     HandleRejectionReason,
+    NetworkPolicy,
+    SafePath,
+    SafeURL,
     SecurityPolicy,
     handle_run,
     issue_handle,
@@ -291,62 +296,209 @@ class TestComposesWithGhostArgumentStripping:
             assert _tool()(session=good) == "READ:"
 
 
-class TestSandboxDispatchSkipsTheCheck:
-    """A stated limit, pinned so it cannot change unnoticed.
+class TestSandboxDispatchValidatesFirst:
+    """The sandbox dispatch validates in the parent before it dispatches (V0.10.6).
 
-    With a real sandbox backend available, `@Airlock` serialises the **undecorated** function
-    into the micro-VM rather than calling the Pydantic-validated wrapper. No `Annotated`
-    validator runs on that path — `SafePath` and `SafeURL` have been in the same position
-    since they shipped, so this is a property of the sandbox dispatch path and not of
-    `HandleField`.
+    This class used to be ``TestSandboxDispatchSkipsTheCheck`` and pinned the opposite
+    behaviour: with a real backend available, ``@Airlock`` serialised the **undecorated**
+    function into the micro-VM instead of calling the Pydantic-validated wrapper, so no
+    ``Annotated`` validator ran. ``SafePath``, ``SafeURL`` and ``HandleField`` were all in
+    that position, and ghost-argument stripping was the only part of the contract still in
+    effect, because ``cleaned_kwargs`` is computed upstream of the branch.
 
-    It is asserted here rather than only written in a docstring because a security check that
-    silently does not apply is worse than one that visibly does not exist. Without E2B
-    installed the decorator falls back to local execution *with* validation, so the hole is
-    invisible on this machine — which is exactly why it needs a test that does not depend on
-    having E2B.
+    The fix does not ship the wrapper into the VM. It cannot: the wrapper is a closure, the
+    backend is not assumed to carry it, and the handle ledger is in-process by design. It
+    splits validation from execution instead, runs the same checks in the parent, and hands
+    the sandbox the already-validated values.
+
+    What these tests hold to:
+
+    * a hostile value is refused on the sandbox path with the **same** ``BlockReason`` as on
+      the local path, not merely refused somehow;
+    * one case per ``Annotated`` type, so a regression in one does not hide behind another;
+    * every dispatch site, sync and async, airgapped and not, because the bug was that one
+      branch of a four-way fork did something different from the other three.
+
+    The backend is faked rather than required, so the assertions do not depend on E2B or
+    Docker being present on the machine running them. ``_FakeResult`` stands in for a real
+    backend precisely so the ImportError fallback (which *does* validate, and would hide the
+    bug) is not the path under test.
     """
 
-    def test_the_sandbox_path_receives_the_unvalidated_function(self, monkeypatch) -> None:
+    @staticmethod
+    def _fake_backend(monkeypatch, record: dict):
+        """Make ``sandbox=True`` take the real dispatch branch without a real backend."""
         import agent_airlock.core as core_module
 
-        seen: dict[str, object] = {}
+        def _sync(self, func, *args, **kwargs):  # noqa: ANN001, ANN202, ARG001
+            record["reached"] = True
+            record["args"] = args
+            record["kwargs"] = kwargs
+            return "SANDBOX-RAN"
 
-        class _FakeResult:
-            success = True
-            result = "SANDBOX-RAN"
-            sandbox_id = "fake"
-            execution_time_ms = 0.0
+        async def _async(self, func, *args, **kwargs):  # noqa: ANN001, ANN202, ARG001
+            return _sync(self, func, *args, **kwargs)
 
-        def fake_execute_in_sandbox(func, args, kwargs, config):  # noqa: ANN001, ANN202, ARG001
-            seen["func"] = func
-            return _FakeResult()
+        monkeypatch.setattr(core_module.Airlock, "_execute_in_sandbox", _sync)
+        monkeypatch.setattr(core_module.Airlock, "_execute_in_sandbox_async", _async)
 
-        # Stand in for the [sandbox] extra so the ImportError fallback (which *does*
-        # validate) is not the path under test.
-        monkeypatch.setattr(
-            core_module.Airlock,
-            "_execute_in_sandbox",
-            lambda self, func, *a, **kw: fake_execute_in_sandbox(func, a, kw, None).result,
-        )
+    # -- one case per Annotated type -------------------------------------------------
+
+    def test_handlefield_with_no_issuing_ledger_is_denied(self, monkeypatch) -> None:
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
 
         @Airlock(sandbox=True)
         def sandboxed(session: HandleField(issuer=ISSUER, scope=SCOPE)) -> str:
             return "REACHED THE BODY"
 
         with handle_run("run-1"):
-            # A handle that was never issued. On the ordinary path this is a hard block.
             result = sandboxed(session="ah_never-issued-anywhere")
 
-        assert result == "SANDBOX-RAN", (
-            "the sandbox branch no longer bypasses validation — if this now blocks, the "
-            "limit documented in agent_airlock.handles has been fixed and the docstring "
-            "should be updated to say so"
+        assert result["block_reason"] == BlockReason.HANDLE_NOT_ISSUED.value
+        assert not record.get("reached"), "the sandbox was dispatched with an unissued handle"
+
+    def test_safepath_traversal_is_denied(self, monkeypatch) -> None:
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
+
+        @Airlock(sandbox=True)
+        def sandboxed(target: SafePath) -> str:
+            return "REACHED THE BODY"
+
+        result = sandboxed(target=Path("../../etc/passwd"))
+
+        assert result["block_reason"] == BlockReason.VALIDATION_ERROR.value
+        assert not record.get("reached"), "the sandbox was dispatched with a traversal path"
+
+    def test_safeurl_metadata_endpoint_is_denied(self, monkeypatch) -> None:
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
+
+        @Airlock(sandbox=True)
+        def sandboxed(endpoint: SafeURL) -> str:
+            return "REACHED THE BODY"
+
+        result = sandboxed(endpoint="http://169.254.169.254/latest/meta-data/")
+
+        assert result["block_reason"] == BlockReason.VALIDATION_ERROR.value
+        assert not record.get("reached"), "the sandbox was dispatched with a metadata URL"
+
+    def test_strictness_is_not_lost_either(self, monkeypatch) -> None:
+        """Strict mode is part of the same contract, so it must cross too."""
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
+
+        @Airlock(sandbox=True)
+        def sandboxed(count: int) -> str:
+            return "REACHED THE BODY"
+
+        result = sandboxed(count="7")  # a string, which strict mode must not coerce
+
+        assert result["block_reason"] == BlockReason.VALIDATION_ERROR.value
+        assert not record.get("reached")
+
+    # -- the same verdict as the local path ------------------------------------------
+
+    def test_the_sandbox_verdict_matches_the_local_path_exactly(self, monkeypatch) -> None:
+        """Not just 'also blocked': the same BlockReason, so audit records agree."""
+        with handle_run("run-1"):
+            local = _tool()(session="ah_never-issued-anywhere")
+
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
+
+        @Airlock(sandbox=True)
+        def sandboxed(
+            session: HandleField(issuer=ISSUER, scope=SCOPE),
+            note: str = "",
+        ) -> str:
+            return f"READ:{note}"
+
+        with handle_run("run-1"):
+            sandboxed_result = sandboxed(session="ah_never-issued-anywhere")
+
+        assert sandboxed_result["block_reason"] == local["block_reason"]
+
+    # -- every dispatch site, not just the one that is easy to reach ------------------
+
+    @pytest.mark.parametrize("airgapped", [False, True], ids=["plain", "airgapped"])
+    def test_every_sync_dispatch_site_validates(self, monkeypatch, airgapped: bool) -> None:
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
+        kwargs = (
+            {"config": AirlockConfig(network_policy=NetworkPolicy(allow_egress=False))}
+            if airgapped
+            else {}
         )
 
-    def test_the_same_call_is_blocked_on_the_ordinary_path(self) -> None:
-        """The contrast is the point: the check works, the sandbox dispatch skips it."""
+        @Airlock(sandbox=True, **kwargs)
+        def sandboxed(endpoint: SafeURL) -> str:
+            return "REACHED THE BODY"
+
+        result = sandboxed(endpoint="http://169.254.169.254/latest/meta-data/")
+
+        assert result["block_reason"] == BlockReason.VALIDATION_ERROR.value
+        assert not record.get("reached")
+
+    @pytest.mark.parametrize("airgapped", [False, True], ids=["plain", "airgapped"])
+    async def test_every_async_dispatch_site_validates(self, monkeypatch, airgapped: bool) -> None:
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
+        kwargs = (
+            {"config": AirlockConfig(network_policy=NetworkPolicy(allow_egress=False))}
+            if airgapped
+            else {}
+        )
+
+        @Airlock(sandbox=True, **kwargs)
+        async def sandboxed(endpoint: SafeURL) -> str:
+            return "REACHED THE BODY"
+
+        result = await sandboxed(endpoint="http://169.254.169.254/latest/meta-data/")
+
+        assert result["block_reason"] == BlockReason.VALIDATION_ERROR.value
+        assert not record.get("reached")
+
+    # -- the fix must not have broken the path that already worked -------------------
+
+    def test_a_valid_call_still_reaches_the_sandbox_with_validated_values(
+        self, monkeypatch
+    ) -> None:
+        """Precision. A guard that refuses everything would pass every test above."""
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
+
+        @Airlock(sandbox=True)
+        def sandboxed(target: SafePath) -> str:
+            return "REACHED THE BODY"
+
+        result = sandboxed(target=Path("/tmp/allowed.txt"))
+
+        assert result == "SANDBOX-RAN"
+        assert record["reached"] is True
+        # The sandbox receives the *validated* value, which for SafePath is a Path
+        # coerced through the AfterValidator, not the raw input.
+        assert record["kwargs"]["target"] == Path("/tmp/allowed.txt")
+
+    def test_an_issued_handle_still_reaches_the_sandbox(self, monkeypatch) -> None:
+        record: dict = {}
+        self._fake_backend(monkeypatch, record)
+
+        @Airlock(sandbox=True)
+        def sandboxed(session: HandleField(issuer=ISSUER, scope=SCOPE)) -> str:
+            return "REACHED THE BODY"
+
         with handle_run("run-1"):
+            good = issue_handle(issuer=ISSUER, scope=SCOPE)
+            assert sandboxed(session=good) == "SANDBOX-RAN"
+        assert record["reached"] is True
+
+    def test_the_local_path_is_unchanged(self) -> None:
+        """This was a pure addition on the non-sandbox path."""
+        with handle_run("run-1"):
+            good = issue_handle(issuer=ISSUER, scope=SCOPE)
+            assert _tool()(session=good) == "READ:"
             assert _tool()(session="ah_never-issued-anywhere")["block_reason"] == (
                 BlockReason.HANDLE_NOT_ISSUED.value
             )
