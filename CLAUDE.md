@@ -11,14 +11,18 @@ The wedge is argument validation at the call boundary; every other layer wraps i
 
 - Ghost-argument stripping/rejection (parameters the LLM invented)
 - Pydantic V2 strict validation, no type coercion; self-healing errors carrying `fix_hints`
-- Policy engine: RBAC, token-bucket rate limits, time windows, per-model-tier cost budgets
+- Policy engine: RBAC, token-bucket rate limits, time windows, per-model-tier cost budgets,
+  per-run resource-amplification budgets
 - PII/secret detection and masking (includes opt-in Indic PII)
 - Sandboxed execution via pluggable backends (E2B Firecracker, Modal, Docker, local)
-- `mcp_spec/` guards mapped to specific named CVEs — stdio injection, OAuth, DNS rebinding,
-  SSRF, eval-RCE, WebSocket origin hijack, task lifecycle
+- `mcp_spec/` guards mapped to specific named CVEs and MCP spec clauses — stdio injection,
+  OAuth, DNS rebinding, SSRF, eval-RCE, WebSocket origin hijack, task lifecycle, handle trust
 - Framework adapters: FastMCP, LangChain/LangGraph, Anthropic (Messages, Claude Agent SDK,
-  Managed Agents), OpenAI, Gemini, PydanticAI, CrewAI, smolagents, Google Model Armor
-- `airlock` CLI: scan-tools, doctor, verify, attest, replay, corpus-bench, conformance
+  Managed Agents), OpenAI, Gemini, PydanticAI, CrewAI, smolagents, Google ADK, Google Model
+  Armor
+- Fleet-wide kill switch (quorum-signed freeze) checked before any other gate
+- `airlock` CLI — one dispatcher fronting every `cli/<name>.py`; the `_COMMANDS` table in
+  `cli/__main__.py` (or `airlock --help`) is the authoritative subcommand list
 
 **The installed core is Pydantic-only.** Everything else — structlog included — lives in an
 extra. `src/agent_airlock/_log.py` falls back to a stdlib-logging shim when structlog is
@@ -34,19 +38,19 @@ pip install -e ".[dev]"            # editable install with dev deps
 
 # Optional extras — install only what you need. Full set:
 #   logging bench sandbox modal mcp claude-agent model-armor console
-#   redis crypto attested pydantic-ai crewai all dev docs
+#   redis crypto attested pydantic-ai crewai google-adk all dev docs
 pip install -e ".[sandbox]"        # E2B Firecracker micro-VM execution
 pip install -e ".[redis]"          # distributed rate limiter
-pip install -e ".[all]"            # every runtime extra (not dev/docs)
+pip install -e ".[all]"            # runtime extras EXCEPT modal, bench, attested (and dev/docs)
 
 make test          # pytest tests/ -v --no-cov
 make coverage      # pytest with coverage (floor enforced; see [tool.coverage.report])
 make lint          # ruff check + ruff format --check + mypy src/
 make format        # ruff format + ruff check --fix
-make bench         # pytest-benchmark suite
+make bench         # pytest-benchmark suite (tests/benchmarks/, --ignore'd by default addopts)
 ```
 
-Repo-specific claim gates:
+Repo-specific claim gates (`make help` lists every target):
 
 ```bash
 make benchmark               # regenerate BENCHMARK.md (guard-suite block-rate corpus)
@@ -55,24 +59,37 @@ make egress-bench            # CVE egress walker over tests/cves/fixtures/
 make verify-corpus           # verify wild_payload_corpus MANIFEST.sha256
 make check-links             # dead relative-link gate (README + docs/)
 make check-cve-catalog       # docs/cves/index.md matches the tests/cves/ suite
-make check-docs              # mkdocs build --strict
-make check-benchmark-freshness  # every benchmark row carries a date
-make check-registry-parity      # declared version must not outrun PyPI
-make check-changelog            # post-release drift gate
-make check-changelog-release    # pre-tag gate ([Unreleased] must be non-empty)
+make check-docs              # mkdocs build --strict, built OUTSIDE the tree (see Architecture)
+make check-changelog         # post-release drift: [Unreleased] must be empty after a release
+make check-changelog-release # pre-tag: [Unreleased] must be NON-empty — red by design between releases
+make check-benchmark-freshness          # every benchmark row carries a date marker
+make check-benchmark-freshness-release  # pre-tag: no benchmark claim older than 30 days
+make check-registry-parity              # declared version must not outrun PyPI
+make check-registry-parity-distance     # release-only: refuse to skip a version
 ```
 
-Which of those actually gate a merge: `ci.yml` runs `check-docs`, `check-links`,
-`check-cve-catalog` and `check-registry-parity`, and calls `check_changelog_heading.py`,
-`check_core_deps.py`, `check_version_tagged.py` and `generate_benchmark.py --check`
-directly. `publish.yml`
-adds the two release-only forms, `check_benchmark_freshness.py --release` and
-`check_registry_parity.py --distance-only`. **No workflow runs the `check-changelog`
-pair or the bare `check-benchmark-freshness`** — run those by hand, and expect
-`check-changelog` to be red by design while work accumulates under `[Unreleased]`.
+Which of those gate a merge (`ci.yml`): the `docs` job runs `mkdocs build --strict`,
+`check_links.py`, `gen_cve_catalog.py --check`, and the **default** modes of
+`check_changelog.py` and `check_benchmark_freshness.py`; `version-tag-guard` (pushes to
+`main` only) runs `check_version_tagged.py`, `check_changelog_heading.py` and
+`check_registry_parity.py`; `test` runs `generate_benchmark.py --check` plus a
+pytest-benchmark smoke run (asserts it executes — deliberately not a latency threshold);
+`bare-install` runs `check_core_deps.py` against a no-extras install. `publish.yml` adds
+the `--release` and `--distance-only` forms; those are the only two that must NOT run
+per-PR, because `check-changelog-release` fails outside a release window.
+
+The `test` job installs `.[dev,redis]`, not `.[dev]`, and asserts the redis-backed
+modules import. Both open with `pytest.importorskip("fakeredis")`, so while `[dev]` was
+the only extra they were skipped in CI for their whole life — 30 tests that reported as
+neither passed nor failed, which is why the v0.10.7 note in `CHANGELOG.md` exists. A
+skipped module and a passing one look identical in the summary line; if you add an
+`importorskip` to a module, add the dependency to a CI job in the same PR or the tests
+below it are decoration. `bare-install` is unaffected: it still installs `-e .` alone,
+so the Pydantic-only core is enforced exactly as before.
 
 Docker integration tests are **opt-in**: default `addopts` carries `-m 'not docker'`.
-Run them explicitly with `pytest -m docker`.
+Run them explicitly with `pytest -m docker`. `cve-watcher.yml` is a scheduled job that
+diffs NVD against the ledger and files triage issues — not a merge gate.
 
 <!-- END AUTO-MANAGED -->
 
@@ -81,24 +98,24 @@ Run them explicitly with `pytest -m docker`.
 
 `src/` layout, single package, hatchling build. The `airlock` console script dispatches to
 every `agent_airlock.cli.<name>:main(argv)` in space-form (`airlock scan-tools`), so flags
-are identical to the `python -m agent_airlock.cli.<name>` long form.
+are identical to the `python -m agent_airlock.cli.<name>` long form. Three pre-dispatcher
+scripts (`airlock-explain`, `airlock-conformance`, `airlock-scan-tools`) survive as stable
+aliases. Subtree `CLAUDE.md` files are excluded from the sdist and wheel
+(`[tool.hatch.build.targets.*]`), so they never reach a user's site-packages.
 
-Repo-level directories outside the package: `tests/`, `benchmarks/` (agentdojo, blockrate,
+Repo-level directories outside the package: `tests/` (mirrors the package's subpackages;
+`tests/cves/` is the signed CVE regression suite), `benchmarks/` (agentdojo, blockrate,
 harness_injection, mcp_conformance, scantools_mcptox, toolprivbench, vs_gateway),
-`scripts/` (the `check_*` claim gates and `smoke_*` guard drivers), `docs/`, `examples/`,
-`demo/` (runnable live demo), `presets/`, `schemas/`, `tools/`, and `.claude-plugin/`
-(marketplace manifest).
+`scripts/` (the `check_*` claim gates, `smoke_*` guard drivers, `cve_watcher.py`), `docs/`
+(mkdocs source), `examples/`, `demo/` (runnable live demo), `presets/`, `schemas/`,
+`tools/`, and `.claude-plugin/` (marketplace manifest).
 
 **There is no committed `site/`.** The docs site is served from the `gh-pages` branch,
-which `mkdocs gh-deploy --force` rebuilds from `docs/` on every push to `main`. A second
-copy used to be committed here; it was a duplicate of the same build that nothing served
-and that drifted from `docs/` between releases (99 of 135 files out of date when it was
-removed in v0.8.81). A bare `mkdocs build` still writes `site/`, which is gitignored — do
-not add it back. `make check-docs` no longer does: it builds to
-`$TMPDIR/agent-airlock-mkdocs-check` instead, so validating the docs leaves no artifacts
-in the tree. That is not only tidiness — ~8M of stale HTML in the working root made
-tooling that classifies a project by scanning for `*.html` read this Python library as a
-web app. CI calls `mkdocs build --strict` directly on a throwaway runner and is unaffected.
+which `docs.yml` rebuilds with `mkdocs gh-deploy --force` on pushes to `main` that touch
+`docs/`, `mkdocs.yml` or `src/`. A bare `mkdocs build` writes `site/`, which is gitignored
+— do not add it back. `make check-docs` builds to `$TMPDIR/agent-airlock-mkdocs-check` so
+validating the docs leaves no HTML in the tree; a committed copy once drifted from `docs/`
+and its stale HTML made project-classifying tooling read this Python library as a web app.
 
 ```
 src/agent_airlock/
@@ -106,38 +123,45 @@ src/agent_airlock/
 ├── __init__.py        public API surface (large, explicit __all__)
 ├── config.py          ENV (AIRLOCK_*) > constructor > airlock.toml
 ├── exceptions.py
+├── testing.py         state-reset helpers for test isolation
 │
-├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py
+├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
-│                oversight.py, identity.py, redis_rate_limit.py, capability_caps/,
-│                policy_compiler/, budget/
+│                oversight.py, identity.py, redis_rate_limit.py, amplification.py,
+│                capability_caps/, policy_compiler/, budget/
 ├── EXECUTION    sandbox.py, sandbox_backend.py, streaming.py, context.py,
 │                conversation.py, circuit_breaker.py, retry.py, runtime/
 ├── SANITIZE     sanitizer.py, audit.py, audit_otel.py, observability.py,
 │                cost_tracking.py, trace_redaction.py
 ├── VACCINE      filesystem.py, network.py, honeypot.py, vaccine.py,
 │                camouflage_resistant.py, ssrf_egress_guard.py, sequence_guard.py,
-│                action_contradiction_gate.py, tool_output_trust_guard.py
+│                action_contradiction_gate.py, tool_output_trust_guard.py,
+│                done_receipt_guard.py
 ├── mcp_spec/    per-CVE / per-spec-revision MCP guards — largest subpackage, own CLAUDE.md
 ├── mcp/         cimd.py — pinned CIMD trust anchor, denies on drift
+├── kill_switch/ quorum-signed fleet freeze — registry, signer, broadcast, transports/
 ├── data/        dated snapshots (model pricing, advisory blast radius)
-├── fixtures/    dated pattern files (e.g. redaction_patterns_2026_04.txt)
+├── fixtures/    dated pattern files (redaction patterns)
 ├── ADVERSARIAL  anomaly.py, regression_corpus.py, sdk_provenance.py, a2a.py,
-│                mcp_proxy_guard.py, corpus/wild_payload_corpus/
-├── ATTEST       attest/, conformance/, baseline/, pack/, packs/, kill_switch/,
-│                scan/, graph/, studio/, owasp_agentic_coverage/
-├── integrations/  framework adapters, plus adapters/ and scanners/
+│                mcp_proxy_guard.py, negotiation_bench.py, corpus/wild_payload_corpus/
+├── ATTEST       attest/, conformance/, baseline/, pack/, packs/, scan/, graph/, studio/,
+│                owasp_agentic_coverage/
+├── integrations/  framework adapters, plus adapters/ (commerce caps) and scanners/
+│                  (pluggable IDE-scanner protocol)
 └── cli/           subcommands behind the unified dispatcher
 ```
 
 **Call flow through `@Airlock`** — `_pre_execution` gates, then execute, then
-`_post_execution`:
+`_post_execution`. Step numbers match the comments in `core.py`:
 
+0. Kill switch — a fleet freeze refuses before the arguments are even examined
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Resolve policy (static, or `Callable[[AirlockContext], SecurityPolicy]`) and check it
    - 2.5 behavioral tool-call sequence guard
    - 2.6 action-time contradiction gate
    - 2.7 unsafe-deserialization content guard
+   - 2.8 per-run resource-amplification budget — after the gates above, so a call that was
+     going to be refused anyway is never charged to the run's ledger
 3. Filesystem path validation
 4. Capability requirements
 5. Endpoint policy validation
@@ -162,11 +186,17 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   it makes UP036/UP042 fire and emit code that breaks on 3.10. Do not raise it.
   Per-file `ARG` ignores exist for `integrations/`, `cli/`, `anomaly.py`, tests and examples —
   those unused args are callback-interface signatures, so do not "fix" them.
+- **bandit** reads `[tool.bandit]` in `pyproject.toml` (CI passes `-c pyproject.toml`).
+  B101 (`assert`) is deliberately not skipped — it caught narrowing asserts on a security
+  path. Where an assert is genuinely fine, use a scoped `# nosec B101 - <reason>`.
 - **Pydantic V2 strict mode** for validation. `@dataclass` with `field(default_factory=...)`
   for structured data; prefer it over plain dicts.
 - **Enums** extend `str, Enum` so they serialize to JSON.
 - **Logging** through `agent_airlock._log` (structlog when installed, stdlib shim otherwise):
-  `logger = get_logger("agent-airlock")`. Structured kwargs, never f-strings.
+  `from agent_airlock._log import structlog` then
+  `logger = structlog.get_logger("agent-airlock.<dotted.module.path>")`. Never
+  `import structlog` directly — the shim is the only module that does. Structured kwargs,
+  never f-strings.
 - **Imports** stdlib → third-party → first-party (`known-first-party = ["agent_airlock"]`).
 - **Naming**: snake_case functions, PascalCase classes, UPPER_SNAKE constants, `_` private.
 - **Docstrings** Google-style (Args / Returns / Raises).
@@ -186,12 +216,16 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   preserves `__signature__` / `__annotations__` so framework introspection still works.
 - **Defense-in-depth** — validation → policy → capability → filesystem → network → sandbox.
   Each layer exists because an earlier one proved insufficient for a specific CVE.
-- **Guard triple, split across two files** — `<Name>Guard` + `<Name>Decision` +
-  `<Name>Verdict` in `mcp_spec/`, and the matching `*_defaults()` factory in
-  `policy_presets.py`, `@preset`-registered (every `*_defaults()` is). A guard with no
-  registered preset never shows up in `list_active()`. Guards are **not** re-exported from
-  `mcp_spec/__init__.py` — its `__all__` carries only the protocol surface, so import a
-  guard from its own module.
+- **Two guard shapes in `mcp_spec/`** — class-style triples (`<Name>Guard` +
+  `@dataclass <Name>Decision` + `<Name>Verdict(str, Enum)`) and function-style validators
+  (`validate_*` / `audit_*` / `check_*`). Either way the matching `*_defaults()` preset
+  factory lives in `policy_presets.py`, `@preset`-registered; a guard with no registered
+  preset never shows up in `list_active()`. Guards are **not** re-exported from
+  `mcp_spec/__init__.py` — import each from its own module.
+- **Lazy optional imports** — anything from an extra (`e2b`, `redis`, `cryptography`,
+  `structlog`, framework SDKs) is imported inside the function that needs it, behind
+  `try/except ImportError`, raising an error that names the extra to install. This is what
+  keeps the `bare-install` job green.
 - **Deny-by-default** — unknown tier, unregistered manifest, and unpinned spec revision all
   fail closed. New branches should preserve that direction.
 - **Config priority** — `AIRLOCK_*` env > constructor > `airlock.toml`.
@@ -202,6 +236,9 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   per-tenant / per-workspace rules.
 - **Preset registry** — explicit `@preset` registration so `list_active()` enumerates
   everything; versioned YAML/TOML bundles load through `preset_loader`.
+- **Dated snapshots** — pricing tables, advisory blast-radius data and redaction patterns
+  ship as dated files under `data/` and `fixtures/`; a refresh is a new dated file, not an
+  edit to the old one.
 - **Attestation receipts** — identity plus LayerContract (assume/guarantee) on
   `airlock attest`.
 - **Warm pool** — `SandboxPool` keeps pre-created sandboxes to hide cold-start latency.
@@ -213,23 +250,27 @@ carrying `fix_hints` for the model to retry against, rather than raising.
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-History is dominated by `feat:` and `fix:`, with recurring `docs:` and `bench:` work.
-Three themes drive most recent development:
+History is dominated by `fix:` and `feat:`, with steady `docs:`, `chore:` and `bench:`
+work (`git log --format=%s | cut -d: -f1 | sort | uniq -c` recounts it). Three themes drive
+most recent development:
 
 1. **Per-CVE guards.** Most `feat:` commits add one guard for one named advisory
    (`mcp_spec/*_guard.py`), its preset defaults, and a regression fixture. Commit messages
-   carry the primary-source URL.
-2. **Claims integrity.** A distinct class of `fix(meta):` commits exists purely to stop the
-   README/docs/registry over-claiming — reconciling coverage floors, test counts, CVE counts,
-   spec-revision status, and dependency claims against what the code actually does.
-   Machine-checked gates (`scripts/check_*.py`, badge and changelog tests) were added so this
-   drift fails CI instead of shipping.
+   carry the primary-source URL. `cve-watcher.yml` feeds this: it polls NVD on a schedule
+   and files triage issues for argument-shaped CVEs, and the queue is closed either with a
+   fixture or with a public, reasoned refusal (#177).
+2. **Claims integrity.** A distinct class of `fix(meta):` / `fix:` commits exists purely
+   to stop the README/docs/registry over-claiming — "ten places the repo claimed something
+   the code contradicted" (#175) is the archetype. Machine-checked gates (`scripts/check_*.py`,
+   the badge, changelog and README-shape tests) were added so this drift fails CI instead
+   of shipping. The README itself was cut by roughly nine-tenths and its size gated
+   (`tests/test_readme_shape.py`, #180); long-form material belongs in `docs/`.
 3. **Benchmark honesty.** `bench(...)` commits publish adversarial results under
    `benchmarks/` and are written to survive a hostile read: a null result ships as a null
-   result ("first live run — inconclusive, and reported as inconclusive"), a broken harness
-   is fixed before its output is quoted ("stop zeros reading as results"), and the sample
-   scope is stated inline rather than rounded up. Match this register when touching
-   `benchmarks/` or `BENCHMARK.md`.
+   result, a broken harness is fixed before its output is quoted, a row that was about to
+   expire gets re-dated only after re-running it (#179), and the sample scope is stated
+   inline rather than rounded up. Match this register when touching `benchmarks/` or
+   `BENCHMARK.md`.
 
 Practical consequence: **do not add a capability claim to README, docs, or a preset
 description unless code and a test back it.** There is tooling that will fail the build on it.
@@ -248,8 +289,9 @@ recounts it over a number pasted into prose.
 - Default safety posture:
   `@Airlock(policy=STRICT_POLICY, sandbox=True, sandbox_required=True)`.
   Anything weaker needs a one-line justification in the docstring.
-- **Forbidden:** `subprocess.run(..., shell=True)` outside `mcp_spec/manifest_only_mode.py`;
-  raw `eval()` / `exec()`; mocking fixtures in CVE regression tests.
+- **Forbidden:** `subprocess.run(..., shell=True)` anywhere in `src/` (the only `subprocess`
+  importer under `mcp_spec/` is `manifest_only_mode.py`, and even it does not use
+  `shell=True`); raw `eval()` / `exec()`; mocking fixtures in CVE regression tests.
 - **CVE fixtures are signed history.** Files under `corpus/wild_payload_corpus/` and
   `tests/cves/` require a primary-source URL in the commit message plus a matching
   `docs/cves/index.md` update in the same PR. Never remove a check without naming the CVE
@@ -257,9 +299,11 @@ recounts it over a number pasted into prose.
 - Every `feat:` needs at least one regression test.
 - Run `make lint` and `pytest -m "not docker"` before committing.
 - CI gates are `test`, `docker-sandbox`, `bare-install`, `lint`, `version-tag-guard`,
-  `security`, `docs`.
-  `bare-install` is the one that enforces the Pydantic-only core — if you add an import
-  that is not in an extra, that job fails, not the test suite.
+  `security`, `docs`. `bare-install` is the one that enforces the Pydantic-only core — if
+  you add an import that is not in an extra, that job fails, not the test suite.
+- The README is gated on shape (`tests/test_readme_shape.py`: line and word ceilings, first
+  code block near the top) and on its framework and version-pin claims. Put new material in
+  `docs/` and link it; do not grow the README.
 - Six guards additionally carry a `scripts/smoke_*.py` end-to-end driver runnable outside
   pytest (sequence guard, action-contradiction gate, attested admission, capsule indirect
   injection, Flowise MCP stdio, explain). It is not required for every guard — add one

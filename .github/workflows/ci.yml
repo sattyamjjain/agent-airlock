@@ -26,9 +26,26 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
+        # `[redis]` is here so tests/test_redis_rate_limit.py and
+        # tests/kill_switch/test_kill_switch_wiring.py actually execute. Both
+        # modules open with `pytest.importorskip("fakeredis")`, and `[dev]`
+        # carries no redis, so for their whole life they were silently skipped
+        # in CI -- 30 tests that reported as neither passed nor failed. The
+        # redis ceiling lift in #182 therefore merged on a green run that had
+        # not imported redis once.
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,redis]"
+
+      - name: Assert the redis-backed tests are not silently skipped
+        # The failure mode this guards is invisible by construction: importorskip
+        # turns a missing dependency into a skip, and a skipped module looks
+        # exactly like a passing one in the summary line. Collect-only, so it
+        # costs nothing and fails loudly if the extra stops resolving.
+        run: |
+          python -c "import fakeredis, redis, lupa; print('redis', redis.__version__, '| fakeredis', fakeredis.__version__)"
+          pytest tests/test_redis_rate_limit.py tests/kill_switch/test_kill_switch_wiring.py \
+            --collect-only -q --no-cov > /dev/null
 
       - name: Lint with ruff
         run: |
