@@ -11,6 +11,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.7] - 2026-09-19
+
+### Fixed
+
+- **The `[redis]` extra shipped a fakeredis that cannot run the rate limiter's Lua
+  script, so the distributed limiter silently degraded to in-memory.**
+  `RedisRateLimit` acquires through an `EVAL`'d Lua script, because the
+  check-and-decrement has to be atomic across processes for the limiter to mean
+  anything. `fakeredis` moved Lua support into a `[lua]` extra, so the declared
+  `fakeredis>=2.20` resolved to a build with no `EVAL`. The limiter caught the
+  error, logged `redis_rate_limit_script_load_failed` and
+  `redis_rate_limit_runtime_fallback_to_memory`, and kept serving — at which point
+  two instances no longer share a bucket, which is the entire purpose of the
+  distributed limiter. The degradation was a warning, not an error, so nothing
+  failed.
+
+  Now `fakeredis[lua]>=2.20`. On a clean `pip install -e ".[dev,redis]"` the old
+  declaration resolved to redis 8.1.0 + fakeredis 2.38.0 with no `lupa` and failed
+  `test_two_instances_share_one_bucket`; with the marker it resolves `lupa` and all
+  30 redis-backed tests pass. The `[lua]` extra exists on every `fakeredis` release
+  from the declared 2.20 floor upward, so the floor is unchanged.
+
+- **CI never ran the redis-backed tests, which is why the above survived.**
+  `tests/test_redis_rate_limit.py` and `tests/kill_switch/test_kill_switch_wiring.py`
+  both open with `pytest.importorskip("fakeredis")`, and the `test` job installed
+  `.[dev]`, which carries no redis. Both modules were skipped in CI for their whole
+  life: 30 tests that reported as neither passed nor failed. A skipped module and a
+  passing one are indistinguishable in the pytest summary line, so the redis ceiling
+  lift in #182 merged on a green run that had not imported redis once.
+
+  The `test` job now installs `.[dev,redis]` and asserts the three imports resolve
+  before the suite runs, so the extra breaking is a red job rather than a quiet
+  return to skipping. `bare-install` is untouched and still installs `-e .` alone,
+  so the Pydantic-only core is enforced exactly as before.
+
+- **The CVE watcher read a sink word inside a sentence that exonerated it.**
+  `classify_shape()` scanned the whole NVD description for sink words. CVE-2026-59971
+  (MySQL MCP Server, CVSS 10.0) matched on exactly one: the word `stdio`, inside
+  *"The default stdio transport is not affected."* Neither of its CWEs is
+  argument-shaped, so that single word — in a clause stating a component is safe —
+  was the sole reason a CRITICAL tracker row opened for a CVE whose defect is a
+  missing authentication check. That is the fake backlog `docs/cve-triage.md` exists
+  to prevent, produced by the mechanism meant to prevent it.
+
+  The sink scan now skips sentences asserting non-applicability. The rule is narrow
+  on purpose: a *mitigation* is not an exoneration, so "stdio-only deployments have
+  reduced network reachability" still counts as a live sentence. All ten dispositions
+  pinned in `tests/test_cve_watcher.py` are unchanged, and CVE-2026-53710 — which
+  carries the same kind of "does not affect" clause — stays a candidate on its
+  `subprocess` match. Both directions are pinned in
+  `TestASinkWordInsideAnExonerationDoesNotCount`.
+
+### Added
+
+- **CVE-2026-53710 regression fixture** (ContextForge `python_sandbox_server`,
+  CVSS 10.0, CWE-94 + CWE-693). RestrictedPython escape: raw `getattr` is exposed
+  through `safe_builtins`, and `validate_code` denies *literal* dangerous dunder
+  strings, so the advisory's payload assembles those names at runtime, walks the
+  class hierarchy and reaches `subprocess.Popen`. `getattr` is already in
+  `DEFAULT_EVAL_SINKS`, so this is a second-defence fixture against an existing
+  guard, not a new guard.
+
+  What the fixture pins, in both directions, is that the two defences cover
+  different halves and neither is complete alone. The advisory payload carries no
+  literal `__class__`, which is why upstream's check passed it, and it must still
+  spell `getattr(`, which is why `EvalRCEGuard` refuses it. A payload using plain
+  attribute access (`"".__class__.__mro__`) calls no sink, so this guard allows it
+  and the string denylist is what catches it. The guard's own documented blind spot
+  — an attacker who also assembles the *sink* name — is pinned too, rather than
+  left implied.
+
+### Changed
+
+- **CVE-2026-59971 dispositioned out of scope** (mysql-mcp-server, CVSS 10.0), with
+  the reasoning recorded in the public refusals table in `tests/cves/README.md`.
+  The missing authentication, the absent DNS-rebinding protection and the `0.0.0.0`
+  bind are all transport-layer defects in another process. The remaining half,
+  *"supply a query that reaches cursor.execute(query)"*, is not argument-shaped:
+  `execute_sql` declares no restriction on its `query`, so running caller-supplied
+  SQL is the tool working as designed and nothing is smuggled past a contract.
+
+  Recorded next to CVE-2026-53710, filed the same day and also CVSS 10.0, because
+  the pair makes the line legible. Both have an unauthenticated-HTTP-endpoint half;
+  they split on whether the tool declares a restriction the argument then escapes.
+  `execute_code` does, so its primitive is in scope. `execute_sql` does not.
+
+  agent-airlock ships the two primitives that would have prevented CVE-2026-59971
+  (`validate_bind_address`, `McpOriginHostGuard`), but both are guards for a server
+  you build with them, and neither can be retrofitted onto someone else's Starlette
+  app. That distinction is stated in the refusal rather than left as an implied
+  capability.
+
+- The published CVE counts moved with the new fixture: 46 regression modules, 39 of
+  them CVE-numbered, covering 37 distinct CVEs. `docs/cves/index.md` regenerated;
+  README and `.claude-plugin/marketplace.json` updated to match, and the assertions
+  in `tests/test_cve_catalog_gate.py` moved with them.
+
 ## [0.10.6] - 2026-09-16
 
 ### Fixed

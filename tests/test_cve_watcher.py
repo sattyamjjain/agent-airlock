@@ -24,6 +24,7 @@ from typing import Any
 import pytest
 from scripts.cve_watcher import (
     ARGUMENT_SHAPED_CWES,
+    _sink_bearing_text,
     already_tracked,
     classify_shape,
     collect_new_cves,
@@ -376,6 +377,107 @@ class TestShapeClassifier:
 
     def test_empty_description_is_triage_required(self) -> None:
         assert classify_shape("", ()) == "triage-required"
+
+
+class TestASinkWordInsideAnExonerationDoesNotCount:
+    """A sentence saying a component is *not* affected is evidence of safety.
+
+    CVE-2026-59971 (MySQL MCP Server, CVSS 10.0) is why this exists. Its entire
+    sink signal, across the whole NVD record, was the word ``stdio`` — inside
+    the sentence "The default stdio transport is not affected." Neither of its
+    CWEs (306, 346) is argument-shaped, so that one word was the sole reason a
+    CRITICAL tracker row opened. A human then dispositioned it out of scope:
+    the defect is missing authentication plus a ``0.0.0.0`` bind, and the
+    ``execute_sql`` sink runs caller-supplied SQL by design.
+
+    That is exactly the fake backlog ``docs/cve-triage.md`` exists to prevent,
+    produced by the mechanism meant to prevent it.
+    """
+
+    #: CVE-2026-59971, as NVD served it. Note the closing exoneration.
+    _MYSQL_MCP = (
+        "MySQL MCP Server is a Model Context Protocol server that enables secure "
+        "interaction with MySQL databases. Prior to 0.4.2, setting MCP_TRANSPORT=sse "
+        "causes src/mysql_mcp_server/server.py to construct SseServerTransport without "
+        "security_settings or enable_dns_rebinding_protection, while the Starlette "
+        "routes /, /sse, and /messages/ have no authentication and the service binds to "
+        "0.0.0.0 by default. A network attacker can directly reach execute_sql, or can "
+        "use DNS rebinding to make a victim's browser relay same-origin requests to a "
+        "locally bound service, and supply a query that reaches cursor.execute(query). "
+        "This allows unauthenticated disclosure and modification of the configured "
+        "database; when the MySQL account has FILE privileges, the same access can read "
+        "or write server files and may enable code execution. The default stdio "
+        "transport is not affected. This issue is fixed in 0.4.2."
+    )
+    _MYSQL_CWES = ("CWE-306", "CWE-346")
+
+    #: CVE-2026-53710, filed the same day. Also carries a "does not affect"
+    #: sentence, and is a candidate anyway on signals that survive it.
+    _CONTEXTFORGE = (
+        "MCP Context Forge is an AI gateway, registry, and proxy for MCP, A2A, REST, "
+        "and gRPC APIs. Prior to 1.0.2, the python_sandbox_server exposes raw getattr "
+        "through safe_builtins, omits a required _getattr_ guard, and relies on "
+        "validate_code checks for literal dangerous dunder strings. An attacker can "
+        "construct dunder names at runtime, traverse the Python class hierarchy, reach "
+        "subprocess.Popen, and execute OS commands with the server process privileges "
+        "through the execute_code MCP tool. The HTTP/SSE transport can expose this tool "
+        "without authentication, while stdio-only deployments have reduced network "
+        "reachability. The issue affects the python_sandbox_server subproject and does "
+        "not directly affect the core Context Forge gateway or proxy components. This "
+        "issue is fixed in version 1.0.2."
+    )
+    _CONTEXTFORGE_CWES = ("CWE-94", "CWE-693")
+
+    def test_the_mysql_record_is_no_longer_filed(self) -> None:
+        assert classify_shape(self._MYSQL_MCP, self._MYSQL_CWES) == "triage-required"
+
+    def test_the_exonerating_sentence_is_what_carried_it(self) -> None:
+        """Without the fix this record was a candidate on one word. Pin the mechanism."""
+        assert "stdio transport is not affected" in self._MYSQL_MCP
+        assert "stdio" not in _sink_bearing_text(self._MYSQL_MCP)
+        # The rest of the record survives — this drops a sentence, not the CVE.
+        assert "execute_sql" in _sink_bearing_text(self._MYSQL_MCP)
+
+    def test_the_contextforge_record_is_still_filed(self) -> None:
+        """A real sink in a live sentence is untouched by the exoneration rule."""
+        assert classify_shape(self._CONTEXTFORGE, self._CONTEXTFORGE_CWES) == "candidate"
+        assert classify_shape(self._CONTEXTFORGE, ()) == "candidate"
+        assert "subprocess.Popen" in _sink_bearing_text(self._CONTEXTFORGE)
+
+    def test_a_mitigation_is_not_an_exoneration(self) -> None:
+        """ "Reduced reachability" means still affected, so the sentence stays.
+
+        Getting this wrong would be wrong reasoning even where it changes no
+        verdict, so it is pinned rather than left to the CWE signal to cover.
+        """
+        sentence = "Stdio-only deployments have reduced network reachability."
+        assert _sink_bearing_text(sentence) == sentence
+        assert classify_shape(sentence, ()) == "candidate"
+
+    @pytest.mark.parametrize(
+        "sentence",
+        [
+            "The default stdio transport is not affected.",
+            "The stdio transport is not vulnerable.",
+            "Servers using stdio are not impacted.",
+            "This does not affect the stdio transport.",
+            "The stdio transport is unaffected.",
+        ],
+    )
+    def test_exoneration_phrasings(self, sentence: str) -> None:
+        assert _sink_bearing_text(sentence) == ""
+        assert classify_shape(sentence, ()) == "triage-required"
+
+    def test_version_numbers_do_not_split_a_sentence_apart(self) -> None:
+        """Dotted versions and paths must not fragment the text being scanned."""
+        text = "Fixed in 0.4.2. The file src/x/server_fastmcp.py calls subprocess.Popen."
+        assert "subprocess.Popen" in _sink_bearing_text(text)
+        assert classify_shape(text, ()) == "candidate"
+
+    def test_an_argument_shaped_cwe_still_files_despite_an_exoneration(self) -> None:
+        """Dropping a sentence never suppresses the CWE signal — only the sink one."""
+        text = "The stdio transport is not affected."
+        assert classify_shape(text, ("CWE-77",)) == "candidate"
 
 
 class TestSsrfArgumentShape:

@@ -212,6 +212,46 @@ _SINK_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: Sentences that say a component is **not** affected. A sink word inside one of
+#: these is evidence of safety, not of an argument-shaped defect, so it must not
+#: upgrade the record.
+#:
+#: This exists because of CVE-2026-59971 (MySQL MCP Server, CVSS 10.0). Its only
+#: sink match in the whole NVD record was the word ``stdio`` — inside the
+#: sentence *"The default stdio transport is not affected."* The classifier read
+#: an exoneration as a sink and opened a CRITICAL tracker row for a CVE a human
+#: then dispositioned out of scope, which is precisely the fake backlog
+#: ``docs/cve-triage.md`` exists to prevent.
+#:
+#: Deliberately narrow. Only genuine non-applicability counts, never a
+#: *mitigation*: CVE-2026-53710 says "stdio-only deployments have reduced
+#: network reachability", which means stdio is still affected and merely harder
+#: to reach. Treating that as exoneration would be wrong reasoning even though
+#: that record stays a candidate on its ``subprocess`` match regardless.
+_EXONERATION_RE = re.compile(
+    r"\b(?:is|are|was|were)\s+not\s+(?:directly\s+)?(?:affected|vulnerable|impacted)"
+    r"|\b(?:does|do|did)\s+not\s+(?:directly\s+)?(?:affect|impact)"
+    r"|\bnot\s+(?:directly\s+)?(?:affected|vulnerable|impacted)\b"
+    r"|\bunaffected\b",
+    re.IGNORECASE,
+)
+
+#: Sentence boundary: a period/question/exclamation mark followed by whitespace.
+#: Version strings ("fixed in 0.4.2.") and dotted paths ("server_fastmcp.py")
+#: survive this because the split needs whitespace immediately after the mark.
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _sink_bearing_text(description: str) -> str:
+    """Drop sentences that exonerate a component, then look for sinks in the rest.
+
+    Returning text rather than a bool keeps :func:`classify_shape` readable and
+    lets the tests assert on which sentences survived.
+    """
+    kept = [s for s in _SENTENCE_SPLIT_RE.split(description or "") if not _EXONERATION_RE.search(s)]
+    return " ".join(kept)
+
+
 CANDIDATE_LABEL = "cve-candidate"
 TRIAGE_LABEL = "cve-triage-required"
 
@@ -228,7 +268,7 @@ def classify_shape(description: str, cwes: list[str] | tuple[str, ...] = ()) -> 
     issue; the label only decides whether a tracker row is opened now or the
     record is listed in the run log for a human to pull forward.
     """
-    if _SINK_RE.search(description or ""):
+    if _SINK_RE.search(_sink_bearing_text(description)):
         return "candidate"
     if any(c in ARGUMENT_SHAPED_CWES for c in cwes):
         return "candidate"

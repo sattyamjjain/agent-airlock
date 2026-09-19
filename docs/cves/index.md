@@ -57,6 +57,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-47390](#cve-2026-47390) | SSRF-protection bypass via alternate IP encodings | — | — |
 | [CVE-2026-48782](#cve-2026-48782) | SafeURL IPv6-transition cloud-metadata SSRF bypass | — | — |
 | [CVE-2026-5023](#cve-2026-5023) | codebase-mcp RepoMix OS command injection | — | — |
+| [CVE-2026-53710](#cve-2026-53710) | ContextForge python_sandbox_server: RestrictedPython escape via raw ``getattr`` | 10.0 (CRITICAL) — CWE-94 + CWE-693 | Partial |
 | [CVE-2026-53820](#cve-2026-53820) | OpenClaw exec-denylist bypass at MCP loopback spawn | 6.9 | — |
 | [CVE-2026-57124](#cve-2026-57124) | PraisonAI UI /api/mcp/connect spawns caller-chosen local commands | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-306 + CWE-78 | Partial |
 | [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
@@ -783,6 +784,49 @@ with user-controlled paths across four handlers. This preset refuses
 to run those handlers unless the caller explicitly opts into
 
 <a id="cve-2026-5023"></a>
+
+### CVE-2026-53710
+
+**ContextForge python_sandbox_server: RestrictedPython escape via raw ``getattr``**
+
+- **CVSS:** 10.0 (CRITICAL) — CWE-94 + CWE-693
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-53710](https://nvd.nist.gov/vuln/detail/CVE-2026-53710)
+- **Advisory:** [https://github.com/advisories/GHSA-xm98-3vcf-fph7](https://github.com/advisories/GHSA-xm98-3vcf-fph7)
+- **Regression test:** [`tests/cves/test_cve_2026_53710_contextforge_sandbox_getattr.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_53710_contextforge_sandbox_getattr.py)
+
+**Vulnerability**
+
+Prior to 1.0.2, the ``python_sandbox_server`` sub-project exposes raw
+``getattr`` through ``safe_builtins``, bypassing RestrictedPython's
+``_getattr_`` mediation, and its ``validate_code`` pre-check searches for
+**literal** dangerous dunder strings. The advisory's proof of concept
+therefore builds those dunder names at runtime, walks the Python class
+hierarchy through the exposed ``getattr``, reaches ``subprocess.Popen`` and
+runs an OS command. Its transcript records the decisive line:
+``validation={'valid': True, 'message': 'Code passed validation'}`` followed
+by ``success=True`` — the code passed the sandbox's own check and then
+escaped it. Fixed in 1.0.2.
+
+**Airlock mitigation**
+
+Three compounding weaknesses in the advisory, and agent-airlock reaches one,
+per the split in ``docs/cve-triage.md``.
+
+**Out of scope:** weakness 3, "The ``execute_code`` MCP tool can be exposed
+over HTTP/SSE transport with no authentication layer." Same documented shape
+as CVE-2026-33032 and CVE-2026-23744. Also out of scope is the repair itself
+— removing ``getattr`` from someone else's ``safe_builtins`` is upstream's
+1.0.2, not something a contract layer can express.
+
+**In scope:** the primitive. A caller-supplied ``code`` argument carrying a
+payload that reaches an interpreter sink is the documented in-scope shape
+(``docs/cve-triage.md``, "Code injection into an interpreter sink"), and
+``getattr`` is already in :data:`DEFAULT_EVAL_SINKS`. So this is a
+**second-defence regression fixture against an existing guard, not a new
+guard** — the CVE-2026-90898 / CVE-2026-57124 pattern.
+
+<a id="cve-2026-53710"></a>
 
 ### CVE-2026-53820
 

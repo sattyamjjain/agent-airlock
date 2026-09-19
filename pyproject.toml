@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.10.6"
+version = "0.10.7"
 description = "A type-checker and contract layer for AI agent tool calls, deny-by-default, in-process, Pydantic-only. Strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks."
 readme = "README.md"
 license = "Apache-2.0"
@@ -134,9 +134,21 @@ console = [
 # Install with: pip install "agent-airlock[redis]"
 # fakeredis ships in the same extra so the test suite runs without
 # a live Redis. redis-py 5.x is the supported floor.
+# The <9.0 ceiling was raised from <7.0 in #182. Verified on redis 8.1.0 with
+# fakeredis 2.38.0: 30 passed across tests/test_redis_rate_limit.py and
+# tests/kill_switch/test_kill_switch_wiring.py.
+# The `[lua]` marker is load-bearing, not cosmetic. RedisRateLimit acquires
+# through an EVAL'd Lua script so the check-and-decrement is atomic across
+# processes; a fakeredis without lupa answers "unknown command 'eval'" and the
+# limiter logs `redis_rate_limit_runtime_fallback_to_memory` and keeps going.
+# Two instances then stop sharing a bucket, which is the entire point of the
+# distributed limiter, and the degradation is a warning rather than an error.
+# fakeredis made Lua an extra rather than a hard dependency, so a plain
+# `fakeredis>=2.20` resolved to a build that silently cannot run the script.
+# The extra exists on every release from the 2.20 floor upward.
 redis = [
     "redis>=5.0,<9.0",
-    "fakeredis>=2.20",
+    "fakeredis[lua]>=2.20",
 ]
 # Ed25519 SignedAgentIdentity (v0.7.0+, #33).
 # Install with: pip install "agent-airlock[crypto]"

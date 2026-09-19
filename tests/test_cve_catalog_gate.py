@@ -194,11 +194,11 @@ class TestThePublishedSplitIsAccurate:
 
     def test_the_module_counts_are_what_the_tree_holds(self) -> None:
         total, cve_numbered = self._module_counts()
-        assert total == 45
-        assert cve_numbered == 38
+        assert total == 46
+        assert cve_numbered == 39
 
     def test_the_distinct_cve_count_is_what_the_catalog_publishes(self) -> None:
-        assert self._distinct_cve_count() == 36
+        assert self._distinct_cve_count() == 37
 
     def test_the_cve_numbered_modules_exceed_the_distinct_cves(self) -> None:
         """The whole reason the two numbers must not be conflated again."""
