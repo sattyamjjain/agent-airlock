@@ -1786,6 +1786,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-53710" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-53710
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-53820" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3000,6 +3011,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-53710" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-53710
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-53820" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3308,6 +3330,12 @@ catalog and the tests stay in lockstep.</p>
 <td>codebase-mcp RepoMix OS command injection</td>
 <td>—</td>
 <td>—</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-53710">CVE-2026-53710</a></td>
+<td>ContextForge python_sandbox_server: RestrictedPython escape via raw <code>getattr</code></td>
+<td>10.0 (CRITICAL) — CWE-94 + CWE-693</td>
+<td>Partial</td>
 </tr>
 <tr>
 <td><a href="#cve-2026-53820">CVE-2026-53820</a></td>
@@ -3935,6 +3963,41 @@ The package <code>codebase-mcp</code> wrapped the RepoMix CLI and shelled out
 with user-controlled paths across four handlers. This preset refuses
 to run those handlers unless the caller explicitly opts into</p>
 <p><a id="cve-2026-5023"></a></p>
+<h3 id="cve-2026-53710">CVE-2026-53710<a class="headerlink" href="#cve-2026-53710" title="Permanent link">&para;</a></h3>
+<p><strong>ContextForge python_sandbox_server: RestrictedPython escape via raw <code>getattr</code></strong></p>
+<ul>
+<li><strong>CVSS:</strong> 10.0 (CRITICAL) — CWE-94 + CWE-693</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-53710">https://nvd.nist.gov/vuln/detail/CVE-2026-53710</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/advisories/GHSA-xm98-3vcf-fph7">https://github.com/advisories/GHSA-xm98-3vcf-fph7</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_53710_contextforge_sandbox_getattr.py"><code>tests/cves/test_cve_2026_53710_contextforge_sandbox_getattr.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>Prior to 1.0.2, the <code>python_sandbox_server</code> sub-project exposes raw
+<code>getattr</code> through <code>safe_builtins</code>, bypassing RestrictedPython's
+<code>_getattr_</code> mediation, and its <code>validate_code</code> pre-check searches for
+<strong>literal</strong> dangerous dunder strings. The advisory's proof of concept
+therefore builds those dunder names at runtime, walks the Python class
+hierarchy through the exposed <code>getattr</code>, reaches <code>subprocess.Popen</code> and
+runs an OS command. Its transcript records the decisive line:
+<code>validation={'valid': True, 'message': 'Code passed validation'}</code> followed
+by <code>success=True</code> — the code passed the sandbox's own check and then
+escaped it. Fixed in 1.0.2.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>Three compounding weaknesses in the advisory, and agent-airlock reaches one,
+per the split in <code>docs/cve-triage.md</code>.</p>
+<p><strong>Out of scope:</strong> weakness 3, "The <code>execute_code</code> MCP tool can be exposed
+over HTTP/SSE transport with no authentication layer." Same documented shape
+as CVE-2026-33032 and CVE-2026-23744. Also out of scope is the repair itself
+— removing <code>getattr</code> from someone else's <code>safe_builtins</code> is upstream's
+1.0.2, not something a contract layer can express.</p>
+<p><strong>In scope:</strong> the primitive. A caller-supplied <code>code</code> argument carrying a
+payload that reaches an interpreter sink is the documented in-scope shape
+(<code>docs/cve-triage.md</code>, "Code injection into an interpreter sink"), and
+<code>getattr</code> is already in :data:<code>DEFAULT_EVAL_SINKS</code>. So this is a
+<strong>second-defence regression fixture against an existing guard, not a new
+guard</strong> — the CVE-2026-90898 / CVE-2026-57124 pattern.</p>
+<p><a id="cve-2026-53710"></a></p>
 <h3 id="cve-2026-53820">CVE-2026-53820<a class="headerlink" href="#cve-2026-53820" title="Permanent link">&para;</a></h3>
 <p><strong>OpenClaw exec-denylist bypass at MCP loopback spawn</strong></p>
 <ul>
