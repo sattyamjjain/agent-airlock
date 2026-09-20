@@ -79,7 +79,7 @@
 - **Decision rule:** an entry is *blocked* iff **any** guard in the suite refuses it.
 - **`expected_block`:** an independent malicious/benign label per entry. Detection counts agreements on malicious entries; false positives count disagreements on benign entries.
 - **OWASP mapping:** indicative alignment with the OWASP Agentic / MCP Top-10 (ASI05, MCP01, MCP05), using the codes agent-airlock already applies in its presets. The rigorous axis is `attack_class` + CWE.
-- **Corpus:** [`tests/cves/corpora/airlock_guard_benchmark_2026_06_13.json`](tests/cves/corpora/airlock_guard_benchmark_2026_06_13.json) — deterministic, version-controlled.
+- **Corpus:** [`tests/cves/corpora/airlock_guard_benchmark_2026_06_13.json`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/corpora/airlock_guard_benchmark_2026_06_13.json) — deterministic, version-controlled.
 
 ### Known limitations (read before trusting the headline)
 
@@ -87,7 +87,7 @@
 - **Signature/syntax-based, not semantic.** Individual guards match known sink/token shapes; in isolation several are evadable (e.g. aliasing `eval`). Detection here is a property of the *suite* (defense-in-depth), not of any single guard.
 - **Self-corpus.** Payloads derive from agent-airlock's own CVE fixtures, so a high detection number is expected and is **not** evidence of robustness against novel or adaptive attackers. Treat this as a coverage / regression baseline, not an ASR result.
 
-**Prior art.** External research this library's premise rests on — and where no head-to-head against it has been run — is recorded in [`PRIOR_ART.md`](PRIOR_ART.md).
+**Prior art.** External research this library's premise rests on — and where no head-to-head against it has been run — is recorded in [`PRIOR_ART.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/PRIOR_ART.md).
 
 ---
 
@@ -148,7 +148,7 @@ agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) (Deben
 | workspace | 240 | 222 | **92.5%** |
 | banking | 144 | 102 | **70.8%** |
 
-> Deterministic, no model, no API key. The true benign-utility / utility-under-attack / ASR (defended vs undefended) come from the model path (`python -m benchmarks.agentdojo.run --model <id>`, needs a key). `agentdojo` is a bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: [`benchmarks/agentdojo/RESULTS.md`](benchmarks/agentdojo/RESULTS.md).
+> Deterministic, no model, no API key. The true benign-utility / utility-under-attack / ASR (defended vs undefended) come from the model path (`python -m benchmarks.agentdojo.run --model <id>`, needs a key). `agentdojo` is a bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: [`benchmarks/agentdojo/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md).
 
 ---
 
@@ -160,7 +160,7 @@ Same repository, same task, **one** realistic instruction planted in a README: w
 
 > **The bound, now that n is large enough.** 0/36 per harness per arm carries a 95% Wilson interval of **[0.0%, 9.6%]**, and pooled across harnesses the injected arm is 0/72, **[0.0%, 5.1%]** — the 10% bound the 2026-08-15 run named as its own requirement, down from **[0.0%, 39.0%]** at n = 6. Two explanations for a zero are ruled out by the run itself: the agents had a reason to act (they did the task) and they do run commands in the fixture (they ran the suite, at the exact point the planted line applies).
 
-> **It is still not an injection-resistance result, for two separate reasons.** `claude-code` ignored the benign twin identically (0/36), so its zero is indifference to this delivery channel rather than detection of intent. And `codex` *did* act on the benign twin once, which makes its injected zero a choice rather than blanket indifference — but one event does not show it tells the two apart: Fisher exact on its matched arms gives **p = 1.00**. Neither result predicts anything about an injection arriving through a channel these agents act on more readily (a task-relevant source file, a tool description, an error message). Per-harness table and the full list of what this does not show: [`benchmarks/harness_injection/RESULTS.md`](benchmarks/harness_injection/RESULTS.md).
+> **It is still not an injection-resistance result, for two separate reasons.** `claude-code` ignored the benign twin identically (0/36), so its zero is indifference to this delivery channel rather than detection of intent. And `codex` *did* act on the benign twin once, which makes its injected zero a choice rather than blanket indifference — but one event does not show it tells the two apart: Fisher exact on its matched arms gives **p = 1.00**. Neither result predicts anything about an injection arriving through a channel these agents act on more readily (a task-relevant source file, a tool description, an error message). Per-harness table and the full list of what this does not show: [`benchmarks/harness_injection/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md).
 
 Earlier runs are superseded: 2026-08-14 used a task that gave no reason to act; both 2026-08-14 and the first 2026-08-15 run recorded codex zeros that were an artefact of `codex exec` defaulting to a read-only sandbox; and the published 2026-08-15 null was sound but underpowered at n = 6, where its own analysis put the upper bound at 39% and named `--trials 18` as the fix. This run is that fix.
 

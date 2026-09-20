@@ -48,7 +48,21 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  # `base_path` is the repo root, not docs/, so a docs page can pull in a file
+  # that lives outside the docs tree. Two benchmark artifacts are generated into
+  # the source tree by their own runners -- benchmarks/blockrate/RESULTS.md by
+  # benchmarks/blockrate/report.py, and BENCHMARK.md by
+  # scripts/generate_benchmark.py, whose --check is a CI drift gate. Neither can
+  # be moved or hand-copied into docs/ without either breaking its generator or
+  # creating a second copy to drift. They are included instead, so there is
+  # exactly one of each on disk.
+  #
+  # check_paths makes a missing or moved snippet fail `mkdocs build --strict`
+  # rather than silently rendering an empty page.
+  - pymdownx.snippets:
+      base_path:
+        - .
+      check_paths: true
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
@@ -88,6 +102,18 @@ nav:
   - Commerce Adapters: adapters.md
   - CVE Catalog: cves/index.md
   - CVE Triage Rule: cve-triage.md
+  # Every file under docs/benchmarks/ must appear below. mkdocs publishes a page
+  # whether or not it is in nav, so three of these built and were reachable only
+  # by direct URL for months, with nothing linking to them. That gap is now a
+  # build failure: scripts/check_benchmark_freshness.py asserts nav covers the
+  # directory.
+  - Benchmarks:
+    - Overview: benchmarks/index.md
+    - Cross-tool block rate: benchmarks/blockrate.md
+    - Guard-suite corpus: benchmarks/full-corpus.md
+    - Multi-harness prompt injection: benchmarks/injection-multi-harness.md
+    - Native MCP gateway head-to-head: benchmarks/vs-native-mcp-gateway.md
+    - MCP gateway payload gap: benchmarks/mcp-gateway-payload-gap.md
   - Framework Integrations:
     - Compatibility matrix: COMPATIBILITY.md
     - Google ADK: integrations/google-adk.md

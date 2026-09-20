@@ -3,7 +3,7 @@
 
 Why this exists
 ---------------
-The README publishes six head-to-head benchmark rows, one of them a *competitive*
+The README publishes seven head-to-head benchmark rows, one of them a *competitive*
 claim against a named third-party product at a pinned version. A competitive claim
 against a moving target decays, and a stale one is worse for credibility than no claim
 at all — the reader cannot tell "measured last week" from "measured in July and never
@@ -108,6 +108,91 @@ def _find_marker(readme: str, identifier: str) -> tuple[str, _dt.date] | None:
     return None
 
 
+#: Where the benchmark pages live, and the nav that has to reach all of them.
+_DOCS_BENCHMARKS = _ROOT / "docs" / "benchmarks"
+_MKDOCS_YML = _ROOT / "mkdocs.yml"
+_BENCHMARK_INDEX = _DOCS_BENCHMARKS / "index.md"
+
+
+def _nav_block(mkdocs_yml: str) -> str:
+    """Return the text of the top-level ``nav:`` block.
+
+    Parsed as text rather than with PyYAML on purpose. This script runs in
+    ``publish.yml``, whose job installs only ``build`` and ``twine`` -- there is no
+    guaranteed YAML parser there, and a gate that raises ImportError in the release
+    workflow is worse than no gate. Nav entries are ``Title: path.md`` lines, so a
+    block scan is enough and cannot fail on a config that mkdocs itself accepts.
+    """
+    lines = mkdocs_yml.splitlines()
+    out: list[str] = []
+    inside = False
+    for line in lines:
+        if not inside:
+            if line.startswith("nav:"):
+                inside = True
+            continue
+        # A non-indented, non-blank, non-comment line ends the block.
+        if line.strip() and not line.startswith((" ", "\t", "#")):
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+def _nav_gaps() -> list[str]:
+    """Every page under ``docs/benchmarks/`` must be reachable from the nav.
+
+    mkdocs publishes a file whether or not nav references it, so a page can build,
+    deploy and be reachable by direct URL while nothing on the site links to it.
+    Three benchmark pages sat in exactly that state
+    (``injection-multi-harness``, ``mcp-gateway-payload-gap``,
+    ``vs-native-mcp-gateway``): they were live and invisible. A missing nav entry is
+    indistinguishable from a working page unless something asserts the difference,
+    which is what this does.
+    """
+    if not _DOCS_BENCHMARKS.is_dir():
+        return []
+    nav = _nav_block(_MKDOCS_YML.read_text(encoding="utf-8"))
+    missing: list[str] = []
+    for path in sorted(_DOCS_BENCHMARKS.rglob("*.md")):
+        rel = path.relative_to(_ROOT / "docs").as_posix()
+        if rel not in nav:
+            missing.append(rel)
+    return missing
+
+
+def _index_date_mismatches(readme: str, readme_path: Path) -> list[str]:
+    """The benchmarks landing page must date each row the same way README does.
+
+    ``docs/benchmarks/index.md`` republishes the freshness dates that this gate reads
+    out of README.md. Two copies of one date drift, and the drift is silent: both
+    pages render fine while claiming a run happened on different days. The dates are
+    checked against each other here so that a re-run which updates one and not the
+    other fails the build.
+
+    Only meaningful against this repository's own README. ``tests/`` drives
+    :func:`main` with a synthetic README in ``tmp_path`` to exercise the date
+    arithmetic; no landing page could agree with those invented dates, and asserting
+    one would fail the date-logic tests on an unrelated concern.
+    """
+    if readme_path != _ROOT / "README.md":
+        return []
+    if not _BENCHMARK_INDEX.is_file():
+        return []
+    index = _BENCHMARK_INDEX.read_text(encoding="utf-8")
+    problems: list[str] = []
+    for identifier, (label, _howto) in BENCHMARKS.items():
+        found = _find_marker(readme, identifier)
+        if found is None:
+            continue  # the undated check below already reports this
+        _line, date = found
+        if date.isoformat() not in index:
+            problems.append(
+                f"{label}: README says {date.isoformat()}, "
+                f"which does not appear in docs/benchmarks/index.md"
+            )
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -148,6 +233,35 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "\nEvery published benchmark row must carry '_re-run YYYY-MM-DD_', "
             "'_re-measured live YYYY-MM-DD_', or '_last verified YYYY-MM-DD_'.",
+            file=sys.stderr,
+        )
+        return 1
+
+    nav_gaps = _nav_gaps()
+    if nav_gaps:
+        print("\nFAIL: benchmark pages that mkdocs publishes but nav never links:", file=sys.stderr)
+        for rel in nav_gaps:
+            print(f"  - {rel}", file=sys.stderr)
+        print(
+            "\nmkdocs builds and deploys a page whether or not nav references it, so these "
+            "are live on the site and reachable only by typing the URL. Add each one under "
+            "the 'Benchmarks:' section of mkdocs.yml, or delete the file.",
+            file=sys.stderr,
+        )
+        return 1
+
+    index_gaps = _index_date_mismatches(readme, _README)
+    if index_gaps:
+        print(
+            "\nFAIL: docs/benchmarks/index.md disagrees with README.md on a run date:",
+            file=sys.stderr,
+        )
+        for item in index_gaps:
+            print(f"  - {item}", file=sys.stderr)
+        print(
+            "\nThe landing page republishes these dates, so a re-run has to update both. "
+            "Two dates for one run is worse than one stale date, because neither page "
+            "looks wrong on its own.",
             file=sys.stderr,
         )
         return 1

@@ -9,7 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(no entries yet)
+### Added
+
+- **The benchmarks are on the docs site, and the nav gap that hid them is now a build
+  failure.** `docs/benchmarks/` held three pages — the multi-harness prompt-injection
+  study, the MCP gateway payload gap and the native-gateway head-to-head — that mkdocs
+  built and deployed but no nav entry referenced. They were live and reachable only by
+  typing the URL, because mkdocs publishes a file whether or not nav mentions it, and a
+  page missing from nav is indistinguishable from a working one unless something asserts
+  the difference. There is now a `Benchmarks` section in the nav, and
+  `scripts/check_benchmark_freshness.py` fails if any file under `docs/benchmarks/` is
+  not in it.
+
+  New landing page at `docs/benchmarks/index.md` carrying all seven published rows with
+  the date each was last re-run. Those dates also appear in `README.md`, which is where
+  the freshness gate reads them, so the gate now asserts the two agree: two dates for one
+  run is worse than one stale date, because neither page looks wrong on its own.
+
+  `benchmarks/blockrate/RESULTS.md` and the root `BENCHMARK.md` are now reachable on the
+  site without a second copy existing. Both are generated — the first by
+  `benchmarks/blockrate/report.py`, the second by `scripts/generate_benchmark.py`, whose
+  `--check` is a CI drift gate — so neither could be moved under `docs/` or hand-copied
+  there without breaking its generator or creating a fork to drift. They are pulled in
+  with `pymdownx.snippets`, which was already enabled, so this needed no new dependency.
+  `check_paths` is on, making a moved snippet fail `mkdocs build --strict` rather than
+  silently rendering an empty page.
+
+  Cross-tree links in both generated files became absolute. A tree-relative link resolves
+  differently depending on whether the file is read at its own path on GitHub or inside
+  the docs page that includes it, so it was necessarily dead in one of the two.
 
 ## [0.10.7] - 2026-09-19
 

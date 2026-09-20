@@ -57,6 +57,13 @@ from agent_airlock.regression_corpus import (  # noqa: E402
 )
 
 _DEFAULT_CORPUS = _REPO_ROOT / "tests/cves/corpora/airlock_guard_benchmark_2026_06_13.json"
+#: Cross-tree links are emitted absolute, not repo-root-relative. BENCHMARK.md is
+#: rendered in two places: at the repo root on GitHub, and inside
+#: `docs/benchmarks/full-corpus.md`, which pulls it in with a pymdownx snippet so
+#: there is exactly one copy of the file. A root-relative link is correct in the
+#: first location and dead in the second, and an absolute one is correct in both.
+_BLOB_BASE = "https://github.com/sattyamjjain/agent-airlock/blob/main/"
+
 _DEFAULT_OUT = _REPO_ROOT / "BENCHMARK.md"
 
 # A realistic "all guards enabled" deployment. The subprocess guard is
@@ -292,7 +299,10 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
             f"Top-10 ({', '.join(owasp_codes)}), using the codes agent-airlock already "
             f"applies in its presets. The rigorous axis is `attack_class` + CWE."
         )
-    out.append(f"- **Corpus:** [`{rel_corpus}`]({rel_corpus}) — deterministic, version-controlled.")
+    out.append(
+        f"- **Corpus:** [`{rel_corpus}`]({_BLOB_BASE}{rel_corpus}) — deterministic, "
+        "version-controlled."
+    )
     out.append("")
     out.append("### Known limitations (read before trusting the headline)")
     out.append("")
@@ -323,7 +333,7 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     # a self-corpus is the one who should be pointed at externally measured work.
     out.append(
         "**Prior art.** External research this library's premise rests on — and where no "
-        "head-to-head against it has been run — is recorded in [`PRIOR_ART.md`](PRIOR_ART.md)."
+        "head-to-head against it has been run — is recorded in [`PRIOR_ART.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/PRIOR_ART.md)."
     )
     out.append("")
     # Deterministic cross-tool comparison (block-rate + cited incumbent scope,
@@ -362,7 +372,7 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
         "utility-under-attack / ASR (defended vs undefended) come from the model path "
         "(`python -m benchmarks.agentdojo.run --model <id>`, needs a key). `agentdojo` is a "
         "bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: "
-        "[`benchmarks/agentdojo/RESULTS.md`](benchmarks/agentdojo/RESULTS.md)."
+        "[`benchmarks/agentdojo/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md)."
     )
     out.append("")
     out.append("---")
@@ -405,7 +415,7 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
         "injection arriving through a channel these agents act on more readily (a "
         "task-relevant source file, a tool description, an error message). Per-harness table "
         "and the full list of what this does not show: "
-        "[`benchmarks/harness_injection/RESULTS.md`](benchmarks/harness_injection/RESULTS.md)."
+        "[`benchmarks/harness_injection/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md)."
     )
     out.append("")
     out.append(

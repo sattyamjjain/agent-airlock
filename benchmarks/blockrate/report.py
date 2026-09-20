@@ -106,9 +106,7 @@ def render_asi_section(report: BlockRateReport) -> str:
         s = stats[slot]
         name = names.get(slot, "—")
         if s.malicious_total == 0 and s.benign_total == 0:
-            lines.append(
-                f"| {slot} | {name} | **0** | — | _not measured_ | **0** | — |"
-            )
+            lines.append(f"| {slot} | {name} | **0** | — | _not measured_ | **0** | — |")
             continue
         rate = _pct(s.block_rate) if s.malicious_total else "_not measured_"
         blocked = str(s.malicious_blocked) if s.malicious_total else "—"
@@ -228,9 +226,7 @@ def render_sandbox_arm_section(arm: SandboxArmReport | None) -> str:
         f"**{arm.policy_agreements}/{arm.policy_items}** policy items agree | ✅ yes |"
     )
     if arm.backend_available:
-        lines.append(
-            f"| **Isolation backend execution** | ran on `{arm.backend_name}` | ✅ yes |"
-        )
+        lines.append(f"| **Isolation backend execution** | ran on `{arm.backend_name}` | ✅ yes |")
     else:
         lines.append(
             f"| **Isolation backend execution** | _not run — {arm.backend_reason}_ | ❌ no |"
@@ -298,13 +294,19 @@ def render_results_md(
     lines.append(render_comparison_section(report).rstrip("\n"))
     lines.append(">")
     lines.append(
-        "> **AgentDojo now wired** (this replaces the earlier \"not yet wired\" note): "
+        '> **AgentDojo now wired** (this replaces the earlier "not yet wired" note): '
         "for an *adaptive-attacker* measurement, airlock runs as an "
         "[AgentDojo](https://arxiv.org/abs/2406.13352) defense and blocks **84.4%** of "
         "`tool_knowledge` injection→task target tool-calls on the pinned "
         "workspace+banking subset — a deterministic upper bound on ASR reduction, with "
         "a `--model` path for the real model-in-the-loop ASR. See "
-        "[`benchmarks/agentdojo/RESULTS.md`](../agentdojo/RESULTS.md)."
+        # Absolute, not `../agentdojo/RESULTS.md`. This file is rendered in two
+        # places now: at its own path on GitHub, and inside
+        # `docs/benchmarks/blockrate.md`, which pulls it in with a pymdownx
+        # snippet so there is exactly one copy. A tree-relative link resolves
+        # differently in the two locations and would be dead in one of them.
+        "[`benchmarks/agentdojo/RESULTS.md`]"
+        "(https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md)."
     )
     lines.append("")
     lines.append(render_sandbox_arm_section(arm).rstrip("\n"))

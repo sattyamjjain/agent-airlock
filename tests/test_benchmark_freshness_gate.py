@@ -1,6 +1,6 @@
 """The benchmark-freshness gate must actually fire.
 
-`scripts/check_benchmark_freshness.py` exists because the README's five benchmark rows —
+`scripts/check_benchmark_freshness.py` exists because the README's seven benchmark rows —
 one of them a competitive claim against a named third-party product at a pinned version —
 were kept honest only by a human remembering to re-run. The 2026-07-16 gateway claim sat a
 month past its run before anyone noticed.
@@ -24,7 +24,14 @@ import datetime as _dt
 from pathlib import Path
 
 import pytest
-from scripts.check_benchmark_freshness import BENCHMARKS, MAX_AGE_DAYS, main
+from scripts.check_benchmark_freshness import (
+    BENCHMARKS,
+    MAX_AGE_DAYS,
+    _index_date_mismatches,
+    _nav_block,
+    _nav_gaps,
+    main,
+)
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -134,3 +141,79 @@ class TestTheGateCoversTheRealReadme:
 
     def test_the_shipped_readme_passes_the_structural_gate(self) -> None:
         assert main([]) == 0
+
+
+class TestTheNavGapIsABuildFailure:
+    """A benchmark page mkdocs publishes but nav never links.
+
+    mkdocs renders and deploys every file under ``docs/``, whether or not the nav
+    references it. Three pages lived in exactly that state — ``injection-multi-harness``,
+    ``mcp-gateway-payload-gap`` and ``vs-native-mcp-gateway`` — built, deployed, and
+    reachable only by typing the URL, with nothing on the site linking to them.
+
+    Nothing distinguishes that from a working page except an assertion, which is what
+    :func:`_nav_gaps` is. These tests drive it in both directions so the gate cannot
+    quietly stop firing.
+    """
+
+    def test_the_shipped_tree_has_no_nav_gap(self) -> None:
+        assert _nav_gaps() == []
+
+    def test_a_page_missing_from_nav_is_reported(self, tmp_path, monkeypatch) -> None:
+        docs = tmp_path / "docs"
+        (docs / "benchmarks").mkdir(parents=True)
+        (docs / "benchmarks" / "index.md").write_text("# i", encoding="utf-8")
+        (docs / "benchmarks" / "orphan.md").write_text("# o", encoding="utf-8")
+        mkdocs = tmp_path / "mkdocs.yml"
+        mkdocs.write_text(
+            "nav:\n  - Benchmarks:\n    - Overview: benchmarks/index.md\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("scripts.check_benchmark_freshness._ROOT", tmp_path)
+        monkeypatch.setattr(
+            "scripts.check_benchmark_freshness._DOCS_BENCHMARKS", docs / "benchmarks"
+        )
+        monkeypatch.setattr("scripts.check_benchmark_freshness._MKDOCS_YML", mkdocs)
+        assert _nav_gaps() == ["benchmarks/orphan.md"]
+
+    def test_the_nav_block_stops_at_the_next_top_level_key(self) -> None:
+        """A path named only outside nav must not count as navigable."""
+        block = _nav_block(
+            "nav:\n  - Overview: benchmarks/index.md\n"
+            "plugins:\n  - search   # benchmarks/orphan.md\n"
+        )
+        assert "benchmarks/index.md" in block
+        assert "benchmarks/orphan.md" not in block
+
+
+class TestTheLandingPageAndReadmeAgreeOnDates:
+    """One run, one date. Two copies of it drift silently.
+
+    ``docs/benchmarks/index.md`` republishes the same freshness dates the gate reads
+    out of README.md. If a re-run updates one and not the other, both pages still
+    render correctly while claiming the measurement happened on different days, and
+    neither looks wrong on its own.
+    """
+
+    def test_the_shipped_pages_agree(self) -> None:
+        readme = (_ROOT / "README.md").read_text(encoding="utf-8")
+        assert _index_date_mismatches(readme, _ROOT / "README.md") == []
+
+    def test_a_drifted_date_is_reported(self, tmp_path, monkeypatch) -> None:
+        readme = (_ROOT / "README.md").read_text(encoding="utf-8")
+        index = (_ROOT / "docs" / "benchmarks" / "index.md").read_text(encoding="utf-8")
+        # Break exactly one date on the landing page.
+        drifted = tmp_path / "index.md"
+        drifted.write_text(index.replace("2026-09-12", "2026-09-11"), encoding="utf-8")
+        monkeypatch.setattr("scripts.check_benchmark_freshness._BENCHMARK_INDEX", drifted)
+        problems = _index_date_mismatches(readme, _ROOT / "README.md")
+        assert len(problems) == 1
+        assert "2026-09-12" in problems[0]
+
+    def test_a_synthetic_readme_is_not_cross_checked(self, tmp_path) -> None:
+        """The date-arithmetic tests above drive main() with an invented README.
+
+        No landing page could agree with those dates, so the cross-check must stand
+        down rather than fail them on an unrelated concern.
+        """
+        assert _index_date_mismatches("anything at all", tmp_path / "README.md") == []
