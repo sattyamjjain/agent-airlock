@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/observability/semconv/">
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/benchmarks/">
       
       
-        <link rel="prev" href="../../cli/egress-bench/">
+        <link rel="prev" href="../cve-triage/">
       
       
-        <link rel="next" href="../../SECURITY/">
+        <link rel="next" href="blockrate/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>OTel Semantic Conventions - Agent-Airlock</title>
+        <title>Overview - Agent-Airlock</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#opentelemetry-semantic-conventions" class="md-skip">
+        <a href="#benchmarks" class="md-skip">
           Skip to content
         </a>
       
@@ -94,7 +94,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Agent-Airlock" class="md-header__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
+    <a href=".." title="Agent-Airlock" class="md-header__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              OTel Semantic Conventions
+              Overview
             
           </span>
         </div>
@@ -227,7 +227,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../.." class="md-tabs__link">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -248,7 +248,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../getting-started/installation/" class="md-tabs__link">
+        <a href="../getting-started/installation/" class="md-tabs__link">
           
   
   
@@ -268,7 +268,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guide/concepts/" class="md-tabs__link">
+        <a href="../guide/concepts/" class="md-tabs__link">
           
   
   
@@ -288,7 +288,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../api/airlock/" class="md-tabs__link">
+        <a href="../api/airlock/" class="md-tabs__link">
           
   
   
@@ -308,7 +308,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../examples/basic/" class="md-tabs__link">
+        <a href="../examples/basic/" class="md-tabs__link">
           
   
   
@@ -326,7 +326,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../adapters/" class="md-tabs__link">
+      <a href="../adapters/" class="md-tabs__link">
         
   
   
@@ -345,7 +345,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../cves/" class="md-tabs__link">
+      <a href="../cves/" class="md-tabs__link">
         
   
   
@@ -364,7 +364,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../cve-triage/" class="md-tabs__link">
+      <a href="../cve-triage/" class="md-tabs__link">
         
   
   
@@ -381,11 +381,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../benchmarks/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
           
   
   
@@ -405,7 +407,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../COMPATIBILITY/" class="md-tabs__link">
+        <a href="../COMPATIBILITY/" class="md-tabs__link">
           
   
   
@@ -425,7 +427,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../cli/kill-switch/" class="md-tabs__link">
+        <a href="../cli/kill-switch/" class="md-tabs__link">
           
   
   
@@ -441,13 +443,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../observability/semconv/" class="md-tabs__link">
           
   
   
@@ -465,7 +465,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../SECURITY/" class="md-tabs__link">
+      <a href="../SECURITY/" class="md-tabs__link">
         
   
   
@@ -503,7 +503,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../changelog/" class="md-tabs__link">
+      <a href="../changelog/" class="md-tabs__link">
         
   
   
@@ -538,7 +538,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Agent-Airlock" class="md-nav__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
+    <a href=".." title="Agent-Airlock" class="md-nav__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -568,7 +568,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -649,7 +649,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/installation/" class="md-nav__link">
+      <a href="../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -677,7 +677,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/quickstart/" class="md-nav__link">
+      <a href="../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -705,7 +705,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/configuration/" class="md-nav__link">
+      <a href="../getting-started/configuration/" class="md-nav__link">
         
   
   
@@ -794,7 +794,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/concepts/" class="md-nav__link">
+      <a href="../guide/concepts/" class="md-nav__link">
         
   
   
@@ -822,7 +822,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/validation/" class="md-nav__link">
+      <a href="../guide/validation/" class="md-nav__link">
         
   
   
@@ -850,7 +850,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/policy/" class="md-nav__link">
+      <a href="../guide/policy/" class="md-nav__link">
         
   
   
@@ -878,7 +878,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/sanitization/" class="md-nav__link">
+      <a href="../guide/sanitization/" class="md-nav__link">
         
   
   
@@ -906,7 +906,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/sandbox/" class="md-nav__link">
+      <a href="../guide/sandbox/" class="md-nav__link">
         
   
   
@@ -934,7 +934,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/mcp/" class="md-nav__link">
+      <a href="../guide/mcp/" class="md-nav__link">
         
   
   
@@ -1023,7 +1023,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/airlock/" class="md-nav__link">
+      <a href="../api/airlock/" class="md-nav__link">
         
   
   
@@ -1051,7 +1051,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/config/" class="md-nav__link">
+      <a href="../api/config/" class="md-nav__link">
         
   
   
@@ -1079,7 +1079,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/policy/" class="md-nav__link">
+      <a href="../api/policy/" class="md-nav__link">
         
   
   
@@ -1107,7 +1107,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/sanitizer/" class="md-nav__link">
+      <a href="../api/sanitizer/" class="md-nav__link">
         
   
   
@@ -1135,7 +1135,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/sandbox/" class="md-nav__link">
+      <a href="../api/sandbox/" class="md-nav__link">
         
   
   
@@ -1163,7 +1163,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/mcp/" class="md-nav__link">
+      <a href="../api/mcp/" class="md-nav__link">
         
   
   
@@ -1252,7 +1252,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../examples/basic/" class="md-nav__link">
+      <a href="../examples/basic/" class="md-nav__link">
         
   
   
@@ -1280,7 +1280,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../examples/policy/" class="md-nav__link">
+      <a href="../examples/policy/" class="md-nav__link">
         
   
   
@@ -1308,7 +1308,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../examples/pii/" class="md-nav__link">
+      <a href="../examples/pii/" class="md-nav__link">
         
   
   
@@ -1336,7 +1336,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../examples/sandbox/" class="md-nav__link">
+      <a href="../examples/sandbox/" class="md-nav__link">
         
   
   
@@ -1371,7 +1371,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adapters/" class="md-nav__link">
+      <a href="../adapters/" class="md-nav__link">
         
   
   
@@ -1398,7 +1398,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cves/" class="md-nav__link">
+      <a href="../cves/" class="md-nav__link">
         
   
   
@@ -1425,7 +1425,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cve-triage/" class="md-nav__link">
+      <a href="../cve-triage/" class="md-nav__link">
         
   
   
@@ -1449,28 +1449,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
-        
-          
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
             
   
   
@@ -1488,7 +1491,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_9">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1503,10 +1506,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../benchmarks/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1522,6 +1552,59 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-seven-published-rows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The seven published rows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pages-on-this-site" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pages on this site
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#re-running-them" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-running them
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1534,7 +1617,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarks/blockrate/" class="md-nav__link">
+      <a href="blockrate/" class="md-nav__link">
         
   
   
@@ -1562,7 +1645,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarks/full-corpus/" class="md-nav__link">
+      <a href="full-corpus/" class="md-nav__link">
         
   
   
@@ -1590,7 +1673,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarks/injection-multi-harness/" class="md-nav__link">
+      <a href="injection-multi-harness/" class="md-nav__link">
         
   
   
@@ -1618,7 +1701,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarks/vs-native-mcp-gateway/" class="md-nav__link">
+      <a href="vs-native-mcp-gateway/" class="md-nav__link">
         
   
   
@@ -1646,7 +1729,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarks/mcp-gateway-payload-gap/" class="md-nav__link">
+      <a href="mcp-gateway-payload-gap/" class="md-nav__link">
         
   
   
@@ -1735,7 +1818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../COMPATIBILITY/" class="md-nav__link">
+      <a href="../COMPATIBILITY/" class="md-nav__link">
         
   
   
@@ -1763,7 +1846,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../integrations/google-adk/" class="md-nav__link">
+      <a href="../integrations/google-adk/" class="md-nav__link">
         
   
   
@@ -1791,7 +1874,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../integrations/pydantic-ai/" class="md-nav__link">
+      <a href="../integrations/pydantic-ai/" class="md-nav__link">
         
   
   
@@ -1819,7 +1902,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../integrations/crewai/" class="md-nav__link">
+      <a href="../integrations/crewai/" class="md-nav__link">
         
   
   
@@ -1847,7 +1930,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../integrations/anthropic-claude-agent-sdk/" class="md-nav__link">
+      <a href="../integrations/anthropic-claude-agent-sdk/" class="md-nav__link">
         
   
   
@@ -1875,7 +1958,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../integrations/managed-agents/" class="md-nav__link">
+      <a href="../integrations/managed-agents/" class="md-nav__link">
         
   
   
@@ -1964,7 +2047,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/kill-switch/" class="md-nav__link">
+      <a href="../cli/kill-switch/" class="md-nav__link">
         
   
   
@@ -1992,7 +2075,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/policy-bundle-lock/" class="md-nav__link">
+      <a href="../cli/policy-bundle-lock/" class="md-nav__link">
         
   
   
@@ -2020,7 +2103,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/policy-compile-explain/" class="md-nav__link">
+      <a href="../cli/policy-compile-explain/" class="md-nav__link">
         
   
   
@@ -2048,7 +2131,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/attest-receipt/" class="md-nav__link">
+      <a href="../cli/attest-receipt/" class="md-nav__link">
         
   
   
@@ -2076,7 +2159,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/console/" class="md-nav__link">
+      <a href="../cli/console/" class="md-nav__link">
         
   
   
@@ -2104,7 +2187,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/graph-serve/" class="md-nav__link">
+      <a href="../cli/graph-serve/" class="md-nav__link">
         
   
   
@@ -2132,7 +2215,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/studio/" class="md-nav__link">
+      <a href="../cli/studio/" class="md-nav__link">
         
   
   
@@ -2160,7 +2243,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../scan-tools/" class="md-nav__link">
+      <a href="../scan-tools/" class="md-nav__link">
         
   
   
@@ -2188,7 +2271,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/egress-bench/" class="md-nav__link">
+      <a href="../cli/egress-bench/" class="md-nav__link">
         
   
   
@@ -2220,31 +2303,28 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" checked>
         
           
-          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="">
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
+        
+          
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
             
   
   
@@ -2262,7 +2342,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_12">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2277,37 +2357,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    OTel Semantic Conventions
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../observability/semconv/" class="md-nav__link">
         
   
   
@@ -2323,203 +2376,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#design-principles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Design principles
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#spans" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Spans
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Spans">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#airlocktool_call" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        airlock.tool_call
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#required-attributes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Required attributes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#optional-attributes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Optional attributes
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Optional attributes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#identity" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Identity
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#policy-validation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Policy / validation
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#block-path-detail-set-only-when-airlockblockedtrue" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Block-path detail (set only when airlock.blocked=true)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#sandbox-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Sandbox execution
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#network-egress" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Network egress
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cost" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Cost
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#output-sanitization" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output sanitization
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#events" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Events
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#relationship-to-upstream-conventions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Relationship to upstream conventions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stability" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stability
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2539,7 +2395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../SECURITY/" class="md-nav__link">
+      <a href="../SECURITY/" class="md-nav__link">
         
   
   
@@ -2593,7 +2449,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelog/" class="md-nav__link">
+      <a href="../changelog/" class="md-nav__link">
         
   
   
@@ -2640,10 +2496,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#design-principles" class="md-nav__link">
+  <a href="#the-seven-published-rows" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design principles
+        The seven published rows
       
     </span>
   </a>
@@ -2651,38 +2507,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#spans" class="md-nav__link">
+  <a href="#pages-on-this-site" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Spans
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Spans">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#airlocktool_call" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        airlock.tool_call
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#required-attributes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Required attributes
+        Pages on this site
       
     </span>
   </a>
@@ -2690,126 +2518,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#optional-attributes" class="md-nav__link">
+  <a href="#re-running-them" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Optional attributes
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Optional attributes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#identity" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Identity
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#policy-validation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Policy / validation
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#block-path-detail-set-only-when-airlockblockedtrue" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Block-path detail (set only when airlock.blocked=true)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#sandbox-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Sandbox execution
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#network-egress" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Network egress
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cost" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Cost
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#output-sanitization" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output sanitization
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#events" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Events
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#relationship-to-upstream-conventions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Relationship to upstream conventions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stability" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stability
+        Re-running them
       
     </span>
   </a>
@@ -2836,305 +2548,108 @@
   
 
 
-<h1 id="opentelemetry-semantic-conventions">OpenTelemetry semantic conventions<a class="headerlink" href="#opentelemetry-semantic-conventions" title="Permanent link">&para;</a></h1>
-<p>This page documents the spans and attributes agent-airlock emits on the
-OTel audit exporter (<code>agent_airlock.audit_otel</code>, enabled via
-<code>AirlockConfig.otel_enabled=True</code>). Treat these as a contract: downstream
-dashboards, saved searches, and SIEM rules depend on the names below.</p>
-<h2 id="design-principles">Design principles<a class="headerlink" href="#design-principles" title="Permanent link">&para;</a></h2>
-<ol>
-<li><strong>Namespace first.</strong> All airlock-specific attributes live under
-   <code>airlock.*</code>. When an upstream OTel semantic convention exists (OTel
-   GenAI SIG <code>gen_ai.*</code>, OTel HTTP <code>http.*</code>, <code>server.*</code>), use the upstream
-   name and mirror to <code>airlock.*</code> for discoverability.</li>
-<li><strong>Only stable names here.</strong> Anything under <code>airlock.experimental.*</code> is
-   NOT part of this contract and can change between minor releases.</li>
-<li><strong>Low cardinality.</strong> <code>airlock.tool_name</code> is medium cardinality; tool
-   arguments are never attached as attributes (they're sent through the
-   audit sink or hashed, not raw).</li>
-</ol>
-<h2 id="spans">Spans<a class="headerlink" href="#spans" title="Permanent link">&para;</a></h2>
-<h3 id="airlocktool_call"><code>airlock.tool_call</code><a class="headerlink" href="#airlocktool_call" title="Permanent link">&para;</a></h3>
-<p>One span per invocation of an <code>@Airlock()</code>-wrapped function. Parent-child
-relationship: a wrapped function called from another wrapped function
-creates a child span.</p>
+<h1 id="benchmarks">Benchmarks<a class="headerlink" href="#benchmarks" title="Permanent link">&para;</a></h1>
+<p>Seven published measurements. Each one carries the date it was last re-run, and each
+date is machine-checked: <code>scripts/check_benchmark_freshness.py</code> fails the release if any
+row is missing its marker, and <code>--release</code> fails if any row is older than 30 days.</p>
+<p>Two conventions are worth knowing before reading any number here.</p>
+<p><strong>A null result is published as a null result.</strong> The multi-harness prompt-injection row
+is a zero, and the page says at length why that zero is <em>not</em> evidence of injection
+resistance. A benchmark that only ever reports wins is not a benchmark.</p>
+<p><strong>Scope is stated, not implied.</strong> Where a comparison is against a system this harness
+does not execute, the incumbent's coverage is marked <em>scope-claimed, not re-run</em> rather
+than given a fabricated number. Where a slot has no samples, it is shown as <code>n=0</code> rather
+than omitted — four of the ten OWASP Agentic slots are in that state.</p>
+<h2 id="the-seven-published-rows">The seven published rows<a class="headerlink" href="#the-seven-published-rows" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Status</th>
-<th>Meaning</th>
+<th>Benchmark</th>
+<th>Headline result</th>
+<th>Last re-run</th>
+<th>Full results</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>OK</code></td>
-<td>Tool ran to completion. <code>airlock.blocked = false</code>.</td>
+<td><strong>Cross-tool block rate</strong> · 210 tool calls</td>
+<td>100% blocked · 0% false-positive · p50 ~2µs · <em>6 of 10 OWASP ASI slots measured; ASI07–ASI10 are n=0</em></td>
+<td>2026-09-16</td>
+<td><a href="blockrate/">Cross-tool block rate results</a></td>
 </tr>
 <tr>
-<td><code>ERROR</code></td>
-<td>Block, validation failure, or execution exception. <code>airlock.block_reason</code> carries the reason.</td>
+<td><strong><code>sandbox=True</code> dispatch</strong> · contract parity</td>
+<td>4/4 annotated-contract probes refused on the sandbox path (0/4 before v0.10.6) · 204/204 verdicts agree with the local path</td>
+<td>2026-09-16</td>
+<td><a href="blockrate/#sandboxtrue-dispatch-arm">Sandbox dispatch parity arm</a></td>
+</tr>
+<tr>
+<td><strong>Least-privilege</strong> · ToolPrivBench, 100 scenarios</td>
+<td>100% over-privileged blocked · 100% low-privileged allowed · OPUR 100% → 0%</td>
+<td>2026-09-08</td>
+<td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/toolprivbench/RESULTS.md">ToolPrivBench results on GitHub</a></td>
+</tr>
+<tr>
+<td><strong>Adaptive attacker</strong> · AgentDojo, all 4 suites</td>
+<td>86.0% of injection→target tool-calls blocked (524/609, deterministic bound). Model-in-the-loop ASR 45% → 10%, but that is one model family on a 60-pair subset</td>
+<td>2026-09-08</td>
+<td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md">AgentDojo results on GitHub</a></td>
+</tr>
+<tr>
+<td><strong>vs. native MCP gateway</strong> · 12 malformed payloads</td>
+<td>airlock 12/12 blocked · Docker MCP Gateway 0/12 · 0% false-positive on both</td>
+<td>2026-09-12</td>
+<td><a href="vs-native-mcp-gateway/">Native MCP gateway head-to-head</a></td>
+</tr>
+<tr>
+<td><strong>Prompt injection across agent harnesses</strong></td>
+<td>A null result, published as one. <code>claude-code</code> and <code>codex</code> each acted on the planted script 0/36, and ignored the benign twin just as completely, so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made <code>codex</code>'s zero a choice did not reproduce, and <code>codex</code> finished only 52/72 cells</td>
+<td>2026-09-20</td>
+<td><a href="injection-multi-harness/">Multi-harness prompt injection</a></td>
+</tr>
+<tr>
+<td><strong>MCP spec conformance</strong> · <code>@modelcontextprotocol/conformance</code></td>
+<td>Run against the wire-path validators, outcome published in full. Not a full MCP server/client conformance pass — airlock is a request validator, not a server, so it does not claim one</td>
+<td>2026-09-08</td>
+<td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcp_conformance/RESULTS.md">MCP conformance results on GitHub</a></td>
 </tr>
 </tbody>
 </table>
-<h2 id="required-attributes">Required attributes<a class="headerlink" href="#required-attributes" title="Permanent link">&para;</a></h2>
-<p>Set on every <code>airlock.tool_call</code> span.</p>
-<table>
-<thead>
-<tr>
-<th>Attribute</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.version</code></td>
-<td>string</td>
-<td><code>agent_airlock.__version__</code>, e.g. <code>0.5.0</code>.</td>
-</tr>
-<tr>
-<td><code>airlock.tool_name</code></td>
-<td>string</td>
-<td>Qualified name of the wrapped function (<code>module.func</code>).</td>
-</tr>
-<tr>
-<td><code>airlock.blocked</code></td>
-<td>bool</td>
-<td><code>true</code> if airlock returned before the wrapped function ran.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="optional-attributes">Optional attributes<a class="headerlink" href="#optional-attributes" title="Permanent link">&para;</a></h2>
-<p>Set when the relevant feature produced data for this call.</p>
-<h3 id="identity">Identity<a class="headerlink" href="#identity" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Attribute</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.agent_id</code></td>
-<td>string</td>
-<td>Logical agent identifier supplied by the caller. <code>"unknown"</code> if the caller did not set it.</td>
-</tr>
-<tr>
-<td><code>airlock.session_id</code></td>
-<td>string</td>
-<td>Session identifier from <code>AirlockContext</code>. Useful for correlating a conversation across multiple tool calls.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="policy-validation">Policy / validation<a class="headerlink" href="#policy-validation" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Attribute</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.policy_id</code></td>
-<td>string</td>
-<td>Human-readable policy name (e.g. <code>GTG_1002_DEFENSE</code>).</td>
-</tr>
-<tr>
-<td><code>airlock.policy_hash</code></td>
-<td>string</td>
-<td>SHA-256 hash of the serialized policy object. Same hash ⇒ same rules; lets you prove which policy was in effect at the time of the call.</td>
-</tr>
-<tr>
-<td><code>airlock.unknown_args_mode</code></td>
-<td>string</td>
-<td>One of <code>BLOCK</code>, <code>STRIP_AND_LOG</code>, <code>STRIP_SILENT</code>.</td>
-</tr>
-<tr>
-<td><code>airlock.required_capabilities</code></td>
-<td>string</td>
-<td>Comma-separated list of <code>Capability</code> flags required by the wrapped function.</td>
-</tr>
-<tr>
-<td><code>airlock.granted_capabilities</code></td>
-<td>string</td>
-<td>Comma-separated list of capabilities actually granted by the active <code>CapabilityPolicy</code>.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="block-path-detail-set-only-when-airlockblockedtrue">Block-path detail (set only when <code>airlock.blocked=true</code>)<a class="headerlink" href="#block-path-detail-set-only-when-airlockblockedtrue" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Attribute</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.block_reason</code></td>
-<td>string</td>
-<td>One of <code>validation_error</code>, <code>policy_violation</code>, <code>capability_denied</code>, <code>rate_limited</code>, <code>filesystem_denied</code>, <code>network_denied</code>, <code>circuit_open</code>, <code>budget_exceeded</code>, <code>sandbox_unavailable</code>.</td>
-</tr>
-<tr>
-<td><code>airlock.error</code></td>
-<td>string</td>
-<td>Short error message (no PII, no stack frames).</td>
-</tr>
-<tr>
-<td><code>airlock.violation_type</code></td>
-<td>string</td>
-<td>When <code>block_reason=policy_violation</code>, the <code>ViolationType</code> enum value.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="sandbox-execution">Sandbox execution<a class="headerlink" href="#sandbox-execution" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Attribute</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.sandbox_backend</code></td>
-<td>string</td>
-<td><code>e2b</code>, <code>docker</code>, <code>managed</code>, <code>local</code>, or <code>none</code>.</td>
-</tr>
-<tr>
-<td><code>airlock.sandbox_id</code></td>
-<td>string</td>
-<td>Backend-specific sandbox or session identifier.</td>
-</tr>
-<tr>
-<td><code>airlock.sandbox_duration_ms</code></td>
-<td>int</td>
-<td>Wall-clock time spent inside the sandbox.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="network-egress">Network egress<a class="headerlink" href="#network-egress" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Attribute</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.egress_domains</code></td>
-<td>string</td>
-<td>Comma-separated list of domains the tool reached during this span. Populated when <code>NetworkPolicy</code> is attached.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="cost">Cost<a class="headerlink" href="#cost" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Attribute</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.cost.input_tokens</code></td>
-<td>int</td>
-<td>Prompt-side tokens charged to this call.</td>
-</tr>
-<tr>
-<td><code>airlock.cost.output_tokens</code></td>
-<td>int</td>
-<td>Completion-side tokens charged to this call.</td>
-</tr>
-<tr>
-<td><code>airlock.cost.total_usd</code></td>
-<td>double</td>
-<td>Total USD for this call (rounded to 6 decimal places).</td>
-</tr>
-</tbody>
-</table>
-<h3 id="output-sanitization">Output sanitization<a class="headerlink" href="#output-sanitization" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Attribute</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.sanitized_count</code></td>
-<td>int</td>
-<td>Number of PII / secret detections the sanitizer masked on this response.</td>
-</tr>
-<tr>
-<td><code>airlock.truncated</code></td>
-<td>bool</td>
-<td><code>true</code> if the output was truncated by the configured token or character limit.</td>
-</tr>
-<tr>
-<td><code>airlock.args_hash</code></td>
-<td>string</td>
-<td>SHA-256 of the canonicalised argument tuple. Useful for replay detection in post-incident analysis. Never contains argument <em>values</em>.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="events">Events<a class="headerlink" href="#events" title="Permanent link">&para;</a></h2>
-<p>The airlock exporter emits span events for notable in-span incidents so
-they're attached to the same trace root without needing a separate
-metric pipeline.</p>
-<table>
-<thead>
-<tr>
-<th>Event name</th>
-<th>When emitted</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>airlock.validation_error</code></td>
-<td>Pydantic strict validation rejected arguments. Attributes: <code>airlock.validation.field</code>, <code>airlock.validation.message</code>.</td>
-</tr>
-<tr>
-<td><code>airlock.honeypot_triggered</code></td>
-<td>Honeypot path returned fake-success data instead of an error. Attributes: <code>airlock.honeypot.strategy</code>.</td>
-</tr>
-<tr>
-<td><code>airlock.circuit_state_changed</code></td>
-<td>Circuit breaker transitioned. Attributes: <code>airlock.circuit.from</code>, <code>airlock.circuit.to</code>.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="relationship-to-upstream-conventions">Relationship to upstream conventions<a class="headerlink" href="#relationship-to-upstream-conventions" title="Permanent link">&para;</a></h2>
+<p>The <strong>Last re-run</strong> column is the same date the freshness gate reads out of <code>README.md</code>,
+and <code>check_benchmark_freshness.py</code> asserts the two agree. If a row here disagrees with
+the README, the build fails rather than publishing two different dates for one run.</p>
+<h2 id="pages-on-this-site">Pages on this site<a class="headerlink" href="#pages-on-this-site" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>OTel GenAI SIG</strong> (<code>gen_ai.*</code>) — airlock sits in front of tool calls,
-  not model inference. Spans that wrap an LLM call (e.g. a judge model
-  scoring a borderline block) additionally set the <code>gen_ai.*</code> attributes
-  per the OTel GenAI semconv draft. Airlock does NOT re-emit those under
-  <code>airlock.*</code>.</li>
-<li><strong>OTel HTTP</strong> (<code>http.*</code>, <code>server.*</code>, <code>url.*</code>) — when a wrapped tool
-  hits an HTTP endpoint, the HTTP instrumentation sets those attributes
-  on a child span. Airlock's <code>airlock.egress_domains</code> is a coarse
-  summary for the parent span; the fine-grained request attributes live
-  on the child.</li>
+<li><a href="blockrate/">Cross-tool block rate</a> — the flagship corpus: 210 tool calls, 106
+  malicious and 104 benign, with the per-OWASP-ASI breakdown and the <code>sandbox=True</code>
+  dispatch arm.</li>
+<li><a href="full-corpus/">Guard-suite corpus</a> — the full per-class, false-positive-aware table
+  over the versioned exploit corpus. A self-corpus, and labelled as one.</li>
+<li><a href="injection-multi-harness/">Multi-harness prompt injection</a> — the matched-pair design,
+  and why the benign control is the only reason the injected column means anything.</li>
+<li><a href="vs-native-mcp-gateway/">Native MCP gateway head-to-head</a> — airlock against Docker's
+  MCP Gateway on the same malformed payloads.</li>
+<li><a href="mcp-gateway-payload-gap/">MCP gateway payload gap</a> — what the gateway comparison
+  does and does not establish.</li>
 </ul>
-<h2 id="stability">Stability<a class="headerlink" href="#stability" title="Permanent link">&para;</a></h2>
-<p>Names above are stable across the v0.5.0 minor series. Breaking changes
-to an attribute name or removal ship in the next minor bump with a
-deprecation note in <code>CHANGELOG.md</code>.</p>
-<p>Anything under <code>airlock.experimental.*</code> may change or disappear without
-notice.</p>
+<p>Four of the seven rows have their full results in the benchmark packages rather than on
+this site; those link to GitHub in the table above.</p>
+<h2 id="re-running-them">Re-running them<a class="headerlink" href="#re-running-them" title="Permanent link">&para;</a></h2>
+<p>Every row is reproducible from the repository. The deterministic ones need nothing but a
+checkout:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.blockrate<span class="w">          </span><span class="c1"># block rate, latency, sandbox dispatch arm</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.toolprivbench<span class="w">      </span><span class="c1"># least-privilege</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>make<span class="w"> </span>benchmark<span class="w">                          </span><span class="c1"># regenerate BENCHMARK.md from the corpus</span>
+</code></pre></div>
+<p>Three are not free. <code>benchmarks.agentdojo.run</code> and <code>benchmarks.harness_injection</code> spend
+real API budget, and <code>benchmarks.vs_gateway</code> needs a Docker daemon. The multi-harness run
+is roughly 100 minutes of paid API time for a full <code>--trials 18</code> matrix, which is why it
+takes a <code>--checkpoint</code> flag and refuses to do anything without an explicit <code>--run</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.harness_injection<span class="w"> </span>--trials<span class="w"> </span><span class="m">18</span><span class="w"> </span>--write<span class="w"> </span>--checkpoint<span class="w"> </span>ckpt.json<span class="w"> </span>--run
+</code></pre></div>
+<p><code>python -m benchmarks.harness_injection</code> on its own is a dry run. It prints the cells it
+would execute and the statistical power that many trials would buy, so the cost is known
+before it is spent.</p>
 
 
 
@@ -3221,10 +2736,10 @@ notice.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

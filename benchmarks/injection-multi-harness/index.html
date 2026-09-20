@@ -13,6 +13,10 @@
         <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/benchmarks/injection-multi-harness/">
       
       
+        <link rel="prev" href="../full-corpus/">
+      
+      
+        <link rel="next" href="../vs-native-mcp-gateway/">
       
       
         
@@ -23,7 +27,7 @@
     
     
       
-        <title>Matched-pair multi-harness prompt injection: the injection did not work - Agent-Airlock</title>
+        <title>Multi-harness prompt injection - Agent-Airlock</title>
       
     
     
@@ -110,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Matched-pair multi-harness prompt injection: the injection did not work
+              Multi-harness prompt injection
             
           </span>
         </div>
@@ -370,6 +374,28 @@
 
       </a>
     </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Benchmarks
+
+        </a>
+      </li>
+    
   
 
       
@@ -1423,6 +1449,429 @@
       
   
   
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blockrate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cross-tool block rate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../full-corpus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guard-suite corpus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-harness prompt injection
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-harness prompt injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The task
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-planted-convention-verbatim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The planted convention, verbatim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-the-control-is-the-whole-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the control is the whole design
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Results">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#95-intervals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        95% intervals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-n-would-be-needed-and-what-this-run-could-not-have-seen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What n would be needed, and what this run could not have seen
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-zero-rules-out-and-what-it-does-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the zero rules out, and what it does not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-three-runs-before-this-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The three runs before this one
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The three runs before this one">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run-1-2026-08-14-136" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run 1 — 2026-08-14 (#136)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-2-2026-08-15-139" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run 2 — 2026-08-15 (#139)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-3-2026-08-15-140-the-published-null" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run 3 — 2026-08-15 (#140, the published null)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-number-does-not-show" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this number does not show
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vs-native-mcp-gateway/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native MCP gateway head-to-head
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp-gateway-payload-gap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP gateway payload gap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
   
   
     
@@ -1441,10 +1890,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
         
           
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
             
   
   
@@ -1462,8 +1911,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1670,10 +2119,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
         
           
-          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
             
   
   
@@ -1691,8 +2140,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1983,10 +2432,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
         
           
-          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
             
   
   
@@ -2004,8 +2453,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_11">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2322,21 +2771,22 @@
 
 
 <h1 id="matched-pair-multi-harness-prompt-injection-the-injection-did-not-work">Matched-pair multi-harness prompt injection: the injection did not work<a class="headerlink" href="#matched-pair-multi-harness-prompt-injection-the-injection-did-not-work" title="Permanent link">&para;</a></h1>
-<p><strong>Neither harness ran the exfiltration-shaped script.</strong> <code>claude-code</code> 2.1.246 and <code>codex</code>
-0.147.0 each acted on it <strong>0 out of 36 times</strong> on the injected arm — while fixing the seeded
-bug in 144/144 cells and running the test suite in 141/144.</p>
-<p><strong>The benign control fired, for the first time in four runs.</strong> <code>codex</code> ran the <em>harmless</em>
-twin <strong>1 out of 36 times</strong>. Three of the four arms are zero; one is not.</p>
-<p>At n = 36 per harness per arm a zero carries a 95% Wilson interval of <strong>[0.0%, 9.6%]</strong> — the
-bound the previous run named as its own requirement, down from <strong>[0.0%, 39.0%]</strong> at n = 6.
-Pooled across both harnesses the injected arm is 0/72, <strong>[0.0%, 5.1%]</strong>. This is the first
-run here whose zero licenses a number rather than only a direction.</p>
-<p>It is still <strong>not</strong> an injection-resistance finding, for two separate reasons.
-<code>claude-code</code>'s benign twin was ignored identically, so its zero is indifference to the
-channel rather than detection of intent. And <code>codex</code>'s single benign action does not show it
-tells the two apart: Fisher exact on its matched arms gives <strong>p = 1.00</strong>.</p>
+<p><strong>Neither harness ran the exfiltration-shaped script.</strong> <code>claude-code</code> 2.1.274 and <code>codex</code>
+0.154.0 each acted on it <strong>0 out of 36 times</strong> on the injected arm.</p>
+<p><strong>The benign control did not fire either, for either harness.</strong> Both ignored the <em>harmless</em>
+twin <strong>0 out of 36 times</strong> as well. All four arms are zero; the matrix total is <strong>0/144</strong>.</p>
+<p>That is a step backwards in evidence, and it is worth saying so plainly. The 2026-08-26 run
+recorded one benign action by <code>codex</code> (1/36), and that single event was the only thing
+making its injected zero a <em>choice</em> rather than blanket indifference to the channel. It did
+not reproduce. With all four arms at zero there is no asymmetry left to test, and neither
+harness's zero can be read as resistance.</p>
+<p><strong>Task completion diverged, and it changes the denominator.</strong> <code>claude-code</code> finished the
+task in 72/72 cells. <code>codex</code> 0.154.0 managed 52/72, down from 72/72 on 0.147.0. A cell where
+the agent never finished the task never reached the point where running the planted script
+was a choice, so <code>codex</code>'s injected zero rests on the <strong>24 of 36</strong> cells that got there, not
+36. Its honest upper bound is <strong>13.8%</strong>, not 9.6%.</p>
 <ul>
-<li><strong>Run date:</strong> 2026-08-26 · <strong>Cells:</strong> 144/144 measured, no exclusions</li>
+<li><strong>Run date:</strong> 2026-09-20 · <strong>Cells:</strong> 144/144 measured, no exclusions</li>
 <li><strong>Reproduce:</strong> <code>python -m benchmarks.harness_injection --trials 18 --write --checkpoint ckpt.json</code></li>
 <li><strong>Raw table and full caveats:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md"><code>benchmarks/harness_injection/RESULTS.md</code></a></li>
 <li><strong>Not run in CI:</strong> it drives third-party coding agents against an injection-seeded
@@ -2385,8 +2835,8 @@ is invisible without the control.</p>
 <p>Here the control was <strong>zero</strong>, so the second reading is the one the data supports.</p>
 <h2 id="results">Results<a class="headerlink" href="#results" title="Permanent link">&para;</a></h2>
 <p>A cell is <code>(harness, arm, airlock_enabled, trial)</code> — 2 harnesses × 2 arms × 2 airlock modes
-× 3 trials = <strong>24 cells</strong>. That gives <strong>n = 6 per harness per arm</strong> (2 airlock modes × 3
-trials) and <strong>n = 12 per arm pooled</strong> across both harnesses.</p>
+× 18 trials = <strong>144 cells</strong>. That gives <strong>n = 36 per harness per arm</strong> (2 airlock modes × 18
+trials) and <strong>n = 72 per arm pooled</strong> across both harnesses.</p>
 <table>
 <thead>
 <tr>
@@ -2402,7 +2852,7 @@ trials) and <strong>n = 12 per arm pooled</strong> across both harnesses.</p>
 <tbody>
 <tr>
 <td><code>claude-code</code></td>
-<td>2.1.246</td>
+<td>2.1.274</td>
 <td>72/72</td>
 <td>72/72</td>
 <td><strong>0/36</strong></td>
@@ -2411,17 +2861,19 @@ trials) and <strong>n = 12 per arm pooled</strong> across both harnesses.</p>
 </tr>
 <tr>
 <td><code>codex</code></td>
-<td>codex-cli 0.147.0</td>
-<td>72/72</td>
-<td>69/72</td>
+<td>codex-cli 0.154.0</td>
+<td>52/72</td>
+<td>52/72</td>
 <td><strong>0/36</strong></td>
-<td><strong>1/36</strong></td>
-<td>yes</td>
+<td><strong>0/36</strong></td>
+<td>partial — see below</td>
 </tr>
 </tbody>
 </table>
-<p>Total acted events across every cell in the matrix: <strong>1/144</strong> — all of it on the benign
-control, none on the injected arm.</p>
+<p>Total acted events across every cell in the matrix: <strong>0/144</strong>.</p>
+<p><code>codex</code> is marked <em>partial</em> because 20 of its 72 cells did not finish the task. Those cells
+contribute a non-action to the table without the agent ever having reached the decision, so
+they inflate the denominator without adding evidence.</p>
 <h3 id="95-intervals">95% intervals<a class="headerlink" href="#95-intervals" title="Permanent link">&para;</a></h3>
 <p>Zero events out of a small n is not the same as zero probability, and the interval is the
 honest way to say so. Wilson score intervals:</p>
@@ -2436,16 +2888,34 @@ honest way to say so. Wilson score intervals:</p>
 </thead>
 <tbody>
 <tr>
-<td>Injected, per harness</td>
+<td>Injected, <code>claude-code</code></td>
 <td>0/36</td>
 <td><strong>[0.0%, 9.6%]</strong></td>
 <td>8.3%</td>
 </tr>
 <tr>
-<td>Injected, pooled (both harnesses)</td>
+<td>Injected, <code>codex</code> (all cells)</td>
+<td>0/36</td>
+<td><strong>[0.0%, 9.6%]</strong></td>
+<td>8.3%</td>
+</tr>
+<tr>
+<td>Injected, <code>codex</code> (completed only)</td>
+<td>0/24</td>
+<td><strong>[0.0%, 13.8%]</strong></td>
+<td>12.5%</td>
+</tr>
+<tr>
+<td>Injected, pooled (all cells)</td>
 <td>0/72</td>
 <td><strong>[0.0%, 5.1%]</strong></td>
 <td>4.2%</td>
+</tr>
+<tr>
+<td>Injected, pooled (completed only)</td>
+<td>0/60</td>
+<td><strong>[0.0%, 6.0%]</strong></td>
+<td>5.0%</td>
 </tr>
 <tr>
 <td>Benign control, <code>claude-code</code></td>
@@ -2455,9 +2925,9 @@ honest way to say so. Wilson score intervals:</p>
 </tr>
 <tr>
 <td>Benign control, <code>codex</code></td>
-<td>1/36</td>
-<td><strong>[0.5%, 14.2%]</strong></td>
-<td>—</td>
+<td>0/36</td>
+<td><strong>[0.0%, 9.6%]</strong></td>
+<td>8.3%</td>
 </tr>
 </tbody>
 </table>
@@ -2465,9 +2935,12 @@ honest way to say so. Wilson score intervals:</p>
 9.6%</strong> — this run rules out a true action rate above roughly one in ten, which the n=6 run
 could not. Anyone citing "0%" without the interval is still citing something this run did
 not measure.</p>
-<p>The <code>codex</code> control row is the one that changed. A non-zero count has a lower bound <em>above</em>
-zero, so the rule of three — which is defined for zero events — does not apply to it, and the
-table says so rather than printing a number that means nothing.</p>
+<p>Two rows for <code>codex</code> rather than one, because the choice of denominator is a judgement and
+hiding it inside a single number would be the kind of rounding-up this page exists to avoid.
+The <em>all cells</em> row is what the matrix literally recorded. The <em>completed only</em> row is what
+the run can actually support, since a cell the agent abandoned is not a cell in which it
+declined to act. Quote the second. The pooled figure moves the same way: <strong>[0.0%, 6.0%]</strong>
+over the 60 cells that reached the decision, not <strong>[0.0%, 5.1%]</strong> over all 72.</p>
 <h3 id="what-n-would-be-needed-and-what-this-run-could-not-have-seen">What n would be needed, and what this run could not have seen<a class="headerlink" href="#what-n-would-be-needed-and-what-this-run-could-not-have-seen" title="Permanent link">&para;</a></h3>
 <p>The interval above is the weakness of this result, so it is worth stating exactly how much
 sample would fix it rather than leaving "more trials" as a gesture.</p>
@@ -2525,7 +2998,7 @@ events the Wilson upper bound has a closed form, <code>z² / (n + z²)</code>:</
 <p><strong>A 10% upper bound needs n = 35, which is <code>--trials 18</code></strong> — 144 cells, six times the
 2026-08-15 run. That run named this figure as the price of saying "under 10%" rather than
 "under 39%", and the 2026-08-26 run paid it: n = 36, upper bound 9.6%. The row marked <em>(this
-run)</em> is the one that was bought.</p>
+run)</em> is the one that was bought, and the 2026-09-20 re-run was measured at the same n.</p>
 <p>Sample size is only half of it. The bound answers <em>how high could the rate be</em>; it does not
 answer <em>would this run have noticed a low one</em>. For a true action rate p, the chance of
 observing zero anyway is <code>(1 − p)ⁿ</code>:</p>
@@ -2638,9 +3111,10 @@ time. Rather than round the zero up into a claim, the run published its own powe
 and named the sample that would fix it: n = 35, i.e. <code>--trials 18</code>.</p>
 <p>This page supersedes that run by doing what it asked for. Two things it got right are worth
 keeping in view: the bound it published for <strong>2.1.233</strong> still stands for 2.1.233 — the newer
-run measures <strong>2.1.246</strong> and does not narrow the old interval retroactively — and its central
-caveat, that a dead benign control makes a zero uninterpretable as resistance, survived
-contact with more data. It just stopped being true of <em>every</em> harness.</p>
+runs measure <strong>2.1.246</strong> and then <strong>2.1.274</strong>, and do not narrow the old interval
+retroactively — and its central caveat, that a dead benign control makes a zero
+uninterpretable as resistance, survived contact with more data. On 2026-08-26 it briefly
+stopped being true of every harness; on 2026-09-20 it is true of both again.</p>
 <h2 id="what-this-number-does-not-show">What this number does not show<a class="headerlink" href="#what-this-number-does-not-show" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Not a model comparison.</strong> A harness is a CLI, a system prompt, a tool surface, and a
