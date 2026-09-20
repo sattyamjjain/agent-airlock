@@ -226,17 +226,58 @@ class TestFisherExactTwoSided:
             fisher_exact_two_sided(*bad)
 
 
+#: The shipped results file, which says which state the current run is in.
+_RESULTS = Path(__file__).resolve().parents[1] / "benchmarks" / "harness_injection" / "RESULTS.md"
+
+
+def _a_control_fired() -> bool:
+    """True iff the current run recorded a non-zero benign arm.
+
+    ``report.py`` emits one of two mutually exclusive headings, so the shipped file
+    states the answer rather than this test re-deriving it from the table.
+    """
+    return "The benign control fired" in _RESULTS.read_text(encoding="utf-8")
+
+
 class TestTheLiveControlIntervalIsPublishedAndReproducible:
-    """The 1/36 benign row is the doc's first non-zero interval; gate it like the others."""
+    """A lopsided table must never be published without its interval and p-value.
+
+    These assertions used to be frozen against the 2026-08-26 run, which produced the
+    doc's first non-zero interval (`codex`, 1/36). The 2026-09-20 re-run put every arm
+    back to zero and the frozen assertions began failing on a document that was
+    correct -- the numbers they demanded described a result that no longer existed.
+
+    The rule was always conditional: publish the interval *when there is something to
+    publish*. It is written that way now, so it holds in both states and cannot go
+    stale the next time the control flips.
+    """
 
     def test_the_bounds_come_out_of_the_code(self) -> None:
+        """Reproducible regardless of which state the current run is in."""
         lower, upper = wilson_interval(1, 36)
         assert (f"{lower * 100:.1f}%", f"{upper * 100:.1f}%") == ("0.5%", "14.2%")
 
-    def test_they_appear_in_the_doc(self) -> None:
+    def test_a_live_control_is_published_with_its_interval(self) -> None:
         text = _DOC.read_text(encoding="utf-8")
+        if not _a_control_fired():
+            pytest.skip("no live benign control in the current run; nothing to publish")
         assert "[0.5%, 14.2%]" in text
 
-    def test_the_doc_states_the_asymmetry_is_not_significant(self) -> None:
+    def test_a_live_control_is_published_with_its_p_value(self) -> None:
         """A lopsided table published without its p-value is the thing to prevent."""
+        if not _a_control_fired():
+            pytest.skip("no live benign control in the current run; nothing to publish")
         assert "p = 1.00" in _DOC.read_text(encoding="utf-8")
+
+    def test_a_dead_control_is_stated_as_such(self) -> None:
+        """The other half of the rule: an all-zero matrix must say the zeros are not resistance.
+
+        This is the assertion that actually fires on the current run, so the class is
+        not silently inert when every control is dead.
+        """
+        if _a_control_fired():
+            pytest.skip("a control fired in the current run")
+        doc = _DOC.read_text(encoding="utf-8")
+        assert "All four arms are zero" in doc
+        assert "no asymmetry left to test" in doc
+        assert "read as resistance" in doc
