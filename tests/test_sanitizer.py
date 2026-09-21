@@ -1,5 +1,7 @@
 """Tests for the sanitizer module."""
 
+import random
+
 from agent_airlock import (
     Airlock,
     AirlockConfig,
@@ -10,6 +12,7 @@ from agent_airlock import (
     mask_sensitive_data,
     sanitize_output,
 )
+from agent_airlock.sanitizer import merge_overlapping_detections
 
 
 class TestDetectSensitiveData:
@@ -491,3 +494,233 @@ class TestSensitiveDataTypes:
 
         for dt in secret_types:
             assert isinstance(dt.value, str)
+
+
+class TestOverlappingSpansDoNotCorruptOutput:
+    """Masking must not damage the text around a span it replaces.
+
+    Patterns are matched per entity type independently, so the same characters
+    are routinely claimed twice. The pre-v0.10.8 masker sorted the detections by
+    start, walked them in reverse, and rebuilt the string with
+    ``result[:start] + masked + result[end:]`` against the string it had already
+    modified. Reverse order keeps *earlier* offsets valid, but both offsets of
+    the current span are read against the mutated string, so any length change
+    from a previous replacement shifted ``end``.
+
+    The damage is silent and lands outside the masked region, which is why no
+    test caught it: the secret still looks masked, and the corruption is one or
+    two characters of ordinary prose next to it.
+    """
+
+    def test_a_shorter_mask_does_not_eat_the_following_character(self) -> None:
+        """The reported repro. ``phone`` masks 1 char shorter, so the space vanished."""
+        result, _ = mask_sensitive_data("+91-9876543210 is mine")
+        assert result == "+91-XXXXX-210 is mine"
+        assert "210is" not in result, "the space after the number was consumed"
+
+    def test_three_spans_two_of_them_overlapping(self) -> None:
+        result, _ = mask_sensitive_data("call +91-9876543210 or 415-555-2671, thanks")
+        assert result == "call +91-XXXXX-210 or 415***671, thanks"
+
+    def test_a_longer_mask_does_not_duplicate_the_following_characters(self) -> None:
+        """The other direction. A mask longer than its span re-emitted trailing text.
+
+        ``credit_card`` masks to three characters more than it matched, so the
+        surviving tail was written twice: ``.com`` came out as ``.comcom``.
+        """
+        result, _ = mask_sensitive_data("a@4111111111111111.com")
+        assert result.count("com") == 1, "trailing text was duplicated"
+
+    def test_text_outside_every_span_survives_byte_for_byte(self) -> None:
+        """Whatever the masking does, the unmatched text must be untouched."""
+        content = "call +91-9876543210 or 415-555-2671, thanks"
+        result, detections = mask_sensitive_data(content)
+        cursor = 0
+        for detection in sorted(detections, key=lambda d: d["start"]):
+            assert content[cursor : detection["start"]] in result
+            cursor = detection["end"]
+        assert content[cursor:] in result
+
+    def test_one_detection_survives_per_overlapping_region(self) -> None:
+        _result, detections = mask_sensitive_data("+91-9876543210 is mine")
+        assert len(detections) == 1
+        assert detections[0]["type"] == "india_mobile"
+
+    def test_the_longest_span_is_the_one_that_wins(self) -> None:
+        _result, detections = mask_sensitive_data("+91-9876543210 is mine")
+        winner = detections[0]
+        assert winner["end"] - winner["start"] == 14
+
+    def test_a_suppressed_match_is_still_recorded(self) -> None:
+        """A dropped detection must not vanish: detection_count is an audit surface."""
+        _result, detections = mask_sensitive_data("+91-9876543210 is mine")
+        assert detections[0]["absorbed"] == ["phone"]
+
+    def test_every_returned_detection_was_actually_applied(self) -> None:
+        """``masked_as`` on a detection that never reached the output would be a lie."""
+        result, detections = mask_sensitive_data("call +91-9876543210 or 415-555-2671, thanks")
+        for detection in detections:
+            assert "masked_as" in detection
+            assert detection["masked_as"] in result
+
+    def test_non_overlapping_spans_are_all_kept(self) -> None:
+        """Resolution must only drop genuine overlaps."""
+        _result, detections = mask_sensitive_data("mail a@b.co ip 10.0.0.1 done")
+        assert {d["type"] for d in detections} == {"email", "ip_address"}
+
+
+class TestOverlapResolutionItself:
+    """Direct tests for the merge rule, including the cases a naive rule gets wrong."""
+
+    @staticmethod
+    def _span(type_: str, start: int, end: int) -> dict[str, object]:
+        return {
+            "type": type_,
+            "value": "x" * (end - start),
+            "start": start,
+            "end": end,
+            "full_match": "x" * (end - start),
+        }
+
+    def test_a_contained_span_is_absorbed_by_its_container(self) -> None:
+        content = "+91-9876543210 is mine"
+        merged = merge_overlapping_detections(
+            content, [self._span("phone", 4, 14), self._span("india_mobile", 0, 14)]
+        )
+        assert len(merged) == 1
+        assert merged[0]["type"] == "india_mobile"
+        assert (merged[0]["start"], merged[0]["end"]) == (0, 14)
+        assert merged[0]["absorbed"] == ["phone"]
+
+    def test_a_partial_overlap_covers_the_union_not_the_longer_span(self) -> None:
+        """The case that makes "keep the longest" unsafe rather than merely lossy.
+
+        ``ssn`` at ``(0, 11)`` and ``aadhaar`` at ``(7, 21)`` overlap without
+        either containing the other. Keeping the longer one masks ``(7, 21)``
+        and leaves ``123-45-`` in the output, which is an unmasked SSN prefix.
+        """
+        content = "123-45-6789 4111-1111-1111-1111"
+        merged = merge_overlapping_detections(
+            content, [self._span("ssn", 0, 11), self._span("aadhaar", 7, 21)]
+        )
+        assert len(merged) == 1
+        assert (merged[0]["start"], merged[0]["end"]) == (0, 21)
+
+    def test_a_chain_is_covered_end_to_end(self) -> None:
+        """A overlaps B, B overlaps C, A and C are disjoint.
+
+        Every character any member claimed must end up inside the merged span.
+        Picking a single winner from the cluster would leave the outer halves of
+        ``A`` and ``C`` exposed.
+        """
+        merged = merge_overlapping_detections(
+            "x" * 30,
+            [self._span("email", 0, 10), self._span("phone", 8, 20), self._span("ssn", 18, 26)],
+        )
+        assert len(merged) == 1
+        assert (merged[0]["start"], merged[0]["end"]) == (0, 26)
+        assert merged[0]["members"] == ["email", "phone", "ssn"]
+
+    def test_equal_length_ties_are_stable_not_arbitrary(self) -> None:
+        """No confidence score exists, so a tie must at least be deterministic."""
+        first, second = self._span("email", 0, 10), self._span("phone", 0, 10)
+        assert [d["type"] for d in merge_overlapping_detections("x" * 12, [first, second])] == [
+            d["type"] for d in merge_overlapping_detections("x" * 12, [second, first])
+        ]
+
+    def test_adjacent_but_not_overlapping_spans_both_survive(self) -> None:
+        """``end`` is exclusive, so ``(0, 5)`` and ``(5, 9)`` do not overlap."""
+        merged = merge_overlapping_detections(
+            "x" * 12, [self._span("email", 0, 5), self._span("phone", 5, 9)]
+        )
+        assert len(merged) == 2
+
+    def test_output_is_sorted_by_position(self) -> None:
+        merged = merge_overlapping_detections(
+            "x" * 30,
+            [self._span("ssn", 20, 25), self._span("email", 0, 5), self._span("phone", 10, 14)],
+        )
+        assert [d["start"] for d in merged] == [0, 10, 20]
+
+    def test_empty_input_is_not_an_error(self) -> None:
+        assert merge_overlapping_detections("", []) == []
+
+    def test_a_merged_cluster_uses_the_strictest_members_strategy(self) -> None:
+        """Merging must never reveal more than the stricter member would have alone.
+
+        ``ssn`` defaults to FULL and ``aadhaar`` to PARTIAL. The merged span
+        covers both, so it has to be masked FULL; masking it PARTIAL would show
+        a tail of a region that SSN wanted redacted outright.
+        """
+        result, detections = mask_sensitive_data("123-45-6789 4111-1111-1111-1111")
+        assert "123-45-" not in result, "SSN prefix left unmasked"
+        assert "6789" not in result
+        assert len(detections) == 1
+        assert set(detections[0]["members"]) >= {"ssn", "aadhaar"}
+
+
+class TestMaskingInvariantsUnderRandomInput:
+    """Properties that must hold for any input, checked over generated composites.
+
+    The corruption this class guards against is invisible to example-based
+    tests: the secret still looks masked and the damage is a character or two of
+    ordinary text beside it. Stating the invariants directly is what makes the
+    whole class of offset bugs detectable rather than only the instances someone
+    thought to write down.
+    """
+
+    _FRAGMENTS = (
+        "+91-9876543210",
+        "9876543210",
+        "415-555-2671",
+        "a@b.co",
+        "john@example.com",
+        "4111111111111111",
+        "123-45-6789",
+        "10.0.0.1",
+        "AKIAIOSFODNN7EXAMPLE",
+        "ABCDE1234F",
+        "user@upi",
+        "HDFC0001234",
+        "2222405343248877",
+    )
+    _JOINS = ("", " ", "-", ".", ",", ":", "/", " and ")
+
+    def _inputs(self, count: int = 600) -> list[str]:
+        rng = random.Random(11)
+        return [
+            rng.choice(self._JOINS).join(rng.sample(self._FRAGMENTS, rng.randint(1, 4)))
+            for _ in range(count)
+        ]
+
+    def test_returned_spans_never_overlap_each_other(self) -> None:
+        for content in self._inputs():
+            _result, detections = mask_sensitive_data(content)
+            ordered = sorted(detections, key=lambda d: d["start"])
+            for earlier, later in zip(ordered, ordered[1:], strict=False):
+                assert earlier["end"] <= later["start"], content
+
+    def test_text_outside_every_span_survives_in_order(self) -> None:
+        """The invariant the old reverse-splice masker broke."""
+        for content in self._inputs():
+            result, detections = mask_sensitive_data(content)
+            cursor, untouched = 0, []
+            for detection in sorted(detections, key=lambda d: d["start"]):
+                untouched.append(content[cursor : detection["start"]])
+                cursor = detection["end"]
+            untouched.append(content[cursor:])
+
+            remaining = result
+            for piece in untouched:
+                index = remaining.find(piece)
+                assert index >= 0, f"{piece!r} lost from {content!r} -> {result!r}"
+                remaining = remaining[index + len(piece) :]
+
+    def test_every_detected_span_ends_up_inside_a_masked_region(self) -> None:
+        """No detection may be dropped: that would be an unmasked secret."""
+        for content in self._inputs():
+            _result, kept = mask_sensitive_data(content)
+            for raw in detect_sensitive_data(content):
+                assert any(d["start"] <= raw["start"] and raw["end"] <= d["end"] for d in kept), (
+                    f"{raw['type']} at {raw['start']}-{raw['end']} unmasked in {content!r}"
+                )
