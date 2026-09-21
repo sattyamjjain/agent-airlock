@@ -429,15 +429,30 @@ class TestSanitizerEdgeCases:
     """Additional sanitizer edge cases."""
 
     def test_mask_multiple_overlapping(self) -> None:
-        """Test masking multiple overlapping patterns."""
-        from agent_airlock.sanitizer import SensitiveDataType, mask_sensitive_data
+        """Two patterns claiming the same characters, which is what "overlapping" means.
 
-        content = "Contact john@example.com at 555-123-4567"
-        result, detections = mask_sensitive_data(
-            content, [SensitiveDataType.EMAIL, SensitiveDataType.PHONE]
-        )
-        assert "john@example.com" not in result
-        assert len(detections) >= 1
+        This test previously used an email and a phone number sitting in
+        different halves of the string. They never overlapped, so it passed
+        without exercising any of the overlap handling it was named for, and a
+        masker that corrupted every overlapping span would have kept it green.
+
+        ``+91-9876543210`` is genuinely claimed twice: ``india_mobile`` spans
+        ``(0, 14)`` and ``phone`` spans ``(4, 14)`` inside it.
+        """
+        from agent_airlock.sanitizer import detect_sensitive_data, mask_sensitive_data
+
+        content = "+91-9876543210 is mine"
+        spans = {(d["type"], d["start"], d["end"]) for d in detect_sensitive_data(content)}
+        assert ("india_mobile", 0, 14) in spans
+        assert ("phone", 4, 14) in spans, "fixture no longer produces an overlap"
+
+        result, detections = mask_sensitive_data(content)
+        assert result == "+91-XXXXX-210 is mine"
+        assert "9876543210" not in result
+        # One span per overlapping region, and the loser is still on the record.
+        assert len(detections) == 1
+        assert detections[0]["type"] == "india_mobile"
+        assert detections[0]["absorbed"] == ["phone"]
 
     def test_truncate_with_zero_max(self) -> None:
         """Test truncate with zero max chars."""

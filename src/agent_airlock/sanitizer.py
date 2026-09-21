@@ -137,9 +137,15 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     # v0.8.46 India mobile. Deliberately REQUIRES an explicit country/trunk
     # prefix (``+91`` / ``91`` / leading ``0``) followed by a 10-digit number
     # starting 6-9. A *bare* 10-digit run is already caught by the (US-shaped)
-    # PHONE pattern above; requiring the prefix here means INDIA_MOBILE only
-    # claims the +91-prefixed forms PHONE misses, so the two never match the
-    # same span (offset-based reverse-splice masking cannot corrupt).
+    # PHONE pattern above.
+    #
+    # This comment used to end: "so the two never match the same span
+    # (offset-based reverse-splice masking cannot corrupt)". The first half was
+    # true and the conclusion did not follow from it. Distinct spans still
+    # *overlap*: ``+91-9876543210`` is INDIA_MOBILE ``(0, 14)`` and PHONE
+    # ``(4, 14)``, and overlap is all the old reverse-splice masker needed to
+    # corrupt the text around them. Masking no longer depends on this property
+    # either way — see :func:`merge_overlapping_detections`.
     SensitiveDataType.INDIA_MOBILE: re.compile(r"(?<!\d)(?:\+?91[\s-]?|0)[6-9]\d{9}(?!\d)"),
     # Secret Patterns
     SensitiveDataType.API_KEY: re.compile(
@@ -529,6 +535,151 @@ def detect_sensitive_data(
     return detections
 
 
+#: Declaration order of :class:`SensitiveDataType`, used only to break a tie
+#: deterministically. It is not a specificity ranking and must not be read as one.
+_TYPE_ORDER: dict[str, int] = {t.value: i for i, t in enumerate(SensitiveDataType)}
+
+
+#: How much plaintext a strategy leaves behind, least protective first. A cluster
+#: of overlapping detections is masked with the most protective strategy any of
+#: its members asked for, so merging two spans can never reveal more than the
+#: stricter of them would have on its own.
+_STRATEGY_RANK: dict[MaskingStrategy, int] = {
+    MaskingStrategy.PARTIAL: 0,
+    MaskingStrategy.TYPE_ONLY: 1,
+    MaskingStrategy.HASH: 2,
+    MaskingStrategy.FULL: 3,
+}
+
+
+def merge_overlapping_detections(
+    content: str,
+    detections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge each cluster of overlapping detections into one span covering their union.
+
+    Patterns are matched independently per entity type, so the same characters
+    are routinely claimed twice. ``+91-9876543210`` is both an ``india_mobile``
+    span at ``(0, 14)`` and a ``phone`` span at ``(4, 14)``. Masking both is not
+    merely redundant, it is incorrect: the second replacement indexes into a
+    string the first one already resized.
+
+    **The union, not the longest member.** Keeping only the longest span is safe
+    when one span contains the other, which is the common case, but real inputs
+    also produce *partial* overlaps. ``123-45-6789 4111-1111-1111-1111`` yields
+    ``ssn`` at ``(0, 11)`` and ``aadhaar`` at ``(7, 21)``; neither contains the
+    other. Keeping the longer one masks ``(7, 21)`` and leaves ``123-45-``
+    standing, which converts a formatting bug into an unmasked SSN prefix.
+    Covering the union cannot do that, and it makes the chain case safe too: if
+    ``A`` overlaps ``B`` and ``B`` overlaps ``C``, all three collapse into one
+    fully masked region rather than leaving the ends of ``A`` and ``C`` exposed.
+
+    Args:
+        content: The original text the offsets refer to.
+        detections: Detections as returned by :func:`detect_sensitive_data`.
+
+    Returns:
+        A new list sorted by ``start``, one entry per overlapping cluster. A
+        merged entry reports the longest member's ``type``, carries ``value``
+        re-sliced to the union, and lists every contributing type in
+        ``members``. Where a cluster merged more than one detection it also
+        carries ``absorbed``, so a match that was folded in is still visible to
+        an audit reader instead of vanishing from the record.
+    """
+    if not detections:
+        return []
+
+    clusters: list[list[dict[str, Any]]] = []
+    for detection in sorted(detections, key=lambda d: (d["start"], d["end"])):
+        if clusters and detection["start"] < max(m["end"] for m in clusters[-1]):
+            clusters[-1].append(detection)
+        else:
+            clusters.append([detection])
+
+    merged: list[dict[str, Any]] = []
+    for cluster in clusters:
+        # The longest member names the cluster; ties fall back to the type's
+        # declaration order purely so the choice is stable. There is no
+        # confidence score on a detection to break it on.
+        primary = min(
+            cluster,
+            key=lambda d: (
+                -(d["end"] - d["start"]),
+                d["start"],
+                _TYPE_ORDER.get(d["type"], len(_TYPE_ORDER)),
+            ),
+        )
+        if len(cluster) == 1:
+            merged.append(primary)
+            continue
+
+        start = min(m["start"] for m in cluster)
+        end = max(m["end"] for m in cluster)
+        entry = dict(primary)
+        entry["start"] = start
+        entry["end"] = end
+        entry["value"] = content[start:end]
+        entry["full_match"] = content[start:end]
+        entry["members"] = sorted({m["type"] for m in cluster})
+        entry["absorbed"] = sorted({m["type"] for m in cluster if m["type"] != primary["type"]})
+        merged.append(entry)
+
+    merged.sort(key=lambda d: d["start"])
+    return merged
+
+
+def _cluster_strategy(
+    detection: dict[str, Any],
+    mask_config: dict[SensitiveDataType, MaskingStrategy],
+) -> MaskingStrategy:
+    """The most protective strategy any member of a merged cluster asked for."""
+    members = detection.get("members")
+    if not members:
+        return mask_config.get(SensitiveDataType(detection["type"]), MaskingStrategy.FULL)
+    strategies = []
+    for name in members:
+        try:
+            strategies.append(mask_config.get(SensitiveDataType(name), MaskingStrategy.FULL))
+        except ValueError:  # a workspace custom pattern, not a built-in type
+            strategies.append(MaskingStrategy.FULL)
+    return max(strategies, key=lambda s: _STRATEGY_RANK.get(s, len(_STRATEGY_RANK)))
+
+
+def _render_masked(
+    content: str,
+    spans: list[tuple[int, int, str]],
+) -> str:
+    """Rebuild ``content`` with ``spans`` replaced, in one left-to-right pass.
+
+    The replaced-in-place version of this walked the detections in reverse and
+    did ``result[:start] + masked + result[end:]`` against a string it had
+    already modified. Reverse order keeps *earlier* offsets valid, but both
+    offsets of the span being applied are read against the mutated string, so
+    any length change from a previous replacement shifted ``end`` and the slice
+    ate or duplicated neighbouring characters.
+
+    Appending to an accumulator removes the class rather than the symptom:
+    every offset is read against the original ``content``, which is never
+    modified.
+
+    Args:
+        content: The original, unmodified text.
+        spans: ``(start, end, replacement)`` tuples. Must not overlap; run
+            :func:`merge_overlapping_detections` first.
+
+    Returns:
+        The rebuilt string.
+    """
+    out: list[str] = []
+    cursor = 0
+    for start, end, replacement in sorted(spans, key=lambda s: s[0]):
+        out.append(content[cursor:start])
+        out.append(replacement)
+        cursor = end
+    out.append(content[cursor:])
+    return "".join(out)
+
+
 def mask_sensitive_data(
     content: str,
     types: list[SensitiveDataType] | None = None,
@@ -555,11 +706,16 @@ def mask_sensitive_data(
     if not detections:
         return content, []
 
-    # Apply masks in reverse order to preserve positions
-    result = content
-    for detection in reversed(detections):
+    # One detection per overlapping region, then a single left-to-right rebuild.
+    # Both steps are required: resolving overlaps without the accumulator still
+    # leaves correct-but-fragile index arithmetic, and the accumulator without
+    # overlap resolution cannot represent two spans claiming the same characters.
+    detections = merge_overlapping_detections(content, detections)
+
+    spans: list[tuple[int, int, str]] = []
+    for detection in detections:
         data_type = SensitiveDataType(detection["type"])
-        strategy = mask_config.get(data_type, MaskingStrategy.FULL)
+        strategy = _cluster_strategy(detection, mask_config)
 
         if data_type == SensitiveDataType.PASSWORD:
             # For passwords, we need to replace just the password value
@@ -567,15 +723,15 @@ def mask_sensitive_data(
             full_match = detection["full_match"]
             password_value = detection["value"]
             masked_value = _mask_value(password_value, data_type, strategy)
-            masked_full = full_match.replace(password_value, masked_value)
-            result = result[: detection["start"]] + masked_full + result[detection["end"] :]
+            replacement = full_match.replace(password_value, masked_value)
+            detection["masked_as"] = "[REDACTED]"
         else:
-            masked = _mask_value(detection["value"], data_type, strategy)
-            result = result[: detection["start"]] + masked + result[detection["end"] :]
+            replacement = _mask_value(detection["value"], data_type, strategy)
+            detection["masked_as"] = replacement
 
-        detection["masked_as"] = masked if data_type != SensitiveDataType.PASSWORD else "[REDACTED]"
+        spans.append((detection["start"], detection["end"], replacement))
 
-    return result, detections
+    return _render_masked(content, spans), detections
 
 
 def truncate_output(
@@ -962,11 +1118,14 @@ def sanitize_with_workspace_config(
                 }
             )
 
-    # Sort by position for proper replacement
-    filtered_detections.sort(key=lambda d: d["start"])
+    # Same two steps as mask_sensitive_data, and required here for the same
+    # reason. This path additionally mixes workspace custom patterns into the
+    # built-in ones, so a custom pattern overlapping a built-in match is routine
+    # rather than exotic.
+    filtered_detections = merge_overlapping_detections(text, filtered_detections)
 
-    # Apply masks in reverse order
-    for detection in reversed(filtered_detections):
+    spans: list[tuple[int, int, str]] = []
+    for detection in filtered_detections:
         type_str = detection["type"]
 
         # Handle custom patterns
@@ -978,30 +1137,30 @@ def sanitize_with_workspace_config(
                 if strategy == MaskingStrategy.TYPE_ONLY
                 else "[REDACTED]"
             )
+            detection["masked_as"] = masked
         else:
             data_type = SensitiveDataType(type_str)
-            strategy = mask_config.get(data_type, MaskingStrategy.FULL)
+            strategy = _cluster_strategy(detection, mask_config)
 
             if data_type == SensitiveDataType.PASSWORD:
                 full_match = detection["full_match"]
                 password_value = detection["value"]
                 masked_value = _mask_value(password_value, data_type, strategy)
                 masked = full_match.replace(password_value, masked_value)
-                result_text = (
-                    result_text[: detection["start"]] + masked + result_text[detection["end"] :]
-                )
                 detection["masked_as"] = "[REDACTED]"
-                detections.append(detection)
-                continue
             else:
                 masked = _mask_value(detection["value"], data_type, strategy)
+                detection["masked_as"] = masked
 
-        result_text = result_text[: detection["start"]] + masked + result_text[detection["end"] :]
-        detection["masked_as"] = masked
+        spans.append((detection["start"], detection["end"], masked))
         detections.append(detection)
 
-    # Reverse detections list to maintain original order
-    detections.reverse()
+    result_text = _render_masked(text, spans)
+
+    # No reverse() here any more. The old loop walked the detections backwards,
+    # so it appended them in descending position and had to flip the list to
+    # restore document order. This loop walks forwards, so the list is already
+    # in order and flipping it would be the bug the flip used to fix.
 
     # Truncate if needed
     was_truncated = False

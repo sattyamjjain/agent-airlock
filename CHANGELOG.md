@@ -9,7 +9,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(no entries yet)
+
+## [0.10.8] - 2026-09-21
+
+### Fixed
+
+- **Masking corrupted the text around every overlapping span.** Patterns are matched per
+  entity type independently, so the same characters are routinely claimed twice:
+  `+91-9876543210` is an `india_mobile` span at `(0, 14)` and a `phone` span at `(4, 14)`
+  inside it. `detect_sensitive_data()` appended both and sorted by `start` with no overlap
+  resolution, and `mask_sensitive_data()` then walked the list in reverse doing
+  `result[:start] + masked + result[end:]` against a string it had already modified.
+
+  Reverse order keeps *earlier* offsets valid, but both offsets of the span being applied
+  are read against the mutated string, so any length change from a previous replacement
+  shifted `end`. `mask_sensitive_data('+91-9876543210 is mine')` returned
+  `'+91-XXXXX-210is mine'`, eating the space. Three spans corrupted further:
+  `'call +91-XXXXX-210or 415***671, thanks'`.
+
+  Both directions were wrong. A mask shorter than its span deleted following characters; a
+  mask longer than its span duplicated them, so `a@4111111111111111.com` came back as
+  `'***@4111111111111111.comcom'`. The damage always landed *outside* the masked region,
+  which is why it went unnoticed: the secret still looked masked and the corruption was a
+  character or two of ordinary prose beside it.
+
+  Overlapping detections are now merged before masking, and the output is rebuilt in a
+  single left-to-right pass with an accumulator. Every offset is read against the original,
+  unmodified string, which removes the class rather than the instance. The same two
+  defects existed on the workspace path in `sanitize_with_workspace_config()` and are fixed
+  there too.
+
+- **Merging by "keep the longest span" would have left sensitive data unmasked.** Worth
+  recording because it was the obvious fix and it is wrong. Keeping the longest member is
+  safe when one span contains the other, which is the common case, but real inputs also
+  produce *partial* overlaps: `123-45-6789 4111-1111-1111-1111` yields `ssn` at `(0, 11)`
+  and `aadhaar` at `(7, 21)`, neither containing the other. Keeping the longer one masks
+  `(7, 21)` and leaves `123-45-` standing, turning a formatting bug into an unmasked SSN
+  prefix. A fuzz over generated composites found 114 partial overlaps against 1,518
+  containments, so this is routine rather than exotic.
+
+  Each cluster of overlapping detections is therefore masked over its **union**, with the
+  most protective strategy any member asked for, so a merge can never reveal more than the
+  stricter member would have alone. The union also makes chains safe: if `A` overlaps `B`
+  and `B` overlaps `C`, all three collapse into one fully masked region instead of leaving
+  the outer halves of `A` and `C` exposed.
+
+- **The `INDIA_MOBILE` pattern comment asserted the false premise that allowed this.** It
+  read "so the two never match the same span (offset-based reverse-splice masking cannot
+  corrupt)". The first half was true and the conclusion did not follow: distinct spans
+  still *overlap*, and overlap was all the old masker needed. Corrected in place.
+
+- **`test_mask_multiple_overlapping` covered nothing.** It used an email and a phone number
+  sitting in different halves of the string, so they never overlapped. It passed against a
+  masker that corrupted every overlapping span. It now uses a genuine overlap and asserts
+  the exact output.
+
 ### Changed
+
+- A returned detection now describes what was actually applied. Merged clusters report the
+  longest member's `type`, carry `value` re-sliced to the union, and list every
+  contributing type in `members` plus the folded-in ones in `absorbed`, so a match that was
+  merged is still visible to an audit reader rather than vanishing from `detection_count`.
+
+### Changed (documentation and benchmarks, 2026-09-20)
 
 - **Re-ran the matched-pair multi-harness prompt-injection benchmark (2026-09-20), and the
   result got weaker.** The row was 25 days old and would have breached the 30-day release
