@@ -186,9 +186,12 @@ class TestTheseGuardsActuallyFail:
         assert any("never names" in p for p in problems)
 
     def test_the_shipped_security_doc_passes(self) -> None:
-        assert security_supported_line_problems(
-            _SECURITY.read_text(encoding="utf-8"), _pyproject_version()
-        ) == []
+        assert (
+            security_supported_line_problems(
+                _SECURITY.read_text(encoding="utf-8"), _pyproject_version()
+            )
+            == []
+        )
 
     def test_historical_patch_versions_are_not_flagged(self) -> None:
         """The 'Fixed in v0.8.74 (affects v0.5.7-v0.8.73)' row must survive.
