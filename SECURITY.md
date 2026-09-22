@@ -2,13 +2,20 @@
 
 ## Supported Versions
 
-Agent-Airlock is pre-1.0. Security fixes land only on the current `0.8.x` line;
-older versions are unsupported — upgrade to the latest `0.8.x` release.
+Agent-Airlock is pre-1.0, so support is stated as a rule rather than a list: **security
+fixes land on the current minor line only.** A fix ships as a new patch on that line and is
+not backported below it. Upgrade to the newest patch of the current line. The current line
+is `0.10.x`.
 
-| Version | Supported          |
+| Version | Supported |
 | ------- | ------------------ |
-| 0.8.x   | :white_check_mark: |
-| < 0.8.0 | :x:                |
+| Current minor line (`0.10.x`) | :white_check_mark: |
+| Any earlier minor line | :x: |
+
+The rule is the load-bearing part; the line number is named once, here, and
+`tests/test_version_consistency.py` fails the build if it stops matching the version in
+`pyproject.toml`. This table once named a minor line two releases behind the one that
+shipped, which told a reporter on a supported version that they were unsupported.
 
 ### Fixed security issues
 
