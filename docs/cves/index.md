@@ -63,6 +63,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
 | [CVE-2026-75062](#cve-2026-75062) | Google langfun lf.query evaluates model-generated Python unsandboxed | 9.2 (CRITICAL) — CWE-95, CWE-1188 | Partial |
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
+| [CVE-2026-77521](#cve-2026-77521) | MaxKB SandboxShellBackend exposes an unapproved `execute` shell tool | 10.0 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H | Partial |
 | [CVE-2026-78575](#cve-2026-78575) | IBM Langflow MCP stdio server config takes unvalidated command-line arguments | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Partial |
 | [CVE-2026-79748](#cve-2026-79748) | MCPHub server-config endpoints spawn attacker-supplied stdio commands | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862 | Partial |
 | [CVE-2026-90898](#cve-2026-90898) | Bifrost MCP client registration spawns an unauthenticated stdio command | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-284 + CWE-306 | Partial |
@@ -1003,6 +1004,51 @@ calls and has nothing to object to. That is an argument-level failure,
 which is the seam this library exists to cover.
 
 <a id="cve-2026-75130"></a>
+
+### CVE-2026-77521
+
+**MaxKB SandboxShellBackend exposes an unapproved `execute` shell tool**
+
+- **CVSS:** 10.0 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-77521](https://nvd.nist.gov/vuln/detail/CVE-2026-77521)
+- **Advisory:** [https://github.com/1Panel-dev/MaxKB/security/advisories/GHSA-f36j-f34j-h3rx](https://github.com/1Panel-dev/MaxKB/security/advisories/GHSA-f36j-f34j-h3rx)
+- **Regression test:** [`tests/cves/test_cve_2026_77521_maxkb_sandbox_shell.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_77521_maxkb_sandbox_shell.py)
+
+**Vulnerability**
+
+Prior to 2.10.5-lts, MaxKB assistants carrying a tool, MCP tool, skill or
+sub-application use ``SandboxShellBackend``, which *"exposes an execute shell
+tool without excluding it and omits execute from interrupt_on, so human
+approval is not required. Untrusted chat or ingested content can therefore
+cause command execution; source deployments with MAXKB_SANDBOX disabled run
+commands directly as the application user, while the official root
+container's string-based gosu wrapper allowed shell metacharacters to execute
+outside the intended sandbox."* Fixed in 2.10.5-lts.
+
+**Airlock mitigation**
+
+Three weaknesses compound here and agent-airlock reaches one, per the split
+in ``docs/cve-triage.md``.
+
+**Out of scope: the exposure and the approval gate.** ``execute`` being
+offered at all (CWE-749) and being absent from ``interrupt_on`` (CWE-250) are
+decisions in MaxKB's own assistant configuration. agent-airlock ships the
+primitives that express both — ``SecurityPolicy(allowed_tools=...)`` for
+least privilege and ``PolicyEscalation`` / ``Approver`` for a human gate —
+but they are a posture an operator adopts for their *own* tools. Nothing in a
+contract layer can impose an approval step on someone else's agent backend,
+and 2.10.5-lts is the right place for it.
+
+**In scope: the primitive.** Shell metacharacters riding in a
+caller-controlled command string is the documented in-scope shape
+(``docs/cve-triage.md``, "Metacharacter / escape neutralisation mismatch",
+anchored on CVE-2026-19591), and ``StdioCommandInjectionGuard`` already
+refuses it. So this is a **second-defence regression fixture against an
+existing guard, not a new guard** — the CVE-2026-90898 / CVE-2026-57124
+pattern.
+
+<a id="cve-2026-77521"></a>
 
 ### CVE-2026-78575
 
