@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(no entries yet)
+
+## [0.10.8] - 2026-09-24
+
 ### Fixed
 
 - **Three surfaces stated the version wrongly and `SECURITY.md` disagreed with itself.**
@@ -22,10 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   install. `SECURITY.md` also carried a second, unrelated `Last updated` footer date, which
   is removed: one file, one date. `tests/test_version_consistency.py` fails on each drift,
   and each check has a negative test that shows it failing.
-
-## [0.10.8] - 2026-09-21
-
-### Fixed
 
 - **Masking corrupted the text around every overlapping span.** Patterns are matched per
   entity type independently, so the same characters are routinely claimed twice:
