@@ -483,6 +483,3 @@ Input validation uses [Pydantic V2](https://docs.pydantic.dev):
 - Regular security updates
 - See: https://github.com/pydantic/pydantic/security
 
----
-
-*Last updated: 2026-09-12*
