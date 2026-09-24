@@ -37,6 +37,7 @@ drift from the suite. This one can, which is why it says so.
 | CVE-2026-90898 | `test_cve_2026_90898_bifrost_stdio_registration.py` | partial (spawn primitive only, not the missing auth) | [maximhq/bifrost#6757](https://github.com/maximhq/bifrost/pull/6757) |
 | CVE-2026-57124 | `test_cve_2026_57124_praisonai_mcp_connect.py` | partial (spawn primitive only, not the missing auth) | [GHSA-p75f-6fp4-p57w](https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-p75f-6fp4-p57w) |
 | CVE-2026-53710 | `test_cve_2026_53710_contextforge_sandbox_getattr.py` | partial (eval-sink primitive only, not the missing auth and not the RestrictedPython policy) | [GHSA-xm98-3vcf-fph7](https://github.com/advisories/GHSA-xm98-3vcf-fph7) |
+| CVE-2026-77521 | `test_cve_2026_77521_maxkb_sandbox_shell.py` | partial (metachar primitive only, not the exposed tool or the missing approval gate) | [GHSA-f36j-f34j-h3rx](https://github.com/1Panel-dev/MaxKB/security/advisories/GHSA-f36j-f34j-h3rx) |
 
 ## Out of scope as a *fix* (the defect itself is not blockable here)
 
