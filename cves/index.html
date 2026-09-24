@@ -1872,6 +1872,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-77521" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-77521
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-78575" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3326,6 +3337,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-77521" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-77521
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-78575" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3615,6 +3637,12 @@ catalog and the tests stay in lockstep.</p>
 <td>Upstash Context7 "ContextCrush" MCP instruction injection</td>
 <td>9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0)</td>
 <td>Strongest</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-77521">CVE-2026-77521</a></td>
+<td>MaxKB SandboxShellBackend exposes an unapproved <code>execute</code> shell tool</td>
+<td>10.0 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H</td>
+<td>Partial</td>
 </tr>
 <tr>
 <td><a href="#cve-2026-78575">CVE-2026-78575</a></td>
@@ -4390,6 +4418,43 @@ nobody requested. A transport or identity layer sees three authorised
 calls and has nothing to object to. That is an argument-level failure,
 which is the seam this library exists to cover.</p>
 <p><a id="cve-2026-75130"></a></p>
+<h3 id="cve-2026-77521">CVE-2026-77521<a class="headerlink" href="#cve-2026-77521" title="Permanent link">&para;</a></h3>
+<p><strong>MaxKB SandboxShellBackend exposes an unapproved <code>execute</code> shell tool</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 10.0 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-77521">https://nvd.nist.gov/vuln/detail/CVE-2026-77521</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/1Panel-dev/MaxKB/security/advisories/GHSA-f36j-f34j-h3rx">https://github.com/1Panel-dev/MaxKB/security/advisories/GHSA-f36j-f34j-h3rx</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_77521_maxkb_sandbox_shell.py"><code>tests/cves/test_cve_2026_77521_maxkb_sandbox_shell.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>Prior to 2.10.5-lts, MaxKB assistants carrying a tool, MCP tool, skill or
+sub-application use <code>SandboxShellBackend</code>, which <em>"exposes an execute shell
+tool without excluding it and omits execute from interrupt_on, so human
+approval is not required. Untrusted chat or ingested content can therefore
+cause command execution; source deployments with MAXKB_SANDBOX disabled run
+commands directly as the application user, while the official root
+container's string-based gosu wrapper allowed shell metacharacters to execute
+outside the intended sandbox."</em> Fixed in 2.10.5-lts.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>Three weaknesses compound here and agent-airlock reaches one, per the split
+in <code>docs/cve-triage.md</code>.</p>
+<p><strong>Out of scope: the exposure and the approval gate.</strong> <code>execute</code> being
+offered at all (CWE-749) and being absent from <code>interrupt_on</code> (CWE-250) are
+decisions in MaxKB's own assistant configuration. agent-airlock ships the
+primitives that express both — <code>SecurityPolicy(allowed_tools=...)</code> for
+least privilege and <code>PolicyEscalation</code> / <code>Approver</code> for a human gate —
+but they are a posture an operator adopts for their <em>own</em> tools. Nothing in a
+contract layer can impose an approval step on someone else's agent backend,
+and 2.10.5-lts is the right place for it.</p>
+<p><strong>In scope: the primitive.</strong> Shell metacharacters riding in a
+caller-controlled command string is the documented in-scope shape
+(<code>docs/cve-triage.md</code>, "Metacharacter / escape neutralisation mismatch",
+anchored on CVE-2026-19591), and <code>StdioCommandInjectionGuard</code> already
+refuses it. So this is a <strong>second-defence regression fixture against an
+existing guard, not a new guard</strong> — the CVE-2026-90898 / CVE-2026-57124
+pattern.</p>
+<p><a id="cve-2026-77521"></a></p>
 <h3 id="cve-2026-78575">CVE-2026-78575<a class="headerlink" href="#cve-2026-78575" title="Permanent link">&para;</a></h3>
 <p><strong>IBM Langflow MCP stdio server config takes unvalidated command-line arguments</strong></p>
 <ul>
