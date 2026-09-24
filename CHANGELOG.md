@@ -11,9 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
-## [0.10.8] - 2026-09-21
+## [0.10.8] - 2026-09-24
 
 ### Fixed
+
+- **Three surfaces stated the version wrongly and `SECURITY.md` disagreed with itself.**
+  The supported-versions table said fixes land only on the `0.8.x` line while the package
+  shipped `0.10.8`, so a reporter on a supported version read it and concluded they were
+  unsupported — and the same file four screens down described behaviour that shipped in
+  `v0.10.6`. The table is now a rule ("the current minor line; everything below it is
+  unsupported") that names the line once, where a guard reads it. `CITATION.cff` said
+  `0.10.4`, four patch releases behind, and was referenced by nothing in `tests/`,
+  `scripts/` or `.github/`; it now cites `0.10.7`, the newest version anyone can actually
+  install. `SECURITY.md` also carried a second, unrelated `Last updated` footer date, which
+  is removed: one file, one date. `tests/test_version_consistency.py` fails on each drift,
+  and each check has a negative test that shows it failing.
 
 - **Masking corrupted the text around every overlapping span.** Patterns are matched per
   entity type independently, so the same characters are routinely claimed twice:
