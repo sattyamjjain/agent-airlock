@@ -963,6 +963,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-gets-masked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Gets Masked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sensitive-data-types" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2623,6 +2634,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-gets-masked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Gets Masked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sensitive-data-types" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2782,18 +2804,29 @@
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"John Doe"</span><span class="p">,</span>
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="s2">"email"</span><span class="p">:</span> <span class="s2">"john@example.com"</span><span class="p">,</span>
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="s2">"ssn"</span><span class="p">:</span> <span class="s2">"123-45-6789"</span><span class="p">,</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        <span class="s2">"api_key"</span><span class="p">:</span> <span class="s2">"sk-1234567890"</span><span class="p">,</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="p">}</span>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">result</span> <span class="o">=</span> <span class="n">get_customer</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="mi">123</span><span class="p">)</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="c1"># Returns:</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="c1"># {</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="c1">#     "name": "John Doe",</span>
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="c1">#     "email": "[EMAIL REDACTED]",</span>
-<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="c1">#     "ssn": "[SSN REDACTED]",</span>
-<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="c1">#     "api_key": "[API_KEY REDACTED]"</span>
-<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="c1"># }</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="p">}</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="n">result</span> <span class="o">=</span> <span class="n">get_customer</span><span class="p">(</span><span class="n">customer_id</span><span class="o">=</span><span class="mi">123</span><span class="p">)</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># Returns (default masking strategies):</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="c1"># {</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="c1">#     "name": "John Doe",</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="c1">#     "email": "j***@example.com",</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="c1">#     "ssn": "[REDACTED]"</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="c1"># }</span>
 </code></pre></div>
+<h2 id="what-gets-masked">What Gets Masked<a class="headerlink" href="#what-gets-masked" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>A string result</strong> is masked and, past <code>max_output_chars</code>, truncated.</li>
+<li><strong>A dict, list, tuple or set</strong> is masked value by value and keeps its type and its
+  keys. It is never truncated, because truncating its serialized form would hand back a
+  different type.</li>
+<li><strong>Any other object</strong> (a Pydantic model, a dataclass) is returned as it is, since
+  rebuilding it with masked fields could break its own invariants. What was detected in
+  it is logged as <code>output_sensitive_data_unmasked</code> and returned as a warning that says it
+  was <em>not</em> masked. Return a dict or a string to have it masked.</li>
+</ul>
+<p>Until 0.10.11 only string results were masked. Every other result was reported as
+masked, in the log, the warnings and the audit record, and returned raw.</p>
 <h2 id="sensitive-data-types">Sensitive Data Types<a class="headerlink" href="#sensitive-data-types" title="Permanent link">&para;</a></h2>
 <h3 id="pii-personally-identifiable-information">PII (Personally Identifiable Information)<a class="headerlink" href="#pii-personally-identifiable-information" title="Permanent link">&para;</a></h3>
 <table>
@@ -2980,7 +3013,8 @@
 <a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1"># "Call us: 1-800-555-1234 or [PHONE REDACTED]"</span>
 </code></pre></div>
 <h2 id="output-truncation">Output Truncation<a class="headerlink" href="#output-truncation" title="Permanent link">&para;</a></h2>
-<p>Limit output size to prevent token bloat:</p>
+<p>Limit the size of string results to prevent token bloat (structured results are
+masked but not truncated; see above):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
