@@ -261,7 +261,10 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   is available inside the wrapped tool, and a policy may be a callable over that context
   for per-tenant / per-workspace rules.
 - **Declarative presets** — `presets/*.yaml` use a restricted YAML dialect
-  (`schema_version: 1`) that `preset_loader` parses without PyYAML.
+  (`schema_version: 1`) that `preset_loader` parses without PyYAML. Every `factory:`
+  value, even on an `enabled: false` entry, must name a preset registered in
+  `policy_presets.list_active()` — `tests/presets/test_ox_mcp_yaml.py` checks this
+  against every file under `presets/`, not just the one it's named for.
 - **Dated snapshots** — pricing tables, advisory blast-radius data and redaction patterns
   ship as dated files under `data/` and `fixtures/`; a refresh is a new dated file, not an
   edit to the old one.
