@@ -2972,15 +2972,15 @@ wrapped function on 4.x. There is no <code>sandbox_required</code> parameter.</p
 <a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="sd">            sandbox: Execute in E2B sandbox</span>
 <a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="sd">            config: Airlock configuration</span>
 <a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="sd">            policy: Security policy</span>
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="sd">            report_progress: Call ctx.report_progress() before and after the</span>
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="sd">                call (see report_progress below)</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="sd">            report_progress: Send a progress notification before and after</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="sd">                the call (see report_progress below)</span>
 <a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="sd">        """</span>
 <a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>
 <a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="n">R</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="n">R</span><span class="p">]:</span>
 <a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">        </span><span class="sd">"""Apply Airlock to function."""</span>
 </code></pre></div>
-<p>It wraps the function in <code>Airlock(sandbox=..., config=..., policy=...)</code>. On a sync tool, a
-blocked call comes back as text rather than Airlock's response dict (see
+<p>It wraps the function in <code>Airlock(sandbox=..., config=..., policy=...)</code>. A blocked call
+raises FastMCP's <code>ToolError</code> carrying the refusal, on sync and async tools alike (see
 <a href="#error-responses">Error Responses</a>). The wrapper keeps the function's signature, so FastMCP
 builds the same input schema.</p>
 <h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
@@ -3062,22 +3062,27 @@ through:</p>
 <p>Static helpers for building an agent identity from an MCP context. Airlock does not call
 them itself.</p>
 <ul>
-<li><code>extract_agent_id(ctx) -&gt; str | None</code>: <code>str(ctx.client_id)</code> if the context has a
-  <code>client_id</code> attribute, else <code>session_id</code>, else <code>request_id</code>, else <code>None</code>.</li>
+<li><code>extract_agent_id(ctx) -&gt; str | None</code>: the first of <code>client_id</code>, <code>session_id</code> and
+  <code>request_id</code> that has a value, as a string; <code>None</code> when none has one, or when reading one
+  raises.</li>
 <li><code>extract_metadata(ctx) -&gt; dict[str, Any]</code>: <code>client_info</code> and <code>protocol_version</code>, for
   whichever of the two the context has.</li>
 </ul>
-<p>On a FastMCP <code>Context</code> they return less than their names suggest. <code>Context</code> always has a
-<code>client_id</code> attribute, so <code>extract_agent_id</code> never falls back to <code>session_id</code> and returns
-the string <code>"None"</code> when the client sent no client ID. <code>Context</code> has neither <code>client_info</code>
-nor <code>protocol_version</code>, so <code>extract_metadata</code> returns <code>{}</code>. For a per-session identity, read
-<code>ctx.session_id</code> directly.</p>
+<p>On a FastMCP <code>Context</code>, <code>client_id</code> is <code>None</code> unless the client sends one, so
+<code>extract_agent_id</code> usually returns the session ID. Until 0.10.18 it returned the string
+<code>"None"</code> instead. <code>client_id</code> is whatever the client chooses to send, so do not base access
+checks on it. <code>Context</code> has neither <code>client_info</code> nor <code>protocol_version</code>, so
+<code>extract_metadata</code> returns <code>{}</code>.</p>
 <h3 id="report_progress">report_progress<a class="headerlink" href="#report_progress" title="Permanent link">&para;</a></h3>
-<p><code>MCPAirlock(report_progress=True)</code>, and so <code>secure_tool</code>, calls <code>ctx.report_progress()</code>
-before and after the call when the tool receives a keyword argument named <code>ctx</code>. FastMCP's
-<code>Context.report_progress</code> is a coroutine and the wrapper does not await it, so no
-notification reaches the client. Report progress from an <code>async</code> tool instead, awaiting
-FastMCP's method:</p>
+<p><code>MCPAirlock(report_progress=True)</code>, and so <code>secure_tool</code>, sends two notifications through
+the tool's FastMCP <code>Context</code>, whatever its parameter is called: <code>(0, 100, "Starting
+&lt;tool&gt;...")</code> before the call and <code>(100, 100, "Completed &lt;tool&gt;")</code> after it, as
+<code>(progress, total, message)</code>. A client receives them only when it asked for progress. An
+async tool always sends them; a sync tool sends them on FastMCP 3.x and later, which run it
+in a worker thread, and none on 2.x, which runs it on the event loop's own thread. Until
+0.10.18 none was ever sent: the coroutine was not awaited, and the message was passed where
+FastMCP expects <code>total</code>.</p>
+<p>For progress in between, await FastMCP's method from an <code>async</code> tool:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastmcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">Context</span>
 <a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">secure_tool</span>
 <a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
@@ -3091,19 +3096,20 @@ FastMCP's method:</p>
 <a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"status"</span><span class="p">:</span> <span class="s2">"done"</span><span class="p">}</span>
 </code></pre></div>
 <h2 id="error-responses">Error Responses<a class="headerlink" href="#error-responses" title="Permanent link">&para;</a></h2>
-<p>On a sync tool, <code>MCPAirlock</code> returns a blocked call as text:</p>
+<p><code>MCPAirlock</code> raises a blocked call as FastMCP's <code>ToolError</code> with this text, and FastMCP
+sends the client an error result (<code>isError</code> true) carrying it:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')
 <a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
 <a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>Suggested fixes:
 <a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>- This operation is not permitted by the current security policy
 <a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>- Contact the administrator if you believe this is an error
 </code></pre></div>
-<p>The LLM can read the suggested fixes and adjust its next call. The text replaces the tool's
-return value, so it has to fit the tool's output schema: a <code>-&gt; str</code> tool accepts it, a
-<code>-&gt; dict</code> tool does not. <a href="../../guide/mcp/">FastMCP Integration</a> covers the other return
-types.</p>
-<p>An <code>async def</code> tool, or a tool wrapped in plain <code>@Airlock()</code>, returns Airlock's response
-dict instead:</p>
+<p>The LLM can read the suggested fixes and adjust its next call. Being an error result, it
+does not have to fit the tool's output schema, so it reaches the client the same way for a
+<code>-&gt; str</code>, <code>-&gt; dict</code> or <code>-&gt; int</code> tool. Until 0.10.18 the text was returned in place of the
+tool's result, and only a <code>-&gt; str</code> tool passed it on intact. Without FastMCP installed, the
+wrapper returns the text instead of raising.</p>
+<p>A tool wrapped in plain <code>@Airlock()</code> returns Airlock's response dict instead:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="s2">"success"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="s2">"status"</span><span class="p">:</span> <span class="s2">"blocked"</span><span class="p">,</span>
@@ -3133,7 +3139,8 @@ type, or an argument the tool does not declare, gets FastMCP's own validation er
 <a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
 <a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="mi">2</span>
 </code></pre></div>
-<p>A blocked call on an async tool returns the response dict above, not the text.</p>
+<p>A blocked call on an async tool raises the same <code>ToolError</code> as on a sync one. Until 0.10.18
+it returned the response dict above.</p>
 <h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
 <p>Test secured MCP tools in memory with FastMCP's <code>Client</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
@@ -3171,15 +3178,15 @@ type, or an argument the tool does not declare, gets FastMCP's own validation er
 <tbody>
 <tr>
 <td>FastMCP 2.x</td>
-<td>✅ (tests recorded on 2.14.7)</td>
+<td>✅ (MCP tests pass on 2.14.7)</td>
 </tr>
 <tr>
 <td>FastMCP 3.x</td>
-<td>Allowed by the pin; no recorded test run</td>
+<td>✅ (MCP tests pass on 3.4.7)</td>
 </tr>
 <tr>
 <td>FastMCP 4.x</td>
-<td>✅ (tests recorded on 4.0.3)</td>
+<td>✅ (MCP tests pass on 4.0.10; CI's <code>test</code> job runs them on the newest release the pin allows)</td>
 </tr>
 <tr>
 <td>MCP clients (Claude Desktop, Claude Code, ...)</td>

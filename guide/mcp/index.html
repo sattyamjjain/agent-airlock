@@ -2900,11 +2900,14 @@ the tool's input schema, and Airlock passes it through unchanged:</p>
 <a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="k">return</span> <span class="p">[]</span>
 </code></pre></div>
 <h2 id="progress-reporting">Progress Reporting<a class="headerlink" href="#progress-reporting" title="Permanent link">&para;</a></h2>
-<p>Airlock does not send progress notifications itself. <code>MCPAirlock(report_progress=True)</code>,
-which <code>secure_tool</code> turns on, calls <code>ctx.report_progress()</code> before and after the call when
-the tool receives a keyword argument named <code>ctx</code>. FastMCP's <code>Context.report_progress</code> is a
-coroutine and the wrapper does not await it, so nothing reaches the client. To report
-progress, make the tool <code>async</code> and await FastMCP's method yourself:</p>
+<p><code>MCPAirlock(report_progress=True)</code>, which <code>secure_tool</code> turns on, sends two progress
+notifications through the tool's FastMCP <code>Context</code>, whatever its parameter is called: 0 of
+100 with <code>"Starting &lt;tool&gt;..."</code> before the call, and 100 of 100 with <code>"Completed &lt;tool&gt;"</code>
+after it. A client receives them only when it asked for progress. From a sync tool they are
+sent on FastMCP 3.x and later, which run a sync tool in a worker thread; FastMCP 2.x runs it
+on the event loop's own thread, where nothing can be awaited, so a sync tool sends none
+there. Until 0.10.18 no notification was ever sent: the coroutine was never awaited.</p>
+<p>For progress in between, make the tool <code>async</code> and await FastMCP's method yourself:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastmcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">Context</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">secure_tool</span>
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
@@ -2922,8 +2925,9 @@ an argument the tool does not declare, is rejected with FastMCP's own validation
 Those calls never reach Airlock, so on an MCP server Airlock's strict type check and
 ghost-argument handling see only what FastMCP passes on.</p>
 <p>When Airlock blocks a call that FastMCP let through, such as a policy denial or an exhausted
-rate limit, <code>MCPAirlock</code> returns the reason and the fix hints as the tool's result, so the
-model can read them:</p>
+rate limit, <code>MCPAirlock</code> raises FastMCP's <code>ToolError</code> with the reason and the fix hints.
+FastMCP sends the client an error result (<code>isError</code> true) carrying that text, so the model
+reads why the call failed and what to change, whatever the tool's return type:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">secure_tool</span>
 <a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
@@ -2931,26 +2935,23 @@ model can read them:</p>
 <a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_user</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="k">return</span> <span class="sa">f</span><span class="s2">"deleted </span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">"</span>
 <a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="c1"># A call returns this text, and the function body never runs:</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="c1"># A call gets an error result with this text, and the function body never runs:</span>
 <a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="c1"># Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')</span>
 <a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="c1">#</span>
 <a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="c1"># Suggested fixes:</span>
 <a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="c1"># - This operation is not permitted by the current security policy</span>
 <a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="c1"># - Contact the administrator if you believe this is an error</span>
 </code></pre></div>
-<p>The text is an ordinary result, not an MCP error (<code>isError</code> is false), and it takes the
-place of the return value, so FastMCP checks it against the tool's output schema:</p>
-<ul>
-<li><code>-&gt; str</code> accepts it.</li>
-<li><code>-&gt; dict</code> rejects it: the client gets a FastMCP error whose message contains the Airlock
-  text.</li>
-<li>A typed scalar such as <code>-&gt; int</code> is accepted by FastMCP 2.14.7, but on 3.4.7 and 4.0
-  <code>fastmcp.Client</code> raises on the result.</li>
-</ul>
-<p>An <code>async def</code> tool, and a plain <code>@Airlock()</code> under <code>@mcp.tool</code>, skip the conversion: a
-blocked call returns Airlock's response dict (<code>"success": False</code>, <code>"status": "blocked"</code>,
-<code>error</code>, <code>block_reason</code>, <code>fix_hints</code>), and the same output-schema check applies to it. A
-<code>-&gt; dict</code> tool accepts it.</p>
+<p>Sync and async tools behave the same. A dict the tool returns itself, even one with
+<code>"success": False</code>, is its result, not a refusal.</p>
+<p>Until 0.10.18 the text came back as an ordinary result in place of the return value. A
+<code>-&gt; dict</code> tool, and on FastMCP 3.x and later a <code>-&gt; int</code> one, then failed FastMCP's
+output-schema check instead of showing the refusal, and an <code>async def</code> tool returned
+Airlock's response dict.</p>
+<p>A plain <code>@Airlock()</code> under <code>@mcp.tool</code> converts nothing: a blocked call returns Airlock's
+response dict (<code>"success": False</code>, <code>"status": "blocked"</code>, <code>error</code>, <code>block_reason</code>,
+<code>fix_hints</code>) as the tool's result, and FastMCP checks it against the tool's output schema
+like any other return value.</p>
 <h2 id="example-complete-server">Example: Complete Server<a class="headerlink" href="#example-complete-server" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="sd">"""Secure MCP Server Example."""</span>
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">SecurityPolicy</span>
@@ -3042,15 +3043,15 @@ subprocess:</p>
 <tbody>
 <tr>
 <td>FastMCP 2.x</td>
-<td>✅ (tests recorded on 2.14.7)</td>
+<td>✅ (MCP tests pass on 2.14.7)</td>
 </tr>
 <tr>
 <td>FastMCP 3.x</td>
-<td>Allowed by the pin; no recorded test run</td>
+<td>✅ (MCP tests pass on 3.4.7)</td>
 </tr>
 <tr>
 <td>FastMCP 4.x</td>
-<td>✅ (tests recorded on 4.0.3)</td>
+<td>✅ (MCP tests pass on 4.0.10; CI's <code>test</code> job runs them on the newest release the pin allows)</td>
 </tr>
 <tr>
 <td>MCP clients (Claude Desktop, Claude Code, ...)</td>
