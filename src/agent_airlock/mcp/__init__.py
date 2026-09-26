@@ -1,10 +1,14 @@
 """FastMCP integration for Agent-Airlock.
 
-Provides seamless integration with FastMCP servers, enabling:
-- Decorator composition (@mcp.tool + @Airlock)
-- MCP context awareness
-- Progress reporting during execution
-- MCP-formatted error responses
+Provides integration with FastMCP servers:
+- Decorator composition (@mcp.tool + @MCPAirlock, or @secure_tool(mcp))
+- Refused calls raised as FastMCP's ``ToolError``, which the client receives as an error
+  result carrying the refusal and its fix hints
+- Progress notifications at the start and end of a call
+- ``MCPContextExtractor`` for reading identifiers off a FastMCP ``Context``
+
+FastMCP validates and coerces a call's arguments against the tool's schema before the
+tool, and so Airlock, sees them.
 """
 
 from __future__ import annotations
@@ -38,15 +42,94 @@ def _check_fastmcp_available() -> bool:
         return False
 
 
+def _is_refusal(result: Any) -> bool:
+    """Whether ``result`` is Airlock's own refusal (``AirlockResponse.to_dict()``).
+
+    ``status == "blocked"`` is checked as well as ``success``: a tool may itself return a
+    dict with ``"success": False``, and that is its result, not a refusal.
+    """
+    return (
+        isinstance(result, dict)
+        and result.get("success") is False
+        and result.get("status") == "blocked"
+    )
+
+
+def _refusal_text(refusal: dict[str, Any]) -> str:
+    """The refusal as the text the model reads: the error, then the fix hints."""
+    text = f"Error: {refusal.get('error', 'Unknown error')}"
+    hints = refusal.get("fix_hints") or []
+    if hints:
+        text += "\n\nSuggested fixes:\n" + "\n".join(f"- {hint}" for hint in hints)
+    return text
+
+
+def _refuse(refusal: dict[str, Any]) -> str:
+    """Raise FastMCP's ToolError with the refusal text; without FastMCP, return the text.
+
+    FastMCP sends a ToolError to the client as an error result with this text, whatever
+    the tool's return type. Until 0.10.18 the text was returned as the tool's result,
+    which fails FastMCP's output-schema check on a tool declared ``-> dict`` or
+    ``-> int``, so the client got a schema error instead of the refusal.
+    """
+    text = _refusal_text(refusal)
+    try:
+        from fastmcp.exceptions import ToolError
+    except ImportError:
+        return text
+    raise ToolError(text)
+
+
+def _mcp_context(kwargs: dict[str, Any]) -> Any | None:
+    """The FastMCP ``Context`` among a tool's arguments, whatever its parameter is named."""
+    try:
+        from fastmcp import Context
+    except ImportError:
+        return kwargs.get("ctx")
+    for value in kwargs.values():
+        if isinstance(value, Context):
+            return value
+    return kwargs.get("ctx")
+
+
+async def _report_progress_async(ctx: Any, progress: float, message: str, function: str) -> None:
+    """Send a progress notification from an async tool. Never fails the call."""
+    try:
+        outcome = ctx.report_progress(progress, 100, message)
+        if inspect.isawaitable(outcome):
+            await outcome
+    except Exception as e:
+        logger.debug("progress_report_failed", function=function, progress=progress, error=str(e))
+
+
+def _report_progress_sync(ctx: Any, progress: float, message: str, function: str) -> None:
+    """Send a progress notification from a sync tool. Never fails the call.
+
+    ``Context.report_progress`` is a coroutine function. FastMCP 3.x and later run a sync
+    tool in an AnyIO worker thread, from which it can be run on the server's event loop.
+    FastMCP 2.x runs a sync tool on the event loop's own thread, where nothing can be
+    awaited, so no notification is sent there.
+    """
+    try:
+        from anyio.from_thread import run as run_on_event_loop
+
+        run_on_event_loop(ctx.report_progress, progress, 100, message)
+    except Exception as e:
+        logger.debug("progress_report_failed", function=function, progress=progress, error=str(e))
+
+
 class MCPAirlock:
     """MCP-aware Airlock decorator for FastMCP tools.
 
     Provides the same security features as @Airlock but with MCP-specific
     enhancements:
-    - Automatic MCP context extraction
-    - Progress reporting for long operations
-    - MCP-formatted error responses
-    - Agent identity from MCP session
+    - A refused call raises FastMCP's ``ToolError``, so the client receives an error
+      result carrying the refusal and its fix hints, for sync and async tools alike
+    - Optional progress notifications at the start and end of each call
+
+    It does not derive an agent identity from the MCP session. ``MCPContextExtractor``
+    reads identifiers off a ``Context``, but ``client_id`` is whatever the client sends,
+    so it is not a basis for access checks.
 
     Example:
         from fastmcp import FastMCP
@@ -82,7 +165,10 @@ class MCPAirlock:
             sandbox: If True, execute in E2B sandbox.
             config: Configuration options.
             policy: Security policy to enforce.
-            report_progress: If True, report progress via MCP context.
+            report_progress: If True, send a progress notification (0 of 100, then 100
+                of 100) at the start and end of each call, through the tool's
+                FastMCP ``Context``. A client receives them only when it asked for
+                progress; from a sync tool they are sent on FastMCP 3.x and later.
         """
         self.sandbox = sandbox
         self.config = config or DEFAULT_CONFIG
@@ -104,67 +190,56 @@ class MCPAirlock:
 
         # Wrap with Airlock first
         airlocked_func = airlock(func)
+        name = func.__name__
+        wrapper: Callable[..., Any]
 
-        @functools.wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            # Extract MCP context if present
-            ctx = kwargs.get("ctx")
+        # Until 0.10.18 an async tool got the sync wrapper below: the refusal check saw a
+        # coroutine, so a refused async call returned Airlock's raw response dict, and the
+        # progress coroutines were never awaited (with the message passed as ``total``).
+        if inspect.iscoroutinefunction(func):
 
-            if ctx is not None and self.report_progress:
-                try:
-                    # Report start of execution
-                    if hasattr(ctx, "report_progress"):
-                        ctx.report_progress(0, f"Starting {func.__name__}...")
-                except Exception as e:
-                    logger.debug(
-                        "progress_report_failed",
-                        function=func.__name__,
-                        stage="start",
-                        error=str(e),
-                    )
+            @functools.wraps(func)
+            async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> Any:
+                ctx = _mcp_context(kwargs) if self.report_progress else None
+                if ctx is not None:
+                    await _report_progress_async(ctx, 0, f"Starting {name}...", name)
 
-            # Execute the airlocked function
-            result = airlocked_func(*args, **kwargs)
+                result = await airlocked_func(*args, **kwargs)  # type: ignore[misc]
+                if _is_refusal(result):
+                    return _refuse(result)
 
-            # Check if result is an error dict
-            if isinstance(result, dict) and result.get("success") is False:
-                # Convert to MCP-friendly error format
-                error_msg = result.get("error", "Unknown error")
-                fix_hints = result.get("fix_hints", [])
+                if ctx is not None:
+                    await _report_progress_async(ctx, 100, f"Completed {name}", name)
+                return result
 
-                # Format as helpful message for LLM
-                formatted_error = f"Error: {error_msg}"
-                if fix_hints:
-                    formatted_error += "\n\nSuggested fixes:\n"
-                    formatted_error += "\n".join(f"- {hint}" for hint in fix_hints)
+            wrapper = async_wrapper
+        else:
 
-                # For MCP, we return the error as a string response
-                # The LLM will see this and can retry
-                return formatted_error  # type: ignore[return-value]
+            @functools.wraps(func)
+            def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> Any:
+                ctx = _mcp_context(kwargs) if self.report_progress else None
+                if ctx is not None:
+                    _report_progress_sync(ctx, 0, f"Starting {name}...", name)
 
-            if ctx is not None and self.report_progress:
-                try:
-                    if hasattr(ctx, "report_progress"):
-                        ctx.report_progress(100, f"Completed {func.__name__}")
-                except Exception as e:
-                    logger.debug(
-                        "progress_report_failed",
-                        function=func.__name__,
-                        stage="complete",
-                        error=str(e),
-                    )
+                result = airlocked_func(*args, **kwargs)
+                if _is_refusal(result):
+                    return _refuse(result)  # type: ignore[arg-type]
 
-            return result  # type: ignore[return-value]
+                if ctx is not None:
+                    _report_progress_sync(ctx, 100, f"Completed {name}", name)
+                return result
+
+            wrapper = sync_wrapper
 
         # Preserve function signature for MCP/LLM framework introspection
         # FastMCP and other frameworks use inspect.signature() to generate
         # JSON schemas for tool calls
         with contextlib.suppress(ValueError, TypeError):
-            wrapper.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+            wrapper.__signature__ = inspect.signature(func)  # type: ignore[union-attr]
 
         wrapper.__annotations__ = getattr(func, "__annotations__", {})
 
-        return wrapper
+        return wrapper  # type: ignore[return-value]
 
 
 def secure_tool(
@@ -315,21 +390,26 @@ class MCPContextExtractor:
 
     @staticmethod
     def extract_agent_id(ctx: Context) -> str | None:
-        """Extract agent ID from MCP context."""
-        try:
-            # Try common locations for agent ID
-            if hasattr(ctx, "client_id"):
-                return str(ctx.client_id)
-            if hasattr(ctx, "session_id"):
-                return str(ctx.session_id)
-            if hasattr(ctx, "request_id"):
-                return str(ctx.request_id)
-        except Exception as e:
-            logger.debug(
-                "context_extraction_failed",
-                field="agent_id",
-                error=str(e),
-            )
+        """Extract an identifier from MCP context.
+
+        Returns the first of ``client_id``, ``session_id`` and ``request_id`` that has a
+        value, or None when none does or reading one raises. A FastMCP ``Context`` has all
+        three and leaves ``client_id`` None unless the client sends one; until 0.10.18 that
+        None came back as the string ``"None"``. ``client_id`` is whatever the client
+        sends, so do not base access checks on it.
+        """
+        for field_name in ("client_id", "session_id", "request_id"):
+            try:
+                value = getattr(ctx, field_name, None)
+            except Exception as e:
+                logger.debug(
+                    "context_extraction_failed",
+                    field=field_name,
+                    error=str(e),
+                )
+                return None
+            if value is not None and value != "":
+                return str(value)
         return None
 
     @staticmethod

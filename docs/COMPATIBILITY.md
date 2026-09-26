@@ -452,7 +452,10 @@ FastMCP is the recommended way to build MCP servers.
 ### @secure_tool Convenience Decorator
 
 ```python
-from agent_airlock.mcp import secure_tool, create_secure_mcp_server
+from pathlib import Path
+
+from agent_airlock import Airlock
+from agent_airlock.mcp import create_secure_mcp_server
 
 mcp, secure = create_secure_mcp_server("My Server")
 
@@ -461,7 +464,10 @@ def read_file(path: str) -> str:
     """Read a file."""
     return Path(path).read_text()
 
-@secure(sandbox=True, sandbox_required=True)
+# The server's decorator takes sandbox= but not sandbox_required=, so stack
+# @Airlock under @mcp.tool for a tool that must never run locally.
+@mcp.tool
+@Airlock(sandbox=True, sandbox_required=True)
 def execute_code(code: str) -> str:
     """Execute code in sandbox."""
     exec(code)
@@ -540,7 +546,7 @@ def execute_code(python_code: str) -> str:
 | LlamaIndex | 0.11+ | ✅ Full | `@Airlock` → `FunctionTool.from_defaults()` |
 | smolagents | 1.x | ✅ Full | `@tool` → `@Airlock` |
 | Anthropic Claude | 0.40+ | ✅ Full | `@Airlock` → schema dict |
-| FastMCP | 2.x | ✅ Full | `@mcp.tool` → `@Airlock` or `@secure_tool` |
+| FastMCP | 2.x–4.x | ✅ Full | `@mcp.tool` → `@Airlock` or `@secure_tool` |
 | Claude Tools | - | ✅ Full | Standard decorator pattern |
 | OpenAI Functions | - | ✅ Full | Schema generated correctly |
 

@@ -99,9 +99,11 @@ check, and wiring it per-PR would fail every PR between releases.
 names imported from `agent_airlock` in each Python fence and `examples/` script: the import
 resolves, keywords match the signature, attributes exist.
 
-`test` installs the `[redis]` extra because the redis-backed modules open with
-`pytest.importorskip("fakeredis")`, and a skipped module reads like a passing one in the
-summary line. If you add an `importorskip`, add its dependency to a CI job in the same PR.
+`test` installs the `[redis]` and `[mcp]` extras because the redis-backed and FastMCP-backed
+modules skip without them (`pytest.importorskip`), and a skipped module reads like a passing
+one in the summary line. `[mcp]` resolves to the newest FastMCP the pin allows, so a FastMCP
+major that breaks the integration fails CI rather than a user. If you add an
+`importorskip`, add its dependency to a CI job in the same PR.
 
 Docker integration tests are **opt-in** — default `addopts` carries `-m 'not docker'`; run
 them with `pytest -m docker`. `cve-watcher.yml` polls NVD on a schedule, diffs against the

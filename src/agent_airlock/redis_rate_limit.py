@@ -62,7 +62,7 @@ from typing import TYPE_CHECKING, Any
 
 from ._log import structlog
 from .exceptions import AirlockError
-from .policy import RateLimit
+from .policy import RateLimit, _seconds_to_refill
 
 if TYPE_CHECKING:
     pass
@@ -364,6 +364,16 @@ class RedisRateLimit(RateLimit):
             if self.fail_mode == "closed":
                 raise RedisRateLimitUnavailable(str(exc)) from exc
             return super().remaining()
+
+    def seconds_until_available(self, tokens: int = 1) -> int:
+        """Whole seconds until ``tokens`` can be acquired, from the shared bucket.
+
+        Reads the token count as the last acquire left it, before refill, so it may
+        overstate the wait slightly; it never understates it.
+        """
+        if self._client is None:
+            return super().seconds_until_available(tokens)
+        return _seconds_to_refill(tokens - self.remaining(), self)
 
 
 __all__ = [

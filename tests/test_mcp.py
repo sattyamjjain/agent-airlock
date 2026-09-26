@@ -1,9 +1,29 @@
 """Tests for the MCP integration module."""
 
+from collections.abc import Callable
+from unittest.mock import patch
+
 import pytest
 
 from agent_airlock import AirlockConfig, SecurityPolicy
 from agent_airlock.mcp import MCPAirlock, _check_fastmcp_available
+
+
+def _refusal(call: Callable[[], object]) -> str:
+    """The text a refused call carries.
+
+    With FastMCP installed the wrapper raises its ``ToolError`` (since 0.10.18), which
+    FastMCP sends to the client as an error result; without FastMCP it returns the text.
+    """
+    if _check_fastmcp_available():
+        from fastmcp.exceptions import ToolError
+
+        with pytest.raises(ToolError) as caught:
+            call()
+        return str(caught.value)
+    result = call()
+    assert isinstance(result, str)
+    return result
 
 
 class TestFastMCPAvailability:
@@ -41,11 +61,9 @@ class TestMCPAirlock:
         def typed_tool(count: int) -> int:
             return count
 
-        # Pass wrong type - should get formatted error string
-        result = typed_tool(count="not an int")  # type: ignore[arg-type]
+        # Pass wrong type - the refusal carries a formatted error
+        result = _refusal(lambda: typed_tool(count="not an int"))  # type: ignore[arg-type]
 
-        # MCPAirlock converts error dicts to formatted strings
-        assert isinstance(result, str)
         assert "Error:" in result
 
     def test_ghost_arguments_stripped(self) -> None:
@@ -64,10 +82,9 @@ class TestMCPAirlock:
         def strict_tool(x: int) -> int:
             return x
 
-        # Ghost argument in strict mode should return error
-        result = strict_tool(x=5, unknown=True)  # type: ignore[call-arg]
+        # Ghost argument in strict mode is refused
+        result = _refusal(lambda: strict_tool(x=5, unknown=True))  # type: ignore[call-arg]
 
-        assert isinstance(result, str)
         assert "Error:" in result
 
     def test_with_policy(self) -> None:
@@ -77,10 +94,8 @@ class TestMCPAirlock:
         def denied_tool(x: int) -> int:
             return x
 
-        result = denied_tool(x=5)
+        result = _refusal(lambda: denied_tool(x=5))
 
-        # Policy violation returns error string
-        assert isinstance(result, str)
         assert "Error:" in result
         assert "denied" in result.lower()
 
@@ -89,16 +104,11 @@ class TestMCPAirlock:
         def sandboxed_tool(x: int) -> int:
             return x * 2
 
-        # Should work or return error if sandbox not available
-        result = sandboxed_tool(x=5)
+        # Without E2B the call is refused as a sandbox error, not run locally
+        with patch("agent_airlock.sandbox._check_e2b_available", return_value=False):
+            result = _refusal(lambda: sandboxed_tool(x=5))
 
-        # Either succeeds with fallback or returns formatted error
-        if isinstance(result, int):
-            assert result == 10
-        else:
-            # Sandbox not available - check it returns a formatted error
-            assert isinstance(result, str)
-            assert "Error:" in result
+        assert "could not run in its sandbox" in result
 
     def test_preserves_function_metadata(self) -> None:
         @MCPAirlock()
@@ -185,10 +195,10 @@ class TestErrorFormatting:
         def typed_tool(age: int) -> int:
             return age
 
-        result = typed_tool(age="twenty")  # type: ignore[arg-type]
+        result = _refusal(lambda: typed_tool(age="twenty"))  # type: ignore[arg-type]
 
-        assert isinstance(result, str)
-        assert "Suggested fixes:" in result or "Error:" in result
+        assert result.startswith("Error: ")
+        assert "Suggested fixes:" in result
 
     def test_policy_error_formatted(self) -> None:
         policy = SecurityPolicy(allowed_tools=["allowed_*"])
@@ -197,9 +207,8 @@ class TestErrorFormatting:
         def blocked_tool(x: int) -> int:
             return x
 
-        result = blocked_tool(x=5)
+        result = _refusal(lambda: blocked_tool(x=5))
 
-        assert isinstance(result, str)
         assert "Error:" in result
 
 

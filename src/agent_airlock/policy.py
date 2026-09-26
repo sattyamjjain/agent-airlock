@@ -14,6 +14,7 @@ import copy
 import fnmatch
 import hashlib
 import json
+import math
 import re
 import threading
 import time
@@ -289,6 +290,24 @@ class RateLimit:
         with self._lock:
             self._refill()
             return int(self.tokens)
+
+    def seconds_until_available(self, tokens: int = 1) -> int:
+        """Whole seconds until ``tokens`` can be acquired; 0 when they can be now."""
+        with self._lock:
+            self._refill()
+            return _seconds_to_refill(tokens - self.tokens, self)
+
+
+def _seconds_to_refill(missing: float, limit: RateLimit) -> int:
+    """Whole seconds for ``limit`` to refill ``missing`` tokens, rounded up.
+
+    A zero-capacity bucket ("0/minute") never refills; its period is reported instead.
+    """
+    if missing <= 0:
+        return 0
+    if limit.max_tokens <= 0:
+        return math.ceil(limit.refill_period_seconds)
+    return math.ceil(missing * limit.refill_period_seconds / limit.max_tokens)
 
 
 @dataclass
@@ -600,6 +619,10 @@ class SecurityPolicy:
                     "pattern": pattern,
                     "limit": self.rate_limits[pattern],
                     "remaining": limiter.remaining(),
+                    # Until 0.10.18 this was missing, and the refusal told the model to
+                    # wait a flat 60 seconds whatever the limit ("1/hour" included). At
+                    # least 1: the acquire above just failed, whatever refilled since.
+                    "reset_seconds": max(1, limiter.seconds_until_available()),
                 },
             )
 

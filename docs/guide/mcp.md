@@ -157,11 +157,15 @@ def my_tool(query: str, ctx: Context) -> list:
 
 ## Progress Reporting
 
-Airlock does not send progress notifications itself. `MCPAirlock(report_progress=True)`,
-which `secure_tool` turns on, calls `ctx.report_progress()` before and after the call when
-the tool receives a keyword argument named `ctx`. FastMCP's `Context.report_progress` is a
-coroutine and the wrapper does not await it, so nothing reaches the client. To report
-progress, make the tool `async` and await FastMCP's method yourself:
+`MCPAirlock(report_progress=True)`, which `secure_tool` turns on, sends two progress
+notifications through the tool's FastMCP `Context`, whatever its parameter is called: 0 of
+100 with `"Starting <tool>..."` before the call, and 100 of 100 with `"Completed <tool>"`
+after it. A client receives them only when it asked for progress. From a sync tool they are
+sent on FastMCP 3.x and later, which run a sync tool in a worker thread; FastMCP 2.x runs it
+on the event loop's own thread, where nothing can be awaited, so a sync tool sends none
+there. Until 0.10.18 no notification was ever sent: the coroutine was never awaited.
+
+For progress in between, make the tool `async` and await FastMCP's method yourself:
 
 ```python
 from fastmcp import Context
@@ -184,8 +188,9 @@ Those calls never reach Airlock, so on an MCP server Airlock's strict type check
 ghost-argument handling see only what FastMCP passes on.
 
 When Airlock blocks a call that FastMCP let through, such as a policy denial or an exhausted
-rate limit, `MCPAirlock` returns the reason and the fix hints as the tool's result, so the
-model can read them:
+rate limit, `MCPAirlock` raises FastMCP's `ToolError` with the reason and the fix hints.
+FastMCP sends the client an error result (`isError` true) carrying that text, so the model
+reads why the call failed and what to change, whatever the tool's return type:
 
 ```python
 from agent_airlock import SecurityPolicy
@@ -195,7 +200,7 @@ from agent_airlock.mcp import secure_tool
 def delete_user(user_id: int) -> str:
     return f"deleted {user_id}"
 
-# A call returns this text, and the function body never runs:
+# A call gets an error result with this text, and the function body never runs:
 # Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')
 #
 # Suggested fixes:
@@ -203,19 +208,18 @@ def delete_user(user_id: int) -> str:
 # - Contact the administrator if you believe this is an error
 ```
 
-The text is an ordinary result, not an MCP error (`isError` is false), and it takes the
-place of the return value, so FastMCP checks it against the tool's output schema:
+Sync and async tools behave the same. A dict the tool returns itself, even one with
+`"success": False`, is its result, not a refusal.
 
-- `-> str` accepts it.
-- `-> dict` rejects it: the client gets a FastMCP error whose message contains the Airlock
-  text.
-- A typed scalar such as `-> int` is accepted by FastMCP 2.14.7, but on 3.4.7 and 4.0
-  `fastmcp.Client` raises on the result.
+Until 0.10.18 the text came back as an ordinary result in place of the return value. A
+`-> dict` tool, and on FastMCP 3.x and later a `-> int` one, then failed FastMCP's
+output-schema check instead of showing the refusal, and an `async def` tool returned
+Airlock's response dict.
 
-An `async def` tool, and a plain `@Airlock()` under `@mcp.tool`, skip the conversion: a
-blocked call returns Airlock's response dict (`"success": False`, `"status": "blocked"`,
-`error`, `block_reason`, `fix_hints`), and the same output-schema check applies to it. A
-`-> dict` tool accepts it.
+A plain `@Airlock()` under `@mcp.tool` converts nothing: a blocked call returns Airlock's
+response dict (`"success": False`, `"status": "blocked"`, `error`, `block_reason`,
+`fix_hints`) as the tool's result, and FastMCP checks it against the tool's output schema
+like any other return value.
 
 ## Example: Complete Server
 
@@ -309,7 +313,7 @@ The `mcp` extra pins `fastmcp>=2.0,<5.0`.
 
 | Component | Supported |
 |-----------|-----------|
-| FastMCP 2.x | ✅ (tests recorded on 2.14.7) |
-| FastMCP 3.x | Allowed by the pin; no recorded test run |
-| FastMCP 4.x | ✅ (tests recorded on 4.0.3) |
+| FastMCP 2.x | ✅ (MCP tests pass on 2.14.7) |
+| FastMCP 3.x | ✅ (MCP tests pass on 3.4.7) |
+| FastMCP 4.x | ✅ (MCP tests pass on 4.0.10; CI's `test` job runs them on the newest release the pin allows) |
 | MCP clients (Claude Desktop, Claude Code, ...) | Airlock runs inside the tool function, so clients see an ordinary FastMCP server |
