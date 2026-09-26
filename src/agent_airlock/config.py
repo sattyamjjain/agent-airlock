@@ -50,7 +50,8 @@ class AirlockConfig:
         strict_mode: DEPRECATED (will be removed in v1.0.0). Use unknown_args instead.
             If True, maps to BLOCK. If False, maps to STRIP_AND_LOG.
         max_output_tokens: Maximum tokens in tool output before truncation. 0 = unlimited.
-        max_output_chars: Maximum characters in output before truncation. 0 = unlimited.
+        max_output_chars: Maximum characters in a string result before truncation. A dict,
+            list, tuple or set result is masked but not truncated. 0 = unlimited.
         mask_pii: Auto-detect and mask PII (SSN, credit cards, emails) in output.
         mask_secrets: Auto-detect and mask API keys, passwords in output.
         sanitize_output: If True, apply output sanitization (PII masking, truncation).

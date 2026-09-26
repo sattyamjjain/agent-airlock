@@ -6,6 +6,7 @@ sensitive data leakage back to LLMs and control output costs.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from dataclasses import dataclass, field
@@ -1018,6 +1019,88 @@ class WorkspacePIIConfig:
                     error=str(e),
                 )
         return compiled
+
+
+#: Containers :func:`sanitize_structured` walks into; anything else is a leaf.
+_WALKED_CONTAINERS = (dict, list, tuple, set, frozenset)
+
+
+def sanitize_structured(
+    value: Any,
+    *,
+    mask_pii: bool = True,
+    mask_secrets: bool = True,
+    mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
+    pii_locales: list[str] | None = None,
+) -> tuple[Any, int]:
+    """Mask sensitive data in every string inside a dict, list, tuple or set.
+
+    :func:`sanitize_output` turns a container into JSON text: the right input for
+    detection and length accounting, but not something a tool can hand back, because its
+    caller needs the same type. This walks the structure instead, masks each string value
+    with the same detectors, and rebuilds only the containers that changed, so a tool
+    returning ``{"content": [{"type": "text", "text": ...}]}`` still returns that shape.
+
+    Dictionary keys and non-string leaves are left alone. A container reached a second
+    time (a cycle) is returned as it is.
+
+    Args:
+        value: A string, a container of them, or any other leaf.
+        mask_pii: As for :func:`sanitize_output`.
+        mask_secrets: As for :func:`sanitize_output`.
+        mask_config: As for :func:`sanitize_output`.
+        pii_locales: As for :func:`sanitize_output`.
+
+    Returns:
+        ``(sanitized, detection_count)``. ``value`` itself comes back when nothing was
+        masked, so an untouched result keeps its identity.
+    """
+    options: dict[str, Any] = {
+        "mask_pii": mask_pii,
+        "mask_secrets": mask_secrets,
+        "mask_config": mask_config,
+        "pii_locales": pii_locales,
+    }
+    return _walk_and_mask(value, options, set())
+
+
+def _walk_and_mask(node: Any, options: dict[str, Any], seen: set[int]) -> tuple[Any, int]:
+    if isinstance(node, str):
+        result = sanitize_output(node, **options)
+        return (result.content, result.detection_count) if result.detection_count else (node, 0)
+    if not isinstance(node, _WALKED_CONTAINERS) or id(node) in seen:
+        return node, 0
+    seen.add(id(node))
+    if isinstance(node, dict):
+        pairs = [(key, _walk_and_mask(item, options, seen)) for key, item in node.items()]
+        total = sum(count for _key, (_new, count) in pairs)
+        if not total:
+            return node, 0
+        rebuilt = copy.copy(node)
+        for key, (new, count) in pairs:
+            if count:
+                rebuilt[key] = new
+        return rebuilt, total
+    walked = [_walk_and_mask(item, options, seen) for item in node]
+    total = sum(count for _new, count in walked)
+    if not total:
+        return node, 0
+    return _rebuild_like(node, [new for new, _count in walked]), total
+
+
+def _rebuild_like(node: Any, items: list[Any]) -> Any:
+    """A container of ``node``'s own type holding ``items``."""
+    if isinstance(node, list):
+        rebuilt = copy.copy(node)
+        rebuilt[:] = items
+        return rebuilt
+    if isinstance(node, tuple) and hasattr(node, "_fields"):
+        namedtuple_type: Any = type(node)
+        return namedtuple_type._make(items)
+    try:
+        return type(node)(items)
+    except TypeError:  # a subclass whose constructor takes something else
+        return tuple(items) if isinstance(node, tuple) else set(items)
 
 
 def sanitize_with_workspace_config(

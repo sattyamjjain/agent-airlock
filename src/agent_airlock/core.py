@@ -92,7 +92,7 @@ from .policy import (
     SecurityPolicy,
     ViolationType,
 )
-from .sanitizer import sanitize_output
+from .sanitizer import sanitize_output, sanitize_structured
 from .self_heal import (
     AirlockResponse,
     BlockReason,
@@ -310,6 +310,72 @@ def _extract_token_usage(result: Any) -> TokenUsage | None:
         return TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens)
     except (TypeError, ValueError):
         return None
+
+
+def _sanitize_tool_output(
+    result: Any, config: AirlockConfig, func_name: str
+) -> tuple[Any, list[str], int, bool]:
+    """Mask sensitive data in a tool's result without changing its type.
+
+    Returns ``(result, warnings, masked_count, was_truncated)``. A string is masked and
+    truncated as it always was. A dict, list, tuple or set is masked value by value and
+    keeps its shape; ``max_output_chars`` does not apply to it, because truncating its
+    serialized form would hand back a different type. Anything else is returned as it
+    is, since rebuilding an arbitrary object with masked fields could break its own
+    invariants, and what was detected in it is reported as *not* masked.
+
+    This replaced a defect as old as the sanitizer: every non-string result was
+    serialized to JSON, masked, and the masked text discarded, while the log said
+    ``output_sanitized``, the warning said "Masked N" and the audit record counted N,
+    for data returned raw.
+    """
+    options: dict[str, Any] = {
+        "mask_pii": config.mask_pii,
+        "mask_secrets": config.mask_secrets,
+        "pii_locales": config.pii_locales or None,
+    }
+    if isinstance(result, str):
+        max_chars = config.max_output_chars if config.max_output_chars > 0 else None
+        sanitization = sanitize_output(result, max_chars=max_chars, **options)
+        warnings = _masked_warnings(sanitization.detection_count, func_name)
+        if sanitization.was_truncated:
+            warnings.append(
+                f"Output truncated from {sanitization.original_length:,} "
+                f"to {sanitization.sanitized_length:,} characters"
+            )
+        return (
+            sanitization.content,
+            warnings,
+            sanitization.detection_count,
+            sanitization.was_truncated,
+        )
+    if isinstance(result, dict | list | tuple | set | frozenset):
+        masked, count = sanitize_structured(result, **options)
+        return masked, _masked_warnings(count, func_name), count, False
+    detected = sanitize_output(result, **options).detection_count
+    if not detected:
+        return result, [], 0, False
+    output_type = type(result).__name__
+    logger.warning(
+        "output_sensitive_data_unmasked",
+        function=func_name,
+        detections=detected,
+        output_type=output_type,
+    )
+    return (
+        result,
+        [f"Detected {detected} sensitive value(s) in {output_type} output; not masked"],
+        0,
+        False,
+    )
+
+
+def _masked_warnings(count: int, func_name: str) -> list[str]:
+    """The warning (and log line) for ``count`` values actually masked, or nothing."""
+    if not count:
+        return []
+    logger.info("output_sanitized", function=func_name, detections=count)
+    return [f"Masked {count} sensitive value(s) in output"]
 
 
 class Airlock:
@@ -600,39 +666,9 @@ class Airlock:
             was_truncated = False
 
             if self.config.sanitize_output and result is not None:
-                max_chars = (
-                    self.config.max_output_chars if self.config.max_output_chars > 0 else None
+                result, warnings, sanitized_count, was_truncated = _sanitize_tool_output(
+                    result, self.config, func_name
                 )
-
-                sanitization = sanitize_output(
-                    result,
-                    mask_pii=self.config.mask_pii,
-                    mask_secrets=self.config.mask_secrets,
-                    max_chars=max_chars,
-                    pii_locales=self.config.pii_locales or None,
-                )
-
-                sanitized_count = sanitization.detection_count
-                was_truncated = sanitization.was_truncated
-
-                if sanitization.detection_count > 0:
-                    warnings.append(
-                        f"Masked {sanitization.detection_count} sensitive value(s) in output"
-                    )
-                    logger.info(
-                        "output_sanitized",
-                        function=func_name,
-                        detections=sanitization.detection_count,
-                    )
-
-                if sanitization.was_truncated:
-                    warnings.append(
-                        f"Output truncated from {sanitization.original_length:,} "
-                        f"to {sanitization.sanitized_length:,} characters"
-                    )
-
-                if isinstance(result, str):
-                    result = sanitization.content
 
             elapsed = time.time() - start_time
             logger.info(

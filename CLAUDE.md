@@ -189,9 +189,11 @@ src/agent_airlock/
 7. Execute (unnumbered in code) — Pydantic strict validation, then run locally or in the
    sandbox, inside the network airgap when one is configured. Sandbox mode validates in
    the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way
-8. `_post_execution` — sanitize output (PII/secrets, truncation) → audit log → mark
-   untrusted output (when the policy sets `reauth_on_untrusted_reinvocation`) → reconcile
-   actual vs estimated cost
+8. `_post_execution` — sanitize output via `_sanitize_tool_output` (a string is masked and
+   truncated; a dict, list, tuple or set is masked value by value and keeps its type; any
+   other object is returned as-is and its detections reported as not masked) → audit log →
+   mark untrusted output (when the policy sets `reauth_on_untrusted_reinvocation`) →
+   reconcile actual vs estimated cost
 
 Blocked calls return an `AirlockResponse`. Validation failures return structured JSON
 carrying `fix_hints` for the model to retry against, rather than raising.
