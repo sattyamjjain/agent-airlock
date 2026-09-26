@@ -11,6 +11,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.13] - 2026-09-26
+
+### Security
+
+- **`allowed_roles` was never enforced through `@Airlock`, and `require_agent_id` refused
+  every call.** `@Airlock` called `SecurityPolicy.check(tool)` with no agent, and the role
+  check was skipped when there was none, so a policy restricted to named roles let every
+  caller through, anonymous ones included. `require_agent_id` refused every call however
+  the caller identified itself, which made `STRICT_POLICY` and each preset that sets it
+  refuse everything. The policy tests only ever called `check()` directly, with an agent,
+  so neither showed.
+
+  The call's identity is now read from its context object (the tool's first argument), else
+  from the context a host set around the call with `with AirlockContext(agent_id=...,
+  roles=[...])`, and passed to the check. A policy with `allowed_roles` refuses a call that
+  carries no identity, since it holds no role.
+
+### Fixed
+
+- **The policy guide's examples raised.** Its Agent Identity section used
+  `SecurityPolicy(allowed_agents=..., denied_agents=..., agent_rate_limits=...)` and
+  `Airlock(agent_id=...)`, none of which exist. `RateLimit(calls=..., period_seconds=...)`,
+  `TimeWindow(start=..., end=..., timezone=...)` and `SecurityPolicy.merge()` do not exist
+  either, and time windows have no timezone support. `docs/guide/policy.md` now shows the
+  real API (`RateLimit.parse(...).acquire()`, `TimeWindow.parse(...).is_within()`, a policy
+  resolver) and how a call carries an identity.
+
 ## [0.10.12] - 2026-09-26
 
 ### Added

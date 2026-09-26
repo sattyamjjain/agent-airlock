@@ -177,6 +177,7 @@ src/agent_airlock/
 0. Kill switch — a fleet freeze refuses before the arguments are even examined
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Resolve policy (static, or `Callable[[AirlockContext], SecurityPolicy]`) and check it
+   against the caller's identity (the call's context object, else the one set around it)
    - 2.5 behavioral tool-call sequence guard
    - 2.6 action-time contradiction gate
    - 2.7 unsafe-deserialization content guard
@@ -316,7 +317,9 @@ recounts it over a number pasted into prose.
 - Read `AGENTS.md` first — it holds the load-bearing contributor contract.
 - Default safety posture:
   `@Airlock(policy=STRICT_POLICY, sandbox=True, sandbox_required=True)`.
-  Anything weaker needs a one-line justification in the docstring.
+  Anything weaker needs a one-line justification in the docstring. `STRICT_POLICY`
+  requires an agent identity: a context object as the tool's first argument, or
+  `with AirlockContext(agent_id=...)` around the call (`_caller_identity` in `core.py`).
 - **Forbidden:** `subprocess.run(..., shell=True)` anywhere in `src/`; raw `eval()` /
   `exec()`; mocking fixtures in CVE regression tests. `mcp_spec/manifest_only_mode.py` is
   the only `subprocess` importer in `src/` and does not use `shell=True`; the `shell=True`
