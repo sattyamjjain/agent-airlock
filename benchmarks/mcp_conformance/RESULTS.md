@@ -1,8 +1,10 @@
 # MCP conformance — agent-airlock (spec 2026-07-28)
 
-Last run: **2026-08-10** (the three 2026-08-05 divergence probes were resolved against the
-ratified 2026-07-28 text and are now scored contract cases; see below). Official suite of
-record: **`@modelcontextprotocol/conformance@0.1.16`**.
+Last run: **2026-09-08**, a clean re-run with every check passing (recorded in commit
+`c04d297`, which moved the README marker; this line still said 2026-08-10 until v0.10.10).
+The cases below were last rewritten on 2026-08-10, when the three 2026-08-05 divergence
+probes were resolved against the ratified 2026-07-28 text and became scored contract cases.
+Official suite of record: **`@modelcontextprotocol/conformance@0.1.16`**.
 
 Reproduce (airlock transport surface, deterministic, no server, no network) — the harness and
 the shipped `airlock` CLI share one source of truth, `agent_airlock.mcp_spec.conformance`:

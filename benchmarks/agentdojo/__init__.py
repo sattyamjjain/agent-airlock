@@ -1,8 +1,9 @@
 """AgentDojo adaptive-attacker robustness bench for agent-airlock.
 
 Registers airlock as an AgentDojo defense and measures its effect on the
-``tool_knowledge`` attack over a pinned workspace + banking subset. Deterministic
-(no model) by default; a real model-in-the-loop pass is available via ``--model``.
+``tool_knowledge`` attack over the pinned workspace, banking, travel and slack
+suites. Deterministic (no model) by default; a real model-in-the-loop pass is
+available via ``--model``.
 
 ``agentdojo`` is an optional ``bench`` extra — the airlock core stays zero-dep.
 

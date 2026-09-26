@@ -87,12 +87,11 @@ coverage.
 ## OX-MCP composite preset
 
 The shipped [`presets/ox-mcp-2026-04.yaml`](https://github.com/sattyamjjain/agent-airlock/blob/main/presets/ox-mcp-2026-04.yaml)
-enables the nine April-2026 OX-disclosure-class presets:
+enables the eight April-2026 OX-disclosure-class presets:
 
 | Entry id | Factory | CVE |
 |---|---|---|
 | `stdio_guard_ox_defaults` | `stdio_guard_ox_defaults` | (umbrella) |
-| `manifest_only_mode` | `manifest_only_mode` | — |
 | `gitpilot_mcp_cve_2026_6980` | `gitpilot_mcp_cve_2026_6980_defaults` | CVE-2026-6980 |
 | `windsurf_cve_2026_30615` | `windsurf_cve_2026_30615_defaults` | CVE-2026-30615 |
 | `mcpjam_cve_2026_23744` | `mcpjam_cve_2026_23744_defaults` | CVE-2026-23744 |
@@ -101,8 +100,13 @@ enables the nine April-2026 OX-disclosure-class presets:
 | `unit42_mcp_sampling` | `unit42_mcp_sampling_defaults` | (sampling-vector class) |
 | `archived_mcp_server_advisory` | `archived_mcp_server_advisory_defaults` | (Puppeteer advisory class) |
 
-`manifest_only_mode` is `enabled: false` by default — opt in
-explicitly per the [manifest-only-mode docs](../mcp/manifest-only-mode.md).
+Manifest-only STDIO launching, the other half of OX's recommendation,
+is not a preset: it needs a signing key and pre-registered manifests,
+so it is opted into in code — see the
+[manifest-only-mode docs](../mcp/manifest-only-mode.md). Every
+`factory:` a preset file names must be a registered preset, even on an
+entry marked `enabled: false`; `tests/presets/test_ox_mcp_yaml.py`
+fails otherwise.
 
 ## Primary source
 

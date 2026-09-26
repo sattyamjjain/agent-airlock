@@ -46,6 +46,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-27826](#cve-2026-27826) | mcp-atlassian SSRF via `X-Atlassian-*-Url` headers | 7.5 (High, AV:A/PR:N/UI:N, C:H) | Partial |
 | [CVE-2026-30615](#cve-2026-30615) | (Windsurf zero-click MCP config) — spawn-time config pin | — | — |
 | [CVE-2026-30616](#cve-2026-30616) | MCP STDIO transport command-injection (Ox Security class) | 9.8 (Critical) | Strongest |
+| [CVE-2026-32211](#cve-2026-32211) | Azure MCP Server SSE token-echo | 8.6 (High) | — |
 | [CVE-2026-32625](#cve-2026-32625) | (LibreChat MCP server-URL env-interpolation secret leak) | 9.6 | — |
 | [CVE-2026-33032](#cve-2026-33032) | "MCPwn" — nginx-ui missing /mcp_message auth middleware | 9.8 | — |
 | [CVE-2026-39884](#cve-2026-39884) | flux159/mcp-server-kubernetes argv injection | — | — |
@@ -573,6 +574,23 @@ client-surface problem and out-of-scope for runtime middleware;
 see ``docs/cves/index.md`` fit-matrix notes.
 
 <a id="cve-2026-30616"></a>
+
+### CVE-2026-32211
+
+**Azure MCP Server SSE token-echo**
+
+- **CVSS:** 8.6 (High)
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-32211](https://nvd.nist.gov/vuln/detail/CVE-2026-32211)
+- **Advisory:** [https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211)
+- **Regression test:** [`tests/cves/test_cve_2026_32211_azure_mcp_token_echo.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_32211_azure_mcp_token_echo.py)
+
+**Vulnerability**
+
+The reference Azure MCP server echoed the caller's ``Authorization``
+header back in a ``WWW-Authenticate`` field on 401 responses, leaking
+short-lived AAD tokens. Fixed in Azure MCP Server 1.4.2.
+
+<a id="cve-2026-32211"></a>
 
 ### CVE-2026-32625
 

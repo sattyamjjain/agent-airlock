@@ -52,15 +52,15 @@ make format        # ruff format + ruff check --fix
 make bench         # pytest-benchmark suite (tests/benchmarks/, --ignore'd by default addopts)
 ```
 
-Repo-specific claim gates. The Makefile's `.PHONY` line is the complete list — `make help`
-omits `check-docs` and both registry-parity targets:
+Repo-specific claim gates. `make help` lists every target, and
+`tests/test_makefile_help.py` fails if a target is missing from it or from `.PHONY`:
 
 ```bash
 make benchmark               # regenerate BENCHMARK.md (guard-suite block-rate corpus)
 make test-badge              # regenerate the TEST-BADGE block in README.md
 make egress-bench            # CVE egress walker over tests/cves/fixtures/
 make verify-corpus           # verify wild_payload_corpus MANIFEST.sha256
-make check-links             # dead relative-link gate (README + docs/)
+make check-links             # dead relative links; docs/ pages must link inside docs/
 make check-cve-catalog       # docs/cves/index.md matches the tests/cves/ suite
 make check-docs              # mkdocs build --strict, built OUTSIDE the tree (see Architecture)
 make check-changelog         # post-release drift: [Unreleased] must be empty after a release

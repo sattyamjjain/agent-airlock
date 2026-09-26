@@ -50,7 +50,13 @@ from ._tool_proxy import named_tool_proxy
 logger = structlog.get_logger("agent-airlock.integrations.pydantic_ai")
 
 
-SUPPORTED_PYDANTIC_AI_VERSIONS: tuple[str, ...] = ("1.88.0", "1.89.0", "1.89.1", "2.43.0")
+SUPPORTED_PYDANTIC_AI_VERSIONS: tuple[str, ...] = (
+    "1.88.0",
+    "1.89.0",
+    "1.89.1",
+    "2.31.1",
+    "2.43.0",
+)
 """PydanticAI versions this adapter has been smoke-tested against.
 
 A user running an unsupported version sees a :class:`UserWarning`
@@ -65,6 +71,12 @@ toolsets, each with a ``tools`` dict of ``Tool`` objects carrying
 in 2.x, so :meth:`PydanticAIAdapter._maybe_attach_output_validate`
 cannot attach the sanitiser and warns instead. Tool-argument validation
 is identical; model-output sanitisation is not available.
+
+**Introspection is not verification.** It confirmed the walk on 2.43.0, but
+only a real run showed that the replaced ``tool.function`` is never called
+(fixed in 0.10.9 by re-pointing ``function_schema.function``). 2.31.1 was
+verified by a real ``Agent`` run under ``TestModel``: with a deny-all policy,
+no tool body ran.
 """
 
 _INSTALL_HINT = (

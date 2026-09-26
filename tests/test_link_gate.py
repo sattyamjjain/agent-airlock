@@ -96,6 +96,39 @@ class TestItDoesNotFireOnThingsThatAreNotLinks:
         assert dead_links(md) == []
 
 
+class TestDocsPagesStayInsideTheDocsTree:
+    """mkdocs publishes ``docs/`` only, so a docs page's link has to resolve inside it.
+
+    Two ``docs/benchmarks/`` pages linked ``../../benchmarks/vs_gateway/gateway_harness/``.
+    That resolved on GitHub and through the repo-root fallback, so this gate passed, and
+    ``mkdocs build --strict`` only logs a directory link at INFO: dead on the site, and no
+    gate failed.
+    """
+
+    def test_a_docs_link_that_leaves_the_tree_is_reported(self, tmp_path: Path) -> None:
+        _write(tmp_path, "benchmarks/harness/run.py", "")
+        page = _write(tmp_path, "docs/benchmarks/page.md", "[h](../../benchmarks/harness/)")
+
+        assert dead_links(page, docs_root=tmp_path / "docs") == [(1, "../../benchmarks/harness/")]
+
+    def test_the_same_target_linked_from_outside_docs_still_passes(self, tmp_path: Path) -> None:
+        _write(tmp_path, "benchmarks/harness/run.py", "")
+        readme = _write(tmp_path, "README.md", "[h](benchmarks/harness/)")
+
+        assert dead_links(readme, docs_root=tmp_path / "docs") == []
+
+    def test_a_link_between_docs_pages_passes(self, tmp_path: Path) -> None:
+        _write(tmp_path, "docs/other.md", "x")
+        page = _write(tmp_path, "docs/sub/page.md", "[o](../other.md)")
+
+        assert dead_links(page, docs_root=tmp_path / "docs") == []
+
+    def test_an_absolute_url_to_the_same_target_passes(self, tmp_path: Path) -> None:
+        page = _write(tmp_path, "docs/p.md", "[h](https://github.com/o/r/tree/main/benchmarks/x)")
+
+        assert dead_links(page, docs_root=tmp_path / "docs") == []
+
+
 class TestAgainstTheRealRepo:
     def test_the_repo_currently_has_no_dead_links(self) -> None:
         assert main(["--quiet"]) == 0

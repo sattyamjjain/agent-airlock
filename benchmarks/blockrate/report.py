@@ -296,9 +296,9 @@ def render_results_md(
     lines.append(
         '> **AgentDojo now wired** (this replaces the earlier "not yet wired" note): '
         "for an *adaptive-attacker* measurement, airlock runs as an "
-        "[AgentDojo](https://arxiv.org/abs/2406.13352) defense and blocks **84.4%** of "
-        "`tool_knowledge` injection→task target tool-calls on the pinned "
-        "workspace+banking subset — a deterministic upper bound on ASR reduction, with "
+        "[AgentDojo](https://arxiv.org/abs/2406.13352) defense and blocks **86.0%** "
+        "(524/609) of `tool_knowledge` injection→task target tool-calls across all four "
+        "pinned suites — a deterministic upper bound on ASR reduction, with "
         "a `--model` path for the real model-in-the-loop ASR. See "
         # Absolute, not `../agentdojo/RESULTS.md`. This file is rendered in two
         # places now: at its own path on GitHub, and inside

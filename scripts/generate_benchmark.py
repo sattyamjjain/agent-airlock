@@ -350,22 +350,28 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     # recorded from the pinned deterministic bench (benchmark v1.2.1), NOT computed
     # here — agentdojo is a bench-only extra that CI does not install, so importing
     # or running it in this generator would break the deterministic --check gate.
+    # Source of record: benchmarks/agentdojo/RESULTS.md, Result 1 (all four suites,
+    # reproduced exactly on 2026-09-08). This block said "workspace + banking,
+    # 324/384 = 84.4%" for weeks after the bench moved to four suites.
     out.append("### Adaptive-attacker robustness (AgentDojo)")
     out.append("")
     out.append(
         "agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) "
         "(Debenedetti et al., NeurIPS 2024) as a **defense** — `AirlockToolsExecutor`: "
         "deny-by-default least-privilege `SecurityPolicy` + ghost-arg BLOCK + output "
-        "sanitizer. On the pinned **workspace + banking** suites under the "
-        "`tool_knowledge` attack (benchmark `v1.2.1`), airlock's least-privilege policy "
-        "blocks the target tool-call for **324/384 = 84.4%** of injection→task pairs — a "
-        "**deterministic upper bound on ASR reduction**, *not* the model-in-the-loop ASR."
+        "sanitizer. On all four pinned suites (**workspace, banking, travel, slack**) "
+        "under the `tool_knowledge` attack (benchmark `v1.2.1`), airlock's "
+        "least-privilege policy blocks the target tool-call for **524/609 = 86.0%** of "
+        "injection→task pairs — a **deterministic upper bound on ASR reduction**, *not* "
+        "the model-in-the-loop ASR."
     )
     out.append("")
     out.append("| suite | injection→task pairs | blocked | block rate |")
     out.append("|---|---|---|---|")
     out.append("| workspace | 240 | 222 | **92.5%** |")
     out.append("| banking | 144 | 102 | **70.8%** |")
+    out.append("| travel | 120 | 114 | **95.0%** |")
+    out.append("| slack | 105 | 86 | **81.9%** |")
     out.append("")
     out.append(
         "> Deterministic, no model, no API key. The true benign-utility / "

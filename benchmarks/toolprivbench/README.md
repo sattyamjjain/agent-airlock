@@ -27,7 +27,8 @@ agent-airlock's deny-by-default least-privilege `SecurityPolicy`
   policy is *precise*, not a blunt deny-all.
 
 The current number is in [`RESULTS.md`](RESULTS.md). **Results last run on
-2026-06-22** (subset harness, 100 scenarios).
+2026-09-08** (subset harness, 100 scenarios); every run is dated in the
+`## Re-runs` table there.
 
 ## Reproduce
 

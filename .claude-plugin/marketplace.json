@@ -11,9 +11,9 @@
       "Stops hallucinated tool arguments before Pydantic ever sees them",
       "Pydantic V2 strict validation + self-healing fix_hints for LLM retry",
       "Sandboxes dangerous execution in E2B, Docker, or local (opt-in)",
-      "Output sanitization: 12 PII / secret types, 4 masking strategies",
+      "Output sanitization: 17 PII / secret types (6 of them India-locale, opt-in), 4 masking strategies",
       "RBAC + rate limits + time windows + capability gating",
-      "CVE regression suite: 30 tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026)",
+      "CVE regression suite reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), catalogued at docs/cves/index.md",
       "OAuth 2.1 + PKCE S256 + RFC 8707 validators for MCP 2025-11-25",
       "OpenTelemetry audit export with documented semantic conventions",
       "Works with every major agent framework (LangChain, LangGraph, CrewAI, AutoGen, OpenAI SDK, Anthropic SDK, PydanticAI, smolagents, LlamaIndex)"
@@ -25,8 +25,8 @@
       "Offline-capable. The CVE suite, policy presets, and validators all work air-gapped."
     ],
     "proof_points": [
-      "3,749 tests passing at 86.85% measured coverage (CI-enforced floor 82%)",
-      "47 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), of which 40 are CVE-numbered and listed in the generated catalog at docs/cves/index.md (the other 7 are advisory regressions with no CVE id of their own, plus umbrella modules whose CVEs are already listed)",
+      "4,646 tests passing (CI-enforced coverage floor 82%)",
+      "47 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), of which 41 are CVE-numbered and listed in the generated catalog at docs/cves/index.md (the other 6 are advisory regressions with no CVE id of their own, plus umbrella modules whose CVEs are already listed)",
       "75 policy presets (curated security defaults), enumerated at runtime by policy_presets.list_active()"
     ],
     "audience": [

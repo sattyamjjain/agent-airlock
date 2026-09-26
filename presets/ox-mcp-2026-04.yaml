@@ -10,12 +10,11 @@ presets:
     factory: stdio_guard_ox_defaults
     primary_source: https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20
     disclosed_at: 2026-04-15
-  - id: manifest_only_mode
-    factory: manifest_only_mode
-    enabled: false
-    allowlist_fallback: true
-    primary_source: https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20
-    disclosed_at: 2026-04-15
+  # Manifest-only STDIO launching (agent_airlock.mcp_spec.manifest_only_mode) is the
+  # other half of OX's recommendation, and it is not a preset: it needs a signing key
+  # and pre-registered manifests, so it is opted into in code (ManifestRegistry plus
+  # launch_from_manifest). An entry here used to name it as `factory: manifest_only_mode`,
+  # which no preset defines; it only loaded because it was disabled.
   - id: gitpilot_mcp_cve_2026_6980
     factory: gitpilot_mcp_cve_2026_6980_defaults
     cve_id: CVE-2026-6980

@@ -12,7 +12,7 @@ column replays a **recorded live measurement** of a Docker MCP Gateway
 (`benchmarks/vs_gateway/gateway_measurement.json`); regenerate it with
 `benchmarks/vs_gateway/gateway_harness/` (needs a Docker daemon).
 
-## The number (re-measured live 2026-08-17)
+## The number (re-measured live 2026-09-12)
 
 Identical corpus: **12 malformed tool-call payloads + 3 benign controls**, sent
 through both layers.
@@ -29,7 +29,8 @@ gateway forwards to the backend.** Airlock p50 ≈ 0.08 ms/decision.
 
 Re-measured **2026-08-17** against a live gateway: `docker mcp` CLI plugin **v0.42.1**,
 gateway image version **2.0.1**, Docker engine **29.4.3**. Same result as the 2026-07-16
-run — **0 / 12** — so the finding is reproduced, not inherited.
+run — **0 / 12** — so the finding is reproduced, not inherited. The 2026-09-12 re-measure
+on CLI v0.43.3 and engine 29.7.2 reproduced it again; see its section below.
 
 Stated precisely, because a competitive claim against a moving target decays: **v2.0.1 is
 what the currently-installed `docker mcp` plugin runs**, not necessarily the newest build
