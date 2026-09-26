@@ -11,6 +11,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.10] - 2026-09-26
+
+### Fixed
+
+- **CVE-2026-32211 had a regression test and no catalog row.** The module was named
+  `test_azure_mcp_cve_2026_32211.py`, and `gen_cve_catalog.py` globs `test_cve_*.py`, so it
+  never reached `docs/cves/index.md`. It is now `test_cve_2026_32211_azure_mcp_token_echo.py`,
+  its header carries the parsed `Advisory:` / `NVD:` / `CVSS:` fields instead of a bulleted
+  list the parser could not read, and the catalog is regenerated: 41 CVE-numbered modules,
+  39 distinct CVEs. The marketplace listing had described every uncatalogued module as having
+  "no CVE id of their own", which was false for this one. Sources:
+  https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211 and
+  https://nvd.nist.gov/vuln/detail/CVE-2026-32211.
+
+- **A preset named a factory that does not exist.** `presets/ox-mcp-2026-04.yaml` carried
+  `factory: manifest_only_mode`, which no preset defines. It only loaded because the entry was
+  disabled; enabling it raised `PresetParseError`, and `docs/presets/yaml-format.md` told
+  readers to opt in. Manifest-only launching needs a signing key and pre-registered manifests,
+  so it is not a preset at all: the entry is replaced by a comment pointing at the code path.
+  Every `factory:` in `presets/*.yaml` must now resolve, disabled entries included.
+
+- **`marketplace.json` carried three stale numbers.** A feature bullet said "30 tests" while
+  the gated proof point said 47. The test-count proof point said "3,749 tests passing at
+  86.85%" while the badge said 4,624 at 87.51%. The sanitisation bullet said "12 PII / secret
+  types" against 17 `SensitiveDataType` members. The proof-point count is now pinned to the
+  README badge, feature bullets may not carry test or CVE counts, and the sanitisation numbers
+  are read off the enums. The measured-coverage figure, which moves every release, is gone.
+
+- **The AgentDojo figure said two suites and 84.4% in three places.**
+  `scripts/generate_benchmark.py` (so `BENCHMARK.md`), `benchmarks/blockrate/report.py` (so
+  `benchmarks/blockrate/RESULTS.md`) and `benchmarks/agentdojo/__init__.py` still said
+  workspace + banking, 324/384 = 84.4%, weeks after the bench moved to all four suites:
+  524/609 = 86.0%, reproduced exactly on 2026-09-08. `BENCHMARK.md` is regenerated, and only
+  its AgentDojo section moved. `blockrate/RESULTS.md` is hand-edited rather than regenerated,
+  because regenerating re-measures latency and would stamp that under its 2026-09-16 date.
+
+- **`SECURITY.md` cited a superseded injection run.** It described the 2026-08-26 run
+  (`codex` benign 1/36, p = 1.00). The 2026-09-20 re-run is a 0/144 null and weaker evidence,
+  with `codex`'s bound at 13.8% because it finished only 52 of 72 cells. It now says so.
+
+- **Benchmark dates disagreed with their own records.** `benchmarks/mcp_conformance/RESULTS.md`
+  said "last run 2026-08-10" while its clean 2026-09-08 re-run (commit `c04d297`) had moved the
+  README marker. `benchmarks/toolprivbench/README.md` said 2026-06-22 while its `## Re-runs`
+  table records 2026-09-08. `benchmarks/vs_gateway/RESULTS.md` headlined 2026-08-17 above a
+  recorded 2026-09-12 re-measure. Each now names its latest recorded run. The AgentDojo rows in
+  the README and `docs/benchmarks/index.md` put one date on two halves: the free bound re-run
+  on 2026-09-08 and the 45% → 10% model pass of 2026-08-08. The model pass now carries its own
+  date, as the 2026-09-08 block in `benchmarks/agentdojo/RESULTS.md` said the README would.
+
+- **Two docs pages linked out of the docs tree.** `docs/benchmarks/mcp-gateway-payload-gap.md`
+  and `docs/benchmarks/vs-native-mcp-gateway.md` linked
+  `../../benchmarks/vs_gateway/gateway_harness/`: live on GitHub, dead on the site.
+  `check_links.py` resolved it from the repo root, and `mkdocs build --strict` logs a link to a
+  directory only at INFO, so nothing failed. The links are absolute now, and `check_links.py`
+  requires a `docs/` page's links to resolve from the page itself and stay inside `docs/`.
+
+- **The #168 Together-routing regressions never ran in CI.** They sit in a module that
+  `importorskip`s `agentdojo`, which no CI job installs. The routing they guard
+  (`_infer`, `_is_auto_registerable`) imports nothing from `agentdojo`, so
+  `tests/test_agentdojo_model_routing.py` pins it where CI runs.
+
+- **`make help` omitted three targets**, `check-docs` and both registry-parity gates, while
+  CLAUDE.md said it listed every one. `tests/test_makefile_help.py` pins the help to `.PHONY`
+  and `.PHONY` to the rules the Makefile defines. `benchmarks/__init__.py` named a nonexistent
+  `benchmark_policy` in `__all__` and a command that collects nothing; it now describes the
+  package.
+
+### Changed
+
+- `SUPPORTED_CREWAI_VERSIONS` adds 1.15.22, verified on a real `Crew`, and
+  `SUPPORTED_PYDANTIC_AI_VERSIONS` adds 2.31.1, verified by a real agent run, so neither warns
+  on those versions. `CITATION.cff` cites 0.10.9.
+
 ## [0.10.9] - 2026-09-26
 
 ### Fixed

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import agent_airlock
 from agent_airlock import policy_presets
+from agent_airlock.sanitizer import _INDIA_LOCALE_PII_TYPES, MaskingStrategy, SensitiveDataType
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -118,7 +119,8 @@ def _cve_regression_module_count() -> int:
     The old counter globbed only ``test_cve_*.py`` (30), silently dropping the
     ``test_ghsa_*`` / ``test_ox_*`` modules and CVE regressions named after their
     subject rather than the ``test_cve_`` prefix (e.g.
-    ``test_azure_mcp_cve_2026_32211``, ``test_vercel_contextai_oauth``). Every
+    ``test_vercel_contextai_oauth``, and ``test_azure_mcp_cve_2026_32211`` until it was
+    renamed to ``test_cve_2026_32211_*`` in v0.10.10). Every
     ``test_*.py`` in the directory reproduces a disclosed CVE / advisory and
     asserts an airlock primitive blocks it, EXCEPT the internal-corpus modules in
     ``_NON_DISCLOSURE_CVE_MODULES``. This is the single number every published
@@ -487,3 +489,47 @@ def test_distribution_test_counts_match_the_badge() -> None:
         "docs/distribution test count(s) drifted from the README TEST-BADGE "
         f"({badge:,}); refresh to the badge value:\n" + "\n".join(offenders)
     )
+
+
+def test_proof_point_test_count_matches_the_badge() -> None:
+    """The marketplace test-count proof point must equal the README TEST-BADGE value.
+
+    It read "3,749 tests passing at 86.85% measured coverage" while the badge said
+    4,624 tests at 87.51%, and nothing compared the two. The measured-coverage figure
+    moves on every release and is gone; the count is pinned the way the distribution
+    drafts are.
+    """
+    proof = " ".join(_load_marketplace().get("listing", {}).get("proof_points", []))
+    m = re.search(r"([\d,]+)\s+tests passing", proof)
+    assert m, f"proof_points missing a 'N tests passing' claim: {proof!r}"
+    assert int(m.group(1).replace(",", "")) == _badge_test_count(), (
+        "marketplace test count drifted from the README TEST-BADGE; refresh it"
+    )
+
+
+def test_feature_bullets_carry_no_test_or_cve_count() -> None:
+    """Counts of tests or CVEs belong in the gated proof points, not the feature bullets.
+
+    A bullet said "CVE regression suite: 30 tests" long after the gated proof point said
+    47. No test read the bullets, so it never failed.
+    """
+    bullets = _load_marketplace().get("listing", {}).get("feature_bullets", [])
+    offenders = [b for b in bullets if re.search(r"\d[\d,]*\s+(?:tests?|CVEs?)\b", b)]
+    assert not offenders, f"move these counts into proof_points: {offenders}"
+
+
+def test_sanitizer_bullet_counts_match_the_code() -> None:
+    """The output-sanitisation bullet's numbers are read off the enums, not remembered.
+
+    It said "12 PII / secret types" against 17 ``SensitiveDataType`` members.
+    """
+    bullets = " ".join(_load_marketplace().get("listing", {}).get("feature_bullets", []))
+    m = re.search(
+        r"(\d+) PII / secret types \((\d+) of them India-locale, opt-in\), "
+        r"(\d+) masking strategies",
+        bullets,
+    )
+    assert m, f"sanitisation bullet not found in: {bullets!r}"
+    assert int(m.group(1)) == len(SensitiveDataType)
+    assert int(m.group(2)) == len(_INDIA_LOCALE_PII_TYPES)
+    assert int(m.group(3)) == len(MaskingStrategy)

@@ -57,7 +57,7 @@ from ._tool_proxy import named_tool_proxy
 logger = structlog.get_logger("agent-airlock.integrations.crewai")
 
 
-SUPPORTED_CREWAI_VERSIONS: tuple[str, ...] = ("1.14.4", "1.14.5a1", "1.14.5a2")
+SUPPORTED_CREWAI_VERSIONS: tuple[str, ...] = ("1.14.4", "1.14.5a1", "1.14.5a2", "1.15.22")
 """CrewAI versions this adapter has been smoke-tested against.
 
 A user running an unsupported version sees a :class:`UserWarning`
@@ -65,6 +65,10 @@ A user running an unsupported version sees a :class:`UserWarning`
 hard failure — the public surface tested is the agents/tools walk,
 which has been stable since v1.14.4. Update this tuple when a new
 version is verified.
+
+1.15.22 was verified on a real ``Crew``: agent- and task-level tools were
+wrapped, and under a deny-all policy ``Tool.run`` and the structured-tool
+path an agent run uses were both refused without the tool body running.
 """
 
 _INSTALL_HINT = (

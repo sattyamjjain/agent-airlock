@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_airlock import policy_presets
 from agent_airlock.preset_loader import (
     LoadedPreset,
     PresetParseError,
@@ -34,7 +35,7 @@ class TestSchemaValidation:
         assert loaded.schema_version == 1
         assert "ox.security" in loaded.primary_source
         assert loaded.disclosed_at == "2026-04-15"
-        assert len(loaded.presets) == 9
+        assert len(loaded.presets) == 8
         for entry in loaded.presets:
             assert entry["id"]
             assert entry["factory"]
@@ -83,6 +84,29 @@ class TestSchemaValidation:
     def test_missing_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(PresetParseError, match="not found"):
             load_yaml_preset(tmp_path / "does-not-exist.yaml")
+
+
+class TestEveryNamedFactoryResolves:
+    """A ``factory:`` name must resolve even on an entry that is disabled.
+
+    ``compose_preset_factories`` skips ``enabled: false`` entries before resolving them,
+    so the OX preset carried ``factory: manifest_only_mode``, which no preset defines,
+    for as long as the entry stayed disabled; enabling it raised ``PresetParseError``.
+    """
+
+    @pytest.mark.parametrize(
+        "path", sorted((ROOT / "presets").glob("*.yaml")), ids=lambda path: path.name
+    )
+    def test_every_factory_is_a_registered_preset(self, path: Path) -> None:
+        registered = {meta.factory_name for meta in policy_presets.list_active()}
+
+        unresolved = [
+            entry["factory"]
+            for entry in load_yaml_preset(path).presets
+            if entry["factory"] not in registered
+        ]
+
+        assert not unresolved, f"{path.name} names unregistered factories: {unresolved}"
 
 
 class TestCompose:

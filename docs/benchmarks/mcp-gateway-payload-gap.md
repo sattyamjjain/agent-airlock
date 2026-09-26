@@ -180,4 +180,4 @@ Docker engine 29.4.3 · MCP protocol `2025-06-18` · measured 2026-07-16. Raw da
 [`benchmarks/vs_gateway/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/vs_gateway/RESULTS.md).
 Shorter summary: [`vs-native-mcp-gateway.md`](vs-native-mcp-gateway.md).
 Regeneration harness:
-[`benchmarks/vs_gateway/gateway_harness/`](../../benchmarks/vs_gateway/gateway_harness/).
+[`benchmarks/vs_gateway/gateway_harness/`](https://github.com/sattyamjjain/agent-airlock/tree/main/benchmarks/vs_gateway/gateway_harness).

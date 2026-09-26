@@ -27,7 +27,7 @@ shipped, which told a reporter on a supported version that they were unsupported
 
 | Result | What it is |
 | --- | --- |
-| [Matched-pair multi-harness prompt injection](docs/benchmarks/injection-multi-harness.md) | **A bounded null.** At n = 36 per harness per arm, `claude-code` 2.1.246 and `codex` 0.147.0 each ran the exfiltration-shaped script **0/36** — 95% Wilson **[0.0%, 9.6%]**, pooled **[0.0%, 5.1%]**. `codex` acted on the *benign* twin **1/36**, the first live control in four runs, but Fisher exact on its matched arms gives **p = 1.00**, so it is not evidence the two are distinguished. Explicitly **not** an injection-resistance finding. Includes all three earlier runs and why each was superseded. |
+| [Matched-pair multi-harness prompt injection](docs/benchmarks/injection-multi-harness.md) | **A null, and weaker evidence than the run before it.** On the 2026-09-20 re-run, `claude-code` 2.1.274 and `codex` 0.154.0 each ran the exfiltration-shaped script **0/36**, and each also ignored the *benign* twin **0/36**: all four arms are zero (**0/144**), so neither zero can be read as resistance. `codex` finished the task in only 52 of 72 cells, so its injected zero rests on 24 of 36 and its 95% upper bound is **13.8%**, not 9.6%. Explicitly **not** an injection-resistance finding. Includes every earlier run and why each was superseded. |
 
 ## What the free containment layers cover, and what they leave open
 

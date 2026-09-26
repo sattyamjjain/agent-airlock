@@ -67,10 +67,10 @@ result = crew.kickoff()
    overrides — these win over `Agent.tools` at runtime, so they
    need wrapping too.
 
-3. **Pins `SUPPORTED_CREWAI_VERSIONS = ("1.14.4", "1.14.5a1",
-   "1.14.5a2")`** — running a version outside this set emits a
-   `UserWarning` (no hard fail). Update the tuple once a new
-   release has been smoke-tested against the adapter.
+3. **Pins `SUPPORTED_CREWAI_VERSIONS`** (listed in the module) —
+   running a version outside this set emits a `UserWarning` (no hard
+   fail). Update the tuple once a new release has been smoke-tested
+   against the adapter.
 
 4. **`wrap_agent(agent, policy=...)`** is also exposed as a
    single-agent shortcut for the standalone-researcher pattern

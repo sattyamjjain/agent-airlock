@@ -23,6 +23,8 @@ Scope, deliberately narrow
   defects. Badge and advisory URLs are checked by hand at release.
 * **Anchors are not resolved.** ``file.md#section`` is checked for ``file.md`` only.
 * ``site/`` is skipped — it is generated build output, not source.
+* **Pages under ``docs/`` must link inside ``docs/``.** mkdocs publishes nothing else, so
+  a link that leaves the tree is dead on the site even when it resolves on GitHub.
 
 Exit codes: ``0`` pass, ``1`` at least one dead link.
 """
@@ -35,6 +37,9 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
+
+#: The tree mkdocs publishes; links on pages inside it must stay inside it.
+_DOCS = _ROOT / "docs"
 
 #: Directories whose markdown is generated or vendored, not authored here.
 _SKIP_DIRS = {"site", ".git", "node_modules", ".venv", "htmlcov"}
@@ -70,20 +75,33 @@ def markdown_files() -> list[Path]:
     return sorted(out)
 
 
-def dead_links(path: Path) -> list[tuple[int, str]]:
-    """Return ``(line_number, target)`` for each relative link that does not resolve."""
+def dead_links(path: Path, *, docs_root: Path = _DOCS) -> list[tuple[int, str]]:
+    """Return ``(line_number, target)`` for each relative link that does not resolve.
+
+    A page under ``docs_root`` is held to what mkdocs serves: its links resolve from the
+    page itself and must stay inside ``docs_root``, because nothing outside it is
+    published. ``../../benchmarks/...`` from ``docs/benchmarks/`` resolved on GitHub and
+    passed the repo-root fallback below, while being dead on the site — and
+    ``mkdocs build --strict`` only logs a link to a directory at INFO, so no gate failed.
+    """
     raw = path.read_text(encoding="utf-8", errors="ignore")
     stripped = _strip_code(raw)
     dead: list[tuple[int, str]] = []
+    docs_root = docs_root.resolve()
+    served = docs_root in path.resolve().parents
 
     for match in _LINK_RE.finditer(stripped):
         target = match.group("target").split("#", 1)[0].strip()
         if not target:
             continue  # pure anchor, e.g. [x](#y) — nothing to resolve
         line_no = stripped.count("\n", 0, match.start()) + 1
+        if served:
+            resolved = (path.parent / target).resolve()
+            if resolved.exists() and (resolved == docs_root or docs_root in resolved.parents):
+                continue
         # Resolve relative to the file, then (for docs written against the repo root)
         # fall back to the root. Either resolving is enough.
-        if (path.parent / target).exists() or (_ROOT / target).exists():
+        elif (path.parent / target).exists() or (_ROOT / target).exists():
             continue
         dead.append((line_no, target))
     return dead

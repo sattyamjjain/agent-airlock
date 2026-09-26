@@ -1,17 +1,19 @@
 """CVE-2026-32211 — Azure MCP Server SSE token-echo (v0.5.3+).
 
-Microsoft disclosed 2026-04-20: the reference Azure MCP server echoed
-the caller's ``Authorization`` header back in a ``WWW-Authenticate``
-field on 401 responses, leaking short-lived AAD tokens. CVSS 8.6,
-fixed in Azure MCP Server 1.4.2.
+Vulnerability (from the Microsoft disclosure, 2026-04-20):
+    The reference Azure MCP server echoed the caller's ``Authorization``
+    header back in a ``WWW-Authenticate`` field on 401 responses, leaking
+    short-lived AAD tokens. Fixed in Azure MCP Server 1.4.2.
+
+Advisory: https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211
+NVD:      https://nvd.nist.gov/vuln/detail/CVE-2026-32211
+CVSS:     8.6 (High)
 
 This regression codifies the echo-class so a proxy sitting in front
-of an unpatched server refuses to forward the leaked token.
-
-Primary sources
----------------
-- MSRC: https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-32211
-- NVD:  https://nvd.nist.gov/vuln/detail/CVE-2026-32211
+of an unpatched server refuses to forward the leaked token. It was
+named ``test_azure_mcp_cve_2026_32211.py`` until v0.10.10, which kept
+it out of the generated catalog (``gen_cve_catalog.py`` globs
+``test_cve_*.py``).
 """
 
 from __future__ import annotations

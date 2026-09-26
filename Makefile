@@ -13,10 +13,13 @@ help:
 	@echo "  verify-corpus           Verify wild_payload_corpus MANIFEST.sha256"
 	@echo "  check-links             Dead relative-link gate (README + docs/)"
 	@echo "  check-cve-catalog       docs/cves/index.md matches the tests/cves/ suite"
+	@echo "  check-docs              mkdocs build --strict, built outside the tree (needs the [docs] extra)"
 	@echo "  check-changelog         Post-release drift gate (fails if [Unreleased] has entries after a release)"
 	@echo "  check-changelog-release Pre-tag gate (fails if [Unreleased] is empty)"
-	@echo "  check-benchmark-freshness         Structural gate (every benchmark row carries a date)"
+	@echo "  check-benchmark-freshness         Structural gate (dated rows; every docs/benchmarks/ page in the nav)"
 	@echo "  check-benchmark-freshness-release Pre-tag gate (fails on a benchmark claim >30d old)"
+	@echo "  check-registry-parity             Declared version must not outrun PyPI (distance and age)"
+	@echo "  check-registry-parity-distance    Release gate: refuse to skip a version (distance only)"
 
 verify-corpus:
 	@python3 scripts/verify_corpus_manifest.py
