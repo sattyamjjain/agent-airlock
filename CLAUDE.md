@@ -74,7 +74,7 @@ make check-registry-parity-distance     # release-only: refuse to skip a version
 
 What gates a merge — `ci.yml` jobs, on PRs and pushes to `main`:
 
-- `test` (full Python matrix) — installs `.[dev,redis]`; ruff check, mypy, pytest with the
+- `test` (full Python matrix) — installs `.[dev,redis,mcp]`; ruff check, mypy, pytest with the
   coverage floor, `generate_benchmark.py --check`, and a pytest-benchmark smoke run that
   asserts the suite executes (deliberately not a latency threshold).
 - `lint` — `ruff format --check` only.
@@ -150,6 +150,8 @@ src/agent_airlock/
 ├── exceptions.py      AirlockError base only; exception classes live where they're raised
 ├── testing.py         state-reset helpers for test isolation
 ├── _log.py            structlog-or-stdlib logging shim
+├── _sandbox_errors.py sandbox exception classes shared by core.py and sandbox.py, so
+│                      core.py can raise them without importing agent_airlock.sandbox
 │
 ├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
@@ -165,8 +167,9 @@ src/agent_airlock/
 │                action_contradiction_gate.py, tool_output_trust_guard.py,
 │                done_receipt_guard.py
 ├── mcp_spec/    per-CVE / per-spec-revision MCP guards — largest subpackage, own CLAUDE.md
-├── mcp/         FastMCP integration (MCPAirlock, secure_tool, create_secure_mcp_server)
-│                plus cimd.py — pinned CIMD trust anchor, denies on drift
+├── mcp/         FastMCP integration (MCPAirlock, secure_tool, create_secure_mcp_server) —
+│                a refusal raises FastMCP's ToolError (error result whatever the return
+│                type); plus cimd.py — pinned CIMD trust anchor, denies on drift
 ├── kill_switch/ quorum-signed fleet freeze — registry, signer, quorum, broadcast, transports/
 ├── data/        dated snapshots (model pricing, advisory blast radius)
 ├── fixtures/    dated pattern files (redaction patterns)
@@ -278,6 +281,10 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   value, even on an `enabled: false` entry, must name a preset registered in
   `policy_presets.list_active()` — `tests/presets/test_ox_mcp_yaml.py` checks this
   against every file under `presets/`, not just the one it's named for.
+- **No silent config no-ops** — a stored `AirlockConfig` field that nothing applies must
+  be listed in `config._NOT_APPLIED` (field name → what to use instead), so
+  `_warn_on_settings_not_applied` emits a `UserWarning` when it's set away from its
+  default. Never add a setting that quietly does nothing.
 - **Dated snapshots** — pricing tables, advisory blast-radius data and redaction patterns
   ship as dated files under `data/` and `fixtures/`; a refresh is a new dated file, not an
   edit to the old one.
@@ -349,13 +356,19 @@ recounts it over a number pasted into prose.
   without naming the CVE that motivated it.
 - Every `feat:` needs at least one regression test.
 - Run `make lint` and `pytest -m "not docker"` before committing.
+- `tests/conftest.py` redirects the default `airlock_audit.json` path to a temp file, but
+  only inside that pytest process — a test that runs an example or script in a subprocess
+  must pass `cwd=tmp_path` itself, or the child process writes its audit log into the
+  checkout.
 - `bare-install` is the job that enforces the Pydantic-only core — if you add an import
   that is not in an extra, that job fails, not the test suite.
 - **Version bumps** must move every surface a test pins — `pyproject.toml` + `__version__`,
   `.claude-plugin/plugin.json`, `CITATION.cff` (version plus that release's CHANGELOG
   date), the supported minor line in `SECURITY.md`, the README badge (`make test-badge`) —
   and need a conformant `## [X.Y.Z]` CHANGELOG heading. Tag `vX.Y.Z` within one commit of
-  the bump, or `version-tag-guard` turns `main` red.
+  the bump, or `version-tag-guard` turns `main` red. Push the tag as soon as the squash merge
+  lands: the merge's own push run also runs `check_registry_parity.py`, which fails on a
+  dated CHANGELOG section with no tag yet (re-run that job once the tag exists).
 - `make test-badge` rewrites the README test count; the hand-written copies under
   `docs/distribution/` must match it in the same commit (`test_numeric_claim_parity.py`).
 - A new page under `docs/benchmarks/` must be added to the `mkdocs.yml` nav, and the dates
