@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -166,3 +167,53 @@ class TestPostToolUseDurationMsRegression:
         )
         assert body["duration_ms"] == 0
         assert body["sdk_field_durations_present"] is True
+
+
+class _TypedForwardTool:
+    """A tool object whose ``forward`` declares a real signature."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.calls: list[Any] = []
+
+    def forward(self, n: int) -> str:
+        self.calls.append(n)
+        return f"{self.name}:{n}"
+
+
+def _blocked(result: Any) -> bool:
+    return isinstance(result, dict) and result.get("status") == "blocked"
+
+
+class TestToolArgumentsAreValidated:
+    """Regression: the adapter handed Airlock a ``(*args, **kwargs)`` proxy, always sync."""
+
+    def test_a_wrong_type_is_rejected(self) -> None:
+        tool: Any = _TypedForwardTool("count")  # Any: wrapping replaces forward's type
+        AnthropicClaudeAgentSDKAdapter().wrap_agent(_StubAgent({"count": tool}))
+
+        result = tool.forward(n="5")
+
+        assert _blocked(result)
+        assert "validation failed" in str(result.get("error"))
+        assert tool.calls == []
+
+    def test_a_ghost_argument_is_stripped(self) -> None:
+        tool: Any = _TypedForwardTool("count")
+        AnthropicClaudeAgentSDKAdapter().wrap_agent(_StubAgent({"count": tool}))
+
+        assert tool.forward(n=5, ghost="x") == "count:5"
+        assert tool.calls == [5]
+
+    async def test_an_async_tool_is_awaited_inside_airlock(self) -> None:
+        # A sync proxy got Airlock's sync wrapper, which returned the un-awaited coroutine
+        # before the tool ran, so its output skipped sanitisation.
+        async def lookup(n: int) -> str:
+            return f"{n}: write to alice@example.com"
+
+        agent = _StubAgent({"lookup": lookup})  # type: ignore[dict-item]
+        AnthropicClaudeAgentSDKAdapter().wrap_agent(agent)
+        guarded = agent.tools["lookup"]  # type: ignore[index]
+
+        assert inspect.iscoroutinefunction(guarded)
+        assert "alice@example.com" not in await guarded(n=1)

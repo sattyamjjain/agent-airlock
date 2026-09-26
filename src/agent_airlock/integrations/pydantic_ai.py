@@ -35,6 +35,7 @@ Primary sources
 
 from __future__ import annotations
 
+import inspect
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
+from ._tool_proxy import named_tool_proxy
 
 logger = structlog.get_logger("agent-airlock.integrations.pydantic_ai")
 
@@ -78,6 +80,37 @@ class PydanticAIMissingError(AirlockError):
     actionable error instead of a deep ``ImportError`` from inside
     PydanticAI's package layout.
     """
+
+
+def _run_context_params(tool: Any, forward: Callable[..., Any]) -> frozenset[str]:
+    """The parameter PydanticAI fills with a ``RunContext``: the first, when ``takes_ctx``.
+
+    It is relaxed to ``Any`` for strict validation. The model never supplies it, and a
+    ``RunContext`` carries a model, a tracer and the run's usage, which have no Pydantic
+    schema to validate against.
+    """
+    if not getattr(tool, "takes_ctx", False):
+        return frozenset()
+    try:
+        parameters = inspect.signature(forward).parameters
+    except (TypeError, ValueError):
+        return frozenset()
+    return frozenset(list(parameters)[:1])
+
+
+def _repoint_function_schema(
+    tool: Any, *, original: Callable[..., Any], wrapped: Callable[..., Any]
+) -> None:
+    """Point ``tool.function_schema.function`` at the guarded callable.
+
+    PydanticAI runs a tool through ``tool.function_schema.call``, which invokes the
+    function captured when the ``Tool`` was built, not ``tool.function``. Replacing only
+    ``tool.function`` left real agent runs outside Airlock entirely: on pydantic-ai
+    2.31.1, both a plain and a ``RunContext`` tool ran under a deny-all policy.
+    """
+    schema = getattr(tool, "function_schema", None)
+    if schema is not None and getattr(schema, "function", None) is original:
+        schema.function = wrapped
 
 
 @dataclass
@@ -198,19 +231,17 @@ class PydanticAIAdapter:
                 f"tool {name!r} has no callable attribute (`function`/`run`/__call__); cannot wrap"
             )
 
-        # Re-tag the proxy with the tool's name so SecurityPolicy
-        # allowed/denied lists target the tool, not its method name.
-        def _named_proxy(*args: Any, **kwargs: Any) -> Any:
-            return forward(*args, **kwargs)
-
-        _named_proxy.__name__ = name
-        _named_proxy.__qualname__ = name
-
+        # The proxy carries the tool's name, so SecurityPolicy lists match the tool
+        # rather than `function`, and the tool's signature, so Airlock validates it.
+        proxy = named_tool_proxy(
+            forward, name=name, relaxed_params=_run_context_params(tool, forward)
+        )
         airlock = Airlock(policy=policy) if policy is not None else Airlock()
-        wrapped = airlock(_named_proxy)
+        wrapped = airlock(proxy)
 
         if target_attr is not None:
             setattr(tool, target_attr, wrapped)  # noqa: B010
+            _repoint_function_schema(tool, original=forward, wrapped=wrapped)
             return tool
         return wrapped
 

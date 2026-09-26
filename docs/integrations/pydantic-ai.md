@@ -19,7 +19,7 @@ the hooks.
 pip install "agent-airlock[pydantic-ai]"
 ```
 
-The extra pins `pydantic-ai>=1.88.0,<2.0`. v1.88.0 is the floor because
+The extra pins `pydantic-ai>=1.88.0,<3.0`. v1.88.0 is the floor because
 that's the release that introduced the `output_validate` hook the
 adapter binds to (PR pydantic/pydantic-ai#4859).
 
@@ -40,11 +40,11 @@ def get_weather(city: str) -> str:
 adapter = PydanticAIAdapter()
 adapter.wrap_agent(agent, policy=STRICT_POLICY)
 
-# Now every tool call routes through the configured policy:
-# - ghost-arg stripping
-# - Pydantic V2 strict validation
-# - PolicyViolation on denied tools
-# - sanitization on the model's structured output (output_validate)
+# Now every tool call in an agent run goes through Airlock:
+# - the policy (a denied tool returns a blocked AirlockResponse instead of running)
+# - strict validation of the tool's declared parameters
+# - sanitization of each tool's output
+# - sanitization of the model's structured output, where output_validate exists (1.x)
 result = agent.run_sync("What's the weather in Bangalore?")
 ```
 
@@ -52,18 +52,23 @@ result = agent.run_sync("What's the weather in Bangalore?")
 
 1. **Walks `agent.toolsets`** (PydanticAI v1.88+ public surface) and
    replaces each function-tool's callable with the
-   `Airlock(policy=...)`-wrapped version. Tools are re-tagged so
+   `Airlock(policy=...)`-wrapped version — both `tool.function` and
+   `tool.function_schema.function`, which is the one an agent run
+   actually calls. The wrapper carries the tool's name, so
    `SecurityPolicy.allowed_tools` / `denied_tools` lists target the
-   tool's name, not its method name.
+   tool rather than its method, and the tool's signature, so strict
+   validation and ghost-argument stripping have parameters to check.
+   A `RunContext` first parameter is passed through unvalidated; the
+   model never supplies it.
 
 2. **Attaches `output_validate`** (default `attach_output_validate=True`).
    The hook runs `agent_airlock.sanitizer.sanitize_output` over the
    model's structured output before it leaves the boundary.
 
-3. **Pins `SUPPORTED_PYDANTIC_AI_VERSIONS = ("1.88.0", "1.89.0",
-   "1.89.1")`** — running a version outside this set emits a
-   `UserWarning` (no hard fail). Update the tuple once a new release
-   has been smoke-tested against the adapter.
+3. **Pins `SUPPORTED_PYDANTIC_AI_VERSIONS`** (listed in the module) —
+   running a version outside this set emits a `UserWarning` (no hard
+   fail). Update the tuple once a new release has been smoke-tested
+   against the adapter.
 
 ## Honest scope
 
@@ -73,6 +78,11 @@ result = agent.run_sync("What's the weather in Bangalore?")
 - Real PydanticAI objects (whose `__module__` starts with `pydantic_ai.*`)
   do trigger the import check. If the extra is missing, the adapter
   raises `PydanticAIMissingError` with a clear install hint.
+- PydanticAI validates tool arguments against its own schema before the
+  call, in lax mode: a coercible value such as `"5"` for an `int`
+  arrives converted, and an unknown argument is rejected there
+  (verified on 2.31.1). Airlock's strict check applies to what
+  PydanticAI hands the tool.
 - The example-only path (`examples/pydanticai_integration.py`) remains
   documented and still works — `@Airlock()` over a raw
   `@agent.tool_plain` is supported.

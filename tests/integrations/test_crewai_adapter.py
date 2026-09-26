@@ -179,3 +179,85 @@ class TestCrewAIAdapter:
 
     def test_supported_versions_tuple_documented(self) -> None:
         assert "1.14.4" in SUPPORTED_CREWAI_VERSIONS
+
+
+class _TypedBaseTool:
+    """A ``BaseTool`` subclass whose ``_run`` declares a real signature."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.calls: list[Any] = []
+
+    def _run(self, n: int) -> str:
+        self.calls.append(n)
+        return f"{self.name}:{n}"
+
+
+class _DecoratedToolShape:
+    """Mirrors crewai 1.15.22's ``Tool``, which ``@tool`` builds (``tools/base_tool.py``).
+
+    ``func`` is the user callable. ``_run`` is a ``(*args, **kwargs)`` pass-through to
+    it, and ``run`` calls ``func`` directly, never ``_run``.
+    """
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.calls: list[Any] = []
+
+        def func(n: int) -> str:
+            self.calls.append(n)
+            return f"{name}:{n}"
+
+        self.func = func
+
+    def _run(self, *args: Any, **kwargs: Any) -> Any:
+        return self.func(*args, **kwargs)
+
+    def run(self, *args: Any, **kwargs: Any) -> Any:
+        return self.func(*args, **kwargs)
+
+
+def _blocked(result: Any) -> bool:
+    return isinstance(result, dict) and result.get("status") == "blocked"
+
+
+class TestToolArgumentsAreValidated:
+    """Regression: the adapter handed Airlock a ``(*args, **kwargs)`` proxy.
+
+    Strict validation then had no parameter to check and ghost-argument stripping saw a
+    ``**kwargs`` that accepts everything.
+    """
+
+    def test_a_base_tool_rejects_a_wrong_type(self) -> None:
+        tool: Any = _TypedBaseTool("count")  # Any: wrapping replaces _run's type
+        CrewAIAdapter().wrap_agent(_StubAgent([tool]))
+
+        result = tool._run(n="5")
+
+        assert _blocked(result)
+        assert "validation failed" in str(result.get("error"))
+        assert tool.calls == []
+
+    def test_a_base_tool_strips_a_ghost_argument(self) -> None:
+        tool: Any = _TypedBaseTool("count")
+        CrewAIAdapter().wrap_agent(_StubAgent([tool]))
+
+        assert tool._run(n=5, ghost="x") == "count:5"
+        assert tool.calls == [5]
+
+    def test_a_decorated_tool_is_wrapped_at_func_not_run(self) -> None:
+        tool = _DecoratedToolShape("count")
+        CrewAIAdapter().wrap_agent(_StubAgent([tool]))
+
+        assert "_run" not in vars(tool), "the class pass-through must be left alone"
+        assert _blocked(tool.run(n="5"))
+        assert tool.calls == []
+
+    def test_a_decorated_tool_run_path_is_guarded(self) -> None:
+        # Tool.run calls func directly, so wrapping _run left it outside Airlock: on
+        # crewai 1.15.22 a deny-all policy did not stop it.
+        tool = _DecoratedToolShape("count")
+        CrewAIAdapter().wrap_agent(_StubAgent([tool]), policy=SecurityPolicy(denied_tools=["*"]))
+
+        assert _blocked(tool.run(n=5))
+        assert tool.calls == []

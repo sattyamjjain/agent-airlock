@@ -54,11 +54,14 @@ result = crew.kickoff()
 ## What the adapter does
 
 1. **Walks `crew.agents`** and for each `Agent`, walks `agent.tools`
-   (CrewAI's `BaseTool` registry). Each tool's `_run` (or `func`)
-   callable is replaced with the `Airlock(policy=...)`-wrapped
-   version. Tools are re-tagged so `SecurityPolicy.allowed_tools` /
-   `denied_tools` lists target the tool's name, not its method
-   name.
+   (CrewAI's `BaseTool` registry). For an `@tool`-built tool the user
+   function (`func`) is replaced with the `Airlock(policy=...)`-wrapped
+   version, which covers `run`, `arun` and the structured-tool path an
+   agent uses; for a `BaseTool` subclass it is `_run`. The wrapper
+   carries the tool's name, so `SecurityPolicy.allowed_tools` /
+   `denied_tools` lists target the tool rather than its method, and the
+   tool's signature, so strict validation and ghost-argument stripping
+   have parameters to check.
 
 2. **Walks `crew.tasks`** for task-level `Task(tools=[...])`
    overrides — these win over `Agent.tools` at runtime, so they
@@ -84,6 +87,10 @@ result = crew.kickoff()
   adapter raises `CrewAIMissingError` with a clear install hint.
 - `crewai` is heavy (pulls `litellm`, `chromadb`, `embedchain`);
   kept strictly opt-in via the `[crewai]` extra.
+- CrewAI validates arguments against the tool's `args_schema` before
+  the call, in lax mode, so a coercible value such as `"5"` for an
+  `int` arrives converted (verified on 1.15.22). Airlock's strict
+  check applies to what CrewAI hands the tool.
 - The example-only path (`examples/crewai_integration.py`) remains
   documented and still works — `@Airlock()` over a raw
   `@tool`-decorated callable is supported.

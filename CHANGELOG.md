@@ -11,6 +11,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.9] - 2026-09-26
+
+### Fixed
+
+- **The PydanticAI adapter guarded nothing in a real agent run.** `wrap_agent` replaced
+  `tool.function`, but an agent run calls `tool.function_schema.call`, which invokes the
+  function captured when the `Tool` was built. On pydantic-ai 2.31.1, with the adapter
+  applied under a deny-all policy, `agent.run_sync()` executed both a plain tool and a
+  `RunContext` tool: no validation, no policy, no audit. The stub-based tests passed
+  throughout because a stub has no `function_schema`, so they called the replaced
+  attribute directly. `function_schema.function` now points at the guarded callable too,
+  and the same run executes neither tool.
+
+- **CrewAI `@tool` tools bypassed Airlock through `Tool.run` and `Tool.arun`.** The adapter
+  wrapped `_run` first, and every CrewAI tool has one, but on a `Tool` built by `@tool` it
+  is a `(*args, **kwargs)` pass-through to `func` that `Tool.run` and `Tool.arun` never
+  call. On crewai 1.15.22 a deny-all policy did not stop `Tool.run`, and `Tool.arun` ran
+  the tool body before raising. The adapter now wraps `func` when a tool has one, which
+  covers `run`, `arun` and the structured-tool path an agent uses; `BaseTool` subclasses
+  keep `_run`.
+
+- **All three walkers handed Airlock a signature-less proxy.** `crewai`, `pydantic_ai` and
+  `anthropic_claude_agent_sdk` re-tag each tool with its name so policy lists match it, and
+  did so with a `(*args, **kwargs)` proxy. Airlock validates the signature it is handed, so
+  strict validation had no parameter to check and ghost-argument detection saw a
+  `**kwargs` that accepts everything: through all three, `echo(n: int)` ran with `n="5"`
+  and an invented argument reached the tool. `google_adk` was unaffected, because it keeps
+  the tool's signature. The proxy now lives in `integrations/_tool_proxy.py` and carries
+  the tool's signature with annotations resolved as `validator.create_argument_validator`
+  resolves them. PydanticAI's `RunContext` parameter is relaxed to `Any`, as `google_adk`
+  relaxes ADK's `tool_context`.
+
+- **Async tools skipped output sanitisation.** The same proxy was always a plain `def`, so
+  an `async` tool got Airlock's sync wrapper. That wrapper audited success before the tool
+  ran and returned the un-awaited coroutine, and the result the framework awaited never
+  passed through sanitisation: an email address in an async tool's output came back
+  unmasked. The proxy is now `async` exactly when the tool is.
+
+- **The integration docs promised checks the adapters did not make.**
+  `docs/integrations/pydantic-ai.md` and `docs/integrations/anthropic-claude-agent-sdk.md`
+  listed ghost-argument stripping and strict validation, and both said denied tools raise
+  `PolicyViolation`; a denied tool returns a blocked `AirlockResponse`. The Claude Agent SDK
+  page also presented a "real SDK shape" that `claude-agent-sdk` does not have: its `@tool`
+  returns an `SdkMcpTool` with an async `handler`, and `ClaudeAgentOptions.tools` holds tool
+  names, so `wrap_agent` raises `AirlockError` on SDK objects (verified on 0.2.160). The
+  pages now describe what is wrapped and what is not, note that PydanticAI and CrewAI
+  coerce arguments with their own lax schemas before Airlock sees them, and drop version
+  tuples and an extra pin that had drifted from the code. The Claude adapter's docstrings
+  called its missing-extra error a `RuntimeError`; it is an `AirlockError`.
+
+### Changed
+
+- A walker now refuses, at wrap time, a tool whose arguments it cannot validate: a callable
+  with no readable signature raises `AirlockError`, and a parameter annotated with a type
+  that has no Pydantic schema raises Pydantic's `PydanticSchemaGenerationError`, as plain
+  `@Airlock()` always has. Both used to wrap and then validate nothing.
+
+- No CI job installs the three SDKs, so each regression test drives a stub that mirrors the
+  real object's call path (`FunctionSchema.call`, CrewAI's `Tool.run`) rather than an
+  `importorskip` test that would be skipped. Ten of the eleven new adapter tests fail
+  against `0.10.8`; the eleventh pins a guard that leaves an unexpected `function_schema`
+  alone.
+
 ## [0.10.8] - 2026-09-24
 
 ### Fixed
