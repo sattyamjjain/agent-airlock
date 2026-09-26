@@ -1113,10 +1113,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#policy-composition" class="md-nav__link">
+  <a href="#choosing-a-policy-per-call" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Policy Composition
+        Choosing a Policy per Call
       
     </span>
   </a>
@@ -2885,10 +2885,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#policy-composition" class="md-nav__link">
+  <a href="#choosing-a-policy-per-call" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Policy Composition
+        Choosing a Policy per Call
       
     </span>
   </a>
@@ -3007,15 +3007,12 @@
 - Smooth rate limiting, not hard cutoffs</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">RateLimit</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">rate_limit</span> <span class="o">=</span> <span class="n">RateLimit</span><span class="p">(</span><span class="n">calls</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">period_seconds</span><span class="o">=</span><span class="mi">3600</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">rate_limit</span> <span class="o">=</span> <span class="n">RateLimit</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">"100/hour"</span><span class="p">)</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="c1"># Check if allowed</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="k">if</span> <span class="n">rate_limit</span><span class="o">.</span><span class="n">is_allowed</span><span class="p">():</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="c1"># Proceed with call</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">rate_limit</span><span class="o">.</span><span class="n">consume</span><span class="p">()</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="c1"># Rate limited</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="n">retry_after</span> <span class="o">=</span> <span class="n">rate_limit</span><span class="o">.</span><span class="n">retry_after</span><span class="p">()</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="k">if</span> <span class="n">rate_limit</span><span class="o">.</span><span class="n">acquire</span><span class="p">():</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="o">...</span>  <span class="c1"># a token was taken: proceed with the call</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="o">...</span>  <span class="c1"># rate limited; rate_limit.remaining() is 0</span>
 </code></pre></div>
 <h2 id="time-based-restrictions">Time-Based Restrictions<a class="headerlink" href="#time-based-restrictions" title="Permanent link">&para;</a></h2>
 <p>Restrict when tools can be called:</p>
@@ -3029,100 +3026,116 @@
 <h3 id="time-window-format">Time Window Format<a class="headerlink" href="#time-window-format" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeWindow</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># Single window</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">window</span> <span class="o">=</span> <span class="n">TimeWindow</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="s2">"09:00"</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">"17:00"</span><span class="p">)</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">window</span> <span class="o">=</span> <span class="n">TimeWindow</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">"09:00-17:00"</span><span class="p">)</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">overnight</span> <span class="o">=</span> <span class="n">TimeWindow</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">"22:00-06:00"</span><span class="p">)</span>  <span class="c1"># a window may cross midnight</span>
 <a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="c1"># With timezone</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="n">window</span> <span class="o">=</span> <span class="n">TimeWindow</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="s2">"09:00"</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">"17:00"</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="s2">"America/New_York"</span><span class="p">)</span>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="c1"># Check if currently allowed</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">if</span> <span class="n">window</span><span class="o">.</span><span class="n">is_active</span><span class="p">():</span>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="c1"># Within allowed window</span>
-<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="k">pass</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="k">if</span> <span class="n">window</span><span class="o">.</span><span class="n">is_within</span><span class="p">():</span>  <span class="c1"># pass dt=... to check another moment</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="o">...</span>
 </code></pre></div>
+<p>Windows are checked against the local clock (<code>datetime.now()</code>); there is no timezone
+argument.</p>
 <h2 id="agent-identity">Agent Identity<a class="headerlink" href="#agent-identity" title="Permanent link">&para;</a></h2>
-<p>Track and control per-agent access:</p>
+<p><code>require_agent_id=True</code> refuses a call that carries no agent identity, and
+<code>allowed_roles</code> refuses one whose agent holds none of the listed roles. An anonymous call
+holds no role, so it is refused too:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">SecurityPolicy</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">allowed_agents</span><span class="o">=</span><span class="p">[</span><span class="s2">"agent-1"</span><span class="p">,</span> <span class="s2">"agent-2"</span><span class="p">],</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">denied_agents</span><span class="o">=</span><span class="p">[</span><span class="s2">"suspicious-agent"</span><span class="p">],</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">agent_rate_limits</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>        <span class="s2">"agent-1"</span><span class="p">:</span> <span class="s2">"1000/hour"</span><span class="p">,</span>
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>        <span class="s2">"agent-2"</span><span class="p">:</span> <span class="s2">"100/hour"</span><span class="p">,</span>
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="p">},</span>
-<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="p">)</span>
-<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>
-<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span> <span class="n">agent_id</span><span class="o">=</span><span class="s2">"agent-1"</span><span class="p">)</span>
-<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>    <span class="k">return</span> <span class="n">x</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">require_agent_id</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">allowed_roles</span><span class="o">=</span><span class="p">[</span><span class="s2">"admin"</span><span class="p">,</span> <span class="s2">"operator"</span><span class="p">])</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_records</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="o">...</span>
 </code></pre></div>
+<p>Airlock reads the identity from the call's context object, the tool's first argument, in
+the shape frameworks pass one: an attribute named <code>context</code>, <code>ctx</code>, <code>request_context</code> or
+<code>session_context</code> whose object has an <code>agent_id</code> (or <code>agent</code>, <code>assistant_id</code>) and <code>roles</code>
+(or <code>permissions</code>, <code>scopes</code>). An OpenAI Agents SDK <code>RunContextWrapper</code> fits when the
+<code>context</code> object you give it carries those fields.</p>
+<p>When a framework passes the tool no context object, set one around the call. <code>async with</code>
+works the same way, and a context object on the call itself comes first:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockContext</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">export_report</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="o">...</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="k">with</span> <span class="n">AirlockContext</span><span class="p">(</span><span class="n">agent_id</span><span class="o">=</span><span class="s2">"support-bot"</span><span class="p">,</span> <span class="n">roles</span><span class="o">=</span><span class="p">[</span><span class="s2">"operator"</span><span class="p">]):</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    <span class="n">export_report</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"q3"</span><span class="p">)</span>
+</code></pre></div>
+<p>Until 0.10.13 <code>@Airlock</code> passed no identity to the policy: <code>require_agent_id</code> refused
+every call, however the caller identified itself, and <code>allowed_roles</code> was never
+enforced.</p>
 <h2 id="predefined-policies">Predefined Policies<a class="headerlink" href="#predefined-policies" title="Permanent link">&para;</a></h2>
 <p>Agent-Airlock includes common policy presets:</p>
 <h3 id="permissive_policy">PERMISSIVE_POLICY<a class="headerlink" href="#permissive_policy" title="Permanent link">&para;</a></h3>
 <p>Minimal restrictions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">PERMISSIVE_POLICY</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">PERMISSIVE_POLICY</span><span class="p">)</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="k">return</span> <span class="n">x</span>
-</code></pre></div>
-<h3 id="strict_policy">STRICT_POLICY<a class="headerlink" href="#strict_policy" title="Permanent link">&para;</a></h3>
-<p>Maximum restrictions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">STRICT_POLICY</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">PERMISSIVE_POLICY</span>
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">STRICT_POLICY</span><span class="p">)</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">PERMISSIVE_POLICY</span><span class="p">)</span>
 <a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="k">return</span> <span class="n">x</span>
 </code></pre></div>
+<h3 id="strict_policy">STRICT_POLICY<a class="headerlink" href="#strict_policy" title="Permanent link">&para;</a></h3>
+<p>Requires an agent identity (see <a href="#agent-identity">Agent Identity</a>), limits every tool to
+100 calls an hour, and applies a strict capability policy:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">STRICT_POLICY</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockContext</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">STRICT_POLICY</span><span class="p">)</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="k">return</span> <span class="n">x</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="k">with</span> <span class="n">AirlockContext</span><span class="p">(</span><span class="n">agent_id</span><span class="o">=</span><span class="s2">"agent-1"</span><span class="p">):</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="n">my_tool</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># refused without an identity</span>
+</code></pre></div>
 <h3 id="read_only_policy">READ_ONLY_POLICY<a class="headerlink" href="#read_only_policy" title="Permanent link">&para;</a></h3>
 <p>Only read operations allowed:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">READ_ONLY_POLICY</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">READ_ONLY_POLICY</span><span class="p">)</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="k">return</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">READ_ONLY_POLICY</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">READ_ONLY_POLICY</span><span class="p">)</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="k">return</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
 </code></pre></div>
 <h3 id="business_hours_policy">BUSINESS_HOURS_POLICY<a class="headerlink" href="#business_hours_policy" title="Permanent link">&para;</a></h3>
 <p>Operations restricted to business hours:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">BUSINESS_HOURS_POLICY</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">BUSINESS_HOURS_POLICY</span><span class="p">)</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">send_email</span><span class="p">(</span><span class="n">to</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"sent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
-</code></pre></div>
-<h2 id="policy-composition">Policy Composition<a class="headerlink" href="#policy-composition" title="Permanent link">&para;</a></h2>
-<p>Combine policies:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">BUSINESS_HOURS_POLICY</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">base_policy</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="n">denied_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"delete_*"</span><span class="p">],</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">rate_limits</span><span class="o">=</span><span class="p">{</span><span class="s2">"*"</span><span class="p">:</span> <span class="s2">"100/hour"</span><span class="p">},</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="p">)</span>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>
-<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="n">strict_policy</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span>
-<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    <span class="n">allowed_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"read_*"</span><span class="p">],</span>
-<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="n">rate_limits</span><span class="o">=</span><span class="p">{</span><span class="s2">"*"</span><span class="p">:</span> <span class="s2">"10/hour"</span><span class="p">},</span>
-<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="p">)</span>
-<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>
-<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="c1"># Merge policies (stricter wins)</span>
-<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="n">combined</span> <span class="o">=</span> <span class="n">base_policy</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">strict_policy</span><span class="p">)</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">BUSINESS_HOURS_POLICY</span><span class="p">)</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">send_email</span><span class="p">(</span><span class="n">to</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"sent"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+</code></pre></div>
+<h2 id="choosing-a-policy-per-call">Choosing a Policy per Call<a class="headerlink" href="#choosing-a-policy-per-call" title="Permanent link">&para;</a></h2>
+<p><code>policy</code> can also be a function that takes the call's <code>AirlockContext</code> and returns the
+policy to apply, for per-tenant or per-workspace rules. There is no policy merge; build
+each policy whole:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">SecurityPolicy</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockContext</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="n">production</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">allowed_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"read_*"</span><span class="p">])</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="n">default</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">denied_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"delete_*"</span><span class="p">])</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">pick</span><span class="p">(</span><span class="n">context</span><span class="p">:</span> <span class="n">AirlockContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SecurityPolicy</span><span class="p">:</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="k">return</span> <span class="n">production</span> <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">workspace_id</span> <span class="o">==</span> <span class="s2">"prod"</span> <span class="k">else</span> <span class="n">default</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">pick</span><span class="p">)</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">write_note</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="o">...</span>
 </code></pre></div>
 <h2 id="monitoring-blocked-calls">Monitoring Blocked Calls<a class="headerlink" href="#monitoring-blocked-calls" title="Permanent link">&para;</a></h2>
 <p>Register callbacks for policy violations:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_blocked</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Blocked </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="c1"># Alert security team, log to SIEM, etc.</span>
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
-<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_rate_limit</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">retry_after</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Rate limited </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">, retry in </span><span class="si">{</span><span class="n">retry_after</span><span class="si">}</span><span class="s2">s"</span><span class="p">)</span>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>    <span class="n">on_blocked</span><span class="o">=</span><span class="n">on_blocked</span><span class="p">,</span>
-<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="n">on_rate_limit</span><span class="o">=</span><span class="n">on_rate_limit</span><span class="p">,</span>
-<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_blocked</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Blocked </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="c1"># Alert security team, log to SIEM, etc.</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_rate_limit</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">retry_after</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Rate limited </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">, retry in </span><span class="si">{</span><span class="n">retry_after</span><span class="si">}</span><span class="s2">s"</span><span class="p">)</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>    <span class="n">on_blocked</span><span class="o">=</span><span class="n">on_blocked</span><span class="p">,</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>    <span class="n">on_rate_limit</span><span class="o">=</span><span class="n">on_rate_limit</span><span class="p">,</span>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="p">)</span>
 </code></pre></div>
 
 
