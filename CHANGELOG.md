@@ -11,6 +11,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.12] - 2026-09-26
+
+### Added
+
+- **Claude Agent SDK tools can be guarded.** `wrap_tools(tools, policy=...)` in
+  `integrations/anthropic_claude_agent_sdk.py` takes the `SdkMcpTool` objects that
+  `claude_agent_sdk.tool` returns and gives back guarded copies to pass to
+  `create_sdk_mcp_server`. `wrap_agent` now does the same for an `SdkMcpTool` among an
+  object's `tools`, where it used to raise "exposes neither `forward` nor `__call__`" for
+  every one. An SDK handler takes a single `args` dict, so it is fronted by a proxy whose
+  keyword parameters come from the tool's `input_schema` (a type map, a `TypedDict` or a JSON
+  schema), and the dict is spread into it. Ghost keys are stripped, each argument is strictly
+  validated against the type the SDK advertises to the model, the policy applies under the
+  tool's name, and what the handler returns is masked. A refusal reaches the model as an
+  error result carrying Airlock's fix hints: returned as it was, the SDK would have read no
+  `content` from it and reported an empty success.
+
+  Verified end to end on claude-agent-sdk 0.2.160, through an MCP client session, including
+  what the SDK's own schema check lets through: `3.0` for an integer, and a key the schema
+  does not declare. A key that cannot be a Python parameter name (`from`, `file-path`) is
+  refused when the tool is wrapped, and the other limits are listed in
+  `docs/integrations/anthropic-claude-agent-sdk.md`.
+
+  Every key an SDK handler receives comes from the model, so one starting with `_airlock_`
+  is refused, in a call and in a schema. Airlock pops `_airlock_tier` and
+  `_airlock_input_tokens` as a router's control values before it looks for ghost arguments,
+  so a model sending one would have picked the budget tier its own call is checked against.
+
+### Fixed
+
+- **The Claude Agent SDK adapter's version check did not exist.** `SUPPORTED_SDK_VERSIONS`
+  said `wrap_agent` warned on an SDK version outside it, but nothing compared against the
+  tuple. Wrapping an SDK object on such a version now emits a `UserWarning`, as the CrewAI,
+  PydanticAI and Google ADK adapters do, and 0.2.160 is added to the tuple.
+
 ## [0.10.11] - 2026-09-26
 
 ### Fixed
