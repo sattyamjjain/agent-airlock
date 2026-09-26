@@ -2628,7 +2628,7 @@ the hooks.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"agent-airlock[pydantic-ai]"</span>
 </code></pre></div>
-<p>The extra pins <code>pydantic-ai&gt;=1.88.0,&lt;2.0</code>. v1.88.0 is the floor because
+<p>The extra pins <code>pydantic-ai&gt;=1.88.0,&lt;3.0</code>. v1.88.0 is the floor because
 that's the release that introduced the <code>output_validate</code> hook the
 adapter binds to (PR pydantic/pydantic-ai#4859).</p>
 <h2 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h2>
@@ -2646,11 +2646,11 @@ adapter binds to (PR pydantic/pydantic-ai#4859).</p>
 <a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">adapter</span> <span class="o">=</span> <span class="n">PydanticAIAdapter</span><span class="p">()</span>
 <a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">adapter</span><span class="o">.</span><span class="n">wrap_agent</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">STRICT_POLICY</span><span class="p">)</span>
 <a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># Now every tool call routes through the configured policy:</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># - ghost-arg stripping</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># - Pydantic V2 strict validation</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="c1"># - PolicyViolation on denied tools</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="c1"># - sanitization on the model's structured output (output_validate)</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># Now every tool call in an agent run goes through Airlock:</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># - the policy (a denied tool returns a blocked AirlockResponse instead of running)</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># - strict validation of the tool's declared parameters</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="c1"># - sanitization of each tool's output</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="c1"># - sanitization of the model's structured output, where output_validate exists (1.x)</span>
 <a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">result</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="s2">"What's the weather in Bangalore?"</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="what-the-adapter-does">What the adapter does<a class="headerlink" href="#what-the-adapter-does" title="Permanent link">&para;</a></h2>
@@ -2658,9 +2658,14 @@ adapter binds to (PR pydantic/pydantic-ai#4859).</p>
 <li>
 <p><strong>Walks <code>agent.toolsets</code></strong> (PydanticAI v1.88+ public surface) and
    replaces each function-tool's callable with the
-   <code>Airlock(policy=...)</code>-wrapped version. Tools are re-tagged so
+   <code>Airlock(policy=...)</code>-wrapped version — both <code>tool.function</code> and
+   <code>tool.function_schema.function</code>, which is the one an agent run
+   actually calls. The wrapper carries the tool's name, so
    <code>SecurityPolicy.allowed_tools</code> / <code>denied_tools</code> lists target the
-   tool's name, not its method name.</p>
+   tool rather than its method, and the tool's signature, so strict
+   validation and ghost-argument stripping have parameters to check.
+   A <code>RunContext</code> first parameter is passed through unvalidated; the
+   model never supplies it.</p>
 </li>
 <li>
 <p><strong>Attaches <code>output_validate</code></strong> (default <code>attach_output_validate=True</code>).
@@ -2668,10 +2673,10 @@ adapter binds to (PR pydantic/pydantic-ai#4859).</p>
    model's structured output before it leaves the boundary.</p>
 </li>
 <li>
-<p><strong>Pins <code>SUPPORTED_PYDANTIC_AI_VERSIONS = ("1.88.0", "1.89.0",
-   "1.89.1")</code></strong> — running a version outside this set emits a
-   <code>UserWarning</code> (no hard fail). Update the tuple once a new release
-   has been smoke-tested against the adapter.</p>
+<p><strong>Pins <code>SUPPORTED_PYDANTIC_AI_VERSIONS</code></strong> (listed in the module) —
+   running a version outside this set emits a <code>UserWarning</code> (no hard
+   fail). Update the tuple once a new release has been smoke-tested
+   against the adapter.</p>
 </li>
 </ol>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
@@ -2682,6 +2687,11 @@ adapter binds to (PR pydantic/pydantic-ai#4859).</p>
 <li>Real PydanticAI objects (whose <code>__module__</code> starts with <code>pydantic_ai.*</code>)
   do trigger the import check. If the extra is missing, the adapter
   raises <code>PydanticAIMissingError</code> with a clear install hint.</li>
+<li>PydanticAI validates tool arguments against its own schema before the
+  call, in lax mode: a coercible value such as <code>"5"</code> for an <code>int</code>
+  arrives converted, and an unknown argument is rejected there
+  (verified on 2.31.1). Airlock's strict check applies to what
+  PydanticAI hands the tool.</li>
 <li>The example-only path (<code>examples/pydanticai_integration.py</code>) remains
   documented and still works — <code>@Airlock()</code> over a raw
   <code>@agent.tool_plain</code> is supported.</li>

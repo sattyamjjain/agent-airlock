@@ -2682,11 +2682,14 @@ floor; operators on the alpha track should pin manually.</p>
 <ol>
 <li>
 <p><strong>Walks <code>crew.agents</code></strong> and for each <code>Agent</code>, walks <code>agent.tools</code>
-   (CrewAI's <code>BaseTool</code> registry). Each tool's <code>_run</code> (or <code>func</code>)
-   callable is replaced with the <code>Airlock(policy=...)</code>-wrapped
-   version. Tools are re-tagged so <code>SecurityPolicy.allowed_tools</code> /
-   <code>denied_tools</code> lists target the tool's name, not its method
-   name.</p>
+   (CrewAI's <code>BaseTool</code> registry). For an <code>@tool</code>-built tool the user
+   function (<code>func</code>) is replaced with the <code>Airlock(policy=...)</code>-wrapped
+   version, which covers <code>run</code>, <code>arun</code> and the structured-tool path an
+   agent uses; for a <code>BaseTool</code> subclass it is <code>_run</code>. The wrapper
+   carries the tool's name, so <code>SecurityPolicy.allowed_tools</code> /
+   <code>denied_tools</code> lists target the tool rather than its method, and the
+   tool's signature, so strict validation and ghost-argument stripping
+   have parameters to check.</p>
 </li>
 <li>
 <p><strong>Walks <code>crew.tasks</code></strong> for task-level <code>Task(tools=[...])</code>
@@ -2716,6 +2719,10 @@ floor; operators on the alpha track should pin manually.</p>
   adapter raises <code>CrewAIMissingError</code> with a clear install hint.</li>
 <li><code>crewai</code> is heavy (pulls <code>litellm</code>, <code>chromadb</code>, <code>embedchain</code>);
   kept strictly opt-in via the <code>[crewai]</code> extra.</li>
+<li>CrewAI validates arguments against the tool's <code>args_schema</code> before
+  the call, in lax mode, so a coercible value such as <code>"5"</code> for an
+  <code>int</code> arrives converted (verified on 1.15.22). Airlock's strict
+  check applies to what CrewAI hands the tool.</li>
 <li>The example-only path (<code>examples/crewai_integration.py</code>) remains
   documented and still works — <code>@Airlock()</code> over a raw
   <code>@tool</code>-decorated callable is supported.</li>

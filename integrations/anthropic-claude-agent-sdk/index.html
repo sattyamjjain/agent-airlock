@@ -2611,22 +2611,25 @@ clear <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="p">)</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">STRICT_POLICY</span>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Real SDK shape — claude_agent_sdk.Agent or anything exposing `tools`.</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">agent</span> <span class="o">=</span> <span class="n">build_my_claude_agent</span><span class="p">()</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">adapter</span> <span class="o">=</span> <span class="n">AnthropicClaudeAgentSDKAdapter</span><span class="p">()</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">secured</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">wrap_agent</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">STRICT_POLICY</span><span class="p">)</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="c1"># Every tool callable is now Airlock-decorated:</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># - ghost arguments stripped</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="c1"># - Pydantic V2 strict validation</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># - PolicyViolation raised on denied tools</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">secured</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">"Summarise the latest commit on main."</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Any object exposing `tools` (dict or list) whose entries are callables</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># or expose `forward` — see "Honest scope" for what that excludes.</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">agent</span> <span class="o">=</span> <span class="n">build_my_agent</span><span class="p">()</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">adapter</span> <span class="o">=</span> <span class="n">AnthropicClaudeAgentSDKAdapter</span><span class="p">()</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">secured</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">wrap_agent</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">STRICT_POLICY</span><span class="p">)</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># Every tool callable is now Airlock-decorated, carrying the tool's own signature:</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="c1"># - ghost arguments stripped</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># - Pydantic V2 strict validation of the declared parameters</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># - a denied tool returns a blocked AirlockResponse instead of running</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># - async tools stay async, so their output is sanitized after they finish</span>
 </code></pre></div>
 <h2 id="what-the-adapter-does">What the adapter does<a class="headerlink" href="#what-the-adapter-does" title="Permanent link">&para;</a></h2>
 <ol>
 <li><strong>Walks <code>agent.tools</code></strong> (dict or list) and replaces each tool's
-   <code>forward</code> / <code>__call__</code> with an <code>Airlock(policy=...)</code>-wrapped shim.</li>
+   <code>forward</code> / <code>__call__</code> with an <code>Airlock(policy=...)</code>-wrapped shim
+   that carries the tool's name and signature and is async when the
+   tool is.</li>
 <li><strong>Re-exports the harness defences</strong> from the existing <code>claude_*.py</code>
    modules so callers can compose:</li>
 <li><code>ManagedAgentsAuditConfig</code> — beta-header + toolset-version + tool
@@ -2635,8 +2638,9 @@ clear <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent
      per-tenant scope, byte quota, redaction-on-write.</li>
 <li><code>build_task_budget_headers</code> + <code>build_output_config</code> — populated by
      the adapter's <code>task_budget_request_kit(remaining=...)</code> helper.</li>
-<li><strong>Pins a <code>SUPPORTED_SDK_VERSIONS = ("0.1.58",)</code> tuple</strong> so callers
-   can detect SDK drift early. New versions are added once smoke-tested.</li>
+<li><strong>Pins a <code>SUPPORTED_SDK_VERSIONS</code> tuple</strong> (listed in the module)
+   recording the SDK versions the adapter was checked against. New
+   versions are added once smoke-tested.</li>
 </ol>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2647,10 +2651,15 @@ clear <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent
 <li>Real SDK objects (whose <code>__module__</code> starts with <code>claude_agent_sdk.*</code>)
   do trigger the import check. If the extra is missing, the adapter
   raises <code>ClaudeAgentSDKMissingError</code> with a clear install hint.</li>
-<li>The Claude Agent SDK has churned twice between Sep-2025 and
-  Apr-2026. If a release renames <code>Agent</code> or shifts the tools dict
-  shape, the adapter logs but does not hard-fail — update
-  <code>SUPPORTED_SDK_VERSIONS</code> once you've smoke-tested the new pin.</li>
+<li><code>claude-agent-sdk</code> itself has no agent object whose <code>tools</code> are
+  callables. Its <code>@tool</code> decorator returns an <code>SdkMcpTool</code> whose logic
+  is an async <code>handler</code>, and <code>ClaudeAgentOptions.tools</code> holds tool
+  names (verified on 0.2.160). So <code>wrap_agent</code> guards tool objects and
+  functions you hold yourself; handed an SDK object, it raises
+  <code>AirlockError</code> rather than wrapping nothing.</li>
+<li>Unlike the CrewAI and PydanticAI adapters, this one does not compare
+  the installed SDK against <code>SUPPORTED_SDK_VERSIONS</code> at runtime, so an
+  untested SDK version produces no warning.</li>
 </ul>
 <h2 id="primary-sources">Primary sources<a class="headerlink" href="#primary-sources" title="Permanent link">&para;</a></h2>
 <ul>
