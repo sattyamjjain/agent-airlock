@@ -135,15 +135,15 @@ jobs:
       # A skip is not a pass. `_skip_unless_docker` skips when the daemon or
       # the image is missing, which would let this job go green having executed
       # nothing — the same "zeros reading as results" failure the benchmark
-      # harness was fixed for. Assert all four actually ran.
+      # harness was fixed for. Assert all five actually ran.
       - name: Run the docker-marked tests
         env:
           AIRLOCK_DOCKER_TEST_IMAGE: agent-airlock-sandbox:local
         run: |
           set -o pipefail
           pytest -m docker -v --no-cov | tee docker-tests.log
-          grep -q "4 passed" docker-tests.log || {
-            echo "::error::expected 4 docker-marked tests to pass; they skipped or were filtered out"
+          grep -q "5 passed" docker-tests.log || {
+            echo "::error::expected 5 docker-marked tests to pass; they skipped or were filtered out"
             exit 1
           }
 

@@ -67,11 +67,11 @@ def train_model(data: list) -> dict:
 from agent_airlock import AirlockConfig
 from agent_airlock.sandbox import execute_in_sandbox, get_sandbox_pool
 
-config = AirlockConfig(sandbox_pool_size=2)  # Keep 2 warm sandboxes
+config = AirlockConfig(sandbox_pool_size=2)  # warm_up() creates 2 sandboxes
 
-# The process-wide pool that execute_in_sandbox() and @Airlock(sandbox=True) share
+# The pool execute_in_sandbox() and @Airlock(sandbox=True, config=config) use for this config
 pool = get_sandbox_pool(config)
-pool.warm_up()  # Create them now instead of on the first call
+pool.warm_up()  # Create them now instead of on the first two calls
 
 def process_code(code: str) -> str:
     return str(eval(code))
@@ -84,8 +84,10 @@ print(result.result)  # 4
 pool.shutdown()
 ```
 
-The pool does not cap concurrency (an empty pool creates another sandbox), has no idle
-timeout, and keeps no statistics; see [Monitoring Sandbox Usage](#monitoring-sandbox-usage).
+Each sandbox runs one call and is killed after it, so the two warm sandboxes cover the first
+two calls; later calls create their own until `warm_up()` runs again. The pool does not cap
+concurrency (an empty pool creates another sandbox) and keeps no statistics; see
+[Monitoring Sandbox Usage](#monitoring-sandbox-usage).
 
 ## Error Handling
 
@@ -102,10 +104,12 @@ if not result["success"]:
     print(result["error"])  # "AIRLOCK_BLOCK: Unexpected error in 'risky_code'"
 ```
 
-A decorated tool never raises for a sandbox failure: an exception inside the sandbox, a
-missing E2B SDK or API key, and an E2B error all return this blocked response, and the
-underlying error is logged as the `unexpected_error` event. `execute_in_sandbox` returns the
-sandbox's own error text:
+A decorated tool never raises for a sandbox failure. An exception inside the sandbox returns
+this blocked response, the same one the tool returns when it raises outside a sandbox, and the
+underlying error is logged as the `unexpected_error` event. A missing E2B SDK or API key, or
+an E2B error, returns `"block_reason": "sandbox_error"` with
+`"AIRLOCK_BLOCK: 'risky_code' could not run in its sandbox"`, logged as the `sandbox_failed`
+event. `execute_in_sandbox` returns the sandbox's own error text:
 
 ```python
 from agent_airlock.sandbox import execute_in_sandbox
@@ -200,8 +204,26 @@ before reading `result.result`. It takes no timeout argument.
 
 ## Async Sandbox Execution
 
-Sandbox a synchronous function and await `execute_in_sandbox_async`, which runs the sandbox
-call in a worker thread:
+An `async def` tool can take `sandbox=True`. Its coroutine is awaited inside the sandbox, and
+awaiting the decorated tool returns what it returned:
+
+```python
+import asyncio
+from agent_airlock import Airlock
+
+@Airlock(sandbox=True)
+async def count_words(text: str) -> int:
+    await asyncio.sleep(0)  # runs on an event loop inside the sandbox
+    return len(text.split())
+
+print(asyncio.run(count_words(text="one two three")))  # 3
+```
+
+Until 0.10.17 the sandbox never awaited the coroutine, and the tool returned the string form
+of a coroutine object (`'<coroutine object ...>'`).
+
+Without the decorator, await `execute_in_sandbox_async`, which runs the sandbox call in a
+worker thread:
 
 ```python
 import asyncio
@@ -217,10 +239,6 @@ async def main():
 
 asyncio.run(main())
 ```
-
-Do not put `sandbox=True` on an `async def` tool: the sandbox calls the function but never
-awaits it, so the tool returns the string form of a coroutine object
-(`'<coroutine object ...>'`), not its result.
 
 ## Monitoring Sandbox Usage
 

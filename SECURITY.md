@@ -228,9 +228,10 @@ When using `sandbox=True`, functions are serialized using cloudpickle for execut
 
 **Mitigation:**
 - Deserialization only occurs inside the isolated E2B MicroVM
-- The MicroVM is destroyed after execution
-- Network access is restricted in the sandbox
-- Never deserialize untrusted pickled data on the host
+- The MicroVM is destroyed after its call (since 0.10.17; it used to be reused)
+- The MicroVM cannot reach the host's filesystem or memory. Its outbound network is E2B's
+  default, which allows internet access
+- The host never deserializes pickled data from the sandbox: results come back as JSON
 
 **Best Practice:**
 ```python

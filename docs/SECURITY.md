@@ -255,12 +255,13 @@ def execute_code(code: str) -> str:
 - Cold start: E2B reports about 125ms for its Firecracker micro-VMs; not measured by this
   project. A warmed pool (`get_sandbox_pool(config).warm_up()`) creates sandboxes before the
   first call.
-- Sandbox lifetime: `sandbox_timeout` seconds, 60 by default, passed to E2B when each sandbox
-  is created. There is no per-call time limit.
-- **Sandboxes are reused.** The pool hands a sandbox back for later calls in the same process,
-  so anything one call leaves in it, such as files, can be seen by the next. Do not rely on
-  isolation between calls.
-- Network access is sandboxed
+- Sandbox lifetime: `sandbox_timeout` seconds, 60 by default, from when a sandbox is created or
+  handed out of the pool. A call still running then fails; there is no other per-call limit.
+- **One call per sandbox.** The pool kills a sandbox after its call, failed or not, instead
+  of handing it to the next call, so files or state one call leaves behind never reach
+  another. Until 0.10.17 sandboxes were reused within a process.
+- Outbound network is E2B's default, which allows internet access: Airlock sets no network
+  restriction on E2B sandboxes. `DockerBackend` runs with `network_mode="none"` by default.
 - 24-hour session cap (E2B limitation)
 
 ### E2B API Key Security
@@ -287,7 +288,10 @@ arbitrary code during deserialization.
 **Why this is acceptable**:
 1. Deserialization occurs INSIDE the E2B sandbox (isolated MicroVM)
 2. Even if malicious code executes, it's contained in the sandbox
-3. The sandbox has no access to your host filesystem or network
+3. The sandbox has no access to your host filesystem or memory
+4. Nothing comes back as a pickle. The outcome is printed as JSON, and the host parses it as
+   JSON: code running in the sandbox controls its own output, so unpickling that output
+   would let it run code on the host. `ModalBackend` did unpickle it until 0.10.17.
 
 **For high-security environments**, consider:
 - Adding HMAC signing to verify payload integrity before sending to sandbox

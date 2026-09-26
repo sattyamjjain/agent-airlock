@@ -27,11 +27,11 @@ Managed Agents stub).
   explicitly opt out. If your tool needs the network, use agent-
   airlock's `EndpointPolicy` at the app layer rather than opening
   the sandbox.
-- **Integration tests.** Four tests behind the `pytest -m docker`
-  marker prove availability, success, timeout, and network
-  isolation. Default `pytest` runs **exclude** them; CI's
-  `docker-sandbox` job builds the repo `Dockerfile` and requires all
-  four to pass.
+- **Integration tests.** Five tests behind the `pytest -m docker`
+  marker prove availability, success, an async function awaited,
+  timeout, and network isolation. Default `pytest` runs **exclude**
+  them; CI's `docker-sandbox` job builds the repo `Dockerfile` and
+  requires all five to pass.
 
 ## Usage
 
@@ -130,7 +130,7 @@ Two opt-in fail-closed flags shipped together in v0.7.0:
 
 | Backend | Isolation | Per call | Dependency |
 |---------|-----------|----------|------------|
-| [`E2BBackend`](../api/sandbox.md) | Firecracker MicroVM | Reuses a sandbox from the shared E2B pool | E2B cloud |
+| [`E2BBackend`](../api/sandbox.md) | Firecracker MicroVM | Takes a sandbox from its config's E2B pool, or creates one, and kills it after the call | E2B cloud |
 | `DockerBackend` (this page) | Container, `cap_drop=ALL` | Starts, then removes, a new container | local Docker daemon |
 | `ModalBackend` | Modal sandbox (gVisor) | Creates a new Modal sandbox | Modal (`[modal]` extra) |
 | `LocalBackend` | **None** | Calls the function in-process | none (dev only) |

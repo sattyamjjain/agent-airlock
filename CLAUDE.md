@@ -197,7 +197,10 @@ src/agent_airlock/
 7. Execute (unnumbered in code) — Pydantic strict validation, reaching inside model,
    dataclass and TypedDict arguments (`validator._nested_strict_check`), then run locally or
    in the sandbox, inside the network airgap when one is configured. Sandbox mode validates in
-   the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way
+   the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way, and a
+   tool that raises in the sandbox gets the answer it gets locally; a sandbox that fails is
+   refused as `sandbox_error`. E2B, Docker and Modal run one payload (`generate_execution_code`)
+   whose outcome comes back as JSON: never unpickle anything a sandbox printed
 8. `_post_execution` — sanitize output via `_sanitize_tool_output` (a string is masked and
    truncated; a dict, list, tuple or set is masked value by value and keeps its type; any
    other object is returned as-is and its detections reported as not masked) → audit log →
@@ -277,7 +280,8 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   ship as dated files under `data/` and `fixtures/`; a refresh is a new dated file, not an
   edit to the old one.
 - **Also by name** — `airlock attest` receipts (identity plus assume/guarantee
-  `LayerContract`); `SandboxPool` warm pool hiding cold starts; `vaccinate()` monkeypatching
+  `LayerContract`); `SandboxPool` of single-use sandboxes, one pool per config, hiding cold
+  starts; `vaccinate()` monkeypatching
   third-party `@tool` decorators; honeypot deception returning plausible fake success.
 
 <!-- END AUTO-MANAGED -->

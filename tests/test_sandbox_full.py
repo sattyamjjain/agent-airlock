@@ -204,14 +204,15 @@ class TestSandboxPool:
                 acquired = pool.acquire()
                 assert acquired == mock_sandbox
 
-    def test_release_to_pool(self) -> None:
-        """Test releasing sandbox back to pool."""
+    def test_release_closes_instead_of_pooling(self) -> None:
+        """A used sandbox is closed, never returned to the pool (0.10.17)."""
         pool = SandboxPool(pool_size=2)
         mock_sandbox = MagicMock()
         mock_sandbox.sandbox_id = "released-sandbox"
 
         pool.release(mock_sandbox)
-        assert pool._pool.qsize() == 1
+        assert pool._pool.qsize() == 0
+        mock_sandbox.kill.assert_called_once()
 
     def test_release_when_shutdown(self) -> None:
         """Test release closes sandbox when shutdown."""
@@ -223,17 +224,20 @@ class TestSandboxPool:
             pool.release(mock_sandbox)
             mock_close.assert_called_once_with(mock_sandbox)
 
-    def test_release_when_pool_full(self) -> None:
-        """Test release closes sandbox when pool is full."""
-        pool = SandboxPool(pool_size=1)
+    def test_release_closes_even_with_room_in_the_pool(self) -> None:
+        """Every release closes its sandbox, whatever the pool holds (0.10.17)."""
+        pool = SandboxPool(pool_size=2)
         mock_sandbox1 = MagicMock()
         mock_sandbox2 = MagicMock()
 
-        pool.release(mock_sandbox1)  # Fills the pool
-
         with patch.object(pool, "_close_sandbox") as mock_close:
-            pool.release(mock_sandbox2)  # Pool is full
-            mock_close.assert_called_once_with(mock_sandbox2)
+            pool.release(mock_sandbox1)
+            pool.release(mock_sandbox2)
+            assert [c.args[0] for c in mock_close.call_args_list] == [
+                mock_sandbox1,
+                mock_sandbox2,
+            ]
+        assert pool._pool.qsize() == 0
 
     def test_close_sandbox(self) -> None:
         """Test _close_sandbox kills the sandbox."""
@@ -287,8 +291,7 @@ class TestGetSandboxPool:
         """Test getting sandbox pool creates new instance."""
         import agent_airlock.sandbox as sandbox_module
 
-        # Reset global pool
-        sandbox_module._global_pool = None
+        sandbox_module._reset_pool()
 
         config = AirlockConfig(sandbox_pool_size=3, sandbox_timeout=120)
         pool = get_sandbox_pool(config)
@@ -301,8 +304,7 @@ class TestGetSandboxPool:
         """Test getting sandbox pool returns existing instance."""
         import agent_airlock.sandbox as sandbox_module
 
-        # Reset and create
-        sandbox_module._global_pool = None
+        sandbox_module._reset_pool()
         pool1 = get_sandbox_pool()
         pool2 = get_sandbox_pool()
 

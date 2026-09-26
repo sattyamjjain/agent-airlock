@@ -19,13 +19,13 @@ class SandboxPool:
         timeout: int = 60,
     ) -> None:
         """
-        Pool of warm E2B sandboxes for low-latency execution.
+        Pool of pre-created E2B sandboxes, each used for one call.
 
         Args:
-            pool_size: Warm sandboxes to keep; one released into a full pool is killed
+            pool_size: Warm sandboxes warm_up() creates
             api_key: E2B API key (falls back to E2B_API_KEY env var)
-            timeout: Passed to E2B's Sandbox.create() for each new sandbox: how many
-                seconds that sandbox lives
+            timeout: How many seconds a sandbox lives: passed to E2B's Sandbox.create(),
+                and reset to this when the pool hands a sandbox out
         """
 ```
 
@@ -34,20 +34,27 @@ class SandboxPool:
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `warm_up(count=None)` | `None` | Create up to `count` sandboxes (default `pool_size`) without overfilling the pool; a failed creation is logged, not raised |
-| `acquire()` | E2B `Sandbox` | Take a pooled sandbox, or create one if the pool is empty |
-| `release(sandbox)` | `None` | Return a sandbox to the pool; kill it if the pool is full or shut down |
-| `sandbox()` | context manager | `acquire()` on entry, `release()` on exit |
-| `shutdown()` | `None` | Kill the pooled sandboxes; later releases kill instead of pooling |
+| `acquire()` | E2B `Sandbox` | Take a pooled sandbox and reset its lifetime to `timeout`, skipping (and killing) any that expired; create one if the pool is empty |
+| `release(sandbox)` | `None` | Kill the sandbox. A used sandbox never goes back into the pool |
+| `sandbox()` | context manager | `acquire()` on entry, `release()` on exit, also when the call failed |
+| `shutdown()` | `None` | Kill the sandboxes still in the pool |
+
+A sandbox runs one call. Whatever that call leaves behind (files, module globals, a
+background thread) would otherwise sit next to the next call, which may be another user's,
+so the pool kills it instead of recycling it. The pool only hides the cold start: it holds
+the sandboxes `warm_up()` created until calls take them, and `warm_up()` again refills it.
+Until 0.10.17 used sandboxes went back into the pool, a failed one included.
 
 `warm_up()` and `acquire()` raise `SandboxNotAvailableError` when `e2b-code-interpreter` is not
 installed. The pool does not cap concurrency (an empty pool creates another sandbox), keeps no
 statistics, and does not run Python functions itself: `execute_in_sandbox` does that, on the
-process-wide pool that `get_sandbox_pool()` returns.
+pool that `get_sandbox_pool()` returns for its config.
 
-`get_sandbox_pool(config=None)`, also importable from `agent_airlock`, creates that pool on its
-first call from `config.sandbox_pool_size`, `config.e2b_api_key` and `config.sandbox_timeout`
-(`DEFAULT_CONFIG` when `config` is `None`). Every later call, including the ones
-`execute_in_sandbox` makes, returns the same pool and ignores its `config`.
+`get_sandbox_pool(config=None)`, also importable from `agent_airlock`, returns the pool for
+`config.e2b_api_key`, `config.sandbox_timeout` and `config.sandbox_pool_size`
+(`DEFAULT_CONFIG` when `config` is `None`), creating it on first use. Configs that agree on all
+three share a pool; one that differs in any of them gets its own. Until 0.10.17 there was one
+process-wide pool, and every config after the first was ignored, its API key included.
 
 ### Example
 
@@ -57,8 +64,8 @@ from agent_airlock.sandbox import execute_in_sandbox, get_sandbox_pool
 
 config = AirlockConfig(sandbox_pool_size=2)
 
-pool = get_sandbox_pool(config)  # the pool execute_in_sandbox() and @Airlock(sandbox=True) use
-pool.warm_up()  # create the sandboxes now instead of on the first call
+pool = get_sandbox_pool(config)  # the pool execute_in_sandbox() uses for this config
+pool.warm_up()  # create two sandboxes now instead of on the first two calls
 
 def my_function(x: int) -> int:
     return x * 2
@@ -91,13 +98,17 @@ def execute_in_sandbox(
         func: Function to execute
         args: Positional arguments
         kwargs: Keyword arguments
-        config: Airlock configuration (DEFAULT_CONFIG when None). Only used to
-            create the process-wide pool, so it has no effect once that pool exists.
+        config: Airlock configuration (DEFAULT_CONFIG when None). Picks the sandbox
+            pool: its E2B API key, sandbox timeout and pool size.
 
     Returns:
         SandboxResult with the execution outcome. Failures are returned, not raised.
     """
 ```
+
+`func` may be an `async def` function: its coroutine is awaited inside the sandbox, and
+`result` holds what it returned. Until 0.10.17 the coroutine was never awaited, and `result`
+held the string `'<coroutine object ...>'`.
 
 `execute_in_sandbox_async` takes the same arguments and runs this call in a worker thread, so it
 can be awaited without blocking the event loop. Neither takes a per-call timeout; see
@@ -113,6 +124,7 @@ can be awaited without blocking the event loop. Neither takes a per-call timeout
 | `stdout`, `stderr` | `str` | Output captured from the sandbox |
 | `execution_time_ms` | `float` | Time since the call started, including getting a sandbox |
 | `sandbox_id` | `str \| None` | E2B id of the sandbox that ran the call |
+| `tool_failed` | `bool` | `True` when `func` ran and raised, or returned something JSON cannot encode; `False` when the sandbox itself failed, and on success |
 
 `to_dict()` returns these fields as a dict. `agent_airlock.SandboxResult`, exported at the
 package root, is the `sandbox_backend` variant, which adds a `backend` field.
@@ -152,30 +164,38 @@ print(result.error)  # ZeroDivisionError: division by zero
 ```
 
 A tool decorated with `@Airlock(sandbox=True)` returns a blocked response instead of its value
-when sandbox execution fails. The underlying error is logged as the `unexpected_error` event,
-not returned:
+when the sandbox fails: E2B or `cloudpickle` missing, no sandbox created, or no result back.
+The underlying error is logged as the `sandbox_failed` event, not returned:
 
 ```python
 {
     "success": False,
     "status": "blocked",
-    "error": "AIRLOCK_BLOCK: Unexpected error in 'my_tool'",
-    "block_reason": "validation_error",
-    "fix_hints": ["An internal error occurred. Please try again."],
+    "error": "AIRLOCK_BLOCK: 'my_tool' could not run in its sandbox",
+    "block_reason": "sandbox_error",
+    "fix_hints": [
+        "The sandbox this tool runs in failed or is unavailable, so the tool returned no "
+        "result. Retrying may not help; tell the user if it keeps failing."
+    ],
 }
 ```
 
-The sandbox exception classes that exist:
+A tool that raises inside the sandbox gets exactly the response it gets when it raises
+in-process, `"AIRLOCK_BLOCK: Unexpected error in 'my_tool'"` with `block_reason`
+`"validation_error"`, and its error is logged as the `unexpected_error` event. Until 0.10.17 a
+failed sandbox got that response too.
+
+The sandbox exception classes, each one class whichever module you import it from:
 
 | Exception | Import from | Raised by |
 |-----------|-------------|-----------|
-| `SandboxError` | `agent_airlock.sandbox` | Base class; `mount_files()`, `mount_directory()` and `download_file()` raise it |
+| `SandboxError` | `agent_airlock.sandbox` | Base class, itself an `AirlockError`; `mount_files()`, `mount_directory()` and `download_file()` raise it |
 | `SandboxNotAvailableError` | `agent_airlock.sandbox` | `SandboxPool.warm_up()` and `acquire()` without `e2b-code-interpreter`; `serialize_function_call()` without `cloudpickle` |
-| `SandboxExecutionError` | `agent_airlock` | The decorator, internally, when the sandbox reports a failure; it becomes the blocked response above |
-| `SandboxUnavailableError` | `agent_airlock` | The decorator, internally, when `sandbox_required=True` and `agent_airlock.sandbox` fails to import; it becomes the blocked response above |
+| `SandboxExecutionError` | `agent_airlock` or `agent_airlock.sandbox` | The decorator, internally, when the sandbox failed; it becomes the `sandbox_error` response above |
+| `SandboxUnavailableError` | `agent_airlock` | The decorator, internally, when `sandbox_required=True` and `agent_airlock.sandbox` fails to import; it becomes the `sandbox_error` response above. A `SandboxNotAvailableError` |
 
-`agent_airlock.sandbox` defines a second `SandboxExecutionError` (a `SandboxError` subclass),
-but nothing in the package raises it.
+Until 0.10.17 `agent_airlock.sandbox` defined a second `SandboxExecutionError` that nothing
+raised.
 
 ## Where a Call Ran
 
@@ -183,7 +203,8 @@ There is no `is_sandboxed()` function. `SandboxResult.sandbox_id` names the E2B 
 ran a call, and the decorator logs it on the `sandbox_execution_success` event. A tool with
 `@Airlock(sandbox=True)` does not quietly run on your machine when E2B is unavailable: it
 returns the blocked response above. The decorator's local fallback is reached only when
-`sandbox_required=False` and importing `agent_airlock.sandbox` itself fails.
+`sandbox_required=False` and importing `agent_airlock.sandbox` itself fails. Until 0.10.17 an
+ImportError raised while the sandbox call ran also reached it.
 
 ## Serialization
 
@@ -200,11 +221,16 @@ payload = base64.b64encode(
     cloudpickle.dumps({"func": func, "args": args, "kwargs": kwargs}, protocol=4)
 ).decode("utf-8")
 
-# Deserialize in sandbox, call, and print the outcome as JSON
+# Deserialize in sandbox, call (awaiting an async function's coroutine), and print the
+# outcome as one line of JSON between two marker lines
 call = cloudpickle.loads(base64.b64decode(payload))
 result = call["func"](*call["args"], **call["kwargs"])
 print(json.dumps({"success": True, "result": result, "error": None}, default=str))
 ```
+
+Nothing comes back as a pickle. Code running in the sandbox controls what it prints, so a host
+that unpickled that output would run whatever the sandbox chose. `ModalBackend` did, until
+0.10.17; E2B, Docker and Modal now all read the outcome back as JSON.
 
 ### Serializable Types
 
@@ -247,8 +273,8 @@ from agent_airlock import Airlock, AirlockConfig
 
 config = AirlockConfig(
     e2b_api_key="...",     # Override env var
-    sandbox_timeout=60,    # Seconds each pooled sandbox lives (E2B's sandbox timeout)
-    sandbox_pool_size=2,   # Warm sandboxes to keep
+    sandbox_timeout=60,    # Seconds a sandbox lives (E2B's sandbox timeout)
+    sandbox_pool_size=2,   # Sandboxes warm_up() creates
 )
 
 @Airlock(sandbox=True, config=config)
@@ -256,9 +282,10 @@ def my_tool():
     pass
 ```
 
-These three settings are read once, when the process-wide pool is created, so give every
-sandboxed tool the same values. `sandbox_timeout` is not a per-call limit: agent-airlock passes
-no timeout for the call itself.
+These three settings pick the tool's sandbox pool: tools whose configs agree on them share
+one. `sandbox_timeout` is how long a sandbox lives: E2B kills it that many seconds after it is
+created, or after the pool hands it out, and a call still running then fails with it.
+agent-airlock passes no separate timeout for the call itself.
 
 The decorator always runs sandboxed tools through E2B. For the pluggable `SandboxBackend`
 classes (Docker, Local, Modal), which you call directly, see

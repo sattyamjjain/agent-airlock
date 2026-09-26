@@ -12,22 +12,33 @@ The key insight: agent-airlock's value is the POLICY ENFORCEMENT
 (schema validation, RBAC, rate limiting, PII masking) - not the sandbox.
 Making the sandbox pluggable proves this architectural distinction.
 
+The ``@Airlock(sandbox=True)`` decorator always runs on E2B; ``AirlockConfig`` has no
+backend setting. Call a backend directly to run a function on it:
+
 Usage:
-    # Use E2B (default)
-    config = AirlockConfig()
-
-    # Use Docker for on-prem
     from agent_airlock.sandbox_backend import DockerBackend
-    config = AirlockConfig(sandbox_backend=DockerBackend())
 
-    # Use local execution (UNSAFE)
+    backend = DockerBackend(image="agent-airlock-sandbox:local")
+    result = backend.execute(my_function, args=(2, 3), kwargs={}, timeout=30)
+    if result.success:
+        print(result.result)
+
+    # Local execution (UNSAFE): no isolation at all
     from agent_airlock.sandbox_backend import LocalBackend
-    config = AirlockConfig(sandbox_backend=LocalBackend(allow_unsafe=True))
+    result = LocalBackend(allow_unsafe=True).execute(my_function, (2, 3), {})
+
+E2B, Docker and Modal run the same payload and read its outcome back as JSON, so a
+result arrives as JSON types: tuples as lists, anything else JSON cannot encode as its
+``str()``.
 """
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import contextlib
+import contextvars
+import inspect
 import re
 import time
 from abc import ABC, abstractmethod
@@ -59,6 +70,8 @@ class SandboxResult:
         execution_time_ms: Time taken in milliseconds.
         sandbox_id: Identifier for the sandbox instance.
         backend: Name of the backend that executed the code.
+        tool_failed: True when the function ran and raised (or returned something that
+            could not be sent back); False when the backend itself could not run it.
     """
 
     success: bool
@@ -69,6 +82,7 @@ class SandboxResult:
     execution_time_ms: float = 0.0
     sandbox_id: str | None = None
     backend: str = "unknown"
+    tool_failed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -81,7 +95,30 @@ class SandboxResult:
             "execution_time_ms": self.execution_time_ms,
             "sandbox_id": self.sandbox_id,
             "backend": self.backend,
+            "tool_failed": self.tool_failed,
         }
+
+
+def _run_to_completion(value: Any) -> Any:
+    """Return an async function's result instead of its coroutine.
+
+    With no event loop running here, the coroutine runs on a new one. Inside a running
+    loop ``asyncio.run()`` refuses, so it runs on a new loop in a worker thread, with a
+    copy of this thread's context.
+    """
+    if not inspect.isawaitable(value):
+        return value
+
+    async def _wait() -> Any:
+        return await value
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_wait())
+    context = contextvars.copy_context()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as worker:
+        return worker.submit(context.run, asyncio.run, _wait()).result()
 
 
 class SandboxBackend(ABC):
@@ -203,16 +240,9 @@ class E2BBackend(SandboxBackend):
 
         Delegates to the existing execute_in_sandbox implementation.
         """
-        from .config import AirlockConfig
         from .sandbox import execute_in_sandbox
 
-        config = AirlockConfig(
-            e2b_api_key=self.api_key,
-            sandbox_timeout=timeout or self.timeout,
-            sandbox_pool_size=self.pool_size,
-        )
-
-        result = execute_in_sandbox(func, args, kwargs, config)
+        result = execute_in_sandbox(func, args, kwargs, self._config(timeout))
 
         return SandboxResult(
             success=result.success,
@@ -223,27 +253,33 @@ class E2BBackend(SandboxBackend):
             execution_time_ms=result.execution_time_ms,
             sandbox_id=result.sandbox_id,
             backend=self.name,
+            tool_failed=result.tool_failed,
+        )
+
+    def _config(self, timeout: int | None = None) -> AirlockConfig:
+        """The config whose sandbox pool this backend uses."""
+        from .config import AirlockConfig
+
+        return AirlockConfig(
+            e2b_api_key=self.api_key,
+            sandbox_timeout=timeout or self.timeout,
+            sandbox_pool_size=self.pool_size,
         )
 
     def warmup(self) -> None:
         """Pre-warm the E2B sandbox pool."""
-        from .config import AirlockConfig
         from .sandbox import get_sandbox_pool
 
-        config = AirlockConfig(
-            e2b_api_key=self.api_key,
-            sandbox_pool_size=self.pool_size,
-            sandbox_timeout=self.timeout,
-        )
-        pool = get_sandbox_pool(config)
-        pool.warm_up()
+        get_sandbox_pool(self._config()).warm_up()
 
     def shutdown(self) -> None:
-        """Shutdown the E2B sandbox pool."""
+        """Shutdown this backend's E2B sandbox pool.
+
+        Until 0.10.17 this shut down the pool for the default config, not this backend's.
+        """
         from .sandbox import get_sandbox_pool
 
-        pool = get_sandbox_pool()
-        pool.shutdown()
+        get_sandbox_pool(self._config()).shutdown()
 
 
 class DockerBackend(SandboxBackend):
@@ -310,8 +346,8 @@ class DockerBackend(SandboxBackend):
             raise ValueError(
                 f"DockerBackend(require_digest_pin=True) refuses tag-only "
                 f"image {image!r}. Use the form '<name>@sha256:<64-hex>' "
-                "(see `docker pull --quiet <name>:<tag>` to discover the "
-                "digest of the tag you currently use)."
+                "(`docker pull <name>:<tag>` prints the digest of the tag you "
+                "currently use on its 'Digest:' line)."
             )
         self.image = image
         self.network_mode = network_mode
@@ -386,6 +422,9 @@ class DockerBackend(SandboxBackend):
         is killed and removed if it has not exited within ``timeout``
         seconds. Prior to v0.5.1 a runaway function could hang forever
         because the parameter was a TODO.
+
+        The container runs the same payload as E2B, so an async function's coroutine is
+        awaited there; until 0.10.17 it came back as its ``str()``.
         """
         start_time = time.time()
 
@@ -401,51 +440,16 @@ class DockerBackend(SandboxBackend):
 
         container = None
         try:
-            import base64
-            import json
-
-            import cloudpickle
             import docker
 
+            from .sandbox import (
+                _parse_execution_output,
+                generate_execution_code,
+                serialize_function_call,
+            )
+
             client = docker.from_env()
-
-            # Serialize the function call
-            payload = {
-                "func": func,
-                "args": args,
-                "kwargs": kwargs,
-            }
-            serialized = base64.b64encode(cloudpickle.dumps(payload, protocol=4)).decode()
-
-            # Create Python script to run in container
-            script = f'''
-import base64
-import cloudpickle
-import json
-import traceback
-
-payload_b64 = "{serialized}"
-payload = cloudpickle.loads(base64.b64decode(payload_b64))
-
-func = payload["func"]
-args = payload["args"]
-kwargs = payload["kwargs"]
-
-try:
-    result = func(*args, **kwargs)
-    output = {{"success": True, "result": result, "error": None}}
-except Exception as e:
-    output = {{
-        "success": False,
-        "result": None,
-        "error": f"{{type(e).__name__}}: {{str(e)}}",
-        "traceback": traceback.format_exc()
-    }}
-
-print("__AIRLOCK_RESULT__")
-print(json.dumps(output, default=str))
-print("__AIRLOCK_END__")
-'''
+            script = generate_execution_code(serialize_function_call(func, args, kwargs))
 
             # Strong hardening defaults: no new privileges, drop every
             # capability, and honor the caller's extra security_opt.
@@ -484,41 +488,31 @@ print("__AIRLOCK_END__")
             output = logs.decode() if isinstance(logs, bytes) else str(logs)
             container.remove(force=True)
 
-            # Non-zero exit always yields a failure, regardless of what
-            # (if anything) the script printed.
-            exit_code = exit_info.get("StatusCode") if isinstance(exit_info, dict) else 0
-            if exit_code != 0 and "__AIRLOCK_RESULT__" not in output:
+            outcome = _parse_execution_output(output)
+            if outcome is None:
+                # A non-zero exit with no outcome printed: the payload never finished.
+                exit_code = exit_info.get("StatusCode") if isinstance(exit_info, dict) else 0
                 return SandboxResult(
                     success=False,
-                    error=f"Container exited with status {exit_code}",
+                    error=(
+                        f"Container exited with status {exit_code}"
+                        if exit_code != 0
+                        else "Container did not produce expected output"
+                    ),
                     stdout=output,
                     backend=self.name,
                 )
 
-            # Parse result
-            if "__AIRLOCK_RESULT__" in output:
-                start_marker = output.find("__AIRLOCK_RESULT__") + len("__AIRLOCK_RESULT__")
-                end_marker = output.find("__AIRLOCK_END__")
-                result_json = output[start_marker:end_marker].strip()
-
-                result_data = json.loads(result_json)
-                elapsed = (time.time() - start_time) * 1000
-
-                return SandboxResult(
-                    success=result_data["success"],
-                    result=result_data.get("result"),
-                    error=result_data.get("error"),
-                    stdout=output,
-                    execution_time_ms=round(elapsed, 2),
-                    backend=self.name,
-                )
-            else:
-                return SandboxResult(
-                    success=False,
-                    error="Container did not produce expected output",
-                    stdout=output,
-                    backend=self.name,
-                )
+            elapsed = (time.time() - start_time) * 1000
+            return SandboxResult(
+                success=outcome["success"],
+                result=outcome.get("result"),
+                error=outcome.get("error"),
+                stdout=output,
+                execution_time_ms=round(elapsed, 2),
+                backend=self.name,
+                tool_failed=not outcome["success"],
+            )
 
         except Exception as e:
             elapsed = (time.time() - start_time) * 1000
@@ -581,12 +575,16 @@ class LocalBackend(SandboxBackend):
         func: Callable[..., R],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
-        _timeout: int = 60,  # Not used - local execution has no timeout
+        timeout: int = 60,
     ) -> SandboxResult:
         """Execute function locally with NO isolation.
 
-        WARNING: This is UNSAFE. The function runs with full host access.
+        WARNING: This is UNSAFE. The function runs with full host access. An async
+        function's coroutine is awaited. ``timeout`` is accepted so the call matches every
+        other backend (until 0.10.17 it was named ``_timeout``, and ``timeout=`` raised a
+        TypeError), but local execution has no timeout.
         """
+        del timeout  # local execution has no timeout
         start_time = time.time()
 
         logger.warning(
@@ -596,7 +594,7 @@ class LocalBackend(SandboxBackend):
         )
 
         try:
-            result = func(*args, **kwargs)
+            result = _run_to_completion(func(*args, **kwargs))
             elapsed = (time.time() - start_time) * 1000
 
             return SandboxResult(
@@ -612,6 +610,7 @@ class LocalBackend(SandboxBackend):
                 error=f"{type(e).__name__}: {str(e)}",
                 execution_time_ms=round(elapsed, 2),
                 backend=self.name,
+                tool_failed=True,
             )
 
 
@@ -776,7 +775,6 @@ class ModalBackend(SandboxBackend):
 
     Example:
         from agent_airlock.sandbox_backend import ModalBackend
-        from agent_airlock import AirlockConfig
 
         backend = ModalBackend(
             app_name="my-airlock-sandbox",
@@ -785,7 +783,10 @@ class ModalBackend(SandboxBackend):
             memory_mb=512,
             timeout_s=30,
         )
-        config = AirlockConfig(sandbox_backend=backend)
+        result = backend.execute(my_function, args=(2, 3), kwargs={})
+
+    ``AirlockConfig`` has no backend setting and the ``@Airlock`` decorator runs on E2B,
+    so a Modal sandbox is used by calling ``execute`` directly.
     """
 
     def __init__(
@@ -879,9 +880,15 @@ class ModalBackend(SandboxBackend):
         """Run ``func(*args, **kwargs)`` inside a Modal sandbox.
 
         The function is cloudpickled, base64-encoded, and shipped to a
-        freshly-created Modal sandbox running ``image_ref``. The sandbox
-        decodes the payload, invokes the function, prints a base64-encoded
-        cloudpickled result envelope on a sentinel line, and exits.
+        freshly-created Modal sandbox running ``image_ref``. The sandbox runs
+        the same payload as E2B and Docker, which prints the outcome as JSON.
+
+        Until 0.10.17 the sandbox printed a cloudpickled result that this
+        method unpickled on the host. Code running in the sandbox controls
+        that output, so a tool could print a pickle of its own, or replace
+        ``cloudpickle.dumps`` before the harness ran, and run code on the host.
+        Nothing from the sandbox is unpickled now; a result arrives as JSON
+        types.
 
         Args:
             func: The function to execute. Must be cloudpickle-able.
@@ -907,7 +914,7 @@ class ModalBackend(SandboxBackend):
             )
 
         try:
-            import cloudpickle
+            import cloudpickle  # noqa: F401 - the payload is pickled with it
         except ImportError:
             return SandboxResult(
                 success=False,
@@ -919,36 +926,13 @@ class ModalBackend(SandboxBackend):
                 backend=self.name,
             )
 
-        import base64
-        import textwrap
+        from .sandbox import (
+            _parse_execution_output,
+            generate_execution_code,
+            serialize_function_call,
+        )
 
-        payload = base64.b64encode(cloudpickle.dumps((func, args, kwargs))).decode("ascii")
-        # The sandbox harness: decode → call → print sentinel result.
-        # Kept as a string template (not a heredoc file) so the backend
-        # has no on-disk artefact dependencies. The sentinel banner lets
-        # us distinguish the cloudpickled result from any incidental
-        # stdout produced by the user code itself.
-        sentinel = "__AIRLOCK_MODAL_RESULT__"
-        harness = textwrap.dedent(
-            f"""
-            import base64, sys, traceback
-            import cloudpickle
-            try:
-                fn, _args, _kwargs = cloudpickle.loads(
-                    base64.b64decode({payload!r}.encode("ascii"))
-                )
-                _out = fn(*_args, **_kwargs)
-                _envelope = ("ok", _out)
-            except BaseException as _exc:  # noqa: BLE001
-                _envelope = ("err", repr(_exc), traceback.format_exc())
-            sys.stdout.write(
-                "{sentinel}"
-                + base64.b64encode(cloudpickle.dumps(_envelope)).decode("ascii")
-                + "\\n"
-            )
-            sys.stdout.flush()
-            """
-        ).strip()
+        harness = generate_execution_code(serialize_function_call(func, args, kwargs))
 
         effective_timeout = timeout if timeout is not None else self.timeout_s
         block_network = self._resolve_block_network()
@@ -985,47 +969,35 @@ class ModalBackend(SandboxBackend):
                 with contextlib.suppress(Exception):
                     sandbox.terminate()
 
-        # Extract the sentinel-wrapped envelope from the user's stdout.
-        envelope_b64: str | None = None
-        user_stdout_lines: list[str] = []
-        for line in stdout.splitlines():
-            if line.startswith(sentinel):
-                envelope_b64 = line[len(sentinel) :]
-            else:
-                user_stdout_lines.append(line)
         elapsed_ms = (time.monotonic() - start) * 1000.0
+        try:
+            outcome = _parse_execution_output(stdout)
+            no_outcome = "modal sandbox produced no result envelope"
+        except ValueError as exc:
+            outcome = None
+            no_outcome = f"modal sandbox result could not be read: {exc}"
 
-        if envelope_b64 is None:
+        if outcome is None:
             return SandboxResult(
                 success=False,
-                error="modal sandbox produced no result envelope",
-                stdout="\n".join(user_stdout_lines),
+                error=no_outcome,
+                stdout=stdout,
                 stderr=stderr,
                 execution_time_ms=elapsed_ms,
                 sandbox_id=sandbox_id,
                 backend=self.name,
             )
-
-        envelope = cloudpickle.loads(base64.b64decode(envelope_b64))
-        if envelope[0] == "ok":
-            return SandboxResult(
-                success=True,
-                result=envelope[1],
-                stdout="\n".join(user_stdout_lines),
-                stderr=stderr,
-                execution_time_ms=elapsed_ms,
-                sandbox_id=sandbox_id,
-                backend=self.name,
-            )
-        # Failure envelope: ("err", repr_exc, traceback_str)
         return SandboxResult(
-            success=False,
-            error=envelope[1],
-            stdout="\n".join(user_stdout_lines),
-            stderr=(envelope[2] if len(envelope) > 2 else "") or stderr,
+            success=outcome["success"],
+            result=outcome.get("result"),
+            error=outcome.get("error"),
+            stdout=stdout,
+            # A tool's traceback travels in the outcome; keep it where it used to land.
+            stderr=outcome.get("traceback") or stderr,
             execution_time_ms=elapsed_ms,
             sandbox_id=sandbox_id,
             backend=self.name,
+            tool_failed=not outcome["success"],
         )
 
 
@@ -1035,14 +1007,19 @@ def get_default_backend(config: AirlockConfig | None = None) -> SandboxBackend:
 
     Priority:
     1. E2B (if available and API key present)
-    2. Docker (if available)
-    3. None (sandbox not available)
+    2. Docker (if a daemon answers), with the default image
+    3. ``LocalBackend(allow_unsafe=True)``, which runs the function in this process
+       with NO isolation, after a ``no_sandbox_available`` warning
+
+    It never returns None, so a caller that needs isolation must check the backend's
+    ``name`` (``"local_unsafe"`` for the last case) before running anything dangerous.
+    ModalBackend and ManagedSandboxBackend are never picked.
 
     Args:
         config: Optional config to check for API keys.
 
     Returns:
-        Best available SandboxBackend, or None if none available.
+        The best available SandboxBackend.
     """
     import os
 

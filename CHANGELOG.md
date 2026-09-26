@@ -11,6 +11,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.17] - 2026-09-26
+
+### Security
+
+- **A tool running in a Modal sandbox could run code on the host.** `ModalBackend` unpickled
+  the result envelope the sandbox printed. Code running in the sandbox controls that output:
+  it could print an envelope of its own, or replace `cloudpickle.dumps` before the harness
+  ran, and the host would load the pickle. The outcome now comes back as JSON, as it does from
+  E2B and Docker, and nothing a sandbox prints is unpickled. A Modal result therefore arrives
+  as JSON types: tuples as lists, anything else JSON cannot encode as its `str()`.
+  `ModalBackend` shipped in 0.8.11.
+
+- **A sandbox ran more than one call.** The E2B pool put a sandbox back after each call, a
+  failed one included, so the next call, possibly another user's, ran next to whatever the
+  last one left behind: files, module globals, a background thread. A sandbox is now killed
+  after its call. The pool still hides the cold start for the sandboxes `warm_up()` creates;
+  calls after those pay it.
+
+- **A second config's E2B API key was ignored.** One process-wide pool took its API key,
+  timeout and size from the first config that reached it, so a tool configured with another
+  key ran in sandboxes created with the first one's. There is now one pool per API key,
+  timeout and pool size. `E2BBackend.shutdown()` also shut down the default config's pool
+  rather than its own.
+
+- **The local fallback caught more than a failed import.** `sandbox=True` runs a tool
+  in-process only when `agent_airlock.sandbox` cannot be imported and `sandbox_required` is
+  False. The `except ImportError` wrapped the whole sandbox call, so an ImportError raised
+  while the call ran took the same path. It now wraps the import alone.
+
+### Fixed
+
+- **`sandbox=True` on an `async def` tool returned `'<coroutine object ...>'`.** The payload
+  called the function and never awaited it; `DockerBackend` ran its own copy of that payload,
+  and `LocalBackend` returned the coroutine itself. The coroutine is now awaited on a new
+  event loop, in a worker thread when a loop is already running, as one is in a Jupyter
+  kernel, which is what E2B runs code in.
+
+- **An expired sandbox was handed out.** A pooled sandbox past its `sandbox_timeout` went to
+  the next call, which failed. The pool now resets a sandbox's lifetime as it hands it out,
+  and kills and skips one that has already expired.
+
+- **`execute_with_files` never returned a result.** It looked for markers the payload does
+  not print and read E2B's list of output chunks as a string. It now reads the result the way
+  `execute_in_sandbox` does. Its result path also unpickled sandbox output; the string bug
+  kept that from being reached.
+
+- **Every sandbox failure was answered as an internal error.** A missing E2B SDK, a sandbox
+  that could not be created and a missing result all became
+  `"AIRLOCK_BLOCK: Unexpected error in '<tool>'"` with `block_reason` `validation_error`. They
+  are now `"AIRLOCK_BLOCK: '<tool>' could not run in its sandbox"` with `block_reason`
+  `sandbox_error`, logged as `sandbox_failed`. A tool that raises inside the sandbox still gets
+  exactly the answer it gets when it raises in-process, and the new
+  `SandboxResult.tool_failed` tells the two cases apart.
+
+- **A tool calling `sys.exit()` in the sandbox, or returning a value JSON cannot encode (a
+  dict with tuple keys), sent back no result.** Both are now reported as the tool's error.
+
+- **`LocalBackend.execute(..., timeout=)` raised a TypeError.** The parameter was named
+  `_timeout`.
+
+- **Docstrings and a hint.** Docstrings in `sandbox_backend.py` showed
+  `AirlockConfig(sandbox_backend=...)`, a TypeError, since the decorator runs on E2B only.
+  `get_default_backend()`'s said it returns None where it returns
+  `LocalBackend(allow_unsafe=True)`, and core's said a missing E2B falls back to local
+  execution. The digest-pin error suggested `docker pull --quiet`, which prints no digest.
+
+### Changed
+
+- `agent_airlock.sandbox.SandboxExecutionError`, a second class that nothing raised, is now
+  the same class as `agent_airlock.SandboxExecutionError`. `SandboxUnavailableError` is now a
+  `SandboxNotAvailableError`, and every sandbox exception is an `AirlockError`.
+
 ## [0.10.16] - 2026-09-26
 
 ### Security
