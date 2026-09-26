@@ -3342,8 +3342,10 @@ below.</p>
 </code></pre></div>
 <p>The resolver receives the context read from the tool's first argument (an object with a
 <code>context</code>, <code>ctx</code>, <code>request_context</code> or <code>session_context</code> attribute, such as an agent
-framework's run context). For a tool without one, like <code>my_tool</code> here, the context is
-empty (<code>workspace_id</code> is <code>None</code>), so <code>resolve_policy</code> returns the 100/hour policy.</p>
+framework's run context). When that carries no agent id, the identity, roles and workspace
+of a context set around the call (<code>with AirlockContext(...)</code>) are used. For a tool with
+neither, like <code>my_tool</code> here, the context is empty (<code>workspace_id</code> is <code>None</code>), so
+<code>resolve_policy</code> returns the 100/hour policy.</p>
 <h3 id="with-sandbox">With Sandbox<a class="headerlink" href="#with-sandbox" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># When E2B is not installed or configured, the call is refused with a blocked</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># response. sandbox_required=True also rules out the one local fallback: running the</span>

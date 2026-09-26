@@ -2867,8 +2867,8 @@ masked, in the log, the warnings and the audit record, and returned raw.</p>
 </tr>
 </tbody>
 </table>
-<p>A card number is matched as an unbroken run of digits, so <code>4111-1111-1111-1111</code> is not
-detected. <code>pii_locales=["in"]</code> adds Aadhaar, PAN, UPI ID, IFSC, Devanagari names and Indian
+<p>A card number may be split by one consistent <code>-</code> or space (<code>4111-1111-1111-1111</code>,
+<code>4111 1111 1111 1111</code>). <code>pii_locales=["in"]</code> adds Aadhaar, PAN, UPI ID, IFSC, Devanagari names and Indian
 mobile numbers.</p>
 <h3 id="secrets">Secrets<a class="headerlink" href="#secrets" title="Permanent link">&para;</a></h3>
 <p>Masked when <code>mask_secrets=True</code> (the default).</p>
@@ -2913,11 +2913,13 @@ mobile numbers.</p>
 </tr>
 </tbody>
 </table>
-<p>Detection is by known shape. An API key is an OpenAI or Anthropic <code>sk-</code> key with 20 or more
-characters after the prefix, a Google <code>AIza</code> key, a GitHub <code>ghp_</code>/<code>gho_</code>/<code>github_pat_</code>
-token or a Slack <code>xox</code> token; a shorter or unrecognised key passes through. A password is
+<p>Detection is by known shape. An API key is an OpenAI key (legacy <code>sk-...</code>, or
+<code>sk-proj-</code>/<code>sk-svcacct-</code>/<code>sk-admin-</code>), an Anthropic <code>sk-ant-...</code> key, a Google <code>AIza</code> key, a
+GitHub <code>ghp_</code>/<code>gho_</code>/<code>github_pat_</code> token or a Slack <code>xox</code> token; a shorter or unrecognised key
+passes through. A password is
 the value (8+ characters) after <code>password</code>, <code>passwd</code>, <code>pwd</code>, <code>secret</code> or <code>token</code> and <code>=</code> or
-<code>:</code>. The private-key rule masks the <code>BEGIN</code> line, not the key body. There is no separate
+<code>:</code>. The private-key rule masks the whole PEM block, or the header and the base64 lines after it
+when the <code>END</code> line is missing. There is no separate
 bearer-token type: the JWT in <code>Bearer eyJ...</code> is masked by the JWT rule.</p>
 <h2 id="masking-strategies">Masking Strategies<a class="headerlink" href="#masking-strategies" title="Permanent link">&para;</a></h2>
 <p><code>@Airlock</code> masks each type with its default strategy, the one the tables above show:

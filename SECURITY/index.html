@@ -3601,7 +3601,8 @@ In distributed deployments, consider:
 <h3 id="pii-detection">PII Detection<a class="headerlink" href="#pii-detection" title="Permanent link">&para;</a></h3>
 <p>Automatically detects and masks:
 - Social Security Numbers (XXX-XX-XXXX)
-- Credit Card Numbers (an unbroken run of digits; <code>4111-1111-1111-1111</code> is not detected)
+- Credit Card Numbers (Visa, Mastercard, Amex, Discover; the digits may be split by one
+  consistent <code>-</code> or space)
 - Email Addresses
 - Phone Numbers
 - IP Addresses</p>
@@ -3609,9 +3610,10 @@ In distributed deployments, consider:
 Indian mobile numbers.</p>
 <h3 id="secret-detection">Secret Detection<a class="headerlink" href="#secret-detection" title="Permanent link">&para;</a></h3>
 <p>Automatically detects and masks:
-- API Keys of known shapes: <code>sk-</code> keys with 20+ characters after the prefix (OpenAI,
-  Anthropic), Google <code>AIza...</code>, GitHub <code>ghp_</code>/<code>gho_</code>/<code>github_pat_</code>, Slack <code>xox*</code>.
-  Others, such as <code>sk-live-...</code> or <code>api_key=...</code>, are not detected.
+- API Keys of known shapes: OpenAI keys (legacy <code>sk-...</code> and <code>sk-proj-</code>/<code>sk-svcacct-</code>/
+  <code>sk-admin-</code>), Anthropic <code>sk-ant-...</code>, Google <code>AIza...</code>, GitHub <code>ghp_</code>/<code>gho_</code>/<code>github_pat_</code>,
+  Slack <code>xox*</code>. Others, such as <code>sk-live-...</code> or <code>api_key=...</code>, are not detected.
+- Private keys: the whole <code>-----BEGIN ... PRIVATE KEY-----</code> block
 - AWS Access Keys (<code>AKIA...</code>)
 - JWT Tokens (<code>eyJ...</code>)
 - Connection Strings (<code>postgres://</code>, <code>mongodb://</code>)
