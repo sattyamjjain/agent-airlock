@@ -91,15 +91,12 @@ Rate limiting uses a token bucket algorithm:
 ```python
 from agent_airlock.policy import RateLimit
 
-rate_limit = RateLimit(calls=100, period_seconds=3600)
+rate_limit = RateLimit.parse("100/hour")
 
-# Check if allowed
-if rate_limit.is_allowed():
-    # Proceed with call
-    rate_limit.consume()
+if rate_limit.acquire():
+    ...  # a token was taken: proceed with the call
 else:
-    # Rate limited
-    retry_after = rate_limit.retry_after()
+    ...  # rate limited; rate_limit.remaining() is 0
 ```
 
 ## Time-Based Restrictions
@@ -120,38 +117,55 @@ policy = SecurityPolicy(
 ```python
 from agent_airlock.policy import TimeWindow
 
-# Single window
-window = TimeWindow(start="09:00", end="17:00")
+window = TimeWindow.parse("09:00-17:00")
+overnight = TimeWindow.parse("22:00-06:00")  # a window may cross midnight
 
-# With timezone
-window = TimeWindow(start="09:00", end="17:00", timezone="America/New_York")
-
-# Check if currently allowed
-if window.is_active():
-    # Within allowed window
-    pass
+if window.is_within():  # pass dt=... to check another moment
+    ...
 ```
+
+Windows are checked against the local clock (`datetime.now()`); there is no timezone
+argument.
 
 ## Agent Identity
 
-Track and control per-agent access:
+`require_agent_id=True` refuses a call that carries no agent identity, and
+`allowed_roles` refuses one whose agent holds none of the listed roles. An anonymous call
+holds no role, so it is refused too:
 
 ```python
 from agent_airlock import Airlock, SecurityPolicy
 
-policy = SecurityPolicy(
-    allowed_agents=["agent-1", "agent-2"],
-    denied_agents=["suspicious-agent"],
-    agent_rate_limits={
-        "agent-1": "1000/hour",
-        "agent-2": "100/hour",
-    },
-)
+policy = SecurityPolicy(require_agent_id=True, allowed_roles=["admin", "operator"])
 
-@Airlock(policy=policy, agent_id="agent-1")
-def my_tool(x: int) -> int:
-    return x
+@Airlock(policy=policy)
+def delete_records(ctx, table: str) -> str:
+    ...
 ```
+
+Airlock reads the identity from the call's context object, the tool's first argument, in
+the shape frameworks pass one: an attribute named `context`, `ctx`, `request_context` or
+`session_context` whose object has an `agent_id` (or `agent`, `assistant_id`) and `roles`
+(or `permissions`, `scopes`). An OpenAI Agents SDK `RunContextWrapper` fits when the
+`context` object you give it carries those fields.
+
+When a framework passes the tool no context object, set one around the call. `async with`
+works the same way, and a context object on the call itself comes first:
+
+```python
+from agent_airlock.context import AirlockContext
+
+@Airlock(policy=policy)
+def export_report(name: str) -> str:
+    ...
+
+with AirlockContext(agent_id="support-bot", roles=["operator"]):
+    export_report(name="q3")
+```
+
+Until 0.10.13 `@Airlock` passed no identity to the policy: `require_agent_id` refused
+every call, however the caller identified itself, and `allowed_roles` was never
+enforced.
 
 ## Predefined Policies
 
@@ -171,14 +185,19 @@ def my_tool(x: int) -> int:
 
 ### STRICT_POLICY
 
-Maximum restrictions:
+Requires an agent identity (see [Agent Identity](#agent-identity)), limits every tool to
+100 calls an hour, and applies a strict capability policy:
 
 ```python
 from agent_airlock import STRICT_POLICY
+from agent_airlock.context import AirlockContext
 
 @Airlock(policy=STRICT_POLICY)
 def my_tool(x: int) -> int:
     return x
+
+with AirlockContext(agent_id="agent-1"):
+    my_tool(x=1)  # refused without an identity
 ```
 
 ### READ_ONLY_POLICY
@@ -205,25 +224,25 @@ def send_email(to: str, subject: str) -> dict:
     return {"sent": True}
 ```
 
-## Policy Composition
+## Choosing a Policy per Call
 
-Combine policies:
+`policy` can also be a function that takes the call's `AirlockContext` and returns the
+policy to apply, for per-tenant or per-workspace rules. There is no policy merge; build
+each policy whole:
 
 ```python
-from agent_airlock import SecurityPolicy
+from agent_airlock import Airlock, SecurityPolicy
+from agent_airlock.context import AirlockContext
 
-base_policy = SecurityPolicy(
-    denied_tools=["delete_*"],
-    rate_limits={"*": "100/hour"},
-)
+production = SecurityPolicy(allowed_tools=["read_*"])
+default = SecurityPolicy(denied_tools=["delete_*"])
 
-strict_policy = SecurityPolicy(
-    allowed_tools=["read_*"],
-    rate_limits={"*": "10/hour"},
-)
+def pick(context: AirlockContext) -> SecurityPolicy:
+    return production if context.workspace_id == "prod" else default
 
-# Merge policies (stricter wins)
-combined = base_policy.merge(strict_policy)
+@Airlock(policy=pick)
+def write_note(ctx, text: str) -> str:
+    ...
 ```
 
 ## Monitoring Blocked Calls

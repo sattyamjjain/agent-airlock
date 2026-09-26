@@ -176,7 +176,7 @@ PRODUCTION_POLICY = SecurityPolicy(
     allowed_tools=["read_*", "query_*", "get_*"],
     denied_tools=["delete_*", "drop_*", "truncate_*"],
 
-    # Agent identity requirements
+    # Agent identity requirements; how a call carries one: guide/policy.md#agent-identity
     require_agent_id=True,
     allowed_roles=["analyst", "developer"],
 

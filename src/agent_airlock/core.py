@@ -67,7 +67,13 @@ from .capabilities import (
     get_required_capabilities,
 )
 from .config import DEFAULT_CONFIG, AirlockConfig
-from .context import AirlockContext, ContextExtractor, reset_context, set_current_context
+from .context import (
+    AirlockContext,
+    ContextExtractor,
+    get_current_context,
+    reset_context,
+    set_current_context,
+)
 from .cost_tracking import (
     AirlockBudgetExceeded,
     BudgetEstimate,
@@ -86,6 +92,7 @@ from .kill_switch.registry import get as _kill_switch_get
 from .kill_switch.registry import is_frozen as _kill_switch_frozen
 from .network import NetworkBlockedError, network_airgap
 from .policy import (
+    AgentIdentity,
     PolicyEscalation,
     PolicyMutationError,
     PolicyViolation,
@@ -376,6 +383,25 @@ def _masked_warnings(count: int, func_name: str) -> list[str]:
         return []
     logger.info("output_sanitized", function=func_name, detections=count)
     return [f"Masked {count} sensitive value(s) in output"]
+
+
+def _caller_identity(context: AirlockContext[Any]) -> AgentIdentity | None:
+    """The identity ``SecurityPolicy.check`` judges this call by, or ``None`` if it has none.
+
+    ``context`` is read from the tool's first argument. A framework that passes none, or
+    one without an agent id, leaves it empty; the context a host set around the call with
+    ``with AirlockContext(agent_id=..., roles=[...])`` is used then. Until 0.10.13 no
+    identity was passed at all, so ``require_agent_id`` refused every call and
+    ``allowed_roles`` let every call through.
+    """
+    for candidate in (context, get_current_context()):
+        if candidate is not None and candidate.agent_id:
+            return AgentIdentity(
+                agent_id=candidate.agent_id,
+                session_id=candidate.session_id,
+                roles=list(candidate.roles),
+            )
+    return None
 
 
 class Airlock:
@@ -1259,7 +1285,7 @@ class Airlock:
 
             try:
                 resolved_policy.check_reauthorization(func_name, context)
-                resolved_policy.check(func_name)
+                resolved_policy.check(func_name, agent=_caller_identity(context))
             except PolicyEscalation as e:
                 # V0.8.74 (issue #143): the third verdict. This clause MUST stay above
                 # the PolicyViolation handler below — PolicyEscalation subclasses it,
@@ -1885,8 +1911,6 @@ class Airlock:
         # (set by routers via ``set_current_context``) so the same router
         # can scope tags across multiple tool calls in one turn without
         # threading context through every function signature.
-        from .context import get_current_context
-
         cv_context = get_current_context()
         cv_metadata: dict[str, Any] = cv_context.metadata if cv_context is not None else {}
 

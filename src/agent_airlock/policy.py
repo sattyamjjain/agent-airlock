@@ -374,7 +374,8 @@ class SecurityPolicy:
         rate_limits: Dict mapping tool patterns to rate limit strings.
                      More specific patterns take precedence.
         require_agent_id: If True, reject calls without agent identity.
-        allowed_roles: If set, agent must have at least one of these roles.
+        allowed_roles: If set, agent must have at least one of these roles; a call
+                       with no agent identity holds none and is rejected.
         capability_policy: V0.4.0 - Capability gating policy for per-tool permissions.
     """
 
@@ -618,19 +619,22 @@ class SecurityPolicy:
                 details={},
             )
 
-        if agent and self.allowed_roles:
-            has_allowed_role = any(agent.has_role(role) for role in self.allowed_roles)
-            if not has_allowed_role:
-                raise PolicyViolation(
-                    f"Agent does not have required role. "
-                    f"Required: one of {self.allowed_roles}, "
-                    f"Agent roles: {agent.roles}",
-                    violation_type="role_required",
-                    details={
-                        "required_roles": self.allowed_roles,
-                        "agent_roles": agent.roles,
-                    },
-                )
+        # An anonymous caller holds no role. Until 0.10.13 the check was skipped for one,
+        # which let every call through a policy restricted to named roles.
+        if self.allowed_roles and (
+            agent is None or not any(agent.has_role(role) for role in self.allowed_roles)
+        ):
+            held = agent.roles if agent is not None else []
+            raise PolicyViolation(
+                f"Agent does not have required role. "
+                f"Required: one of {self.allowed_roles}, "
+                f"Agent roles: {held if agent is not None else 'none (no agent identity)'}",
+                violation_type="role_required",
+                details={
+                    "required_roles": self.allowed_roles,
+                    "agent_roles": held,
+                },
+            )
 
     def check_reauthorization(
         self,
