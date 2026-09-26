@@ -548,10 +548,14 @@ def execute_code(python_code: str) -> str:
 
 ## Performance Notes
 
-- **Validation overhead:** <50ms per call
-- **E2B cold start:** ~125ms ([Firecracker MicroVM](https://e2b.dev/blog/firecracker-vs-qemu))
-- **E2B warm pool:** <200ms (pre-warmed sandboxes)
-- **Signature introspection:** Negligible (cached by frameworks)
+- **Validation overhead:** measured by `tests/benchmarks/test_bench_core.py` (`make bench`);
+  no figure is published here.
+- **E2B cold start:** E2B reports about 125ms for its
+  [Firecracker micro-VMs](https://e2b.dev/blog/firecracker-vs-qemu); not measured by this
+  project.
+- **E2B warm pool:** `get_sandbox_pool(config).warm_up()` creates sandboxes before the first
+  call; the saving is not measured here.
+- **Signature introspection:** once per tool, when it is decorated, not per call.
 
 ---
 

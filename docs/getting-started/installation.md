@@ -37,7 +37,7 @@ pip install agent-airlock[sandbox]
 ```
 
 This installs:
-- `e2b>=1.0` - E2B SDK
+- `e2b` and `e2b-code-interpreter` (`>=1.0,<3.0`) - E2B SDK
 - `cloudpickle>=3.0` - Function serialization
 
 !!! note "E2B API Key Required"
@@ -56,11 +56,12 @@ pip install agent-airlock[mcp]
 
 This installs:
 - `mcp>=1.0` - MCP SDK
-- `fastmcp>=2.0,<3.0` - FastMCP framework
+- `fastmcp>=2.0,<5.0` - FastMCP framework
 
 ### Full Installation
 
-Install everything:
+Install every runtime extra except `modal`, `bench` and `attested`, which are installed by
+name:
 
 ```bash
 pip install agent-airlock[all]
@@ -122,9 +123,9 @@ If E2B sandbox fails to connect:
 
 ### Type Checking Errors
 
-Agent-Airlock uses strict typing. If mypy complains:
+Agent-Airlock ships its type hints (`py.typed`). If mypy complains about a third-party
+package it imports, install that package's stubs, or skip untyped imports:
 
 ```bash
-pip install types-all  # Install type stubs
 mypy your_code.py --ignore-missing-imports
 ```

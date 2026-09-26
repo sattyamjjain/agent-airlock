@@ -21,41 +21,49 @@ Without Airlock, `force` and `bypass_audit` are silently ignored by `**kwargs` o
 ### The Solution
 
 ```python
-from agent_airlock import Airlock, AirlockConfig
+from agent_airlock import Airlock, AirlockConfig, UnknownArgsMode
 
-# Permissive mode: strip ghost arguments
-@Airlock(config=AirlockConfig(strict_mode=False))
+# Default (STRIP_AND_LOG): strip ghost arguments and log them
+@Airlock()
 def delete_user(user_id: int) -> dict:
     return {"deleted": user_id}
 
-# Strict mode: reject ghost arguments
-@Airlock(config=AirlockConfig(strict_mode=True))
+# BLOCK: reject a call that carries ghost arguments
+@Airlock(config=AirlockConfig(unknown_args=UnknownArgsMode.BLOCK))
 def delete_user_strict(user_id: int) -> dict:
     return {"deleted": user_id}
 ```
 
-### Permissive Mode (Default)
+`STRIP_SILENT` strips them without logging.
+
+### Stripping (Default)
 
 Ghost arguments are stripped and logged:
 
 ```python
 result = delete_user(user_id=123, force=True)
-# Logs: WARNING - Stripped ghost arguments: ['force']
+# Logs a warning: ghost_arguments_stripped  stripped_args=['force']
 # Returns: {"deleted": 123}
 ```
 
-### Strict Mode
+### Blocking
 
 Ghost arguments cause rejection:
 
 ```python
 result = delete_user_strict(user_id=123, force=True)
-# Returns: AirlockResponse(
-#     status="blocked",
-#     error="Ghost arguments not allowed",
-#     fix_hints=["Remove unknown parameters: force"],
-#     blocked_args=["force"]
-# )
+# Returns:
+# {
+#     "success": False,
+#     "status": "blocked",
+#     "error": "AIRLOCK_BLOCK: Unknown arguments detected: force",
+#     "block_reason": "ghost_arguments",
+#     "fix_hints": [
+#         "Remove these unknown arguments: force",
+#         "Check the function signature for valid parameter names",
+#     ],
+#     "metadata": {...},
+# }
 ```
 
 ## Type Validation
@@ -86,11 +94,16 @@ def get_user(user_id: int) -> dict:
     return {"id": user_id}
 
 result = get_user(user_id="123")
-# Returns: AirlockResponse(
-#     status="blocked",
-#     error="Type validation failed",
-#     fix_hints=["user_id: Expected int, got str. Try: user_id=123"]
-# )
+# Returns:
+# {
+#     "success": False,
+#     "status": "blocked",
+#     "error": "AIRLOCK_BLOCK: Tool 'get_user' validation failed. user_id: Input should
+#               be a valid integer",
+#     "block_reason": "validation_error",
+#     "fix_hints": ["'user_id' must be an integer, not str"],
+#     "metadata": {...},
+# }
 ```
 
 ## Supported Types
@@ -109,13 +122,17 @@ Airlock validates all standard Python types:
 
 ## Complex Types
 
-Airlock supports Pydantic models:
+Airlock supports Pydantic models, passed as a dict or an instance. Strict mode applies to the
+tool's own parameters; a model is validated with its own config, so set it strict too if its
+fields should refuse coercion:
 
 ```python
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from agent_airlock import Airlock
 
 class UserCreate(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     name: str
     email: str
     age: int
@@ -132,6 +149,9 @@ result = create_user(user={"name": "John", "email": "j@x.com", "age": "30"})
 # Blocked with fix_hints
 ```
 
+Without `ConfigDict(strict=True)` on the model, `"age": "30"` is coerced to `30` and the
+call runs.
+
 ## Self-Healing Responses
 
 When validation fails, Airlock returns actionable hints:
@@ -142,15 +162,18 @@ def search(query: str, limit: int = 10, offset: int = 0) -> list:
     return []
 
 result = search(query=123, limit="ten", extra_param=True)
-# Returns:
+# extra_param is stripped (the default mode), then both type errors are reported:
 # {
+#     "success": False,
 #     "status": "blocked",
-#     "error": "Validation failed",
+#     "error": "AIRLOCK_BLOCK: Tool 'search' validation failed. query: Input should be a
+#               valid string; limit: Input should be a valid integer",
+#     "block_reason": "validation_error",
 #     "fix_hints": [
-#         "query: Expected str, got int. Try: query='123'",
-#         "limit: Expected int, got str. Try: limit=10",
-#         "Remove unknown parameters: extra_param"
-#     ]
+#         "'query' must be a string, not int",
+#         "'limit' must be an integer, not str"
+#     ],
+#     "metadata": {...},
 # }
 ```
 

@@ -38,14 +38,17 @@ models, classify explicitly by constructing a `CapabilityPolicy` with
 ## Usage
 
 ```python
-from agent_airlock import Airlock
+from agent_airlock import Airlock, AirlockConfig
 from agent_airlock.policy_presets import offensive_cyber_model_defaults
 
 cap_policy = offensive_cyber_model_defaults(model_id="claude-opus-4-7")
 
-@Airlock(capability_policy=cap_policy)
+@Airlock(config=AirlockConfig(capability_policy=cap_policy))
 def run_tool(cmd: str) -> str: ...
 ```
+
+The preset is a `CapabilityPolicy`, so it applies to tools that declare what they need with
+`@requires(...)`; a tool that declares nothing is not checked against it.
 
 If the driving model is later swapped for GPT-5-2-Codex, the same
 one-liner produces the same tier-level defaults — no branching in

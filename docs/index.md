@@ -17,15 +17,16 @@ the tool is the only place the real Python arguments exist. The installed core d
 Pydantic and nothing else.
 
 ```python
-from agent_airlock import Airlock, UnknownArgsMode
+from agent_airlock import Airlock, AirlockConfig, UnknownArgsMode
 
-@Airlock(unknown_args_mode=UnknownArgsMode.BLOCK)
+@Airlock(config=AirlockConfig(unknown_args=UnknownArgsMode.BLOCK))
 def delete_user(user_id: int) -> dict:
     """Delete a user - protected by Airlock."""
     return {"deleted": user_id}
 
 # LLM tries: delete_user(user_id="123", admin_override=True)
-# Airlock blocks: ghost argument 'admin_override', wrong type for 'user_id'
+# Refused: unknown argument 'admin_override'. Retried without it, refused again:
+# 'user_id' must be an integer, not str. Neither call reaches the function.
 ```
 
 ## Key Features
@@ -34,13 +35,13 @@ def delete_user(user_id: int) -> dict:
 LLMs hallucinate parameters that don't exist. Airlock catches them.
 
 ```python
-from agent_airlock import UnknownArgsMode
+from agent_airlock import Airlock, AirlockConfig, UnknownArgsMode
 
-# BLOCK mode (production) - reject calls with unknown args
-# STRIP_AND_LOG mode (staging) - strip and log warnings
-# STRIP_SILENT mode (development) - silently strip
+# BLOCK - reject calls with unknown args
+# STRIP_AND_LOG (the default) - strip them and log a warning
+# STRIP_SILENT - strip them silently
 
-@Airlock(unknown_args_mode=UnknownArgsMode.BLOCK)
+@Airlock(config=AirlockConfig(unknown_args=UnknownArgsMode.BLOCK))
 def delete_file(path: str) -> bool: ...
 
 # LLM invents "force=True" - Airlock blocks it
@@ -60,11 +61,12 @@ When validation fails, Airlock returns structured errors the LLM can understand 
 
 ```python
 {
+    "success": False,
     "status": "blocked",
-    "error": "Validation failed",
-    "fix_hints": [
-        "user_id: Expected int, got str. Try: user_id=123"
-    ]
+    "error": "AIRLOCK_BLOCK: Tool 'get_user' validation failed. user_id: Input should be a valid integer",
+    "block_reason": "validation_error",
+    "fix_hints": ["'user_id' must be an integer, not str"],
+    "metadata": {...},  # the function name and each field error
 }
 ```
 
@@ -96,6 +98,10 @@ def fetch_and_save(url: str, path: str) -> bool:
     ...
 ```
 
+`@requires` declares what a tool needs; it is enforced against a `CapabilityPolicy` set as
+`SecurityPolicy(capability_policy=...)` or `AirlockConfig(capability_policy=...)`. With
+neither set, nothing is checked.
+
 ### Policy Engine
 RBAC, rate limiting, and time-based restrictions.
 
@@ -113,19 +119,23 @@ policy = SecurityPolicy(
 Prevent cascading failures with fault tolerance:
 
 ```python
-from agent_airlock import CircuitBreaker, AGGRESSIVE_BREAKER
+from agent_airlock import AGGRESSIVE_BREAKER, Airlock, CircuitBreaker
 
-@Airlock(circuit_breaker=AGGRESSIVE_BREAKER)
+breaker = CircuitBreaker("search-api", AGGRESSIVE_BREAKER)
+
+@Airlock()
+@breaker  # inside @Airlock, so it sees the tool's exceptions
 def external_api_call(query: str) -> dict:
-    """Auto-fails fast if external service is down."""
+    """After 3 failures the circuit opens and calls fail fast."""
     ...
 ```
 
 ### PII/Secret Masking
-Detect and mask sensitive data in outputs (including India-specific: Aadhaar, PAN, UPI).
+Detect and mask sensitive data in outputs. India-specific types (Aadhaar, PAN, UPI) are
+opt-in with `AirlockConfig(pii_locales=["in"])`.
 
 ```python
-# Output: "User email: [EMAIL REDACTED]"
+# Output: "User email: j***@example.com"
 # Instead of: "User email: john@example.com"
 ```
 
@@ -133,10 +143,14 @@ Detect and mask sensitive data in outputs (including India-specific: Aadhaar, PA
 Run dangerous code in isolated Firecracker MicroVMs.
 
 ```python
-@Airlock(sandbox=True)
+@Airlock(sandbox=True, sandbox_required=True)
 def run_user_code(code: str) -> str:
-    return exec(code)  # Executes in E2B sandbox, not your server
+    exec(code)  # Runs in an E2B micro-VM, not on your server
+    return "ok"
 ```
+
+When E2B is not installed or configured, the call is refused with a blocked response; it is
+not run on your server instead.
 
 ### OpenTelemetry Observability (V0.4.0)
 Enterprise-grade distributed tracing:

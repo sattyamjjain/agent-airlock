@@ -24,9 +24,9 @@ result = get_customer(id=123)
 # {
 #     "id": 123,
 #     "name": "John Doe",
-#     "email": "[EMAIL REDACTED]",
-#     "phone": "[PHONE REDACTED]",
-#     "ssn": "[SSN REDACTED]"
+#     "email": "j***@example.com",
+#     "phone": "555***567",
+#     "ssn": "[REDACTED]"
 # }
 ```
 
@@ -43,89 +43,82 @@ config = AirlockConfig(
 @Airlock(config=config)
 def get_config() -> dict:
     return {
-        "api_key": "sk-1234567890abcdef",
-        "aws_key": "AKIA1234567890EXAMPLE",
+        "api_key": "sk-1234567890abcdefghijklmnop",
+        "aws_key": "AKIAIOSFODNN7EXAMPLE",
         "db_url": "postgres://user:pass@localhost/db",
-        "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxx",
+        "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.abc",
     }
 
 result = get_config()
 # {
-#     "api_key": "[API_KEY REDACTED]",
-#     "aws_key": "[AWS_KEY REDACTED]",
-#     "db_url": "[CONNECTION_STRING REDACTED]",
-#     "jwt": "[JWT REDACTED]"
+#     "api_key": "sk-1234...mnop",
+#     "aws_key": "AKIAIOS...MPLE",
+#     "db_url": "[REDACTED]",
+#     "jwt": "eyJhbGciOi...[JWT]"
 # }
 ```
 
+Secrets are matched by shape: a value that does not fit a known key format (for example an
+`sk-` key with fewer than 20 characters after the prefix) is returned unmasked.
+
 ## Masking Strategies
 
+`@Airlock` uses each type's default strategy (`PARTIAL` for email, as above);
+`AirlockConfig` has no strategy setting. To pick one, call `sanitize_output` with a
+`mask_config` mapping. A type left out of the mapping is masked `FULL`.
+
 ```python
-from agent_airlock import Airlock, AirlockConfig, MaskingStrategy
+from agent_airlock import MaskingStrategy, SensitiveDataType, sanitize_output
+
+def mask_email(strategy: MaskingStrategy) -> str:
+    config = {SensitiveDataType.EMAIL: strategy}
+    return sanitize_output("john@example.com", mask_config=config).content
 
 # Full redaction
-config_full = AirlockConfig(
-    sanitize_output=True,
-    mask_pii=True,
-    masking_strategy=MaskingStrategy.FULL,
-)
-# john@example.com → [EMAIL REDACTED]
+mask_email(MaskingStrategy.FULL)       # [REDACTED]
 
 # Partial masking
-config_partial = AirlockConfig(
-    sanitize_output=True,
-    mask_pii=True,
-    masking_strategy=MaskingStrategy.PARTIAL,
-)
-# john@example.com → j***@e***.com
+mask_email(MaskingStrategy.PARTIAL)    # j***@example.com
 
 # Type only
-config_type = AirlockConfig(
-    sanitize_output=True,
-    mask_pii=True,
-    masking_strategy=MaskingStrategy.TYPE_ONLY,
-)
-# john@example.com → [EMAIL]
+mask_email(MaskingStrategy.TYPE_ONLY)  # [EMAIL]
 
 # Hash (for correlation)
-config_hash = AirlockConfig(
-    sanitize_output=True,
-    mask_pii=True,
-    masking_strategy=MaskingStrategy.HASH,
-)
-# john@example.com → [EMAIL:a1b2c3d4]
+mask_email(MaskingStrategy.HASH)       # [SHA256:855f96e9...]
 ```
 
 ## Selective Type Masking
 
+`AirlockConfig` has no per-type switch, only `mask_pii`, `mask_secrets` and
+`pii_locales`. Select types with the standalone functions:
+
 ```python
-from agent_airlock import Airlock, AirlockConfig, SensitiveDataType
+from agent_airlock import (
+    SensitiveDataType, WorkspacePIIConfig, mask_sensitive_data, sanitize_with_workspace_config,
+)
+
+text = "john@example.com, SSN 123-45-6789, card 4111111111111111"
 
 # Only mask specific types
-config = AirlockConfig(
-    sanitize_output=True,
-    enabled_types=[
+masked, detections = mask_sensitive_data(
+    text,
+    types=[
         SensitiveDataType.SSN,
         SensitiveDataType.CREDIT_CARD,
     ],
 )
-
-@Airlock(config=config)
-def get_data() -> dict:
-    return {
-        "email": "john@example.com",    # NOT masked
-        "ssn": "123-45-6789",           # Masked
-        "card": "4111111111111111",     # Masked
-    }
+# john@example.com, SSN [REDACTED], card **** **** **** 1111
+# (email NOT masked)
 
 # Disable specific types
-config2 = AirlockConfig(
-    sanitize_output=True,
-    mask_pii=True,
+config = WorkspacePIIConfig(
+    workspace_id="ops",
     disabled_types=[
         SensitiveDataType.IP_ADDRESS,   # Don't mask IPs
     ],
 )
+sanitize_with_workspace_config("host 10.0.0.12, owner ops@example.com", config).content
+# host 10.0.0.12, owner o***@example.com
 ```
 
 ## Workspace-Specific Rules
@@ -144,7 +137,7 @@ enterprise = WorkspacePIIConfig(
 
 content = "Contact alice@acme.com or bob@gmail.com"
 result = sanitize_with_workspace_config(content, enterprise)
-# "Contact alice@acme.com or [EMAIL REDACTED]"
+# result.content == "Contact alice@acme.com or b***@gmail.com"
 
 # Sales workspace - mask competitor emails
 sales = WorkspacePIIConfig(
@@ -154,7 +147,7 @@ sales = WorkspacePIIConfig(
 
 content = "Lead: prospect@company.com, Spy: mole@competitor1.com"
 result = sanitize_with_workspace_config(content, sales)
-# "Lead: prospect@company.com, Spy: [EMAIL REDACTED]"
+# result.content == "Lead: prospect@company.com, Spy: m***@competitor1.com"
 ```
 
 ## Phone Number Filtering
@@ -174,13 +167,13 @@ Support: +1888-555-9999 (keep visible)
 """
 
 result = sanitize_with_workspace_config(content, config)
-# Toll-free numbers preserved, personal masked
+# result.content: toll-free numbers preserved, personal masked as 555***567
 ```
 
 ## Custom Patterns
 
 ```python
-from agent_airlock import WorkspacePIIConfig, MaskingStrategy
+from agent_airlock import MaskingStrategy, WorkspacePIIConfig, sanitize_with_workspace_config
 
 config = WorkspacePIIConfig(
     workspace_id="hr-department",
@@ -202,10 +195,14 @@ Salary: $85,000.00
 """
 
 result = sanitize_with_workspace_config(content, config)
-# Employee: [employee_id]
-# Badge: [badge_number]
-# Salary: [salary REDACTED]
+# result.content:
+# Employee: [EMPLOYEE_ID]
+# Badge: [REDACTED]
+# Salary: [REDACTED]
 ```
+
+A custom pattern with no strategy is masked `FULL`. Only `TYPE_ONLY` shows the pattern's
+name; every other strategy gives `[REDACTED]`.
 
 ## Streaming Sanitization
 
@@ -227,11 +224,12 @@ def generate_report():
 
 for chunk in streaming.wrap_generator(generate_report()):
     print(chunk, end="")
-# Customer: [EMAIL REDACTED]
-# Phone: [PHONE REDACTED]
-# SSN: [SSN REDACTED]
+# Customer: j***@example.com
+# Phone: 555***567
+# SSN: [REDACTED]
 
-print(f"\nTruncated: {streaming.state.was_truncated}")
+print(f"\nTruncated: {streaming.state.truncated}")
+# Truncated: False
 ```
 
 ## Direct Sanitization
@@ -256,6 +254,25 @@ result = sanitize_output(
 print(result.content)
 print(f"Detections: {result.detection_count}")
 
+# Each detection is a dict: type, value, start, end, full_match, masked_as
 for detection in result.detections:
-    print(f"  {detection.type}: {detection.original} → {detection.masked}")
+    print(f"  {detection['type']}: {detection['value']} → {detection['masked_as']}")
 ```
+
+Output:
+
+```
+User data:
+- Email: j***@example.com
+- Phone: (555***567
+- SSN: [REDACTED]
+- API Key: sk-abcdef123456
+
+Detections: 3
+  email: john@example.com → j***@example.com
+  phone: 555) 123-4567 → 555***567
+  ssn: 123-45-6789 → [REDACTED]
+```
+
+The API key is left as it is: the `sk-` pattern needs at least 20 characters after the
+prefix. The phone match starts after the opening parenthesis, which stays in the output.

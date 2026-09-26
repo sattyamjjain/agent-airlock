@@ -61,6 +61,7 @@ make test-badge              # regenerate the TEST-BADGE block in README.md
 make egress-bench            # CVE egress walker over tests/cves/fixtures/
 make verify-corpus           # verify wild_payload_corpus MANIFEST.sha256
 make check-links             # dead relative links; docs/ pages must link inside docs/
+make check-docs-api          # docs and example code use agent_airlock API that exists
 make check-cve-catalog       # docs/cves/index.md matches the tests/cves/ suite
 make check-docs              # mkdocs build --strict, built OUTSIDE the tree (see Architecture)
 make check-changelog         # post-release drift: [Unreleased] must be empty after a release
@@ -92,6 +93,11 @@ What gates a merge — `ci.yml` jobs, on PRs and pushes to `main`:
 `twine check`. That job installs only `build` and `twine`, so any script it runs must stay
 stdlib-only. `make check-changelog-release` runs in no workflow: it is a manual pre-tag
 check, and wiring it per-PR would fail every PR between releases.
+
+`scripts/check_docs_api.py` imports the package, so it runs in `test` as
+`tests/test_docs_api_gate.py` rather than in `docs`, which installs only mkdocs. It checks
+names imported from `agent_airlock` in each Python fence and `examples/` script: the import
+resolves, keywords match the signature, attributes exist.
 
 `test` installs the `[redis]` extra because the redis-backed modules open with
 `pytest.importorskip("fakeredis")`, and a skipped module reads like a passing one in the

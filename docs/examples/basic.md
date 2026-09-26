@@ -64,16 +64,16 @@ def get_user_details(user_id: int) -> dict:
         "name": "John Doe",
         "email": "john@example.com",
         "ssn": "123-45-6789",
-        "api_key": "sk-1234567890abcdef",
+        "api_key": "sk-abcdefghij0123456789",
     }
 
 result = get_user_details(user_id=123)
 # {
 #     "id": 123,
 #     "name": "John Doe",
-#     "email": "[EMAIL REDACTED]",
-#     "ssn": "[SSN REDACTED]",
-#     "api_key": "[API_KEY REDACTED]"
+#     "email": "j***@example.com",
+#     "ssn": "[REDACTED]",
+#     "api_key": "sk-abcd...6789"
 # }
 ```
 

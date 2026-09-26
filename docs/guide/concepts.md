@@ -187,25 +187,25 @@ config = HoneypotConfig(strategy=BlockStrategy.HONEYPOT)
 The `@Airlock` decorator wraps your functions with security:
 
 ```python
-from agent_airlock import Airlock, UnknownArgsMode
+from agent_airlock import Airlock, AirlockConfig, UnknownArgsMode
 
-@Airlock(unknown_args_mode=UnknownArgsMode.BLOCK)
+@Airlock(config=AirlockConfig(unknown_args=UnknownArgsMode.BLOCK))
 def my_tool(x: int) -> int:
     return x * 2
 ```
 
-This single decorator:
+On each call, in this order, this single decorator:
 
-1. Inspects function signature
-2. Strips/rejects ghost arguments (based on UnknownArgsMode)
-3. Validates types strictly
-4. Checks security policy
-5. Verifies capabilities
-6. Validates filesystem paths
-7. Controls network egress
-8. Optionally executes in sandbox
-9. Sanitizes output
-10. Returns safe response
+1. Refuses the call if a fleet kill switch is engaged
+2. Strips or rejects ghost arguments (based on `UnknownArgsMode`)
+3. Checks the security policy, and the guards it configures
+4. Validates filesystem paths, when a `FilesystemPolicy` is set
+5. Verifies declared capabilities, when a `CapabilityPolicy` is set
+6. Checks endpoint policies and the per-model-tier budget, when configured
+7. Validates types strictly, then runs the function: in the sandbox with `sandbox=True`,
+   inside the network airgap when a `NetworkPolicy` forbids egress
+8. Sanitizes the output
+9. Writes the audit record and returns the result, or a blocked response
 
 ## Unknown Arguments Mode (V0.4.0)
 
@@ -217,14 +217,18 @@ The `UnknownArgsMode` enum replaces the boolean `strict_mode`:
 | `STRIP_AND_LOG` | Strip unknown args, log warning | Staging |
 | `STRIP_SILENT` | Silently strip unknown args | Development |
 
+`STRIP_AND_LOG` is the default. Set the mode on `AirlockConfig`, or with the
+`AIRLOCK_UNKNOWN_ARGS` environment variable, which overrides it: every `AirlockConfig` reads
+it when it is created, and the default config is created when `agent_airlock` is imported.
+
 ```python
-from agent_airlock import UnknownArgsMode, PRODUCTION_MODE, STAGING_MODE
+from agent_airlock import PRODUCTION_MODE, STAGING_MODE, Airlock, AirlockConfig
 
 # Using predefined modes
-@Airlock(unknown_args_mode=PRODUCTION_MODE)  # UnknownArgsMode.BLOCK
+@Airlock(config=AirlockConfig(unknown_args=PRODUCTION_MODE))  # UnknownArgsMode.BLOCK
 def prod_tool(x: int) -> int: ...
 
-@Airlock(unknown_args_mode=STAGING_MODE)  # UnknownArgsMode.STRIP_AND_LOG
+@Airlock(config=AirlockConfig(unknown_args=STAGING_MODE))  # UnknownArgsMode.STRIP_AND_LOG
 def staging_tool(x: int) -> int: ...
 ```
 
@@ -239,12 +243,17 @@ result = my_tool(x=5)
 ### Blocked Response
 ```python
 result = my_tool(x="five")
-# Returns: AirlockResponse with status="blocked"
+# Returns a dict: {"success": False, "status": "blocked", "block_reason": "validation_error", ...}
 ```
 
-The `AirlockResponse` contains:
-- `status`: "blocked" or "success"
+The blocked response is an `AirlockResponse` returned as a dict. It contains:
+- `success`: `False`
+- `status`: `"blocked"`
 - `error`: Human-readable error message
+- `block_reason`: Why, such as `"validation_error"`, `"ghost_arguments"` or `"policy_violation"`
 - `fix_hints`: List of corrective suggestions
-- `blocked_args`: Arguments that were rejected
-- `tool_name`: Name of the blocked tool
+- `metadata`: Details, such as the function name and each field error for a validation error
+
+With `@Airlock(return_dict=True)` a successful call returns a dict too:
+`{"success": True, "status": "completed", "result": ...}`, plus `warnings` when output was
+masked.
