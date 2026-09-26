@@ -24,9 +24,12 @@ and framework vaccination in `../vaccine.py`; neither imports from here.
 - **`@Airlock` enforces only the signature it is handed.** Re-tag a tool with
   `_tool_proxy.named_tool_proxy`, which carries the tool's signature (annotations resolved)
   and is async when the tool is; pass framework-injected context parameters as
-  `relaxed_params`, as `google_adk._relax_injected_params` does for ADK. Test every walker
-  with a wrong-typed and a ghost argument through the SDK's real call path; async handling
-  is pinned once, in `tests/integrations/test_tool_proxy.py`.
+  `relaxed_params`, as `google_adk._relax_injected_params` does for ADK. A Claude SDK
+  `SdkMcpTool` handler takes one `args` dict, so `_claude_sdk_tools` builds the signature
+  from its `input_schema` instead and spreads the dict into it; gates that read keyword
+  arguments would otherwise see one opaque parameter. Test every walker with a
+  wrong-typed and a ghost argument through the SDK's real call path; async handling is
+  pinned once, in `tests/integrations/test_tool_proxy.py`.
 - **`adapters/`** holds the commerce adapters, which satisfy the `CommerceAdapter` Protocol in
   `agent_commerce_caps.py` (contract in `docs/adapters.md`). **`scanners/`** defines a
   `Scanner` Protocol and registry; nothing under `src/` registers a scanner.
@@ -46,8 +49,9 @@ and framework vaccination in `../vaccine.py`; neither imports from here.
   `_INSTALL_HINT` that names the `agent-airlock[<extra>]` to install. Its `_maybe_check_sdk`
   imports the SDK only when `type(obj).__module__` belongs to it — local stubs never trigger
   the import — and warns on versions outside `SUPPORTED_*_VERSIONS` (the Claude SDK adapter
-  defines that tuple but never compares against it). `langchain` differs: one entry point
-  returns the tool unwrapped when `langchain_core` is missing, another raises `ImportError`.
+  does both in a module-level `_check_sdk`, shared with `wrap_tools`). `langchain` differs:
+  one entry point returns the tool unwrapped when `langchain_core` is missing, another
+  raises `ImportError`.
 - **Typing and lint.** mypy runs with no SDK installed, so each imported SDK needs an
   `ignore_missing_imports` entry in `pyproject.toml`; the `disallow_untyped_calls = false`
   override for `integrations.langchain` is load-bearing. The ruff `ARG001`/`ARG002` ignore

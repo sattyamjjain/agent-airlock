@@ -7,20 +7,27 @@ but the canonical contract is one adapter named for the framework
 plus matching test + doc, so callers can find the entrypoint without
 having to learn the internal module layout.
 
-Usage::
+Usage — guard the tools you serve from an in-process SDK MCP server::
 
-    from agent_airlock.integrations.anthropic_claude_agent_sdk import (
-        AnthropicClaudeAgentSDKAdapter,
-    )
-    from agent_airlock.policy import STRICT_POLICY
+    from claude_agent_sdk import create_sdk_mcp_server, tool
 
-    adapter = AnthropicClaudeAgentSDKAdapter()
-    secured = adapter.wrap_agent(agent, policy=STRICT_POLICY)
+    from agent_airlock.integrations.anthropic_claude_agent_sdk import wrap_tools
+    from agent_airlock.policy import SecurityPolicy
+
+    @tool("greet", "Greet a user", {"name": str})
+    async def greet(args):
+        return {"content": [{"type": "text", "text": f"Hello, {args['name']}!"}]}
+
+    policy = SecurityPolicy(rate_limits={"*": "100/hour"})
+    server = create_sdk_mcp_server("tools", tools=wrap_tools([greet], policy=policy))
+
+:meth:`AnthropicClaudeAgentSDKAdapter.wrap_agent` does the same for the entries of any
+object's ``tools`` attribute.
 
 The optional dependency is ``claude-agent-sdk>=0.1.58`` (extra:
 ``pip install "agent-airlock[claude-agent]"``). The SDK is *not*
-imported at module load — calling :meth:`wrap_agent` without the
-extra installed raises a clear :class:`ClaudeAgentSDKMissingError`
+imported at module load — wrapping an object that comes from the SDK
+without the extra installed raises a clear :class:`ClaudeAgentSDKMissingError`
 (an :class:`~agent_airlock.exceptions.AirlockError`) with the install
 hint, never an opaque ``ImportError`` from somewhere deep in the call
 stack.
@@ -35,7 +42,8 @@ Primary sources
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import warnings
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,6 +51,7 @@ from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
+from ._claude_sdk_tools import guard_sdk_tool, is_sdk_mcp_tool
 from ._tool_proxy import named_tool_proxy
 from .claude_auto_memory import (
     AutoMemoryAccessPolicy,
@@ -58,14 +67,18 @@ from .claude_task_budget import build_output_config, build_task_budget_headers
 logger = structlog.get_logger("agent-airlock.integrations.anthropic_claude_agent_sdk")
 
 
-SUPPORTED_SDK_VERSIONS: tuple[str, ...] = ("0.1.58", "0.1.73", "0.2.152")
+SUPPORTED_SDK_VERSIONS: tuple[str, ...] = ("0.1.58", "0.1.73", "0.2.152", "0.2.160")
 """Pinned SDK versions this adapter has been smoke-tested against.
 
-The Claude Agent SDK has churned twice between Sep-2025 and May-2026
-— if a newer release renames ``Agent`` or shifts the tools dict's
-shape, ``wrap_agent`` emits a structlog ``UserWarning``-equivalent
-line but does not hard-fail. Update this tuple when a new version
-has been verified.
+Wrapping an object that comes from the SDK on any other version emits
+a :class:`UserWarning` (via ``warnings.warn``) but does not hard-fail.
+Until 0.10.12 this said so while no comparison was made. Update this
+tuple when a new version has been verified.
+
+**0.2.160** is verified end to end: tools returned by :func:`wrap_tools`,
+served by ``create_sdk_mcp_server`` and called through an MCP client
+session, are refused on a wrong-typed argument, have a ghost argument
+stripped, and have their output masked.
 
 v0.1.73 (released 2026-05-04) added ``duration_ms`` to PostToolUse
 and PostToolUseFailure hook inputs (tool execution time, excluding
@@ -118,35 +131,40 @@ class AnthropicClaudeAgentSDKAdapter:
     task_budget_total: int | None = None
 
     def wrap_agent(self, agent: Any, *, policy: SecurityPolicy | None = None) -> Any:
-        """Wrap a Claude Agent SDK ``Agent`` so every tool routes through Airlock.
+        """Route every entry of ``agent.tools`` through Airlock, in place.
+
+        The SDK has no agent class holding tool callables, so ``agent`` is any
+        object with a ``tools`` attribute (dict or list) that you assemble.
 
         Args:
-            agent: A :class:`claude_agent_sdk.Agent`-shaped object. The
-                adapter only requires a ``tools`` attribute (dict or
-                list) where each entry has a ``__call__`` or ``forward``
-                method. Real SDK objects satisfy this; tests can pass a
-                stub.
-            policy: Optional :class:`SecurityPolicy` (e.g.
-                ``STRICT_POLICY``). When set, every tool callable is
-                wrapped with :class:`Airlock(policy=policy)`.
+            agent: The object whose ``tools`` to wrap. Each entry is an
+                ``SdkMcpTool`` made by ``claude_agent_sdk.tool`` (replaced by a
+                guarded copy, as :func:`wrap_tools` makes), an object with a
+                ``forward`` method (whose ``forward`` is replaced), or a
+                callable (replaced by its guarded form).
+            policy: Optional :class:`SecurityPolicy`. When set, every tool
+                is wrapped with :class:`Airlock(policy=policy)`.
 
         Returns:
-            The same agent, mutated in place — every tool callable
-            replaced by an Airlock-decorated shim.
+            The same agent, its ``tools`` container mutated in place.
 
         Raises:
-            ClaudeAgentSDKMissingError: ``claude-agent-sdk`` extra is
-                not installed *and* the agent is not a structural
-                stub. Stub agents (``hasattr(agent, "tools")``) bypass
-                the SDK import — required by tests and useful in
-                CI environments without the optional dep.
+            AirlockError: An entry is a tool name, such as the built-in tool
+                names in ``ClaudeAgentOptions.tools``, or is not a tool at all.
+            ClaudeAgentSDKMissingError: ``agent`` or an entry comes from the
+                SDK and the extra is not installed. Stub objects never
+                trigger the SDK import, which is what the tests rely on.
         """
-        self._maybe_check_sdk(agent)
         tools = getattr(agent, "tools", None)
         if tools is None:
             raise AirlockError(
                 "agent does not expose a `tools` attribute; not a Claude Agent SDK shape"
             )
+        entries = list(tools.values()) if isinstance(tools, dict) else tools
+        if _from_sdk(agent) or (
+            isinstance(entries, list) and any(_from_sdk(tool) for tool in entries)
+        ):
+            _check_sdk(stacklevel=3)
 
         if isinstance(tools, dict):
             for name, tool in tools.items():
@@ -205,9 +223,18 @@ class AnthropicClaudeAgentSDKAdapter:
 
         Args:
             tool: The tool object or callable.
-            name: The tool's name (used in logs and audit).
+            name: The tool's name (used in logs and audit). An ``SdkMcpTool``
+                is guarded under its own ``name``, the one the model calls.
             policy: Optional :class:`SecurityPolicy` to apply.
         """
+        if is_sdk_mcp_tool(tool):
+            return guard_sdk_tool(tool, policy=policy)
+        if isinstance(tool, str):
+            raise AirlockError(
+                f"{tool!r} is a tool name, not a tool. Claude Code runs its built-in tools "
+                "itself, so Airlock cannot wrap them; guard your own SDK tools with "
+                "wrap_tools() before passing them to create_sdk_mcp_server()"
+            )
         forward: Callable[..., Any] | None = getattr(tool, "forward", None)
         if forward is None and callable(tool):
             forward = tool
@@ -229,20 +256,70 @@ class AnthropicClaudeAgentSDKAdapter:
             return tool
         return wrapped
 
-    def _maybe_check_sdk(self, agent: Any) -> None:
-        """Raise :class:`ClaudeAgentSDKMissingError` only for real SDK objects.
 
-        Stubs (test doubles) carrying ``tools`` but no real SDK module
-        provenance are allowed through — the test surface needs to run
-        without the optional dep installed.
-        """
-        module = type(agent).__module__
-        if not module.startswith("claude_agent_sdk"):
-            return
-        try:
-            import claude_agent_sdk as _sdk  # noqa: F401
-        except ImportError as exc:
-            raise ClaudeAgentSDKMissingError(_INSTALL_HINT) from exc
+def wrap_tools(tools: Iterable[Any], *, policy: SecurityPolicy | None = None) -> list[Any]:
+    """Return guarded copies of SDK tools, to pass to ``create_sdk_mcp_server``.
+
+    Each handler is fronted by a proxy that takes the tool's ``input_schema`` keys as
+    keyword arguments, so ``Airlock`` strips ghost arguments, validates each argument
+    strictly and applies ``policy`` before the handler runs, then masks what it returns.
+    A refusal reaches the model as an error result (``is_error: True``) with Airlock's
+    fix hints. Wrap the tools before building the server: it keeps its own references.
+
+    Args:
+        tools: ``SdkMcpTool`` objects made by ``claude_agent_sdk.tool``.
+        policy: Optional :class:`SecurityPolicy`; its tool lists match each tool's name.
+
+    Returns:
+        New ``SdkMcpTool`` objects in the same order. The originals are unchanged.
+
+    Raises:
+        AirlockError: An entry is not an ``SdkMcpTool``, or its ``input_schema`` declares
+            a key that is not a Python identifier (see the integration docs).
+        ClaudeAgentSDKMissingError: An entry comes from the SDK and the extra is not
+            installed.
+    """
+    tools = list(tools)
+    for tool in tools:
+        if not is_sdk_mcp_tool(tool):
+            raise AirlockError(
+                "wrap_tools takes SdkMcpTool objects made by claude_agent_sdk.tool; "
+                f"got {type(tool).__name__}"
+            )
+    if any(_from_sdk(tool) for tool in tools):
+        _check_sdk(stacklevel=3)
+    guarded = [guard_sdk_tool(tool, policy=policy) for tool in tools]
+    logger.info(
+        "claude_agent_sdk_tools_wrapped",
+        tool_count=len(guarded),
+        policy_set=policy is not None,
+    )
+    return guarded
+
+
+def _from_sdk(obj: Any) -> bool:
+    """Whether ``obj`` is an SDK object; stubs used by the tests never are."""
+    return type(obj).__module__.startswith("claude_agent_sdk")
+
+
+def _check_sdk(*, stacklevel: int) -> None:
+    """Import the SDK, and warn when its version is outside ``SUPPORTED_SDK_VERSIONS``.
+
+    Raises:
+        ClaudeAgentSDKMissingError: The extra is not installed.
+    """
+    try:
+        import claude_agent_sdk as _sdk
+    except ImportError as exc:
+        raise ClaudeAgentSDKMissingError(_INSTALL_HINT) from exc
+    installed = getattr(_sdk, "__version__", "unknown")
+    if installed not in SUPPORTED_SDK_VERSIONS:
+        warnings.warn(
+            f"claude-agent-sdk {installed} is outside SUPPORTED_SDK_VERSIONS "
+            f"{SUPPORTED_SDK_VERSIONS}; adapter behaviour is best-effort",
+            UserWarning,
+            stacklevel=stacklevel,
+        )
 
 
 def memory_helpers() -> dict[str, Callable[..., Any]]:
@@ -302,4 +379,5 @@ __all__ = [
     "ClaudeAgentSDKMissingError",
     "memory_helpers",
     "posttooluse_audit_payload",
+    "wrap_tools",
 ]
