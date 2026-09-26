@@ -18,13 +18,13 @@ The unit is calls, and the field names say so
 ---------------------------------------------
 The paper measures tokens and wall time. agent-airlock does not observe either
 universally: ``duration_ms`` is tool execution time (it excludes model latency, which is
-where a detour spends most of what it wastes), and token counts only exist when the caller
-supplies ``_airlock_input_tokens``. Inventing a cost model to fill the gap would be worse
-than naming the limit.
+where a detour spends most of what it wastes), and token counts only exist when the
+harness tags the call's context with ``input_tokens``. Inventing a cost model to fill the
+gap would be worse than naming the limit.
 
 So the primary unit is the **call count per run** — the signal the layer genuinely has,
 and the one that already separates the two trajectories two-to-six. Tokens ride along as
-``run_input_tokens`` **only** when the caller supplies them, and are never estimated.
+``run_input_tokens`` **only** when the harness supplies them, and are never estimated.
 
 Deny-by-default
 ---------------

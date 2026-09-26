@@ -6,20 +6,26 @@ runs a worst-case cost estimate against the tier's per-call cap BEFORE the
 tool executes. Untagged calls fall back to the budget's ``strict_tier``
 (deny-by-default — the cheapest tier).
 
-This file shows three routing patterns:
+A call is tagged through context metadata (``airlock_tier``, ``input_tokens``,
+``model_id``), never through the tool's arguments: the model writes those.
+Until 0.10.14 ``_airlock_tier`` / ``_airlock_input_tokens`` keyword arguments
+were also read, which let a model lower its own estimate.
 
-1. **Explicit tagging** — the router decides per call and passes
-   ``_airlock_tier="frontier"`` as a control kwarg. Stripped before the
-   tool sees it.
+This file shows four routing patterns:
 
-2. **Context-metadata tagging** — the router sets
-   ``context.metadata["airlock_tier"]``. Useful when ``_airlock_tier``
-   would clash with a wrapped framework's kwarg-passing convention.
+1. **Tag around the call** — the router decides per call and wraps it in
+   ``with AirlockContext(metadata={"airlock_tier": ..., "input_tokens": ...})``.
+
+2. **Tag on a framework context object** — the tool's first argument carries
+   the tags, as a ``RunContextWrapper``-style ``ctx.context.metadata``.
 
 3. **model_id → tier_resolver** — the router supplies a callback that
    maps model identifiers to tier labels, and tags calls only with
-   ``context.metadata["model_id"]``. Keeps the model-tier mapping in
-   the router, not in agent-airlock.
+   ``model_id``. Keeps the model-tier mapping in the router, not in
+   agent-airlock.
+
+4. **Compose with allow/deny lists** — the budget is one field of a
+   ``SecurityPolicy``.
 
 Run with: ``python -m examples.model_tier_budget``
 """
@@ -27,28 +33,24 @@ Run with: ``python -m examples.model_tier_budget``
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from typing import Any
 
-from agent_airlock import (
-    Airlock,
-    AirlockContext,
-    SecurityPolicy,
-    set_current_context,
-)
+from agent_airlock import Airlock, AirlockContext, SecurityPolicy
 from agent_airlock.policy_presets import (
     STRICT_MODEL_TIER_BUDGET,
     strict_tier_budget_policy,
 )
 
 # ---------------------------------------------------------------------------
-# Pattern 1: Explicit tagging via ``_airlock_tier`` kwarg
+# Pattern 1: Tag around the call
 # ---------------------------------------------------------------------------
 
 policy = strict_tier_budget_policy()
 
 
 @Airlock(policy=policy, return_dict=True)
-def summarize(text: str, **_extra: Any) -> str:
+def summarize(text: str) -> str:
     """Toy tool — pretends to summarize. In a real router this would call
     an LLM whose tier the caller decides on a per-call basis.
     """
@@ -65,62 +67,67 @@ def _router_tags_per_task(task_description: str) -> str:
     return "mid"
 
 
-def demo_explicit_tagging() -> None:
+def _tags(tier: str | None = None, input_tokens: int | None = None) -> AirlockContext[None]:
+    metadata: dict[str, Any] = {}
+    if tier is not None:
+        metadata["airlock_tier"] = tier
+    if input_tokens is not None:
+        metadata["input_tokens"] = input_tokens
+    return AirlockContext[None](metadata=metadata)
+
+
+def demo_tag_around_the_call() -> None:
     print("=" * 70)
-    print("Pattern 1: Router tags each call explicitly with _airlock_tier")
+    print("Pattern 1: Router tags each call with AirlockContext metadata")
     print("=" * 70)
 
     # Cheap call: small tier, low input → succeeds.
-    result = summarize(
-        "Draft a tweet about Python.",
-        _airlock_tier=_router_tags_per_task("Draft a tweet"),
-        _airlock_input_tokens=50,
-    )
+    with _tags(_router_tags_per_task("Draft a tweet"), input_tokens=50):
+        result = summarize("Draft a tweet about Python.")
     print(f"\n[small/50tk] → {json.dumps(result, indent=2)}")
 
     # Expensive call: frontier tier with very high input → blocked at
-    # worst-case estimate (input + 4000 worst-case output × frontier price).
-    result = summarize(
-        "Deep analysis of the entire ARM64 ABI specification...",
-        _airlock_tier=_router_tags_per_task("Deep analysis"),
-        _airlock_input_tokens=200_000,
-    )
+    # worst-case estimate (input + worst-case output × frontier price).
+    with _tags(_router_tags_per_task("Deep analysis"), input_tokens=200_000):
+        result = summarize("Deep analysis of the entire ARM64 ABI specification...")
     print(f"\n[frontier/200k tk] → {json.dumps(result, indent=2)}")
 
     # Untagged call: falls back to strict_tier='small' (deny-by-default).
     # With reasonable input tokens it succeeds within small's 2¢ cap.
-    result = summarize("Hello.", _airlock_input_tokens=20)
+    with _tags(input_tokens=20):
+        result = summarize("Hello.")
     print(f"\n[untagged/20tk → falls back to 'small'] → {json.dumps(result, indent=2)}")
 
 
 # ---------------------------------------------------------------------------
-# Pattern 2: Context-metadata tagging
+# Pattern 2: Tag on a framework context object
 # ---------------------------------------------------------------------------
 
 
-def demo_context_metadata_tagging() -> None:
+@dataclass
+class _RunState:
+    """What a framework hands a tool as ``ctx.context`` — here, carrying the tags."""
+
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class _RunContextWrapper:
+    context: _RunState
+
+
+def demo_context_object_tagging() -> None:
     print("\n" + "=" * 70)
-    print("Pattern 2: Tag via context.metadata['airlock_tier']")
+    print("Pattern 2: Tags on the tool's context argument (ctx.context.metadata)")
     print("=" * 70)
 
     @Airlock(policy=strict_tier_budget_policy(), return_dict=True)
-    def translate(text: str) -> str:
+    def translate(ctx: _RunContextWrapper, text: str) -> str:
         return f"TRANSLATED: {text}"
 
-    ctx = AirlockContext[None]()
-    ctx.metadata["airlock_tier"] = "mid"
-    ctx.metadata["input_tokens"] = 100
-    token = set_current_context(ctx)
-    try:
-        # Note: real callers usually pass context via the function's first
-        # arg (see ContextExtractor). Here we just set it globally to keep
-        # the example terse.
-        result = translate("Bonjour le monde.")
-        print(f"\n[mid via context.metadata] → {json.dumps(result, indent=2)}")
-    finally:
-        from agent_airlock import reset_context
-
-        reset_context(token)
+    ctx = _RunContextWrapper(_RunState(metadata={"airlock_tier": "mid", "input_tokens": 100}))
+    result = translate(ctx, text="Bonjour le monde.")
+    print(f"\n[mid via ctx.context.metadata] → {json.dumps(result, indent=2)}")
 
 
 # ---------------------------------------------------------------------------
@@ -152,18 +159,11 @@ def demo_tier_resolver() -> None:
     def call_llm(prompt: str) -> str:
         return f"RESPONSE: {prompt[:60]}"
 
-    # Set context.metadata['model_id']; airlock invokes the resolver.
-    ctx = AirlockContext[None]()
-    ctx.metadata["model_id"] = "claude-opus-4-7"
-    ctx.metadata["input_tokens"] = 5_000  # Plausible frontier input — keeps within cap.
-    token = set_current_context(ctx)
-    try:
+    # Tag the model_id; airlock invokes the resolver.
+    tags = {"model_id": "claude-opus-4-7", "input_tokens": 5_000}  # within the frontier cap
+    with AirlockContext[None](metadata=tags):
         result = call_llm("Compare Rust vs C++ ownership models.")
-        print(f"\n[model_id=opus → frontier] → {json.dumps(result, indent=2)}")
-    finally:
-        from agent_airlock import reset_context
-
-        reset_context(token)
+    print(f"\n[model_id=opus → frontier] → {json.dumps(result, indent=2)}")
 
 
 # ---------------------------------------------------------------------------
@@ -183,15 +183,16 @@ def demo_combined_with_allowlist() -> None:
     )
 
     @Airlock(policy=combined, return_dict=True)
-    def call_llm(prompt: str, **_extra: Any) -> str:
+    def call_llm(prompt: str) -> str:
         return f"LLM: {prompt[:40]}"
 
-    result = call_llm("hi", _airlock_tier="small", _airlock_input_tokens=10)
+    with _tags("small", input_tokens=10):
+        result = call_llm("hi")
     print(f"\n[allowed + small/10tk] → {json.dumps(result, indent=2)}")
 
 
 if __name__ == "__main__":
-    demo_explicit_tagging()
-    demo_context_metadata_tagging()
+    demo_tag_around_the_call()
+    demo_context_object_tagging()
     demo_tier_resolver()
     demo_combined_with_allowlist()

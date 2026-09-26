@@ -96,11 +96,6 @@ as they were. On every call:
 - Every key has to be usable as a Python parameter name. A tool whose
   schema declares `from` or `file-path` is refused when you wrap it, with
   an `AirlockError` naming the keys, rather than guarded partially.
-- A key starting with `_airlock_` is refused, in a schema when you wrap
-  the tool and in a call. Airlock reads `_airlock_tier` and
-  `_airlock_input_tokens` as a router's control values before it looks
-  for ghost arguments, so a model sending one could otherwise pick the
-  budget tier its own call is checked against.
 - A `typing_extensions.TypedDict` schema is enforced even though the SDK,
   on Python 3.11 and later, does not recognise one and advertises the
   tool with no properties. The model then learns the keys from Airlock's

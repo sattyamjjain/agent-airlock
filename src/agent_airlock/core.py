@@ -404,6 +404,43 @@ def _caller_identity(context: AirlockContext[Any]) -> AgentIdentity | None:
     return None
 
 
+# The keyword arguments a router once tagged a call with. See _warn_on_retired_control_arguments.
+_RETIRED_CONTROL_ARGUMENTS = ("_airlock_tier", "_airlock_input_tokens")
+
+
+def _call_metadata(context: AirlockContext[Any], key: str) -> Any:
+    """A tag a host set on this call: the call's own context metadata first, then the context
+    set around the call with ``with AirlockContext(metadata={...})``.
+
+    The budget and amplification checks read ``airlock_tier``, ``input_tokens`` and
+    ``model_id`` here and nowhere else. The model cannot write either context.
+    """
+    value = context.metadata.get(key)
+    if value is not None:
+        return value
+    ambient = get_current_context()
+    return ambient.metadata.get(key) if ambient is not None else None
+
+
+def _warn_on_retired_control_arguments(func_name: str, kwargs: dict[str, Any]) -> None:
+    """Point a router still passing ``_airlock_tier`` / ``_airlock_input_tokens`` at metadata.
+
+    Until 0.10.14 those keyword arguments were popped and read as the call's tier and token
+    count. In every framework that passes the model's arguments as keywords the model writes
+    them, so a model could lower its own budget estimate or pick its tier. They are now
+    ordinary arguments, stripped or refused as ghosts unless the tool declares them.
+    """
+    present = [name for name in _RETIRED_CONTROL_ARGUMENTS if name in kwargs]
+    if present:
+        logger.warning(
+            "airlock_control_arguments_ignored",
+            function=func_name,
+            arguments=present,
+            hint="tag the call with AirlockContext(metadata={'airlock_tier': ..., "
+            "'input_tokens': ...}); tool arguments are the model's to write",
+        )
+
+
 class Airlock:
     """Decorator that secures function calls with validation, sandboxing, and policies.
 
@@ -530,12 +567,12 @@ class Airlock:
             """
             start_time = time.time()
 
-            # V0.8.7: pop airlock control kwargs BEFORE ghost-arg validation
-            # so the tool's signature isn't required to declare them. The
-            # router supplies these to tag a call; they are not part of the
-            # tool's contract.
-            tier_kwarg = kwargs.pop("_airlock_tier", None)
-            input_tokens_kwarg = kwargs.pop("_airlock_input_tokens", None)
+            # Until 0.10.14 `_airlock_tier` and `_airlock_input_tokens` were popped here and
+            # read as a router's tags. The model writes the keyword arguments in every
+            # framework that passes its arguments as keywords, so they are now ordinary
+            # arguments, stripped or refused as ghosts; a router tags the call through
+            # AirlockContext metadata (`_call_metadata`).
+            _warn_on_retired_control_arguments(func_name, kwargs)
 
             # Extract context from function arguments
             context = ContextExtractor.extract_from_args(args, kwargs)
@@ -637,11 +674,12 @@ class Airlock:
             # first charged to the run's ledger. Inert when
             # policy.amplification_budget is None; blocks when it is set but
             # carries no threshold.
+            tokens = _call_metadata(context, "input_tokens")
             amp_error = self._check_amplification(
                 func_name=func_name,
                 resolved_policy=resolved_policy,
                 context=context,
-                input_tokens=input_tokens_kwarg,
+                input_tokens=tokens if isinstance(tokens, int) else None,
             )
             if amp_error is not None:
                 return kwargs, start_time, context, amp_error, None
@@ -665,8 +703,6 @@ class Airlock:
             budget_estimate, budget_error = self._check_model_tier_budget(
                 func_name=func_name,
                 resolved_policy=resolved_policy,
-                tier_kwarg=tier_kwarg,
-                input_tokens_kwarg=input_tokens_kwarg,
                 context=context,
             )
             if budget_error is not None:
@@ -1347,9 +1383,9 @@ class Airlock:
             func_name: Name of the tool being called.
             resolved_policy: The resolved policy, or None.
             context: Current context; supplies the run identity and receives the decision.
-            input_tokens: Caller-supplied ``_airlock_input_tokens``, when provided. Never
-                estimated — a run whose harness supplies none simply carries no token
-                figure rather than a guessed one.
+            input_tokens: The ``input_tokens`` metadata tag the harness set on the call's
+                context, when it set one. Never estimated — a run whose harness supplies
+                none simply carries no token figure rather than a guessed one.
 
         Returns:
             An :class:`AirlockResponse` when the run is over budget under a ``block``
@@ -1873,27 +1909,24 @@ class Airlock:
         *,
         func_name: str,
         resolved_policy: SecurityPolicy | None,
-        tier_kwarg: str | None,
-        input_tokens_kwarg: int | None,
         context: AirlockContext[Any],
     ) -> tuple[BudgetEstimate | None, AirlockResponse | None]:
         """Run the per-model-tier budget pre-execute check (v0.8.7).
 
         No-op when ``resolved_policy.model_tier_budget`` is None. When set,
-        resolves the tier (priority: ``tier_kwarg`` from caller >
-        ``context.metadata['airlock_tier']`` > ``tier_resolver(model_id)``
-        > ``strict_tier``) and computes a worst-case cost estimate via
-        the global :class:`CostTracker`. On cap breach, returns a structured
-        blocked response with ``block_reason=BUDGET_EXCEEDED``.
+        resolves the tier (priority: the ``airlock_tier`` metadata tag >
+        ``tier_resolver(model_id)`` > ``strict_tier``) and computes a
+        worst-case cost estimate via the global :class:`CostTracker`. On cap
+        breach, returns a structured blocked response with
+        ``block_reason=BUDGET_EXCEEDED``.
+
+        The ``airlock_tier``, ``input_tokens`` and ``model_id`` tags are read
+        with :func:`_call_metadata`, never from the tool's arguments.
 
         Args:
             func_name: Tool being invoked (for telemetry).
             resolved_policy: The resolved SecurityPolicy (may be None or
                 a non-SecurityPolicy if the caller wired in a stub).
-            tier_kwarg: Caller-supplied ``_airlock_tier`` value (popped
-                from kwargs before ghost-arg validation).
-            input_tokens_kwarg: Caller-supplied ``_airlock_input_tokens``.
-                Falls back to ``context.metadata['input_tokens']``, then 0.
             context: The current AirlockContext.
 
         Returns:
@@ -1905,36 +1938,12 @@ class Airlock:
         if resolved_policy.model_tier_budget is None:
             return None, None
 
-        # Collect candidate metadata: the arg-extracted context's metadata
-        # is the primary source. If the arg-extracted context carries no
-        # useful tagging, we fall back to the contextvar-stored context
-        # (set by routers via ``set_current_context``) so the same router
-        # can scope tags across multiple tool calls in one turn without
-        # threading context through every function signature.
-        cv_context = get_current_context()
-        cv_metadata: dict[str, Any] = cv_context.metadata if cv_context is not None else {}
-
-        def _meta_get(key: str) -> Any:
-            value = context.metadata.get(key)
-            if value is not None:
-                return value
-            return cv_metadata.get(key)
-
-        # Resolve tier from kwarg → arg-extracted metadata → contextvar metadata.
-        explicit_tier = tier_kwarg
-        if explicit_tier is None:
-            ctx_tier = _meta_get("airlock_tier")
-            if isinstance(ctx_tier, str):
-                explicit_tier = ctx_tier
-        # Resolve input_tokens from kwarg → metadata → 0.
-        input_tokens = input_tokens_kwarg if input_tokens_kwarg is not None else 0
-        if input_tokens == 0:
-            meta_input = _meta_get("input_tokens")
-            if isinstance(meta_input, int):
-                input_tokens = meta_input
-        # Model ID from metadata only — not a control kwarg.
-        meta_model_id = _meta_get("model_id")
-        model_id = meta_model_id if isinstance(meta_model_id, str) else None
+        tier_tag = _call_metadata(context, "airlock_tier")
+        explicit_tier = tier_tag if isinstance(tier_tag, str) else None
+        tokens_tag = _call_metadata(context, "input_tokens")
+        input_tokens = tokens_tag if isinstance(tokens_tag, int) else 0
+        model_tag = _call_metadata(context, "model_id")
+        model_id = model_tag if isinstance(model_tag, str) else None
 
         cost_tracker = get_global_tracker()
         try:

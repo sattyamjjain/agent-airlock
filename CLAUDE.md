@@ -186,7 +186,8 @@ src/agent_airlock/
 3. Filesystem path validation
 4. Capability requirements
 5. Endpoint policy validation
-6. Per-model-tier budget check
+6. Per-model-tier budget check — the tier, token count and model id come from context
+   metadata (`_call_metadata`), never from the tool's arguments, which the model writes
 7. Execute (unnumbered in code) — Pydantic strict validation, then run locally or in the
    sandbox, inside the network airgap when one is configured. Sandbox mode validates in
    the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way

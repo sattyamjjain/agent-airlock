@@ -41,7 +41,7 @@ What this module establishes, in order:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +91,7 @@ class _Session:
 
     session_id: str
     agent_id: str = "analyst-agent"
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -314,8 +315,8 @@ class TestResourceAmplificationIsRecordedAndDetected:
     What deliberately did **not** change: the unit is CALLS, not dollars. The paper
     measures tokens (+66.91%) and wall time (+92.45%); airlock observes neither
     universally, so it reports the unit it genuinely has and the field names say so.
-    `run_input_tokens` is populated only from a caller-supplied `_airlock_input_tokens`
-    and is never estimated.
+    `run_input_tokens` is populated only from the `input_tokens` tag the harness sets on
+    the call's context, and is never estimated.
 
     Closes https://github.com/sattyamjjain/agent-airlock/issues/142
     """
@@ -412,12 +413,29 @@ class TestResourceAmplificationIsRecordedAndDetected:
         def summarize_text(_wrapper: _Wrapper) -> str:
             return EXPECTED_ANSWER
 
-        wrapper = _Wrapper(context=_Session(session_id="sess-tok"))
-        summarize_text(wrapper, _airlock_input_tokens=1200)
-        summarize_text(wrapper, _airlock_input_tokens=800)
+        for tokens in (1200, 800):
+            session = _Session(session_id="sess-tok", metadata={"input_tokens": tokens})
+            summarize_text(_Wrapper(context=session))
 
         records = _audit_records(audit_path, "sess-tok")
         assert records[-1]["run_input_tokens"] == 2000, "token counts did not accumulate"
+
+    def test_a_token_count_the_model_sends_is_not_recorded(self, tmp_path: Path) -> None:
+        """Until 0.10.14 a model could write `_airlock_input_tokens` into the run's record."""
+        audit_path = tmp_path / "tokens.jsonl"
+        config = AirlockConfig(enable_audit_log=True, audit_log_path=audit_path)
+        policy = SecurityPolicy(
+            amplification_budget=AmplificationBudget(max_calls_per_run=10),
+        )
+
+        @Airlock(config=config, policy=policy)
+        def summarize_text(_wrapper: _Wrapper) -> str:
+            return EXPECTED_ANSWER
+
+        summarize_text(_Wrapper(context=_Session(session_id="sess-model")), _airlock_input_tokens=5)
+
+        records = _audit_records(audit_path, "sess-model")
+        assert records[-1].get("run_input_tokens") is None
 
     def test_duration_is_still_per_call_and_never_summed(self, tmp_path: Path) -> None:
         """Unchanged and still true: `duration_ms` cannot reconstruct the wall-time figure.

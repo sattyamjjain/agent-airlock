@@ -21,11 +21,13 @@ from agent_airlock import (
     reset_context,
     set_current_context,
 )
+from agent_airlock.config import AirlockConfig
 from agent_airlock.cost_tracking import _reset_tracker, set_global_tracker
 from agent_airlock.policy_presets import (
     STRICT_MODEL_TIER_BUDGET,
     strict_tier_budget_policy,
 )
+from agent_airlock.unknown_args import UnknownArgsMode
 
 # Fixed pricing table so tests are deterministic across DEFAULT_PRICING changes.
 _TEST_PRICING = {
@@ -46,6 +48,16 @@ def _install_global_test_tracker() -> CostTracker:
     tracker = _fresh_tracker()
     set_global_tracker(tracker)
     return tracker
+
+
+def _tagged(tier: str | None = None, input_tokens: int | None = None) -> AirlockContext[None]:
+    """The context a router sets around a call to tag it (``with _tagged(...):``)."""
+    metadata: dict[str, Any] = {}
+    if tier is not None:
+        metadata["airlock_tier"] = tier
+    if input_tokens is not None:
+        metadata["input_tokens"] = input_tokens
+    return AirlockContext[None](metadata=metadata)
 
 
 # ---------------------------------------------------------------------------
@@ -423,14 +435,15 @@ class TestCoreIntegration:
     def teardown_method(self) -> None:
         _reset_tracker()
 
-    def test_frontier_blocks_via_explicit_tier_kwarg(self) -> None:
+    def test_frontier_tag_blocks_an_expensive_call(self) -> None:
         policy = strict_tier_budget_policy()
 
         @Airlock(policy=policy, return_dict=True)
-        def call(prompt: str, **_extra: Any) -> str:
+        def call(prompt: str) -> str:
             return "ok"
 
-        result = call("hi", _airlock_tier="frontier", _airlock_input_tokens=200_000)
+        with _tagged("frontier", 200_000):
+            result = call("hi")
         assert isinstance(result, dict)
         assert result["success"] is False
         assert result["block_reason"] == "budget_exceeded"
@@ -441,10 +454,11 @@ class TestCoreIntegration:
         policy = strict_tier_budget_policy()
 
         @Airlock(policy=policy, return_dict=True)
-        def call(prompt: str, **_extra: Any) -> str:
+        def call(prompt: str) -> str:
             return "ok"
 
-        result = call("hi", _airlock_tier="small", _airlock_input_tokens=50)
+        with _tagged("small", 50):
+            result = call("hi")
         assert isinstance(result, dict)
         assert result["success"] is True
         assert result["result"] == "ok"
@@ -453,16 +467,17 @@ class TestCoreIntegration:
         policy = strict_tier_budget_policy()
 
         @Airlock(policy=policy, return_dict=True)
-        def call(prompt: str, **_extra: Any) -> str:
+        def call(prompt: str) -> str:
             return "ok"
 
-        # No _airlock_tier kwarg, no context.metadata, no resolver.
-        # Should fall back to strict_tier="small".
-        result = call("hi", _airlock_input_tokens=20)
+        # No airlock_tier tag and no resolver: falls back to strict_tier="small".
+        with _tagged(input_tokens=20):
+            result = call("hi")
         assert isinstance(result, dict)
         assert result["success"] is True
         # And a too-expensive untagged call IS blocked because small cap is tight.
-        result = call("hi", _airlock_input_tokens=2_000_000)
+        with _tagged(input_tokens=2_000_000):
+            result = call("hi")
         assert isinstance(result, dict)
         assert result["success"] is False
         assert result["block_reason"] == "budget_exceeded"
@@ -513,45 +528,90 @@ class TestCoreIntegration:
         policy = strict_tier_budget_policy()
 
         @Airlock(policy=policy, return_dict=True)
-        def call(prompt: str, **_extra: Any) -> str:
+        def call(prompt: str) -> str:
             return "ok"
 
-        result = call("hi", _airlock_tier="mythical")
+        with _tagged("mythical"):
+            result = call("hi")
         assert isinstance(result, dict)
         assert result["success"] is False
         # Caller typo → fail loudly (mapped to policy_violation block reason)
         assert result["block_reason"] == "policy_violation"
 
-    def test_control_kwargs_stripped_before_tool_sees_them(self) -> None:
-        policy = strict_tier_budget_policy()
-
-        @Airlock(policy=policy, return_dict=True)
-        def call(prompt: str, **_extra: Any) -> dict[str, Any]:
-            # If _airlock_tier reached the tool we'd see it in _extra.
-            # Assert it does not.
-            assert "_airlock_tier" not in _extra
-            assert "_airlock_input_tokens" not in _extra
-            return {"prompt": prompt}
-
-        result = call("hi", _airlock_tier="small", _airlock_input_tokens=10)
-        assert isinstance(result, dict)
-        assert result["success"] is True
-        assert result["result"] == {"prompt": "hi"}
-
     def test_post_execute_reconciliation_runs_when_result_carries_token_usage(self) -> None:
         policy = strict_tier_budget_policy()
 
         @Airlock(policy=policy, return_dict=True)
-        def call(prompt: str, **_extra: Any) -> dict[str, Any]:
+        def call(prompt: str) -> dict[str, Any]:
             return {
                 "answer": "42",
                 "token_usage": {"input_tokens": 50, "output_tokens": 100},
             }
 
-        result = call("hi", _airlock_tier="small", _airlock_input_tokens=50)
+        with _tagged("small", 50):
+            result = call("hi")
         # Reconciliation is observability — call still succeeds.
         assert isinstance(result, dict)
         assert result["success"] is True
+
+
+class TestTagsComeFromTheContextNotTheArguments:
+    """Regression (0.10.14): ``_airlock_tier`` / ``_airlock_input_tokens`` were read from kwargs.
+
+    The model writes a tool's keyword arguments in every framework that passes its arguments
+    as keywords, and the kwargs outranked the host's metadata tags. A host-tagged call over
+    the frontier cap ran once the model added ``_airlock_input_tokens=1``.
+    """
+
+    def setup_method(self) -> None:
+        _install_global_test_tracker()
+
+    def teardown_method(self) -> None:
+        _reset_tracker()
+
+    @staticmethod
+    def _tool(config: AirlockConfig | None = None) -> Any:
+        @Airlock(policy=strict_tier_budget_policy(), return_dict=True, config=config)
+        def call(prompt: str) -> str:
+            return "ok"
+
+        return call
+
+    def test_a_model_sent_token_count_does_not_lower_the_estimate(self) -> None:
+        call = self._tool()
+
+        with _tagged("frontier", 200_000):
+            result = call("hi", _airlock_input_tokens=1)
+
+        assert result["success"] is False
+        assert result["block_reason"] == "budget_exceeded"
+
+    def test_a_model_sent_tier_does_not_choose_the_tier(self) -> None:
+        call = self._tool()
+
+        with _tagged("frontier", 200_000):
+            result = call("hi", _airlock_tier="mid", _airlock_input_tokens=1)
+
+        assert result["success"] is False
+        assert result["metadata"]["tier"] == "frontier"
+
+    def test_they_are_stripped_like_any_undeclared_argument(self) -> None:
+        call = self._tool()
+
+        with _tagged("small", 50):
+            result = call("hi", _airlock_tier="frontier", _airlock_input_tokens=10)
+
+        assert result["success"] is True
+        assert result["result"] == "ok"
+
+    def test_they_are_refused_as_ghosts_in_block_mode(self) -> None:
+        call = self._tool(AirlockConfig(unknown_args=UnknownArgsMode.BLOCK))
+
+        with _tagged("small", 50):
+            result = call("hi", _airlock_tier="small")
+
+        assert result["success"] is False
+        assert result["block_reason"] == "ghost_arguments"
 
 
 class TestCoreIntegrationAsync:
@@ -568,10 +628,11 @@ class TestCoreIntegrationAsync:
         policy = strict_tier_budget_policy()
 
         @Airlock(policy=policy, return_dict=True)
-        async def call(prompt: str, **_extra: Any) -> str:
+        async def call(prompt: str) -> str:
             return "ok"
 
-        result = await call("hi", _airlock_tier="frontier", _airlock_input_tokens=200_000)
+        async with _tagged("frontier", 200_000):
+            result = await call("hi")
         assert isinstance(result, dict)
         assert result["success"] is False
         assert result["block_reason"] == "budget_exceeded"
@@ -582,10 +643,11 @@ class TestCoreIntegrationAsync:
         policy = strict_tier_budget_policy()
 
         @Airlock(policy=policy, return_dict=True)
-        async def call(prompt: str, **_extra: Any) -> str:
+        async def call(prompt: str) -> str:
             return "ok"
 
-        result = await call("hi", _airlock_tier="small", _airlock_input_tokens=20)
+        async with _tagged("small", 20):
+            result = await call("hi")
         assert isinstance(result, dict)
         assert result["success"] is True
 

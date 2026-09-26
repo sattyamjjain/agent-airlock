@@ -788,9 +788,9 @@ class SecurityPolicy:
         estimate. Raises :class:`AirlockBudgetExceeded` on cap breach.
 
         Args:
-            tier_label: Explicit tier label (e.g. from a router-supplied
-                ``_airlock_tier`` kwarg). May be None — the budget will
-                fall back via resolver or to ``strict_tier``.
+            tier_label: Explicit tier label (e.g. the router's
+                ``airlock_tier`` context-metadata tag). May be None — the
+                budget will fall back via resolver or to ``strict_tier``.
             input_tokens: Caller's best estimate of input tokens for the
                 call. Pass 0 if unknown.
             cost_tracker: Cost tracker carrying the pricing table.

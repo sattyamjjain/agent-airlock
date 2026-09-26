@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.14] - 2026-09-26
+
+### Security
+
+- **A model could lower its own budget estimate, or pick its tier, through a tool
+  argument.** `@Airlock` popped `_airlock_tier` and `_airlock_input_tokens` from the call's
+  keyword arguments and read them as a router's tier and token count. They outranked the
+  host's context tags and were taken before the ghost-argument check, so not even `BLOCK`
+  mode refused them. In every framework that passes the model's arguments as keywords the
+  model writes those, and a call the host had tagged as over the frontier cap ran once the
+  model added `_airlock_input_tokens=1`. The same argument set the `run_input_tokens` figure
+  on the amplification audit record.
+
+  The tier, token count and model id are now read only from context metadata: the call's
+  own context object, else `with AirlockContext(metadata={...})` around the call. The two
+  names are ordinary arguments, stripped or refused in `BLOCK` mode like any other the tool
+  does not declare, and a warning (`airlock_control_arguments_ignored`) names them when
+  they arrive.
+
+  **Migration:** a router that passed `_airlock_tier=` / `_airlock_input_tokens=` wraps the
+  call instead: `with AirlockContext(metadata={"airlock_tier": "frontier", "input_tokens":
+  n}): tool(...)`. `examples/model_tier_budget.py` shows both context routes.
+
+### Changed
+
+- The Claude Agent SDK adapter no longer refuses a model-sent `_airlock_*` key, or a schema
+  that declares one, as 0.10.12 did. That refusal existed only because core read those
+  names; they are now stripped like any other key the schema does not declare.
+
 ## [0.10.13] - 2026-09-26
 
 ### Security

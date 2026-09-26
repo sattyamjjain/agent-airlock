@@ -3096,7 +3096,7 @@ def strict_tier_budget_policy(
         tier_resolver: Optional callback mapping model_id strings to tier
             labels. When supplied, untagged calls that ship a ``model_id``
             in ``context.metadata`` can be routed to the correct tier
-            without an explicit ``_airlock_tier`` kwarg. The router stays
+            without an explicit ``airlock_tier`` tag. The router stays
             in the caller's code — agent-airlock just invokes the callback.
 
     Returns:

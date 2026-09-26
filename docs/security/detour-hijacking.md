@@ -69,8 +69,10 @@ it each still have a test that fails if they are ever fixed silently.
 declared baseline, and `AuditRecord` carries `run_call_count`, `run_baseline_calls`,
 `run_amplification_ratio` and `run_input_tokens`. The unit is **calls**, deliberately: the
 paper's token and wall-time figures are not universally observable at this seam, so
-`run_input_tokens` is populated only from a caller-supplied `_airlock_input_tokens` and is
-**never estimated**.
+`run_input_tokens` is populated only from the `input_tokens` tag the harness sets on the
+call's context (`with AirlockContext(metadata={"input_tokens": ...})`, or the context
+object passed as the tool's first argument) and is **never estimated**. Until 0.10.14 it
+also read an `_airlock_input_tokens` tool argument, which the model could write.
 
 What still does not reconstruct is the paper's own quantity. `duration_ms` is tool execution
 time, not the agent's end-to-end wall time, and summing it does not reproduce the 92.45%

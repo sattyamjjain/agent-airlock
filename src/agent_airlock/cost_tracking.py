@@ -705,8 +705,10 @@ class ModelTierBudget:
     The caller's router decides the tier — agent-airlock does not maintain
     a vendor-locked model→tier table. Two routes are supported:
 
-    1. The router tags each call by passing ``_airlock_tier="frontier"``
-       as a kwarg (or by setting ``context.metadata["airlock_tier"]``).
+    1. The router tags each call with ``context.metadata["airlock_tier"]``,
+       usually ``with AirlockContext(metadata={"airlock_tier": "frontier"}):``
+       around the call. Until 0.10.14 an ``_airlock_tier`` keyword argument
+       also worked; the model writes a tool's arguments, so it no longer does.
     2. The router passes a ``model_id`` (via
        ``context.metadata["model_id"]``) and configures a
        ``tier_resolver: Callable[[str], str]`` that maps model IDs to
