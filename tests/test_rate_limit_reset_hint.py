@@ -39,16 +39,21 @@ class TestTheWaitMatchesTheLimit:
         refused = _exhaust(limit)
 
         assert refused["block_reason"] == "rate_limit"
-        assert refused["metadata"]["reset_seconds"] == wait
-        assert refused["fix_hints"] == [f"Rate limit is {limit}", hint]
+        # Exact on any machine that makes the calls within a second of each other; the
+        # bucket refills while they run, so a slower one reports a slightly shorter wait.
+        reported = refused["metadata"]["reset_seconds"]
+        assert wait - 5 <= reported <= wait
+        if reported == wait:
+            assert refused["fix_hints"] == [f"Rate limit is {limit}", hint]
 
     def test_on_rate_limit_gets_the_same_wait(self) -> None:
         seen: list[tuple[str, int]] = []
         config = AirlockConfig(on_rate_limit=lambda name, wait: seen.append((name, wait)))
 
-        _exhaust("1/hour", config)
+        refused = _exhaust("1/hour", config)
 
-        assert seen == [("tool", 3600)]
+        assert seen == [("tool", refused["metadata"]["reset_seconds"])]
+        assert 3595 <= seen[0][1] <= 3600
 
 
 class TestSecondsUntilAvailable:

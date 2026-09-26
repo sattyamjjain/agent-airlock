@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 from typing import Any
 from unittest.mock import patch
@@ -101,9 +102,14 @@ class TestARefusalReachesTheClientAsAnError:
         refused = _call(mcp, "hourly")
 
         assert refused.is_error is True
-        assert _text(refused).endswith(
-            "Suggested fixes:\n- Rate limit is 1/hour\n- Wait 3600 seconds before retrying"
+        # 3600 less whatever the bucket refilled between the two calls (a slow CI runner
+        # takes over a second to open two client sessions).
+        hints = re.search(
+            r"Suggested fixes:\n- Rate limit is 1/hour\n- Wait (\d+) seconds before retrying$",
+            _text(refused),
         )
+        assert hints is not None, _text(refused)
+        assert 3590 <= int(hints.group(1)) <= 3600
 
 
 class TestAToolsOwnFailureDictIsItsResult:
