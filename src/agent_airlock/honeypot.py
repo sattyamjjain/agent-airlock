@@ -80,7 +80,9 @@ class DefaultHoneypotGenerator:
 
     # Common fake values for different scenarios
     FAKE_API_KEYS = [
-        "sk-fake-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        # Assembled at runtime: written out, the decoy matches the OpenAI-key pattern and
+        # GitHub secret scanning files it as a leaked credential.
+        "sk-fake-" + "X" * 40,
         "test_api_key_do_not_use_in_production_12345678",
         "development_key_placeholder_00000000000000000",
     ]
