@@ -2564,8 +2564,10 @@ it each still have a test that fails if they are ever fixed silently.</p>
 declared baseline, and <code>AuditRecord</code> carries <code>run_call_count</code>, <code>run_baseline_calls</code>,
 <code>run_amplification_ratio</code> and <code>run_input_tokens</code>. The unit is <strong>calls</strong>, deliberately: the
 paper's token and wall-time figures are not universally observable at this seam, so
-<code>run_input_tokens</code> is populated only from a caller-supplied <code>_airlock_input_tokens</code> and is
-<strong>never estimated</strong>.</p>
+<code>run_input_tokens</code> is populated only from the <code>input_tokens</code> tag the harness sets on the
+call's context (<code>with AirlockContext(metadata={"input_tokens": ...})</code>, or the context
+object passed as the tool's first argument) and is <strong>never estimated</strong>. Until 0.10.14 it
+also read an <code>_airlock_input_tokens</code> tool argument, which the model could write.</p>
 <p>What still does not reconstruct is the paper's own quantity. <code>duration_ms</code> is tool execution
 time, not the agent's end-to-end wall time, and summing it does not reproduce the 92.45%
 figure because it excludes model latency — which is where a detour spends most of what it
