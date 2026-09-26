@@ -62,9 +62,11 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
 <!-- AUTO-MANAGED: dependencies -->
 ## Key Dependencies
 
-- **`[bench]` is just `agentdojo`, and no workflow installs it**, so the AgentDojo shim and
-  smoke tests always skip in CI — and without it `python -m benchmarks.agentdojo.run`
-  prints an install hint and exits 0.
+- **`[bench]` is just `agentdojo`, and no workflow installs it**, so most of the AgentDojo
+  shim and the smoke tests skip in CI — and without it `python -m benchmarks.agentdojo.run`
+  prints an install hint and exits 0. Exception: the shim's model-id routing (`_infer`,
+  `_is_auto_registerable`) is plain string logic with no `agentdojo` import, so
+  `tests/test_agentdojo_model_routing.py` pins it where CI runs.
 - **Paid or host-touching runs — ask before starting one:** `agentdojo --model` (a provider
   key such as `OPENAI_API_KEY`; price the model id in `_MODEL_PRICES`), `harness_injection
   --run` (logged-in `claude` / `codex` / `cursor-agent` CLIs; its `--checkpoint` file is not
