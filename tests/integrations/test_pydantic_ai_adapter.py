@@ -10,6 +10,7 @@ import check.
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -225,3 +226,110 @@ class TestOutputValidateCannotBeSilentlySkipped:
 
         assert callable(agent.output_validate)
         assert not [w for w in caught if issubclass(w.category, UserWarning)]
+
+
+class _RunContextShape:
+    """Stands in for ``pydantic_ai.RunContext``: injected by the framework, no schema."""
+
+
+class _FunctionSchemaShape:
+    """Mirrors pydantic-ai 2.31.1's ``FunctionSchema`` (``_function_schema.py``).
+
+    An agent run invokes ``tool.function_schema.call`` (``toolsets/function.py``), and
+    ``call`` runs ``self.function`` — the function captured when the ``Tool`` was built,
+    not ``Tool.function``. The real ``call`` is async and awaits sync tools in a thread;
+    the dispatch is what matters here.
+    """
+
+    def __init__(self, function: Callable[..., Any], *, takes_ctx: bool) -> None:
+        self.function = function
+        self.takes_ctx = takes_ctx
+
+    def call(self, args_dict: dict[str, Any], ctx: Any) -> Any:
+        args = [ctx] if self.takes_ctx else []
+        return self.function(*args, **args_dict)
+
+
+class _ToolShape:
+    """Mirrors a pydantic-ai ``Tool``: ``function``, ``takes_ctx`` and ``function_schema``."""
+
+    def __init__(self, name: str, function: Callable[..., Any], *, takes_ctx: bool = False):
+        self.name = name
+        self.function = function
+        self.takes_ctx = takes_ctx
+        self.function_schema = _FunctionSchemaShape(function, takes_ctx=takes_ctx)
+
+
+def _wrap(tool: _ToolShape, policy: SecurityPolicy | None = None) -> None:
+    agent = _StubAgent([_StubToolset({tool.name: tool})])  # type: ignore[dict-item]
+    PydanticAIAdapter(attach_output_validate=False).wrap_agent(agent, policy=policy)
+
+
+def _blocked(result: Any) -> bool:
+    return isinstance(result, dict) and result.get("status") == "blocked"
+
+
+class TestAgentRunsGoThroughAirlock:
+    """Regression: only ``tool.function`` was replaced, which an agent run never calls.
+
+    On pydantic-ai 2.31.1 a plain tool and a ``RunContext`` tool both ran under a deny-all
+    policy, so real runs were outside Airlock entirely: no validation, policy or audit.
+    """
+
+    def test_the_run_path_invokes_the_guarded_callable(self) -> None:
+        calls: list[int] = []
+
+        def lookup(n: int) -> int:
+            calls.append(n)
+            return n
+
+        tool = _ToolShape("lookup", lookup)
+        _wrap(tool, policy=SecurityPolicy(denied_tools=["*"]))
+
+        assert _blocked(tool.function_schema.call({"n": 5}, ctx=None))
+        assert calls == []
+        assert tool.function_schema.function is tool.function
+
+    def test_a_schema_holding_some_other_function_is_left_alone(self) -> None:
+        def lookup(n: int) -> int:
+            return n
+
+        def other(n: int) -> int:
+            return -n
+
+        tool = _ToolShape("lookup", lookup)
+        tool.function_schema.function = other
+        _wrap(tool)
+
+        assert tool.function_schema.function is other
+
+
+class TestToolArgumentsAreValidated:
+    """Regression: the adapter handed Airlock a ``(*args, **kwargs)`` proxy."""
+
+    def test_a_wrong_type_is_rejected(self) -> None:
+        calls: list[Any] = []
+
+        def lookup(n: int) -> int:
+            calls.append(n)
+            return n
+
+        tool = _ToolShape("lookup", lookup)
+        _wrap(tool)
+
+        result = tool.function_schema.call({"n": "5"}, ctx=None)
+
+        assert _blocked(result)
+        assert "validation failed" in str(result.get("error"))
+        assert calls == []
+
+    def test_the_run_context_is_not_strictly_validated(self) -> None:
+        # Without relaxing it, a schema-less RunContext fails Airlock's wrap outright.
+        def lookup(ctx: _RunContextShape, n: int) -> int:
+            return n
+
+        tool = _ToolShape("lookup", lookup, takes_ctx=True)
+        _wrap(tool)
+
+        assert tool.function_schema.call({"n": 5}, _RunContextShape()) == 5
+        assert _blocked(tool.function_schema.call({"n": "5"}, _RunContextShape()))

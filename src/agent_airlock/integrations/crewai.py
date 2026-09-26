@@ -7,8 +7,9 @@ v0.7.1, CrewAI was example-only — users had to remember the
 ``@framework_decorator`` over ``@Airlock()`` rule themselves. This
 adapter promotes CrewAI to adapter-shipped: ``wrap_crew(crew,
 policy=...)`` walks every Agent's tool registry, replaces each
-tool's ``_run`` (or ``func``) callable with the Airlock-decorated
-version, and walks task-level ``Task(tools=[...])`` overrides too.
+tool's ``func`` (or, for ``BaseTool`` subclasses, ``_run``) callable
+with the Airlock-decorated version, and walks task-level
+``Task(tools=[...])`` overrides too.
 
 The CrewAI package is **not** imported at module load — callers
 without the ``[crewai]`` extra installed still ``import
@@ -51,6 +52,7 @@ from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
+from ._tool_proxy import named_tool_proxy
 
 logger = structlog.get_logger("agent-airlock.integrations.crewai")
 
@@ -199,15 +201,21 @@ class CrewAIAdapter:
         return count
 
     def _wrap_one(self, tool: Any, *, name: str, policy: SecurityPolicy | None) -> Any:
-        """Replace ``tool._run`` / ``tool.func`` / ``tool`` with a guarded shim.
+        """Replace ``tool.func`` / ``tool._run`` / ``tool`` with a guarded shim.
 
-        CrewAI ``BaseTool`` subclasses use ``_run`` for the user
-        callable; ``@tool``-decorated callables are wrapped with a
-        ``func`` attribute. Plain callables are wrapped directly.
+        ``@tool``-decorated callables become a ``Tool`` whose ``func`` is the
+        user callable; ``BaseTool`` subclasses implement ``_run``. Plain
+        callables are wrapped directly.
+
+        ``func`` is tried first. A ``Tool`` has a ``_run`` too, but it is a
+        ``(*args, **kwargs)`` pass-through to ``func`` that ``Tool.run`` and
+        ``Tool.arun`` never call, so wrapping it left both of those paths
+        outside Airlock (verified on crewai 1.15.22: a deny-all policy did
+        not stop ``Tool.run``) and gave strict validation no signature.
         """
         target_attr: str | None = None
         forward: Callable[..., Any] | None = None
-        for candidate in ("_run", "func"):
+        for candidate in ("func", "_run"):
             attr = getattr(tool, candidate, None)
             if callable(attr):
                 target_attr = candidate
@@ -217,20 +225,13 @@ class CrewAIAdapter:
             forward = tool
         if forward is None:
             raise AirlockError(
-                f"tool {name!r} has no callable attribute (`_run`/`func`/__call__); cannot wrap"
+                f"tool {name!r} has no callable attribute (`func`/`_run`/__call__); cannot wrap"
             )
 
-        # Re-tag the proxy with the tool's name so SecurityPolicy
-        # allowed_tools / denied_tools lists target the tool's name,
-        # not its method name.
-        def _named_proxy(*args: Any, **kwargs: Any) -> Any:
-            return forward(*args, **kwargs)
-
-        _named_proxy.__name__ = name
-        _named_proxy.__qualname__ = name
-
+        # The proxy carries the tool's name, so SecurityPolicy lists match the tool
+        # rather than `_run` / `func`, and the tool's signature, so Airlock validates it.
         airlock = Airlock(policy=policy) if policy is not None else Airlock()
-        wrapped = airlock(_named_proxy)
+        wrapped = airlock(named_tool_proxy(forward, name=name))
 
         if target_attr is not None:
             setattr(tool, target_attr, wrapped)  # noqa: B010

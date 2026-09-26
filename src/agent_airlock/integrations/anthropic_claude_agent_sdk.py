@@ -20,9 +20,10 @@ Usage::
 The optional dependency is ``claude-agent-sdk>=0.1.58`` (extra:
 ``pip install "agent-airlock[claude-agent]"``). The SDK is *not*
 imported at module load — calling :meth:`wrap_agent` without the
-extra installed raises a clear :class:`RuntimeError` with the
-install hint, never an opaque ``ImportError`` from somewhere deep
-in the call stack.
+extra installed raises a clear :class:`ClaudeAgentSDKMissingError`
+(an :class:`~agent_airlock.exceptions.AirlockError`) with the install
+hint, never an opaque ``ImportError`` from somewhere deep in the call
+stack.
 
 Primary sources
 ---------------
@@ -42,6 +43,7 @@ from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
+from ._tool_proxy import named_tool_proxy
 from .claude_auto_memory import (
     AutoMemoryAccessPolicy,
     guarded_read,
@@ -89,8 +91,7 @@ _INSTALL_HINT = (
 class ClaudeAgentSDKMissingError(AirlockError):
     """Raised when ``wrap_agent`` is called without the extra installed.
 
-    This is intentionally a subclass of :class:`AirlockError` (and
-    therefore ``RuntimeError`` via the inheritance chain) so callers
+    This is intentionally a subclass of :class:`AirlockError` so callers
     get a clear, actionable error instead of a deep ``ImportError``
     from inside the SDK.
     """
@@ -215,17 +216,11 @@ class AnthropicClaudeAgentSDKAdapter:
                 f"tool {name!r} exposes neither `forward` nor `__call__`; cannot wrap"
             )
 
-        # Airlock uses ``func.__name__`` for policy checks. We re-tag the
-        # callable with the tool's canonical name so SecurityPolicy
-        # allowed/denied lists target the tool, not its method name.
-        def _named_proxy(*args: Any, **kwargs: Any) -> Any:
-            return forward(*args, **kwargs)
-
-        _named_proxy.__name__ = name
-        _named_proxy.__qualname__ = name
-
+        # Airlock uses ``func.__name__`` for policy checks, so the proxy carries the
+        # tool's canonical name; it also carries the tool's signature, so Airlock
+        # validates it, and is async when the tool is.
         airlock = Airlock(policy=policy) if policy is not None else Airlock()
-        wrapped = airlock(_named_proxy)
+        wrapped = airlock(named_tool_proxy(forward, name=name))
 
         if hasattr(tool, "forward"):
             # Tool object (non-function): mutate in place. Use setattr so
