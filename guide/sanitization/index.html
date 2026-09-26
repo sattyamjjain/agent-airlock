@@ -2828,7 +2828,9 @@
 <p>Until 0.10.11 only string results were masked. Every other result was reported as
 masked, in the log, the warnings and the audit record, and returned raw.</p>
 <h2 id="sensitive-data-types">Sensitive Data Types<a class="headerlink" href="#sensitive-data-types" title="Permanent link">&para;</a></h2>
+<p>"Masked As" is what <code>@Airlock</code> returns, using each type's default strategy.</p>
 <h3 id="pii-personally-identifiable-information">PII (Personally Identifiable Information)<a class="headerlink" href="#pii-personally-identifiable-information" title="Permanent link">&para;</a></h3>
+<p>Masked when <code>mask_pii=True</code> (the default).</p>
 <table>
 <thead>
 <tr>
@@ -2841,31 +2843,35 @@ masked, in the log, the warnings and the audit record, and returned raw.</p>
 <tr>
 <td>Email</td>
 <td><code>john@example.com</code></td>
-<td><code>[EMAIL REDACTED]</code></td>
+<td><code>j***@example.com</code></td>
 </tr>
 <tr>
 <td>Phone</td>
 <td><code>555-123-4567</code></td>
-<td><code>[PHONE REDACTED]</code></td>
+<td><code>555***567</code></td>
 </tr>
 <tr>
 <td>SSN</td>
 <td><code>123-45-6789</code></td>
-<td><code>[SSN REDACTED]</code></td>
+<td><code>[REDACTED]</code></td>
 </tr>
 <tr>
 <td>Credit Card</td>
-<td><code>4111-1111-1111-1111</code></td>
-<td><code>[CREDIT_CARD REDACTED]</code></td>
+<td><code>4111111111111111</code></td>
+<td><code>**** **** **** 1111</code></td>
 </tr>
 <tr>
 <td>IP Address</td>
 <td><code>192.168.1.100</code></td>
-<td><code>[IP_ADDRESS REDACTED]</code></td>
+<td><code>192***100</code></td>
 </tr>
 </tbody>
 </table>
+<p>A card number is matched as an unbroken run of digits, so <code>4111-1111-1111-1111</code> is not
+detected. <code>pii_locales=["in"]</code> adds Aadhaar, PAN, UPI ID, IFSC, Devanagari names and Indian
+mobile numbers.</p>
 <h3 id="secrets">Secrets<a class="headerlink" href="#secrets" title="Permanent link">&para;</a></h3>
+<p>Masked when <code>mask_secrets=True</code> (the default).</p>
 <table>
 <thead>
 <tr>
@@ -2877,98 +2883,94 @@ masked, in the log, the warnings and the audit record, and returned raw.</p>
 <tbody>
 <tr>
 <td>API Key</td>
-<td><code>sk-1234567890abcdef</code></td>
-<td><code>[API_KEY REDACTED]</code></td>
+<td><code>sk-abcdefghijklmnopqrstuvwxyz</code></td>
+<td><code>sk-abcd...wxyz</code></td>
 </tr>
 <tr>
 <td>AWS Key</td>
-<td><code>AKIA1234567890</code></td>
-<td><code>[AWS_KEY REDACTED]</code></td>
+<td><code>AKIAIOSFODNN7EXAMPLE</code></td>
+<td><code>AKIAIOS...MPLE</code></td>
 </tr>
 <tr>
 <td>Password</td>
 <td><code>password=secret123</code></td>
-<td><code>[PASSWORD REDACTED]</code></td>
+<td><code>password=[REDACTED]</code></td>
 </tr>
 <tr>
 <td>JWT</td>
-<td><code>eyJhbGciOi...</code></td>
-<td><code>[JWT REDACTED]</code></td>
+<td><code>eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.abc</code></td>
+<td><code>eyJhbGciOi...[JWT]</code></td>
 </tr>
 <tr>
 <td>Connection String</td>
 <td><code>postgres://user:pass@host</code></td>
-<td><code>[CONNECTION_STRING REDACTED]</code></td>
+<td><code>[REDACTED]</code></td>
 </tr>
 <tr>
 <td>Private Key</td>
 <td><code>-----BEGIN PRIVATE KEY-----</code></td>
-<td><code>[PRIVATE_KEY REDACTED]</code></td>
-</tr>
-<tr>
-<td>Bearer Token</td>
-<td><code>Bearer eyJ...</code></td>
-<td><code>[BEARER_TOKEN REDACTED]</code></td>
+<td><code>[REDACTED]</code></td>
 </tr>
 </tbody>
 </table>
+<p>Detection is by known shape. An API key is an OpenAI or Anthropic <code>sk-</code> key with 20 or more
+characters after the prefix, a Google <code>AIza</code> key, a GitHub <code>ghp_</code>/<code>gho_</code>/<code>github_pat_</code>
+token or a Slack <code>xox</code> token; a shorter or unrecognised key passes through. A password is
+the value (8+ characters) after <code>password</code>, <code>passwd</code>, <code>pwd</code>, <code>secret</code> or <code>token</code> and <code>=</code> or
+<code>:</code>. The private-key rule masks the <code>BEGIN</code> line, not the key body. There is no separate
+bearer-token type: the JWT in <code>Bearer eyJ...</code> is masked by the JWT rule.</p>
 <h2 id="masking-strategies">Masking Strategies<a class="headerlink" href="#masking-strategies" title="Permanent link">&para;</a></h2>
-<p>Choose how sensitive data is masked:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">MaskingStrategy</span>
+<p><code>@Airlock</code> masks each type with its default strategy, the one the tables above show:
+<code>FULL</code> for SSN, password, private key and connection string, <code>TYPE_ONLY</code> for IFSC, and
+<code>PARTIAL</code> for the rest. <code>AirlockConfig</code> has no strategy setting. To choose a strategy, run
+the standalone sanitizer with a <code>mask_config</code> mapping:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskingStrategy</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">sanitize_output</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Full redaction (default)</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">masking_strategy</span><span class="o">=</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">FULL</span><span class="p">,</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">)</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># john@example.com → [EMAIL REDACTED]</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">mask_email</span><span class="p">(</span><span class="n">strategy</span><span class="p">:</span> <span class="n">MaskingStrategy</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">EMAIL</span><span class="p">:</span> <span class="n">strategy</span><span class="p">}</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="k">return</span> <span class="n">sanitize_output</span><span class="p">(</span><span class="s2">"john@example.com"</span><span class="p">,</span> <span class="n">mask_config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span><span class="o">.</span><span class="n">content</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Full redaction</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">FULL</span><span class="p">)</span>       <span class="c1"># [REDACTED]</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Partial masking</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">masking_strategy</span><span class="o">=</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">PARTIAL</span><span class="p">,</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="p">)</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># john@example.com → j***@e***.com</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># Type only</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>    <span class="n">masking_strategy</span><span class="o">=</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">TYPE_ONLY</span><span class="p">,</span>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="p">)</span>
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="c1"># john@example.com → [EMAIL]</span>
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>
-<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="c1"># Hash (for correlation)</span>
-<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>    <span class="n">masking_strategy</span><span class="o">=</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">HASH</span><span class="p">,</span>
-<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="p">)</span>
-<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="c1"># john@example.com → [EMAIL:a1b2c3d4]</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Partial masking (the default for email)</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">PARTIAL</span><span class="p">)</span>    <span class="c1"># j***@example.com</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># Type only</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">TYPE_ONLY</span><span class="p">)</span>  <span class="c1"># [EMAIL]</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># Hash (for correlation)</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">HASH</span><span class="p">)</span>       <span class="c1"># [SHA256:855f96e9...]</span>
 </code></pre></div>
+<p>The mapping replaces the defaults: a type you leave out of it is masked <code>FULL</code>.</p>
 <h2 id="selective-detection">Selective Detection<a class="headerlink" href="#selective-detection" title="Permanent link">&para;</a></h2>
-<p>Enable/disable specific data types:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">SensitiveDataType</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Only mask specific types</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">enabled_types</span><span class="o">=</span><span class="p">[</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">SSN</span><span class="p">,</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">CREDIT_CARD</span><span class="p">,</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="p">],</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="p">)</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="c1"># Mask all except specific types</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="n">mask_pii</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="n">disabled_types</span><span class="o">=</span><span class="p">[</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>        <span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">IP_ADDRESS</span><span class="p">,</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="p">],</span>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="p">)</span>
+<p><code>AirlockConfig</code> switches detection by group: <code>mask_pii</code>, <code>mask_secrets</code> and
+<code>pii_locales</code>. To enable or disable specific data types, use the standalone functions:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">WorkspacePIIConfig</span><span class="p">,</span> <span class="n">mask_sensitive_data</span><span class="p">,</span> <span class="n">sanitize_with_workspace_config</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">text</span> <span class="o">=</span> <span class="s2">"john@example.com, SSN 123-45-6789, card 4111111111111111"</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Only mask specific types</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">masked</span><span class="p">,</span> <span class="n">detections</span> <span class="o">=</span> <span class="n">mask_sensitive_data</span><span class="p">(</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="n">text</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">types</span><span class="o">=</span><span class="p">[</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">SSN</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">CREDIT_CARD</span><span class="p">],</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="p">)</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="c1"># john@example.com, SSN [REDACTED], card **** **** **** 1111</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="c1"># Mask all except specific types</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="n">config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">"ops"</span><span class="p">,</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="n">disabled_types</span><span class="o">=</span><span class="p">[</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">IP_ADDRESS</span><span class="p">],</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="p">)</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="n">sanitize_with_workspace_config</span><span class="p">(</span><span class="s2">"host 10.0.0.12, owner ops@example.com"</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span><span class="o">.</span><span class="n">content</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="c1"># host 10.0.0.12, owner o***@example.com</span>
 </code></pre></div>
 <h2 id="workspace-specific-rules">Workspace-Specific Rules<a class="headerlink" href="#workspace-specific-rules" title="Permanent link">&para;</a></h2>
-<p>For multi-tenant applications:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkspacePIIConfig</span><span class="p">,</span> <span class="n">sanitize_with_workspace_config</span>
+<p>For multi-tenant applications. <code>sanitize_with_workspace_config</code> returns a
+<code>SanitizationResult</code>; the masked text is its <code>content</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskingStrategy</span><span class="p">,</span> <span class="n">WorkspacePIIConfig</span><span class="p">,</span> <span class="n">sanitize_with_workspace_config</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># Enterprise workspace: Don't mask internal emails</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">enterprise_config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
@@ -2997,11 +2999,13 @@ masked, in the log, the warnings and the audit record, and returned raw.</p>
 <a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a><span class="c1"># Apply workspace config</span>
 <a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a><span class="n">content</span> <span class="o">=</span> <span class="s2">"Contact: alice@acme.com or bob@competitor1.com"</span>
 <a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_with_workspace_config</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">sales_config</span><span class="p">)</span>
-<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="c1"># "Contact: alice@acme.com or [EMAIL REDACTED]"</span>
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="c1"># result.content == "Contact: alice@acme.com or b***@competitor1.com"</span>
 </code></pre></div>
+<p>A custom pattern is masked as <code>[REDACTED]</code>, or as <code>[EMPLOYEE_ID]</code> (its name in capitals)
+when its strategy is <code>TYPE_ONLY</code>.</p>
 <h2 id="phone-number-filtering">Phone Number Filtering<a class="headerlink" href="#phone-number-filtering" title="Permanent link">&para;</a></h2>
 <p>Allow specific phone prefixes:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkspacePIIConfig</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkspacePIIConfig</span><span class="p">,</span> <span class="n">sanitize_with_workspace_config</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">"support"</span><span class="p">,</span>
@@ -3010,7 +3014,7 @@ masked, in the log, the warnings and the audit record, and returned raw.</p>
 <a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
 <a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">content</span> <span class="o">=</span> <span class="s2">"Call us: 1-800-555-1234 or 555-123-4567"</span>
 <a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_with_workspace_config</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1"># "Call us: 1-800-555-1234 or [PHONE REDACTED]"</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1"># result.content == "Call us: 1-800-555-1234 or 555***567"</span>
 </code></pre></div>
 <h2 id="output-truncation">Output Truncation<a class="headerlink" href="#output-truncation" title="Permanent link">&para;</a></h2>
 <p>Limit the size of string results to prevent token bloat (structured results are
@@ -3019,15 +3023,17 @@ masked but not truncated; see above):</p>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">max_output_chars</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>  <span class="c1"># Character limit</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">max_output_tokens</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>  <span class="c1"># Token limit</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">)</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">max_output_chars</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>  <span class="c1"># Character limit (default 20000; 0 = no limit)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">)</span>
 </code></pre></div>
-<p>When truncated, a notice is appended:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>[OUTPUT TRUNCATED - 15,000 chars exceeded 10,000 limit]
+<p><code>max_output_chars</code> is the only limit applied. <code>AirlockConfig</code> also has a
+<code>max_output_tokens</code> field, but <code>@Airlock</code> does not truncate on it.</p>
+<p>When truncated, a notice is appended, inside the limit:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>[OUTPUT TRUNCATED: Showing 10,000 of 15,000 characters]
 </code></pre></div></p>
 <h2 id="streaming-support">Streaming Support<a class="headerlink" href="#streaming-support" title="Permanent link">&para;</a></h2>
-<p>Sanitize streaming outputs:</p>
+<p><code>@Airlock</code> does not mask what a generator yields. Sanitize streaming outputs by wrapping
+the generator:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">StreamingAirlock</span><span class="p">,</span> <span class="n">AirlockConfig</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
@@ -3043,8 +3049,8 @@ masked but not truncated; see above):</p>
 <a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>
 <a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">streaming</span><span class="o">.</span><span class="n">wrap_generator</span><span class="p">(</span><span class="n">generate_report</span><span class="p">()):</span>
 <a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
-<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="c1"># Customer: [EMAIL REDACTED]</span>
-<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="c1"># Phone: [PHONE REDACTED]</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="c1"># Customer: j***@example.com</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="c1"># Phone: 555***567</span>
 </code></pre></div>
 <h2 id="sanitization-results">Sanitization Results<a class="headerlink" href="#sanitization-results" title="Permanent link">&para;</a></h2>
 <p>Get details about what was masked:</p>
@@ -3054,17 +3060,20 @@ masked but not truncated; see above):</p>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_output</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">mask_pii</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
 <a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># "Email: [EMAIL REDACTED], SSN: [SSN REDACTED]"</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># "Email: j***@example.com, SSN: [REDACTED]"</span>
 <a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
 <a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">detection_count</span><span class="p">)</span>
 <a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="c1"># 2</span>
 <a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>
 <a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">detections</span><span class="p">)</span>
 <a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="c1"># [</span>
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="c1">#     {"type": "EMAIL", "original": "john@example.com", "masked": "[EMAIL REDACTED]"},</span>
-<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="c1">#     {"type": "SSN", "original": "123-45-6789", "masked": "[SSN REDACTED]"}</span>
-<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="c1"># ]</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="c1">#     {"type": "email", "value": "john@example.com", "start": 7, "end": 23,</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="c1">#      "full_match": "john@example.com", "masked_as": "j***@example.com"},</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="c1">#     {"type": "ssn", "value": "123-45-6789", "start": 30, "end": 41,</span>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="c1">#      "full_match": "123-45-6789", "masked_as": "[REDACTED]"}</span>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="c1"># ]</span>
 </code></pre></div>
+<p>Each detection holds the original <code>value</code>, so treat the list as sensitive.</p>
 
 
 

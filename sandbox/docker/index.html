@@ -2482,10 +2482,10 @@
 
 
 <h1 id="dockerbackend-v051">DockerBackend (v0.5.1+)<a class="headerlink" href="#dockerbackend-v051" title="Permanent link">&para;</a></h1>
-<p><code>DockerBackend</code> runs an agent-airlock-wrapped tool call inside an
-ephemeral Docker container. It is one of four pluggable
-<a href="../../api/sandbox/"><code>SandboxBackend</code></a> implementations (E2B, Docker,
-Local, Managed-stub).</p>
+<p><code>DockerBackend</code> runs a Python function inside an ephemeral Docker
+container. It is one of the <code>SandboxBackend</code> implementations in
+<code>agent_airlock.sandbox_backend</code> (E2B, Docker, Local, Modal, and a
+Managed Agents stub).</p>
 <h2 id="what-v051-actually-ships">What v0.5.1 actually ships<a class="headerlink" href="#what-v051-actually-ships" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Timeout enforced.</strong> <code>DockerBackend.execute(..., timeout=60)</code>
@@ -2510,27 +2510,55 @@ Local, Managed-stub).</p>
   the sandbox.</li>
 <li><strong>Integration tests.</strong> Four tests behind the <code>pytest -m docker</code>
   marker prove availability, success, timeout, and network
-  isolation. Default <code>pytest</code> runs <strong>exclude</strong> them, so CI does
-  not need a Docker daemon.</li>
+  isolation. Default <code>pytest</code> runs <strong>exclude</strong> them; CI's
+  <code>docker-sandbox</code> job builds the repo <code>Dockerfile</code> and requires all
+  four to pass.</li>
 </ul>
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.sandbox_backend</span><span class="w"> </span><span class="kn">import</span> <span class="n">DockerBackend</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">backend</span> <span class="o">=</span> <span class="n">DockerBackend</span><span class="p">(</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">image</span><span class="o">=</span><span class="s2">"python:3.11-slim"</span><span class="p">,</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">memory_limit</span><span class="o">=</span><span class="s2">"256m"</span><span class="p">,</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">cpu_limit</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">security_opt</span><span class="o">=</span><span class="p">[</span><span class="s2">"seccomp=/etc/docker/airlock-seccomp.json"</span><span class="p">],</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">sandbox_backend</span><span class="o">=</span><span class="n">backend</span><span class="p">)</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sandbox_required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="k">def</span><span class="w"> </span><span class="nf">risky_thing</span><span class="p">(</span><span class="n">arg</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="o">...</span>
+<p><code>@Airlock(sandbox=True)</code> does not take a backend: its sandbox path
+always runs through E2B, and <code>AirlockConfig</code> has no backend setting.
+Call the backend's <code>execute()</code> yourself. It returns a <code>SandboxResult</code>
+instead of raising, and the timeout is a per-call argument, not a
+constructor parameter:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.sandbox_backend</span><span class="w"> </span><span class="kn">import</span> <span class="n">DockerBackend</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">backend</span> <span class="o">=</span> <span class="n">DockerBackend</span><span class="p">(</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">image</span><span class="o">=</span><span class="s2">"airlock-sandbox:py3.11"</span><span class="p">,</span>  <span class="c1"># must have cloudpickle installed; see below</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">memory_limit</span><span class="o">=</span><span class="s2">"256m"</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">cpu_limit</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">security_opt</span><span class="o">=</span><span class="p">[</span><span class="s2">"seccomp=/etc/docker/airlock-seccomp.json"</span><span class="p">],</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">risky_thing</span><span class="p">(</span><span class="n">arg</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">return</span> <span class="n">arg</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">result</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">risky_thing</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="s2">"hello"</span><span class="p">,),</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{},</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">result</span><span class="p">)</span>  <span class="c1"># HELLO</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">error</span><span class="p">)</span>
 </code></pre></div>
+<p>The host needs the <code>docker</code> Python package, which no extra installs,
+and <code>cloudpickle</code> (in the <code>[sandbox]</code> extra). The image needs
+<code>cloudpickle</code> too: the script the backend runs starts with
+<code>import cloudpickle</code>, and with <code>network_mode="none"</code> the container
+cannot install it, so with the default <code>python:3.11-slim</code> image
+<code>execute()</code> fails with <code>Container exited with status 1</code>. Use the
+host's Python version in the image, because cloudpickle sends a
+function defined in <code>__main__</code> as bytecode. A function it can import
+by name is sent by reference instead, so its module must be installed
+in the image as well. A minimal image:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">FROM</span><span class="w"> </span><span class="s">python:3.11-slim</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">RUN</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--no-cache-dir<span class="w"> </span>cloudpickle
+</code></pre></div>
+<p>The repo's <code>Dockerfile</code> builds the image the integration tests use.</p>
+<p>To pick a backend by availability, <code>get_default_backend(config=None)</code>
+(exported from <code>agent_airlock</code>) returns <code>E2BBackend</code> when an E2B API
+key is set (on <code>config</code> or in <code>E2B_API_KEY</code>) and the SDK is installed,
+else <code>DockerBackend()</code> with the
+default image when a Docker daemon answers, else
+<code>LocalBackend(allow_unsafe=True)</code>, which has no isolation, with a
+<code>no_sandbox_available</code> warning.</p>
 <h2 id="v070-hardening-flags-37-38">v0.7.0 hardening flags (#37, #38)<a class="headerlink" href="#v070-hardening-flags-37-38" title="Permanent link">&para;</a></h2>
 <p>Two opt-in fail-closed flags shipped together in v0.7.0:</p>
 <ul>
@@ -2541,9 +2569,9 @@ Local, Managed-stub).</p>
   CI, shared dev hosts) want the call to fail-closed when the daemon
   runs as root rather than silently downgrading.</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">backend</span> <span class="o">=</span> <span class="n">DockerBackend</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"python@sha256:..."</span><span class="p">,</span> <span class="n">require_rootless</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">backend</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"daemon is not rootless — refusing to spawn"</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">backend</span> <span class="o">=</span> <span class="n">DockerBackend</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"python@sha256:..."</span><span class="p">,</span> <span class="n">require_rootless</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">backend</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"daemon is not rootless — refusing to spawn"</span><span class="p">)</span>
 </code></pre></div>
 <ul>
 <li><strong><code>require_digest_pin=True</code></strong> — refuses tag-only image strings at
@@ -2551,14 +2579,14 @@ Local, Managed-stub).</p>
   a tag's identity can change under you. The accepted form is
   <code>&lt;name&gt;@sha256:&lt;64-hex&gt;</code> (validated by an explicit regex).</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># OK</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">DockerBackend</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"python@sha256:"</span> <span class="o">+</span> <span class="s2">"0"</span> <span class="o">*</span> <span class="mi">64</span><span class="p">,</span> <span class="n">require_digest_pin</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># raises ValueError</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">DockerBackend</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"python:3.11-slim"</span><span class="p">,</span> <span class="n">require_digest_pin</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># OK</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">DockerBackend</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"python@sha256:"</span> <span class="o">+</span> <span class="s2">"0"</span> <span class="o">*</span> <span class="mi">64</span><span class="p">,</span> <span class="n">require_digest_pin</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># raises ValueError</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">DockerBackend</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"python:3.11-slim"</span><span class="p">,</span> <span class="n">require_digest_pin</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<p>Discover the digest of a tag with <code>docker pull --quiet &lt;name&gt;:&lt;tag&gt;</code>
-  or <code>docker inspect &lt;name&gt;:&lt;tag&gt; --format='{{.RepoDigests}}'</code>.</p>
+<p>Discover the digest of a tag from the <code>Digest:</code> line <code>docker pull &lt;name&gt;:&lt;tag&gt;</code> prints,
+  or with <code>docker inspect &lt;name&gt;:&lt;tag&gt; --format='{{.RepoDigests}}'</code>.</p>
 <h2 id="known-gaps-still-tracked">Known gaps (still tracked)<a class="headerlink" href="#known-gaps-still-tracked" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>No user-namespace remap helper.</strong> Users who want
@@ -2571,44 +2599,49 @@ Local, Managed-stub).</p>
 <tr>
 <th>Backend</th>
 <th>Isolation</th>
-<th>Latency</th>
-<th>Cloud dependency</th>
-<th>Default?</th>
+<th>Per call</th>
+<th>Dependency</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><a href="../../api/sandbox/"><code>E2BBackend</code></a></td>
 <td>Firecracker MicroVM</td>
-<td>&lt;200 ms warm</td>
+<td>Reuses a sandbox from the shared E2B pool</td>
 <td>E2B cloud</td>
-<td>✓</td>
 </tr>
 <tr>
 <td><code>DockerBackend</code> (this page)</td>
 <td>Container, <code>cap_drop=ALL</code></td>
-<td>~1-2 s cold, &lt;200 ms warm if image cached</td>
+<td>Starts, then removes, a new container</td>
 <td>local Docker daemon</td>
-<td>—</td>
+</tr>
+<tr>
+<td><code>ModalBackend</code></td>
+<td>Modal sandbox (gVisor)</td>
+<td>Creates a new Modal sandbox</td>
+<td>Modal (<code>[modal]</code> extra)</td>
 </tr>
 <tr>
 <td><code>LocalBackend</code></td>
 <td><strong>None</strong></td>
-<td>~0 ms</td>
-<td>none</td>
-<td>dev only</td>
+<td>Calls the function in-process</td>
+<td>none (dev only)</td>
 </tr>
 <tr>
 <td><code>ManagedSandboxBackend</code></td>
-<td>Anthropic Managed Agents (session-based)</td>
-<td>varies</td>
-<td>Anthropic API</td>
-<td>preview</td>
+<td>None: <code>execute()</code> never runs the function</td>
+<td>Returns a failed <code>SandboxResult</code></td>
+<td><code>anthropic</code> SDK and API key</td>
 </tr>
 </tbody>
 </table>
+<p>Only the E2B path is used by <code>@Airlock(sandbox=True)</code>, and
+<code>get_default_backend()</code> never returns <code>ModalBackend</code> or
+<code>ManagedSandboxBackend</code>.</p>
 <p>If you're running in air-gapped / on-prem environments where E2B
-is not an option, <code>DockerBackend</code> is the recommended choice.</p>
+is not an option, <code>DockerBackend</code> is the recommended choice, called
+directly as in <a href="#usage">Usage</a>.</p>
 
 
 

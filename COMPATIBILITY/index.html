@@ -4174,10 +4174,14 @@
 <hr />
 <h2 id="performance-notes">Performance Notes<a class="headerlink" href="#performance-notes" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Validation overhead:</strong> &lt;50ms per call</li>
-<li><strong>E2B cold start:</strong> ~125ms (<a href="https://e2b.dev/blog/firecracker-vs-qemu">Firecracker MicroVM</a>)</li>
-<li><strong>E2B warm pool:</strong> &lt;200ms (pre-warmed sandboxes)</li>
-<li><strong>Signature introspection:</strong> Negligible (cached by frameworks)</li>
+<li><strong>Validation overhead:</strong> measured by <code>tests/benchmarks/test_bench_core.py</code> (<code>make bench</code>);
+  no figure is published here.</li>
+<li><strong>E2B cold start:</strong> E2B reports about 125ms for its
+  <a href="https://e2b.dev/blog/firecracker-vs-qemu">Firecracker micro-VMs</a>; not measured by this
+  project.</li>
+<li><strong>E2B warm pool:</strong> <code>get_sandbox_pool(config).warm_up()</code> creates sandboxes before the first
+  call; the saving is not measured here.</li>
+<li><strong>Signature introspection:</strong> once per tool, when it is decorated, not per call.</li>
 </ul>
 <hr />
 <h2 id="references_9">References<a class="headerlink" href="#references_9" title="Permanent link">&para;</a></h2>

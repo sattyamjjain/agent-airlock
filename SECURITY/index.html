@@ -2511,10 +2511,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#strict-mode-vs-permissive-mode" class="md-nav__link">
+  <a href="#unknown-argument-modes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Strict Mode vs Permissive Mode
+        Unknown-Argument Modes
       
     </span>
   </a>
@@ -3020,10 +3020,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#strict-mode-vs-permissive-mode" class="md-nav__link">
+  <a href="#unknown-argument-modes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Strict Mode vs Permissive Mode
+        Unknown-Argument Modes
       
     </span>
   </a>
@@ -3343,7 +3343,7 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Tool expects: read_file(path: str)</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># LLM sends: read_file(path="data.txt", force=True, admin=True)</span>
 </code></pre></div></p>
-<p><strong>Mitigation</strong>: Ghost argument stripping (permissive) or rejection (strict mode).</p>
+<p><strong>Mitigation</strong>: Ghost argument stripping (the default) or rejection (<code>UnknownArgsMode.BLOCK</code>).</p>
 <h3 id="2-type-coercion-attacks">2. Type Coercion Attacks<a class="headerlink" href="#2-type-coercion-attacks" title="Permanent link">&para;</a></h3>
 <p><strong>Threat</strong>: LLMs send wrong types expecting implicit conversion.</p>
 <p><strong>Example</strong>:
@@ -3405,19 +3405,20 @@
 <hr />
 <h2 id="configuration-guidelines">Configuration Guidelines<a class="headerlink" href="#configuration-guidelines" title="Permanent link">&para;</a></h2>
 <h3 id="recommended-production-configuration">Recommended Production Configuration<a class="headerlink" href="#recommended-production-configuration" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">STRICT_POLICY</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">STRICT_POLICY</span><span class="p">,</span> <span class="n">UnknownArgsMode</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">strict_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>          <span class="c1"># Reject unknown arguments</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">unknown_args</span><span class="o">=</span><span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">BLOCK</span><span class="p">,</span>  <span class="c1"># Reject unknown arguments</span>
 <a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">mask_pii</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>             <span class="c1"># Mask SSN, credit cards, etc.</span>
 <a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">mask_secrets</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>         <span class="c1"># Mask API keys, passwords</span>
 <a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">max_output_chars</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>    <span class="c1"># Prevent token explosion</span>
 <a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>      <span class="c1"># Enable all output protection</span>
 <a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="p">)</span>
 <a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">STRICT_POLICY</span><span class="p">)</span>
-<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_secure_tool</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">MyArgs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="o">...</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="c1"># STRICT_POLICY refuses any call that carries no agent identity</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">STRICT_POLICY</span><span class="p">)</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_secure_tool</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">MyArgs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="o">...</span>
 </code></pre></div>
 <h3 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h3>
 <table>
@@ -3430,28 +3431,27 @@
 </thead>
 <tbody>
 <tr>
+<td><code>AIRLOCK_UNKNOWN_ARGS</code></td>
+<td><code>block</code> rejects unknown arguments; also <code>strip_and_log</code>, <code>strip_silent</code></td>
+<td><code>strip_and_log</code></td>
+</tr>
+<tr>
 <td><code>AIRLOCK_STRICT_MODE</code></td>
-<td>Reject unknown arguments</td>
-<td><code>false</code></td>
-</tr>
-<tr>
-<td><code>AIRLOCK_MASK_PII</code></td>
-<td>Enable PII masking</td>
-<td><code>true</code></td>
-</tr>
-<tr>
-<td><code>AIRLOCK_MASK_SECRETS</code></td>
-<td>Enable secret masking</td>
-<td><code>true</code></td>
+<td>Deprecated; <code>true</code> maps to <code>block</code>, any other value to <code>strip_and_log</code> (and wins over <code>AIRLOCK_UNKNOWN_ARGS</code>)</td>
+<td>unset</td>
 </tr>
 <tr>
 <td><code>E2B_API_KEY</code></td>
-<td>E2B sandbox API key</td>
+<td>E2B sandbox API key, used when none is set in code</td>
 <td>None</td>
 </tr>
 </tbody>
 </table>
-<h3 id="strict-mode-vs-permissive-mode">Strict Mode vs Permissive Mode<a class="headerlink" href="#strict-mode-vs-permissive-mode" title="Permanent link">&para;</a></h3>
+<p>PII and secret masking have no environment variable. Both are on by default
+(<code>mask_pii=True</code>, <code>mask_secrets=True</code>); turn them off in code.</p>
+<h3 id="unknown-argument-modes">Unknown-Argument Modes<a class="headerlink" href="#unknown-argument-modes" title="Permanent link">&para;</a></h3>
+<p>Set with <code>AirlockConfig(unknown_args=...)</code>. <code>strict_mode=True</code> is the deprecated spelling
+of <code>BLOCK</code>.</p>
 <table>
 <thead>
 <tr>
@@ -3462,14 +3462,19 @@
 </thead>
 <tbody>
 <tr>
-<td><strong>Permissive</strong> (default)</td>
+<td><code>STRIP_AND_LOG</code> (default)</td>
 <td>Strip unknown args, log warning</td>
 <td>Development, backward compatibility</td>
 </tr>
 <tr>
-<td><strong>Strict</strong></td>
+<td><code>BLOCK</code></td>
 <td>Reject call, return error</td>
 <td>Production, high-security environments</td>
+</tr>
+<tr>
+<td><code>STRIP_SILENT</code></td>
+<td>Strip unknown args, no warning</td>
+<td>Isolated development only</td>
 </tr>
 </tbody>
 </table>
@@ -3480,7 +3485,7 @@
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">PERMISSIVE_POLICY</span><span class="p">,</span>    <span class="c1"># No restrictions</span>
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">STRICT_POLICY</span><span class="p">,</span>        <span class="c1"># Requires agent ID</span>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">READ_ONLY_POLICY</span><span class="p">,</span>     <span class="c1"># Blocks write/delete/modify tools</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">BUSINESS_HOURS_POLICY</span> <span class="c1"># 9 AM - 5 PM only</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">BUSINESS_HOURS_POLICY</span> <span class="c1"># delete_*, drop_*, *_production only 9 AM - 5 PM</span>
 <a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="p">)</span>
 </code></pre></div>
 <h3 id="custom-policies">Custom Policies<a class="headerlink" href="#custom-policies" title="Permanent link">&para;</a></h3>
@@ -3523,21 +3528,23 @@
 - Make network requests to arbitrary URLs
 - Perform filesystem operations</p>
 <h3 id="critical-use-sandbox_requiredtrue-for-dangerous-operations">CRITICAL: Use sandbox_required=True for Dangerous Operations<a class="headerlink" href="#critical-use-sandbox_requiredtrue-for-dangerous-operations" title="Permanent link">&para;</a></h3>
-<p><strong>SECURITY WARNING</strong>: When <code>sandbox=True</code> but E2B is unavailable, the default
-behavior is to fall back to local execution. This can be dangerous for tools
-that execute arbitrary code.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># DANGEROUS: Falls back to local execution if E2B unavailable</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_code</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>  <span class="c1"># May run locally!</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="k">return</span> <span class="s2">"executed"</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># SECURE: Raises error instead of local fallback</span>
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sandbox_required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_code</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">    </span><span class="sd">"""Runs in isolated E2B MicroVM. Never runs locally."""</span>
-<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>  <span class="c1"># Only runs in sandbox</span>
-<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="k">return</span> <span class="s2">"executed"</span>
+<p>When E2B is not installed or configured, a <code>sandbox=True</code> call is refused with a blocked
+response. <code>sandbox=True</code> alone still leaves one local fallback: if <code>agent_airlock.sandbox</code>
+itself fails to import, the function runs in your process. <code>sandbox_required=True</code> refuses
+that case too, so it is the setting for tools that execute arbitrary code.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Refused when E2B is unavailable, but runs locally if agent_airlock.sandbox</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="c1"># cannot be imported</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_code</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="k">return</span> <span class="s2">"executed"</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="c1"># SECURE: never runs in your process</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sandbox_required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_code</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">    </span><span class="sd">"""Runs in an isolated E2B micro-VM, or not at all."""</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>    <span class="k">return</span> <span class="s2">"executed"</span>
 </code></pre></div>
 <p><strong>Always use <code>sandbox_required=True</code> for</strong>:
 - Code execution (exec(), eval())
@@ -3545,10 +3552,14 @@ that execute arbitrary code.</p>
 - Any operation that could compromise the host system</p>
 <h3 id="sandbox-limitations">Sandbox Limitations<a class="headerlink" href="#sandbox-limitations" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Cold start: ~125-180ms (E2B Firecracker MicroVM)</li>
-<li>Warm pool: &lt;200ms (pre-warmed sandboxes eliminate cold starts)</li>
-<li>Max execution time: 60 seconds (configurable)</li>
-<li>No persistent state between calls</li>
+<li>Cold start: E2B reports about 125ms for its Firecracker micro-VMs; not measured by this
+  project. A warmed pool (<code>get_sandbox_pool(config).warm_up()</code>) creates sandboxes before the
+  first call.</li>
+<li>Sandbox lifetime: <code>sandbox_timeout</code> seconds, 60 by default, passed to E2B when each sandbox
+  is created. There is no per-call time limit.</li>
+<li><strong>Sandboxes are reused.</strong> The pool hands a sandbox back for later calls in the same process,
+  so anything one call leaves in it, such as files, can be seen by the next. Do not rely on
+  isolation between calls.</li>
 <li>Network access is sandboxed</li>
 <li>24-hour session cap (E2B limitation)</li>
 </ul>
@@ -3556,11 +3567,13 @@ that execute arbitrary code.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Store in environment (recommended)</span>
 <a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">E2B_API_KEY</span><span class="o">=</span><span class="s2">"your-key-here"</span>
 <a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Or in config file (less secure)</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Or in config file (less secure), loaded with AirlockConfig.from_toml("airlock.toml")</span>
 <a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="c1"># airlock.toml</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="o">[</span>sandbox<span class="o">]</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="o">[</span>airlock<span class="o">]</span>
 <a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="nv">e2b_api_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"your-key-here"</span><span class="w">  </span><span class="c1"># Ensure file permissions are restricted</span>
 </code></pre></div>
+<p>A key set in code or in the file takes precedence; <code>E2B_API_KEY</code> is used only when neither
+sets one.</p>
 <h3 id="pickle-serialization-security">Pickle Serialization Security<a class="headerlink" href="#pickle-serialization-security" title="Permanent link">&para;</a></h3>
 <p>Agent-Airlock uses <code>cloudpickle</code> to serialize functions and arguments for
 sandbox execution. This is inherently risky because pickle can execute
@@ -3588,66 +3601,92 @@ In distributed deployments, consider:
 <h3 id="pii-detection">PII Detection<a class="headerlink" href="#pii-detection" title="Permanent link">&para;</a></h3>
 <p>Automatically detects and masks:
 - Social Security Numbers (XXX-XX-XXXX)
-- Credit Card Numbers (4XXX-XXXX-XXXX-XXXX)
+- Credit Card Numbers (an unbroken run of digits; <code>4111-1111-1111-1111</code> is not detected)
 - Email Addresses
 - Phone Numbers
 - IP Addresses</p>
+<p>With <code>pii_locales=["in"]</code>, also Aadhaar, PAN, UPI IDs, IFSC codes, Devanagari names and
+Indian mobile numbers.</p>
 <h3 id="secret-detection">Secret Detection<a class="headerlink" href="#secret-detection" title="Permanent link">&para;</a></h3>
 <p>Automatically detects and masks:
-- API Keys (<code>sk-live-</code>, <code>api_key=</code>, etc.)
+- API Keys of known shapes: <code>sk-</code> keys with 20+ characters after the prefix (OpenAI,
+  Anthropic), Google <code>AIza...</code>, GitHub <code>ghp_</code>/<code>gho_</code>/<code>github_pat_</code>, Slack <code>xox*</code>.
+  Others, such as <code>sk-live-...</code> or <code>api_key=...</code>, are not detected.
 - AWS Access Keys (<code>AKIA...</code>)
 - JWT Tokens (<code>eyJ...</code>)
 - Connection Strings (<code>postgres://</code>, <code>mongodb://</code>)
-- Generic Passwords</p>
+- Generic Passwords (8+ characters after <code>password=</code>, <code>pwd=</code>, <code>secret=</code>, <code>token=</code>, etc.)</p>
+<p>A string, dict, list, tuple or set result is masked. Any other object (a Pydantic model, a
+dataclass) is returned as it is, and what was found in it is logged as not masked; what a
+generator yields is not masked either. See <a href="../guide/sanitization/">PII &amp; Secret Masking</a>.</p>
 <h3 id="masking-strategies">Masking Strategies<a class="headerlink" href="#masking-strategies" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanitizationConfig</span><span class="p">,</span> <span class="n">MaskingStrategy</span>
+<p><code>@Airlock</code> masks each type with its default strategy: <code>FULL</code> for SSN, passwords, private
+keys and connection strings, <code>TYPE_ONLY</code> for IFSC, <code>PARTIAL</code> for the rest. <code>AirlockConfig</code>
+has no strategy setting. To choose one, run the standalone sanitizer with a <code>mask_config</code>
+mapping; a type left out of the mapping is masked <code>FULL</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskingStrategy</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">sanitize_output</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">SanitizationConfig</span><span class="p">(</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="n">pii_strategy</span><span class="o">=</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">PARTIAL</span><span class="p">,</span>   <span class="c1"># Show last 4 chars</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">secret_strategy</span><span class="o">=</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">FULL</span><span class="p">,</span>   <span class="c1"># Complete redaction</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="p">)</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_output</span><span class="p">(</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="n">text</span><span class="p">,</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">mask_config</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>        <span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">SSN</span><span class="p">:</span> <span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">PARTIAL</span><span class="p">,</span>   <span class="c1"># First and last 3 chars</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>        <span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">API_KEY</span><span class="p">:</span> <span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">FULL</span><span class="p">,</span>  <span class="c1"># Complete redaction</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>    <span class="p">},</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="p">)</span>
 </code></pre></div>
 <table>
 <thead>
 <tr>
 <th>Strategy</th>
-<th>Example</th>
+<th>Example (SSN <code>123-45-6789</code>)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>FULL</code></td>
-<td><code>***REDACTED***</code></td>
+<td><code>[REDACTED]</code></td>
 </tr>
 <tr>
 <td><code>PARTIAL</code></td>
-<td><code>***-**-6789</code></td>
+<td><code>123***789</code></td>
 </tr>
 <tr>
 <td><code>TYPE_ONLY</code></td>
-<td><code>[SSN REDACTED]</code></td>
+<td><code>[SSN]</code></td>
 </tr>
 <tr>
 <td><code>HASH</code></td>
-<td><code>[SSN:a1b2c3d4]</code></td>
+<td><code>[SHA256:01a54629...]</code></td>
 </tr>
 </tbody>
 </table>
 <hr />
 <h2 id="audit-logging">Audit Logging<a class="headerlink" href="#audit-logging" title="Permanent link">&para;</a></h2>
 <h3 id="log-format">Log Format<a class="headerlink" href="#log-format" title="Permanent link">&para;</a></h3>
-<p>All tool calls are logged as structured JSON:</p>
+<p>Calls through <code>@Airlock</code> are appended to a JSON Lines file, one record per line:
+<code>airlock_audit.json</code> by default (<code>audit_log_path</code>; <code>enable_audit_log=False</code> turns it off).
+A call to <code>delete_records</code> refused by a <code>denied_tools=["delete_*"]</code> policy:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-01-31T10:30:00Z"</span><span class="p">,</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">"tool"</span><span class="p">:</span><span class="w"> </span><span class="s2">"delete_records"</span><span class="p">,</span>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">"agent_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agent-123"</span><span class="p">,</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"table"</span><span class="p">:</span><span class="w"> </span><span class="s2">"users"</span><span class="p">,</span><span class="w"> </span><span class="nt">"where"</span><span class="p">:</span><span class="w"> </span><span class="s2">"id=1"</span><span class="p">},</span>
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span><span class="nt">"result"</span><span class="p">:</span><span class="w"> </span><span class="s2">"blocked"</span><span class="p">,</span>
-<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="nt">"reason"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tool_denied"</span><span class="p">,</span>
-<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="nt">"policy"</span><span class="p">:</span><span class="w"> </span><span class="s2">"STRICT_POLICY"</span>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="p">}</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-01-31T10:30:00.123456+00:00"</span><span class="p">,</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">"tool_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"delete_records"</span><span class="p">,</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">"blocked"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">"block_reason"</span><span class="p">:</span><span class="w"> </span><span class="s2">"policy_violation"</span><span class="p">,</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span><span class="nt">"duration_ms"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.11</span><span class="p">,</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="nt">"sanitized_count"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="nt">"truncated"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">  </span><span class="nt">"args_preview"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"table"</span><span class="p">:</span><span class="w"> </span><span class="s2">"'users'"</span><span class="p">,</span><span class="w"> </span><span class="nt">"where"</span><span class="p">:</span><span class="w"> </span><span class="s2">"'id=1'"</span><span class="p">},</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span><span class="nt">"result_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"None"</span><span class="p">,</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">  </span><span class="nt">"result_preview"</span><span class="p">:</span><span class="w"> </span><span class="s2">"BLOCKED"</span><span class="p">,</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">  </span><span class="nt">"error"</span><span class="p">:</span><span class="w"> </span><span class="s2">"AIRLOCK_BLOCK: Policy violation for 'delete_records'. Tool 'delete_records' is denied by policy (matches 'delete_*')"</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="p">}</span>
 </code></pre></div>
+<p>Fields with no value are left out. <code>agent_id</code> and <code>session_id</code> are recorded only from a
+context carried by the tool's first argument; an identity set around the call with
+<code>with AirlockContext(...)</code> does not reach the record. Argument values whose names look
+sensitive (<code>password</code>, <code>token</code>, <code>api_key</code>, ...) are written as <code>[REDACTED]</code>.</p>
 <h3 id="log-destinations">Log Destinations<a class="headerlink" href="#log-destinations" title="Permanent link">&para;</a></h3>
+<p>The library's own log lines (not the audit file) go through structlog when the
+<code>[logging]</code> extra is installed, and through the stdlib <code>logging</code> module otherwise:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">structlog</span>
 <a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
 <a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1"># Configure logging backend</span>
@@ -3675,7 +3714,7 @@ In distributed deployments, consider:
 <h2 id="security-checklist">Security Checklist<a class="headerlink" href="#security-checklist" title="Permanent link">&para;</a></h2>
 <p>Before deploying to production:</p>
 <ul>
-<li>[ ] Enable <code>strict_mode=True</code></li>
+<li>[ ] Set <code>unknown_args=UnknownArgsMode.BLOCK</code></li>
 <li>[ ] Configure appropriate <code>SecurityPolicy</code></li>
 <li>[ ] Enable PII and secret masking</li>
 <li>[ ] Set reasonable <code>max_output_chars</code> limit</li>
@@ -3704,7 +3743,7 @@ In distributed deployments, consider:
 </tr>
 <tr>
 <td><strong>LLM05: Improper Output Handling</strong></td>
-<td>PII/secret detection + masking sanitizes all tool outputs</td>
+<td>PII/secret detection + masking sanitizes string and container (dict, list, tuple, set) tool outputs</td>
 </tr>
 <tr>
 <td><strong>LLM06: Excessive Agency</strong></td>
@@ -3728,7 +3767,7 @@ In distributed deployments, consider:
 <li><a href="https://genai.owasp.org/llmrisk/llm01-prompt-injection/">LLM01: Prompt Injection</a></li>
 <li><a href="https://modelcontextprotocol.io/specification">MCP Security Guidelines</a></li>
 <li><a href="https://e2b.dev/docs/security">E2B Security Model</a></li>
-<li><a href="https://e2b.dev/blog/firecracker-vs-qemu">E2B Firecracker Performance</a> - Cold start ~125ms</li>
+<li><a href="https://e2b.dev/blog/firecracker-vs-qemu">E2B Firecracker Performance</a> - E2B's own cold-start figure</li>
 <li><a href="https://docs.pydantic.dev/latest/concepts/strict_mode/">Pydantic Strict Mode</a></li>
 </ul>
 

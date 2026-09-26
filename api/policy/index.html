@@ -1364,41 +1364,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#policy-composition" class="md-nav__link">
+  <a href="#choosing-a-policy-per-call" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Policy Composition
+        Choosing a Policy per Call
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Policy Composition">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#merge" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        merge()
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#override" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        override()
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -2946,41 +2918,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#policy-composition" class="md-nav__link">
+  <a href="#choosing-a-policy-per-call" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Policy Composition
+        Choosing a Policy per Call
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Policy Composition">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#merge" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        merge()
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#override" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        override()
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -3015,17 +2959,35 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="c1"># Tool access control</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">allowed_tools</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">denied_tools</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="c1"># Rate limiting</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">rate_limits</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="c1"># Time restrictions</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">time_restrictions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="c1"># Agent identity</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="n">allowed_agents</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="n">denied_agents</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="n">agent_rate_limits</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">default_deny</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="c1"># Rate limiting and time windows</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">rate_limits</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">time_restrictions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="c1"># Agent identity</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">require_agent_id</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="n">allowed_roles</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="c1"># Capabilities</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="n">capability_policy</span><span class="p">:</span> <span class="n">CapabilityPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>    <span class="c1"># Escalation to a human approver</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>    <span class="n">escalate_tools</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>    <span class="n">approver</span><span class="p">:</span> <span class="n">Approver</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="n">escalation_channel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"default"</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="n">escalation_timeout_seconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">300.0</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>    <span class="c1"># Budgets and guards, all off by default</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>    <span class="n">model_tier_budget</span><span class="p">:</span> <span class="n">ModelTierBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>    <span class="n">amplification_budget</span><span class="p">:</span> <span class="n">AmplificationBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>    <span class="n">sequence_guard</span><span class="p">:</span> <span class="n">SequenceGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>    <span class="n">action_contradiction_gate</span><span class="p">:</span> <span class="n">ActionContradictionGate</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>    <span class="n">deserialization_guard</span><span class="p">:</span> <span class="n">UnsafeDeserializationGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>    <span class="n">trace_redaction</span><span class="p">:</span> <span class="n">TraceRedactionPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>    <span class="n">reauth_on_untrusted_reinvocation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>    <span class="n">untrusted_reinvocation_threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>    <span class="n">stdio_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"allowlist"</span><span class="p">,</span> <span class="s2">"manifest_only"</span><span class="p">,</span> <span class="s2">"disabled"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"allowlist"</span>
 </code></pre></div>
 <h3 id="attributes">Attributes<a class="headerlink" href="#attributes" title="Permanent link">&para;</a></h3>
 <table>
@@ -3040,40 +3002,82 @@
 <tr>
 <td><code>allowed_tools</code></td>
 <td><code>list[str]</code></td>
-<td>Allowlist of tool patterns</td>
+<td>Allowlist of tool patterns. Empty allows every tool not denied</td>
 </tr>
 <tr>
 <td><code>denied_tools</code></td>
 <td><code>list[str]</code></td>
-<td>Denylist of tool patterns</td>
+<td>Denylist of tool patterns. Takes precedence over the allowlist</td>
+</tr>
+<tr>
+<td><code>default_deny</code></td>
+<td><code>bool</code></td>
+<td>With <code>True</code>, an empty allowlist denies every tool</td>
 </tr>
 <tr>
 <td><code>rate_limits</code></td>
 <td><code>dict[str, str]</code></td>
-<td>Rate limits per tool pattern</td>
+<td>Rate limits per tool pattern (<code>"100/hour"</code>). The most specific pattern applies</td>
 </tr>
 <tr>
 <td><code>time_restrictions</code></td>
 <td><code>dict[str, str]</code></td>
-<td>Time windows per tool pattern</td>
+<td>Time windows per tool pattern (<code>"09:00-17:00"</code>)</td>
 </tr>
 <tr>
-<td><code>allowed_agents</code></td>
+<td><code>require_agent_id</code></td>
+<td><code>bool</code></td>
+<td>Refuse a call that carries no agent identity</td>
+</tr>
+<tr>
+<td><code>allowed_roles</code></td>
 <td><code>list[str]</code></td>
-<td>Allowed agent IDs</td>
+<td>Refuse a call whose agent holds none of these roles; an anonymous call holds none</td>
 </tr>
 <tr>
-<td><code>denied_agents</code></td>
-<td><code>list[str]</code></td>
-<td>Denied agent IDs</td>
+<td><code>capability_policy</code></td>
+<td><code>CapabilityPolicy \| None</code></td>
+<td>Checked against what a tool declares with <code>@requires(...)</code></td>
 </tr>
 <tr>
-<td><code>agent_rate_limits</code></td>
+<td><code>escalate_tools</code></td>
 <td><code>dict[str, str]</code></td>
-<td>Rate limits per agent</td>
+<td>Tool patterns that need a human's approval, with the reason the approver sees</td>
+</tr>
+<tr>
+<td><code>approver</code></td>
+<td><code>Approver \| None</code></td>
+<td>Transport that asks the human. A matched escalation with no approver is refused</td>
+</tr>
+<tr>
+<td><code>model_tier_budget</code></td>
+<td><code>ModelTierBudget \| None</code></td>
+<td>Per-model-tier cost caps, checked before the tool runs</td>
+</tr>
+<tr>
+<td><code>amplification_budget</code></td>
+<td><code>AmplificationBudget \| None</code></td>
+<td>Per-run call budget against a declared baseline</td>
+</tr>
+<tr>
+<td><code>sequence_guard</code>, <code>action_contradiction_gate</code>, <code>deserialization_guard</code></td>
+<td></td>
+<td>Optional guards run after the policy check</td>
+</tr>
+<tr>
+<td><code>trace_redaction</code></td>
+<td><code>TraceRedactionPolicy \| None</code></td>
+<td>Redacts traces sent to a non-local sink</td>
+</tr>
+<tr>
+<td><code>stdio_mode</code></td>
+<td><code>str</code></td>
+<td>How STDIO subprocess launches are allowed: <code>"allowlist"</code>, <code>"manifest_only"</code> or <code>"disabled"</code></td>
 </tr>
 </tbody>
 </table>
+<p>How a call carries its identity for <code>require_agent_id</code> and <code>allowed_roles</code> is described in
+<a href="../../guide/policy/#agent-identity">Agent Identity</a>.</p>
 <h3 id="pattern-matching">Pattern Matching<a class="headerlink" href="#pattern-matching" title="Permanent link">&para;</a></h3>
 <p>Tool patterns support glob-style matching:</p>
 <table>
@@ -3122,37 +3126,39 @@
 <h3 id="permissive_policy">PERMISSIVE_POLICY<a class="headerlink" href="#permissive_policy" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">PERMISSIVE_POLICY</span>
 </code></pre></div>
-<p>Minimal restrictions - allows everything with basic rate limiting.</p>
+<p>An empty <code>SecurityPolicy()</code>: allows every tool, with no rate limit.</p>
 <h3 id="strict_policy">STRICT_POLICY<a class="headerlink" href="#strict_policy" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">STRICT_POLICY</span>
 </code></pre></div>
-<p>Maximum restrictions - requires explicit allowlist.</p>
+<p>Requires an agent identity, limits every tool to 100 calls an hour, and applies a
+capability policy that grants <code>FILESYSTEM_READ</code>, <code>NETWORK_HTTPS</code> and <code>DATABASE_READ</code> and
+denies <code>PROCESS_SHELL</code> and <code>FILESYSTEM_DELETE</code>. It also turns on trace redaction.</p>
 <h3 id="read_only_policy">READ_ONLY_POLICY<a class="headerlink" href="#read_only_policy" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">READ_ONLY_POLICY</span>
 </code></pre></div>
-<p>Only allows read operations (<code>read_*</code>, <code>get_*</code>, <code>list_*</code>, <code>search_*</code>).</p>
+<p>Allows <code>read_*</code>, <code>get_*</code>, <code>list_*</code> and <code>search_*</code>, denies <code>write_*</code>, <code>delete_*</code>, <code>update_*</code>
+and <code>create_*</code>, and applies a capability policy that denies write and delete capabilities.</p>
 <h3 id="business_hours_policy">BUSINESS_HOURS_POLICY<a class="headerlink" href="#business_hours_policy" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">BUSINESS_HOURS_POLICY</span>
 </code></pre></div>
-<p>All operations restricted to business hours (09:00-17:00).</p>
+<p>Restricts <code>delete_*</code>, <code>drop_*</code> and <code>*_production</code> to 09:00-17:00. Other tools are not
+restricted.</p>
 <h2 id="ratelimit">RateLimit<a class="headerlink" href="#ratelimit" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">RateLimit</span>
 </code></pre></div>
+<p>A token bucket. <code>SecurityPolicy.rate_limits</code> builds one per pattern; you rarely construct
+one yourself.</p>
 <h3 id="signature_1">Signature<a class="headerlink" href="#signature_1" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">RateLimit</span><span class="p">:</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>        <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>        <span class="n">calls</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>        <span class="n">period_seconds</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="p">):</span>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="sd">"""</span>
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="sd">        Token bucket rate limiter.</span>
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
-<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="sd">        Args:</span>
-<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="sd">            calls: Maximum calls allowed</span>
-<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="sd">            period_seconds: Time period in seconds</span>
-<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="sd">        """</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nd">@dataclass</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">RateLimit</span><span class="p">:</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">max_tokens</span><span class="p">:</span> <span class="nb">int</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">refill_period_seconds</span><span class="p">:</span> <span class="nb">float</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="nd">@classmethod</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">limit_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RateLimit</span><span class="p">:</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">        </span><span class="sd">"""Parse "count/period", where period is second, minute, hour or day."""</span>
 </code></pre></div>
+<p>The bucket starts full.</p>
 <h3 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -3164,58 +3170,46 @@
 </thead>
 <tbody>
 <tr>
-<td><code>is_allowed()</code></td>
-<td><code>bool</code></td>
-<td>Check if call is allowed</td>
+<td><code>parse(limit_str)</code></td>
+<td><code>RateLimit</code></td>
+<td>Build one from <code>"100/hour"</code>; raises <code>ValueError</code> on a bad format</td>
 </tr>
 <tr>
-<td><code>consume()</code></td>
+<td><code>acquire(tokens=1)</code></td>
 <td><code>bool</code></td>
-<td>Consume a token, return success</td>
+<td>Take tokens if available; <code>False</code> when rate limited</td>
 </tr>
 <tr>
-<td><code>retry_after()</code></td>
+<td><code>remaining()</code></td>
 <td><code>int</code></td>
-<td>Seconds until next token available</td>
-</tr>
-<tr>
-<td><code>reset()</code></td>
-<td><code>None</code></td>
-<td>Reset the rate limiter</td>
+<td>Tokens left after refilling for elapsed time</td>
 </tr>
 </tbody>
 </table>
 <h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">RateLimit</span>
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">rate_limit</span> <span class="o">=</span> <span class="n">RateLimit</span><span class="p">(</span><span class="n">calls</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">period_seconds</span><span class="o">=</span><span class="mi">3600</span><span class="p">)</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">rate_limit</span> <span class="o">=</span> <span class="n">RateLimit</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">"100/hour"</span><span class="p">)</span>
 <a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">if</span> <span class="n">rate_limit</span><span class="o">.</span><span class="n">is_allowed</span><span class="p">():</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">rate_limit</span><span class="o">.</span><span class="n">consume</span><span class="p">()</span>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    <span class="c1"># Proceed with call</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    <span class="n">wait</span> <span class="o">=</span> <span class="n">rate_limit</span><span class="o">.</span><span class="n">retry_after</span><span class="p">()</span>
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Rate limited, retry in </span><span class="si">{</span><span class="n">wait</span><span class="si">}</span><span class="s2">s"</span><span class="p">)</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">if</span> <span class="n">rate_limit</span><span class="o">.</span><span class="n">acquire</span><span class="p">():</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="o">...</span>  <span class="c1"># proceed with the call</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Rate limited, </span><span class="si">{</span><span class="n">rate_limit</span><span class="o">.</span><span class="n">remaining</span><span class="p">()</span><span class="si">}</span><span class="s2"> tokens left"</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="timewindow">TimeWindow<a class="headerlink" href="#timewindow" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeWindow</span>
 </code></pre></div>
 <h3 id="signature_2">Signature<a class="headerlink" href="#signature_2" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TimeWindow</span><span class="p">:</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>        <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>        <span class="n">start</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>        <span class="n">end</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>        <span class="n">timezone</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"UTC"</span><span class="p">,</span>
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="p">):</span>
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">        </span><span class="sd">"""</span>
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="sd">        Time-based access window.</span>
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>
-<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="sd">        Args:</span>
-<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="sd">            start: Start time (HH:MM)</span>
-<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="sd">            end: End time (HH:MM)</span>
-<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="sd">            timezone: Timezone name</span>
-<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="sd">        """</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nd">@dataclass</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">TimeWindow</span><span class="p">:</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">start_hour</span><span class="p">:</span> <span class="nb">int</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">start_minute</span><span class="p">:</span> <span class="nb">int</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">end_hour</span><span class="p">:</span> <span class="nb">int</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">end_minute</span><span class="p">:</span> <span class="nb">int</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="nd">@classmethod</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">window_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TimeWindow</span><span class="p">:</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">        </span><span class="sd">"""Parse "HH:MM-HH:MM"."""</span>
 </code></pre></div>
 <h3 id="methods_1">Methods<a class="headerlink" href="#methods_1" title="Permanent link">&para;</a></h3>
 <table>
@@ -3228,54 +3222,45 @@
 </thead>
 <tbody>
 <tr>
-<td><code>is_active()</code></td>
+<td><code>parse(window_str)</code></td>
+<td><code>TimeWindow</code></td>
+<td>Build one from <code>"09:00-17:00"</code></td>
+</tr>
+<tr>
+<td><code>is_within(dt=None)</code></td>
 <td><code>bool</code></td>
-<td>Check if currently in window</td>
-</tr>
-<tr>
-<td><code>next_start()</code></td>
-<td><code>datetime</code></td>
-<td>Next time window opens</td>
-</tr>
-<tr>
-<td><code>next_end()</code></td>
-<td><code>datetime</code></td>
-<td>Next time window closes</td>
+<td>Whether <code>dt</code> (default: now) falls in the window</td>
 </tr>
 </tbody>
 </table>
+<p>Windows are checked against the local clock (<code>datetime.now()</code>); there is no timezone
+argument. A window may cross midnight (<code>"22:00-06:00"</code>).</p>
 <h3 id="example_2">Example<a class="headerlink" href="#example_2" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeWindow</span>
 <a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">window</span> <span class="o">=</span> <span class="n">TimeWindow</span><span class="p">(</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">start</span><span class="o">=</span><span class="s2">"09:00"</span><span class="p">,</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">end</span><span class="o">=</span><span class="s2">"17:00"</span><span class="p">,</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">timezone</span><span class="o">=</span><span class="s2">"America/New_York"</span><span class="p">,</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">)</span>
-<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>
-<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="k">if</span> <span class="n">window</span><span class="o">.</span><span class="n">is_active</span><span class="p">():</span>
-<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>    <span class="c1"># Within business hours</span>
-<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>    <span class="k">pass</span>
-<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>    <span class="c1"># Outside business hours</span>
-<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>    <span class="n">next_open</span> <span class="o">=</span> <span class="n">window</span><span class="o">.</span><span class="n">next_start</span><span class="p">()</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">window</span> <span class="o">=</span> <span class="n">TimeWindow</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">"09:00-17:00"</span><span class="p">)</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">if</span> <span class="n">window</span><span class="o">.</span><span class="n">is_within</span><span class="p">():</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="o">...</span>  <span class="c1"># within business hours</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    <span class="o">...</span>  <span class="c1"># outside business hours</span>
 </code></pre></div>
-<h2 id="policy-composition">Policy Composition<a class="headerlink" href="#policy-composition" title="Permanent link">&para;</a></h2>
-<h3 id="merge">merge()<a class="headerlink" href="#merge" title="Permanent link">&para;</a></h3>
-<p>Combine two policies:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">base</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">denied_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"delete_*"</span><span class="p">])</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">strict</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">rate_limits</span><span class="o">=</span><span class="p">{</span><span class="s2">"*"</span><span class="p">:</span> <span class="s2">"10/hour"</span><span class="p">})</span>
+<h2 id="choosing-a-policy-per-call">Choosing a Policy per Call<a class="headerlink" href="#choosing-a-policy-per-call" title="Permanent link">&para;</a></h2>
+<p>There is no policy merge or override; build each policy whole. To apply different policies
+to different calls, pass <code>Airlock</code> a function that takes the call's <code>AirlockContext</code> and
+returns the policy:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">SecurityPolicy</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockContext</span>
 <a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="n">combined</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">strict</span><span class="p">)</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="c1"># Combined has both denied_tools and rate_limits</span>
-</code></pre></div>
-<h3 id="override">override()<a class="headerlink" href="#override" title="Permanent link">&para;</a></h3>
-<p>Override specific settings:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">base</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">rate_limits</span><span class="o">=</span><span class="p">{</span><span class="s2">"*"</span><span class="p">:</span> <span class="s2">"100/hour"</span><span class="p">})</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">override</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">rate_limits</span><span class="o">=</span><span class="p">{</span><span class="s2">"*"</span><span class="p">:</span> <span class="s2">"1000/hour"</span><span class="p">})</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="n">final</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">override</span><span class="p">(</span><span class="n">override</span><span class="p">)</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="c1"># rate_limits is now {"*": "1000/hour"}</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="n">production</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">allowed_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"read_*"</span><span class="p">])</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="n">default</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">denied_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"delete_*"</span><span class="p">])</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">pick</span><span class="p">(</span><span class="n">context</span><span class="p">:</span> <span class="n">AirlockContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SecurityPolicy</span><span class="p">:</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>    <span class="k">return</span> <span class="n">production</span> <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">workspace_id</span> <span class="o">==</span> <span class="s2">"prod"</span> <span class="k">else</span> <span class="n">default</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">pick</span><span class="p">)</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">write_note</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    <span class="o">...</span>
 </code></pre></div>
 
 

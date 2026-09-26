@@ -1171,6 +1171,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#sandbox" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1186,6 +1197,17 @@
     <span class="md-ellipsis">
       
         Callbacks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security-policies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security Policies
       
     </span>
   </a>
@@ -1270,6 +1292,17 @@
     <span class="md-ellipsis">
       
         PII Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#india-pii-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        India PII Types
       
     </span>
   </a>
@@ -2726,6 +2759,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#sandbox" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2741,6 +2785,17 @@
     <span class="md-ellipsis">
       
         Callbacks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security-policies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security Policies
       
     </span>
   </a>
@@ -2832,6 +2887,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#india-pii-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        India PII Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#secret-types" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2903,26 +2969,42 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@dataclass</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">AirlockConfig</span><span class="p">:</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="c1"># Validation</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">strict_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="c1"># Output Sanitization</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">sanitize_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">mask_pii</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">mask_secrets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">max_output_chars</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">max_output_tokens</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">masking_strategy</span><span class="p">:</span> <span class="n">MaskingStrategy</span> <span class="o">=</span> <span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">FULL</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">enabled_types</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">SensitiveDataType</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="n">disabled_types</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">SensitiveDataType</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="c1"># E2B Sandbox</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="n">e2b_api_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="n">sandbox_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>    <span class="c1"># Callbacks</span>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>    <span class="n">on_validation_error</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ValidationError</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="n">on_blocked</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="n">on_rate_limit</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">unknown_args</span><span class="p">:</span> <span class="n">UnknownArgsMode</span> <span class="o">=</span> <span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">STRIP_AND_LOG</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">strict_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># deprecated, use unknown_args</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="c1"># Output Sanitization</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">max_output_tokens</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5000</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">max_output_chars</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20000</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">mask_pii</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">mask_secrets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">sanitize_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">pii_locales</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="c1"># Audit</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="n">enable_audit_log</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="n">audit_log_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"airlock_audit.json"</span><span class="p">)</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="n">audit_otel_enabled</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>    <span class="n">audit_otel_endpoint</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>    <span class="n">audit_include_args_hash</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="c1"># E2B Sandbox</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="n">e2b_api_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>    <span class="n">sandbox_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">60</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>    <span class="n">sandbox_pool_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>    <span class="c1"># Callbacks</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>    <span class="n">on_validation_error</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ValidationError</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>    <span class="n">on_blocked</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>    <span class="n">on_rate_limit</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>    <span class="c1"># Security policies</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>    <span class="n">filesystem_policy</span><span class="p">:</span> <span class="n">FilesystemPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>    <span class="n">network_policy</span><span class="p">:</span> <span class="n">NetworkPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>    <span class="n">honeypot_config</span><span class="p">:</span> <span class="n">HoneypotConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>    <span class="n">capability_policy</span><span class="p">:</span> <span class="n">CapabilityPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>    <span class="n">endpoint_policies</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">EndpointPolicy</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>    <span class="n">anomaly_config</span><span class="p">:</span> <span class="n">AnomalyDetectorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>    <span class="n">require_done_receipt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 </code></pre></div>
 <h3 id="attributes">Attributes<a class="headerlink" href="#attributes" title="Permanent link">&para;</a></h3>
 <h4 id="validation">Validation<a class="headerlink" href="#validation" title="Permanent link">&para;</a></h4>
@@ -2937,10 +3019,16 @@
 </thead>
 <tbody>
 <tr>
+<td><code>unknown_args</code></td>
+<td><code>UnknownArgsMode</code></td>
+<td><code>STRIP_AND_LOG</code></td>
+<td>Arguments the function does not declare: <code>BLOCK</code> rejects the call, <code>STRIP_AND_LOG</code> drops them and logs a warning, <code>STRIP_SILENT</code> drops them without one</td>
+</tr>
+<tr>
 <td><code>strict_mode</code></td>
 <td><code>bool</code></td>
 <td><code>False</code></td>
-<td>Reject ghost arguments instead of stripping</td>
+<td>Deprecated; emits a <code>DeprecationWarning</code>. <code>True</code> maps to <code>unknown_args=BLOCK</code></td>
 </tr>
 </tbody>
 </table>
@@ -2958,50 +3046,66 @@
 <tr>
 <td><code>sanitize_output</code></td>
 <td><code>bool</code></td>
-<td><code>False</code></td>
+<td><code>True</code></td>
 <td>Enable output sanitization</td>
 </tr>
 <tr>
 <td><code>mask_pii</code></td>
 <td><code>bool</code></td>
-<td><code>False</code></td>
+<td><code>True</code></td>
 <td>Mask PII in outputs</td>
 </tr>
 <tr>
 <td><code>mask_secrets</code></td>
 <td><code>bool</code></td>
-<td><code>False</code></td>
+<td><code>True</code></td>
 <td>Mask secrets in outputs</td>
 </tr>
 <tr>
+<td><code>pii_locales</code></td>
+<td><code>list[str]</code></td>
+<td><code>[]</code></td>
+<td><code>["in"]</code> adds the India PII types</td>
+</tr>
+<tr>
 <td><code>max_output_chars</code></td>
-<td><code>int \| None</code></td>
-<td><code>None</code></td>
-<td>Truncate at character limit</td>
+<td><code>int</code></td>
+<td><code>20000</code></td>
+<td>Truncate string results at this many characters; <code>0</code> means no limit</td>
 </tr>
 <tr>
 <td><code>max_output_tokens</code></td>
-<td><code>int \| None</code></td>
-<td><code>None</code></td>
-<td>Truncate at token limit</td>
+<td><code>int</code></td>
+<td><code>5000</code></td>
+<td>Stored (and read from <code>AIRLOCK_MAX_OUTPUT_TOKENS</code>), but <code>@Airlock</code> does not truncate on it</td>
+</tr>
+</tbody>
+</table>
+<p>Each detected type is masked with its default strategy (see
+<a href="#maskingstrategy">MaskingStrategy</a>). <code>AirlockConfig</code> has no field for choosing a strategy
+or for picking individual types.</p>
+<h4 id="audit">Audit<a class="headerlink" href="#audit" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enable_audit_log</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td>Append JSON Lines audit records to <code>audit_log_path</code></td>
 </tr>
 <tr>
-<td><code>masking_strategy</code></td>
-<td><code>MaskingStrategy</code></td>
-<td><code>FULL</code></td>
-<td>How to mask data</td>
-</tr>
-<tr>
-<td><code>enabled_types</code></td>
-<td><code>list</code></td>
-<td><code>None</code></td>
-<td>Only detect these types</td>
-</tr>
-<tr>
-<td><code>disabled_types</code></td>
-<td><code>list</code></td>
-<td><code>[]</code></td>
-<td>Don't detect these types</td>
+<td><code>audit_log_path</code></td>
+<td><code>Path</code></td>
+<td><code>airlock_audit.json</code></td>
+<td>Audit log file</td>
 </tr>
 </tbody>
 </table>
@@ -3020,13 +3124,19 @@
 <td><code>e2b_api_key</code></td>
 <td><code>str \| None</code></td>
 <td><code>None</code></td>
-<td>E2B API key (prefer env var)</td>
+<td>E2B API key; the <code>E2B_API_KEY</code> env var is used when unset</td>
 </tr>
 <tr>
 <td><code>sandbox_timeout</code></td>
 <td><code>int</code></td>
-<td><code>30</code></td>
+<td><code>60</code></td>
 <td>Execution timeout in seconds</td>
+</tr>
+<tr>
+<td><code>sandbox_pool_size</code></td>
+<td><code>int</code></td>
+<td><code>2</code></td>
+<td>Warm sandboxes kept ready</td>
 </tr>
 </tbody>
 </table>
@@ -3061,18 +3171,61 @@
 </tr>
 </tbody>
 </table>
+<h4 id="security-policies">Security Policies<a class="headerlink" href="#security-policies" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>filesystem_policy</code></td>
+<td><code>FilesystemPolicy \| None</code></td>
+<td><code>None</code></td>
+<td>Validates path-like arguments</td>
+</tr>
+<tr>
+<td><code>network_policy</code></td>
+<td><code>NetworkPolicy \| None</code></td>
+<td><code>None</code></td>
+<td>Egress control while the tool runs</td>
+</tr>
+<tr>
+<td><code>honeypot_config</code></td>
+<td><code>HoneypotConfig \| None</code></td>
+<td><code>None</code></td>
+<td>Deception for blocked calls, e.g. fake success</td>
+</tr>
+<tr>
+<td><code>capability_policy</code></td>
+<td><code>CapabilityPolicy \| None</code></td>
+<td><code>None</code></td>
+<td>Checked against <code>@requires</code>; a <code>SecurityPolicy</code>'s own <code>capability_policy</code> takes precedence</td>
+</tr>
+<tr>
+<td><code>endpoint_policies</code></td>
+<td><code>dict[str, EndpointPolicy]</code></td>
+<td><code>{}</code></td>
+<td>Per-tool URL rules</td>
+</tr>
+</tbody>
+</table>
+<p><code>audit_otel_enabled</code>, <code>audit_otel_endpoint</code>, <code>audit_include_args_hash</code>, <code>anomaly_config</code> and
+<code>require_done_receipt</code> are accepted and stored, but <code>@Airlock</code> does not read them.</p>
 <h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">MaskingStrategy</span><span class="p">,</span> <span class="n">SensitiveDataType</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">UnknownArgsMode</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">strict_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">unknown_args</span><span class="o">=</span><span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">BLOCK</span><span class="p">,</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">sanitize_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">mask_pii</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">mask_secrets</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">max_output_chars</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="n">masking_strategy</span><span class="o">=</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">PARTIAL</span><span class="p">,</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">disabled_types</span><span class="o">=</span><span class="p">[</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">IP_ADDRESS</span><span class="p">],</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="p">)</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="p">)</span>
 </code></pre></div>
 <h2 id="maskingstrategy">MaskingStrategy<a class="headerlink" href="#maskingstrategy" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskingStrategy</span>
@@ -3090,12 +3243,12 @@
 <tr>
 <td><code>FULL</code></td>
 <td><code>john@example.com</code></td>
-<td><code>[EMAIL REDACTED]</code></td>
+<td><code>[REDACTED]</code></td>
 </tr>
 <tr>
 <td><code>PARTIAL</code></td>
 <td><code>john@example.com</code></td>
-<td><code>j***@e***.com</code></td>
+<td><code>j***@example.com</code></td>
 </tr>
 <tr>
 <td><code>TYPE_ONLY</code></td>
@@ -3105,15 +3258,28 @@
 <tr>
 <td><code>HASH</code></td>
 <td><code>john@example.com</code></td>
-<td><code>[EMAIL:a1b2c3d4]</code></td>
+<td><code>[SHA256:855f96e9...]</code></td>
 </tr>
 </tbody>
 </table>
+<p><code>@Airlock</code> uses a fixed default per type: <code>FULL</code> for SSN, password, private key and
+connection string, <code>TYPE_ONLY</code> for IFSC, <code>PARTIAL</code> for the rest. To choose, call the
+standalone sanitizer with a <code>mask_config</code> mapping. A type left out of the mapping is masked
+<code>FULL</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskingStrategy</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">sanitize_output</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_output</span><span class="p">(</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="s2">"john@example.com"</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">mask_config</span><span class="o">=</span><span class="p">{</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">EMAIL</span><span class="p">:</span> <span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">TYPE_ONLY</span><span class="p">},</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">)</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">result</span><span class="o">.</span><span class="n">content</span>  <span class="c1"># "[EMAIL]"</span>
+</code></pre></div>
 <h2 id="sensitivedatatype">SensitiveDataType<a class="headerlink" href="#sensitivedatatype" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SensitiveDataType</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SensitiveDataType</span>
 </code></pre></div>
 <h3 id="values_1">Values<a class="headerlink" href="#values_1" title="Permanent link">&para;</a></h3>
 <h4 id="pii-types">PII Types<a class="headerlink" href="#pii-types" title="Permanent link">&para;</a></h4>
+<p>Masked when <code>mask_pii=True</code>.</p>
 <table>
 <thead>
 <tr>
@@ -3136,7 +3302,7 @@
 </tr>
 <tr>
 <td><code>CREDIT_CARD</code></td>
-<td>Credit card numbers</td>
+<td>Credit card numbers (unbroken digits)</td>
 </tr>
 <tr>
 <td><code>IP_ADDRESS</code></td>
@@ -3144,7 +3310,44 @@
 </tr>
 </tbody>
 </table>
+<h4 id="india-pii-types">India PII Types<a class="headerlink" href="#india-pii-types" title="Permanent link">&para;</a></h4>
+<p>Added when <code>mask_pii=True</code> and <code>pii_locales=["in"]</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AADHAAR</code></td>
+<td>Aadhaar numbers (Verhoeff-checked)</td>
+</tr>
+<tr>
+<td><code>PAN</code></td>
+<td>Permanent Account Numbers</td>
+</tr>
+<tr>
+<td><code>UPI_ID</code></td>
+<td>UPI IDs</td>
+</tr>
+<tr>
+<td><code>IFSC</code></td>
+<td>Bank IFSC codes</td>
+</tr>
+<tr>
+<td><code>PERSONAL_NAME_DEVANAGARI</code></td>
+<td>Names in Devanagari script</td>
+</tr>
+<tr>
+<td><code>INDIA_MOBILE</code></td>
+<td>Mobile numbers with a <code>+91</code>, <code>91</code> or <code>0</code> prefix</td>
+</tr>
+</tbody>
+</table>
 <h4 id="secret-types">Secret Types<a class="headerlink" href="#secret-types" title="Permanent link">&para;</a></h4>
+<p>Masked when <code>mask_secrets=True</code>.</p>
 <table>
 <thead>
 <tr>
@@ -3155,7 +3358,7 @@
 <tbody>
 <tr>
 <td><code>API_KEY</code></td>
-<td>Generic API keys</td>
+<td>Known API key formats (OpenAI, Anthropic, Google, GitHub, Slack)</td>
 </tr>
 <tr>
 <td><code>AWS_KEY</code></td>
@@ -3177,14 +3380,13 @@
 <td><code>PRIVATE_KEY</code></td>
 <td>Private key markers</td>
 </tr>
-<tr>
-<td><code>BEARER_TOKEN</code></td>
-<td>Bearer tokens</td>
-</tr>
 </tbody>
 </table>
 <h2 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h2>
-<p>All configuration can be set via environment variables:</p>
+<p>Only these are read. They are read when an <code>AirlockConfig</code> is built, and the first three
+override the constructor and the TOML file. <code>@Airlock()</code> with no <code>config</code> uses
+<code>DEFAULT_CONFIG</code>, which is built when <code>agent_airlock</code> is imported, so set them before the
+import.</p>
 <table>
 <thead>
 <tr>
@@ -3194,46 +3396,35 @@
 </thead>
 <tbody>
 <tr>
+<td><code>AIRLOCK_UNKNOWN_ARGS</code></td>
+<td><code>unknown_args</code> (<code>block</code>, <code>strip_and_log</code> or <code>strip_silent</code>)</td>
+</tr>
+<tr>
+<td><code>AIRLOCK_MAX_OUTPUT_TOKENS</code></td>
+<td><code>max_output_tokens</code></td>
+</tr>
+<tr>
 <td><code>AIRLOCK_STRICT_MODE</code></td>
-<td><code>strict_mode</code></td>
-</tr>
-<tr>
-<td><code>AIRLOCK_SANITIZE_OUTPUT</code></td>
-<td><code>sanitize_output</code></td>
-</tr>
-<tr>
-<td><code>AIRLOCK_MASK_PII</code></td>
-<td><code>mask_pii</code></td>
-</tr>
-<tr>
-<td><code>AIRLOCK_MASK_SECRETS</code></td>
-<td><code>mask_secrets</code></td>
-</tr>
-<tr>
-<td><code>AIRLOCK_MAX_OUTPUT_CHARS</code></td>
-<td><code>max_output_chars</code></td>
-</tr>
-<tr>
-<td><code>AIRLOCK_SANDBOX_TIMEOUT</code></td>
-<td><code>sandbox_timeout</code></td>
+<td><code>strict_mode</code> (deprecated; <code>true</code> maps to <code>block</code>, any other value to <code>strip_and_log</code>)</td>
 </tr>
 <tr>
 <td><code>E2B_API_KEY</code></td>
-<td><code>e2b_api_key</code></td>
+<td><code>e2b_api_key</code>, when it is not set in code or TOML</td>
 </tr>
 </tbody>
 </table>
 <h2 id="configuration-file">Configuration File<a class="headerlink" href="#configuration-file" title="Permanent link">&para;</a></h2>
-<p>Create <code>airlock.toml</code> in your project root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[airlock]</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">strict_mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">sanitize_output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">mask_pii</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">mask_secrets</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">max_output_chars</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10000</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="k">[airlock.sandbox]</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="n">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">60</span>
+<p>Nothing loads <code>airlock.toml</code> automatically. Load it with
+<code>AirlockConfig.from_toml("airlock.toml")</code>, or <code>AirlockConfig.from_toml_if_exists()</code>, which
+returns the defaults when the file is missing. Keys go under <code>[airlock]</code>; unknown keys are
+logged and ignored.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">[airlock]</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">unknown_args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"block"</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">sanitize_output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">mask_pii</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">mask_secrets</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">max_output_chars</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10000</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">sandbox_timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">60</span>
 </code></pre></div>
 
 
