@@ -31,6 +31,11 @@ check, which runs first.
 A refusal comes back as an SDK error result (``is_error: True``) carrying Airlock's error
 and fix hints. Returned as it was, the SDK would have read no ``content`` from it and
 reported an empty success.
+
+Every key in the ``args`` dict comes from the model, so none may start with ``_airlock_``:
+``Airlock`` pops ``_airlock_tier`` and ``_airlock_input_tokens`` as a router's control values
+before it looks for ghost arguments, which would let the model pick the budget tier its call
+is checked against. Such a key is refused at call time, and at wrap time in a schema.
 """
 
 from __future__ import annotations
@@ -47,13 +52,19 @@ from typing import Annotated, Any, Union, get_args, get_origin
 # recognise a typing_extensions.TypedDict, which is a separate class on every version.
 from typing_extensions import get_type_hints, is_typeddict
 
+from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
 from ._tool_proxy import _adopt_identity
 
+logger = structlog.get_logger("agent-airlock.integrations._claude_sdk_tools")
+
 # Typed Any so a union built at runtime is not read by mypy as a type expression.
 _UNION: Any = Union
+
+# The prefix of the keyword arguments Airlock reads as a router's control values.
+_RESERVED_PREFIX = "_airlock_"
 
 _JSON_TYPES: dict[str, Any] = {
     "string": str,
@@ -106,14 +117,25 @@ def guard_sdk_tool(tool: Any, *, policy: SecurityPolicy | None = None) -> Any:
 
     Raises:
         AirlockError: ``input_schema`` is not a form the SDK accepts, or declares a key
-            that cannot be a Python parameter name, so no contract can be derived from it.
+            that cannot be a Python parameter name or that starts with ``_airlock_``, so
+            no contract can be derived from it.
     """
     fields, open_ended = _schema_fields(tool.input_schema, name=tool.name)
     proxy = _spread_proxy(tool.handler, name=tool.name, fields=fields, open_ended=open_ended)
     airlocked: Any = (Airlock(policy=policy) if policy is not None else Airlock())(proxy)
 
     async def handler(args: Mapping[str, Any] | None) -> Any:
-        result = await airlocked(**dict(args or {}))
+        arguments = dict(args or {})
+        reserved = sorted(str(key) for key in arguments if str(key).startswith(_RESERVED_PREFIX))
+        if reserved:
+            logger.warning("sdk_tool_reserved_arguments_refused", tool=tool.name, keys=reserved)
+            return _sdk_error_result(
+                {
+                    "error": f"AIRLOCK_BLOCK: {reserved} are reserved for Airlock, not arguments",
+                    "fix_hints": [f"Call '{tool.name}' without {reserved}"],
+                }
+            )
+        result = await airlocked(**arguments)
         return _sdk_error_result(result) if _is_refusal(result) else result
 
     guarded = copy.copy(tool)
@@ -175,6 +197,12 @@ def _schema_fields(schema: Any, *, name: str) -> tuple[dict[str, _Field], bool]:
         raise AirlockError(
             f"tool {name!r}: input_schema is a {type(schema).__name__}, not a dict, a "
             "TypedDict or a JSON schema, so Airlock cannot derive the tool's arguments"
+        )
+    reserved = [key for key in fields if str(key).startswith(_RESERVED_PREFIX)]
+    if reserved:
+        raise AirlockError(
+            f"tool {name!r}: input_schema keys {reserved} start with {_RESERVED_PREFIX!r}, "
+            "which Airlock reads as its own control values; rename them"
         )
     invalid = [key for key in fields if not _is_parameter_name(key)]
     if invalid:

@@ -208,6 +208,19 @@ class TestRefusalsAndOutput:
         assert "ghost" in _text(reply)
         assert tool.handler.calls == []  # type: ignore[attr-defined]
 
+    @pytest.mark.parametrize("key", ["_airlock_tier", "_airlock_input_tokens"])
+    async def test_a_reserved_control_key_from_the_model_is_refused(self, key: str) -> None:
+        # Airlock pops these as a router's control values before its ghost check, so a
+        # model sending one would pick the budget tier its own call is checked against.
+        tool = _tool({"n": int})
+        (guarded,) = wrap_tools([tool])
+
+        reply = await _run_tool(guarded, {"n": 1, key: "free"})
+
+        assert reply["is_error"] is True
+        assert "reserved" in _text(reply)
+        assert tool.handler.calls == []  # type: ignore[attr-defined]
+
     async def test_a_handler_exception_is_reported_without_its_message(self) -> None:
         async def handler(args: dict[str, Any]) -> dict[str, Any]:
             raise RuntimeError("db password is hunter2")
@@ -259,6 +272,10 @@ class TestWrapping:
     ) -> None:
         with pytest.raises(AirlockError, match="renamed"):
             wrap_tools([_tool(schema)])
+
+    def test_a_schema_declaring_a_reserved_key_is_refused_at_wrap_time(self) -> None:
+        with pytest.raises(AirlockError, match="control values"):
+            wrap_tools([_tool({"_airlock_tier": str})])
 
     def test_a_schema_airlock_cannot_read_is_refused_at_wrap_time(self) -> None:
         with pytest.raises(AirlockError, match="cannot derive"):

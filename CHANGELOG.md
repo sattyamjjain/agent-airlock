@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refused when the tool is wrapped, and the other limits are listed in
   `docs/integrations/anthropic-claude-agent-sdk.md`.
 
+  Every key an SDK handler receives comes from the model, so one starting with `_airlock_`
+  is refused, in a call and in a schema. Airlock pops `_airlock_tier` and
+  `_airlock_input_tokens` as a router's control values before it looks for ghost arguments,
+  so a model sending one would have picked the budget tier its own call is checked against.
+
 ### Fixed
 
 - **The Claude Agent SDK adapter's version check did not exist.** `SUPPORTED_SDK_VERSIONS`
