@@ -29,18 +29,30 @@ def get_customer(customer_id: int) -> dict:
         "name": "John Doe",
         "email": "john@example.com",
         "ssn": "123-45-6789",
-        "api_key": "sk-1234567890",
     }
 
 result = get_customer(customer_id=123)
-# Returns:
+# Returns (default masking strategies):
 # {
 #     "name": "John Doe",
-#     "email": "[EMAIL REDACTED]",
-#     "ssn": "[SSN REDACTED]",
-#     "api_key": "[API_KEY REDACTED]"
+#     "email": "j***@example.com",
+#     "ssn": "[REDACTED]"
 # }
 ```
+
+## What Gets Masked
+
+- **A string result** is masked and, past `max_output_chars`, truncated.
+- **A dict, list, tuple or set** is masked value by value and keeps its type and its
+  keys. It is never truncated, because truncating its serialized form would hand back a
+  different type.
+- **Any other object** (a Pydantic model, a dataclass) is returned as it is, since
+  rebuilding it with masked fields could break its own invariants. What was detected in
+  it is logged as `output_sensitive_data_unmasked` and returned as a warning that says it
+  was *not* masked. Return a dict or a string to have it masked.
+
+Until 0.10.11 only string results were masked. Every other result was reported as
+masked, in the log, the warnings and the audit record, and returned raw.
 
 ## Sensitive Data Types
 
@@ -184,7 +196,8 @@ result = sanitize_with_workspace_config(content, config)
 
 ## Output Truncation
 
-Limit output size to prevent token bloat:
+Limit the size of string results to prevent token bloat (structured results are
+masked but not truncated; see above):
 
 ```python
 from agent_airlock import AirlockConfig

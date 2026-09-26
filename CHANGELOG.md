@@ -11,6 +11,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.11] - 2026-09-26
+
+### Fixed
+
+- **Only string results were ever masked, and every other result was reported as masked.**
+  `_post_execution` ran `sanitize_output` on every result, but that serializes a dict or a
+  list to JSON text, and the masked text was kept only `if isinstance(result, str)`. For any
+  other result, which covers a dict and so most structured tools, the raw value was returned
+  while the log said `output_sanitized`, the warning said "Masked N sensitive value(s)" and
+  the audit record counted N. The record's `result_preview` is built from the returned value,
+  so the raw data was also written into the audit log. The check is as old as the sanitizer
+  (January). The flagship example in `docs/guide/sanitization.md` returns a dict and showed it
+  masked, which it was not.
+
+  A dict, list, tuple or set is now masked value by value by the new
+  `sanitizer.sanitize_structured`, keeping its type and its keys; a namedtuple stays a
+  namedtuple. Any other object, such as a Pydantic model or a dataclass, is returned as it
+  is, because rebuilding it with masked fields could break its own invariants. What was
+  detected in it is logged as `output_sensitive_data_unmasked`, and the warning says it was
+  *not* masked; the audit record counts only what was actually masked.
+
+- **A large structured result was reported as truncated when it was not.** Truncation was
+  measured on the JSON text and never applied to a non-string result, but the warning "Output
+  truncated from N to M characters" was emitted anyway. `max_output_chars` now applies to
+  string results only, and says so.
+
+### Changed
+
+- A guarded tool that returns the shape Claude Agent SDK handlers use,
+  `{"content": [...]}`, now has its output masked. The 0.10.9 note that async tools' output
+  "is sanitized after they finish" was true for string results only until this release.
+
 ## [0.10.10] - 2026-09-26
 
 ### Fixed
