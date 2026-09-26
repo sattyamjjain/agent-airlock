@@ -243,19 +243,19 @@ class TestExecuteInSandbox:
 class TestCoreIntegration:
     """Tests for core.py sandbox integration."""
 
-    def test_sandbox_fallback_when_not_available(self) -> None:
-        """Test that sandbox falls back to local execution when E2B unavailable."""
+    def test_sandbox_refuses_when_not_available(self) -> None:
+        """Without E2B the call is refused as a sandbox error, not run locally."""
         from agent_airlock import Airlock
 
         @Airlock(sandbox=True)
         def multiply(x: int, y: int) -> int:
             return x * y
 
-        # Should fall back to local execution and succeed
-        result = multiply(x=3, y=4)
+        with patch("agent_airlock.sandbox._check_e2b_available", return_value=False):
+            result = multiply(x=3, y=4)
 
-        # Either returns result (local fallback) or error dict
-        assert result == 12 or (isinstance(result, dict) and "error" in result)
+        assert isinstance(result, dict)
+        assert result["block_reason"] == "sandbox_error"
 
     def test_sandbox_execution_error_export(self) -> None:
         """Test that SandboxExecutionError is exported."""
@@ -273,7 +273,7 @@ class TestGlobalPool:
         import agent_airlock.sandbox
         from agent_airlock.sandbox import SandboxPool, get_sandbox_pool
 
-        agent_airlock.sandbox._global_pool = None
+        agent_airlock.sandbox._reset_pool()
 
         pool = get_sandbox_pool()
 
@@ -284,7 +284,7 @@ class TestGlobalPool:
         import agent_airlock.sandbox
         from agent_airlock.sandbox import get_sandbox_pool
 
-        agent_airlock.sandbox._global_pool = None
+        agent_airlock.sandbox._reset_pool()
 
         config = AirlockConfig(sandbox_pool_size=5, sandbox_timeout=120)
         pool = get_sandbox_pool(config)
@@ -297,7 +297,7 @@ class TestGlobalPool:
         import agent_airlock.sandbox
         from agent_airlock.sandbox import get_sandbox_pool
 
-        agent_airlock.sandbox._global_pool = None
+        agent_airlock.sandbox._reset_pool()
 
         pool1 = get_sandbox_pool()
         pool2 = get_sandbox_pool()

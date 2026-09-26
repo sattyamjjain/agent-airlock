@@ -741,7 +741,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.10.16"
+__version__ = "0.10.17"
 
 __all__ = [
     # Core
@@ -1279,7 +1279,9 @@ __all__ = [
 
 
 def get_sandbox_pool(config: AirlockConfig | None = None) -> "SandboxPool":
-    """Get the global sandbox pool for E2B execution.
+    """Get the E2B sandbox pool for a config.
+
+    Configs with the same E2B API key, sandbox timeout and pool size share a pool.
 
     Requires: pip install agent-airlock[sandbox]
     """

@@ -711,16 +711,13 @@ class TestCoreAsyncSandboxFallback:
         This covers core.py line 656 - the path where sandbox fallback runs
         a sync function inside async wrapper.
         """
+        import sys
         from unittest.mock import patch
 
-        import agent_airlock.sandbox as sandbox_mod
         from agent_airlock import Airlock
 
-        # Mock ImportError to simulate E2B not being available
-        def raise_import_error(*args, **kwargs):
-            raise ImportError("No E2B")
-
-        with patch.object(sandbox_mod, "execute_in_sandbox_async", side_effect=raise_import_error):
+        # The fallback is for agent_airlock.sandbox failing to import; simulate that.
+        with patch.dict(sys.modules, {"agent_airlock.sandbox": None}):
 
             @Airlock(sandbox=True, sandbox_required=False)
             async def async_func_calling_sync(x: int) -> int:
@@ -1134,17 +1131,13 @@ class TestCoreAsyncSandboxSyncFallback:
         at decoration time, so this path is hit when an async function
         falls back to local execution.
         """
+        import sys
         from unittest.mock import patch
 
         from agent_airlock import Airlock
 
-        # Mock sandbox to fail
-        async def mock_failing_sandbox(*args, **kwargs):
-            raise ImportError("No E2B available")
-
-        with patch(
-            "agent_airlock.sandbox.execute_in_sandbox_async", side_effect=mock_failing_sandbox
-        ):
+        # The fallback is for agent_airlock.sandbox failing to import; simulate that.
+        with patch.dict(sys.modules, {"agent_airlock.sandbox": None}):
 
             @Airlock(sandbox=True, sandbox_required=False)
             async def async_tool(x: int) -> int:

@@ -14,7 +14,7 @@ header spells this out. They are **opt-in** via ``pytest -m docker``:
 The default ``pytest`` invocation excludes them (see ``pyproject.toml``
 ``addopts = "... -m 'not docker'"``) so CI does not need Docker.
 
-Scope: prove the four load-bearing claims DockerBackend actually makes.
+Scope: prove the five load-bearing claims DockerBackend actually makes.
 We do NOT run these as part of the 80% coverage gate — they exist to
 prevent the honesty bug in issue #2 from regressing.
 """
@@ -69,6 +69,14 @@ def _runaway_loop() -> None:
         _t.sleep(1)
 
 
+async def _async_add(x: int, y: int) -> int:
+    """Awaited in the container since 0.10.17; before, its coroutine's str() came back."""
+    import asyncio as _asyncio
+
+    await _asyncio.sleep(0)
+    return x + y
+
+
 def _network_probe() -> str:
     """Tries to reach 8.8.8.8 — must fail because network_mode='none'."""
     import socket
@@ -96,6 +104,13 @@ class TestDockerBackendIntegration:
         assert result.result == 5
         assert result.backend == "docker"
         assert result.execution_time_ms > 0
+
+    def test_async_function_is_awaited(self) -> None:
+        """An async function's result comes back, not its coroutine (0.10.17)."""
+        backend = _skip_unless_docker()
+        result = backend.execute(_async_add, args=(2, 3), kwargs={})
+        assert result.success is True, result.error
+        assert result.result == 5
 
     def test_timeout_kills_runaway_container(self) -> None:
         """Regression for the timeout TODO — infinite loop must be killed."""

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import sys
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import patch
 
@@ -249,22 +252,33 @@ class TestPydanticAttributeCopying:
         assert result == 10
 
 
+@contextlib.contextmanager
+def _sandbox_module_unimportable() -> Iterator[None]:
+    """Make ``from .sandbox import ...`` in core raise ImportError, as a broken install would.
+
+    The decorator's local fallback exists for exactly this case. These tests used to make
+    the sandbox *call* raise ImportError instead, which the fallback also caught until
+    0.10.17.
+    """
+    with patch.dict(sys.modules, {"agent_airlock.sandbox": None}):
+        yield
+
+
 class TestSandboxExecutionWithMock:
     """Tests for sandbox execution with mocking."""
 
     def test_sandbox_enabled_returns_error_when_unavailable(self) -> None:
-        """Test sandbox=True with unavailable E2B returns error or falls back."""
+        """Without E2B, sandbox=True refuses the call even with sandbox_required=False."""
 
         @Airlock(sandbox=True, sandbox_required=False)
         def my_func(x: int) -> int:
             return x * 2
 
-        # With sandbox_required=False and no E2B, should either:
-        # 1. Fall back to local execution (return 10)
-        # 2. Return error dict
-        result = my_func(x=5)
-        # Accept either behavior
-        assert result == 10 or (isinstance(result, dict) and "success" in result)
+        with patch("agent_airlock.sandbox._check_e2b_available", return_value=False):
+            result = my_func(x=5)
+
+        assert isinstance(result, dict)
+        assert result["block_reason"] == "sandbox_error"
 
     def test_sandbox_required_true_fails_when_unavailable(self) -> None:
         """Test sandbox_required=True returns error when E2B unavailable."""
@@ -370,14 +384,8 @@ class TestSandboxExecutionWithMock:
 
     @pytest.mark.asyncio
     async def test_sandbox_import_error_async_fallback(self) -> None:
-        """Test async sandbox fallback when ImportError occurs."""
-        # Mock ImportError by making the import fail
-        import agent_airlock.sandbox as sandbox_mod
-
-        def raise_import_error(*args: Any, **kwargs: Any) -> None:
-            raise ImportError("No E2B")
-
-        with patch.object(sandbox_mod, "execute_in_sandbox_async", side_effect=raise_import_error):
+        """A failed import of agent_airlock.sandbox falls back without sandbox_required."""
+        with _sandbox_module_unimportable():
 
             @Airlock(sandbox=True, sandbox_required=False)
             async def my_async_func(x: int) -> int:
@@ -389,31 +397,21 @@ class TestSandboxExecutionWithMock:
 
     @pytest.mark.asyncio
     async def test_sandbox_required_async_fails(self) -> None:
-        """Test async sandbox required fails on ImportError."""
-        import agent_airlock.sandbox as sandbox_mod
-
-        def raise_import_error(*args: Any, **kwargs: Any) -> None:
-            raise ImportError("No E2B")
-
-        with patch.object(sandbox_mod, "execute_in_sandbox_async", side_effect=raise_import_error):
+        """A failed import with sandbox_required=True is refused as a sandbox error."""
+        with _sandbox_module_unimportable():
 
             @Airlock(sandbox=True, sandbox_required=True)
             async def my_async_func(x: int) -> int:
                 return x * 3
 
             result = await my_async_func(x=7)
-            # Should return error dict
             assert isinstance(result, dict)
             assert result["success"] is False
+            assert result["block_reason"] == "sandbox_error"
 
     def test_sandbox_import_error_sync_fallback(self) -> None:
-        """Test sync sandbox fallback when ImportError occurs."""
-        import agent_airlock.sandbox as sandbox_mod
-
-        def raise_import_error(*args: Any, **kwargs: Any) -> None:
-            raise ImportError("No E2B")
-
-        with patch.object(sandbox_mod, "execute_in_sandbox", side_effect=raise_import_error):
+        """A failed import of agent_airlock.sandbox falls back without sandbox_required."""
+        with _sandbox_module_unimportable():
 
             @Airlock(sandbox=True, sandbox_required=False)
             def my_sync_func(x: int) -> int:
@@ -424,22 +422,17 @@ class TestSandboxExecutionWithMock:
             assert result == 20
 
     def test_sandbox_required_sync_fails_on_import_error(self) -> None:
-        """Test sync sandbox required fails on ImportError."""
-        import agent_airlock.sandbox as sandbox_mod
-
-        def raise_import_error(*args: Any, **kwargs: Any) -> None:
-            raise ImportError("No E2B")
-
-        with patch.object(sandbox_mod, "execute_in_sandbox", side_effect=raise_import_error):
+        """A failed import with sandbox_required=True is refused as a sandbox error."""
+        with _sandbox_module_unimportable():
 
             @Airlock(sandbox=True, sandbox_required=True)
             def my_sync_func(x: int) -> int:
                 return x * 4
 
             result = my_sync_func(x=5)
-            # Should return error dict
             assert isinstance(result, dict)
             assert result["success"] is False
+            assert result["block_reason"] == "sandbox_error"
 
     def test_sync_sandbox_fallback_without_e2b_key(self) -> None:
         """Test sync sandbox fallback works without sandbox execution."""

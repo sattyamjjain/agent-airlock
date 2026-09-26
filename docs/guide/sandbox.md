@@ -70,9 +70,10 @@ def long_running_task(data: str) -> str:
 ```
 
 `sandbox_timeout` (default 60) is passed to E2B as each sandbox's timeout: how many seconds the
-sandbox lives after the pool creates it. It is not a per-call limit, and it is read once:
-every sandboxed call in the process shares one pool, built from the config of the first
-sandboxed call, so a later config with a different value does not change it.
+sandbox lives after it is created, or after the pool hands it out. A call still running then
+fails with its sandbox. Tools whose configs differ get their own pools, so each can have its
+own value. Until 0.10.17 one pool served the whole process, built from the first sandboxed
+call's config, and later values were ignored.
 
 ### Required Sandbox
 
@@ -95,8 +96,9 @@ settings return the blocked response shown under [Error Handling](#error-handlin
 
 1. **Serialization**: Function and arguments serialized with `cloudpickle`
 2. **Transfer**: Serialized data sent to E2B
-3. **Execution**: Code runs in isolated MicroVM
-4. **Return**: The sandbox prints the outcome as JSON, which Airlock parses
+3. **Execution**: Code runs in isolated MicroVM; an `async def` tool's coroutine is awaited there
+4. **Return**: The sandbox prints the outcome as JSON, which Airlock parses. Nothing the
+   sandbox prints is unpickled on your server
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
@@ -113,8 +115,10 @@ settings return the blocked response shown under [Error Handling](#error-handlin
 
 ## Sandbox Pool
 
-For low latency, Airlock keeps a pool of E2B sandboxes and reuses them across calls. Every
-sandboxed call in the process shares it:
+For low latency, Airlock keeps a pool of pre-created E2B sandboxes. Each sandbox runs one call
+and is then killed, so nothing a call leaves behind (files, module globals, a background
+thread) reaches the next one, which may be another user's. Tools whose configs agree on the
+E2B API key, `sandbox_timeout` and `sandbox_pool_size` share a pool:
 
 ```python
 from agent_airlock import AirlockConfig
@@ -132,12 +136,14 @@ pool.warm_up()
 | When | The pool |
 |------|----------|
 | It is empty (first call, or every sandbox in use) | Creates an E2B sandbox and installs `cloudpickle` in it |
-| A call finishes | Takes the sandbox back for the next call |
-| It already holds `sandbox_pool_size` sandboxes | Kills the returned sandbox instead |
+| It hands out a pooled sandbox | Resets its lifetime to `sandbox_timeout`; one that already expired is killed and skipped |
+| A call finishes, or fails | Kills the sandbox; it is never used again |
+| `pool.warm_up()` is called | Creates sandboxes until it holds `sandbox_pool_size` |
 | `pool.shutdown()` is called | Kills the pooled sandboxes |
 
-The pool does not cap concurrent calls and has no idle timeout: a sandbox ends when its
-`sandbox_timeout` expires or the pool kills it.
+The pool does not cap concurrent calls. Once calls have taken the sandboxes `warm_up()`
+created, each new call pays the cold start again until `warm_up()` runs again. Until 0.10.17
+a finished sandbox went back into the pool, a failed one included.
 
 ## File Handling
 
@@ -189,8 +195,7 @@ by default; see [DockerBackend](../sandbox/docker.md).
 ### Size Limits
 
 Airlock sets no payload or result size limit of its own, and no per-call execution timeout:
-`sandbox_timeout` (default 60 seconds) is how long each pooled sandbox lives; see
-[Timeout](#timeout).
+`sandbox_timeout` (default 60 seconds) is how long a sandbox lives; see [Timeout](#timeout).
 
 ## Error Handling
 
@@ -208,10 +213,13 @@ if isinstance(result, dict) and result.get("status") == "blocked":
 ```
 
 A failure does not raise. The call returns a blocked response (`"success": False`,
-`"status": "blocked"`), and the underlying error, such as
-`ZeroDivisionError: division by zero`, is logged as the `unexpected_error` event. To get the
-sandbox's error text back, call `execute_in_sandbox` instead, which returns it in
-`SandboxResult.error`; see the [Sandbox API](../api/sandbox.md#exceptions).
+`"status": "blocked"`). A tool that raised, like this one, gets the same response it gets
+outside the sandbox, and the underlying error, such as `ZeroDivisionError: division by zero`,
+is logged as the `unexpected_error` event. When the sandbox itself failed (E2B missing, no
+sandbox created, no result back), `block_reason` is `"sandbox_error"` and the error is logged
+as the `sandbox_failed` event. To get the sandbox's error text back, call
+`execute_in_sandbox` instead, which returns it in `SandboxResult.error`; see the
+[Sandbox API](../api/sandbox.md#exceptions).
 
 ## Monitoring
 
@@ -249,20 +257,21 @@ def add_numbers(a: int, b: int) -> int:
     return a + b
 ```
 
-### 2. Set the Timeout Once
+### 2. Size the Timeout for the Tool
 
-All sandboxed calls share one pool, built from the first sandboxed call's config, and each
-sandbox lives `sandbox_timeout` seconds from its creation. Give every sandboxed tool the same
-config:
+A sandbox lives `sandbox_timeout` seconds from its creation, or from the pool handing it out,
+so a call must finish within it. Each config gets its own pool, so a long-running tool can
+have a longer timeout than the rest:
 
 ```python
-config = AirlockConfig(sandbox_timeout=300)
+quick = AirlockConfig(sandbox_timeout=30)
+slow = AirlockConfig(sandbox_timeout=300)
 
-@Airlock(sandbox=True, config=config)
+@Airlock(sandbox=True, config=quick)
 def quick_calc(expr: str) -> float:
     return eval(expr)
 
-@Airlock(sandbox=True, config=config)
+@Airlock(sandbox=True, config=slow)
 def train_model(data: list) -> dict:
     # Long-running ML task
     return {"accuracy": 0.95}

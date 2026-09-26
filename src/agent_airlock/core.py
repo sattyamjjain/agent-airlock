@@ -25,8 +25,10 @@ exec() Usage:
             exec(code)  # Runs in E2B MicroVM, never locally
             return "ok"
 
-    When sandbox_required=True, Airlock raises SandboxUnavailableError if E2B
-    is not available, preventing accidental local execution of dangerous code.
+    With sandbox=True the function never runs in this process because E2B is missing
+    or failed: the call is refused with a ``sandbox_error`` response. sandbox_required=True
+    also refuses in the one case sandbox=True alone runs locally, which is
+    ``agent_airlock.sandbox`` itself failing to import.
     Never use exec() without sandbox protection in production.
 
 Thread Safety:
@@ -59,6 +61,9 @@ from typing import Any, Literal, ParamSpec, TypeVar, overload
 from pydantic import ValidationError
 
 from ._log import structlog
+from ._sandbox_errors import SandboxError
+from ._sandbox_errors import SandboxExecutionError as SandboxExecutionError
+from ._sandbox_errors import SandboxUnavailableError as SandboxUnavailableError
 from .audit import AuditLogger
 from .capabilities import (
     Capability,
@@ -493,9 +498,12 @@ class Airlock:
         """Initialize the Airlock decorator.
 
         Args:
-            sandbox: If True, execute the function in an E2B sandbox.
-            sandbox_required: If True and sandbox=True, raise an error instead of
-                            falling back to local execution when E2B is unavailable.
+            sandbox: If True, execute the function in an E2B sandbox. When E2B is
+                    missing or the sandbox fails, the call is refused with a
+                    ``sandbox_error`` response; it is not run here instead.
+            sandbox_required: If True and sandbox=True, refuse the call even in the one
+                            case sandbox=True alone runs it locally: the
+                            ``agent_airlock.sandbox`` module failing to import.
                             SECURITY: Always set this to True for dangerous operations
                             like exec() to prevent accidental local execution.
             config: Configuration options. Uses DEFAULT_CONFIG if not provided.
@@ -820,6 +828,20 @@ class Airlock:
                     func_name,
                     error,
                 )
+            elif isinstance(error, SandboxError):
+                # The sandbox failed, not the tool: E2B was missing, no sandbox could be
+                # created, or no result came back. Until 0.10.17 this got the generic
+                # answer below, tagged validation_error.
+                logger.error("sandbox_failed", function=func_name, error=str(error))
+                response = AirlockResponse.blocked_response(
+                    reason=BlockReason.SANDBOX_ERROR,
+                    error=f"AIRLOCK_BLOCK: '{func_name}' could not run in its sandbox",
+                    fix_hints=[
+                        "The sandbox this tool runs in failed or is unavailable, so the "
+                        "tool returned no result. Retrying may not help; tell the user if "
+                        "it keeps failing."
+                    ],
+                )
             else:
                 logger.exception("unexpected_error", function=func_name, error=str(error))
                 response = AirlockResponse.blocked_response(
@@ -1125,47 +1147,22 @@ class Airlock:
         Serializes the function and arguments, executes in an isolated
         E2B Firecracker MicroVM, and returns the result.
 
-        Falls back to local execution if E2B is not available.
+        When E2B is missing or the sandbox fails, this raises ``SandboxExecutionError``
+        and the call is refused; the function is not run here. The one local fallback is
+        for ``agent_airlock.sandbox`` failing to import (see ``_without_sandbox_module``).
         """
         try:
             from .sandbox import execute_in_sandbox
-
-            result = execute_in_sandbox(
-                func,
-                args=args,
-                kwargs=dict(kwargs),
-                config=self.config,
-            )
-
-            if result.success:
-                logger.info(
-                    "sandbox_execution_success",
-                    function=func.__name__,
-                    sandbox_id=result.sandbox_id,
-                    execution_time_ms=result.execution_time_ms,
-                )
-                return result.result  # type: ignore[no-any-return]
-            else:
-                raise SandboxExecutionError(
-                    f"Sandbox execution failed: {result.error}",
-                    details=result.to_dict(),
-                )
-
         except ImportError:
-            if self.sandbox_required:
-                raise SandboxUnavailableError(
-                    f"Sandbox required for '{func.__name__}' but E2B is not available. "
-                    "Install with: pip install agent-airlock[sandbox] and set E2B_API_KEY. "
-                    "SECURITY WARNING: This function was marked sandbox_required=True to "
-                    "prevent accidental local execution of dangerous code."
-                ) from None
-            logger.warning(
-                "sandbox_fallback_local",
-                function=func.__name__,
-                message="E2B not available. Install with: pip install agent-airlock[sandbox]",
-            )
-            validated_func = create_strict_validator(func)
-            return validated_func(*args, **kwargs)
+            return self._without_sandbox_module(func)(*args, **kwargs)
+
+        result = execute_in_sandbox(
+            func,
+            args=args,
+            kwargs=dict(kwargs),
+            config=self.config,
+        )
+        return self._sandbox_outcome(func, result, is_async=False)  # type: ignore[no-any-return]
 
     async def _execute_in_sandbox_async(
         self,
@@ -1175,51 +1172,74 @@ class Airlock:
     ) -> R:
         """Execute function in E2B sandbox (async version).
 
-        Uses asyncio to run the sandbox execution without blocking.
+        Uses asyncio to run the sandbox execution without blocking. An async function's
+        coroutine is awaited inside the sandbox. Failures are handled as in the sync
+        version.
         """
         try:
             from .sandbox import execute_in_sandbox_async
-
-            result = await execute_in_sandbox_async(
-                func,
-                args=args,
-                kwargs=dict(kwargs),
-                config=self.config,
-            )
-
-            if result.success:
-                logger.info(
-                    "sandbox_execution_success",
-                    function=func.__name__,
-                    sandbox_id=result.sandbox_id,
-                    execution_time_ms=result.execution_time_ms,
-                    is_async=True,
-                )
-                return result.result  # type: ignore[no-any-return]
-            else:
-                raise SandboxExecutionError(
-                    f"Sandbox execution failed: {result.error}",
-                    details=result.to_dict(),
-                )
-
         except ImportError:
-            if self.sandbox_required:
-                raise SandboxUnavailableError(
-                    f"Sandbox required for '{func.__name__}' but E2B is not available. "
-                    "Install with: pip install agent-airlock[sandbox] and set E2B_API_KEY. "
-                    "SECURITY WARNING: This function was marked sandbox_required=True to "
-                    "prevent accidental local execution of dangerous code."
-                ) from None
-            logger.warning(
-                "sandbox_fallback_local",
-                function=func.__name__,
-                message="E2B not available. Install with: pip install agent-airlock[sandbox]",
-            )
-            validated_func = create_strict_validator(func)
-            # For async functions falling back to local, we need to await
-            if asyncio.iscoroutinefunction(func):
+            validated_func = self._without_sandbox_module(func)
+            if inspect.iscoroutinefunction(func):
                 return await validated_func(*args, **kwargs)  # type: ignore[misc, no-any-return]
             return validated_func(*args, **kwargs)  # pragma: no cover - defensive code
+
+        result = await execute_in_sandbox_async(
+            func,
+            args=args,
+            kwargs=dict(kwargs),
+            config=self.config,
+        )
+        return self._sandbox_outcome(func, result, is_async=True)  # type: ignore[no-any-return]
+
+    @staticmethod
+    def _sandbox_outcome(func: Callable[..., Any], result: Any, *, is_async: bool) -> Any:
+        """Return a sandboxed call's result, or raise what its failure means.
+
+        A tool that raised in the sandbox raises ``_SandboxedToolError``, which the
+        decorator answers exactly as it answers a tool that raised in-process. Any other
+        failure is the sandbox's own and raises ``SandboxExecutionError``, answered with a
+        ``sandbox_error`` refusal.
+        """
+        if result.success:
+            logger.info(
+                "sandbox_execution_success",
+                function=func.__name__,
+                sandbox_id=result.sandbox_id,
+                execution_time_ms=result.execution_time_ms,
+                is_async=is_async,
+            )
+            return result.result
+        if result.tool_failed:
+            raise _SandboxedToolError(result.error or "the tool failed in the sandbox")
+        raise SandboxExecutionError(
+            f"Sandbox execution failed: {result.error}",
+            details=result.to_dict(),
+        )
+
+    def _without_sandbox_module(self, func: Callable[P, R]) -> Callable[P, R]:
+        """``agent_airlock.sandbox`` could not be imported: refuse, or run in-process.
+
+        This is the only case ``sandbox=True`` runs a function locally, and only with
+        ``sandbox_required=False``. The fallback used to wrap the whole sandbox call, so an
+        ImportError raised while running it also sent the function here.
+        """
+        if self.sandbox_required:
+            raise SandboxUnavailableError(
+                f"Sandbox required for '{func.__name__}' but agent_airlock.sandbox could "
+                "not be imported. SECURITY WARNING: This function was marked "
+                "sandbox_required=True to prevent accidental local execution of dangerous "
+                "code."
+            ) from None
+        logger.warning(
+            "sandbox_fallback_local",
+            function=func.__name__,
+            message=(
+                "agent_airlock.sandbox could not be imported; running in-process because "
+                "sandbox_required=False"
+            ),
+        )
+        return create_strict_validator(func)
 
     def _validate_ghost_arguments(
         self,
@@ -2151,24 +2171,12 @@ class Airlock:
         )
 
 
-class SandboxExecutionError(Exception):
-    """Raised when sandbox execution fails."""
+class _SandboxedToolError(RuntimeError):
+    """The tool raised inside the sandbox.
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
-        self.message = message
-        self.details = details or {}
-        super().__init__(message)
-
-
-class SandboxUnavailableError(Exception):
-    """Raised when sandbox is required but E2B is not available.
-
-    This error is raised when sandbox_required=True and E2B dependencies
-    are not installed or configured. This prevents dangerous operations
-    like exec() from accidentally running on the local machine.
+    Deliberately not a ``SandboxError``: the decorator answers it exactly as it answers a
+    tool that raised in-process, so a tool fails the same way on both paths.
     """
-
-    pass
 
 
 # Convenience alias for common use case

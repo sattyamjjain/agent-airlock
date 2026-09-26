@@ -494,17 +494,16 @@ class TestModalBackendExecuteMocked:
         return fake_modal, sandbox
 
     def test_execute_ok_envelope_returns_success(self) -> None:
-        """Happy path: sandbox echoes back a cloudpickled ('ok', result) envelope."""
-        cloudpickle = pytest.importorskip("cloudpickle")
-        import base64
+        """Happy path: the sandbox prints a JSON outcome between the marker lines.
 
-        sentinel = "__AIRLOCK_MODAL_RESULT__"
-        envelope = ("ok", 42)
+        Until 0.10.17 it printed a cloudpickled envelope that the host unpickled; see
+        tests/test_sandbox_correctness_0_10_17.py for why that let a tool run code here.
+        """
         stdout = (
             "hello from user code\n"
-            + sentinel
-            + base64.b64encode(cloudpickle.dumps(envelope)).decode("ascii")
-            + "\n"
+            "__AIRLOCK_RESULT__\n"
+            '{"success": true, "result": 42, "error": null}\n'
+            "__AIRLOCK_END__\n"
         )
         fake_modal, sandbox = self._install_fake_modal(stdout)
 
@@ -528,13 +527,13 @@ class TestModalBackendExecuteMocked:
         sandbox.terminate.assert_called_once()
 
     def test_execute_err_envelope_returns_failure(self) -> None:
-        """Failure envelope from the sandbox is mapped to success=False."""
-        cloudpickle = pytest.importorskip("cloudpickle")
-        import base64
-
-        sentinel = "__AIRLOCK_MODAL_RESULT__"
-        envelope = ("err", "RuntimeError('boom')", "Traceback...\nRuntimeError: boom")
-        stdout = sentinel + base64.b64encode(cloudpickle.dumps(envelope)).decode("ascii") + "\n"
+        """A failure outcome from the sandbox is mapped to success=False."""
+        stdout = (
+            "__AIRLOCK_RESULT__\n"
+            '{"success": false, "result": null, "error": "RuntimeError: boom", '
+            '"traceback": "Traceback...\\nRuntimeError: boom"}\n'
+            "__AIRLOCK_END__\n"
+        )
         fake_modal, _ = self._install_fake_modal(stdout)
 
         backend = ModalBackend(app_name="x", image_ref="py")
@@ -542,6 +541,7 @@ class TestModalBackendExecuteMocked:
             result = backend.execute(lambda: None, (), {})
 
         assert result.success is False
+        assert result.tool_failed is True
         assert "RuntimeError" in (result.error or "")
         assert "Traceback" in (result.stderr or "")
 
