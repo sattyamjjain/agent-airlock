@@ -100,9 +100,11 @@ class TestTheAdvertisedCommandWorks:
     """`python examples/escalation_threshold.py` — the exact line the README prints."""
 
     @pytest.fixture(scope="class")
-    def run(self) -> subprocess.CompletedProcess[str]:
+    def run(self, tmp_path_factory: pytest.TempPathFactory) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603
             [sys.executable, str(_EXAMPLE)],
+            # The example's default audit log lands here, not in the checkout.
+            cwd=tmp_path_factory.mktemp("escalation-example"),
             capture_output=True,
             text=True,
             timeout=120,
@@ -120,7 +122,7 @@ class TestTheAdvertisedCommandWorks:
         for n in ("1.", "2.", "3.", "4."):
             assert n in run.stdout, f"scenario {n} missing from the output"
 
-    def test_it_is_deterministic(self) -> None:
+    def test_it_is_deterministic(self, tmp_path: Path) -> None:
         """Two runs produce identical *demo* output.
 
         Structlog interleaves its own timestamped lines into stdout, so those are stripped
@@ -131,6 +133,7 @@ class TestTheAdvertisedCommandWorks:
         runs = [
             subprocess.run(  # noqa: S603
                 [sys.executable, str(_EXAMPLE)],
+                cwd=tmp_path,  # the example's default audit log lands here
                 capture_output=True,
                 text=True,
                 timeout=120,

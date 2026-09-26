@@ -3,16 +3,22 @@
 Provides validation and sanitization for generator functions that yield
 data incrementally. Supports both sync and async generators.
 
+``@Airlock`` does not sanitize what a generator yields: it returns the generator object
+as it is. Wrap the generator function with ``create_streaming_wrapper`` instead (there is
+no ``@Airlock(streaming=True)``; until 0.10.19 this docstring showed one).
+
 Example:
-    from agent_airlock import Airlock, AirlockConfig
-    from agent_airlock.streaming import StreamingAirlock
+    from functools import partial
+
+    from agent_airlock import AirlockConfig
+    from agent_airlock.streaming import create_streaming_wrapper
 
     config = AirlockConfig(mask_pii=True, max_output_chars=5000)
 
-    @Airlock(config=config, streaming=True)
+    @partial(create_streaming_wrapper, config=config)
     async def stream_data() -> AsyncGenerator[str, None]:
         async for chunk in data_source:
-            yield chunk  # Each chunk sanitized, total truncated if needed
+            yield chunk  # Each str chunk sanitized, total truncated if needed
 """
 
 from __future__ import annotations
