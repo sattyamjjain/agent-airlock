@@ -93,8 +93,9 @@ class AuditRecord:
     #
     # The unit is CALLS, and the names say so. `duration_ms` above is per-call tool
     # execution time and excludes model latency, so it cannot reconstruct the paper's
-    # wall-time figure; `run_input_tokens` is populated only from a caller-supplied
-    # `_airlock_input_tokens` and is NEVER estimated. All optional, and `to_dict()` drops
+    # wall-time figure; `run_input_tokens` is populated only from the `input_tokens` tag
+    # the harness sets on the call's context, and is NEVER estimated. All optional, and
+    # `to_dict()` drops
     # None, so a record from a run with no amplification budget is byte-identical to a
     # v0.8.73 record.
     run_call_count: int | None = None
