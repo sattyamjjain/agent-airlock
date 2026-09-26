@@ -404,6 +404,27 @@ def _caller_identity(context: AirlockContext[Any]) -> AgentIdentity | None:
     return None
 
 
+def _inherit_ambient_identity(context: AirlockContext[Any]) -> None:
+    """Give a call with no identity of its own the one set around it, in place.
+
+    The policy check has fallen back to the ambient context since 0.10.13, but the audit
+    record, a policy resolver and ``get_current_context()`` inside the tool read the call's
+    own context, so an identity set with ``with AirlockContext(...)`` was checked and never
+    recorded. Nothing is taken when the call carries an agent id of its own.
+    """
+    if context.agent_id:
+        return
+    ambient = get_current_context()
+    if ambient is None or not ambient.agent_id:
+        return
+    context.agent_id = ambient.agent_id
+    context.session_id = context.session_id or ambient.session_id
+    context.workspace_id = context.workspace_id or ambient.workspace_id
+    context.user_id = context.user_id or ambient.user_id
+    if not context.roles:
+        context.roles = list(ambient.roles)
+
+
 # The keyword arguments a router once tagged a call with. See _warn_on_retired_control_arguments.
 _RETIRED_CONTROL_ARGUMENTS = ("_airlock_tier", "_airlock_input_tokens")
 
@@ -576,6 +597,7 @@ class Airlock:
 
             # Extract context from function arguments
             context = ContextExtractor.extract_from_args(args, kwargs)
+            _inherit_ambient_identity(context)
 
             logger.debug(
                 "airlock_intercept",

@@ -192,7 +192,8 @@ def get_policy_for_role(role: str) -> SecurityPolicy:
     return policies.get(role, GUEST_POLICY)
 
 def policy_for_caller(context: AirlockContext) -> SecurityPolicy:
-    # The caller's first role, from the context object passed as the tool's first argument
+    # The caller's first role: from the context object passed as the tool's first argument,
+    # or from one set around the call with `with AirlockContext(...)`
     return get_policy_for_role(context.roles[0] if context.roles else "guest")
 
 # The policy is chosen on every call, from the caller's roles:

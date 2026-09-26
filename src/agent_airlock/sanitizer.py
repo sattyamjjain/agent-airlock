@@ -84,11 +84,14 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         r"\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b"
     ),
     SensitiveDataType.SSN: re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
+    # Groups may be split by one consistent "-" or " " (the backreference): until 0.10.16
+    # only contiguous digits matched, so "4111-1111-1111-1111" was never masked.
     SensitiveDataType.CREDIT_CARD: re.compile(
-        r"\b(?:4[0-9]{12}(?:[0-9]{3})?|"  # Visa
-        r"5[1-5][0-9]{14}|"  # Mastercard
-        r"3[47][0-9]{13}|"  # Amex
-        r"6(?:011|5[0-9]{2})[0-9]{12})\b"  # Discover
+        r"\b(?:4[0-9]{12}|"  # Visa, 13 digits
+        r"4[0-9]{3}([- ]?)[0-9]{4}\1[0-9]{4}\1[0-9]{4}|"  # Visa
+        r"5[1-5][0-9]{2}([- ]?)[0-9]{4}\2[0-9]{4}\2[0-9]{4}|"  # Mastercard
+        r"3[47][0-9]{2}([- ]?)[0-9]{6}\3[0-9]{5}|"  # Amex, 4-6-5
+        r"6(?:011|5[0-9]{2})([- ]?)[0-9]{4}\4[0-9]{4}\4[0-9]{4})\b"  # Discover
     ),
     SensitiveDataType.IP_ADDRESS: re.compile(
         r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
@@ -151,8 +154,14 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     # Secret Patterns
     SensitiveDataType.API_KEY: re.compile(
         r"\b(?:"
-        r"sk-[a-zA-Z0-9]{20,}|"  # OpenAI
-        r"sk-ant-[a-zA-Z0-9-]{20,}|"  # Anthropic
+        r"sk-[a-zA-Z0-9]{20,}|"  # OpenAI, legacy
+        # OpenAI project, service-account and admin keys, the default since 2024. Their
+        # bodies hold "_" and "-", which the legacy form cannot match (until 0.10.16 they
+        # passed through unmasked).
+        r"sk-(?:proj|svcacct|admin)-[a-zA-Z0-9_-]{20,}|"
+        # Anthropic. "_" is in the body too: until 0.10.16 the match stopped at the first one
+        # and the rest of the key was left in the output.
+        r"sk-ant-[a-zA-Z0-9_-]{20,}|"
         r"AIza[0-9A-Za-z_-]{35}|"  # Google
         r"ghp_[a-zA-Z0-9]{36}|"  # GitHub PAT
         r"gho_[a-zA-Z0-9]{36}|"  # GitHub OAuth
@@ -164,8 +173,13 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     SensitiveDataType.PASSWORD: re.compile(
         r"(?i)(?:password|passwd|pwd|secret|token)[\s]*[=:]\s*['\"]?([^\s'\"]{8,})['\"]?",
     ),
+    # The whole PEM block, or the header and the base64 lines after it when the END line is
+    # missing (truncated output). Until 0.10.16 only the BEGIN line was matched, so the key
+    # material itself was returned unmasked.
     SensitiveDataType.PRIVATE_KEY: re.compile(
-        r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"
+        r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+        r"(?:[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+        r"|(?:\s*[A-Za-z0-9+/=]{4,})*)"
     ),
     SensitiveDataType.JWT: re.compile(r"\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\b"),
     SensitiveDataType.CONNECTION_STRING: re.compile(

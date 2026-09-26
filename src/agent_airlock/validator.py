@@ -8,11 +8,14 @@ Handles:
 
 from __future__ import annotations
 
+import dataclasses
+import functools
 import inspect
 from collections.abc import Callable
-from typing import Any, TypeVar, get_type_hints
+from typing import Any, TypeVar, get_args, get_type_hints
 
-from pydantic import ConfigDict, ValidationError, validate_call
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, validate_call
+from typing_extensions import TypedDict, is_typeddict
 
 from ._log import structlog
 
@@ -122,6 +125,57 @@ def strip_ghost_arguments(
 _STRICT_CONFIG = ConfigDict(strict=True)
 
 
+def _has_own_config(hint: Any) -> bool:
+    """Whether ``hint`` holds a type validated by its own config: a model, dataclass or TypedDict."""
+    if isinstance(hint, type) and (
+        issubclass(hint, BaseModel) or dataclasses.is_dataclass(hint) or is_typeddict(hint)
+    ):
+        return True
+    return any(_has_own_config(arg) for arg in get_args(hint))
+
+
+def _nested_strict_check(func: Callable[..., Any]) -> Callable[..., None] | None:
+    """A check that validates the arguments whose type has its own config, strictly.
+
+    ``validate_call`` applies :data:`_STRICT_CONFIG` to the function's parameters, but a
+    Pydantic model, dataclass or TypedDict is validated with its own config, which is lax by
+    default: until 0.10.16 ``{"age": "30"}`` for a model with ``age: int`` was coerced and
+    the call ran. Strictness given at *call* level does reach nested types, so these
+    arguments are validated once more with ``strict=True``. Their error locations keep the
+    parameter name (``user.age``), since they are checked as keys of one TypedDict.
+
+    Returns ``None`` when no parameter needs it, so ordinary tools pay nothing.
+    """
+    try:
+        hints = get_type_hints(func, include_extras=True)
+        signature = inspect.signature(func)
+    except Exception:  # unresolvable annotations: validate_call reports them at build time
+        return None
+    variadic = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+    fields = {
+        name: hints[name]
+        for name, param in signature.parameters.items()
+        if param.kind not in variadic and name in hints and _has_own_config(hints[name])
+    }
+    if not fields:
+        return None
+    typed_dict: Any = TypedDict  # a runtime-built TypedDict, which mypy cannot type
+    adapter: TypeAdapter[Any] = TypeAdapter(
+        typed_dict(f"{getattr(func, '__name__', 'tool')}_arguments", fields, total=False)
+    )
+
+    def check(*args: Any, **kwargs: Any) -> None:
+        try:
+            bound = signature.bind_partial(*args, **kwargs)
+        except TypeError:
+            return  # a binding error is validate_call's to report
+        provided = {name: value for name, value in bound.arguments.items() if name in fields}
+        if provided:
+            adapter.validate_python(provided, strict=True)
+
+    return check
+
+
 def create_strict_validator(func: F) -> F:
     """Wrap a function with Pydantic strict validation.
 
@@ -130,13 +184,35 @@ def create_strict_validator(func: F) -> F:
     - Exact type matching required
     - Clear validation error messages
 
+    Strictness reaches inside a Pydantic model, dataclass or TypedDict argument too (see
+    :func:`_nested_strict_check`).
+
     Args:
         func: The function to wrap with validation.
 
     Returns:
         Wrapped function with strict Pydantic validation.
     """
-    return validate_call(config=_STRICT_CONFIG)(func)
+    validated: Any = validate_call(config=_STRICT_CONFIG)(func)
+    check = _nested_strict_check(func)
+    if check is None:
+        return validated  # type: ignore[no-any-return]
+
+    if inspect.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def checked_async(*args: Any, **kwargs: Any) -> Any:
+            check(*args, **kwargs)
+            return await validated(*args, **kwargs)
+
+        return checked_async  # type: ignore[return-value]
+
+    @functools.wraps(func)
+    def checked(*args: Any, **kwargs: Any) -> Any:
+        check(*args, **kwargs)
+        return validated(*args, **kwargs)
+
+    return checked  # type: ignore[return-value]
 
 
 #: What :func:`create_argument_validator` hands back: takes the call's positional and
@@ -219,6 +295,8 @@ def create_argument_validator(func: Callable[..., Any]) -> ArgumentValidator:
     except Exception as exc:  # pragma: no cover - degenerate signature
         build_error = f"{type(exc).__name__}: {exc}"
 
+    nested_check = _nested_strict_check(func)
+
     def _validate(
         args: tuple[Any, ...], kwargs: dict[str, Any]
     ) -> tuple[tuple[Any, ...], dict[str, Any]]:
@@ -228,6 +306,8 @@ def create_argument_validator(func: Callable[..., Any]) -> ArgumentValidator:
                 f"'{getattr(func, '__name__', 'tool')}' before sandbox dispatch "
                 f"({build_error}). Refusing rather than dispatching unvalidated."
             )
+        if nested_check is not None:
+            nested_check(*args, **kwargs)
         return validating_capture(*args, **kwargs)
 
     return _validate

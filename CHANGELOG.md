@@ -11,6 +11,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.16] - 2026-09-26
+
+### Security
+
+- **Current OpenAI and Anthropic API keys were returned unmasked.** The API-key pattern
+  allowed no `_` or `-` after `sk-`. OpenAI's project, service-account and admin keys
+  (`sk-proj-`, `sk-svcacct-`, `sk-admin-`, the default format since 2024) passed through
+  whole, and an Anthropic `sk-ant-` key was masked only up to its first `_`, leaving the rest
+  of the key in the output. Both are now masked in full.
+
+- **A private key's material was returned unmasked.** The rule matched the
+  `-----BEGIN ... PRIVATE KEY-----` line alone, so the base64 key body under it reached the
+  model. The whole PEM block is now masked, or, when the `END` line is missing, the header
+  and the base64 lines after it.
+
+- **Card numbers written with dashes or spaces were not masked.** Only contiguous digits
+  matched, so `4111-1111-1111-1111` passed through. One consistent separator between the
+  groups now matches.
+
+- **`AIRLOCK_STRICT_MODE=false` downgraded `AIRLOCK_UNKNOWN_ARGS=block`.** The deprecated
+  variable was applied second, so a deployment that set both stripped unknown arguments
+  instead of refusing them. `AIRLOCK_UNKNOWN_ARGS` now wins, and a warning
+  (`strict_mode_env_ignored`) says the legacy variable was ignored.
+
+- **Strict validation did not reach inside a Pydantic model argument.** `validate_call`'s
+  strict config covers the function's own parameters, but a model is validated with its own
+  config, lax by default: `{"age": "30"}` for `age: int` was coerced and the call ran. An
+  argument whose type holds a model, dataclass or TypedDict is now also validated with
+  call-level `strict=True`, on the direct and the sandbox path, and the fix hint names the
+  field's path (`'user.age' must be an integer, not str`). A tool whose model relied on
+  coercion now gets a refusal instead.
+
+### Fixed
+
+- **An identity set around a call was checked but not recorded.** Since 0.10.13 the policy
+  check falls back to a context set with `with AirlockContext(...)`, but the audit record, a
+  policy resolver and `get_current_context()` inside the tool read the call's own context. A
+  call with no identity of its own now takes the ambient context's agent id, session, roles
+  and workspace.
+
 ## [0.10.15] - 2026-09-26
 
 ### Fixed

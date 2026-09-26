@@ -315,7 +315,8 @@ In distributed deployments, consider:
 
 Automatically detects and masks:
 - Social Security Numbers (XXX-XX-XXXX)
-- Credit Card Numbers (an unbroken run of digits; `4111-1111-1111-1111` is not detected)
+- Credit Card Numbers (Visa, Mastercard, Amex, Discover; the digits may be split by one
+  consistent `-` or space)
 - Email Addresses
 - Phone Numbers
 - IP Addresses
@@ -326,9 +327,10 @@ Indian mobile numbers.
 ### Secret Detection
 
 Automatically detects and masks:
-- API Keys of known shapes: `sk-` keys with 20+ characters after the prefix (OpenAI,
-  Anthropic), Google `AIza...`, GitHub `ghp_`/`gho_`/`github_pat_`, Slack `xox*`.
-  Others, such as `sk-live-...` or `api_key=...`, are not detected.
+- API Keys of known shapes: OpenAI keys (legacy `sk-...` and `sk-proj-`/`sk-svcacct-`/
+  `sk-admin-`), Anthropic `sk-ant-...`, Google `AIza...`, GitHub `ghp_`/`gho_`/`github_pat_`,
+  Slack `xox*`. Others, such as `sk-live-...` or `api_key=...`, are not detected.
+- Private keys: the whole `-----BEGIN ... PRIVATE KEY-----` block
 - AWS Access Keys (`AKIA...`)
 - JWT Tokens (`eyJ...`)
 - Connection Strings (`postgres://`, `mongodb://`)
