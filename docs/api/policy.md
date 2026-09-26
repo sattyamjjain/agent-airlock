@@ -16,30 +16,59 @@ class SecurityPolicy:
     # Tool access control
     allowed_tools: list[str] = field(default_factory=list)
     denied_tools: list[str] = field(default_factory=list)
+    default_deny: bool = False
 
-    # Rate limiting
+    # Rate limiting and time windows
     rate_limits: dict[str, str] = field(default_factory=dict)
-
-    # Time restrictions
     time_restrictions: dict[str, str] = field(default_factory=dict)
 
     # Agent identity
-    allowed_agents: list[str] = field(default_factory=list)
-    denied_agents: list[str] = field(default_factory=list)
-    agent_rate_limits: dict[str, str] = field(default_factory=dict)
+    require_agent_id: bool = False
+    allowed_roles: list[str] = field(default_factory=list)
+
+    # Capabilities
+    capability_policy: CapabilityPolicy | None = None
+
+    # Escalation to a human approver
+    escalate_tools: dict[str, str] = field(default_factory=dict)
+    approver: Approver | None = None
+    escalation_channel: str = "default"
+    escalation_timeout_seconds: float = 300.0
+
+    # Budgets and guards, all off by default
+    model_tier_budget: ModelTierBudget | None = None
+    amplification_budget: AmplificationBudget | None = None
+    sequence_guard: SequenceGuard | None = None
+    action_contradiction_gate: ActionContradictionGate | None = None
+    deserialization_guard: UnsafeDeserializationGuard | None = None
+    trace_redaction: TraceRedactionPolicy | None = None
+    reauth_on_untrusted_reinvocation: bool = False
+    untrusted_reinvocation_threshold: int = 1
+    stdio_mode: Literal["allowlist", "manifest_only", "disabled"] = "allowlist"
 ```
 
 ### Attributes
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `allowed_tools` | `list[str]` | Allowlist of tool patterns |
-| `denied_tools` | `list[str]` | Denylist of tool patterns |
-| `rate_limits` | `dict[str, str]` | Rate limits per tool pattern |
-| `time_restrictions` | `dict[str, str]` | Time windows per tool pattern |
-| `allowed_agents` | `list[str]` | Allowed agent IDs |
-| `denied_agents` | `list[str]` | Denied agent IDs |
-| `agent_rate_limits` | `dict[str, str]` | Rate limits per agent |
+| `allowed_tools` | `list[str]` | Allowlist of tool patterns. Empty allows every tool not denied |
+| `denied_tools` | `list[str]` | Denylist of tool patterns. Takes precedence over the allowlist |
+| `default_deny` | `bool` | With `True`, an empty allowlist denies every tool |
+| `rate_limits` | `dict[str, str]` | Rate limits per tool pattern (`"100/hour"`). The most specific pattern applies |
+| `time_restrictions` | `dict[str, str]` | Time windows per tool pattern (`"09:00-17:00"`) |
+| `require_agent_id` | `bool` | Refuse a call that carries no agent identity |
+| `allowed_roles` | `list[str]` | Refuse a call whose agent holds none of these roles; an anonymous call holds none |
+| `capability_policy` | `CapabilityPolicy \| None` | Checked against what a tool declares with `@requires(...)` |
+| `escalate_tools` | `dict[str, str]` | Tool patterns that need a human's approval, with the reason the approver sees |
+| `approver` | `Approver \| None` | Transport that asks the human. A matched escalation with no approver is refused |
+| `model_tier_budget` | `ModelTierBudget \| None` | Per-model-tier cost caps, checked before the tool runs |
+| `amplification_budget` | `AmplificationBudget \| None` | Per-run call budget against a declared baseline |
+| `sequence_guard`, `action_contradiction_gate`, `deserialization_guard` | | Optional guards run after the policy check |
+| `trace_redaction` | `TraceRedactionPolicy \| None` | Redacts traces sent to a non-local sink |
+| `stdio_mode` | `str` | How STDIO subprocess launches are allowed: `"allowlist"`, `"manifest_only"` or `"disabled"` |
+
+How a call carries its identity for `require_agent_id` and `allowed_roles` is described in
+[Agent Identity](../guide/policy.md#agent-identity).
 
 ### Pattern Matching
 
@@ -79,7 +108,7 @@ policy = SecurityPolicy(
 from agent_airlock import PERMISSIVE_POLICY
 ```
 
-Minimal restrictions - allows everything with basic rate limiting.
+An empty `SecurityPolicy()`: allows every tool, with no rate limit.
 
 ### STRICT_POLICY
 
@@ -87,7 +116,9 @@ Minimal restrictions - allows everything with basic rate limiting.
 from agent_airlock import STRICT_POLICY
 ```
 
-Maximum restrictions - requires explicit allowlist.
+Requires an agent identity, limits every tool to 100 calls an hour, and applies a
+capability policy that grants `FILESYSTEM_READ`, `NETWORK_HTTPS` and `DATABASE_READ` and
+denies `PROCESS_SHELL` and `FILESYSTEM_DELETE`. It also turns on trace redaction.
 
 ### READ_ONLY_POLICY
 
@@ -95,7 +126,8 @@ Maximum restrictions - requires explicit allowlist.
 from agent_airlock import READ_ONLY_POLICY
 ```
 
-Only allows read operations (`read_*`, `get_*`, `list_*`, `search_*`).
+Allows `read_*`, `get_*`, `list_*` and `search_*`, denies `write_*`, `delete_*`, `update_*`
+and `create_*`, and applies a capability policy that denies write and delete capabilities.
 
 ### BUSINESS_HOURS_POLICY
 
@@ -103,7 +135,8 @@ Only allows read operations (`read_*`, `get_*`, `list_*`, `search_*`).
 from agent_airlock import BUSINESS_HOURS_POLICY
 ```
 
-All operations restricted to business hours (09:00-17:00).
+Restricts `delete_*`, `drop_*` and `*_production` to 09:00-17:00. Other tools are not
+restricted.
 
 ## RateLimit
 
@@ -111,46 +144,43 @@ All operations restricted to business hours (09:00-17:00).
 from agent_airlock.policy import RateLimit
 ```
 
+A token bucket. `SecurityPolicy.rate_limits` builds one per pattern; you rarely construct
+one yourself.
+
 ### Signature
 
 ```python
+@dataclass
 class RateLimit:
-    def __init__(
-        self,
-        calls: int,
-        period_seconds: int,
-    ):
-        """
-        Token bucket rate limiter.
+    max_tokens: int
+    refill_period_seconds: float
 
-        Args:
-            calls: Maximum calls allowed
-            period_seconds: Time period in seconds
-        """
+    @classmethod
+    def parse(cls, limit_str: str) -> RateLimit:
+        """Parse "count/period", where period is second, minute, hour or day."""
 ```
+
+The bucket starts full.
 
 ### Methods
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `is_allowed()` | `bool` | Check if call is allowed |
-| `consume()` | `bool` | Consume a token, return success |
-| `retry_after()` | `int` | Seconds until next token available |
-| `reset()` | `None` | Reset the rate limiter |
+| `parse(limit_str)` | `RateLimit` | Build one from `"100/hour"`; raises `ValueError` on a bad format |
+| `acquire(tokens=1)` | `bool` | Take tokens if available; `False` when rate limited |
+| `remaining()` | `int` | Tokens left after refilling for elapsed time |
 
 ### Example
 
 ```python
 from agent_airlock.policy import RateLimit
 
-rate_limit = RateLimit(calls=100, period_seconds=3600)
+rate_limit = RateLimit.parse("100/hour")
 
-if rate_limit.is_allowed():
-    rate_limit.consume()
-    # Proceed with call
+if rate_limit.acquire():
+    ...  # proceed with the call
 else:
-    wait = rate_limit.retry_after()
-    print(f"Rate limited, retry in {wait}s")
+    print(f"Rate limited, {rate_limit.remaining()} tokens left")
 ```
 
 ## TimeWindow
@@ -162,72 +192,58 @@ from agent_airlock.policy import TimeWindow
 ### Signature
 
 ```python
+@dataclass
 class TimeWindow:
-    def __init__(
-        self,
-        start: str,
-        end: str,
-        timezone: str = "UTC",
-    ):
-        """
-        Time-based access window.
+    start_hour: int
+    start_minute: int
+    end_hour: int
+    end_minute: int
 
-        Args:
-            start: Start time (HH:MM)
-            end: End time (HH:MM)
-            timezone: Timezone name
-        """
+    @classmethod
+    def parse(cls, window_str: str) -> TimeWindow:
+        """Parse "HH:MM-HH:MM"."""
 ```
 
 ### Methods
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `is_active()` | `bool` | Check if currently in window |
-| `next_start()` | `datetime` | Next time window opens |
-| `next_end()` | `datetime` | Next time window closes |
+| `parse(window_str)` | `TimeWindow` | Build one from `"09:00-17:00"` |
+| `is_within(dt=None)` | `bool` | Whether `dt` (default: now) falls in the window |
+
+Windows are checked against the local clock (`datetime.now()`); there is no timezone
+argument. A window may cross midnight (`"22:00-06:00"`).
 
 ### Example
 
 ```python
 from agent_airlock.policy import TimeWindow
 
-window = TimeWindow(
-    start="09:00",
-    end="17:00",
-    timezone="America/New_York",
-)
+window = TimeWindow.parse("09:00-17:00")
 
-if window.is_active():
-    # Within business hours
-    pass
+if window.is_within():
+    ...  # within business hours
 else:
-    # Outside business hours
-    next_open = window.next_start()
+    ...  # outside business hours
 ```
 
-## Policy Composition
+## Choosing a Policy per Call
 
-### merge()
-
-Combine two policies:
-
-```python
-base = SecurityPolicy(denied_tools=["delete_*"])
-strict = SecurityPolicy(rate_limits={"*": "10/hour"})
-
-combined = base.merge(strict)
-# Combined has both denied_tools and rate_limits
-```
-
-### override()
-
-Override specific settings:
+There is no policy merge or override; build each policy whole. To apply different policies
+to different calls, pass `Airlock` a function that takes the call's `AirlockContext` and
+returns the policy:
 
 ```python
-base = SecurityPolicy(rate_limits={"*": "100/hour"})
-override = SecurityPolicy(rate_limits={"*": "1000/hour"})
+from agent_airlock import Airlock, SecurityPolicy
+from agent_airlock.context import AirlockContext
 
-final = base.override(override)
-# rate_limits is now {"*": "1000/hour"}
+production = SecurityPolicy(allowed_tools=["read_*"])
+default = SecurityPolicy(denied_tools=["delete_*"])
+
+def pick(context: AirlockContext) -> SecurityPolicy:
+    return production if context.workspace_id == "prod" else default
+
+@Airlock(policy=pick)
+def write_note(ctx, text: str) -> str:
+    ...
 ```

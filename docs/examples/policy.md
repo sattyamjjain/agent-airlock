@@ -77,22 +77,31 @@ def delete_database(name: str) -> dict:
 
 ## Agent-Based Access
 
+A policy can require a caller identity and a role. Airlock reads both from the call's
+context: a context object as the tool's first argument, or one set around the call.
+
 ```python
-from agent_airlock import Airlock, SecurityPolicy
+from agent_airlock import Airlock, AirlockContext, SecurityPolicy
 
-policy = SecurityPolicy(
-    allowed_agents=["agent-alpha", "agent-beta"],
-    denied_agents=["suspicious-agent"],
-    agent_rate_limits={
-        "agent-alpha": "10000/hour",  # High limit for trusted agent
-        "agent-beta": "1000/hour",    # Lower limit
-    },
-)
+policy = SecurityPolicy(require_agent_id=True, allowed_roles=["admin"])
 
-@Airlock(policy=policy, agent_id="agent-alpha")
-def admin_operation() -> dict:
+@Airlock(policy=policy)
+def admin_operation(ctx) -> dict:
     return {"status": "ok"}
+
+@Airlock(policy=policy)
+def rotate_keys() -> dict:
+    return {"status": "rotated"}
+
+# A framework context object: ctx.context carries agent_id and roles
+admin_operation(framework_ctx)
+
+# No context argument: set one around the call
+with AirlockContext(agent_id="agent-alpha", roles=["admin"]):
+    rotate_keys()
 ```
+
+A call with no identity, or whose roles include none of `allowed_roles`, is refused.
 
 ## Predefined Policies
 
@@ -105,12 +114,13 @@ from agent_airlock import (
     BUSINESS_HOURS_POLICY,
 )
 
-# Minimal restrictions
+# No restrictions
 @Airlock(policy=PERMISSIVE_POLICY)
 def any_tool(x: int) -> int:
     return x
 
-# Maximum restrictions
+# Requires an agent identity (see Agent-Based Access), 100 calls an hour,
+# and a capability policy
 @Airlock(policy=STRICT_POLICY)
 def strict_tool(x: int) -> int:
     return x
@@ -120,43 +130,41 @@ def strict_tool(x: int) -> int:
 def read_data(id: int) -> dict:
     return {"id": id}
 
-# Business hours only
+# delete_*, drop_* and *_production tools only run 09:00-17:00
 @Airlock(policy=BUSINESS_HOURS_POLICY)
-def business_tool() -> dict:
-    return {"status": "ok"}
+def drop_table(name: str) -> dict:
+    return {"dropped": name}
 ```
 
-## Policy Composition
+## Policy per Environment
+
+There is no policy merge. Build each policy whole, sharing settings through plain Python:
 
 ```python
+import os
+
 from agent_airlock import SecurityPolicy
 
-# Base policy
-base = SecurityPolicy(
-    denied_tools=["delete_*"],
-    rate_limits={"*": "100/hour"},
-)
+DENIED = ["delete_*"]
 
-# Production overrides
 production = SecurityPolicy(
-    rate_limits={"*": "1000/hour"},  # Higher limits
+    denied_tools=DENIED,
+    rate_limits={"*": "1000/hour"},
     time_restrictions={"*": "09:00-17:00"},  # Business hours
 )
 
-# Development overrides
 development = SecurityPolicy(
+    denied_tools=DENIED,
     rate_limits={"*": "10000/hour"},  # Very high limits
 )
 
-# Combine policies
-prod_policy = base.merge(production)
-dev_policy = base.merge(development)
+policy = production if os.environ.get("ENV") == "production" else development
 ```
 
 ## Role-Based Access Control
 
 ```python
-from agent_airlock import Airlock, SecurityPolicy
+from agent_airlock import Airlock, AirlockContext, SecurityPolicy
 
 # Define role policies
 ADMIN_POLICY = SecurityPolicy(
@@ -183,11 +191,19 @@ def get_policy_for_role(role: str) -> SecurityPolicy:
     }
     return policies.get(role, GUEST_POLICY)
 
-# Usage
-@Airlock(policy=get_policy_for_role("user"))
-def user_search(query: str) -> list:
-    return []
+def policy_for_caller(context: AirlockContext) -> SecurityPolicy:
+    # The caller's first role, from the context object passed as the tool's first argument
+    return get_policy_for_role(context.roles[0] if context.roles else "guest")
+
+# The policy is chosen on every call, from the caller's roles:
+# admin and user may read, guest may only search
+@Airlock(policy=policy_for_caller)
+def read_report(ctx, report_id: int) -> dict:
+    return {"id": report_id}
 ```
+
+To restrict a tool to roles without a policy per role, set
+`SecurityPolicy(allowed_roles=[...])` (see Agent-Based Access).
 
 ## Monitoring Policy Violations
 

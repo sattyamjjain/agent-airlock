@@ -11,6 +11,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.15] - 2026-09-26
+
+### Fixed
+
+- **The docs described an API that does not exist, in 109 places.** A reader who copied an
+  example got a `TypeError`, `ImportError` or `AttributeError`: `Airlock(unknown_args_mode=...)`
+  on the docs home page, `AirlockConfig(masking_strategy=...)`, `from agent_airlock import
+  secure_tool`, `SandboxPool(max_size=...)`, `Airlock(circuit_breaker=...)`,
+  `SecurityPolicy.merge()`. Every Python example under `docs/` now uses API that exists and
+  was run against the code; the API reference signatures were rebuilt from the real ones;
+  shown outputs are the real ones, including masked values (`j***@example.com`, not
+  `[EMAIL REDACTED]`) and refusal dicts. One example's sample key, `sk-1234567890`, was being
+  masked as a phone number.
+
+- **Statements the code contradicts were corrected as well**, where a user may be relying on
+  them:
+  - With `sandbox=True`, a call is refused when E2B is not available; it is not run locally.
+    Pooled sandboxes are reused by later calls, so what one call leaves behind can be seen by
+    the next.
+  - Through FastMCP, FastMCP checks, and can coerce, the arguments before Airlock sees them;
+    progress reporting sends nothing.
+  - A Pydantic model parameter is validated with its own config, not Airlock's strict mode.
+  - `@Airlock` does not mask what a generator yields; `StreamingAirlock` does.
+  - `STRICT_POLICY` requires an agent identity rather than an allowlist, and
+    `BUSINESS_HOURS_POLICY` restricts only `delete_*`, `drop_*` and `*_production`.
+  - Several `AirlockConfig` fields, `max_output_tokens` among them, are stored but not read by
+    `@Airlock`, and `AirlockConfig` reads only three `AIRLOCK_*` environment variables.
+  - Unmeasured latency figures were removed or attributed to their source.
+
+### Added
+
+- **A gate for it:** `scripts/check_docs_api.py` (`make check-docs-api`, run in CI as
+  `tests/test_docs_api_gate.py`). Every Python fence in the authored markdown and every
+  script under `examples/` is parsed, and each name it imports from `agent_airlock` must
+  resolve, take the keywords it is called with, and have the attributes used on it.
+
 ## [0.10.14] - 2026-09-26
 
 ### Security

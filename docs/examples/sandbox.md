@@ -30,29 +30,30 @@ def dangerous_operation(code: str) -> str:
     """This MUST run in sandbox - no fallback."""
     return exec(code)
 
-# If E2B is unavailable, raises error instead of running locally
-try:
-    result = dangerous_operation(code="import os; os.listdir('/')")
-except Exception as e:
-    print(f"Sandbox unavailable: {e}")
+# If E2B is unavailable, the call returns a blocked response instead of running locally
+result = dangerous_operation(code="import os; os.listdir('/')")
+if isinstance(result, dict) and result.get("status") == "blocked":
+    print(f"Sandbox unavailable: {result['error']}")
 ```
 
 ## Sandbox Timeout
 
+`sandbox_timeout` is how long each E2B sandbox lives, not a per-call limit, and every
+sandboxed call in the process shares one pool, built from the first sandboxed call's config.
+Set it once and give every sandboxed tool the same config (see the
+[E2B Sandbox guide](../guide/sandbox.md#timeout)):
+
 ```python
 from agent_airlock import Airlock, AirlockConfig
 
-# Short timeout for quick operations
-fast_config = AirlockConfig(sandbox_timeout=5)
+# Each pooled sandbox lives 300 seconds from its creation
+config = AirlockConfig(sandbox_timeout=300)
 
-@Airlock(sandbox=True, config=fast_config)
+@Airlock(sandbox=True, config=config)
 def quick_calc(expr: str) -> float:
     return eval(expr)
 
-# Long timeout for complex operations
-slow_config = AirlockConfig(sandbox_timeout=300)
-
-@Airlock(sandbox=True, config=slow_config)
+@Airlock(sandbox=True, config=config)
 def train_model(data: list) -> dict:
     # Long-running ML task
     import time
@@ -63,67 +64,63 @@ def train_model(data: list) -> dict:
 ## Sandbox Pool Management
 
 ```python
-from agent_airlock.sandbox import SandboxPool
+from agent_airlock import AirlockConfig
+from agent_airlock.sandbox import execute_in_sandbox, get_sandbox_pool
 
-# Create pool with custom settings
-pool = SandboxPool(
-    min_size=2,        # Keep 2 warm sandboxes
-    max_size=10,       # Max 10 concurrent
-    idle_timeout=300,  # Clean up after 5 min idle
-)
+config = AirlockConfig(sandbox_pool_size=2)  # Keep 2 warm sandboxes
+
+# The process-wide pool that execute_in_sandbox() and @Airlock(sandbox=True) share
+pool = get_sandbox_pool(config)
+pool.warm_up()  # Create them now instead of on the first call
 
 def process_code(code: str) -> str:
-    return eval(code)
+    return str(eval(code))
 
 # Execute using pool
-result = pool.execute(process_code, args=("2 + 2",), kwargs={})
-print(result)  # 4
-
-# Check pool stats
-stats = pool.stats()
-print(f"Active sandboxes: {stats['active']}")
-print(f"Idle sandboxes: {stats['idle']}")
-print(f"Average latency: {stats['avg_latency_ms']}ms")
+result = execute_in_sandbox(process_code, args=("2 + 2",), config=config)
+print(result.result)  # 4
 
 # Cleanup when done
-pool.cleanup()
+pool.shutdown()
 ```
+
+The pool does not cap concurrency (an empty pool creates another sandbox), has no idle
+timeout, and keeps no statistics; see [Monitoring Sandbox Usage](#monitoring-sandbox-usage).
 
 ## Error Handling
 
 ```python
 from agent_airlock import Airlock
-from agent_airlock.sandbox import (
-    SandboxExecutionError,
-    SandboxTimeoutError,
-    SandboxUnavailableError,
-)
 
-@Airlock(sandbox=True)
+@Airlock(sandbox=True, return_dict=True)
 def risky_code(code: str) -> str:
-    return eval(code)
+    return str(eval(code))
 
-try:
-    result = risky_code(code="1/0")  # Division by zero
-except SandboxExecutionError as e:
-    print(f"Execution error: {e}")
-    print(f"Error type: {e.error_type}")
-
-try:
-    result = risky_code(code="while True: pass")  # Infinite loop
-except SandboxTimeoutError as e:
-    print(f"Timeout after {e.timeout}s")
-
-# Check if running in sandbox
-from agent_airlock import is_sandboxed
-
-@Airlock(sandbox=True)
-def check_environment() -> str:
-    if is_sandboxed():
-        return "Running in E2B sandbox"
-    else:
-        return "Running locally (fallback)"
+result = risky_code(code="1/0")  # Division by zero, inside the sandbox
+if not result["success"]:
+    print(result["status"])  # "blocked"
+    print(result["error"])  # "AIRLOCK_BLOCK: Unexpected error in 'risky_code'"
 ```
+
+A decorated tool never raises for a sandbox failure: an exception inside the sandbox, a
+missing E2B SDK or API key, and an E2B error all return this blocked response, and the
+underlying error is logged as the `unexpected_error` event. `execute_in_sandbox` returns the
+sandbox's own error text:
+
+```python
+from agent_airlock.sandbox import execute_in_sandbox
+
+def risky_code(code: str) -> str:
+    return str(eval(code))
+
+result = execute_in_sandbox(risky_code, args=("1/0",))
+print(result.success)  # False
+print(result.error)  # "ZeroDivisionError: division by zero"
+```
+
+There is no timeout exception and no `is_sandboxed()` helper: a tool with `sandbox=True`
+returns either its sandboxed result or the blocked response (see
+[Required Sandbox](../guide/sandbox.md#required-sandbox) for the one local-fallback case).
 
 ## Data Processing in Sandbox
 
@@ -194,45 +191,58 @@ result = execute_in_sandbox(
     my_function,
     args=(5, 3),
     kwargs={},
-    timeout=10,
 )
-print(result)  # 8
+print(result.result)  # 8
 ```
+
+`execute_in_sandbox` returns a `SandboxResult`, not the bare value: check `result.success`
+before reading `result.result`. It takes no timeout argument.
 
 ## Async Sandbox Execution
 
+Sandbox a synchronous function and await `execute_in_sandbox_async`, which runs the sandbox
+call in a worker thread:
+
 ```python
 import asyncio
-from agent_airlock import Airlock
+from agent_airlock.sandbox import execute_in_sandbox_async
 
-@Airlock(sandbox=True)
-async def async_process(data: str) -> dict:
-    """Async function in sandbox."""
-    await asyncio.sleep(0.1)
+def process(data: str) -> dict:
+    """Runs in the sandbox."""
     return {"processed": data.upper()}
 
 async def main():
-    result = await async_process(data="hello")
-    print(result)  # {"processed": "HELLO"}
+    result = await execute_in_sandbox_async(process, args=("hello",))
+    print(result.result)  # {'processed': 'HELLO'}
 
 asyncio.run(main())
 ```
 
+Do not put `sandbox=True` on an `async def` tool: the sandbox calls the function but never
+awaits it, so the tool returns the string form of a coroutine object
+(`'<coroutine object ...>'`), not its result.
+
 ## Monitoring Sandbox Usage
 
+The pool keeps no statistics. Each `SandboxResult` from `execute_in_sandbox` carries
+`success`, `execution_time_ms` and `sandbox_id`, so aggregate those:
+
 ```python
-from agent_airlock.sandbox import SandboxPool
+from agent_airlock.sandbox import execute_in_sandbox
 
-pool = SandboxPool()
+def square(x: int) -> int:
+    return x * x
 
-# After running several operations...
-stats = pool.stats()
+results = [execute_in_sandbox(square, args=(n,)) for n in range(5)]
+ok = [r for r in results if r.success]
 
-print(f"Total executions: {stats['total_executions']}")
-print(f"Success rate: {stats['success_rate']:.1%}")
-print(f"Average latency: {stats['avg_latency_ms']:.0f}ms")
-print(f"Active sandboxes: {stats['active']}")
-print(f"Idle sandboxes: {stats['idle']}")
-print(f"Total created: {stats['total_created']}")
-print(f"Total cleaned: {stats['total_cleaned']}")
+print(f"Total executions: {len(results)}")
+print(f"Success rate: {len(ok) / len(results):.1%}")
+if ok:
+    print(f"Average latency: {sum(r.execution_time_ms for r in ok) / len(ok):.0f}ms")
+    print(f"Sandboxes used: {len({r.sandbox_id for r in ok})}")
 ```
+
+The pool also logs `sandbox_created` (with `elapsed_ms`) each time it creates a sandbox, and
+the decorator logs `sandbox_execution_success` (with `sandbox_id` and `execution_time_ms`) for
+each sandboxed call.

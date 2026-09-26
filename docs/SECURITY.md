@@ -28,7 +28,7 @@ Agent-Airlock protects against these AI agent attack vectors:
 # LLM sends: read_file(path="data.txt", force=True, admin=True)
 ```
 
-**Mitigation**: Ghost argument stripping (permissive) or rejection (strict mode).
+**Mitigation**: Ghost argument stripping (the default) or rejection (`UnknownArgsMode.BLOCK`).
 
 ### 2. Type Coercion Attacks
 **Threat**: LLMs send wrong types expecting implicit conversion.
@@ -120,16 +120,17 @@ Agent-Airlock implements multiple security layers:
 ### Recommended Production Configuration
 
 ```python
-from agent_airlock import Airlock, AirlockConfig, STRICT_POLICY
+from agent_airlock import Airlock, AirlockConfig, STRICT_POLICY, UnknownArgsMode
 
 config = AirlockConfig(
-    strict_mode=True,          # Reject unknown arguments
+    unknown_args=UnknownArgsMode.BLOCK,  # Reject unknown arguments
     mask_pii=True,             # Mask SSN, credit cards, etc.
     mask_secrets=True,         # Mask API keys, passwords
     max_output_chars=10000,    # Prevent token explosion
     sanitize_output=True,      # Enable all output protection
 )
 
+# STRICT_POLICY refuses any call that carries no agent identity
 @Airlock(config=config, policy=STRICT_POLICY)
 def my_secure_tool(args: MyArgs) -> dict:
     ...
@@ -139,17 +140,23 @@ def my_secure_tool(args: MyArgs) -> dict:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AIRLOCK_STRICT_MODE` | Reject unknown arguments | `false` |
-| `AIRLOCK_MASK_PII` | Enable PII masking | `true` |
-| `AIRLOCK_MASK_SECRETS` | Enable secret masking | `true` |
-| `E2B_API_KEY` | E2B sandbox API key | None |
+| `AIRLOCK_UNKNOWN_ARGS` | `block` rejects unknown arguments; also `strip_and_log`, `strip_silent` | `strip_and_log` |
+| `AIRLOCK_STRICT_MODE` | Deprecated; `true` maps to `block`, any other value to `strip_and_log` (and wins over `AIRLOCK_UNKNOWN_ARGS`) | unset |
+| `E2B_API_KEY` | E2B sandbox API key, used when none is set in code | None |
 
-### Strict Mode vs Permissive Mode
+PII and secret masking have no environment variable. Both are on by default
+(`mask_pii=True`, `mask_secrets=True`); turn them off in code.
+
+### Unknown-Argument Modes
+
+Set with `AirlockConfig(unknown_args=...)`. `strict_mode=True` is the deprecated spelling
+of `BLOCK`.
 
 | Mode | Behavior | Use Case |
 |------|----------|----------|
-| **Permissive** (default) | Strip unknown args, log warning | Development, backward compatibility |
-| **Strict** | Reject call, return error | Production, high-security environments |
+| `STRIP_AND_LOG` (default) | Strip unknown args, log warning | Development, backward compatibility |
+| `BLOCK` | Reject call, return error | Production, high-security environments |
+| `STRIP_SILENT` | Strip unknown args, no warning | Isolated development only |
 
 ---
 
@@ -162,7 +169,7 @@ from agent_airlock import (
     PERMISSIVE_POLICY,    # No restrictions
     STRICT_POLICY,        # Requires agent ID
     READ_ONLY_POLICY,     # Blocks write/delete/modify tools
-    BUSINESS_HOURS_POLICY # 9 AM - 5 PM only
+    BUSINESS_HOURS_POLICY # delete_*, drop_*, *_production only 9 AM - 5 PM
 )
 ```
 
@@ -217,22 +224,24 @@ Use `sandbox=True` for tools that:
 
 ### CRITICAL: Use sandbox_required=True for Dangerous Operations
 
-**SECURITY WARNING**: When `sandbox=True` but E2B is unavailable, the default
-behavior is to fall back to local execution. This can be dangerous for tools
-that execute arbitrary code.
+When E2B is not installed or configured, a `sandbox=True` call is refused with a blocked
+response. `sandbox=True` alone still leaves one local fallback: if `agent_airlock.sandbox`
+itself fails to import, the function runs in your process. `sandbox_required=True` refuses
+that case too, so it is the setting for tools that execute arbitrary code.
 
 ```python
-# DANGEROUS: Falls back to local execution if E2B unavailable
+# Refused when E2B is unavailable, but runs locally if agent_airlock.sandbox
+# cannot be imported
 @Airlock(sandbox=True)
 def execute_code(code: str) -> str:
-    exec(code)  # May run locally!
+    exec(code)
     return "executed"
 
-# SECURE: Raises error instead of local fallback
+# SECURE: never runs in your process
 @Airlock(sandbox=True, sandbox_required=True)
 def execute_code(code: str) -> str:
-    """Runs in isolated E2B MicroVM. Never runs locally."""
-    exec(code)  # Only runs in sandbox
+    """Runs in an isolated E2B micro-VM, or not at all."""
+    exec(code)
     return "executed"
 ```
 
@@ -243,10 +252,14 @@ def execute_code(code: str) -> str:
 
 ### Sandbox Limitations
 
-- Cold start: ~125-180ms (E2B Firecracker MicroVM)
-- Warm pool: <200ms (pre-warmed sandboxes eliminate cold starts)
-- Max execution time: 60 seconds (configurable)
-- No persistent state between calls
+- Cold start: E2B reports about 125ms for its Firecracker micro-VMs; not measured by this
+  project. A warmed pool (`get_sandbox_pool(config).warm_up()`) creates sandboxes before the
+  first call.
+- Sandbox lifetime: `sandbox_timeout` seconds, 60 by default, passed to E2B when each sandbox
+  is created. There is no per-call time limit.
+- **Sandboxes are reused.** The pool hands a sandbox back for later calls in the same process,
+  so anything one call leaves in it, such as files, can be seen by the next. Do not rely on
+  isolation between calls.
 - Network access is sandboxed
 - 24-hour session cap (E2B limitation)
 
@@ -256,11 +269,14 @@ def execute_code(code: str) -> str:
 # Store in environment (recommended)
 export E2B_API_KEY="your-key-here"
 
-# Or in config file (less secure)
+# Or in config file (less secure), loaded with AirlockConfig.from_toml("airlock.toml")
 # airlock.toml
-[sandbox]
+[airlock]
 e2b_api_key = "your-key-here"  # Ensure file permissions are restricted
 ```
+
+A key set in code or in the file takes precedence; `E2B_API_KEY` is used only when neither
+sets one.
 
 ### Pickle Serialization Security
 
@@ -299,37 +315,54 @@ In distributed deployments, consider:
 
 Automatically detects and masks:
 - Social Security Numbers (XXX-XX-XXXX)
-- Credit Card Numbers (4XXX-XXXX-XXXX-XXXX)
+- Credit Card Numbers (an unbroken run of digits; `4111-1111-1111-1111` is not detected)
 - Email Addresses
 - Phone Numbers
 - IP Addresses
 
+With `pii_locales=["in"]`, also Aadhaar, PAN, UPI IDs, IFSC codes, Devanagari names and
+Indian mobile numbers.
+
 ### Secret Detection
 
 Automatically detects and masks:
-- API Keys (`sk-live-`, `api_key=`, etc.)
+- API Keys of known shapes: `sk-` keys with 20+ characters after the prefix (OpenAI,
+  Anthropic), Google `AIza...`, GitHub `ghp_`/`gho_`/`github_pat_`, Slack `xox*`.
+  Others, such as `sk-live-...` or `api_key=...`, are not detected.
 - AWS Access Keys (`AKIA...`)
 - JWT Tokens (`eyJ...`)
 - Connection Strings (`postgres://`, `mongodb://`)
-- Generic Passwords
+- Generic Passwords (8+ characters after `password=`, `pwd=`, `secret=`, `token=`, etc.)
+
+A string, dict, list, tuple or set result is masked. Any other object (a Pydantic model, a
+dataclass) is returned as it is, and what was found in it is logged as not masked; what a
+generator yields is not masked either. See [PII & Secret Masking](guide/sanitization.md).
 
 ### Masking Strategies
 
-```python
-from agent_airlock import SanitizationConfig, MaskingStrategy
+`@Airlock` masks each type with its default strategy: `FULL` for SSN, passwords, private
+keys and connection strings, `TYPE_ONLY` for IFSC, `PARTIAL` for the rest. `AirlockConfig`
+has no strategy setting. To choose one, run the standalone sanitizer with a `mask_config`
+mapping; a type left out of the mapping is masked `FULL`:
 
-config = SanitizationConfig(
-    pii_strategy=MaskingStrategy.PARTIAL,   # Show last 4 chars
-    secret_strategy=MaskingStrategy.FULL,   # Complete redaction
+```python
+from agent_airlock import MaskingStrategy, SensitiveDataType, sanitize_output
+
+result = sanitize_output(
+    text,
+    mask_config={
+        SensitiveDataType.SSN: MaskingStrategy.PARTIAL,   # First and last 3 chars
+        SensitiveDataType.API_KEY: MaskingStrategy.FULL,  # Complete redaction
+    },
 )
 ```
 
-| Strategy | Example |
+| Strategy | Example (SSN `123-45-6789`) |
 |----------|---------|
-| `FULL` | `***REDACTED***` |
-| `PARTIAL` | `***-**-6789` |
-| `TYPE_ONLY` | `[SSN REDACTED]` |
-| `HASH` | `[SSN:a1b2c3d4]` |
+| `FULL` | `[REDACTED]` |
+| `PARTIAL` | `123***789` |
+| `TYPE_ONLY` | `[SSN]` |
+| `HASH` | `[SHA256:01a54629...]` |
 
 ---
 
@@ -337,21 +370,35 @@ config = SanitizationConfig(
 
 ### Log Format
 
-All tool calls are logged as structured JSON:
+Calls through `@Airlock` are appended to a JSON Lines file, one record per line:
+`airlock_audit.json` by default (`audit_log_path`; `enable_audit_log=False` turns it off).
+A call to `delete_records` refused by a `denied_tools=["delete_*"]` policy:
 
 ```json
 {
-  "timestamp": "2026-01-31T10:30:00Z",
-  "tool": "delete_records",
-  "agent_id": "agent-123",
-  "args": {"table": "users", "where": "id=1"},
-  "result": "blocked",
-  "reason": "tool_denied",
-  "policy": "STRICT_POLICY"
+  "timestamp": "2026-01-31T10:30:00.123456+00:00",
+  "tool_name": "delete_records",
+  "blocked": true,
+  "block_reason": "policy_violation",
+  "duration_ms": 0.11,
+  "sanitized_count": 0,
+  "truncated": false,
+  "args_preview": {"table": "'users'", "where": "'id=1'"},
+  "result_type": "None",
+  "result_preview": "BLOCKED",
+  "error": "AIRLOCK_BLOCK: Policy violation for 'delete_records'. Tool 'delete_records' is denied by policy (matches 'delete_*')"
 }
 ```
 
+Fields with no value are left out. `agent_id` and `session_id` are recorded only from a
+context carried by the tool's first argument; an identity set around the call with
+`with AirlockContext(...)` does not reach the record. Argument values whose names look
+sensitive (`password`, `token`, `api_key`, ...) are written as `[REDACTED]`.
+
 ### Log Destinations
+
+The library's own log lines (not the audit file) go through structlog when the
+`[logging]` extra is installed, and through the stdlib `logging` module otherwise:
 
 ```python
 import structlog
@@ -387,7 +434,7 @@ We aim to respond within 48 hours and provide a fix within 7 days for critical i
 
 Before deploying to production:
 
-- [ ] Enable `strict_mode=True`
+- [ ] Set `unknown_args=UnknownArgsMode.BLOCK`
 - [ ] Configure appropriate `SecurityPolicy`
 - [ ] Enable PII and secret masking
 - [ ] Set reasonable `max_output_chars` limit
@@ -408,7 +455,7 @@ Agent-Airlock provides mitigations for these OWASP LLM Application Security risk
 | OWASP Risk | Agent-Airlock Mitigation |
 |------------|--------------------------|
 | **LLM01: Prompt Injection** | Strict type validation rejects malformed inputs; no implicit type coercion |
-| **LLM05: Improper Output Handling** | PII/secret detection + masking sanitizes all tool outputs |
+| **LLM05: Improper Output Handling** | PII/secret detection + masking sanitizes string and container (dict, list, tuple, set) tool outputs |
 | **LLM06: Excessive Agency** | Rate limiting, time restrictions, and RBAC policies constrain agent actions |
 | **LLM09: Misinformation** | Ghost argument rejection prevents hallucinated parameters from executing |
 | **LLM10: Unbounded Consumption** | Output truncation limits token usage; rate limiting prevents API abuse |
@@ -422,5 +469,5 @@ Agent-Airlock provides mitigations for these OWASP LLM Application Security risk
 - [LLM01: Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
 - [MCP Security Guidelines](https://modelcontextprotocol.io/specification)
 - [E2B Security Model](https://e2b.dev/docs/security)
-- [E2B Firecracker Performance](https://e2b.dev/blog/firecracker-vs-qemu) - Cold start ~125ms
+- [E2B Firecracker Performance](https://e2b.dev/blog/firecracker-vs-qemu) - E2B's own cold-start figure
 - [Pydantic Strict Mode](https://docs.pydantic.dev/latest/concepts/strict_mode/)

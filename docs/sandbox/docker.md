@@ -1,9 +1,9 @@
 # DockerBackend (v0.5.1+)
 
-`DockerBackend` runs an agent-airlock-wrapped tool call inside an
-ephemeral Docker container. It is one of four pluggable
-[`SandboxBackend`](../api/sandbox.md) implementations (E2B, Docker,
-Local, Managed-stub).
+`DockerBackend` runs a Python function inside an ephemeral Docker
+container. It is one of the `SandboxBackend` implementations in
+`agent_airlock.sandbox_backend` (E2B, Docker, Local, Modal, and a
+Managed Agents stub).
 
 ## What v0.5.1 actually ships
 
@@ -29,29 +29,63 @@ Local, Managed-stub).
   the sandbox.
 - **Integration tests.** Four tests behind the `pytest -m docker`
   marker prove availability, success, timeout, and network
-  isolation. Default `pytest` runs **exclude** them, so CI does
-  not need a Docker daemon.
+  isolation. Default `pytest` runs **exclude** them; CI's
+  `docker-sandbox` job builds the repo `Dockerfile` and requires all
+  four to pass.
 
 ## Usage
 
+`@Airlock(sandbox=True)` does not take a backend: its sandbox path
+always runs through E2B, and `AirlockConfig` has no backend setting.
+Call the backend's `execute()` yourself. It returns a `SandboxResult`
+instead of raising, and the timeout is a per-call argument, not a
+constructor parameter:
+
 ```python
-from agent_airlock import Airlock, AirlockConfig
 from agent_airlock.sandbox_backend import DockerBackend
 
 backend = DockerBackend(
-    image="python:3.11-slim",
+    image="airlock-sandbox:py3.11",  # must have cloudpickle installed; see below
     memory_limit="256m",
     cpu_limit=0.5,
-    timeout=30,
     security_opt=["seccomp=/etc/docker/airlock-seccomp.json"],
 )
 
-config = AirlockConfig(sandbox_backend=backend)
-
-@Airlock(config=config, sandbox=True, sandbox_required=True)
 def risky_thing(arg: str) -> str:
-    ...
+    return arg.upper()
+
+result = backend.execute(risky_thing, args=("hello",), kwargs={}, timeout=30)
+if result.success:
+    print(result.result)  # HELLO
+else:
+    print(result.error)
 ```
+
+The host needs the `docker` Python package, which no extra installs,
+and `cloudpickle` (in the `[sandbox]` extra). The image needs
+`cloudpickle` too: the script the backend runs starts with
+`import cloudpickle`, and with `network_mode="none"` the container
+cannot install it, so with the default `python:3.11-slim` image
+`execute()` fails with `Container exited with status 1`. Use the
+host's Python version in the image, because cloudpickle sends a
+function defined in `__main__` as bytecode. A function it can import
+by name is sent by reference instead, so its module must be installed
+in the image as well. A minimal image:
+
+```dockerfile
+FROM python:3.11-slim
+RUN pip install --no-cache-dir cloudpickle
+```
+
+The repo's `Dockerfile` builds the image the integration tests use.
+
+To pick a backend by availability, `get_default_backend(config=None)`
+(exported from `agent_airlock`) returns `E2BBackend` when an E2B API
+key is set (on `config` or in `E2B_API_KEY`) and the SDK is installed,
+else `DockerBackend()` with the
+default image when a Docker daemon answers, else
+`LocalBackend(allow_unsafe=True)`, which has no isolation, with a
+`no_sandbox_available` warning.
 
 ## v0.7.0 hardening flags (#37, #38)
 
@@ -83,8 +117,8 @@ Two opt-in fail-closed flags shipped together in v0.7.0:
   DockerBackend(image="python:3.11-slim", require_digest_pin=True)
   ```
 
-  Discover the digest of a tag with `docker pull --quiet <name>:<tag>`
-  or `docker inspect <name>:<tag> --format='{{.RepoDigests}}'`.
+  Discover the digest of a tag from the `Digest:` line `docker pull <name>:<tag>` prints,
+  or with `docker inspect <name>:<tag> --format='{{.RepoDigests}}'`.
 
 ## Known gaps (still tracked)
 
@@ -94,12 +128,18 @@ Two opt-in fail-closed flags shipped together in v0.7.0:
 
 ## Relationship to E2B and Managed backends
 
-| Backend | Isolation | Latency | Cloud dependency | Default? |
-|---------|-----------|---------|------------------|----------|
-| [`E2BBackend`](../api/sandbox.md) | Firecracker MicroVM | <200 ms warm | E2B cloud | ✓ |
-| `DockerBackend` (this page) | Container, `cap_drop=ALL` | ~1-2 s cold, <200 ms warm if image cached | local Docker daemon | — |
-| `LocalBackend` | **None** | ~0 ms | none | dev only |
-| `ManagedSandboxBackend` | Anthropic Managed Agents (session-based) | varies | Anthropic API | preview |
+| Backend | Isolation | Per call | Dependency |
+|---------|-----------|----------|------------|
+| [`E2BBackend`](../api/sandbox.md) | Firecracker MicroVM | Reuses a sandbox from the shared E2B pool | E2B cloud |
+| `DockerBackend` (this page) | Container, `cap_drop=ALL` | Starts, then removes, a new container | local Docker daemon |
+| `ModalBackend` | Modal sandbox (gVisor) | Creates a new Modal sandbox | Modal (`[modal]` extra) |
+| `LocalBackend` | **None** | Calls the function in-process | none (dev only) |
+| `ManagedSandboxBackend` | None: `execute()` never runs the function | Returns a failed `SandboxResult` | `anthropic` SDK and API key |
+
+Only the E2B path is used by `@Airlock(sandbox=True)`, and
+`get_default_backend()` never returns `ModalBackend` or
+`ManagedSandboxBackend`.
 
 If you're running in air-gapped / on-prem environments where E2B
-is not an option, `DockerBackend` is the recommended choice.
+is not an option, `DockerBackend` is the recommended choice, called
+directly as in [Usage](#usage).

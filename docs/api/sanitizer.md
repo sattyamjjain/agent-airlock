@@ -12,42 +12,59 @@ from agent_airlock import sanitize_output
 
 ```python
 def sanitize_output(
-    content: str,
+    content: Any,
     mask_pii: bool = True,
     mask_secrets: bool = True,
-    masking_strategy: MaskingStrategy = MaskingStrategy.FULL,
-    enabled_types: list[SensitiveDataType] | None = None,
-    disabled_types: list[SensitiveDataType] | None = None,
+    max_chars: int | None = None,
+    mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
+    pii_locales: list[str] | None = None,
 ) -> SanitizationResult:
     """
     Sanitize content by masking sensitive data.
 
     Args:
-        content: Text to sanitize
+        content: Text to sanitize. Anything else is converted to text first (JSON when
+            it can be), so the result's content is always a string.
         mask_pii: Mask PII (emails, phones, etc.)
         mask_secrets: Mask secrets (API keys, passwords, etc.)
-        masking_strategy: How to mask (FULL, PARTIAL, etc.)
-        enabled_types: Only detect these types
-        disabled_types: Don't detect these types
+        max_chars: Truncate the masked text to this many characters
+        mask_config: A masking strategy per data type, in place of the defaults
+        pii_locales: Extra PII locales to detect, e.g. ["in"] for India-specific types
 
     Returns:
         SanitizationResult with masked content and detections
     """
 ```
 
+`@Airlock` does not go through this conversion for a dict, list, tuple or set result: it masks
+the values and keeps the type. See [What Gets Masked](../guide/sanitization.md#what-gets-masked).
+
 ### Example
 
 ```python
 from agent_airlock import sanitize_output
 
-content = "Email: john@example.com, API: sk-1234567890"
+content = "Email: john@example.com, API: sk-abcdefghij0123456789"
 result = sanitize_output(content, mask_pii=True, mask_secrets=True)
 
 print(result.content)
-# "Email: [EMAIL REDACTED], API: [API_KEY REDACTED]"
+# "Email: j***@example.com, API: sk-abcd...6789"
 
 print(result.detection_count)
 # 2
+```
+
+To choose the strategy for a type:
+
+```python
+from agent_airlock import MaskingStrategy, SensitiveDataType, sanitize_output
+
+result = sanitize_output(
+    "john@example.com",
+    mask_config={SensitiveDataType.EMAIL: MaskingStrategy.FULL},
+)
+print(result.content)
+# "[REDACTED]"
 ```
 
 ## SanitizationResult
@@ -62,20 +79,22 @@ from agent_airlock import SanitizationResult
 |-----------|------|-------------|
 | `content` | `str` | Sanitized content |
 | `detection_count` | `int` | Number of items masked |
-| `detections` | `list[Detection]` | Details of each detection |
-| `was_truncated` | `bool` | If output was truncated |
+| `detections` | `list[dict]` | Details of each detection (below) |
+| `was_truncated` | `bool` | Whether `max_chars` truncated the content |
+| `original_length` | `int` | Length of the text before masking |
+| `sanitized_length` | `int` | Length of `content` |
 
-### Detection
+### Detections
 
-```python
-@dataclass
-class Detection:
-    type: SensitiveDataType
-    original: str
-    masked: str
-    start: int
-    end: int
-```
+Each entry in `detections` is a dict:
+
+| Key | Description |
+|-----|-------------|
+| `type` | The data type, such as `"email"` or `"api_key"` |
+| `value` | The detected text |
+| `full_match` | The whole text the pattern matched |
+| `masked_as` | What it was replaced with |
+| `start`, `end` | Its position in the original text |
 
 ## WorkspacePIIConfig
 
@@ -120,7 +139,9 @@ config = WorkspacePIIConfig(
     },
 )
 
-result = sanitize_with_workspace_config(content, config)
+result = sanitize_with_workspace_config("alice@company.com, bob@gmail.com, EMP-123456", config)
+print(result.content)
+# "alice@company.com, b***@gmail.com, [REDACTED]"
 ```
 
 ## sanitize_with_workspace_config
@@ -133,19 +154,14 @@ from agent_airlock import sanitize_with_workspace_config
 
 ```python
 def sanitize_with_workspace_config(
-    content: str,
-    config: WorkspacePIIConfig,
+    content: Any,
+    workspace_config: WorkspacePIIConfig,
+    mask_pii: bool = True,
+    mask_secrets: bool = True,
+    max_chars: int | None = None,
+    mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
 ) -> SanitizationResult:
-    """
-    Sanitize content with workspace-specific rules.
-
-    Args:
-        content: Text to sanitize
-        config: Workspace configuration
-
-    Returns:
-        SanitizationResult with masked content
-    """
+    """Sanitize content with workspace-specific rules."""
 ```
 
 ## StreamingAirlock
@@ -158,25 +174,23 @@ from agent_airlock import StreamingAirlock
 
 ```python
 class StreamingAirlock:
-    def __init__(self, config: AirlockConfig):
+    def __init__(self, config: AirlockConfig | None = None, *, tool_name: str = "unknown"):
         """
         Wrapper for streaming/generator sanitization.
 
         Args:
             config: Airlock configuration
+            tool_name: Name used in logs
         """
 
-    def wrap_generator(
-        self,
-        gen: Generator[str, None, None],
-    ) -> Generator[str, None, None]:
+    def wrap_generator(self, gen: Generator[T, None, None]) -> Generator[T, None, None]:
         """Wrap a sync generator with sanitization."""
 
-    async def wrap_async_generator(
-        self,
-        gen: AsyncGenerator[str, None],
-    ) -> AsyncGenerator[str, None]:
+    async def wrap_async_generator(self, gen: AsyncGenerator[T, None]) -> AsyncGenerator[T, None]:
         """Wrap an async generator with sanitization."""
+
+    def reset(self) -> None:
+        """Clear the state before reusing the wrapper."""
 ```
 
 ### Example
@@ -193,7 +207,7 @@ def my_generator():
 
 for chunk in streaming.wrap_generator(my_generator()):
     print(chunk)
-# "Email: [EMAIL REDACTED]"
+# "Email: j***@example.com"
 # "More content..."
 ```
 
@@ -204,9 +218,10 @@ streaming = StreamingAirlock(config)
 wrapped = streaming.wrap_generator(gen)
 
 # After consuming...
-print(streaming.state.was_truncated)
-print(streaming.state.chunks_processed)
+print(streaming.state.truncated)
+print(streaming.state.total_chunks)
 print(streaming.state.total_chars)
+print(streaming.state.sanitized_count)
 ```
 
 ## create_streaming_wrapper
@@ -219,14 +234,14 @@ from agent_airlock import create_streaming_wrapper
 
 ```python
 def create_streaming_wrapper(
-    gen_func: Callable[..., Generator[str, None, None]],
-    config: AirlockConfig,
-) -> Callable[..., Generator[str, None, None]]:
+    func: Callable[..., Generator | AsyncGenerator],
+    config: AirlockConfig | None = None,
+) -> Callable[..., Generator | AsyncGenerator]:
     """
     Create a sanitized wrapper for a generator function.
 
     Args:
-        gen_func: Generator function to wrap
+        func: Generator function to wrap
         config: Airlock configuration
 
     Returns:
@@ -249,4 +264,6 @@ wrapped = create_streaming_wrapper(my_stream, config)
 
 for chunk in wrapped(query="test"):
     print(chunk)
+# "Results for test..."
+# "email: u***@example.com"
 ```

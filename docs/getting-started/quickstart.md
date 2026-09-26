@@ -28,25 +28,28 @@ When the LLM sends invalid arguments, Airlock returns a self-healing response:
 # LLM tries: search_users(query=123, limit="ten")
 result = search_users(query=123, limit="ten")
 
-# Result is NOT a crash, but a helpful response:
+# Result is NOT a crash, but a helpful response (plus a "metadata" key):
 # {
+#     "success": False,
 #     "status": "blocked",
-#     "error": "Validation failed",
+#     "error": "AIRLOCK_BLOCK: Tool 'search_users' validation failed. query: Input should
+#               be a valid string; limit: Input should be a valid integer",
+#     "block_reason": "validation_error",
 #     "fix_hints": [
-#         "query: Expected str, got int. Try: query='123'",
-#         "limit: Expected int, got str. Try: limit=10"
+#         "'query' must be a string, not int",
+#         "'limit' must be an integer, not str"
 #     ]
 # }
 ```
 
-## Strict Mode
+## Rejecting Unknown Arguments
 
-By default, Airlock strips unknown arguments. Enable strict mode to reject them:
+By default, Airlock strips unknown arguments and logs them. Set `BLOCK` to reject them:
 
 ```python
-from agent_airlock import Airlock, AirlockConfig
+from agent_airlock import Airlock, AirlockConfig, UnknownArgsMode
 
-config = AirlockConfig(strict_mode=True)
+config = AirlockConfig(unknown_args=UnknownArgsMode.BLOCK)
 
 @Airlock(config=config)
 def delete_user(user_id: int) -> dict:
@@ -98,8 +101,8 @@ def get_user_profile(user_id: int) -> dict:
 # Output to LLM:
 # {
 #     "name": "John Doe",
-#     "email": "[EMAIL REDACTED]",
-#     "ssn": "[SSN REDACTED]"
+#     "email": "j***@example.com",
+#     "ssn": "[REDACTED]"
 # }
 ```
 
@@ -110,30 +113,34 @@ Run dangerous code in isolated environments:
 ```python
 from agent_airlock import Airlock
 
-@Airlock(sandbox=True)
+@Airlock(sandbox=True, sandbox_required=True)
 def execute_code(code: str) -> str:
     """Execute arbitrary Python code safely."""
-    return eval(code)  # Runs in E2B MicroVM, not your server!
+    return str(eval(code))  # Runs in an E2B micro-VM, not on your server
 ```
+
+Without E2B installed and configured, the call is refused with a blocked response.
 
 !!! warning "E2B API Key Required"
     Sandbox execution requires an E2B API key. Set `E2B_API_KEY` environment variable.
 
 ## FastMCP Integration
 
-Use with FastMCP servers:
+Use with FastMCP servers (`pip install agent-airlock[mcp]`). `secure_tool` wraps the
+function in Airlock and registers it with the server:
 
 ```python
 from fastmcp import FastMCP
-from agent_airlock import secure_tool
+from agent_airlock.mcp import secure_tool
 
 mcp = FastMCP("My Secure Server")
 
-@mcp.tool
-@secure_tool()
+@secure_tool(mcp)
 def my_tool(x: int) -> int:
     return x * 2
 ```
+
+See [FastMCP Integration](../guide/mcp.md) for the details.
 
 ## Next Steps
 

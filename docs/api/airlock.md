@@ -11,41 +11,34 @@ from agent_airlock import Airlock
 ### Signature
 
 ```python
-def Airlock(
-    config: AirlockConfig | None = None,
-    policy: SecurityPolicy | Callable[[AirlockContext], SecurityPolicy] | None = None,
-    sandbox: bool = False,
-    sandbox_required: bool = False,
-    agent_id: str | None = None,
-    # V0.4.0 additions
-    unknown_args_mode: UnknownArgsMode | None = None,
-    capability_policy: CapabilityPolicy | None = None,
-    circuit_breaker: CircuitBreaker | None = None,
-    cost_tracker: CostTracker | None = None,
-    retry_policy: RetryPolicy | None = None,
-    return_dict: bool = False,
-) -> Callable[[F], F]:
-    """
-    Decorator that wraps a function with security validation.
-
-    Args:
-        config: Configuration options (sanitization, output limits, etc.)
-        policy: Security policy (RBAC, rate limits, time restrictions)
-               Can be a callable for dynamic resolution.
-        sandbox: If True, execute in E2B sandbox
-        sandbox_required: If True, fail if sandbox unavailable
-        agent_id: Identifier for the calling agent
-        unknown_args_mode: How to handle unknown arguments (V0.4.0)
-        capability_policy: Fine-grained capability gating (V0.4.0)
-        circuit_breaker: Fault tolerance configuration (V0.4.0)
-        cost_tracker: Cost monitoring and budget limits (V0.4.0)
-        retry_policy: Automatic retry with backoff (V0.4.0)
-        return_dict: If True, always return dict instead of AirlockResponse
-
-    Returns:
-        Decorated function with security wrapper
-    """
+class Airlock:
+    def __init__(
+        self,
+        *,
+        sandbox: bool = False,
+        sandbox_required: bool = False,
+        config: AirlockConfig | None = None,
+        policy: SecurityPolicy | Callable[[AirlockContext], SecurityPolicy | None] | None = None,
+        return_dict: bool = False,
+    ) -> None:
+        """
+        Args:
+            sandbox: If True, execute the function in an E2B sandbox.
+            sandbox_required: If True and sandbox=True, refuse the call instead of
+                falling back to local execution when E2B is unavailable.
+            config: Configuration options. Uses DEFAULT_CONFIG if not provided.
+            policy: Security policy (RBAC, rate limits, time restrictions), or a
+                callable that takes an AirlockContext and returns one.
+            return_dict: If True, a successful call returns the AirlockResponse dict
+                too; if False (default), it returns the raw result.
+        """
 ```
+
+These five are the only constructor arguments. All are keyword-only, and the decorator is
+always called: `@Airlock()`, not `@Airlock`. Unknown-argument handling, output sanitization
+and capability policy live on `AirlockConfig` (passed as `config=`) or on the
+`SecurityPolicy`. Circuit breakers, retries and cost tracking are separate helpers, shown
+below.
 
 ### Basic Usage
 
@@ -57,21 +50,24 @@ def my_tool(x: int) -> int:
 
 ### With UnknownArgsMode (V0.4.0)
 
+The mode is a config field, `AirlockConfig(unknown_args=...)`. The default is
+`STRIP_AND_LOG`.
+
 ```python
-from agent_airlock import Airlock, UnknownArgsMode
+from agent_airlock import Airlock, AirlockConfig, UnknownArgsMode
 
 # Production - reject unknown arguments
-@Airlock(unknown_args_mode=UnknownArgsMode.BLOCK)
+@Airlock(config=AirlockConfig(unknown_args=UnknownArgsMode.BLOCK))
 def prod_tool(x: int) -> int:
     return x * 2
 
 # Staging - strip and log
-@Airlock(unknown_args_mode=UnknownArgsMode.STRIP_AND_LOG)
+@Airlock(config=AirlockConfig(unknown_args=UnknownArgsMode.STRIP_AND_LOG))
 def staging_tool(x: int) -> int:
     return x * 2
 
 # Development - silently strip
-@Airlock(unknown_args_mode=UnknownArgsMode.STRIP_SILENT)
+@Airlock(config=AirlockConfig(unknown_args=UnknownArgsMode.STRIP_SILENT))
 def dev_tool(x: int) -> int:
     return x * 2
 ```
@@ -121,27 +117,43 @@ def my_tool(x: int) -> int:
     return x * 2
 ```
 
+The resolver receives the context read from the tool's first argument (an object with a
+`context`, `ctx`, `request_context` or `session_context` attribute, such as an agent
+framework's run context). For a tool without one, like `my_tool` here, the context is
+empty (`workspace_id` is `None`), so `resolve_policy` returns the 100/hour policy.
+
 ### With Sandbox
 
 ```python
-@Airlock(sandbox=True)
+# When E2B is not installed or configured, the call is refused with a blocked
+# response. sandbox_required=True also rules out the one local fallback: running the
+# function here if agent_airlock.sandbox itself fails to import.
+@Airlock(sandbox=True, sandbox_required=True)
 def dangerous_tool(code: str) -> str:
     return eval(code)
 ```
 
 ### With Capability Gating (V0.4.0)
 
-```python
-from agent_airlock import Airlock, Capability, requires
+`@requires` only declares what a tool needs. `@Airlock` checks the declaration against the
+`capability_policy` of the `SecurityPolicy` passed as `policy=`, or, when that has none,
+the one on `AirlockConfig`. With neither set, nothing is checked.
 
-@Airlock()
+```python
+from agent_airlock import (
+    Airlock, AirlockConfig, Capability, requires, READ_ONLY_CAPABILITY_POLICY,
+)
+
+config = AirlockConfig(capability_policy=READ_ONLY_CAPABILITY_POLICY)
+
+@Airlock(config=config)
 @requires(Capability.FILESYSTEM_READ)
-def read_tool(path: str) -> str:
+def read_tool(path: str) -> str:  # runs: FILESYSTEM_READ is granted
     return open(path).read()
 
-@Airlock()
+@Airlock(config=config)
 @requires(Capability.FILESYSTEM_READ | Capability.NETWORK_HTTP)
-def fetch_and_save(url: str, path: str) -> bool:
+def fetch_and_save(url: str, path: str) -> bool:  # blocked: NETWORK_HTTP is not granted
     data = requests.get(url).text
     open(path, "w").write(data)
     return True
@@ -149,34 +161,59 @@ def fetch_and_save(url: str, path: str) -> bool:
 
 ### With Circuit Breaker (V0.4.0)
 
-```python
-from agent_airlock import Airlock, AGGRESSIVE_BREAKER
+`Airlock` takes no circuit-breaker argument. `CircuitBreaker` is its own decorator: stack
+it under `@Airlock`, so it sees the tool's exceptions. Airlock turns an exception into a
+blocked response, so a breaker stacked above it would never count a failure. While the
+circuit is open the tool body does not run, and the call returns the same blocked response
+Airlock gives for any exception the tool raises.
 
-@Airlock(circuit_breaker=AGGRESSIVE_BREAKER)
+```python
+from agent_airlock import Airlock, CircuitBreaker, AGGRESSIVE_BREAKER
+
+breaker = CircuitBreaker("external-api", AGGRESSIVE_BREAKER)  # opens after 3 failures
+
+@Airlock()
+@breaker
 def external_api_call(query: str) -> dict:
-    return requests.get(f"https://api.example.com?q={query}").json()
+    return requests.get("https://api.example.com", params={"q": query}).json()
 ```
 
 ### With Cost Tracking (V0.4.0)
 
+`Airlock` takes no cost-tracker argument. `CostTracker` is standalone: record each call's
+token usage with `track()`. When a recorded call breaks a `BudgetConfig` limit (per call
+or per session), `BudgetExceededError` is raised. Amounts are `Decimal`.
+
 ```python
-from agent_airlock import Airlock, CostTracker, BudgetConfig
+from decimal import Decimal
+from agent_airlock import CostTracker, BudgetConfig
 
-tracker = CostTracker(budget=BudgetConfig(hard_limit=100.0))
+tracker = CostTracker(budget=BudgetConfig(max_cost_per_session=Decimal("100")))
 
-@Airlock(cost_tracker=tracker)
-def expensive_tool(query: str) -> str:
-    return call_expensive_api(query)
+with tracker.track("expensive_tool") as call:
+    result = call_expensive_api(query)
+    call.set_tokens(input_tokens=1200, output_tokens=300)
 ```
+
+The budget `@Airlock` itself enforces before a call runs is the per-model-tier one,
+`SecurityPolicy(model_tier_budget=...)`. A call is tagged with its tier through
+`AirlockContext` metadata (`airlock_tier`, `input_tokens`), never through tool arguments.
+See the [Policy API](policy.md).
 
 ### With Retry Policy (V0.4.0)
 
-```python
-from agent_airlock import Airlock, STANDARD_RETRY
+`Airlock` takes no retry argument. `RetryPolicy` is its own decorator: stack it under
+`@Airlock`, so it retries the tool body. Arguments are validated before the body runs, so
+a call Airlock rejects is never retried. When the retries run out, `RetryExhaustedError` is
+raised and Airlock returns it as a blocked response.
 
-@Airlock(retry_policy=STANDARD_RETRY)
+```python
+from agent_airlock import Airlock, RetryPolicy, STANDARD_RETRY
+
+@Airlock()
+@RetryPolicy(STANDARD_RETRY)
 def flaky_tool(query: str) -> dict:
-    return requests.get(f"https://flaky-api.com?q={query}").json()
+    return requests.get("https://flaky-api.com", params={"q": query}).json()
 ```
 
 ### Async Support
@@ -190,59 +227,82 @@ async def async_tool(x: int) -> int:
 
 ### Streaming Support (V0.1.5+)
 
-```python
-from agent_airlock import StreamingAirlock
+`StreamingAirlock` is not a decorator, and `@Airlock` does not sanitize what a generator
+yields. Decorate a generator function with `create_streaming_wrapper`, which masks each
+string chunk and applies `max_output_chars` to the stream as a whole:
 
-@StreamingAirlock()
+```python
+from agent_airlock import create_streaming_wrapper
+
+@create_streaming_wrapper
 def stream_tool(query: str):
     for chunk in generate_chunks(query):
         yield chunk
 
-@StreamingAirlock()
+@create_streaming_wrapper
 async def async_stream_tool(query: str):
     async for chunk in generate_async_chunks(query):
         yield chunk
 ```
 
+Used as a bare decorator it applies the default `AirlockConfig()`. To pass a config, call
+it as `create_streaming_wrapper(stream_tool, config)`, or wrap a generator yourself with
+`StreamingAirlock(config).wrap_generator(gen)` (`wrap_async_generator` for an async one).
+
 ## AirlockResponse
 
-Response object for blocked calls.
+The shape of a blocked call's return value. The wrapper returns
+`AirlockResponse.to_dict()`, a plain `dict`, not the object; keys with no value are left
+out.
 
 ```python
 from agent_airlock import AirlockResponse
 ```
 
-### Attributes
+### Keys
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `status` | `str` | "blocked" or "success" |
-| `error` | `str \| None` | Error message |
-| `fix_hints` | `list[str]` | Corrective suggestions for LLM |
-| `blocked_args` | `list[str]` | Arguments that were rejected |
-| `tool_name` | `str` | Name of the tool |
-| `validation_errors` | `list[dict]` | Detailed validation errors |
+| Key | Type | Description |
+|-----|------|-------------|
+| `success` | `bool` | `False` for a blocked call |
+| `status` | `str` | `"blocked"`, or `"completed"` for a success under `return_dict=True` |
+| `error` | `str` | Error message |
+| `block_reason` | `str` | Why it was blocked, e.g. `"ghost_arguments"`, `"validation_error"` |
+| `fix_hints` | `list[str]` | Corrective suggestions for the LLM |
+| `metadata` | `dict` | Details, e.g. the function name and the offending arguments |
+| `result` | `Any` | The tool's result (successes under `return_dict=True`) |
+| `warnings` | `list[str]` | E.g. how many values were masked |
 
 ### Example
 
 ```python
-from agent_airlock import Airlock, UnknownArgsMode
+from agent_airlock import Airlock, AirlockConfig, UnknownArgsMode
 
-@Airlock(unknown_args_mode=UnknownArgsMode.BLOCK)
+@Airlock(config=AirlockConfig(unknown_args=UnknownArgsMode.BLOCK))
 def my_tool(x: int) -> int:
     return x * 2
 
 result = my_tool(x="invalid", ghost=True)
-# result is AirlockResponse:
+# The unknown argument is caught before type validation runs:
 # {
+#     "success": False,
 #     "status": "blocked",
-#     "error": "Validation failed",
+#     "error": "AIRLOCK_BLOCK: Unknown arguments detected: ghost",
+#     "block_reason": "ghost_arguments",
 #     "fix_hints": [
-#         "x: Expected int, got str. Try: x=0",
-#         "Remove unknown parameters: ghost"
+#         "Remove these unknown arguments: ghost",
+#         "Check the function signature for valid parameter names"
 #     ],
-#     "blocked_args": ["ghost"],
-#     "tool_name": "my_tool"
+#     "metadata": {"function": "my_tool", "ghost_arguments": ["ghost"]}
+# }
+
+result = my_tool(x="invalid")
+# {
+#     "success": False,
+#     "status": "blocked",
+#     "error": "AIRLOCK_BLOCK: Tool 'my_tool' validation failed. x: Input should be a valid integer",
+#     "block_reason": "validation_error",
+#     "fix_hints": ["'x' must be an integer, not str"],
+#     "metadata": {"function": "my_tool", "error_count": 1, "errors": [...]}
 # }
 ```
 
@@ -258,7 +318,7 @@ def read_file(path: SafePath) -> str:
     return open(path).read()
 
 def write_temp(path: SafePathInTmp) -> bool:
-    """Path must be in /tmp."""
+    """Path must be under /tmp/airlock."""
     ...
 ```
 
@@ -284,26 +344,41 @@ from agent_airlock import Capability
 # Available capabilities (Flag enum, can combine with |)
 Capability.FILESYSTEM_READ
 Capability.FILESYSTEM_WRITE
+Capability.FILESYSTEM_DELETE
 Capability.NETWORK_HTTP
-Capability.NETWORK_SOCKET
-Capability.PROCESS_SPAWN
+Capability.NETWORK_HTTPS
+Capability.NETWORK_ARBITRARY   # raw sockets
+Capability.PROCESS_EXEC        # external processes, no shell
+Capability.PROCESS_SHELL
+Capability.DATA_PII
+Capability.DATA_SECRETS
 Capability.DATABASE_READ
 Capability.DATABASE_WRITE
 ```
 
+Named combinations: `FILESYSTEM_ALL` (read, write, delete), `NETWORK_ALL` (HTTP, HTTPS,
+arbitrary), `DANGEROUS` (`PROCESS_SHELL | FILESYSTEM_DELETE | NETWORK_ARBITRARY`) and
+`SAFE_READ` (`FILESYSTEM_READ | DATABASE_READ | NETWORK_HTTPS`).
+
 ## CircuitBreaker (V0.4.0)
 
 ```python
-from agent_airlock import CircuitBreaker, CircuitState
+from agent_airlock import CircuitBreaker, CircuitState, AGGRESSIVE_BREAKER
 
-breaker = CircuitBreaker(...)
+breaker = CircuitBreaker("external-api", AGGRESSIVE_BREAKER)  # name, CircuitBreakerConfig
 
 # Check state
 breaker.state  # CircuitState.CLOSED, OPEN, or HALF_OPEN
 
 # Get stats
-stats = breaker.stats  # CircuitStats with failure_count, success_count, etc.
+stats = breaker.stats  # CircuitStats: total_failures, consecutive_failures, times_opened, ...
+
+# Close the circuit and clear the stats
+breaker.reset()
 ```
+
+Used directly (`with breaker:`), an open circuit raises `CircuitBreakerError`, whose
+`retry_after` is the seconds left until a trial call is allowed.
 
 ## Predefined Constants
 
@@ -331,23 +406,27 @@ from agent_airlock import (
 
 ### Circuit Breakers (V0.4.0)
 
+`CircuitBreakerConfig` presets, passed to `CircuitBreaker(name, config)`:
+
 ```python
 from agent_airlock import (
-    AGGRESSIVE_BREAKER,
-    CONSERVATIVE_BREAKER,
-    DEFAULT_BREAKER,
+    AGGRESSIVE_BREAKER,    # opens after 3 failures, trial call after 10s
+    CONSERVATIVE_BREAKER,  # opens after 10 failures, trial call after 60s
+    DEFAULT_BREAKER,       # opens after 5 failures, trial call after 30s
 )
 ```
 
 ### Retry Policies (V0.4.0)
 
+`RetryConfig` presets, passed to `RetryPolicy(config)`:
+
 ```python
 from agent_airlock import (
-    NO_RETRY,
-    FAST_RETRY,
-    STANDARD_RETRY,
-    AGGRESSIVE_RETRY,
-    PATIENT_RETRY,
+    NO_RETRY,          # 0 retries
+    FAST_RETRY,        # 3 retries, 0.1s base delay, 1s cap
+    STANDARD_RETRY,    # 3 retries, 1s base delay, 30s cap
+    AGGRESSIVE_RETRY,  # 5 retries, 0.5s base delay, 60s cap
+    PATIENT_RETRY,     # 10 retries, 2s base delay, 300s cap
 )
 ```
 
@@ -397,7 +476,7 @@ with observe("my_operation", tool_name="my_tool") as span:
 
 ```python
 from agent_airlock import Airlock
-from typing import TypeVar, Callable
+from typing import Any, TypeVar, Callable
 
 F = TypeVar('F', bound=Callable[..., Any])
 

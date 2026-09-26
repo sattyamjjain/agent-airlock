@@ -1,4 +1,4 @@
-.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-links check-docs check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release check-registry-parity check-registry-parity-distance verify-corpus check-cve-catalog
+.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-links check-docs-api check-docs check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release check-registry-parity check-registry-parity-distance verify-corpus check-cve-catalog
 
 help:
 	@echo "Targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  egress-bench            Run the CVE egress-bench walker against tests/cves/fixtures/"
 	@echo "  verify-corpus           Verify wild_payload_corpus MANIFEST.sha256"
 	@echo "  check-links             Dead relative-link gate (README + docs/)"
+	@echo "  check-docs-api          Docs and example code must use agent_airlock API that exists"
 	@echo "  check-cve-catalog       docs/cves/index.md matches the tests/cves/ suite"
 	@echo "  check-docs              mkdocs build --strict, built outside the tree (needs the [docs] extra)"
 	@echo "  check-changelog         Post-release drift gate (fails if [Unreleased] has entries after a release)"
@@ -53,6 +54,9 @@ egress-bench:
 
 check-links:
 	python3 scripts/check_links.py
+
+check-docs-api:
+	python3 scripts/check_docs_api.py
 
 # The catalog is generated from tests/cves/ docstrings. docs/cves/index.md told
 # readers "CI runs `gen_cve_catalog.py --check` on every PR" from the day it was
