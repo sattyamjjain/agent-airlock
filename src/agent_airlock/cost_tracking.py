@@ -112,13 +112,30 @@ class BudgetExceededError(Exception):
 
 @dataclass
 class BudgetConfig:
-    """Budget configuration for cost limits."""
+    """Budget configuration for cost limits.
+
+    The money limits may be given as a ``Decimal``, an int, a float or a numeric string;
+    each is stored as a ``Decimal``. Until 0.10.19 a float limit was stored as given, and
+    the budget-warning check divided a ``Decimal`` by it, which raises TypeError. That
+    happened before the call was recorded, so the error was logged, the record dropped,
+    and the session total never grew: a float session budget was never reached.
+    """
 
     max_cost_per_call: Decimal | None = None
     max_cost_per_session: Decimal | None = None
     max_tokens_per_call: int | None = None
     max_tokens_per_session: int | None = None
     warn_at_percentage: float = 80.0  # Warn when reaching this % of budget
+
+    def __post_init__(self) -> None:
+        for name in ("max_cost_per_call", "max_cost_per_session"):
+            value: Any = getattr(self, name)
+            if value is None or isinstance(value, Decimal):
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+                raise TypeError(f"{name} must be a Decimal, int, float or str, not {value!r}")
+            # str() first, so 0.1 becomes Decimal("0.1"), not its binary expansion.
+            setattr(self, name, Decimal(str(value)))
 
 
 # Default pricing per 1K tokens.

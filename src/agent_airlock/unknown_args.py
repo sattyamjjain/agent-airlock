@@ -171,6 +171,10 @@ DEVELOPMENT_MODE = UnknownArgsMode.STRIP_SILENT
 def get_recommended_mode(environment: str) -> UnknownArgsMode:
     """Get recommended mode for an environment.
 
+    Production ("production", "prod", "live") and any unrecognised name get BLOCK; staging
+    ("staging", "stage", "test", "qa") and development ("development", "dev", "local") get
+    STRIP_AND_LOG. STRIP_SILENT is never recommended: stripped arguments are always logged.
+
     Args:
         environment: Environment name (production, staging, development)
 
@@ -181,7 +185,7 @@ def get_recommended_mode(environment: str) -> UnknownArgsMode:
         >>> get_recommended_mode("production")
         <UnknownArgsMode.BLOCK: 'block'>
         >>> get_recommended_mode("development")
-        <UnknownArgsMode.STRIP_SILENT: 'strip_silent'>
+        <UnknownArgsMode.STRIP_AND_LOG: 'strip_and_log'>
     """
     env_lower = environment.lower()
     if env_lower in ("production", "prod", "live"):

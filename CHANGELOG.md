@@ -11,6 +11,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.19] - 2026-09-26
+
+### Fixed
+
+- **A float session budget was never enforced.** `BudgetConfig` stored a float money limit
+  as given, and the budget-warning check divided a `Decimal` by it, which raises TypeError.
+  That happened after the limit comparison but before the call was recorded, so the error
+  was logged and the record dropped: the session total never grew and the limit was never
+  reached. Money limits given as an int, float or numeric string are now stored as
+  `Decimal`, and a bool is refused.
+
+- **Settings that nothing applies were accepted without a word.** `max_output_tokens`,
+  `audit_otel_enabled`, `audit_otel_endpoint`, `audit_include_args_hash`, `anomaly_config`
+  and `require_done_receipt` are stored but never read, and `require_done_receipt`'s comment
+  said it switched on a fail-closed guard. Setting one to anything but its default now emits
+  a `UserWarning` naming what to use instead, and the docstrings say so.
+
+- **An `airlock.toml` with an `[airlock.credentials]` section failed to load.** `from_toml`
+  passed the parsed scopes to the constructor under a name it does not take. They load into
+  the new `AirlockConfig.credential_scopes`, for `MCPProxyConfig(tool_scopes=...)`.
+
+- **Bare `@Airlock` failed with "takes 1 positional argument but 2 were given"**, while
+  `__call__`'s docstring said it worked. The error now says to write `@Airlock()`, or to use
+  `@airlock`, which works without parentheses.
+
+- **Docstrings.** `get_recommended_mode`'s example gave `STRIP_SILENT` for "development"
+  where it returns `STRIP_AND_LOG`; a comment in `config.py` said `E2B_API_KEY` beats a key
+  given to the constructor, which is the other way round; `streaming.py` showed an
+  `@Airlock(streaming=True)` argument that does not exist; the semconv page named an
+  `AirlockConfig.otel_enabled` setting that does not exist.
+
+- **The test suite wrote its audit log into the checkout.** A tool decorated with the default
+  config writes `airlock_audit.json` in the working directory; `tests/conftest.py` now sends
+  those records to a temporary file.
+
 ## [0.10.18] - 2026-09-26
 
 ### Fixed

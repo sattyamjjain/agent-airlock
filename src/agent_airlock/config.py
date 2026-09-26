@@ -1,9 +1,11 @@
 """Configuration management for Agent-Airlock.
 
 Supports configuration from:
-1. Environment variables (highest priority)
+1. Environment variables: ``AIRLOCK_UNKNOWN_ARGS``, the deprecated ``AIRLOCK_STRICT_MODE``
+   and ``AIRLOCK_MAX_OUTPUT_TOKENS`` override the constructor; ``E2B_API_KEY`` is used only
+   when no key is given
 2. Constructor arguments
-3. TOML config files (airlock.toml)
+3. TOML config files, read only by ``AirlockConfig.from_toml()``
 """
 
 from __future__ import annotations
@@ -49,7 +51,8 @@ class AirlockConfig:
             - STRIP_SILENT: Strip silently (dangerous, dev only)
         strict_mode: DEPRECATED (will be removed in v1.0.0). Use unknown_args instead.
             If True, maps to BLOCK. If False, maps to STRIP_AND_LOG.
-        max_output_tokens: Maximum tokens in tool output before truncation. 0 = unlimited.
+        max_output_tokens: Stored but not applied: nothing counts tokens in tool output,
+            and setting it warns. Use max_output_chars to truncate.
         max_output_chars: Maximum characters in a string result before truncation. A dict,
             list, tuple or set result is masked but not truncated. 0 = unlimited.
         mask_pii: Auto-detect and mask PII (SSN, credit cards, emails) in output.
@@ -57,9 +60,10 @@ class AirlockConfig:
         sanitize_output: If True, apply output sanitization (PII masking, truncation).
         enable_audit_log: Write all tool calls to audit log file.
         audit_log_path: Path to audit log file.
-        audit_otel_enabled: If True, export audit events to OpenTelemetry (V0.4.0+).
-        audit_otel_endpoint: OpenTelemetry collector endpoint (V0.4.0+).
-        audit_include_args_hash: Include SHA256 hash of args in audit (V0.4.0+).
+        audit_otel_enabled: Stored but not applied, and setting it warns: nothing exports
+            audit events from it. Build an ``OTelAuditExporter`` (``audit_otel``) instead.
+        audit_otel_endpoint: Stored but not applied, like audit_otel_enabled.
+        audit_include_args_hash: Stored but not applied, like audit_otel_enabled.
         e2b_api_key: API key for E2B sandbox. Falls back to E2B_API_KEY env var.
         sandbox_timeout: Timeout in seconds for sandbox execution.
         sandbox_pool_size: Number of warm sandboxes to keep ready.
@@ -115,7 +119,8 @@ class AirlockConfig:
     # V0.4.1 Per-tool endpoint policies
     endpoint_policies: dict[str, EndpointPolicy] = field(default_factory=dict)
 
-    # V0.4.1 Anomaly detection
+    # V0.4.1 Anomaly detection. Stored but not applied, and setting it warns: @Airlock runs
+    # no anomaly detection. Pass it to an AnomalyDetector (anomaly.py) yourself.
     anomaly_config: AnomalyDetectorConfig | None = None
 
     # V0.8.9 — opt-in locale tags for region-specific PII detection.
@@ -126,17 +131,23 @@ class AirlockConfig:
     # 12-digit numbers). Locale codes are lowercase ISO-3166-1 alpha-2.
     pii_locales: list[str] = field(default_factory=list)
 
-    # V0.8.25 — opt-in fail-closed terminal-claim guard (Goal-Autopilot
-    # arXiv:2606.11688). OFF by default for backward compat. When True, an
-    # agent's terminal/"done" claim is admitted only if a named falsifiable
-    # check executed and passed THIS run; otherwise the guard returns a
-    # recoverable honest stall. Wire the per-claim checks via the
-    # ``no_false_success_defaults`` preset. ON under STRICT deployments.
+    # V0.8.25: meant to switch on the fail-closed terminal-claim guard (Goal-Autopilot,
+    # arXiv:2606.11688), but nothing reads it: @Airlock checks no terminal claims, and
+    # setting it warns. Until 0.10.19 this comment said setting it made the guard admit a
+    # "done" claim only after its check passed. Use DoneReceiptGuard, or the
+    # ``no_false_success_defaults`` preset, where the agent makes its terminal claim.
     require_done_receipt: bool = False
+
+    # V0.4.1 per-tool credential scopes from ``[airlock.credentials]``. Not applied by
+    # @Airlock: pass them to ``MCPProxyConfig(tool_scopes=config.credential_scopes)``.
+    # Until 0.10.19 ``from_toml`` passed them to the constructor under a name it does
+    # not take, so any file with that section failed to load.
+    credential_scopes: dict[str, CredentialScope] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Apply environment variable overrides after initialization."""
-        # E2B API key priority: env var > constructor > config file
+        # E2B API key: a key given to the constructor (or from_toml) wins; E2B_API_KEY is
+        # used only when none was given.
         if self.e2b_api_key is None:
             self.e2b_api_key = os.environ.get("E2B_API_KEY")
 
@@ -193,6 +204,23 @@ class AirlockConfig:
 
         if os.environ.get("AIRLOCK_MAX_OUTPUT_TOKENS"):
             self.max_output_tokens = int(os.environ["AIRLOCK_MAX_OUTPUT_TOKENS"])
+
+        self._warn_on_settings_not_applied()
+
+    def _warn_on_settings_not_applied(self) -> None:
+        """Warn about each setting that is stored but that nothing applies.
+
+        Setting ``require_done_receipt=True`` used to switch nothing on without a word;
+        a deployment could believe a guard was active that never ran.
+        """
+        defaults = {name: f.default for name, f in self.__dataclass_fields__.items()}
+        for name, instead in _NOT_APPLIED.items():
+            if getattr(self, name) != defaults[name]:
+                warnings.warn(
+                    f"AirlockConfig.{name} is stored but not applied: {instead}.",
+                    UserWarning,
+                    stacklevel=4,
+                )
 
     @classmethod
     def from_toml(cls, path: Path | str = "airlock.toml") -> AirlockConfig:
@@ -362,12 +390,26 @@ class AirlockConfig:
         if "anomaly" in data:
             result["anomaly_config"] = _parse_anomaly_config(data["anomaly"])
 
-        # V0.4.1 Per-tool credential scopes
+        # V0.4.1 Per-tool credential scopes, for MCPProxyConfig(tool_scopes=...)
         if "credentials" in data:
-            # Store as _credential_scopes, to be used when creating MCPProxyConfig
-            result["_credential_scopes"] = _parse_credential_scopes(data["credentials"])
+            result["credential_scopes"] = _parse_credential_scopes(data["credentials"])
 
         return result
+
+
+# Settings AirlockConfig stores but that nothing applies, and what to use instead. Each one
+# warns when set to anything but its default (see _warn_on_settings_not_applied).
+_NOT_APPLIED: dict[str, str] = {
+    "max_output_tokens": "nothing counts tokens in tool output; use max_output_chars",
+    "audit_otel_enabled": "nothing exports audit events from it; build an OTelAuditExporter",
+    "audit_otel_endpoint": "nothing exports audit events from it; build an OTelAuditExporter",
+    "audit_include_args_hash": "nothing exports audit events from it; build an OTelAuditExporter",
+    "anomaly_config": "@Airlock runs no anomaly detection; pass it to an AnomalyDetector",
+    "require_done_receipt": (
+        "@Airlock checks no terminal claims; use DoneReceiptGuard, or the "
+        "no_false_success_defaults preset, where the agent claims it is done"
+    ),
+}
 
 
 def _parse_filesystem_policy(data: dict[str, Any]) -> FilesystemPolicy:

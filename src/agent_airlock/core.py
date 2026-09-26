@@ -488,6 +488,8 @@ class Airlock:
 
     def __init__(
         self,
+        _func: Callable[..., Any] | None = None,
+        /,
         *,
         sandbox: bool = False,
         sandbox_required: bool = False,
@@ -497,7 +499,13 @@ class Airlock:
     ) -> None:
         """Initialize the Airlock decorator.
 
+        ``Airlock`` takes its options first, so it is written ``@Airlock()`` with the
+        parentheses. The lowercase ``@airlock`` also works without them.
+
         Args:
+            _func: Not an option. Bare ``@Airlock`` passes the function here, and it is
+                refused with a TypeError that says to add the parentheses; until 0.10.19
+                the TypeError only said too many positional arguments were given.
             sandbox: If True, execute the function in an E2B sandbox. When E2B is
                     missing or the sandbox fails, the call is refused with a
                     ``sandbox_error`` response; it is not run here instead.
@@ -514,6 +522,11 @@ class Airlock:
                         If False (default), return the raw result on success,
                         and AirlockResponse dict on error.
         """
+        if _func is not None:
+            raise TypeError(
+                "Airlock takes its options first: write @Airlock() with parentheses, "
+                "or use @airlock, which also works without them"
+            )
         self.sandbox = sandbox
         self.sandbox_required = sandbox_required
         self.config = config or DEFAULT_CONFIG
@@ -537,13 +550,12 @@ class Airlock:
     ):
         """Apply the Airlock decorator to a function.
 
-        Supports both @Airlock() and @Airlock syntaxes.
+        ``@Airlock(...)`` builds the decorator and calls this with the decorated function.
+        Called with no function, it returns the decorator itself.
         """
         if func is None:
-            # Called with arguments: @Airlock(sandbox=True)
             return self._decorator
 
-        # Called without arguments: @Airlock
         return self._decorator(func)
 
     def _decorator(self, func: Callable[P, R]) -> Callable[P, R | dict[str, Any]]:

@@ -121,10 +121,11 @@ class TestTheScenariosMatchTheirLabels:
 
 
 class TestItRunsAsAdvertised:
-    def test_the_documented_command_exits_zero(self) -> None:
+    def test_the_documented_command_exits_zero(self, tmp_path: Path) -> None:
         """`main()` returns non-zero if any verdict was wrong, so this asserts correctness."""
         proc = subprocess.run(
             [sys.executable, str(_EXAMPLE)],
+            cwd=tmp_path,  # the example's default audit log lands here, not in the checkout
             capture_output=True,
             text=True,
             timeout=120,
@@ -132,9 +133,10 @@ class TestItRunsAsAdvertised:
         )
         assert proc.returncode == 0, proc.stdout + proc.stderr
 
-    def test_the_output_names_every_verdict(self) -> None:
+    def test_the_output_names_every_verdict(self, tmp_path: Path) -> None:
         proc = subprocess.run(
             [sys.executable, str(_EXAMPLE)],
+            cwd=tmp_path,  # the example's default audit log lands here, not in the checkout
             capture_output=True,
             text=True,
             timeout=120,
@@ -150,10 +152,11 @@ class TestItRunsAsAdvertised:
         ):
             assert expected in out, f"{expected} missing from example output"
 
-    def test_no_full_handle_is_printed(self) -> None:
+    def test_no_full_handle_is_printed(self, tmp_path: Path) -> None:
         """The demo prints handles; a bearer capability must not be echoed at full length."""
         proc = subprocess.run(
             [sys.executable, str(_EXAMPLE)],
+            cwd=tmp_path,  # the example's default audit log lands here, not in the checkout
             capture_output=True,
             text=True,
             timeout=120,

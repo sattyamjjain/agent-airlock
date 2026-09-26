@@ -23,12 +23,14 @@ class TestAirlockConfig:
         assert config.sandbox_pool_size == 2
 
     def test_custom_values(self) -> None:
-        config = AirlockConfig(
-            strict_mode=True,
-            max_output_tokens=1000,
-            mask_pii=False,
-            sandbox_timeout=120,
-        )
+        # max_output_tokens is stored but not applied, and says so (0.10.19).
+        with pytest.warns(UserWarning, match="max_output_tokens is stored but not applied"):
+            config = AirlockConfig(
+                strict_mode=True,
+                max_output_tokens=1000,
+                mask_pii=False,
+                sandbox_timeout=120,
+            )
 
         assert config.strict_mode is True
         assert config.max_output_tokens == 1000

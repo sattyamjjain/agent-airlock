@@ -1,9 +1,11 @@
 # OpenTelemetry semantic conventions
 
 This page documents the spans and attributes agent-airlock emits on the
-OTel audit exporter (`agent_airlock.audit_otel`, enabled via
-`AirlockConfig.otel_enabled=True`). Treat these as a contract: downstream
-dashboards, saved searches, and SIEM rules depend on the names below.
+OTel audit exporter (`OTelAuditExporter` in `agent_airlock.audit_otel`),
+which you construct and call yourself: no `AirlockConfig` setting turns it
+on, and `audit_otel_enabled` is stored but not applied. Treat these as a
+contract: downstream dashboards, saved searches, and SIEM rules depend on
+the names below.
 
 ## Design principles
 

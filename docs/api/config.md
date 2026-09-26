@@ -50,6 +50,7 @@ class AirlockConfig:
     endpoint_policies: dict[str, EndpointPolicy] = field(default_factory=dict)
     anomaly_config: AnomalyDetectorConfig | None = None
     require_done_receipt: bool = False
+    credential_scopes: dict[str, CredentialScope] = field(default_factory=dict)
 ```
 
 ### Attributes
@@ -70,7 +71,7 @@ class AirlockConfig:
 | `mask_secrets` | `bool` | `True` | Mask secrets in outputs |
 | `pii_locales` | `list[str]` | `[]` | `["in"]` adds the India PII types |
 | `max_output_chars` | `int` | `20000` | Truncate string results at this many characters; `0` means no limit |
-| `max_output_tokens` | `int` | `5000` | Stored (and read from `AIRLOCK_MAX_OUTPUT_TOKENS`), but `@Airlock` does not truncate on it |
+| `max_output_tokens` | `int` | `5000` | Stored (and read from `AIRLOCK_MAX_OUTPUT_TOKENS`), but `@Airlock` does not truncate on it; any other value warns |
 
 Each detected type is masked with its default strategy (see
 [MaskingStrategy](#maskingstrategy)). `AirlockConfig` has no field for choosing a strategy
@@ -108,9 +109,15 @@ or for picking individual types.
 | `honeypot_config` | `HoneypotConfig \| None` | `None` | Deception for blocked calls, e.g. fake success |
 | `capability_policy` | `CapabilityPolicy \| None` | `None` | Checked against `@requires`; a `SecurityPolicy`'s own `capability_policy` takes precedence |
 | `endpoint_policies` | `dict[str, EndpointPolicy]` | `{}` | Per-tool URL rules |
+| `credential_scopes` | `dict[str, CredentialScope]` | `{}` | Per-tool scopes from `[airlock.credentials]`. Not applied by `@Airlock`: pass them to `MCPProxyConfig(tool_scopes=config.credential_scopes)` |
 
 `audit_otel_enabled`, `audit_otel_endpoint`, `audit_include_args_hash`, `anomaly_config` and
-`require_done_receipt` are accepted and stored, but `@Airlock` does not read them.
+`require_done_receipt` are accepted and stored, but nothing reads them, and setting one to
+anything but its default emits a `UserWarning` naming what to use instead:
+`OTelAuditExporter` for the audit settings, an `AnomalyDetector` for `anomaly_config`, and
+`DoneReceiptGuard` (or the `no_false_success_defaults` preset) for `require_done_receipt`.
+Until 0.10.19 they were stored without a word, although `require_done_receipt`'s comment
+said it switched on a fail-closed guard.
 
 ### Example
 
@@ -231,4 +238,12 @@ mask_pii = true
 mask_secrets = true
 max_output_chars = 10000
 sandbox_timeout = 60
+
+# Per-tool credential scopes, loaded into config.credential_scopes
+[airlock.credentials.read_file]
+required_scopes = ["fs:read"]
+max_token_age_seconds = 600
 ```
+
+Until 0.10.19 a file with an `[airlock.credentials]` section failed to load with a
+`TypeError`.

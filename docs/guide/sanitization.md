@@ -226,7 +226,7 @@ config = AirlockConfig(
 ```
 
 `max_output_chars` is the only limit applied. `AirlockConfig` also has a
-`max_output_tokens` field, but `@Airlock` does not truncate on it.
+`max_output_tokens` field, but `@Airlock` does not truncate on it, and setting it warns.
 
 When truncated, a notice is appended, inside the limit:
 ```
