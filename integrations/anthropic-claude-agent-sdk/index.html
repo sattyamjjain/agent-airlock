@@ -2594,42 +2594,65 @@
 
 <h1 id="anthropic-claude-agent-sdk">Anthropic Claude Agent SDK<a class="headerlink" href="#anthropic-claude-agent-sdk" title="Permanent link">&para;</a></h1>
 <p><code>agent_airlock.integrations.anthropic_claude_agent_sdk</code> is the canonical
-adapter for the <a href="https://docs.claude.com/en/agents-and-tools/agent-skills">Anthropic Claude Agent SDK</a>. It is a thin
-facade over the existing <code>claude_*.py</code> family (managed-agents, auto-memory,
+adapter for the <a href="https://docs.claude.com/en/agents-and-tools/agent-skills">Anthropic Claude Agent SDK</a>. It guards the
+tools you serve from an in-process SDK MCP server, and it is a facade over
+the existing <code>claude_*.py</code> family (managed-agents, auto-memory,
 task-budget) so callers can find the entrypoint without learning the
 internal module layout.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"agent-airlock[claude-agent]"</span>
 </code></pre></div>
 <p>The extra pins <code>claude-agent-sdk&gt;=0.1.58</code>. The SDK is <em>not</em> imported at
-module load — calling <code>wrap_agent</code> without the extra installed raises a
-clear <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent_airlock/integrations/anthropic_claude_agent_sdk.py"><code>ClaudeAgentSDKMissingError</code></a> with the install hint
-(never an opaque <code>ImportError</code> from somewhere deep in the call stack).</p>
+module load — wrapping an object that comes from the SDK without the
+extra installed raises a clear <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent_airlock/integrations/anthropic_claude_agent_sdk.py"><code>ClaudeAgentSDKMissingError</code></a>
+with the install hint (never an opaque <code>ImportError</code> from somewhere deep
+in the call stack).</p>
 <h2 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.integrations.anthropic_claude_agent_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">AnthropicClaudeAgentSDKAdapter</span><span class="p">,</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="p">)</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">STRICT_POLICY</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">claude_agent_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClaudeAgentOptions</span><span class="p">,</span> <span class="n">create_sdk_mcp_server</span><span class="p">,</span> <span class="n">tool</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.integrations.anthropic_claude_agent_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">wrap_tools</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Any object exposing `tools` (dict or list) whose entries are callables</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># or expose `forward` — see "Honest scope" for what that excludes.</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">agent</span> <span class="o">=</span> <span class="n">build_my_agent</span><span class="p">()</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">adapter</span> <span class="o">=</span> <span class="n">AnthropicClaudeAgentSDKAdapter</span><span class="p">()</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">secured</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">wrap_agent</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">STRICT_POLICY</span><span class="p">)</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># Every tool callable is now Airlock-decorated, carrying the tool's own signature:</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="c1"># - ghost arguments stripped</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># - Pydantic V2 strict validation of the declared parameters</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># - a denied tool returns a blocked AirlockResponse instead of running</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1"># - async tools stay async, so their output is sanitized after they finish</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nd">@tool</span><span class="p">(</span><span class="s2">"greet"</span><span class="p">,</span> <span class="s2">"Greet a user"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="nb">str</span><span class="p">})</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">greet</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"content"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"Hello, </span><span class="si">{</span><span class="n">args</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2">!"</span><span class="p">}]}</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">rate_limits</span><span class="o">=</span><span class="p">{</span><span class="s2">"*"</span><span class="p">:</span> <span class="s2">"100/hour"</span><span class="p">})</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">server</span> <span class="o">=</span> <span class="n">create_sdk_mcp_server</span><span class="p">(</span><span class="s2">"tools"</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">wrap_tools</span><span class="p">([</span><span class="n">greet</span><span class="p">],</span> <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">))</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">options</span> <span class="o">=</span> <span class="n">ClaudeAgentOptions</span><span class="p">(</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="n">mcp_servers</span><span class="o">=</span><span class="p">{</span><span class="s2">"tools"</span><span class="p">:</span> <span class="n">server</span><span class="p">},</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="n">allowed_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"mcp__tools__greet"</span><span class="p">],</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="p">)</span>
 </code></pre></div>
+<p>Wrap the tools before building the server, which keeps its own
+references. <code>wrap_tools</code> returns guarded copies and leaves the originals
+as they were. On every call:</p>
+<ul>
+<li>a key the tool's <code>input_schema</code> does not declare is a ghost argument,
+  stripped before the handler sees it (refused instead when the process
+  starts with <code>AIRLOCK_UNKNOWN_ARGS=block</code>)</li>
+<li>each declared argument is strictly validated, against the type the SDK
+  advertises to the model</li>
+<li>the policy applies under the tool's name, the one the model calls</li>
+<li>what the handler returns is masked for PII and secrets</li>
+<li>a refusal reaches the model as an error result (<code>is_error: True</code>)
+  carrying Airlock's error and fix hints</li>
+</ul>
 <h2 id="what-the-adapter-does">What the adapter does<a class="headerlink" href="#what-the-adapter-does" title="Permanent link">&para;</a></h2>
 <ol>
-<li><strong>Walks <code>agent.tools</code></strong> (dict or list) and replaces each tool's
-   <code>forward</code> / <code>__call__</code> with an <code>Airlock(policy=...)</code>-wrapped shim
-   that carries the tool's name and signature and is async when the
-   tool is.</li>
+<li><strong><code>wrap_tools(tools, policy=...)</code></strong> fronts each <code>SdkMcpTool</code>'s handler
+   with a proxy whose keyword parameters come from <code>input_schema</code>, in the
+   three forms the SDK accepts: a <code>{"name": type}</code> map (every key
+   required), a <code>TypedDict</code> (its required keys) or a JSON schema (its
+   <code>required</code> list). The handler's single <code>args</code> dict is spread into those
+   parameters, so every gate that reads arguments sees each one.</li>
+<li><strong><code>AnthropicClaudeAgentSDKAdapter().wrap_agent(obj, policy=...)</code></strong> walks
+   any object's <code>tools</code> attribute (dict or list) and replaces each entry:
+   an <code>SdkMcpTool</code> with a guarded copy, an object's <code>forward</code> or a
+   callable with an Airlock-wrapped shim that carries the tool's name and
+   signature and is async when the tool is.</li>
 <li><strong>Re-exports the harness defences</strong> from the existing <code>claude_*.py</code>
    modules so callers can compose:</li>
 <li><code>ManagedAgentsAuditConfig</code> — beta-header + toolset-version + tool
@@ -2638,28 +2661,46 @@ clear <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/src/agent
      per-tenant scope, byte quota, redaction-on-write.</li>
 <li><code>build_task_budget_headers</code> + <code>build_output_config</code> — populated by
      the adapter's <code>task_budget_request_kit(remaining=...)</code> helper.</li>
-<li><strong>Pins a <code>SUPPORTED_SDK_VERSIONS</code> tuple</strong> (listed in the module)
-   recording the SDK versions the adapter was checked against. New
-   versions are added once smoke-tested.</li>
+<li><strong>Pins a <code>SUPPORTED_SDK_VERSIONS</code> tuple</strong> recording the SDK versions
+   the adapter was checked against. Wrapping an SDK object on any other
+   version emits a <code>UserWarning</code> but still wraps.</li>
 </ol>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
 <ul>
-<li>The adapter does not import the SDK at module load — passing a stub
-  agent (any object with a <code>tools</code> attribute) works without the extra
-  installed. This is what the test suite uses, and it's also useful in
-  CI environments without the optional dep.</li>
-<li>Real SDK objects (whose <code>__module__</code> starts with <code>claude_agent_sdk.*</code>)
-  do trigger the import check. If the extra is missing, the adapter
-  raises <code>ClaudeAgentSDKMissingError</code> with a clear install hint.</li>
-<li><code>claude-agent-sdk</code> itself has no agent object whose <code>tools</code> are
-  callables. Its <code>@tool</code> decorator returns an <code>SdkMcpTool</code> whose logic
-  is an async <code>handler</code>, and <code>ClaudeAgentOptions.tools</code> holds tool
-  names (verified on 0.2.160). So <code>wrap_agent</code> guards tool objects and
-  functions you hold yourself; handed an SDK object, it raises
-  <code>AirlockError</code> rather than wrapping nothing.</li>
-<li>Unlike the CrewAI and PydanticAI adapters, this one does not compare
-  the installed SDK against <code>SUPPORTED_SDK_VERSIONS</code> at runtime, so an
-  untested SDK version produces no warning.</li>
+<li>Each argument is checked against the type the SDK advertises and hands
+  the handler, not the Python annotation. The SDK sends a type it does not
+  map (a <code>datetime</code>, a <code>Literal</code>) as a string, so Airlock checks a string;
+  a <code>float</code> field accepts an integer and passes it on unconverted. Nested
+  structure (list items, object properties, enums) is left to the SDK's
+  own JSON-schema check, which runs before the handler is called.</li>
+<li>Airlock is stricter than that check in one place: an <code>integer</code> field
+  refuses <code>3.0</code>, which JSON Schema admits.</li>
+<li>A key outside a JSON schema's <code>properties</code> is a ghost argument unless
+  the schema sets <code>additionalProperties</code> to something other than <code>false</code>.
+  JSON Schema, and the SDK, admit it by default.</li>
+<li>Every key has to be usable as a Python parameter name. A tool whose
+  schema declares <code>from</code> or <code>file-path</code> is refused when you wrap it, with
+  an <code>AirlockError</code> naming the keys, rather than guarded partially.</li>
+<li>A key starting with <code>_airlock_</code> is refused, in a schema when you wrap
+  the tool and in a call. Airlock reads <code>_airlock_tier</code> and
+  <code>_airlock_input_tokens</code> as a router's control values before it looks
+  for ghost arguments, so a model sending one could otherwise pick the
+  budget tier its own call is checked against.</li>
+<li>A <code>typing_extensions.TypedDict</code> schema is enforced even though the SDK,
+  on Python 3.11 and later, does not recognise one and advertises the
+  tool with no properties. The model then learns the keys from Airlock's
+  fix hints.</li>
+<li>An exception raised by a handler reaches the model as Airlock's generic
+  "Unexpected error" result, not as the exception's own message.</li>
+<li><code>ClaudeAgentOptions.tools</code> holds the names of Claude Code's built-in
+  tools, which Claude Code runs itself. Airlock cannot wrap those, and
+  <code>wrap_agent</code> raises an <code>AirlockError</code> pointing to <code>wrap_tools</code> if it is
+  handed one.</li>
+<li>Stub objects (any object with a <code>tools</code> attribute, or a tool of the
+  <code>SdkMcpTool</code> shape) never trigger the SDK import, which is what the
+  test suite relies on.</li>
+<li>Verified end to end on <code>claude-agent-sdk</code> 0.2.160: guarded tools served
+  by <code>create_sdk_mcp_server</code> and called through an MCP client session.</li>
 </ul>
 <h2 id="primary-sources">Primary sources<a class="headerlink" href="#primary-sources" title="Permanent link">&para;</a></h2>
 <ul>
