@@ -2508,11 +2508,11 @@ Managed Agents stub).</p>
   explicitly opt out. If your tool needs the network, use agent-
   airlock's <code>EndpointPolicy</code> at the app layer rather than opening
   the sandbox.</li>
-<li><strong>Integration tests.</strong> Four tests behind the <code>pytest -m docker</code>
-  marker prove availability, success, timeout, and network
-  isolation. Default <code>pytest</code> runs <strong>exclude</strong> them; CI's
-  <code>docker-sandbox</code> job builds the repo <code>Dockerfile</code> and requires all
-  four to pass.</li>
+<li><strong>Integration tests.</strong> Five tests behind the <code>pytest -m docker</code>
+  marker prove availability, success, an async function awaited,
+  timeout, and network isolation. Default <code>pytest</code> runs <strong>exclude</strong>
+  them; CI's <code>docker-sandbox</code> job builds the repo <code>Dockerfile</code> and
+  requires all five to pass.</li>
 </ul>
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
 <p><code>@Airlock(sandbox=True)</code> does not take a backend: its sandbox path
@@ -2607,7 +2607,7 @@ default image when a Docker daemon answers, else
 <tr>
 <td><a href="../../api/sandbox/"><code>E2BBackend</code></a></td>
 <td>Firecracker MicroVM</td>
-<td>Reuses a sandbox from the shared E2B pool</td>
+<td>Takes a sandbox from its config's E2B pool, or creates one, and kills it after the call</td>
 <td>E2B cloud</td>
 </tr>
 <tr>

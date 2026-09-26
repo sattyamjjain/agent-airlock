@@ -1214,10 +1214,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-set-the-timeout-once" class="md-nav__link">
+  <a href="#2-size-the-timeout-for-the-tool" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Set the Timeout Once
+        2. Size the Timeout for the Tool
       
     </span>
   </a>
@@ -2980,10 +2980,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-set-the-timeout-once" class="md-nav__link">
+  <a href="#2-size-the-timeout-for-the-tool" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Set the Timeout Once
+        2. Size the Timeout for the Tool
       
     </span>
   </a>
@@ -3075,9 +3075,10 @@
 <a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
 </code></pre></div>
 <p><code>sandbox_timeout</code> (default 60) is passed to E2B as each sandbox's timeout: how many seconds the
-sandbox lives after the pool creates it. It is not a per-call limit, and it is read once:
-every sandboxed call in the process shares one pool, built from the config of the first
-sandboxed call, so a later config with a different value does not change it.</p>
+sandbox lives after it is created, or after the pool hands it out. A call still running then
+fails with its sandbox. Tools whose configs differ get their own pools, so each can have its
+own value. Until 0.10.17 one pool served the whole process, built from the first sandboxed
+call's config, and later values were ignored.</p>
 <h3 id="required-sandbox">Required Sandbox<a class="headerlink" href="#required-sandbox" title="Permanent link">&para;</a></h3>
 <p>Prevent fallback to local execution:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sandbox_required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -3094,8 +3095,9 @@ settings return the blocked response shown under <a href="#error-handling">Error
 <ol>
 <li><strong>Serialization</strong>: Function and arguments serialized with <code>cloudpickle</code></li>
 <li><strong>Transfer</strong>: Serialized data sent to E2B</li>
-<li><strong>Execution</strong>: Code runs in isolated MicroVM</li>
-<li><strong>Return</strong>: The sandbox prints the outcome as JSON, which Airlock parses</li>
+<li><strong>Execution</strong>: Code runs in isolated MicroVM; an <code>async def</code> tool's coroutine is awaited there</li>
+<li><strong>Return</strong>: The sandbox prints the outcome as JSON, which Airlock parses. Nothing the
+   sandbox prints is unpickled on your server</li>
 </ol>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>┌─────────────────┐     ┌─────────────────┐
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>│   Your Server   │     │  E2B MicroVM    │
@@ -3109,8 +3111,10 @@ settings return the blocked response shown under <a href="#error-handling">Error
 <a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>     cloudpickle          cloudpickle
 </code></pre></div>
 <h2 id="sandbox-pool">Sandbox Pool<a class="headerlink" href="#sandbox-pool" title="Permanent link">&para;</a></h2>
-<p>For low latency, Airlock keeps a pool of E2B sandboxes and reuses them across calls. Every
-sandboxed call in the process shares it:</p>
+<p>For low latency, Airlock keeps a pool of pre-created E2B sandboxes. Each sandbox runs one call
+and is then killed, so nothing a call leaves behind (files, module globals, a background
+thread) reaches the next one, which may be another user's. Tools whose configs agree on the
+E2B API key, <code>sandbox_timeout</code> and <code>sandbox_pool_size</code> share a pool:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.sandbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_sandbox_pool</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
@@ -3134,12 +3138,16 @@ sandboxed call in the process shares it:</p>
 <td>Creates an E2B sandbox and installs <code>cloudpickle</code> in it</td>
 </tr>
 <tr>
-<td>A call finishes</td>
-<td>Takes the sandbox back for the next call</td>
+<td>It hands out a pooled sandbox</td>
+<td>Resets its lifetime to <code>sandbox_timeout</code>; one that already expired is killed and skipped</td>
 </tr>
 <tr>
-<td>It already holds <code>sandbox_pool_size</code> sandboxes</td>
-<td>Kills the returned sandbox instead</td>
+<td>A call finishes, or fails</td>
+<td>Kills the sandbox; it is never used again</td>
+</tr>
+<tr>
+<td><code>pool.warm_up()</code> is called</td>
+<td>Creates sandboxes until it holds <code>sandbox_pool_size</code></td>
 </tr>
 <tr>
 <td><code>pool.shutdown()</code> is called</td>
@@ -3147,8 +3155,9 @@ sandboxed call in the process shares it:</p>
 </tr>
 </tbody>
 </table>
-<p>The pool does not cap concurrent calls and has no idle timeout: a sandbox ends when its
-<code>sandbox_timeout</code> expires or the pool kills it.</p>
+<p>The pool does not cap concurrent calls. Once calls have taken the sandboxes <code>warm_up()</code>
+created, each new call pays the cold start again until <code>warm_up()</code> runs again. Until 0.10.17
+a finished sandbox went back into the pool, a failed one included.</p>
 <h2 id="file-handling">File Handling<a class="headerlink" href="#file-handling" title="Permanent link">&para;</a></h2>
 <p>The decorator does not mount files. The function runs against the sandbox's own filesystem,
 which does not contain your server's files, so pass the contents as an argument; they are
@@ -3185,8 +3194,7 @@ which allows internet access:</p>
 by default; see <a href="../../sandbox/docker/">DockerBackend</a>.</p>
 <h3 id="size-limits">Size Limits<a class="headerlink" href="#size-limits" title="Permanent link">&para;</a></h3>
 <p>Airlock sets no payload or result size limit of its own, and no per-call execution timeout:
-<code>sandbox_timeout</code> (default 60 seconds) is how long each pooled sandbox lives; see
-<a href="#timeout">Timeout</a>.</p>
+<code>sandbox_timeout</code> (default 60 seconds) is how long a sandbox lives; see <a href="#timeout">Timeout</a>.</p>
 <h2 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span>
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
@@ -3200,10 +3208,13 @@ by default; see <a href="../../sandbox/docker/">DockerBackend</a>.</p>
 <a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>    <span class="c1"># Error is contained - your server is safe</span>
 </code></pre></div>
 <p>A failure does not raise. The call returns a blocked response (<code>"success": False</code>,
-<code>"status": "blocked"</code>), and the underlying error, such as
-<code>ZeroDivisionError: division by zero</code>, is logged as the <code>unexpected_error</code> event. To get the
-sandbox's error text back, call <code>execute_in_sandbox</code> instead, which returns it in
-<code>SandboxResult.error</code>; see the <a href="../../api/sandbox/#exceptions">Sandbox API</a>.</p>
+<code>"status": "blocked"</code>). A tool that raised, like this one, gets the same response it gets
+outside the sandbox, and the underlying error, such as <code>ZeroDivisionError: division by zero</code>,
+is logged as the <code>unexpected_error</code> event. When the sandbox itself failed (E2B missing, no
+sandbox created, no result back), <code>block_reason</code> is <code>"sandbox_error"</code> and the error is logged
+as the <code>sandbox_failed</code> event. To get the sandbox's error text back, call
+<code>execute_in_sandbox</code> instead, which returns it in <code>SandboxResult.error</code>; see the
+<a href="../../api/sandbox/#exceptions">Sandbox API</a>.</p>
 <h2 id="monitoring">Monitoring<a class="headerlink" href="#monitoring" title="Permanent link">&para;</a></h2>
 <p>The pool keeps no statistics. Each <code>SandboxResult</code> from <code>execute_in_sandbox</code> reports its own
 call:</p>
@@ -3231,20 +3242,21 @@ sandboxed call.</p>
 <a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">add_numbers</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>    <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
 </code></pre></div>
-<h3 id="2-set-the-timeout-once">2. Set the Timeout Once<a class="headerlink" href="#2-set-the-timeout-once" title="Permanent link">&para;</a></h3>
-<p>All sandboxed calls share one pool, built from the first sandboxed call's config, and each
-sandbox lives <code>sandbox_timeout</code> seconds from its creation. Give every sandboxed tool the same
-config:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">sandbox_timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">quick_calc</span><span class="p">(</span><span class="n">expr</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">train_model</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    <span class="c1"># Long-running ML task</span>
-<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"accuracy"</span><span class="p">:</span> <span class="mf">0.95</span><span class="p">}</span>
+<h3 id="2-size-the-timeout-for-the-tool">2. Size the Timeout for the Tool<a class="headerlink" href="#2-size-the-timeout-for-the-tool" title="Permanent link">&para;</a></h3>
+<p>A sandbox lives <code>sandbox_timeout</code> seconds from its creation, or from the pool handing it out,
+so a call must finish within it. Each config gets its own pool, so a long-running tool can
+have a longer timeout than the rest:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">quick</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">sandbox_timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">slow</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">sandbox_timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">quick</span><span class="p">)</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">quick_calc</span><span class="p">(</span><span class="n">expr</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">slow</span><span class="p">)</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">train_model</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="c1"># Long-running ML task</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"accuracy"</span><span class="p">:</span> <span class="mf">0.95</span><span class="p">}</span>
 </code></pre></div>
 <h3 id="3-handle-failures-gracefully">3. Handle Failures Gracefully<a class="headerlink" href="#3-handle-failures-gracefully" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sandbox_required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>

@@ -2874,13 +2874,13 @@
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="n">timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">60</span><span class="p">,</span>
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">        </span><span class="sd">"""</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="sd">        Pool of warm E2B sandboxes for low-latency execution.</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="sd">        Pool of pre-created E2B sandboxes, each used for one call.</span>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="sd">        Args:</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="sd">            pool_size: Warm sandboxes to keep; one released into a full pool is killed</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="sd">            pool_size: Warm sandboxes warm_up() creates</span>
 <a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="sd">            api_key: E2B API key (falls back to E2B_API_KEY env var)</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="sd">            timeout: Passed to E2B's Sandbox.create() for each new sandbox: how many</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="sd">                seconds that sandbox lives</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="sd">            timeout: How many seconds a sandbox lives: passed to E2B's Sandbox.create(),</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="sd">                and reset to this when the pool hands a sandbox out</span>
 <a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="sd">        """</span>
 </code></pre></div>
 <h3 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h3>
@@ -2901,41 +2901,47 @@
 <tr>
 <td><code>acquire()</code></td>
 <td>E2B <code>Sandbox</code></td>
-<td>Take a pooled sandbox, or create one if the pool is empty</td>
+<td>Take a pooled sandbox and reset its lifetime to <code>timeout</code>, skipping (and killing) any that expired; create one if the pool is empty</td>
 </tr>
 <tr>
 <td><code>release(sandbox)</code></td>
 <td><code>None</code></td>
-<td>Return a sandbox to the pool; kill it if the pool is full or shut down</td>
+<td>Kill the sandbox. A used sandbox never goes back into the pool</td>
 </tr>
 <tr>
 <td><code>sandbox()</code></td>
 <td>context manager</td>
-<td><code>acquire()</code> on entry, <code>release()</code> on exit</td>
+<td><code>acquire()</code> on entry, <code>release()</code> on exit, also when the call failed</td>
 </tr>
 <tr>
 <td><code>shutdown()</code></td>
 <td><code>None</code></td>
-<td>Kill the pooled sandboxes; later releases kill instead of pooling</td>
+<td>Kill the sandboxes still in the pool</td>
 </tr>
 </tbody>
 </table>
+<p>A sandbox runs one call. Whatever that call leaves behind (files, module globals, a
+background thread) would otherwise sit next to the next call, which may be another user's,
+so the pool kills it instead of recycling it. The pool only hides the cold start: it holds
+the sandboxes <code>warm_up()</code> created until calls take them, and <code>warm_up()</code> again refills it.
+Until 0.10.17 used sandboxes went back into the pool, a failed one included.</p>
 <p><code>warm_up()</code> and <code>acquire()</code> raise <code>SandboxNotAvailableError</code> when <code>e2b-code-interpreter</code> is not
 installed. The pool does not cap concurrency (an empty pool creates another sandbox), keeps no
 statistics, and does not run Python functions itself: <code>execute_in_sandbox</code> does that, on the
-process-wide pool that <code>get_sandbox_pool()</code> returns.</p>
-<p><code>get_sandbox_pool(config=None)</code>, also importable from <code>agent_airlock</code>, creates that pool on its
-first call from <code>config.sandbox_pool_size</code>, <code>config.e2b_api_key</code> and <code>config.sandbox_timeout</code>
-(<code>DEFAULT_CONFIG</code> when <code>config</code> is <code>None</code>). Every later call, including the ones
-<code>execute_in_sandbox</code> makes, returns the same pool and ignores its <code>config</code>.</p>
+pool that <code>get_sandbox_pool()</code> returns for its config.</p>
+<p><code>get_sandbox_pool(config=None)</code>, also importable from <code>agent_airlock</code>, returns the pool for
+<code>config.e2b_api_key</code>, <code>config.sandbox_timeout</code> and <code>config.sandbox_pool_size</code>
+(<code>DEFAULT_CONFIG</code> when <code>config</code> is <code>None</code>), creating it on first use. Configs that agree on all
+three share a pool; one that differs in any of them gets its own. Until 0.10.17 there was one
+process-wide pool, and every config after the first was ignored, its API key included.</p>
 <h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.sandbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">execute_in_sandbox</span><span class="p">,</span> <span class="n">get_sandbox_pool</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">sandbox_pool_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">pool</span> <span class="o">=</span> <span class="n">get_sandbox_pool</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>  <span class="c1"># the pool execute_in_sandbox() and @Airlock(sandbox=True) use</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">pool</span><span class="o">.</span><span class="n">warm_up</span><span class="p">()</span>  <span class="c1"># create the sandboxes now instead of on the first call</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">pool</span> <span class="o">=</span> <span class="n">get_sandbox_pool</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>  <span class="c1"># the pool execute_in_sandbox() uses for this config</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">pool</span><span class="o">.</span><span class="n">warm_up</span><span class="p">()</span>  <span class="c1"># create two sandboxes now instead of on the first two calls</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
 <a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_function</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="mi">2</span>
@@ -2962,13 +2968,16 @@ first call from <code>config.sandbox_pool_size</code>, <code>config.e2b_api_key<
 <a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="sd">        func: Function to execute</span>
 <a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="sd">        args: Positional arguments</span>
 <a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="sd">        kwargs: Keyword arguments</span>
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="sd">        config: Airlock configuration (DEFAULT_CONFIG when None). Only used to</span>
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="sd">            create the process-wide pool, so it has no effect once that pool exists.</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="sd">        config: Airlock configuration (DEFAULT_CONFIG when None). Picks the sandbox</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="sd">            pool: its E2B API key, sandbox timeout and pool size.</span>
 <a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>
 <a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="sd">    Returns:</span>
 <a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="sd">        SandboxResult with the execution outcome. Failures are returned, not raised.</span>
 <a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="sd">    """</span>
 </code></pre></div>
+<p><code>func</code> may be an <code>async def</code> function: its coroutine is awaited inside the sandbox, and
+<code>result</code> holds what it returned. Until 0.10.17 the coroutine was never awaited, and <code>result</code>
+held the string <code>'&lt;coroutine object ...&gt;'</code>.</p>
 <p><code>execute_in_sandbox_async</code> takes the same arguments and runs this call in a worker thread, so it
 can be awaited without blocking the event loop. Neither takes a per-call timeout; see
 <code>sandbox_timeout</code> under <a href="#configuration">Configuration</a>.</p>
@@ -3012,6 +3021,11 @@ can be awaited without blocking the event loop. Neither takes a per-call timeout
 <td><code>str \| None</code></td>
 <td>E2B id of the sandbox that ran the call</td>
 </tr>
+<tr>
+<td><code>tool_failed</code></td>
+<td><code>bool</code></td>
+<td><code>True</code> when <code>func</code> ran and raised, or returned something JSON cannot encode; <code>False</code> when the sandbox itself failed, and on success</td>
+</tr>
 </tbody>
 </table>
 <p><code>to_dict()</code> returns these fields as a dict. <code>agent_airlock.SandboxResult</code>, exported at the
@@ -3043,17 +3057,24 @@ included), or an exception raised by <code>func</code> inside the sandbox:</p>
 <a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">error</span><span class="p">)</span>  <span class="c1"># ZeroDivisionError: division by zero</span>
 </code></pre></div>
 <p>A tool decorated with <code>@Airlock(sandbox=True)</code> returns a blocked response instead of its value
-when sandbox execution fails. The underlying error is logged as the <code>unexpected_error</code> event,
-not returned:</p>
+when the sandbox fails: E2B or <code>cloudpickle</code> missing, no sandbox created, or no result back.
+The underlying error is logged as the <code>sandbox_failed</code> event, not returned:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="s2">"success"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="s2">"status"</span><span class="p">:</span> <span class="s2">"blocked"</span><span class="p">,</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="s2">"error"</span><span class="p">:</span> <span class="s2">"AIRLOCK_BLOCK: Unexpected error in 'my_tool'"</span><span class="p">,</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="s2">"block_reason"</span><span class="p">:</span> <span class="s2">"validation_error"</span><span class="p">,</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="s2">"fix_hints"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"An internal error occurred. Please try again."</span><span class="p">],</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">}</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="s2">"error"</span><span class="p">:</span> <span class="s2">"AIRLOCK_BLOCK: 'my_tool' could not run in its sandbox"</span><span class="p">,</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="s2">"block_reason"</span><span class="p">:</span> <span class="s2">"sandbox_error"</span><span class="p">,</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="s2">"fix_hints"</span><span class="p">:</span> <span class="p">[</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        <span class="s2">"The sandbox this tool runs in failed or is unavailable, so the tool returned no "</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>        <span class="s2">"result. Retrying may not help; tell the user if it keeps failing."</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="p">],</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="p">}</span>
 </code></pre></div>
-<p>The sandbox exception classes that exist:</p>
+<p>A tool that raises inside the sandbox gets exactly the response it gets when it raises
+in-process, <code>"AIRLOCK_BLOCK: Unexpected error in 'my_tool'"</code> with <code>block_reason</code>
+<code>"validation_error"</code>, and its error is logged as the <code>unexpected_error</code> event. Until 0.10.17 a
+failed sandbox got that response too.</p>
+<p>The sandbox exception classes, each one class whichever module you import it from:</p>
 <table>
 <thead>
 <tr>
@@ -3066,7 +3087,7 @@ not returned:</p>
 <tr>
 <td><code>SandboxError</code></td>
 <td><code>agent_airlock.sandbox</code></td>
-<td>Base class; <code>mount_files()</code>, <code>mount_directory()</code> and <code>download_file()</code> raise it</td>
+<td>Base class, itself an <code>AirlockError</code>; <code>mount_files()</code>, <code>mount_directory()</code> and <code>download_file()</code> raise it</td>
 </tr>
 <tr>
 <td><code>SandboxNotAvailableError</code></td>
@@ -3075,24 +3096,25 @@ not returned:</p>
 </tr>
 <tr>
 <td><code>SandboxExecutionError</code></td>
-<td><code>agent_airlock</code></td>
-<td>The decorator, internally, when the sandbox reports a failure; it becomes the blocked response above</td>
+<td><code>agent_airlock</code> or <code>agent_airlock.sandbox</code></td>
+<td>The decorator, internally, when the sandbox failed; it becomes the <code>sandbox_error</code> response above</td>
 </tr>
 <tr>
 <td><code>SandboxUnavailableError</code></td>
 <td><code>agent_airlock</code></td>
-<td>The decorator, internally, when <code>sandbox_required=True</code> and <code>agent_airlock.sandbox</code> fails to import; it becomes the blocked response above</td>
+<td>The decorator, internally, when <code>sandbox_required=True</code> and <code>agent_airlock.sandbox</code> fails to import; it becomes the <code>sandbox_error</code> response above. A <code>SandboxNotAvailableError</code></td>
 </tr>
 </tbody>
 </table>
-<p><code>agent_airlock.sandbox</code> defines a second <code>SandboxExecutionError</code> (a <code>SandboxError</code> subclass),
-but nothing in the package raises it.</p>
+<p>Until 0.10.17 <code>agent_airlock.sandbox</code> defined a second <code>SandboxExecutionError</code> that nothing
+raised.</p>
 <h2 id="where-a-call-ran">Where a Call Ran<a class="headerlink" href="#where-a-call-ran" title="Permanent link">&para;</a></h2>
 <p>There is no <code>is_sandboxed()</code> function. <code>SandboxResult.sandbox_id</code> names the E2B sandbox that
 ran a call, and the decorator logs it on the <code>sandbox_execution_success</code> event. A tool with
 <code>@Airlock(sandbox=True)</code> does not quietly run on your machine when E2B is unavailable: it
 returns the blocked response above. The decorator's local fallback is reached only when
-<code>sandbox_required=False</code> and importing <code>agent_airlock.sandbox</code> itself fails.</p>
+<code>sandbox_required=False</code> and importing <code>agent_airlock.sandbox</code> itself fails. Until 0.10.17 an
+ImportError raised while the sandbox call ran also reached it.</p>
 <h2 id="serialization">Serialization<a class="headerlink" href="#serialization" title="Permanent link">&para;</a></h2>
 <p>Agent-Airlock uses <code>cloudpickle</code> to send the call and JSON to bring the result back:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">base64</span>
@@ -3105,11 +3127,15 @@ returns the blocked response above. The decorator's local fallback is reached on
 <a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="n">cloudpickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"func"</span><span class="p">:</span> <span class="n">func</span><span class="p">,</span> <span class="s2">"args"</span><span class="p">:</span> <span class="n">args</span><span class="p">,</span> <span class="s2">"kwargs"</span><span class="p">:</span> <span class="n">kwargs</span><span class="p">},</span> <span class="n">protocol</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
 <a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">)</span>
 <a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>
-<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="c1"># Deserialize in sandbox, call, and print the outcome as JSON</span>
-<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="n">call</span> <span class="o">=</span> <span class="n">cloudpickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">payload</span><span class="p">))</span>
-<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="n">result</span> <span class="o">=</span> <span class="n">call</span><span class="p">[</span><span class="s2">"func"</span><span class="p">](</span><span class="o">*</span><span class="n">call</span><span class="p">[</span><span class="s2">"args"</span><span class="p">],</span> <span class="o">**</span><span class="n">call</span><span class="p">[</span><span class="s2">"kwargs"</span><span class="p">])</span>
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="nb">print</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"success"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"result"</span><span class="p">:</span> <span class="n">result</span><span class="p">,</span> <span class="s2">"error"</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span> <span class="n">default</span><span class="o">=</span><span class="nb">str</span><span class="p">))</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="c1"># Deserialize in sandbox, call (awaiting an async function's coroutine), and print the</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="c1"># outcome as one line of JSON between two marker lines</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="n">call</span> <span class="o">=</span> <span class="n">cloudpickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">payload</span><span class="p">))</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="n">result</span> <span class="o">=</span> <span class="n">call</span><span class="p">[</span><span class="s2">"func"</span><span class="p">](</span><span class="o">*</span><span class="n">call</span><span class="p">[</span><span class="s2">"args"</span><span class="p">],</span> <span class="o">**</span><span class="n">call</span><span class="p">[</span><span class="s2">"kwargs"</span><span class="p">])</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="nb">print</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"success"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"result"</span><span class="p">:</span> <span class="n">result</span><span class="p">,</span> <span class="s2">"error"</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span> <span class="n">default</span><span class="o">=</span><span class="nb">str</span><span class="p">))</span>
 </code></pre></div>
+<p>Nothing comes back as a pickle. Code running in the sandbox controls what it prints, so a host
+that unpickled that output would run whatever the sandbox chose. <code>ModalBackend</code> did, until
+0.10.17; E2B, Docker and Modal now all read the outcome back as JSON.</p>
 <h3 id="serializable-types">Serializable Types<a class="headerlink" href="#serializable-types" title="Permanent link">&para;</a></h3>
 <p>For the function and its arguments:</p>
 <table>
@@ -3186,17 +3212,18 @@ sandbox.</p>
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
 <a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
 <a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">e2b_api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">,</span>     <span class="c1"># Override env var</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">sandbox_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>    <span class="c1"># Seconds each pooled sandbox lives (E2B's sandbox timeout)</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">sandbox_pool_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>   <span class="c1"># Warm sandboxes to keep</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">sandbox_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>    <span class="c1"># Seconds a sandbox lives (E2B's sandbox timeout)</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">sandbox_pool_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>   <span class="c1"># Sandboxes warm_up() creates</span>
 <a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">)</span>
 <a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>
 <a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">sandbox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
 <a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_tool</span><span class="p">():</span>
 <a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>    <span class="k">pass</span>
 </code></pre></div>
-<p>These three settings are read once, when the process-wide pool is created, so give every
-sandboxed tool the same values. <code>sandbox_timeout</code> is not a per-call limit: agent-airlock passes
-no timeout for the call itself.</p>
+<p>These three settings pick the tool's sandbox pool: tools whose configs agree on them share
+one. <code>sandbox_timeout</code> is how long a sandbox lives: E2B kills it that many seconds after it is
+created, or after the pool hands it out, and a call still running then fails with it.
+agent-airlock passes no separate timeout for the call itself.</p>
 <p>The decorator always runs sandboxed tools through E2B. For the pluggable <code>SandboxBackend</code>
 classes (Docker, Local, Modal), which you call directly, see
 <a href="../../sandbox/docker/">DockerBackend</a>.</p>
