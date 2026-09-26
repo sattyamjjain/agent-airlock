@@ -167,7 +167,9 @@ class AirlockConfig:
                     valid_values=[m.value for m in UnknownArgsMode],
                 )
 
-        # Legacy: AIRLOCK_STRICT_MODE still works but is deprecated
+        # Legacy: AIRLOCK_STRICT_MODE still works but is deprecated. AIRLOCK_UNKNOWN_ARGS wins
+        # when both are set: until 0.10.16 the legacy variable was applied second, so
+        # AIRLOCK_STRICT_MODE=false silently turned AIRLOCK_UNKNOWN_ARGS=block into stripping.
         if os.environ.get("AIRLOCK_STRICT_MODE"):
             warnings.warn(
                 "AIRLOCK_STRICT_MODE environment variable is deprecated and will be removed "
@@ -175,8 +177,19 @@ class AirlockConfig:
                 DeprecationWarning,
                 stacklevel=2,
             )
-            self.strict_mode = os.environ["AIRLOCK_STRICT_MODE"].lower() in ("true", "1", "yes")
-            self.unknown_args = mode_from_strict_bool(self.strict_mode)
+            if os.environ.get("AIRLOCK_UNKNOWN_ARGS"):
+                logger.warning(
+                    "strict_mode_env_ignored",
+                    reason="AIRLOCK_UNKNOWN_ARGS is set and takes precedence",
+                    unknown_args=self.unknown_args.value,
+                )
+            else:
+                self.strict_mode = os.environ["AIRLOCK_STRICT_MODE"].lower() in (
+                    "true",
+                    "1",
+                    "yes",
+                )
+                self.unknown_args = mode_from_strict_bool(self.strict_mode)
 
         if os.environ.get("AIRLOCK_MAX_OUTPUT_TOKENS"):
             self.max_output_tokens = int(os.environ["AIRLOCK_MAX_OUTPUT_TOKENS"])

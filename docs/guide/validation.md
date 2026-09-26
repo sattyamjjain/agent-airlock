@@ -122,17 +122,14 @@ Airlock validates all standard Python types:
 
 ## Complex Types
 
-Airlock supports Pydantic models, passed as a dict or an instance. Strict mode applies to the
-tool's own parameters; a model is validated with its own config, so set it strict too if its
-fields should refuse coercion:
+Airlock supports Pydantic models, passed as a dict or an instance, and strict mode reaches
+inside them:
 
 ```python
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from agent_airlock import Airlock
 
 class UserCreate(BaseModel):
-    model_config = ConfigDict(strict=True)
-
     name: str
     email: str
     age: int
@@ -146,11 +143,12 @@ result = create_user(user={"name": "John", "email": "j@x.com", "age": 30})
 
 # Invalid - age is string
 result = create_user(user={"name": "John", "email": "j@x.com", "age": "30"})
-# Blocked with fix_hints
+# Blocked, with fix_hints: ["'user.age' must be an integer, not str"]
 ```
 
-Without `ConfigDict(strict=True)` on the model, `"age": "30"` is coerced to `30` and the
-call runs.
+The same holds for a list of models (`'users.1.age'`), a TypedDict, and an optional model.
+Until 0.10.16 a model was validated with its own config, lax by default, so `"30"` was
+coerced to `30` and the call ran.
 
 ## Self-Healing Responses
 

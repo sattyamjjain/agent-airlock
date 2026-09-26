@@ -194,8 +194,9 @@ src/agent_airlock/
 5. Endpoint policy validation
 6. Per-model-tier budget check — the tier, token count and model id come from context
    metadata (`_call_metadata`), never from the tool's arguments, which the model writes
-7. Execute (unnumbered in code) — Pydantic strict validation, then run locally or in the
-   sandbox, inside the network airgap when one is configured. Sandbox mode validates in
+7. Execute (unnumbered in code) — Pydantic strict validation, reaching inside model,
+   dataclass and TypedDict arguments (`validator._nested_strict_check`), then run locally or
+   in the sandbox, inside the network airgap when one is configured. Sandbox mode validates in
    the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way
 8. `_post_execution` — sanitize output via `_sanitize_tool_output` (a string is masked and
    truncated; a dict, list, tuple or set is masked value by value and keeps its type; any

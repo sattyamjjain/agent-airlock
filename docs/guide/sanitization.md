@@ -70,8 +70,8 @@ Masked when `mask_pii=True` (the default).
 | Credit Card | `4111111111111111` | `**** **** **** 1111` |
 | IP Address | `192.168.1.100` | `192***100` |
 
-A card number is matched as an unbroken run of digits, so `4111-1111-1111-1111` is not
-detected. `pii_locales=["in"]` adds Aadhaar, PAN, UPI ID, IFSC, Devanagari names and Indian
+A card number may be split by one consistent `-` or space (`4111-1111-1111-1111`,
+`4111 1111 1111 1111`). `pii_locales=["in"]` adds Aadhaar, PAN, UPI ID, IFSC, Devanagari names and Indian
 mobile numbers.
 
 ### Secrets
@@ -87,11 +87,13 @@ Masked when `mask_secrets=True` (the default).
 | Connection String | `postgres://user:pass@host` | `[REDACTED]` |
 | Private Key | `-----BEGIN PRIVATE KEY-----` | `[REDACTED]` |
 
-Detection is by known shape. An API key is an OpenAI or Anthropic `sk-` key with 20 or more
-characters after the prefix, a Google `AIza` key, a GitHub `ghp_`/`gho_`/`github_pat_`
-token or a Slack `xox` token; a shorter or unrecognised key passes through. A password is
+Detection is by known shape. An API key is an OpenAI key (legacy `sk-...`, or
+`sk-proj-`/`sk-svcacct-`/`sk-admin-`), an Anthropic `sk-ant-...` key, a Google `AIza` key, a
+GitHub `ghp_`/`gho_`/`github_pat_` token or a Slack `xox` token; a shorter or unrecognised key
+passes through. A password is
 the value (8+ characters) after `password`, `passwd`, `pwd`, `secret` or `token` and `=` or
-`:`. The private-key rule masks the `BEGIN` line, not the key body. There is no separate
+`:`. The private-key rule masks the whole PEM block, or the header and the base64 lines after it
+when the `END` line is missing. There is no separate
 bearer-token type: the JWT in `Bearer eyJ...` is masked by the JWT rule.
 
 ## Masking Strategies

@@ -119,8 +119,10 @@ def my_tool(x: int) -> int:
 
 The resolver receives the context read from the tool's first argument (an object with a
 `context`, `ctx`, `request_context` or `session_context` attribute, such as an agent
-framework's run context). For a tool without one, like `my_tool` here, the context is
-empty (`workspace_id` is `None`), so `resolve_policy` returns the 100/hour policy.
+framework's run context). When that carries no agent id, the identity, roles and workspace
+of a context set around the call (`with AirlockContext(...)`) are used. For a tool with
+neither, like `my_tool` here, the context is empty (`workspace_id` is `None`), so
+`resolve_policy` returns the 100/hour policy.
 
 ### With Sandbox
 
