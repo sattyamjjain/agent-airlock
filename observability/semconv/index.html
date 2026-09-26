@@ -2838,9 +2838,11 @@
 
 <h1 id="opentelemetry-semantic-conventions">OpenTelemetry semantic conventions<a class="headerlink" href="#opentelemetry-semantic-conventions" title="Permanent link">&para;</a></h1>
 <p>This page documents the spans and attributes agent-airlock emits on the
-OTel audit exporter (<code>agent_airlock.audit_otel</code>, enabled via
-<code>AirlockConfig.otel_enabled=True</code>). Treat these as a contract: downstream
-dashboards, saved searches, and SIEM rules depend on the names below.</p>
+OTel audit exporter (<code>OTelAuditExporter</code> in <code>agent_airlock.audit_otel</code>),
+which you construct and call yourself: no <code>AirlockConfig</code> setting turns it
+on, and <code>audit_otel_enabled</code> is stored but not applied. Treat these as a
+contract: downstream dashboards, saved searches, and SIEM rules depend on
+the names below.</p>
 <h2 id="design-principles">Design principles<a class="headerlink" href="#design-principles" title="Permanent link">&para;</a></h2>
 <ol>
 <li><strong>Namespace first.</strong> All airlock-specific attributes live under

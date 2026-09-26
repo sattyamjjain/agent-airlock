@@ -3029,7 +3029,7 @@ masked but not truncated; see above):</p>
 <a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">)</span>
 </code></pre></div>
 <p><code>max_output_chars</code> is the only limit applied. <code>AirlockConfig</code> also has a
-<code>max_output_tokens</code> field, but <code>@Airlock</code> does not truncate on it.</p>
+<code>max_output_tokens</code> field, but <code>@Airlock</code> does not truncate on it, and setting it warns.</p>
 <p>When truncated, a notice is appended, inside the limit:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>[OUTPUT TRUNCATED: Showing 10,000 of 15,000 characters]
 </code></pre></div></p>

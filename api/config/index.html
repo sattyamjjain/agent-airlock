@@ -3005,6 +3005,7 @@
 <a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>    <span class="n">endpoint_policies</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">EndpointPolicy</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 <a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>    <span class="n">anomaly_config</span><span class="p">:</span> <span class="n">AnomalyDetectorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>    <span class="n">require_done_receipt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>    <span class="n">credential_scopes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">CredentialScope</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="attributes">Attributes<a class="headerlink" href="#attributes" title="Permanent link">&para;</a></h3>
 <h4 id="validation">Validation<a class="headerlink" href="#validation" title="Permanent link">&para;</a></h4>
@@ -3077,7 +3078,7 @@
 <td><code>max_output_tokens</code></td>
 <td><code>int</code></td>
 <td><code>5000</code></td>
-<td>Stored (and read from <code>AIRLOCK_MAX_OUTPUT_TOKENS</code>), but <code>@Airlock</code> does not truncate on it</td>
+<td>Stored (and read from <code>AIRLOCK_MAX_OUTPUT_TOKENS</code>), but <code>@Airlock</code> does not truncate on it; any other value warns</td>
 </tr>
 </tbody>
 </table>
@@ -3212,10 +3213,21 @@ or for picking individual types.</p>
 <td><code>{}</code></td>
 <td>Per-tool URL rules</td>
 </tr>
+<tr>
+<td><code>credential_scopes</code></td>
+<td><code>dict[str, CredentialScope]</code></td>
+<td><code>{}</code></td>
+<td>Per-tool scopes from <code>[airlock.credentials]</code>. Not applied by <code>@Airlock</code>: pass them to <code>MCPProxyConfig(tool_scopes=config.credential_scopes)</code></td>
+</tr>
 </tbody>
 </table>
 <p><code>audit_otel_enabled</code>, <code>audit_otel_endpoint</code>, <code>audit_include_args_hash</code>, <code>anomaly_config</code> and
-<code>require_done_receipt</code> are accepted and stored, but <code>@Airlock</code> does not read them.</p>
+<code>require_done_receipt</code> are accepted and stored, but nothing reads them, and setting one to
+anything but its default emits a <code>UserWarning</code> naming what to use instead:
+<code>OTelAuditExporter</code> for the audit settings, an <code>AnomalyDetector</code> for <code>anomaly_config</code>, and
+<code>DoneReceiptGuard</code> (or the <code>no_false_success_defaults</code> preset) for <code>require_done_receipt</code>.
+Until 0.10.19 they were stored without a word, although <code>require_done_receipt</code>'s comment
+said it switched on a fail-closed guard.</p>
 <h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">UnknownArgsMode</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
@@ -3425,7 +3437,14 @@ logged and ignored.</p>
 <a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">mask_secrets</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">max_output_chars</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10000</span>
 <a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">sandbox_timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">60</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="c1"># Per-tool credential scopes, loaded into config.credential_scopes</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="k">[airlock.credentials.read_file]</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="n">required_scopes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"fs:read"</span><span class="p">]</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="n">max_token_age_seconds</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">600</span>
 </code></pre></div>
+<p>Until 0.10.19 a file with an <code>[airlock.credentials]</code> section failed to load with a
+<code>TypeError</code>.</p>
 
 
 
