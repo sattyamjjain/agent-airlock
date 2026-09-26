@@ -3027,7 +3027,7 @@ per-class, false-positive-aware breakdown — not the headline number.</p>
 </blockquote>
 <hr />
 <h3 id="adaptive-attacker-robustness-agentdojo">Adaptive-attacker robustness (AgentDojo)<a class="headerlink" href="#adaptive-attacker-robustness-agentdojo" title="Permanent link">&para;</a></h3>
-<p>agent-airlock is wired into <a href="https://arxiv.org/abs/2406.13352">AgentDojo</a> (Debenedetti et al., NeurIPS 2024) as a <strong>defense</strong> — <code>AirlockToolsExecutor</code>: deny-by-default least-privilege <code>SecurityPolicy</code> + ghost-arg BLOCK + output sanitizer. On the pinned <strong>workspace + banking</strong> suites under the <code>tool_knowledge</code> attack (benchmark <code>v1.2.1</code>), airlock's least-privilege policy blocks the target tool-call for <strong>324/384 = 84.4%</strong> of injection→task pairs — a <strong>deterministic upper bound on ASR reduction</strong>, <em>not</em> the model-in-the-loop ASR.</p>
+<p>agent-airlock is wired into <a href="https://arxiv.org/abs/2406.13352">AgentDojo</a> (Debenedetti et al., NeurIPS 2024) as a <strong>defense</strong> — <code>AirlockToolsExecutor</code>: deny-by-default least-privilege <code>SecurityPolicy</code> + ghost-arg BLOCK + output sanitizer. On all four pinned suites (<strong>workspace, banking, travel, slack</strong>) under the <code>tool_knowledge</code> attack (benchmark <code>v1.2.1</code>), airlock's least-privilege policy blocks the target tool-call for <strong>524/609 = 86.0%</strong> of injection→task pairs — a <strong>deterministic upper bound on ASR reduction</strong>, <em>not</em> the model-in-the-loop ASR.</p>
 <table>
 <thead>
 <tr>
@@ -3049,6 +3049,18 @@ per-class, false-positive-aware breakdown — not the headline number.</p>
 <td>144</td>
 <td>102</td>
 <td><strong>70.8%</strong></td>
+</tr>
+<tr>
+<td>travel</td>
+<td>120</td>
+<td>114</td>
+<td><strong>95.0%</strong></td>
+</tr>
+<tr>
+<td>slack</td>
+<td>105</td>
+<td>86</td>
+<td><strong>81.9%</strong></td>
 </tr>
 </tbody>
 </table>

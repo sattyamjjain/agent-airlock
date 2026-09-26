@@ -2584,7 +2584,7 @@ coverage.</p>
 </ul>
 <h2 id="ox-mcp-composite-preset">OX-MCP composite preset<a class="headerlink" href="#ox-mcp-composite-preset" title="Permanent link">&para;</a></h2>
 <p>The shipped <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/presets/ox-mcp-2026-04.yaml"><code>presets/ox-mcp-2026-04.yaml</code></a>
-enables the nine April-2026 OX-disclosure-class presets:</p>
+enables the eight April-2026 OX-disclosure-class presets:</p>
 <table>
 <thead>
 <tr>
@@ -2598,11 +2598,6 @@ enables the nine April-2026 OX-disclosure-class presets:</p>
 <td><code>stdio_guard_ox_defaults</code></td>
 <td><code>stdio_guard_ox_defaults</code></td>
 <td>(umbrella)</td>
-</tr>
-<tr>
-<td><code>manifest_only_mode</code></td>
-<td><code>manifest_only_mode</code></td>
-<td>—</td>
 </tr>
 <tr>
 <td><code>gitpilot_mcp_cve_2026_6980</code></td>
@@ -2641,8 +2636,13 @@ enables the nine April-2026 OX-disclosure-class presets:</p>
 </tr>
 </tbody>
 </table>
-<p><code>manifest_only_mode</code> is <code>enabled: false</code> by default — opt in
-explicitly per the <a href="../../mcp/manifest-only-mode/">manifest-only-mode docs</a>.</p>
+<p>Manifest-only STDIO launching, the other half of OX's recommendation,
+is not a preset: it needs a signing key and pre-registered manifests,
+so it is opted into in code — see the
+<a href="../../mcp/manifest-only-mode/">manifest-only-mode docs</a>. Every
+<code>factory:</code> a preset file names must be a registered preset, even on an
+entry marked <code>enabled: false</code>; <code>tests/presets/test_ox_mcp_yaml.py</code>
+fails otherwise.</p>
 <h2 id="primary-source">Primary source<a class="headerlink" href="#primary-source" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="https://www.ox.security/blog/mother-of-all-ai-supply-chains-2026-04-20">OX Security — Mother of All AI Supply Chains (2026-04-15)</a></li>

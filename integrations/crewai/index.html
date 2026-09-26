@@ -2697,10 +2697,10 @@ floor; operators on the alpha track should pin manually.</p>
    need wrapping too.</p>
 </li>
 <li>
-<p><strong>Pins <code>SUPPORTED_CREWAI_VERSIONS = ("1.14.4", "1.14.5a1",
-   "1.14.5a2")</code></strong> — running a version outside this set emits a
-   <code>UserWarning</code> (no hard fail). Update the tuple once a new
-   release has been smoke-tested against the adapter.</p>
+<p><strong>Pins <code>SUPPORTED_CREWAI_VERSIONS</code></strong> (listed in the module) —
+   running a version outside this set emits a <code>UserWarning</code> (no hard
+   fail). Update the tuple once a new release has been smoke-tested
+   against the adapter.</p>
 </li>
 <li>
 <p><strong><code>wrap_agent(agent, policy=...)</code></strong> is also exposed as a
