@@ -469,7 +469,7 @@ def handle_rate_limit(
         error=f"AIRLOCK_BLOCK: Rate limit exceeded for '{func_name}'.",
         fix_hints=[
             f"Rate limit is {limit}",
-            f"Wait {reset_seconds} seconds before retrying",
+            f"Wait {reset_seconds} second{'' if reset_seconds == 1 else 's'} before retrying",
         ],
         metadata={
             "function": func_name,

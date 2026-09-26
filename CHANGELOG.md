@@ -11,6 +11,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.18] - 2026-09-26
+
+### Fixed
+
+- **A refused call on a FastMCP tool typed `-> dict` or `-> int` never reached the client as
+  a refusal.** `MCPAirlock` returned the refusal text as the tool's result, which fails
+  FastMCP's output-schema check: a `-> dict` tool gave the client a schema error, and on
+  FastMCP 3.x and later a `-> int` tool made `fastmcp.Client` raise. A `-> str` tool passed
+  the text on as a successful result. The refusal is now raised as FastMCP's `ToolError`,
+  which FastMCP sends as an error result (`isError` true) with the same text, whatever the
+  return type. Without FastMCP installed the text is still returned.
+
+- **A refused async tool returned Airlock's raw response dict.** `MCPAirlock` gave every tool
+  a sync wrapper, so its refusal check saw a coroutine. Async tools now get an async wrapper
+  and the same `ToolError`.
+
+- **A tool's own `{"success": False, ...}` result was turned into an error.** The refusal
+  check looked at `success` alone; it now also requires Airlock's `"status": "blocked"`.
+
+- **No progress notification was ever sent.** `report_progress=True`, which `secure_tool`
+  turns on, called `ctx.report_progress()` without awaiting it and passed the message where
+  FastMCP expects `total`, so every call left an unawaited coroutine behind. It now sends
+  `(0, 100, "Starting <tool>...")` and `(100, 100, "Completed <tool>")` from async tools,
+  and from sync tools on FastMCP 3.x and later, which run them in a worker thread. It finds
+  the tool's `Context` whatever its parameter is called, not only `ctx`.
+
+- **`MCPContextExtractor.extract_agent_id` returned the string `"None"`.** A FastMCP
+  `Context` always has a `client_id` attribute, usually None. The first identifier that has
+  a value is returned now, usually the session ID.
+
+- **A rate-limit refusal always said to wait 60 seconds.** The limiter never reported when a
+  token would be back, so the hint, and `on_rate_limit`'s second argument, was a flat 60
+  whatever the limit: a `1/hour` tool was told to retry after a minute. The wait now comes
+  from the bucket (3600 seconds for `1/hour`, 36 for `100/hour`), for `RedisRateLimit` too,
+  through the new `RateLimit.seconds_until_available()`.
+
+- **`docs/COMPATIBILITY.md`'s server example passed `sandbox_required=True` to the server
+  factory's decorator**, which does not take it.
+
+### Changed
+
+- CI's `test` job installs the `[mcp]` extra. The tests that need FastMCP itself were skipped
+  in CI until now; they run there on the newest FastMCP the pin allows. The MCP tests pass
+  on FastMCP 2.14.7, 3.4.7 and 4.0.10.
+
 ## [0.10.17] - 2026-09-26
 
 ### Security

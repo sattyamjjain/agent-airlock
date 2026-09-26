@@ -84,16 +84,16 @@ class MCPAirlock:
             sandbox: Execute in E2B sandbox
             config: Airlock configuration
             policy: Security policy
-            report_progress: Call ctx.report_progress() before and after the
-                call (see report_progress below)
+            report_progress: Send a progress notification before and after
+                the call (see report_progress below)
         """
 
     def __call__(self, func: Callable[P, R]) -> Callable[P, R]:
         """Apply Airlock to function."""
 ```
 
-It wraps the function in `Airlock(sandbox=..., config=..., policy=...)`. On a sync tool, a
-blocked call comes back as text rather than Airlock's response dict (see
+It wraps the function in `Airlock(sandbox=..., config=..., policy=...)`. A blocked call
+raises FastMCP's `ToolError` carrying the refusal, on sync and async tools alike (see
 [Error Responses](#error-responses)). The wrapper keeps the function's signature, so FastMCP
 builds the same input schema.
 
@@ -197,24 +197,30 @@ from agent_airlock.mcp import MCPContextExtractor
 Static helpers for building an agent identity from an MCP context. Airlock does not call
 them itself.
 
-- `extract_agent_id(ctx) -> str | None`: `str(ctx.client_id)` if the context has a
-  `client_id` attribute, else `session_id`, else `request_id`, else `None`.
+- `extract_agent_id(ctx) -> str | None`: the first of `client_id`, `session_id` and
+  `request_id` that has a value, as a string; `None` when none has one, or when reading one
+  raises.
 - `extract_metadata(ctx) -> dict[str, Any]`: `client_info` and `protocol_version`, for
   whichever of the two the context has.
 
-On a FastMCP `Context` they return less than their names suggest. `Context` always has a
-`client_id` attribute, so `extract_agent_id` never falls back to `session_id` and returns
-the string `"None"` when the client sent no client ID. `Context` has neither `client_info`
-nor `protocol_version`, so `extract_metadata` returns `{}`. For a per-session identity, read
-`ctx.session_id` directly.
+On a FastMCP `Context`, `client_id` is `None` unless the client sends one, so
+`extract_agent_id` usually returns the session ID. Until 0.10.18 it returned the string
+`"None"` instead. `client_id` is whatever the client chooses to send, so do not base access
+checks on it. `Context` has neither `client_info` nor `protocol_version`, so
+`extract_metadata` returns `{}`.
 
 ### report_progress
 
-`MCPAirlock(report_progress=True)`, and so `secure_tool`, calls `ctx.report_progress()`
-before and after the call when the tool receives a keyword argument named `ctx`. FastMCP's
-`Context.report_progress` is a coroutine and the wrapper does not await it, so no
-notification reaches the client. Report progress from an `async` tool instead, awaiting
-FastMCP's method:
+`MCPAirlock(report_progress=True)`, and so `secure_tool`, sends two notifications through
+the tool's FastMCP `Context`, whatever its parameter is called: `(0, 100, "Starting
+<tool>...")` before the call and `(100, 100, "Completed <tool>")` after it, as
+`(progress, total, message)`. A client receives them only when it asked for progress. An
+async tool always sends them; a sync tool sends them on FastMCP 3.x and later, which run it
+in a worker thread, and none on 2.x, which runs it on the event loop's own thread. Until
+0.10.18 none was ever sent: the coroutine was not awaited, and the message was passed where
+FastMCP expects `total`.
+
+For progress in between, await FastMCP's method from an `async` tool:
 
 ```python
 from fastmcp import Context
@@ -232,7 +238,8 @@ async def long_task(data: str, ctx: Context) -> dict:
 
 ## Error Responses
 
-On a sync tool, `MCPAirlock` returns a blocked call as text:
+`MCPAirlock` raises a blocked call as FastMCP's `ToolError` with this text, and FastMCP
+sends the client an error result (`isError` true) carrying it:
 
 ```text
 Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')
@@ -242,13 +249,13 @@ Suggested fixes:
 - Contact the administrator if you believe this is an error
 ```
 
-The LLM can read the suggested fixes and adjust its next call. The text replaces the tool's
-return value, so it has to fit the tool's output schema: a `-> str` tool accepts it, a
-`-> dict` tool does not. [FastMCP Integration](../guide/mcp.md) covers the other return
-types.
+The LLM can read the suggested fixes and adjust its next call. Being an error result, it
+does not have to fit the tool's output schema, so it reaches the client the same way for a
+`-> str`, `-> dict` or `-> int` tool. Until 0.10.18 the text was returned in place of the
+tool's result, and only a `-> str` tool passed it on intact. Without FastMCP installed, the
+wrapper returns the text instead of raising.
 
-An `async def` tool, or a tool wrapped in plain `@Airlock()`, returns Airlock's response
-dict instead:
+A tool wrapped in plain `@Airlock()` returns Airlock's response dict instead:
 
 ```python
 {
@@ -286,7 +293,8 @@ async def async_tool(x: int) -> int:
     return x * 2
 ```
 
-A blocked call on an async tool returns the response dict above, not the text.
+A blocked call on an async tool raises the same `ToolError` as on a sync one. Until 0.10.18
+it returned the response dict above.
 
 ## Testing
 
@@ -323,9 +331,9 @@ The `mcp` extra pins `fastmcp>=2.0,<5.0`.
 
 | MCP Component | Supported |
 |---------------|-----------|
-| FastMCP 2.x | ✅ (tests recorded on 2.14.7) |
-| FastMCP 3.x | Allowed by the pin; no recorded test run |
-| FastMCP 4.x | ✅ (tests recorded on 4.0.3) |
+| FastMCP 2.x | ✅ (MCP tests pass on 2.14.7) |
+| FastMCP 3.x | ✅ (MCP tests pass on 3.4.7) |
+| FastMCP 4.x | ✅ (MCP tests pass on 4.0.10; CI's `test` job runs them on the newest release the pin allows) |
 | MCP clients (Claude Desktop, Claude Code, ...) | Airlock runs inside the tool function, so clients see an ordinary FastMCP server |
 
 Other frameworks do not go through this module: they use the

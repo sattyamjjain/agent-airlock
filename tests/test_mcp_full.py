@@ -74,22 +74,40 @@ class TestMCPAirlock:
         assert result == 10
 
     def test_mcp_airlock_with_context_and_progress(self) -> None:
-        """Test MCPAirlock with context and progress reporting."""
+        """An async tool awaits its progress notifications: 0 of 100, then 100 of 100."""
+        import asyncio
+        from unittest.mock import AsyncMock, call
+
         from agent_airlock.mcp import MCPAirlock
 
         decorator = MCPAirlock(report_progress=True)
 
         mock_ctx = MagicMock()
-        mock_ctx.report_progress = MagicMock()
+        mock_ctx.report_progress = AsyncMock()
 
         @decorator
+        async def my_func(x: int, ctx: Any = None) -> int:
+            return x * 2
+
+        result = asyncio.run(my_func(x=5, ctx=mock_ctx))
+        assert result == 10
+        assert mock_ctx.report_progress.await_args_list == [
+            call(0, 100, "Starting my_func..."),
+            call(100, 100, "Completed my_func"),
+        ]
+
+    def test_sync_tool_outside_a_worker_thread_sends_no_progress(self) -> None:
+        """Nothing can be awaited there, so no coroutine is created and left unawaited."""
+        from agent_airlock.mcp import MCPAirlock
+
+        mock_ctx = MagicMock()
+
+        @MCPAirlock(report_progress=True)
         def my_func(x: int, ctx: Any = None) -> int:
             return x * 2
 
-        result = my_func(x=5, ctx=mock_ctx)
-        assert result == 10
-        # Progress should be reported
-        assert mock_ctx.report_progress.call_count >= 1
+        assert my_func(x=5, ctx=mock_ctx) == 10
+        mock_ctx.report_progress.assert_not_called()
 
     def test_mcp_airlock_handles_progress_error(self) -> None:
         """Test MCPAirlock handles progress reporting errors gracefully."""
@@ -119,11 +137,19 @@ class TestMCPAirlock:
         def my_func(x: int) -> int:
             return x * 2
 
-        # Call with ghost argument - should return formatted error
-        result = my_func(x=5, ghost_arg=True)  # type: ignore
+        # Call with ghost argument: refused, with a formatted error. With FastMCP
+        # installed the refusal is raised as its ToolError (0.10.18).
+        from agent_airlock.mcp import _check_fastmcp_available
 
-        assert isinstance(result, str)
-        assert "Error" in result
+        if _check_fastmcp_available():
+            from fastmcp.exceptions import ToolError
+
+            with pytest.raises(ToolError, match="^Error: "):
+                my_func(x=5, ghost_arg=True)  # type: ignore
+        else:
+            result = my_func(x=5, ghost_arg=True)  # type: ignore
+            assert isinstance(result, str)
+            assert "Error" in result
 
 
 class TestSecureTool:
