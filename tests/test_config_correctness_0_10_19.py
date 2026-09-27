@@ -91,13 +91,14 @@ class TestSettingsThatAreNotAppliedSaySo:
         ],
     )
     def test_setting_one_warns(self, name: str, value: Any) -> None:
-        with pytest.warns(UserWarning, match=f"AirlockConfig.{name} is stored but not applied"):
+        # A FutureWarning since 0.10.20, when these were deprecated for removal in v1.0.0.
+        with pytest.warns(FutureWarning, match=f"AirlockConfig.{name} is deprecated"):
             AirlockConfig(**{name: value})
 
     def test_the_anomaly_config_warns(self) -> None:
         from agent_airlock.anomaly import AnomalyDetectorConfig
 
-        with pytest.warns(UserWarning, match="anomaly_config is stored but not applied"):
+        with pytest.warns(FutureWarning, match="anomaly_config is deprecated"):
             AirlockConfig(anomaly_config=AnomalyDetectorConfig())
 
     def test_the_defaults_do_not(self, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -340,9 +340,11 @@ Automatically detects and masks:
 - Connection Strings (`postgres://`, `mongodb://`)
 - Generic Passwords (8+ characters after `password=`, `pwd=`, `secret=`, `token=`, etc.)
 
-A string, dict, list, tuple or set result is masked. Any other object (a Pydantic model, a
-dataclass) is returned as it is, and what was found in it is logged as not masked; what a
-generator yields is not masked either. See [PII & Secret Masking](guide/sanitization.md).
+A string, dict, list, tuple or set result is masked. What a generator tool yields is
+masked item by item the same way, and each step of it runs under the call's network airgap
+(until 0.10.20 it did neither). Any other object (a Pydantic model, a dataclass) is returned
+as it is, and what was found in it is logged as not masked. See
+[PII & Secret Masking](guide/sanitization.md).
 
 ### Masking Strategies
 
@@ -377,7 +379,11 @@ result = sanitize_output(
 ### Log Format
 
 Calls through `@Airlock` are appended to a JSON Lines file, one record per line:
-`airlock_audit.json` by default (`audit_log_path`; `enable_audit_log=False` turns it off).
+`airlock_audit.json` in the working directory by default. Set `audit_log_path`, or the
+`AIRLOCK_AUDIT_LOG_PATH` environment variable when no path is given in code or TOML, to put
+it elsewhere; `enable_audit_log=False` turns it off. A log that cannot be created is
+reported once (`audit_log_unavailable`) and nothing is recorded, rather than failing the
+import.
 A call to `delete_records` refused by a `denied_tools=["delete_*"]` policy:
 
 ```json
@@ -396,10 +402,12 @@ A call to `delete_records` refused by a `denied_tools=["delete_*"]` policy:
 }
 ```
 
-Fields with no value are left out. `agent_id` and `session_id` are recorded only from a
-context carried by the tool's first argument; an identity set around the call with
-`with AirlockContext(...)` does not reach the record. Argument values whose names look
-sensitive (`password`, `token`, `api_key`, ...) are written as `[REDACTED]`.
+Fields with no value are left out. `agent_id` and `session_id` come from a context carried
+by the tool's first argument, or, when the call has none, from one set around it with
+`with AirlockContext(...)`. Argument values whose names look sensitive (`password`, `token`,
+`api_key`, ...) are written as `[REDACTED]`, and every other argument preview is passed
+through the PII and secret masker before it is cut to length, so an email address or key
+given in any argument is not written as-is. Until 0.10.20 only the names were checked.
 
 ### Log Destinations
 

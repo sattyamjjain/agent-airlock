@@ -189,14 +189,14 @@ class TestStructure:
         assert AirlockConfig().require_done_receipt is False
 
     def test_config_flag_constructor_on(self) -> None:
-        # Stored, but nothing reads it, and it says so (0.10.19).
-        with pytest.warns(UserWarning, match="require_done_receipt is stored but not applied"):
+        # Stored, but nothing reads it: deprecated since 0.10.20, and it says so.
+        with pytest.warns(FutureWarning, match="require_done_receipt is deprecated"):
             assert AirlockConfig(require_done_receipt=True).require_done_receipt is True
 
     def test_config_flag_from_toml(self, tmp_path) -> None:
         toml = tmp_path / "airlock.toml"
         toml.write_text("[airlock]\nrequire_done_receipt = true\n")
-        with pytest.warns(UserWarning, match="require_done_receipt is stored but not applied"):
+        with pytest.warns(FutureWarning, match="require_done_receipt is deprecated"):
             assert AirlockConfig.from_toml(toml).require_done_receipt is True
 
     def test_public_exports_present(self) -> None:

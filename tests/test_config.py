@@ -23,8 +23,8 @@ class TestAirlockConfig:
         assert config.sandbox_pool_size == 2
 
     def test_custom_values(self) -> None:
-        # max_output_tokens is stored but not applied, and says so (0.10.19).
-        with pytest.warns(UserWarning, match="max_output_tokens is stored but not applied"):
+        # max_output_tokens was never applied; deprecated since 0.10.20, and says so.
+        with pytest.warns(FutureWarning, match="max_output_tokens is deprecated"):
             config = AirlockConfig(
                 strict_mode=True,
                 max_output_tokens=1000,

@@ -71,7 +71,7 @@ class AirlockConfig:
 | `mask_secrets` | `bool` | `True` | Mask secrets in outputs |
 | `pii_locales` | `list[str]` | `[]` | `["in"]` adds the India PII types |
 | `max_output_chars` | `int` | `20000` | Truncate string results at this many characters; `0` means no limit |
-| `max_output_tokens` | `int` | `5000` | Stored (and read from `AIRLOCK_MAX_OUTPUT_TOKENS`), but `@Airlock` does not truncate on it; any other value warns |
+| `max_output_tokens` | `int` | `5000` | Deprecated, removal in v1.0.0: nothing has ever truncated on it (it is read from `AIRLOCK_MAX_OUTPUT_TOKENS` too); any other value warns |
 
 Each detected type is masked with its default strategy (see
 [MaskingStrategy](#maskingstrategy)). `AirlockConfig` has no field for choosing a strategy
@@ -82,7 +82,7 @@ or for picking individual types.
 | Attribute | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `enable_audit_log` | `bool` | `True` | Append JSON Lines audit records to `audit_log_path` |
-| `audit_log_path` | `Path` | `airlock_audit.json` | Audit log file |
+| `audit_log_path` | `Path` | `airlock_audit.json` | Audit log file, relative to the working directory; `AIRLOCK_AUDIT_LOG_PATH` replaces the default when no path is given in code or TOML |
 
 #### Sandbox
 
@@ -112,12 +112,13 @@ or for picking individual types.
 | `credential_scopes` | `dict[str, CredentialScope]` | `{}` | Per-tool scopes from `[airlock.credentials]`. Not applied by `@Airlock`: pass them to `MCPProxyConfig(tool_scopes=config.credential_scopes)` |
 
 `audit_otel_enabled`, `audit_otel_endpoint`, `audit_include_args_hash`, `anomaly_config` and
-`require_done_receipt` are accepted and stored, but nothing reads them, and setting one to
-anything but its default emits a `UserWarning` naming what to use instead:
-`OTelAuditExporter` for the audit settings, an `AnomalyDetector` for `anomaly_config`, and
-`DoneReceiptGuard` (or the `no_false_success_defaults` preset) for `require_done_receipt`.
-Until 0.10.19 they were stored without a word, although `require_done_receipt`'s comment
-said it switched on a fail-closed guard.
+`require_done_receipt` are accepted and stored, but nothing has ever read them. They are
+deprecated for removal in v1.0.0, and setting one to anything but its default emits a
+`FutureWarning`, shown by default, naming what to use instead: `OTelAuditExporter` for the
+audit settings, an `AnomalyDetector` for `anomaly_config`, and `DoneReceiptGuard` (or the
+`no_false_success_defaults` preset) for `require_done_receipt`. Until 0.10.19 they were
+stored without a word, although `require_done_receipt`'s comment said it switched on a
+fail-closed guard.
 
 ### Example
 
@@ -219,9 +220,10 @@ import.
 | Variable | Config Attribute |
 |----------|------------------|
 | `AIRLOCK_UNKNOWN_ARGS` | `unknown_args` (`block`, `strip_and_log` or `strip_silent`) |
-| `AIRLOCK_MAX_OUTPUT_TOKENS` | `max_output_tokens` |
+| `AIRLOCK_MAX_OUTPUT_TOKENS` | `max_output_tokens` (deprecated, never applied) |
 | `AIRLOCK_STRICT_MODE` | `strict_mode` (deprecated; `true` maps to `block`, any other value to `strip_and_log`) |
 | `E2B_API_KEY` | `e2b_api_key`, when it is not set in code or TOML |
+| `AIRLOCK_AUDIT_LOG_PATH` | `audit_log_path`, when it is not set in code or TOML |
 
 ## Configuration File
 

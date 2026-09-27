@@ -33,7 +33,7 @@ config = AirlockConfig(
     pii_locales=[],           # ["in"] also masks Aadhaar, PAN, UPI, IFSC, etc.
     mask_secrets=True,        # Mask secrets (API keys, passwords, etc.)
     max_output_chars=20000,   # Truncate string results past this (0 = no limit)
-    max_output_tokens=5000,   # Stored, but @Airlock does not truncate on it
+    max_output_tokens=5000,   # Deprecated: never applied, and setting it warns
 
     # E2B Sandbox
     e2b_api_key=None,         # E2B API key (prefer the E2B_API_KEY env var)
@@ -87,11 +87,14 @@ timeout, filesystem and network policy) is set in code or in `airlock.toml`.
 # Unknown Args Mode (V0.4.0); overrides the constructor and the TOML file
 export AIRLOCK_UNKNOWN_ARGS=block  # or strip_and_log, strip_silent
 
-# Stored as max_output_tokens (which @Airlock does not truncate on)
+# Deprecated: sets max_output_tokens, which nothing applies
 export AIRLOCK_MAX_OUTPUT_TOKENS=5000
 
 # E2B Sandbox; used when no e2b_api_key is set in code or TOML
 export E2B_API_KEY=your-key-here
+
+# Audit log file; used when no audit_log_path is set in code or TOML
+export AIRLOCK_AUDIT_LOG_PATH=/var/log/agent-airlock/audit.jsonl
 
 # Deprecated: AIRLOCK_STRICT_MODE=true still maps to block, with a DeprecationWarning
 ```

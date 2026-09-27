@@ -11,6 +11,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.20] - 2026-09-27
+
+### Security
+
+- **A generator tool ran outside the network airgap and streamed unmasked output.** A
+  generator's body runs when it is iterated, after `@Airlock` has returned. Under
+  `NetworkPolicy(allow_egress=False)` it could still open sockets, it ran without the
+  call's context, and nothing it yielded was masked. Each step of a generator or async
+  generator tool, and its cleanup when the stream is closed early, now runs inside the
+  call's airgap and context, and each item it yields is sanitized as a returned value would
+  be. Values sent in and the generator's return value pass through.
+
+- **The audit log recorded argument values as given.** Only parameter names were checked,
+  so an email address or API key passed in an ordinary argument was written as-is, in a
+  file that lands in the working directory by default. Argument previews now go through the
+  PII and secret masker before they are cut to length.
+
+- **`get_default_backend()` fell back to running code with no isolation.** With no E2B key
+  and no Docker daemon it returned `LocalBackend(allow_unsafe=True)`, with only a log
+  warning. It now raises `SandboxNotAvailableError`; pass `allow_unsafe_local=True` to get
+  that fallback on purpose.
+
+### Fixed
+
+- **An audit log that could not be created crashed decoration.** The log file is opened
+  when `@Airlock` decorates a function, so the default config raised `PermissionError` at
+  import from any unwritable working directory, a common container setup. The failure is
+  now logged once as `audit_log_unavailable`, and nothing is recorded for that path.
+
+### Added
+
+- `AIRLOCK_AUDIT_LOG_PATH` sets the audit log file when no `audit_log_path` is given in
+  code or TOML. The default stays `airlock_audit.json` in the working directory.
+
+### Deprecated
+
+- `max_output_tokens` (and `AIRLOCK_MAX_OUTPUT_TOKENS`), `audit_otel_enabled`,
+  `audit_otel_endpoint`, `audit_include_args_hash`, `anomaly_config` and
+  `require_done_receipt`, for removal in v1.0.0. Nothing has ever applied them. Setting one
+  now emits a `FutureWarning`, which Python shows by default, in place of 0.10.19's
+  `UserWarning`.
+
 ## [0.10.19] - 2026-09-26
 
 ### Fixed

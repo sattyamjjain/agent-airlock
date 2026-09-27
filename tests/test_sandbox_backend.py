@@ -283,7 +283,7 @@ class TestGetDefaultBackend:
 
     def test_returns_sandbox_backend(self) -> None:
         """Test that function returns a SandboxBackend."""
-        backend = get_default_backend()
+        backend = get_default_backend(allow_unsafe_local=True)
         assert isinstance(backend, SandboxBackend)
 
     def test_prefers_e2b_when_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -304,15 +304,27 @@ class TestGetDefaultBackend:
             backend = get_default_backend()
             assert backend.name == "docker"
 
-    def test_falls_back_to_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test fallback to local when others unavailable."""
+    def test_falls_back_to_local_only_when_asked(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The no-isolation fallback is opt-in since 0.10.20."""
         monkeypatch.delenv("E2B_API_KEY", raising=False)
         with (
             patch.object(E2BBackend, "is_available", return_value=False),
             patch.object(DockerBackend, "is_available", return_value=False),
         ):
-            backend = get_default_backend()
+            backend = get_default_backend(allow_unsafe_local=True)
             assert backend.name == "local_unsafe"
+
+    def test_refuses_without_a_sandbox(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No sandbox and no opt-in: an error, not a backend that runs code in-process."""
+        from agent_airlock.sandbox import SandboxNotAvailableError
+
+        monkeypatch.delenv("E2B_API_KEY", raising=False)
+        with (
+            patch.object(E2BBackend, "is_available", return_value=False),
+            patch.object(DockerBackend, "is_available", return_value=False),
+            pytest.raises(SandboxNotAvailableError, match="allow_unsafe_local=True"),
+        ):
+            get_default_backend()
 
 
 class TestSandboxBackendInterface:
@@ -592,5 +604,5 @@ class TestModalBackendNotAutoSelected:
         # which is what we want to assert against (Modal isn't even in
         # the chain). This isn't testing Docker; it's pinning the chain.
         with patch.object(DockerBackend, "is_available", return_value=False):
-            backend = get_default_backend()
+            backend = get_default_backend(allow_unsafe_local=True)
         assert backend.name != "modal"

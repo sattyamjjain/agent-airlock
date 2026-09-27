@@ -3,7 +3,7 @@
 This page documents the spans and attributes agent-airlock emits on the
 OTel audit exporter (`OTelAuditExporter` in `agent_airlock.audit_otel`),
 which you construct and call yourself: no `AirlockConfig` setting turns it
-on, and `audit_otel_enabled` is stored but not applied. Treat these as a
+on, and `audit_otel_enabled` is deprecated because nothing ever applied it. Treat these as a
 contract: downstream dashboards, saved searches, and SIEM rules depend on
 the names below.
 

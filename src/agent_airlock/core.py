@@ -54,7 +54,7 @@ import functools
 import inspect
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable, Generator, Iterator
 from datetime import datetime, timezone
 from typing import Any, Literal, ParamSpec, TypeVar, overload
 
@@ -380,6 +380,79 @@ def _sanitize_tool_output(
         0,
         False,
     )
+
+
+@contextlib.contextmanager
+def _call_scope(config: AirlockConfig, context: AirlockContext[Any] | None) -> Iterator[None]:
+    """The call's context and network airgap, which the tool's body runs inside."""
+    token = set_current_context(context) if context is not None else None
+    try:
+        if config.network_policy is not None and not config.network_policy.allow_egress:
+            with network_airgap(config.network_policy):
+                yield
+        else:
+            yield
+    finally:
+        if token is not None:
+            reset_context(token)
+
+
+def _sanitize_stream_item(item: Any, config: AirlockConfig, func_name: str) -> Any:
+    """One item a generator tool yielded, sanitized as a returned value would be."""
+    if not config.sanitize_output or item is None:
+        return item
+    return _sanitize_tool_output(item, config, func_name)[0]
+
+
+def _guard_stream(
+    stream: Generator[Any, Any, Any],
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+) -> Generator[Any, Any, Any]:
+    """Run a generator tool's body under the call's guards, one step at a time.
+
+    A generator's body runs when it is iterated, after ``@Airlock`` has returned. Until
+    0.10.20 it therefore ran outside the network airgap and without the call's context,
+    and nothing it yielded was sanitized: a tool that streamed its output could reach
+    the network under ``allow_egress=False`` and stream PII unmasked. Each step, and the
+    cleanup when the stream is closed early, now runs inside both, and each item is
+    sanitized as a returned value would be. Values sent in pass through and the return
+    value is kept.
+    """
+    try:
+        sent: Any = None
+        while True:
+            with _call_scope(config, context):
+                try:
+                    item = stream.send(sent)
+                except StopIteration as stop:
+                    return stop.value
+            sent = yield _sanitize_stream_item(item, config, func_name)
+    finally:
+        with _call_scope(config, context):
+            stream.close()
+
+
+async def _guard_async_stream(
+    stream: AsyncGenerator[Any, Any],
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+) -> AsyncGenerator[Any, Any]:
+    """The async-generator form of ``_guard_stream``."""
+    try:
+        sent: Any = None
+        while True:
+            with _call_scope(config, context):
+                try:
+                    item = await stream.asend(sent)
+                except StopAsyncIteration:
+                    return
+            sent = yield _sanitize_stream_item(item, config, func_name)
+    finally:
+        with _call_scope(config, context):
+            await stream.aclose()
 
 
 def _masked_warnings(count: int, func_name: str) -> list[str]:
@@ -769,7 +842,13 @@ class Airlock:
             sanitized_count = 0
             was_truncated = False
 
-            if self.config.sanitize_output and result is not None:
+            # A generator's items are sanitized as they are yielded, so this call's audit
+            # record counts none of them.
+            if inspect.isgenerator(result):
+                result = _guard_stream(result, self.config, func_name, context)
+            elif inspect.isasyncgen(result):
+                result = _guard_async_stream(result, self.config, func_name, context)
+            elif self.config.sanitize_output and result is not None:
                 result, warnings, sanitized_count, was_truncated = _sanitize_tool_output(
                     result, self.config, func_name
                 )
