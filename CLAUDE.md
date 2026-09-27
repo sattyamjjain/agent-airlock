@@ -210,9 +210,11 @@ src/agent_airlock/
    whose outcome comes back as JSON: never unpickle anything a sandbox printed
 8. `_post_execution` — sanitize output via `_sanitize_tool_output` (a string is masked and
    truncated; a dict, list, tuple or set is masked value by value and keeps its type; any
-   other object is returned as-is and its detections reported as not masked) → audit log →
-   mark untrusted output (when the policy sets `reauth_on_untrusted_reinvocation`) →
-   reconcile actual vs estimated cost
+   other object is returned as-is and its detections reported as not masked). A generator
+   result is wrapped instead (`_guard_stream`): its body runs when iterated, after the
+   call returns, so each step re-enters the call's airgap and context and each item is
+   sanitized as it is yielded → audit log → mark untrusted output (when the policy sets
+   `reauth_on_untrusted_reinvocation`) → reconcile actual vs estimated cost
 
 Blocked calls return an `AirlockResponse`. Validation failures return structured JSON
 carrying `fix_hints` for the model to retry against, rather than raising.
@@ -285,8 +287,9 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   against every file under `presets/`, not just the one it's named for.
 - **No silent config no-ops** — a stored `AirlockConfig` field that nothing applies must
   be listed in `config._NOT_APPLIED` (field name → what to use instead), so
-  `_warn_on_settings_not_applied` emits a `UserWarning` when it's set away from its
-  default. Never add a setting that quietly does nothing.
+  `_warn_on_settings_not_applied` emits a `FutureWarning` (deprecated, removal in v1.0.0)
+  when it's set away from its default. `FutureWarning`, because Python hides
+  `DeprecationWarning` outside `__main__`. Never add a setting that quietly does nothing.
 - **Dated snapshots** — pricing tables, advisory blast-radius data and redaction patterns
   ship as dated files under `data/` and `fixtures/`; a refresh is a new dated file, not an
   edit to the old one.

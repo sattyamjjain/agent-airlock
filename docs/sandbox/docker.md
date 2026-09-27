@@ -82,10 +82,12 @@ The repo's `Dockerfile` builds the image the integration tests use.
 To pick a backend by availability, `get_default_backend(config=None)`
 (exported from `agent_airlock`) returns `E2BBackend` when an E2B API
 key is set (on `config` or in `E2B_API_KEY`) and the SDK is installed,
-else `DockerBackend()` with the
-default image when a Docker daemon answers, else
-`LocalBackend(allow_unsafe=True)`, which has no isolation, with a
-`no_sandbox_available` warning.
+else `DockerBackend()` with the default image when a Docker daemon
+answers, else raises `SandboxNotAvailableError`. Pass
+`allow_unsafe_local=True` to get `LocalBackend(allow_unsafe=True)`
+instead, which runs the function in your process with no isolation.
+Until 0.10.20 that fallback happened unasked, with only a
+`no_sandbox_available` warning in the log.
 
 ## v0.7.0 hardening flags (#37, #38)
 

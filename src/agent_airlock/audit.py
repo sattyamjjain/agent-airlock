@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ._log import structlog
+from .sanitizer import sanitize_output
 
 if TYPE_CHECKING:
     from .amplification import AmplificationDecision
@@ -114,6 +115,16 @@ class AuditRecord:
         return json.dumps(self.to_dict(), default=str, ensure_ascii=False)
 
 
+# How much of an argument the sanitizer scans before its preview is cut to length. Masking
+# first means a secret straddling the cut is still recognised whole.
+_PREVIEW_SCAN_CHARS = 4000
+
+
+def _masked(text: str) -> str:
+    """``text`` with the secrets and PII the output sanitizer detects masked."""
+    return sanitize_output(text[:_PREVIEW_SCAN_CHARS], max_chars=None).content
+
+
 class AuditLogger:
     """Thread-safe JSON Lines audit logger.
 
@@ -151,17 +162,32 @@ class AuditLogger:
         self._file_lock = threading.Lock()
 
     def _init_real(self, path: Path) -> None:
-        """Initialize with actual file path."""
+        """Initialize with actual file path.
+
+        A log that cannot be created (an unwritable working directory, a read-only
+        filesystem) is reported once and this logger records nothing. Until 0.10.20 the
+        OSError escaped, and because the logger is built when ``@Airlock`` decorates a
+        function, the default config crashed at import in any unwritable working directory.
+        """
         self.path = path
         self.enabled = True
         self._file_lock = threading.Lock()
 
-        # Ensure parent directory exists
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Write header comment on first creation
-        if not self.path.exists():
-            self._write_header()
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            if not self.path.exists():
+                self._write_header()
+        except OSError as e:
+            logger.error(
+                "audit_log_unavailable",
+                path=str(self.path),
+                error=str(e),
+                hint=(
+                    "set audit_log_path or AIRLOCK_AUDIT_LOG_PATH to a writable file, "
+                    "or enable_audit_log=False"
+                ),
+            )
+            self.enabled = False
 
     def _write_header(self) -> None:
         """Write a header comment to new audit files."""
@@ -255,7 +281,11 @@ class AuditLogger:
     def _redact_args(args: dict[str, Any]) -> dict[str, str]:
         """Redact sensitive argument values for audit.
 
-        Returns a dict with string representations, sensitive values replaced.
+        A value whose parameter name suggests a secret is replaced outright. Every other
+        preview goes through the output sanitizer before it is cut to length, so a key or
+        personal data passed in any argument is masked before it is written. Until
+        0.10.20 only the parameter name was checked, and ``send_email(to=...)`` wrote the
+        address as given into a log that lands in the working directory by default.
         """
         result = {}
         for key, value in args.items():
@@ -265,10 +295,10 @@ class AuditLogger:
                 result[key] = "[REDACTED]"
             elif isinstance(value, str) and len(value) > 100:
                 # Truncate long string arguments
-                result[key] = value[:100] + "..."
+                result[key] = _masked(value)[:100] + "..."
             else:
                 # Convert to string representation
-                result[key] = repr(value)[:200]
+                result[key] = _masked(repr(value))[:200]
 
         return result
 

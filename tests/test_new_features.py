@@ -1096,7 +1096,7 @@ class TestSandboxBackend:
         """Test getting default sandbox backend."""
         from agent_airlock.sandbox_backend import get_default_backend
 
-        backend = get_default_backend()
+        backend = get_default_backend(allow_unsafe_local=True)
         assert backend is not None
 
 

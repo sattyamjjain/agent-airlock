@@ -3,9 +3,12 @@
 Provides validation and sanitization for generator functions that yield
 data incrementally. Supports both sync and async generators.
 
-``@Airlock`` does not sanitize what a generator yields: it returns the generator object
-as it is. Wrap the generator function with ``create_streaming_wrapper`` instead (there is
-no ``@Airlock(streaming=True)``; until 0.10.19 this docstring showed one).
+``@Airlock`` sanitizes each item a generator tool yields as it would a returned value
+(since 0.10.20), and runs each step under the call's network airgap and context. What
+this module adds is a cap on the whole stream: ``max_output_chars`` counted across chunks,
+ending the stream once it is reached. Wrap the generator function with
+``create_streaming_wrapper`` for that. There is no ``@Airlock(streaming=True)``; until
+0.10.19 this docstring showed one.
 
 Example:
     from functools import partial

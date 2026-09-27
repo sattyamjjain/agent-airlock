@@ -741,7 +741,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.10.19"
+__version__ = "0.10.20"
 
 __all__ = [
     # Core

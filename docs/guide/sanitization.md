@@ -226,7 +226,8 @@ config = AirlockConfig(
 ```
 
 `max_output_chars` is the only limit applied. `AirlockConfig` also has a
-`max_output_tokens` field, but `@Airlock` does not truncate on it, and setting it warns.
+`max_output_tokens` field, deprecated because nothing has ever truncated on it; setting it
+warns.
 
 When truncated, a notice is appended, inside the limit:
 ```
@@ -235,8 +236,10 @@ When truncated, a notice is appended, inside the limit:
 
 ## Streaming Support
 
-`@Airlock` does not mask what a generator yields. Sanitize streaming outputs by wrapping
-the generator:
+`@Airlock` masks each item a generator tool yields as it would a returned value, and runs
+each step of the generator under the call's network airgap and context. Until 0.10.20 it
+did neither. What `StreamingAirlock` adds is a cap on the whole stream: `max_output_chars`
+counted across chunks, ending the stream once it is reached. Wrap the generator for that:
 
 ```python
 from agent_airlock import StreamingAirlock, AirlockConfig

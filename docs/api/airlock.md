@@ -229,9 +229,11 @@ async def async_tool(x: int) -> int:
 
 ### Streaming Support (V0.1.5+)
 
-`StreamingAirlock` is not a decorator, and `@Airlock` does not sanitize what a generator
-yields. Decorate a generator function with `create_streaming_wrapper`, which masks each
-string chunk and applies `max_output_chars` to the stream as a whole:
+`@Airlock` on a generator function masks each item the generator yields, as it would a
+returned value, and runs each step under the call's network airgap and context (until
+0.10.20 it did neither). `StreamingAirlock` is not a decorator. For a cap on the stream as a
+whole, decorate the generator function with `create_streaming_wrapper`, which masks each
+string chunk and applies `max_output_chars` across the chunks:
 
 ```python
 from agent_airlock import create_streaming_wrapper

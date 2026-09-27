@@ -2,8 +2,8 @@
 
 Supports configuration from:
 1. Environment variables: ``AIRLOCK_UNKNOWN_ARGS``, the deprecated ``AIRLOCK_STRICT_MODE``
-   and ``AIRLOCK_MAX_OUTPUT_TOKENS`` override the constructor; ``E2B_API_KEY`` is used only
-   when no key is given
+   and the deprecated ``AIRLOCK_MAX_OUTPUT_TOKENS`` override the constructor;
+   ``E2B_API_KEY`` and ``AIRLOCK_AUDIT_LOG_PATH`` are used only when no value is given
 2. Constructor arguments
 3. TOML config files, read only by ``AirlockConfig.from_toml()``
 """
@@ -40,6 +40,12 @@ else:
 logger = structlog.get_logger("agent-airlock.config")
 
 
+# The default audit log location. The field's default is this very object, which is how
+# __post_init__ tells "not given" (AIRLOCK_AUDIT_LOG_PATH may replace it) from a path that
+# happens to be equal.
+_DEFAULT_AUDIT_LOG_PATH = Path("airlock_audit.json")
+
+
 @dataclass
 class AirlockConfig:
     """Configuration for Airlock decorator behavior.
@@ -51,19 +57,21 @@ class AirlockConfig:
             - STRIP_SILENT: Strip silently (dangerous, dev only)
         strict_mode: DEPRECATED (will be removed in v1.0.0). Use unknown_args instead.
             If True, maps to BLOCK. If False, maps to STRIP_AND_LOG.
-        max_output_tokens: Stored but not applied: nothing counts tokens in tool output,
-            and setting it warns. Use max_output_chars to truncate.
+        max_output_tokens: Deprecated, removal in v1.0.0: never applied, since nothing
+            counts tokens in tool output, and setting it warns. Use max_output_chars.
         max_output_chars: Maximum characters in a string result before truncation. A dict,
             list, tuple or set result is masked but not truncated. 0 = unlimited.
         mask_pii: Auto-detect and mask PII (SSN, credit cards, emails) in output.
         mask_secrets: Auto-detect and mask API keys, passwords in output.
         sanitize_output: If True, apply output sanitization (PII masking, truncation).
         enable_audit_log: Write all tool calls to audit log file.
-        audit_log_path: Path to audit log file.
-        audit_otel_enabled: Stored but not applied, and setting it warns: nothing exports
-            audit events from it. Build an ``OTelAuditExporter`` (``audit_otel``) instead.
-        audit_otel_endpoint: Stored but not applied, like audit_otel_enabled.
-        audit_include_args_hash: Stored but not applied, like audit_otel_enabled.
+        audit_log_path: Path to audit log file. Defaults to ``airlock_audit.json`` in the
+            working directory, or to ``AIRLOCK_AUDIT_LOG_PATH`` when that is set.
+        audit_otel_enabled: Deprecated, removal in v1.0.0: never applied, since nothing
+            exports audit events from it, and setting it warns. Build an
+            ``OTelAuditExporter`` (``audit_otel``) instead.
+        audit_otel_endpoint: Deprecated, like audit_otel_enabled.
+        audit_include_args_hash: Deprecated, like audit_otel_enabled.
         e2b_api_key: API key for E2B sandbox. Falls back to E2B_API_KEY env var.
         sandbox_timeout: Timeout in seconds for sandbox execution.
         sandbox_pool_size: Number of warm sandboxes to keep ready.
@@ -95,7 +103,7 @@ class AirlockConfig:
     mask_secrets: bool = True
     sanitize_output: bool = True
     enable_audit_log: bool = True
-    audit_log_path: Path = field(default_factory=lambda: Path("airlock_audit.json"))
+    audit_log_path: Path = field(default_factory=lambda: _DEFAULT_AUDIT_LOG_PATH)
     audit_otel_enabled: bool = False
     audit_otel_endpoint: str | None = None
     audit_include_args_hash: bool = True
@@ -119,8 +127,9 @@ class AirlockConfig:
     # V0.4.1 Per-tool endpoint policies
     endpoint_policies: dict[str, EndpointPolicy] = field(default_factory=dict)
 
-    # V0.4.1 Anomaly detection. Stored but not applied, and setting it warns: @Airlock runs
-    # no anomaly detection. Pass it to an AnomalyDetector (anomaly.py) yourself.
+    # V0.4.1 Anomaly detection. Deprecated, removal in v1.0.0: never applied, since
+    # @Airlock runs no anomaly detection, and setting it warns. Pass it to an
+    # AnomalyDetector (anomaly.py) yourself.
     anomaly_config: AnomalyDetectorConfig | None = None
 
     # V0.8.9 — opt-in locale tags for region-specific PII detection.
@@ -132,10 +141,11 @@ class AirlockConfig:
     pii_locales: list[str] = field(default_factory=list)
 
     # V0.8.25: meant to switch on the fail-closed terminal-claim guard (Goal-Autopilot,
-    # arXiv:2606.11688), but nothing reads it: @Airlock checks no terminal claims, and
-    # setting it warns. Until 0.10.19 this comment said setting it made the guard admit a
-    # "done" claim only after its check passed. Use DoneReceiptGuard, or the
-    # ``no_false_success_defaults`` preset, where the agent makes its terminal claim.
+    # arXiv:2606.11688), but nothing reads it: @Airlock checks no terminal claims.
+    # Deprecated, removal in v1.0.0, and setting it warns. Until 0.10.19 this comment said
+    # setting it made the guard admit a "done" claim only after its check passed. Use
+    # DoneReceiptGuard, or the ``no_false_success_defaults`` preset, where the agent makes
+    # its terminal claim.
     require_done_receipt: bool = False
 
     # V0.4.1 per-tool credential scopes from ``[airlock.credentials]``. Not applied by
@@ -205,20 +215,30 @@ class AirlockConfig:
         if os.environ.get("AIRLOCK_MAX_OUTPUT_TOKENS"):
             self.max_output_tokens = int(os.environ["AIRLOCK_MAX_OUTPUT_TOKENS"])
 
+        # Moves the default audit log without a code change; a path given in code or TOML
+        # wins, as a key given to the constructor wins over E2B_API_KEY.
+        if os.environ.get("AIRLOCK_AUDIT_LOG_PATH") and (
+            self.audit_log_path is _DEFAULT_AUDIT_LOG_PATH
+        ):
+            self.audit_log_path = Path(os.environ["AIRLOCK_AUDIT_LOG_PATH"])
+
         self._warn_on_settings_not_applied()
 
     def _warn_on_settings_not_applied(self) -> None:
-        """Warn about each setting that is stored but that nothing applies.
+        """Warn about each deprecated setting that nothing has ever applied.
 
         Setting ``require_done_receipt=True`` used to switch nothing on without a word;
-        a deployment could believe a guard was active that never ran.
+        a deployment could believe a guard was active that never ran. FutureWarning, not
+        DeprecationWarning: Python hides DeprecationWarning outside ``__main__`` by
+        default, and whoever set one of these needs to see that it does nothing.
         """
         defaults = {name: f.default for name, f in self.__dataclass_fields__.items()}
         for name, instead in _NOT_APPLIED.items():
             if getattr(self, name) != defaults[name]:
                 warnings.warn(
-                    f"AirlockConfig.{name} is stored but not applied: {instead}.",
-                    UserWarning,
+                    f"AirlockConfig.{name} is deprecated and will be removed in v1.0.0. "
+                    f"Nothing has ever applied it: {instead}.",
+                    FutureWarning,
                     stacklevel=4,
                 )
 
@@ -397,8 +417,9 @@ class AirlockConfig:
         return result
 
 
-# Settings AirlockConfig stores but that nothing applies, and what to use instead. Each one
-# warns when set to anything but its default (see _warn_on_settings_not_applied).
+# Settings AirlockConfig stores but that nothing has ever applied, and what to use instead.
+# Deprecated for removal in v1.0.0; each warns when set to anything but its default (see
+# _warn_on_settings_not_applied).
 _NOT_APPLIED: dict[str, str] = {
     "max_output_tokens": "nothing counts tokens in tool output; use max_output_chars",
     "audit_otel_enabled": "nothing exports audit events from it; build an OTelAuditExporter",

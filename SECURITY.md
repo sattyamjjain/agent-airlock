@@ -334,9 +334,11 @@ def execute_code(code: str) -> str:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `E2B_API_KEY` | E2B sandbox authentication | None |
-| `AIRLOCK_STRICT_MODE` | Force strict mode globally | false |
-| `AIRLOCK_MAX_OUTPUT_TOKENS` | Override max output tokens | 5000 |
+| `E2B_API_KEY` | E2B sandbox authentication, when no key is set in code | None |
+| `AIRLOCK_UNKNOWN_ARGS` | Unknown-argument mode (`block`, `strip_and_log`, `strip_silent`) | `strip_and_log` |
+| `AIRLOCK_AUDIT_LOG_PATH` | Audit log file, when no `audit_log_path` is set in code or TOML | `airlock_audit.json` |
+| `AIRLOCK_STRICT_MODE` | Deprecated; `true` maps to `AIRLOCK_UNKNOWN_ARGS=block` | unset |
+| `AIRLOCK_MAX_OUTPUT_TOKENS` | Deprecated; nothing has ever applied it | 5000 |
 
 ---
 

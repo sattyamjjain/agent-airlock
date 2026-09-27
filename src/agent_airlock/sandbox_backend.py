@@ -47,6 +47,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from ._log import structlog
+from ._sandbox_errors import SandboxNotAvailableError
 
 if TYPE_CHECKING:
     from .config import AirlockConfig
@@ -1002,24 +1003,35 @@ class ModalBackend(SandboxBackend):
 
 
 # Default backend factory
-def get_default_backend(config: AirlockConfig | None = None) -> SandboxBackend:
+def get_default_backend(
+    config: AirlockConfig | None = None,
+    *,
+    allow_unsafe_local: bool = False,
+) -> SandboxBackend:
     """Get the default sandbox backend based on availability.
 
     Priority:
     1. E2B (if available and API key present)
     2. Docker (if a daemon answers), with the default image
-    3. ``LocalBackend(allow_unsafe=True)``, which runs the function in this process
-       with NO isolation, after a ``no_sandbox_available`` warning
+    3. Nothing: raises ``SandboxNotAvailableError``, unless ``allow_unsafe_local=True``
+       asks for ``LocalBackend(allow_unsafe=True)``, which runs the function in this
+       process with NO isolation
 
-    It never returns None, so a caller that needs isolation must check the backend's
-    ``name`` (``"local_unsafe"`` for the last case) before running anything dangerous.
+    Until 0.10.20 the third rung returned that ``LocalBackend`` unasked, after a warning
+    in the log, so a caller that wanted a sandbox got none without an error.
     ModalBackend and ManagedSandboxBackend are never picked.
 
     Args:
         config: Optional config to check for API keys.
+        allow_unsafe_local: Return ``LocalBackend(allow_unsafe=True)`` rather than raise
+            when no sandbox is available.
 
     Returns:
         The best available SandboxBackend.
+
+    Raises:
+        SandboxNotAvailableError: No sandbox is available and ``allow_unsafe_local`` is
+            False.
     """
     import os
 
@@ -1040,10 +1052,18 @@ def get_default_backend(config: AirlockConfig | None = None) -> SandboxBackend:
     if docker.is_available():
         return docker
 
-    # No sandbox available
+    if not allow_unsafe_local:
+        raise SandboxNotAvailableError(
+            "No sandbox backend is available: install agent-airlock[sandbox] and set "
+            "E2B_API_KEY, or run a Docker daemon. get_default_backend("
+            "allow_unsafe_local=True) returns LocalBackend instead, which runs the "
+            "function in this process with no isolation."
+        )
+
     logger.warning(
         "no_sandbox_available",
         hint="Install e2b-code-interpreter or docker for sandbox support",
+        fallback="LocalBackend(allow_unsafe=True), no isolation",
     )
     return LocalBackend(allow_unsafe=True)
 
