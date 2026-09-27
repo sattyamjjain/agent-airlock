@@ -90,9 +90,11 @@ What gates a merge — `ci.yml` jobs, on PRs and pushes to `main`:
 
 `publish.yml` (on a published release) adds `check_benchmark_freshness.py --release`,
 `check_registry_parity.py --distance-only`, a GitHub-description drift check and
-`twine check`. That job installs only `build` and `twine`, so any script it runs must stay
-stdlib-only. `make check-changelog-release` runs in no workflow: it is a manual pre-tag
-check, and wiring it per-PR would fail every PR between releases.
+`twine check`. The upload authenticates through PyPI Trusted Publishing (OIDC), so the job
+needs `id-token: write` and there is no PyPI token to add back. That job installs only
+`build` and `twine`, so any script it runs must stay stdlib-only.
+`make check-changelog-release` runs in no workflow: it is a manual pre-tag check, and
+wiring it per-PR would fail every PR between releases.
 
 `scripts/check_docs_api.py` imports the package, so it runs in `test` as
 `tests/test_docs_api_gate.py` rather than in `docs`, which installs only mkdocs. It checks

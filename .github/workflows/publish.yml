@@ -81,11 +81,9 @@ jobs:
       - name: README must render as a valid PyPI long_description
         run: twine check dist/*
 
-      # Uploads with PYPI_API_TOKEN while that secret exists. The action switches to
-      # Trusted Publishing, with attestations, when `password` is empty, so moving over
-      # is a settings change: add this workflow (publish.yml, no environment) as a
-      # trusted publisher on PyPI, then delete the PYPI_API_TOKEN secret.
+      # Trusted Publishing (OIDC). PyPI lists this workflow (publish.yml, any environment)
+      # as a trusted publisher for agent-airlock, so the action trades the job's id-token
+      # for a short-lived upload token and attaches PEP 740 attestations. No credential is
+      # stored anywhere. Releases up to 0.10.19 uploaded with a PYPI_API_TOKEN secret.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
