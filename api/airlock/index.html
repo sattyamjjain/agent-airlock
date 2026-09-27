@@ -3427,9 +3427,11 @@ raised and Airlock returns it as a blocked response.</p>
 <a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="mi">2</span>
 </code></pre></div>
 <h3 id="streaming-support-v015">Streaming Support (V0.1.5+)<a class="headerlink" href="#streaming-support-v015" title="Permanent link">&para;</a></h3>
-<p><code>StreamingAirlock</code> is not a decorator, and <code>@Airlock</code> does not sanitize what a generator
-yields. Decorate a generator function with <code>create_streaming_wrapper</code>, which masks each
-string chunk and applies <code>max_output_chars</code> to the stream as a whole:</p>
+<p><code>@Airlock</code> on a generator function masks each item the generator yields, as it would a
+returned value, and runs each step under the call's network airgap and context (until
+0.10.20 it did neither). <code>StreamingAirlock</code> is not a decorator. For a cap on the stream as a
+whole, decorate the generator function with <code>create_streaming_wrapper</code>, which masks each
+string chunk and applies <code>max_output_chars</code> across the chunks:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_streaming_wrapper</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
 <a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nd">@create_streaming_wrapper</span>

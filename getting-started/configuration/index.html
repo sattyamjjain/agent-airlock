@@ -2862,7 +2862,7 @@ the import.</p>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">pii_locales</span><span class="o">=</span><span class="p">[],</span>           <span class="c1"># ["in"] also masks Aadhaar, PAN, UPI, IFSC, etc.</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">mask_secrets</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>        <span class="c1"># Mask secrets (API keys, passwords, etc.)</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">max_output_chars</span><span class="o">=</span><span class="mi">20000</span><span class="p">,</span>   <span class="c1"># Truncate string results past this (0 = no limit)</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">max_output_tokens</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>   <span class="c1"># Stored, but @Airlock does not truncate on it</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">max_output_tokens</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>   <span class="c1"># Deprecated: never applied, and setting it warns</span>
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="c1"># E2B Sandbox</span>
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">e2b_api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>         <span class="c1"># E2B API key (prefer the E2B_API_KEY env var)</span>
@@ -2908,13 +2908,16 @@ timeout, filesystem and network policy) is set in code or in <code>airlock.toml<
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Unknown Args Mode (V0.4.0); overrides the constructor and the TOML file</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AIRLOCK_UNKNOWN_ARGS</span><span class="o">=</span>block<span class="w">  </span><span class="c1"># or strip_and_log, strip_silent</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Stored as max_output_tokens (which @Airlock does not truncate on)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Deprecated: sets max_output_tokens, which nothing applies</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AIRLOCK_MAX_OUTPUT_TOKENS</span><span class="o">=</span><span class="m">5000</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># E2B Sandbox; used when no e2b_api_key is set in code or TOML</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="nb">export</span><span class="w"> </span><span class="nv">E2B_API_KEY</span><span class="o">=</span>your-key-here
 <a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># Deprecated: AIRLOCK_STRICT_MODE=true still maps to block, with a DeprecationWarning</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># Audit log file; used when no audit_log_path is set in code or TOML</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nb">export</span><span class="w"> </span><span class="nv">AIRLOCK_AUDIT_LOG_PATH</span><span class="o">=</span>/var/log/agent-airlock/audit.jsonl
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="c1"># Deprecated: AIRLOCK_STRICT_MODE=true still maps to block, with a DeprecationWarning</span>
 </code></pre></div>
 <h2 id="configuration-file">Configuration File<a class="headerlink" href="#configuration-file" title="Permanent link">&para;</a></h2>
 <p>Nothing reads <code>airlock.toml</code> on its own. Create one in your project root and load it:</p>

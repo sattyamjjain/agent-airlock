@@ -3622,9 +3622,11 @@ Indian mobile numbers.</p>
 - JWT Tokens (<code>eyJ...</code>)
 - Connection Strings (<code>postgres://</code>, <code>mongodb://</code>)
 - Generic Passwords (8+ characters after <code>password=</code>, <code>pwd=</code>, <code>secret=</code>, <code>token=</code>, etc.)</p>
-<p>A string, dict, list, tuple or set result is masked. Any other object (a Pydantic model, a
-dataclass) is returned as it is, and what was found in it is logged as not masked; what a
-generator yields is not masked either. See <a href="../guide/sanitization/">PII &amp; Secret Masking</a>.</p>
+<p>A string, dict, list, tuple or set result is masked. What a generator tool yields is
+masked item by item the same way, and each step of it runs under the call's network airgap
+(until 0.10.20 it did neither). Any other object (a Pydantic model, a dataclass) is returned
+as it is, and what was found in it is logged as not masked. See
+<a href="../guide/sanitization/">PII &amp; Secret Masking</a>.</p>
 <h3 id="masking-strategies">Masking Strategies<a class="headerlink" href="#masking-strategies" title="Permanent link">&para;</a></h3>
 <p><code>@Airlock</code> masks each type with its default strategy: <code>FULL</code> for SSN, passwords, private
 keys and connection strings, <code>TYPE_ONLY</code> for IFSC, <code>PARTIAL</code> for the rest. <code>AirlockConfig</code>
@@ -3670,7 +3672,11 @@ mapping; a type left out of the mapping is masked <code>FULL</code>:</p>
 <h2 id="audit-logging">Audit Logging<a class="headerlink" href="#audit-logging" title="Permanent link">&para;</a></h2>
 <h3 id="log-format">Log Format<a class="headerlink" href="#log-format" title="Permanent link">&para;</a></h3>
 <p>Calls through <code>@Airlock</code> are appended to a JSON Lines file, one record per line:
-<code>airlock_audit.json</code> by default (<code>audit_log_path</code>; <code>enable_audit_log=False</code> turns it off).
+<code>airlock_audit.json</code> in the working directory by default. Set <code>audit_log_path</code>, or the
+<code>AIRLOCK_AUDIT_LOG_PATH</code> environment variable when no path is given in code or TOML, to put
+it elsewhere; <code>enable_audit_log=False</code> turns it off. A log that cannot be created is
+reported once (<code>audit_log_unavailable</code>) and nothing is recorded, rather than failing the
+import.
 A call to <code>delete_records</code> refused by a <code>denied_tools=["delete_*"]</code> policy:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
 <a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-01-31T10:30:00.123456+00:00"</span><span class="p">,</span>
@@ -3686,10 +3692,12 @@ A call to <code>delete_records</code> refused by a <code>denied_tools=["delete_*
 <a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">  </span><span class="nt">"error"</span><span class="p">:</span><span class="w"> </span><span class="s2">"AIRLOCK_BLOCK: Policy violation for 'delete_records'. Tool 'delete_records' is denied by policy (matches 'delete_*')"</span>
 <a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="p">}</span>
 </code></pre></div>
-<p>Fields with no value are left out. <code>agent_id</code> and <code>session_id</code> are recorded only from a
-context carried by the tool's first argument; an identity set around the call with
-<code>with AirlockContext(...)</code> does not reach the record. Argument values whose names look
-sensitive (<code>password</code>, <code>token</code>, <code>api_key</code>, ...) are written as <code>[REDACTED]</code>.</p>
+<p>Fields with no value are left out. <code>agent_id</code> and <code>session_id</code> come from a context carried
+by the tool's first argument, or, when the call has none, from one set around it with
+<code>with AirlockContext(...)</code>. Argument values whose names look sensitive (<code>password</code>, <code>token</code>,
+<code>api_key</code>, ...) are written as <code>[REDACTED]</code>, and every other argument preview is passed
+through the PII and secret masker before it is cut to length, so an email address or key
+given in any argument is not written as-is. Until 0.10.20 only the names were checked.</p>
 <h3 id="log-destinations">Log Destinations<a class="headerlink" href="#log-destinations" title="Permanent link">&para;</a></h3>
 <p>The library's own log lines (not the audit file) go through structlog when the
 <code>[logging]</code> extra is installed, and through the stdlib <code>logging</code> module otherwise:</p>

@@ -2555,10 +2555,12 @@ in the image as well. A minimal image:</p>
 <p>To pick a backend by availability, <code>get_default_backend(config=None)</code>
 (exported from <code>agent_airlock</code>) returns <code>E2BBackend</code> when an E2B API
 key is set (on <code>config</code> or in <code>E2B_API_KEY</code>) and the SDK is installed,
-else <code>DockerBackend()</code> with the
-default image when a Docker daemon answers, else
-<code>LocalBackend(allow_unsafe=True)</code>, which has no isolation, with a
-<code>no_sandbox_available</code> warning.</p>
+else <code>DockerBackend()</code> with the default image when a Docker daemon
+answers, else raises <code>SandboxNotAvailableError</code>. Pass
+<code>allow_unsafe_local=True</code> to get <code>LocalBackend(allow_unsafe=True)</code>
+instead, which runs the function in your process with no isolation.
+Until 0.10.20 that fallback happened unasked, with only a
+<code>no_sandbox_available</code> warning in the log.</p>
 <h2 id="v070-hardening-flags-37-38">v0.7.0 hardening flags (#37, #38)<a class="headerlink" href="#v070-hardening-flags-37-38" title="Permanent link">&para;</a></h2>
 <p>Two opt-in fail-closed flags shipped together in v0.7.0:</p>
 <ul>

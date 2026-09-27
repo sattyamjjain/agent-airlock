@@ -3078,7 +3078,7 @@
 <td><code>max_output_tokens</code></td>
 <td><code>int</code></td>
 <td><code>5000</code></td>
-<td>Stored (and read from <code>AIRLOCK_MAX_OUTPUT_TOKENS</code>), but <code>@Airlock</code> does not truncate on it; any other value warns</td>
+<td>Deprecated, removal in v1.0.0: nothing has ever truncated on it (it is read from <code>AIRLOCK_MAX_OUTPUT_TOKENS</code> too); any other value warns</td>
 </tr>
 </tbody>
 </table>
@@ -3106,7 +3106,7 @@ or for picking individual types.</p>
 <td><code>audit_log_path</code></td>
 <td><code>Path</code></td>
 <td><code>airlock_audit.json</code></td>
-<td>Audit log file</td>
+<td>Audit log file, relative to the working directory; <code>AIRLOCK_AUDIT_LOG_PATH</code> replaces the default when no path is given in code or TOML</td>
 </tr>
 </tbody>
 </table>
@@ -3222,12 +3222,13 @@ or for picking individual types.</p>
 </tbody>
 </table>
 <p><code>audit_otel_enabled</code>, <code>audit_otel_endpoint</code>, <code>audit_include_args_hash</code>, <code>anomaly_config</code> and
-<code>require_done_receipt</code> are accepted and stored, but nothing reads them, and setting one to
-anything but its default emits a <code>UserWarning</code> naming what to use instead:
-<code>OTelAuditExporter</code> for the audit settings, an <code>AnomalyDetector</code> for <code>anomaly_config</code>, and
-<code>DoneReceiptGuard</code> (or the <code>no_false_success_defaults</code> preset) for <code>require_done_receipt</code>.
-Until 0.10.19 they were stored without a word, although <code>require_done_receipt</code>'s comment
-said it switched on a fail-closed guard.</p>
+<code>require_done_receipt</code> are accepted and stored, but nothing has ever read them. They are
+deprecated for removal in v1.0.0, and setting one to anything but its default emits a
+<code>FutureWarning</code>, shown by default, naming what to use instead: <code>OTelAuditExporter</code> for the
+audit settings, an <code>AnomalyDetector</code> for <code>anomaly_config</code>, and <code>DoneReceiptGuard</code> (or the
+<code>no_false_success_defaults</code> preset) for <code>require_done_receipt</code>. Until 0.10.19 they were
+stored without a word, although <code>require_done_receipt</code>'s comment said it switched on a
+fail-closed guard.</p>
 <h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">UnknownArgsMode</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
@@ -3413,7 +3414,7 @@ import.</p>
 </tr>
 <tr>
 <td><code>AIRLOCK_MAX_OUTPUT_TOKENS</code></td>
-<td><code>max_output_tokens</code></td>
+<td><code>max_output_tokens</code> (deprecated, never applied)</td>
 </tr>
 <tr>
 <td><code>AIRLOCK_STRICT_MODE</code></td>
@@ -3422,6 +3423,10 @@ import.</p>
 <tr>
 <td><code>E2B_API_KEY</code></td>
 <td><code>e2b_api_key</code>, when it is not set in code or TOML</td>
+</tr>
+<tr>
+<td><code>AIRLOCK_AUDIT_LOG_PATH</code></td>
+<td><code>audit_log_path</code>, when it is not set in code or TOML</td>
 </tr>
 </tbody>
 </table>
