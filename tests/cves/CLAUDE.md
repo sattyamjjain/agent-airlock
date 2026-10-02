@@ -44,8 +44,8 @@ what counts as in scope is in `docs/cve-triage.md`.
   raises=AssertionError, reason="in-scope-and-deferred-until-<date> (#<issue>): <why>")`,
   so an unexpected pass and an unrelated crash both fail, and pin the missing primitive in
   a `TestWhereTheGapIs` class. When the gap closes, make the assertions plain and update
-  the fit, the triage disposition and the README intro sentence that names the module
-  (`test_cve_2026_102911_pi_llm_wiki_url.py`).
+  the fit and the triage disposition. `test_cve_2026_102911_pi_llm_wiki_url.py` was held
+  this way until 0.10.22 closed its gap (its history shows both states).
 - **Presets.** A module that adds a preset pins that preset's `cves` tuple and its
   `list_active()` entry. A second-defence module that reuses an existing guard asserts the
   reverse — the preset does *not* claim the CVE — plus the watcher signal that admitted it;

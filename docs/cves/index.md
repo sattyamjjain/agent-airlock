@@ -38,7 +38,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2025-68143](#cve-2025-68143) | Anthropic mcp-server-git `git_init` path traversal | 8.2 (High) | Strong |
 | [CVE-2025-68144](#cve-2025-68144) | Anthropic mcp-server-git argument injection | 8.1 (High) | Strongest |
 | [CVE-2025-68145](#cve-2025-68145) | mcp-server-git `--repository` root not enforced | 7.1 (High) | Strong |
-| [CVE-2026-102911](#cve-2026-102911) | pi-llm-wiki `wiki_capture_source` splices its `url` argument into `sh -c` | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78 | None |
+| [CVE-2026-102911](#cve-2026-102911) | pi-llm-wiki `wiki_capture_source` splices its `url` argument into `sh -c` | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78 | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
@@ -227,7 +227,7 @@ prefix) so it catches the three common escape variants:
 **pi-llm-wiki `wiki_capture_source` splices its `url` argument into `sh -c`**
 
 - **CVSS:** 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78
-- **Airlock fit:** none
+- **Airlock fit:** partial
 - **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-102911](https://nvd.nist.gov/vuln/detail/CVE-2026-102911)
 - **Advisory:** [https://github.com/zosmaai/pi-llm-wiki/issues/185](https://github.com/zosmaai/pi-llm-wiki/issues/185)
 - **Regression test:** [`tests/cves/test_cve_2026_102911_pi_llm_wiki_url.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_102911_pi_llm_wiki_url.py)
@@ -248,18 +248,18 @@ its own argv element with no shell.
 
 **Airlock mitigation**
 
-In scope and not refused yet: dispositioned
-``in-scope-and-deferred-until-2026-11-02`` on issue #256. A ``url`` typed ``SafeURL``
-refuses the published payload, but only because it is not an https URL at all.
-Put the same payload inside one and ``SafeURL`` admits it, because it checks where
-a URL points (scheme, host, metadata endpoints, private ranges), not which
-characters it carries. ``StdioCommandInjectionGuard`` does refuse these characters,
-but it reads only the ``command`` and ``args`` fields of a spawn config, never an
-argument named ``url``.
+A ``url`` typed ``SafeURL`` refuses every payload here that runs a command through the
+double-quoted splice. Upstream's own payloads are not https URLs, so the scheme check
+refuses them. Put inside one, each still carries a ``"`` that ends the quoting, a
+backtick, a ``|`` or ``$(``, and since 0.10.22 ``SafeURL`` refuses a URL carrying a
+character RFC 3986 requires to be percent-encoded, and ``$(``. Until then it checked
+only where a URL points, and these four cases were held here as strict ``xfail``
+(issue #256).
 
-The tests that want the refusal are strict ``xfail``. The day a primitive starts
-refusing a URL that carries shell syntax they fail the build, and this fit and the
-disposition on #256 have to change with them.
+What it cannot refuse: ``$NAME`` inside the double quotes still expands, so a URL can
+carry an environment variable into the fetch. ``$name`` is ordinary URL syntax
+(OData's ``$select``), and refusing it would break real URLs. The complete fix is the
+upstream one: pass the URL as its own argv element, with no shell.
 
 <a id="cve-2026-102911"></a>
 

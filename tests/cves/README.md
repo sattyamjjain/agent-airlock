@@ -2,9 +2,9 @@
 
 Every test in this directory reproduces a disclosed CVE's vulnerable
 tool-call pattern and asserts that the corresponding agent-airlock
-primitive blocks it. One module asserts it as a strict `xfail`:
-CVE-2026-102911 is in scope and not refused yet (deferred on #256), and its
-xfail fails the build the day a primitive starts refusing it.
+primitive blocks it. A CVE that is in scope and not refused yet is held as a
+strict `xfail` instead, which fails the build the day a primitive starts
+refusing it; CVE-2026-102911 was one until 0.10.22.
 
 The suite is a **second defence**: agent-airlock's job is to catch the same
 class of bug when a vulnerable server is still running, or when a new tool
@@ -33,7 +33,7 @@ drift from the suite. This one can, which is why it says so.
 | CVE-2026-27825 | `test_cve_2026_27825_mcp_atlassian_arbitrary_write.py` | strong | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27825/) |
 | CVE-2026-27826 | `test_cve_2026_27826_mcp_atlassian_header_ssrf.py` | partial (if URL is a tool param) | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27826/) |
 | CVE-2026-79748 | `test_cve_2026_79748_mcphub_spawn_config.py` | partial (spawn primitive only, not the missing authz) | [GHSA-mx89-jjx9-gjr8](https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8) |
-| CVE-2026-102911 | `test_cve_2026_102911_pi_llm_wiki_url.py` | none yet (`in-scope-and-deferred-until-2026-11-02`, #256; the published PoC is refused only because it is not an https URL) | [zosmaai/pi-llm-wiki#185](https://github.com/zosmaai/pi-llm-wiki/issues/185) |
+| CVE-2026-102911 | `test_cve_2026_102911_pi_llm_wiki_url.py` | partial (refuses every payload that runs a command; `$NAME` expansion inside the quotes is URL syntax and passes) | [zosmaai/pi-llm-wiki#185](https://github.com/zosmaai/pi-llm-wiki/issues/185) |
 | CVE-2026-79538 | `test_cve_2026_79538_metamcp_stdio_proxy.py` | partial (spawn primitive only, not the missing authz; no fixed release yet) | [Traceforce advisory](https://www.traceforce.ai/security-advisories/cve-2026-79538) |
 | CVE-2026-19591 | `test_cve_2026_19591_codex_stop_parsing.py` | strong | [openai/codex#22643](https://github.com/openai/codex/pull/22643) |
 | CVE-2026-19753 | `test_cve_2026_19753_rdf_explorer_ssrf.py` | strong | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19753) |
