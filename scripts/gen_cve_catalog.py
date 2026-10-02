@@ -12,7 +12,7 @@ Each CVE regression test module starts with a structured docstring:
     NVD:      <url>
     CVSS:     <n.n> (<severity>)
 
-    Airlock fit: <strong|strongest|partial|out-of-scope>.
+    Airlock fit: <strong|strongest|partial|none|out-of-scope>.
         <paragraph>
     \"\"\"
 
@@ -444,9 +444,13 @@ This page is auto-generated from the regression tests in
 
 Every CVE listed here has a corresponding test that reproduces the
 vulnerable tool-call pattern and asserts an agent-airlock primitive blocks
-it. The suite is a **second defence**: agent-airlock's job is to catch the
-same class of bug when a vulnerable server is still running, or when a new
-tool ships with the same shape. Most of these CVEs have an upstream fix; where
+it, except a row whose fit is **None**: triaged in scope and not refused
+yet. That row's test is a strict `xfail`, so the build fails the day the
+refusal starts working, and the row has to change with it.
+
+The suite is a **second defence**: agent-airlock's job is to catch the same
+class of bug when a vulnerable server is still running, or when a new tool
+ships with the same shape. Most of these CVEs have an upstream fix; where
 none existed when a row was added, its Vulnerability section says so.
 
 See [`tests/cves/README.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/README.md)

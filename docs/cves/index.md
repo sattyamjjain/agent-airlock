@@ -5,9 +5,13 @@ This page is auto-generated from the regression tests in
 
 Every CVE listed here has a corresponding test that reproduces the
 vulnerable tool-call pattern and asserts an agent-airlock primitive blocks
-it. The suite is a **second defence**: agent-airlock's job is to catch the
-same class of bug when a vulnerable server is still running, or when a new
-tool ships with the same shape. Most of these CVEs have an upstream fix; where
+it, except a row whose fit is **None**: triaged in scope and not refused
+yet. That row's test is a strict `xfail`, so the build fails the day the
+refusal starts working, and the row has to change with it.
+
+The suite is a **second defence**: agent-airlock's job is to catch the same
+class of bug when a vulnerable server is still running, or when a new tool
+ships with the same shape. Most of these CVEs have an upstream fix; where
 none existed when a row was added, its Vulnerability section says so.
 
 See [`tests/cves/README.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/README.md)
@@ -34,6 +38,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2025-68143](#cve-2025-68143) | Anthropic mcp-server-git `git_init` path traversal | 8.2 (High) | Strong |
 | [CVE-2025-68144](#cve-2025-68144) | Anthropic mcp-server-git argument injection | 8.1 (High) | Strongest |
 | [CVE-2025-68145](#cve-2025-68145) | mcp-server-git `--repository` root not enforced | 7.1 (High) | Strong |
+| [CVE-2026-102911](#cve-2026-102911) | pi-llm-wiki `wiki_capture_source` splices its `url` argument into `sh -c` | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78 | None |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
@@ -216,6 +221,47 @@ prefix) so it catches the three common escape variants:
 - a symlink that points outside the root
 
 <a id="cve-2025-68145"></a>
+
+### CVE-2026-102911
+
+**pi-llm-wiki `wiki_capture_source` splices its `url` argument into `sh -c`**
+
+- **CVSS:** 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78
+- **Airlock fit:** none
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-102911](https://nvd.nist.gov/vuln/detail/CVE-2026-102911)
+- **Advisory:** [https://github.com/zosmaai/pi-llm-wiki/issues/185](https://github.com/zosmaai/pi-llm-wiki/issues/185)
+- **Regression test:** [`tests/cves/test_cve_2026_102911_pi_llm_wiki_url.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_102911_pi_llm_wiki_url.py)
+
+**Vulnerability**
+
+pi-llm-wiki up to 0.11.7 exposes an MCP tool, ``wiki_capture_source``, whose ``url``
+argument reaches ``extractWithMarkItDown`` in
+``extensions/llm-wiki/lib/source-extractors.ts``. That function ran ``sh`` with these arguments:
+
+    ["-c", `uvx --from 'markitdown[docx,pdf]' markitdown "${source}" 2>/dev/null || echo ""`]
+
+The value sits inside double quotes, so ``$(...)`` and backticks run where they
+stand, and a ``"`` closes the quoting so that ``;``, ``|`` or ``&&`` start a command
+of the caller's choosing. The published proof of concept sends ``url`` as
+``";open -a Calculator;# ``. Fixed in 0.11.8 (PR #186), which passes ``source`` as
+its own argv element with no shell.
+
+**Airlock mitigation**
+
+In scope and not refused yet: dispositioned
+``in-scope-and-deferred-until-2026-11-02`` on issue #256. A ``url`` typed ``SafeURL``
+refuses the published payload, but only because it is not an https URL at all.
+Put the same payload inside one and ``SafeURL`` admits it, because it checks where
+a URL points (scheme, host, metadata endpoints, private ranges), not which
+characters it carries. ``StdioCommandInjectionGuard`` does refuse these characters,
+but it reads only the ``command`` and ``args`` fields of a spawn config, never an
+argument named ``url``.
+
+The tests that want the refusal are strict ``xfail``. The day a primitive starts
+refusing a URL that carries shell syntax they fail the build, and this fit and the
+disposition on #256 have to change with them.
+
+<a id="cve-2026-102911"></a>
 
 ### CVE-2026-11393
 
