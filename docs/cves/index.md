@@ -1210,7 +1210,9 @@ second-defence fixture against an existing guard, not a new guard.
 
 The guard judges a decoded config. MetaMCP splits ``args`` with ``shell-quote``
 and parses ``env`` as JSON before it spawns; the test's ``_spawn_config`` repeats
-those three lines, so every verdict here is about what reaches the spawn.
+those three lines, so the verdicts are about what reaches the spawn. Fed the raw
+query instead, the guard refuses it too: since 0.10.21 an ``env`` it cannot read,
+such as that JSON string, is refused rather than skipped.
 
 <a id="cve-2026-79538"></a>
 

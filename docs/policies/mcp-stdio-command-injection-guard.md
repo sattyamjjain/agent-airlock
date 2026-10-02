@@ -20,6 +20,13 @@ an injection path. The guard denies on:
 2. **Path traversal** (`../` resolving outside an operator-supplied
    `cwd_allowlist`). The traversal check is **opt-in** — empty
    allowlist disables it.
+3. **A stop-parsing token** (`--%`) as a whole element of `command` or
+   `args` (CVE-2026-19591).
+
+`command` and `args` may each be a single string or a list of strings,
+and both shapes are checked. A single string is a shell-form command
+line, so the stop-parsing and traversal checks look at its tokens. Until
+v0.10.21 a list `command` and a string `args` were skipped entirely.
 
 [hns]: https://www.helpnetsecurity.com/2026/05/05/ai-agent-security-skills-blind-spots/
 
@@ -59,6 +66,7 @@ family for chain-friendly composition.
 | `ALLOW` | no metachar in argv; traversal check disabled or path inside allowlist |
 | `DENY_SHELL_METACHAR` | any default or operator-extended metachar found |
 | `DENY_PATH_TRAVERSAL` | path-shaped argv element resolves outside `cwd_allowlist` |
+| `DENY_STOP_PARSING_TOKEN` | an argv element is a stop-parsing token (`--%`), so the argv no longer describes what would run |
 
 ## Extending the metachar set
 

@@ -65,6 +65,10 @@ logger = structlog.get_logger("agent-airlock.mcp_spec.subprocess_arg_guard")
 # ``args`` / ``argv`` the argument vector; ``env`` the process environment.
 _DEFAULT_SPAWN_KEYS: tuple[str, ...] = ("command", "cmd", "args", "argv", "env")
 
+# Keys the program is read from, in precedence order: ``command`` / ``cmd`` name it
+# directly, ``argv`` / ``args`` name it in their first element.
+_PROGRAM_KEYS: tuple[str, ...] = ("command", "cmd", "argv", "args")
+
 # Environment variables that turn an otherwise-allowlisted binary into a
 # code-execution primitive (preload / search-path / interpreter hooks).
 _DEFAULT_DANGEROUS_ENV_VARS: frozenset[str] = frozenset(
@@ -212,18 +216,27 @@ class McpSubprocessArgInjectionGuard:
             # A plain data argument — this guard gates the spawn surface only.
             return self._allow("config carries no spawn-shaped fields")
 
-        # 1) Resolve the program: command / cmd, else argv[0] / args[0].
+        # 1) Resolve the program: command / cmd, else argv[0] / args[0], each a string
+        #    or a sequence of strings. A spawn config whose program cannot be read is
+        #    refused (v0.10.21): until then a list ``command`` such as
+        #    ``["sh", "-c", "id"]``, a string ``args`` and a config naming no program
+        #    at all skipped the allowlist and were allowed.
         program = self._resolve_program(config)
-        if program is not None:
-            field_name, raw = program
-            resolved = self._program_name(raw)
-            if not self._is_allowed(raw, resolved):
-                return self._deny_command(field_name, raw, resolved)
+        if program is None:
+            return self._deny_unresolved(config)
+        field_name, raw = program
+        resolved = self._program_name(raw)
+        if not self._is_allowed(raw, resolved):
+            return self._deny_command(field_name, raw, resolved)
 
         # 2) Inspect env for code-loading variables (refused regardless of
         #    whether the command was allowlisted — env turns any binary
-        #    into an execution primitive).
+        #    into an execution primitive). An env that is not a mapping (a JSON
+        #    string, a list of pairs) cannot be read, so it is refused rather than
+        #    skipped (v0.10.21).
         env = config.get("env")
+        if env is not None and not isinstance(env, Mapping):
+            return self._deny_env_unreadable(env)
         if isinstance(env, Mapping):
             for var in env:
                 if isinstance(var, str) and var.upper() in self._dangerous_env_vars:
@@ -234,15 +247,30 @@ class McpSubprocessArgInjectionGuard:
     # -- internal helpers --------------------------------------------------
 
     def _resolve_program(self, config: Mapping[str, Any]) -> tuple[str, str] | None:
-        """Return ``(field_name, raw_program_string)`` or None if absent."""
-        for key in ("command", "cmd"):
+        """Return ``(field_name, raw_program_string)``, or None when no program can be read.
+
+        Keys are tried in :data:`_PROGRAM_KEYS` order. A string names the program in its
+        first whitespace token, a sequence in its first element. A key that is absent,
+        ``None``, blank or an empty sequence is skipped. A key holding anything else (a
+        sequence whose first element is not a non-blank string, a mapping, a number)
+        makes the program unreadable, and a later key does not rescue it: the spawner
+        would read the earlier one.
+        """
+        for key in _PROGRAM_KEYS:
             value = config.get(key)
-            if isinstance(value, str) and value.strip():
-                return key, value
-        for key in ("argv", "args"):
-            value = config.get(key)
-            if isinstance(value, (list, tuple)) and value and isinstance(value[0], str):
-                return f"{key}[0]", value[0]
+            if value is None:
+                continue
+            if isinstance(value, str):
+                if value.strip():
+                    return key, value
+                continue
+            if isinstance(value, (list, tuple)):
+                if not value:
+                    continue
+                first = value[0]
+                if isinstance(first, str) and first.strip():
+                    return f"{key}[0]", first
+            return None
         return None
 
     @staticmethod
@@ -299,6 +327,66 @@ class McpSubprocessArgInjectionGuard:
             ),
             matched_field=field_name,
             matched_command=resolved,
+            fix_hints=hints,
+        )
+
+    def _deny_unresolved(self, config: Mapping[str, Any]) -> McpSubprocessArgDecision:
+        present = [key for key in _PROGRAM_KEYS if config.get(key) is not None]
+        field_name = present[0] if present else None
+        logger.warning(
+            "mcp_subprocess_arg_blocked",
+            verdict=McpSubprocessArgVerdict.DENY_UNTRUSTED_COMMAND.value,
+            field=field_name,
+            reason="no_readable_program",
+            advisory=self._advisory,
+        )
+        prefix = f"({self._advisory}) " if self._advisory else ""
+        hints = [
+            f"{prefix}This spawn config names no program the guard can check against the "
+            "allowlist. `command`, `cmd`, `argv` and `args` must each be a string or a "
+            "list of strings whose first element is the program.",
+            "Send the whole spawn config, with the program in `command`, so it can be "
+            "checked before anything is spawned.",
+        ]
+        if self._advisory_url:
+            hints.append(f"See: {self._advisory_url}")
+        return McpSubprocessArgDecision(
+            allowed=False,
+            verdict=McpSubprocessArgVerdict.DENY_UNTRUSTED_COMMAND,
+            detail=(
+                "spawn-shaped config names no program that can be checked against the "
+                f"allowlist (program field: {field_name!r})"
+            ),
+            matched_field=field_name,
+            matched_command=None,
+            fix_hints=hints,
+        )
+
+    def _deny_env_unreadable(self, env: object) -> McpSubprocessArgDecision:
+        kind = type(env).__name__
+        logger.warning(
+            "mcp_subprocess_arg_blocked",
+            verdict=McpSubprocessArgVerdict.DENY_UNTRUSTED_ENV.value,
+            field="env",
+            reason="env_not_a_mapping",
+            env_type=kind,
+            advisory=self._advisory,
+        )
+        prefix = f"({self._advisory}) " if self._advisory else ""
+        hints = [
+            f"{prefix}The spawn config's env is a {kind}, not a mapping, so it cannot be "
+            "checked for code-loading variables (LD_PRELOAD, NODE_OPTIONS, PYTHONPATH, ...).",
+            "Decode env into a mapping of variable names to values before the check, or "
+            "pin the process environment to a fixed, vetted set.",
+        ]
+        if self._advisory_url:
+            hints.append(f"See: {self._advisory_url}")
+        return McpSubprocessArgDecision(
+            allowed=False,
+            verdict=McpSubprocessArgVerdict.DENY_UNTRUSTED_ENV,
+            detail=f"spawn config's env is a {kind}, not a mapping, so it cannot be checked",
+            matched_field="env",
+            matched_command=None,
             fix_hints=hints,
         )
 

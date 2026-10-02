@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import enum
 import os
+import shlex
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -192,8 +193,10 @@ class StdioCommandInjectionGuard:
 
         Args:
             args: The tool call's argument dict. ``None`` = no payload
-                = allow. Inspected fields: ``command`` (string) and
-                ``args`` (iterable of strings).
+                = allow. Inspected fields: ``command`` and ``args``, each
+                a string or a sequence of strings. Until v0.10.21 a list
+                ``command`` and a string ``args`` were skipped, so nothing
+                in them was ever checked.
 
         Returns:
             :class:`StdioCommandInjectionDecision`. Callers map
@@ -210,7 +213,7 @@ class StdioCommandInjectionGuard:
         #    a question about a command line the shell will not build. Refuse
         #    rather than reason about it — the same position upstream took in
         #    openai/codex#22643. See CVE-2026-19591.
-        for value in self._argv_strings(args):
+        for value in self._argv_tokens(args):
             if value in self._stop_parsing_tokens:
                 logger.warning(
                     "stdio_command_injection_stop_parsing_token",
@@ -252,7 +255,7 @@ class StdioCommandInjectionGuard:
         # 2) If the operator opted into the traversal check, inspect
         #    each argv element that looks like a path.
         if self._cwd_allowlist:
-            for value in self._argv_strings(args):
+            for value in self._argv_tokens(args):
                 if self._is_path_traversal(value):
                     logger.warning(
                         "stdio_command_injection_path_traversal",
@@ -282,15 +285,35 @@ class StdioCommandInjectionGuard:
         )
 
     def _argv_strings(self, args: Mapping[str, Any]) -> Iterable[str]:
-        """Yield every argv-shaped string from the args dict."""
-        command = args.get("command")
-        if isinstance(command, str):
-            yield command
-        argv = args.get("args")
-        if isinstance(argv, (list, tuple)):
-            for item in argv:
-                if isinstance(item, str):
-                    yield item
+        """Yield every argv-shaped string from the args dict, whole.
+
+        ``command`` and ``args`` are each read as one string or as a sequence of
+        strings. Used by the metachar scan, where a match anywhere in a string counts.
+        """
+        for key in ("command", "args"):
+            value = args.get(key)
+            if isinstance(value, str):
+                yield value
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    if isinstance(item, str):
+                        yield item
+
+    def _argv_tokens(self, args: Mapping[str, Any]) -> Iterable[str]:
+        """Yield argv elements: sequence items as given, bare strings split like a shell.
+
+        A bare string is a shell-form command line, so a stop-parsing token or a path
+        inside it is one token of that line, not the whole string. Used by the checks
+        that compare whole elements (stop-parsing tokens, path traversal).
+        """
+        for key in ("command", "args"):
+            value = args.get(key)
+            if isinstance(value, str):
+                yield from _shell_tokens(value)
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    if isinstance(item, str):
+                        yield item
 
     def _find_metachar(self, value: str) -> str | None:
         for ch in self._metachars:
@@ -324,6 +347,14 @@ class StdioCommandInjectionGuard:
             normalised == root or normalised.startswith(root.rstrip("/") + "/")
             for root in self._cwd_allowlist
         )
+
+
+def _shell_tokens(line: str) -> list[str]:
+    """Split a shell-form string the way a POSIX shell would, or on whitespace if it can't."""
+    try:
+        return shlex.split(line)
+    except ValueError:  # unbalanced quotes: still inspect what is there
+        return line.split()
 
 
 __all__ = [
