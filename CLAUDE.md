@@ -276,7 +276,9 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   `try/except ImportError`, raising an error that names the extra to install. This is what
   keeps the `bare-install` job green.
 - **Deny-by-default** — unknown tier, unregistered manifest, and unpinned spec revision all
-  fail closed. New branches should preserve that direction.
+  fail closed, and so does an input shape a guard cannot read, such as a list where a string
+  was expected: it is refused rather than skipped (see `mcp_spec/CLAUDE.md`). New branches
+  should preserve that direction.
 - **Context propagation** — `contextvars`-backed `AirlockContext`; `get_current_context()`
   is available inside the wrapped tool, and a policy may be a callable over that context
   for per-tenant / per-workspace rules.
