@@ -1536,6 +1536,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-102911" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-102911
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1898,6 +1909,17 @@
     <span class="md-ellipsis">
       
         CVE-2026-78575
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-79538" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-79538
       
     </span>
   </a>
@@ -3012,6 +3034,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-102911" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-102911
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3381,6 +3414,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-79538" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-79538
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-79748" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3432,10 +3476,13 @@
 <a href="https://github.com/sattyamjjain/agent-airlock/tree/main/tests/cves"><code>tests/cves/</code></a>.</p>
 <p>Every CVE listed here has a corresponding test that reproduces the
 vulnerable tool-call pattern and asserts an agent-airlock primitive blocks
-it. The suite is a <strong>second defence</strong> — upstream vendors have shipped fixes
-for every CVE below. Agent-airlock's job is to catch the same class of bug
-when a vulnerable server is still running, or when a new tool ships with the
-same shape.</p>
+it, except a row whose fit is <strong>None</strong>: triaged in scope and not refused
+yet. That row's test is a strict <code>xfail</code>, so the build fails the day the
+refusal starts working, and the row has to change with it.</p>
+<p>The suite is a <strong>second defence</strong>: agent-airlock's job is to catch the same
+class of bug when a vulnerable server is still running, or when a new tool
+ships with the same shape. Most of these CVEs have an upstream fix; where
+none existed when a row was added, its Vulnerability section says so.</p>
 <p>See <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/README.md"><code>tests/cves/README.md</code></a>
 for the classification rules and a list of CVEs we deliberately chose NOT
 to cover (transport-layer and web-framework bugs that sit outside the
@@ -3485,6 +3532,12 @@ catalog and the tests stay in lockstep.</p>
 <td>mcp-server-git <code>--repository</code> root not enforced</td>
 <td>7.1 (High)</td>
 <td>Strong</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-102911">CVE-2026-102911</a></td>
+<td>pi-llm-wiki <code>wiki_capture_source</code> splices its <code>url</code> argument into <code>sh -c</code></td>
+<td>9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78</td>
+<td>None</td>
 </tr>
 <tr>
 <td><a href="#cve-2026-11393">CVE-2026-11393</a></td>
@@ -3679,6 +3732,12 @@ catalog and the tests stay in lockstep.</p>
 <td>Partial</td>
 </tr>
 <tr>
+<td><a href="#cve-2026-79538">CVE-2026-79538</a></td>
+<td>MetaMCP inspector proxy spawns the stdio command its query string names</td>
+<td>9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-94</td>
+<td>Partial</td>
+</tr>
+<tr>
 <td><a href="#cve-2026-79748">CVE-2026-79748</a></td>
 <td>MCPHub server-config endpoints spawn attacker-supplied stdio commands</td>
 <td>9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862</td>
@@ -3809,6 +3868,39 @@ prefix) so it catches the three common escape variants:</p>
 <li>a symlink that points outside the root</li>
 </ul>
 <p><a id="cve-2025-68145"></a></p>
+<h3 id="cve-2026-102911">CVE-2026-102911<a class="headerlink" href="#cve-2026-102911" title="Permanent link">&para;</a></h3>
+<p><strong>pi-llm-wiki <code>wiki_capture_source</code> splices its <code>url</code> argument into <code>sh -c</code></strong></p>
+<ul>
+<li><strong>CVSS:</strong> 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78</li>
+<li><strong>Airlock fit:</strong> none</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-102911">https://nvd.nist.gov/vuln/detail/CVE-2026-102911</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/zosmaai/pi-llm-wiki/issues/185">https://github.com/zosmaai/pi-llm-wiki/issues/185</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_102911_pi_llm_wiki_url.py"><code>tests/cves/test_cve_2026_102911_pi_llm_wiki_url.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>pi-llm-wiki up to 0.11.7 exposes an MCP tool, <code>wiki_capture_source</code>, whose <code>url</code>
+argument reaches <code>extractWithMarkItDown</code> in
+<code>extensions/llm-wiki/lib/source-extractors.ts</code>. That function ran <code>sh</code> with these arguments:</p>
+<div class="highlight"><pre><span></span><code>["-c", `uvx --from 'markitdown[docx,pdf]' markitdown "${source}" 2&gt;/dev/null || echo ""`]
+</code></pre></div>
+<p>The value sits inside double quotes, so <code>$(...)</code> and backticks run where they
+stand, and a <code>"</code> closes the quoting so that <code>;</code>, <code>|</code> or <code>&amp;&amp;</code> start a command
+of the caller's choosing. The published proof of concept sends <code>url</code> as
+<code>";open -a Calculator;#</code>. Fixed in 0.11.8 (PR #186), which passes <code>source</code> as
+its own argv element with no shell.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>In scope and not refused yet: dispositioned
+<code>in-scope-and-deferred-until-2026-11-02</code> on issue #256. A <code>url</code> typed <code>SafeURL</code>
+refuses the published payload, but only because it is not an https URL at all.
+Put the same payload inside one and <code>SafeURL</code> admits it, because it checks where
+a URL points (scheme, host, metadata endpoints, private ranges), not which
+characters it carries. <code>StdioCommandInjectionGuard</code> does refuse these characters,
+but it reads only the <code>command</code> and <code>args</code> fields of a spawn config, never an
+argument named <code>url</code>.</p>
+<p>The tests that want the refusal are strict <code>xfail</code>. The day a primitive starts
+refusing a URL that carries shell syntax they fail the build, and this fit and the
+disposition on #256 have to change with them.</p>
+<p><a id="cve-2026-102911"></a></p>
 <h3 id="cve-2026-11393">CVE-2026-11393<a class="headerlink" href="#cve-2026-11393" title="Permanent link">&para;</a></h3>
 <p><strong>AgentCore CLI triple-quote codegen RCE</strong></p>
 <ul>
@@ -4544,6 +4636,38 @@ asserts end to end. That is a composition requirement rather than a bug in
 either guard, and it is pinned here so the pairing cannot be dropped from a
 preset on the belief that one is redundant.</p>
 <p><a id="cve-2026-78575"></a></p>
+<h3 id="cve-2026-79538">CVE-2026-79538<a class="headerlink" href="#cve-2026-79538" title="Permanent link">&para;</a></h3>
+<p><strong>MetaMCP inspector proxy spawns the stdio command its query string names</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-94</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-79538">https://nvd.nist.gov/vuln/detail/CVE-2026-79538</a></li>
+<li><strong>Advisory:</strong> <a href="https://www.traceforce.ai/security-advisories/cve-2026-79538">https://www.traceforce.ai/security-advisories/cve-2026-79538</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_79538_metamcp_stdio_proxy.py"><code>tests/cves/test_cve_2026_79538_metamcp_stdio_proxy.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>MetaMCP up to and including 2.4.22 serves an internal MCP inspector proxy at
+<code>GET /mcp-proxy/server/stdio</code>. Its <code>createTransport</code> STDIO branch
+(<code>apps/backend/src/routers/mcp-proxy/server.ts</code>) reads <code>command</code>, <code>args</code>
+and <code>env</code> from the request's query string and hands them to
+<code>ProcessManagedStdioTransport</code>, which spawns them. In the advisory's words,
+<em>"the handler accepts the process parameters from the request itself rather than
+resolving them from a server record the caller owns, and does not check them
+against an allowlist. The only gate is a logged-in session. Registration is open
+by default"</em>. No fixed release existed when this was catalogued: 2.4.22
+(2025-12-19) is the newest release, and the advisory names no patched version.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>The CVE-2026-79748 split, on a GET route. That any registered user reaches the
+proxy is an authorization defect in MetaMCP's own Express router, out of scope
+for the same reason as CVE-2026-33032 and CVE-2026-23744. What that hole hands
+over is a request-controlled stdio spawn config (<code>command</code> / <code>args</code> /
+<code>env</code>) with no allowlist, the shape <code>McpSubprocessArgInjectionGuard</code>
+already refuses for CVE-2026-42271 and CVE-2026-79748. So this is a
+second-defence fixture against an existing guard, not a new guard.</p>
+<p>The guard judges a decoded config. MetaMCP splits <code>args</code> with <code>shell-quote</code>
+and parses <code>env</code> as JSON before it spawns; the test's <code>_spawn_config</code> repeats
+those three lines, so every verdict here is about what reaches the spawn.</p>
+<p><a id="cve-2026-79538"></a></p>
 <h3 id="cve-2026-79748">CVE-2026-79748<a class="headerlink" href="#cve-2026-79748" title="Permanent link">&para;</a></h3>
 <p><strong>MCPHub server-config endpoints spawn attacker-supplied stdio commands</strong></p>
 <ul>
