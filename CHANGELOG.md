@@ -11,6 +11,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.22] - 2026-10-02
+
+### Security
+
+- **`SafeURL` checked where a URL points, never what it carries.** It refused a bad scheme,
+  a metadata host and a private address, so `https://example.com/";id;#` passed. A tool
+  that hands its URL to a shell inside double quotes runs that, as pi-llm-wiki did
+  (CVE-2026-102911). `SafeURL` and `SafeURLAllowHttp` now refuse a URL carrying a character
+  RFC 3986 requires to be percent-encoded (a control character, a space, `"`, `<`, `>`,
+  `\`, `^`, a backtick, `{`, `|`, `}`) and the shell command substitution `$(`, which is
+  legal URL syntax but which no URL needs unencoded. The same check stops a `\r\n` header
+  injection riding in a URL. `$name` is still allowed, because real URLs use it (OData's
+  `$select`), so inside double quotes a URL can still expand an environment variable: the
+  complete fix is not building shell strings.
+
+### Changed
+
+- **A raw space in a URL is now refused.** `https://example.com/my file.pdf` was never a
+  valid URL; percent-encode it (`%20`). The refusal names the characters to encode, so a
+  model can retry with a fixed URL. Non-ASCII text is left alone, so internationalized URLs
+  still pass.
+
+- **CVE-2026-102911 (#256) is closed**, a month ahead of its deferral date. Its four strict
+  `xfail` cases are plain assertions now, and its catalog fit is Partial, for the `$name`
+  limit above.
+
+### Removed
+
+- **`uv.lock`.** It was committed on 2026-01-31 and never updated (it still named version
+  0.1.0), and nothing read it: CI, the Makefile and the Dockerfile install with pip. It is
+  gitignored now, so `uv run` keeps its lockfile local.
+
 ## [0.10.21] - 2026-10-02
 
 ### Security
