@@ -11,6 +11,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.21] - 2026-10-02
+
+### Security
+
+- **`McpSubprocessArgInjectionGuard` let through spawn configs it could not read.** It took
+  the program only from a string `command` or `cmd`, or from the first element of a list
+  `argv` or `args`. A list `command` such as `["sh", "-c", "id"]`, a string `args`, and a
+  config that named no program at all skipped the allowlist and were allowed, reported as
+  an "allowlisted static command". An `env` that was not a mapping (a JSON string, a list
+  of pairs) was never checked, so a `NODE_OPTIONS` preload sent that way went through.
+  The program is now read from a string or a list in any of those fields. A spawn config
+  whose program cannot be read is refused, and so is an `env` that is not a mapping. This
+  is the guard behind the CVE-2026-42271 preset, which is on CISA's KEV list.
+
+- **`StdioCommandInjectionGuard` never looked at a list `command` or a string `args`.**
+  A metacharacter or a `--%` stop-parsing token (CVE-2026-19591) in either went unseen.
+  MetaMCP's inspector proxy (CVE-2026-79538) takes `args` from its query string as one
+  string. Both shapes are now checked; in a string, the stop-parsing and traversal checks
+  look at its shell tokens rather than the whole line.
+
+### Added
+
+- **Triage for #249, #254 and #256.** CVE-2026-79538 (MetaMCP inspector proxy, no fixed
+  release) gets a second-defence test: the stdio spawn config the proxy takes from its
+  query string is refused by `McpSubprocessArgInjectionGuard`. CVE-2026-102911
+  (pi-llm-wiki) is in scope and not refused yet. A `url` typed `SafeURL` refuses the
+  published payload only because it is not an https URL, and admits the same payload
+  inside one, because `SafeURL` checks where a URL points, not which characters it
+  carries. Its four URL cases are strict `xfail`, deferred until 2026-11-02.
+  CVE-2026-51996 (mcp-remote) is out of scope: the hash it names runs inside mcp-remote
+  over its own launch URL, not over a tool argument.
+
+### Fixed
+
+- **The CVE catalog said every listed CVE was fixed upstream and blocked by a test, and
+  the marketplace listing said every test passes.** With an unpatched CVE catalogued and
+  a deferred one held as strict `xfail`, none of the three held for every row, so each now
+  says where it does not.
+
+- **The OWASP Agentic matrix went stale on 2026-10-01**, and `test_not_stale_on_ship_day`
+  failed every build from the next day. It was re-verified against the code and a
+  block-rate re-run, not re-dated.
+
 ## [0.10.20] - 2026-09-27
 
 ### Security
