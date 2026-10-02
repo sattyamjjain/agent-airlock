@@ -2,12 +2,15 @@
 
 Every test in this directory reproduces a disclosed CVE's vulnerable
 tool-call pattern and asserts that the corresponding agent-airlock
-primitive blocks it.
+primitive blocks it. One module asserts it as a strict `xfail`:
+CVE-2026-102911 is in scope and not refused yet (deferred on #256), and its
+xfail fails the build the day a primitive starts refusing it.
 
-The suite is a **second defence**. Upstream vendors have shipped fixes for
-every CVE listed below; agent-airlock's job is to catch the same class of
-bug when a vulnerable server is still running, or when a new tool ships
-with the same shape.
+The suite is a **second defence**: agent-airlock's job is to catch the same
+class of bug when a vulnerable server is still running, or when a new tool
+ships with the same shape. Upstream vendors have shipped fixes for every CVE
+listed below except CVE-2026-79538 (MetaMCP), which had no fixed release when
+it was added; for that one the second defence is the only one there is.
 
 ## Layout
 
@@ -30,6 +33,8 @@ drift from the suite. This one can, which is why it says so.
 | CVE-2026-27825 | `test_cve_2026_27825_mcp_atlassian_arbitrary_write.py` | strong | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27825/) |
 | CVE-2026-27826 | `test_cve_2026_27826_mcp_atlassian_header_ssrf.py` | partial (if URL is a tool param) | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27826/) |
 | CVE-2026-79748 | `test_cve_2026_79748_mcphub_spawn_config.py` | partial (spawn primitive only, not the missing authz) | [GHSA-mx89-jjx9-gjr8](https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8) |
+| CVE-2026-102911 | `test_cve_2026_102911_pi_llm_wiki_url.py` | none yet (`in-scope-and-deferred-until-2026-11-02`, #256; the published PoC is refused only because it is not an https URL) | [zosmaai/pi-llm-wiki#185](https://github.com/zosmaai/pi-llm-wiki/issues/185) |
+| CVE-2026-79538 | `test_cve_2026_79538_metamcp_stdio_proxy.py` | partial (spawn primitive only, not the missing authz; no fixed release yet) | [Traceforce advisory](https://www.traceforce.ai/security-advisories/cve-2026-79538) |
 | CVE-2026-19591 | `test_cve_2026_19591_codex_stop_parsing.py` | strong | [openai/codex#22643](https://github.com/openai/codex/pull/22643) |
 | CVE-2026-19753 | `test_cve_2026_19753_rdf_explorer_ssrf.py` | strong | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19753) |
 | CVE-2026-75062 | `test_cve_2026_75062_langfun_eval.py` | partial (payload shape only; langfun evaluates internally) | [google/langfun#725](https://github.com/google/langfun/issues/725) |
@@ -62,6 +67,7 @@ CVE-2026-79748 carries in the Layout table above.
 | CVE-2026-85620 | Postgres MCP Pro 0.3.0 | no | CWE-863. `SafeSqlDriver`'s allowlist checks function names only on `FuncCall` AST nodes; a function in a `FROM` clause parses as `RangeFunction`, which is in `ALLOWED_NODE_TYPES` and never name-checked — so `SELECT * FROM pg_read_file('/etc/passwd')` returns the file while `SELECT pg_read_file(...)` is blocked. Blocking this needs a real SQL parser to walk the AST. The Pydantic-only core forbids that dependency, and a regex approximation would be **the same defect this CVE is**: a validator that covers some syntax positions and silently misses others. Solve it by upgrading postgres-mcp, or with a read-only DB role that lacks `pg_read_file`. |
 | CVE-2026-90617 | GH05TCREW PentestAgent, rolling release (audited at `cf882da`) | no | CWE-77, CWE-78. NVD: *"This vulnerability affects the function run_task of the file interface/main.py of the component MCP HTTP Server. Performing a manipulation results in os command injection."* The classifier filed it because `run_task` really is a registered MCP tool taking `{task, target, scope}`, which is the seam this library sits on. **The argument does not carry the command.** `task` is a natural-language prompt; the shell string is authored downstream by the LLM and run by `LocalRuntime`'s `asyncio.create_subprocess_shell`, which is the product working as designed for a caller that got in. The defect is that the aiohttp `/mcp` routes carry no authentication and bind `0.0.0.0:8080` by default, so any network client can drive the agent at all. Upstream [PR #101](https://github.com/GH05TCREW/pentestagent/pull/101) fixes it with `Authorization: Bearer` middleware plus a `127.0.0.1` default, and changes no argument or schema. Neither an auth check on someone else's route nor a bind default is expressible at the tool-call boundary. (NVD names `interface/main.py`; at `cf882da` that file only bootstraps the registry, and `run_task` is defined in `pentestagent/mcp/server/mcp_tools.py`.) |
 | CVE-2026-59971 | mysql-mcp-server &lt; 0.4.2 | no | CWE-306, CWE-346. NVD: *"setting MCP_TRANSPORT=sse causes src/mysql_mcp_server/server.py to construct SseServerTransport without security_settings or enable_dns_rebinding_protection, while the Starlette routes /, /sse, and /messages/ have no authentication and the service binds to 0.0.0.0 by default."* Every one of those is a transport-layer defect in another process. The remaining half — *"supply a query that reaches cursor.execute(query)"* — is **not** an argument-shaped defect, and that is the whole disposition: `execute_sql` declares no restriction on its `query`, so running caller-supplied SQL is the tool working as designed and nothing is smuggled past a contract. Contrast CVE-2026-53710 above, filed the same day and also CVSS 10.0, where `execute_code` *does* declare a restricted subset (`validate_code`, curated `safe_builtins`) that the payload escapes — that one is in scope for exactly that reason. agent-airlock ships the two primitives that would have prevented this (`validate_bind_address` for the `0.0.0.0` default, `McpOriginHostGuard` for the absent DNS-rebinding protection), but both are guards for a server **you** build with them; neither can be retrofitted onto mysql-mcp-server's Starlette app. Upstream 0.4.2 passes `TransportSecuritySettings(enable_dns_rebinding_protection=True)` and documents `127.0.0.1` as the recommended bind. This record is also why the watcher now skips sink words inside exonerating sentences: its sole sink match was `stdio`, in *"The default stdio transport is not affected."* |
+| CVE-2026-51996 | geelen `mcp-remote` 0.1.16 through 0.1.38 | no | Filed under CWE-94; NVD has listed CWE-328 since. NVD: *"An issue in geelen mcp-remote 0.1.16 through 0.1.38 allows a remote attacker to execute arbitrary code via the src/lib/utils.ts and the getServerUrlHash function"*. `getServerUrlHash` runs inside mcp-remote, a client-side proxy, over its own launch configuration: the server URL from its command line plus `--resource` and headers. At 0.1.38 its whole body joins those values and returns `crypto.createHash('md5')` of them as a token-file prefix. No tool-call argument reaches it, and nothing in it executes anything. The only write-up NVD cites ([playb0t F-04](https://github.com/playb0t/mcp-remote-oauth-security/blob/v1.0.1/advisories/F-04-md5-token-isolation.md)) classifies it as a weak hash for a storage namespace, and its v1.0.1 correction says no token takeover or real-token access was demonstrated. |
 
 **Why all three of CVE-2026-79748, CVE-2026-33032 and CVE-2026-23744 are
 `partial`**, given all three are missing-authorization defects: the split is the

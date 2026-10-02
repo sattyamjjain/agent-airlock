@@ -497,11 +497,13 @@ def test_proof_point_test_count_matches_the_badge() -> None:
     It read "3,749 tests passing at 86.85% measured coverage" while the badge said
     4,624 tests at 87.51%, and nothing compared the two. The measured-coverage figure
     moves on every release and is gone; the count is pinned the way the distribution
-    drafts are.
+    drafts are. It said "N tests passing" until the suite gained strict xfails
+    (CVE-2026-102911, deferred), which are collected and counted but do not pass, so
+    it now says "N tests", as the badge does.
     """
     proof = " ".join(_load_marketplace().get("listing", {}).get("proof_points", []))
-    m = re.search(r"([\d,]+)\s+tests passing", proof)
-    assert m, f"proof_points missing a 'N tests passing' claim: {proof!r}"
+    m = re.search(r"([\d,]+)\s+tests\b", proof)
+    assert m, f"proof_points missing an 'N tests' claim: {proof!r}"
     assert int(m.group(1).replace(",", "")) == _badge_test_count(), (
         "marketplace test count drifted from the README TEST-BADGE; refresh it"
     )
