@@ -118,10 +118,12 @@ def _contract_refusal(result: Any) -> bool:
 
 def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
     """Return ``(hostile_refused_by_contract, benign_passed_the_contract)``."""
+    # Each stub's parameter is the thing under test: @Airlock checks it, and the body
+    # never reads it. Hence the ARG001 pragmas, the same exemption tests/** has.
     if probe.annotated_type == "SafePath":
 
         @Airlock(sandbox=sandbox)
-        def tool_path(target: SafePath) -> str:
+        def tool_path(target: SafePath) -> str:  # noqa: ARG001
             return "RAN"
 
         return (
@@ -132,7 +134,7 @@ def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
     if probe.annotated_type == "SafeURL":
 
         @Airlock(sandbox=sandbox)
-        def tool_url(endpoint: SafeURL) -> str:
+        def tool_url(endpoint: SafeURL) -> str:  # noqa: ARG001
             return "RAN"
 
         return (
@@ -145,7 +147,7 @@ def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
 
         @Airlock(sandbox=sandbox)
         def tool_handle(
-            session: HandleField(issuer=_PROBE_ISSUER, scope=_PROBE_SCOPE),
+            session: HandleField(issuer=_PROBE_ISSUER, scope=_PROBE_SCOPE),  # noqa: ARG001
         ) -> str:
             return "RAN"
 
@@ -156,7 +158,7 @@ def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
         return hostile, benign
 
     @Airlock(sandbox=sandbox)
-    def tool_int(count: int) -> str:
+    def tool_int(count: int) -> str:  # noqa: ARG001
         return "RAN"
 
     return (
@@ -170,8 +172,9 @@ def _policy_tool(call: ToolCall, *, sandbox: bool) -> Any:
     allow = [call.allowed_tool] if call.allowed_tool else []
     policy = SecurityPolicy(allowed_tools=allow, default_deny=True)
 
+    # The policy decides on the tool's name alone; the stub never reads its argument.
     @Airlock(sandbox=sandbox, policy=policy)
-    def invoke(tool_name: str) -> str:
+    def invoke(tool_name: str) -> str:  # noqa: ARG001
         return "RAN"
 
     return invoke(tool_name=call.tool_name)
@@ -238,9 +241,7 @@ def _detect_backend() -> tuple[str | None, bool, str]:
 def run_sandbox_arm() -> SandboxArmReport:
     """Run both legs and report them separately."""
     name, available, reason = _detect_backend()
-    report = SandboxArmReport(
-        backend_name=name, backend_available=available, backend_reason=reason
-    )
+    report = SandboxArmReport(backend_name=name, backend_available=available, backend_reason=reason)
 
     # Leg 1: the annotated contract, on both paths.
     for probe in _probes():
@@ -254,8 +255,7 @@ def run_sandbox_arm() -> SandboxArmReport:
                 "sandbox_blocked": sandbox_hostile,
                 "benign_allowed_local": local_benign,
                 "benign_allowed_sandbox": sandbox_benign,
-                "parity": (local_hostile == sandbox_hostile)
-                and (local_benign == sandbox_benign),
+                "parity": (local_hostile == sandbox_hostile) and (local_benign == sandbox_benign),
             }
         )
 
