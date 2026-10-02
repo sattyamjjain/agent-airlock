@@ -2533,7 +2533,13 @@ an injection path. The guard denies on:</p>
 <li><strong>Path traversal</strong> (<code>../</code> resolving outside an operator-supplied
    <code>cwd_allowlist</code>). The traversal check is <strong>opt-in</strong> — empty
    allowlist disables it.</li>
+<li><strong>A stop-parsing token</strong> (<code>--%</code>) as a whole element of <code>command</code> or
+   <code>args</code> (CVE-2026-19591).</li>
 </ol>
+<p><code>command</code> and <code>args</code> may each be a single string or a list of strings,
+and both shapes are checked. A single string is a shell-form command
+line, so the stop-parsing and traversal checks look at its tokens. Until
+v0.10.21 a list <code>command</code> and a string <code>args</code> were skipped entirely.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <p>Core. No optional extra. The <code>mcp</code> package is <strong>not</strong> loaded — the
 guard is a regex / string-set match over the argv.</p>
@@ -2575,6 +2581,10 @@ family for chain-friendly composition.</p>
 <tr>
 <td><code>DENY_PATH_TRAVERSAL</code></td>
 <td>path-shaped argv element resolves outside <code>cwd_allowlist</code></td>
+</tr>
+<tr>
+<td><code>DENY_STOP_PARSING_TOKEN</code></td>
+<td>an argv element is a stop-parsing token (<code>--%</code>), so the argv no longer describes what would run</td>
 </tr>
 </tbody>
 </table>

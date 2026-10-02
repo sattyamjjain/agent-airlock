@@ -4666,7 +4666,9 @@ already refuses for CVE-2026-42271 and CVE-2026-79748. So this is a
 second-defence fixture against an existing guard, not a new guard.</p>
 <p>The guard judges a decoded config. MetaMCP splits <code>args</code> with <code>shell-quote</code>
 and parses <code>env</code> as JSON before it spawns; the test's <code>_spawn_config</code> repeats
-those three lines, so every verdict here is about what reaches the spawn.</p>
+those three lines, so the verdicts are about what reaches the spawn. Fed the raw
+query instead, the guard refuses it too: since 0.10.21 an <code>env</code> it cannot read,
+such as that JSON string, is refused rather than skipped.</p>
 <p><a id="cve-2026-79538"></a></p>
 <h3 id="cve-2026-79748">CVE-2026-79748<a class="headerlink" href="#cve-2026-79748" title="Permanent link">&para;</a></h3>
 <p><strong>MCPHub server-config endpoints spawn attacker-supplied stdio commands</strong></p>
