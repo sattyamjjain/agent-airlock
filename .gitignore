@@ -30,6 +30,10 @@ env/
 venv/
 ENV/
 
+# uv's lockfile. Nothing here reads one: CI, the Makefile and the Dockerfile install with
+# pip, and a committed lock goes stale on every version bump. `uv run` keeps it local.
+uv.lock
+
 # IDE
 .idea/
 .vscode/
