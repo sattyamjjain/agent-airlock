@@ -59,6 +59,10 @@ never appears in `list_active()`. Not every guard has one: `reasoning_replay_gua
 - **`docs/cves/index.md` is generated** from the `tests/cves/test_cve_*.py` docstring
   headers by `scripts/gen_cve_catalog.py` (which documents the header format). Regenerate
   it in the same PR; never hand-edit it. `make check-cve-catalog` is the CI gate.
+- **Read every shape a field can take, or refuse it.** A guard that inspects `command`,
+  `args` or `env` handles a string and a sequence for each (a mapping for `env`), and
+  refuses any other shape. Skipping a shape it did not expect is fail-open: until v0.10.21
+  a list `command` walked past both spawn guards (`tests/test_spawn_guards_fail_closed_0_10_21.py`).
 - **`manifest_only_mode.py` is the only module importing `subprocess`**, and nothing in
   this subpackage — including it — uses `shell=True`. Keep both true.
 - `*Decision` is a frozen `@dataclass`; `*Verdict` is `class X(str, enum.Enum)` so it

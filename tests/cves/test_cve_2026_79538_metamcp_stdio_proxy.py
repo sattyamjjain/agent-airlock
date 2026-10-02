@@ -27,7 +27,9 @@ Airlock fit: partial.
 
     The guard judges a decoded config. MetaMCP splits ``args`` with ``shell-quote``
     and parses ``env`` as JSON before it spawns; the test's ``_spawn_config`` repeats
-    those three lines, so every verdict here is about what reaches the spawn.
+    those three lines, so the verdicts are about what reaches the spawn. Fed the raw
+    query instead, the guard refuses it too: since 0.10.21 an ``env`` it cannot read,
+    such as that JSON string, is refused rather than skipped.
 
 The preset's ``cves`` tuple is deliberately **not** extended to name this CVE. The
 preset claims the CVEs it addresses; it does not address a missing authorization
@@ -137,6 +139,13 @@ class TestTheProxyQueryIsRefused:
     def test_an_approved_launcher_still_starts(self) -> None:
         # Precision: the inspector's real job keeps working.
         assert _preset()["check"](_spawn_config(BENIGN)) is None
+
+    def test_the_raw_query_is_refused_too(self) -> None:
+        # Undecoded, `env` is still the JSON string from the query. Until 0.10.21 the
+        # guard skipped an env it could not read, and this query passed.
+        with pytest.raises(McpSubprocessArgInjectionError) as exc:
+            _preset()["check"](ENV_PRELOAD)
+        assert exc.value.decision.matched_field == "env"
 
     def test_an_empty_allowlist_spawns_nothing(self) -> None:
         # Deny-by-default: an operator who declares nothing gets nothing spawned.
