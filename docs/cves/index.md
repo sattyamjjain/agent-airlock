@@ -5,10 +5,10 @@ This page is auto-generated from the regression tests in
 
 Every CVE listed here has a corresponding test that reproduces the
 vulnerable tool-call pattern and asserts an agent-airlock primitive blocks
-it. The suite is a **second defence** — upstream vendors have shipped fixes
-for every CVE below. Agent-airlock's job is to catch the same class of bug
-when a vulnerable server is still running, or when a new tool ships with the
-same shape.
+it. The suite is a **second defence**: agent-airlock's job is to catch the
+same class of bug when a vulnerable server is still running, or when a new
+tool ships with the same shape. Most of these CVEs have an upstream fix; where
+none existed when a row was added, its Vulnerability section says so.
 
 See [`tests/cves/README.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/README.md)
 for the classification rules and a list of CVEs we deliberately chose NOT
@@ -66,6 +66,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
 | [CVE-2026-77521](#cve-2026-77521) | MaxKB SandboxShellBackend exposes an unapproved `execute` shell tool | 10.0 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H | Partial |
 | [CVE-2026-78575](#cve-2026-78575) | IBM Langflow MCP stdio server config takes unvalidated command-line arguments | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Partial |
+| [CVE-2026-79538](#cve-2026-79538) | MetaMCP inspector proxy spawns the stdio command its query string names | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-94 | Partial |
 | [CVE-2026-79748](#cve-2026-79748) | MCPHub server-config endpoints spawn attacker-supplied stdio commands | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862 | Partial |
 | [CVE-2026-90898](#cve-2026-90898) | Bifrost MCP client registration spawns an unauthenticated stdio command | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-284 + CWE-306 | Partial |
 
@@ -1127,6 +1128,45 @@ either guard, and it is pinned here so the pairing cannot be dropped from a
 preset on the belief that one is redundant.
 
 <a id="cve-2026-78575"></a>
+
+### CVE-2026-79538
+
+**MetaMCP inspector proxy spawns the stdio command its query string names**
+
+- **CVSS:** 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-94
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-79538](https://nvd.nist.gov/vuln/detail/CVE-2026-79538)
+- **Advisory:** [https://www.traceforce.ai/security-advisories/cve-2026-79538](https://www.traceforce.ai/security-advisories/cve-2026-79538)
+- **Regression test:** [`tests/cves/test_cve_2026_79538_metamcp_stdio_proxy.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_79538_metamcp_stdio_proxy.py)
+
+**Vulnerability**
+
+MetaMCP up to and including 2.4.22 serves an internal MCP inspector proxy at
+``GET /mcp-proxy/server/stdio``. Its ``createTransport`` STDIO branch
+(``apps/backend/src/routers/mcp-proxy/server.ts``) reads ``command``, ``args``
+and ``env`` from the request's query string and hands them to
+``ProcessManagedStdioTransport``, which spawns them. In the advisory's words,
+*"the handler accepts the process parameters from the request itself rather than
+resolving them from a server record the caller owns, and does not check them
+against an allowlist. The only gate is a logged-in session. Registration is open
+by default"*. No fixed release existed when this was catalogued: 2.4.22
+(2025-12-19) is the newest release, and the advisory names no patched version.
+
+**Airlock mitigation**
+
+The CVE-2026-79748 split, on a GET route. That any registered user reaches the
+proxy is an authorization defect in MetaMCP's own Express router, out of scope
+for the same reason as CVE-2026-33032 and CVE-2026-23744. What that hole hands
+over is a request-controlled stdio spawn config (``command`` / ``args`` /
+``env``) with no allowlist, the shape ``McpSubprocessArgInjectionGuard``
+already refuses for CVE-2026-42271 and CVE-2026-79748. So this is a
+second-defence fixture against an existing guard, not a new guard.
+
+The guard judges a decoded config. MetaMCP splits ``args`` with ``shell-quote``
+and parses ``env`` as JSON before it spawns; the test's ``_spawn_config`` repeats
+those three lines, so every verdict here is about what reaches the spawn.
+
+<a id="cve-2026-79538"></a>
 
 ### CVE-2026-79748
 

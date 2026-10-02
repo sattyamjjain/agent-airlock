@@ -168,7 +168,7 @@ generated from a YAML source and byte-diffed in CI.
 | **ASI01 Agent Goal Hijack** | Sequence guard, action-contradiction gate, tool-output trust guard | Partial |
 | **ASI02 Tool Misuse and Exploitation** | Strict validation, ghost-arg stripping, `SafePath` / `SafeURL`, capability gating | Full |
 | **ASI03 Identity and Privilege Abuse** | RBAC, signed agent identity, capability-union boundary, privilege right-sizing | Partial |
-| **ASI04 Agentic Supply Chain Vulnerabilities** | Description and manifest pinning, schema `$ref` guard, tool-definition pin, attested admission, and 47 CVE/advisory regression tests in `tests/cves/` (the 39 distinct CVEs they cover are published in [the generated catalog](docs/cves/index.md)) | Partial |
+| **ASI04 Agentic Supply Chain Vulnerabilities** | Description and manifest pinning, schema `$ref` guard, tool-definition pin, attested admission, and 48 CVE/advisory regression tests in `tests/cves/` (the 40 distinct CVEs they cover are published in [the generated catalog](docs/cves/index.md)) | Partial |
 | **ASI05 Unexpected Code Execution (RCE)** | Eval-RCE guards, sandboxed execution, stdio command-injection guards | Full |
 | **ASI06 Memory & Context Poisoning** | Auto-memory provenance, cross-tenant isolation, conversation tracking | Partial |
 | **ASI07 Insecure Inter-Agent Communication** | A2A guard, MCP proxy guard, transport validation | Partial |

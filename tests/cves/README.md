@@ -4,10 +4,11 @@ Every test in this directory reproduces a disclosed CVE's vulnerable
 tool-call pattern and asserts that the corresponding agent-airlock
 primitive blocks it.
 
-The suite is a **second defence**. Upstream vendors have shipped fixes for
-every CVE listed below; agent-airlock's job is to catch the same class of
-bug when a vulnerable server is still running, or when a new tool ships
-with the same shape.
+The suite is a **second defence**: agent-airlock's job is to catch the same
+class of bug when a vulnerable server is still running, or when a new tool
+ships with the same shape. Upstream vendors have shipped fixes for every CVE
+listed below except CVE-2026-79538 (MetaMCP), which had no fixed release when
+it was added; for that one the second defence is the only one there is.
 
 ## Layout
 
@@ -30,6 +31,7 @@ drift from the suite. This one can, which is why it says so.
 | CVE-2026-27825 | `test_cve_2026_27825_mcp_atlassian_arbitrary_write.py` | strong | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27825/) |
 | CVE-2026-27826 | `test_cve_2026_27826_mcp_atlassian_header_ssrf.py` | partial (if URL is a tool param) | [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/mcp-atlassian/CVE-2026-27826/) |
 | CVE-2026-79748 | `test_cve_2026_79748_mcphub_spawn_config.py` | partial (spawn primitive only, not the missing authz) | [GHSA-mx89-jjx9-gjr8](https://github.com/samanhappy/mcphub/security/advisories/GHSA-mx89-jjx9-gjr8) |
+| CVE-2026-79538 | `test_cve_2026_79538_metamcp_stdio_proxy.py` | partial (spawn primitive only, not the missing authz; no fixed release yet) | [Traceforce advisory](https://www.traceforce.ai/security-advisories/cve-2026-79538) |
 | CVE-2026-19591 | `test_cve_2026_19591_codex_stop_parsing.py` | strong | [openai/codex#22643](https://github.com/openai/codex/pull/22643) |
 | CVE-2026-19753 | `test_cve_2026_19753_rdf_explorer_ssrf.py` | strong | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-19753) |
 | CVE-2026-75062 | `test_cve_2026_75062_langfun_eval.py` | partial (payload shape only; langfun evaluates internally) | [google/langfun#725](https://github.com/google/langfun/issues/725) |
