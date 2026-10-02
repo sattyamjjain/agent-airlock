@@ -3537,7 +3537,7 @@ catalog and the tests stay in lockstep.</p>
 <td><a href="#cve-2026-102911">CVE-2026-102911</a></td>
 <td>pi-llm-wiki <code>wiki_capture_source</code> splices its <code>url</code> argument into <code>sh -c</code></td>
 <td>9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78</td>
-<td>None</td>
+<td>Partial</td>
 </tr>
 <tr>
 <td><a href="#cve-2026-11393">CVE-2026-11393</a></td>
@@ -3872,7 +3872,7 @@ prefix) so it catches the three common escape variants:</p>
 <p><strong>pi-llm-wiki <code>wiki_capture_source</code> splices its <code>url</code> argument into <code>sh -c</code></strong></p>
 <ul>
 <li><strong>CVSS:</strong> 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78</li>
-<li><strong>Airlock fit:</strong> none</li>
+<li><strong>Airlock fit:</strong> partial</li>
 <li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-102911">https://nvd.nist.gov/vuln/detail/CVE-2026-102911</a></li>
 <li><strong>Advisory:</strong> <a href="https://github.com/zosmaai/pi-llm-wiki/issues/185">https://github.com/zosmaai/pi-llm-wiki/issues/185</a></li>
 <li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_102911_pi_llm_wiki_url.py"><code>tests/cves/test_cve_2026_102911_pi_llm_wiki_url.py</code></a></li>
@@ -3889,17 +3889,17 @@ of the caller's choosing. The published proof of concept sends <code>url</code> 
 <code>";open -a Calculator;#</code>. Fixed in 0.11.8 (PR #186), which passes <code>source</code> as
 its own argv element with no shell.</p>
 <p><strong>Airlock mitigation</strong></p>
-<p>In scope and not refused yet: dispositioned
-<code>in-scope-and-deferred-until-2026-11-02</code> on issue #256. A <code>url</code> typed <code>SafeURL</code>
-refuses the published payload, but only because it is not an https URL at all.
-Put the same payload inside one and <code>SafeURL</code> admits it, because it checks where
-a URL points (scheme, host, metadata endpoints, private ranges), not which
-characters it carries. <code>StdioCommandInjectionGuard</code> does refuse these characters,
-but it reads only the <code>command</code> and <code>args</code> fields of a spawn config, never an
-argument named <code>url</code>.</p>
-<p>The tests that want the refusal are strict <code>xfail</code>. The day a primitive starts
-refusing a URL that carries shell syntax they fail the build, and this fit and the
-disposition on #256 have to change with them.</p>
+<p>A <code>url</code> typed <code>SafeURL</code> refuses every payload here that runs a command through the
+double-quoted splice. Upstream's own payloads are not https URLs, so the scheme check
+refuses them. Put inside one, each still carries a <code>"</code> that ends the quoting, a
+backtick, a <code>|</code> or <code>$(</code>, and since 0.10.22 <code>SafeURL</code> refuses a URL carrying a
+character RFC 3986 requires to be percent-encoded, and <code>$(</code>. Until then it checked
+only where a URL points, and these four cases were held here as strict <code>xfail</code>
+(issue #256).</p>
+<p>What it cannot refuse: <code>$NAME</code> inside the double quotes still expands, so a URL can
+carry an environment variable into the fetch. <code>$name</code> is ordinary URL syntax
+(OData's <code>$select</code>), and refusing it would break real URLs. The complete fix is the
+upstream one: pass the URL as its own argv element, with no shell.</p>
 <p><a id="cve-2026-102911"></a></p>
 <h3 id="cve-2026-11393">CVE-2026-11393<a class="headerlink" href="#cve-2026-11393" title="Permanent link">&para;</a></h3>
 <p><strong>AgentCore CLI triple-quote codegen RCE</strong></p>

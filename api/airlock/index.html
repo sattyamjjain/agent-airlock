@@ -3559,6 +3559,13 @@ out.</p>
 <a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="w">    </span><span class="sd">"""URL can be HTTP or HTTPS."""</span>
 <a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>    <span class="k">return</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 </code></pre></div>
+<p>Both refuse a URL that points somewhere it should not (<code>file://</code>, a cloud metadata
+endpoint, a private, loopback or link-local address, <code>localhost</code>) and, since 0.10.22, one
+that carries what no URL carries raw: a character RFC 3986 requires to be percent-encoded
+(a control character, a space, <code>"</code>, <code>&lt;</code>, <code>&gt;</code>, <code>\</code>, <code>^</code>, a backtick, <code>{</code>, <code>|</code>, <code>}</code>) or the
+shell command substitution <code>$(</code>. Percent-encode it (<code>%20</code>, <code>%24(</code>) if it is meant
+literally. Non-ASCII text is left alone, so internationalized URLs pass, and so is <code>$name</code>,
+which real URLs use (OData's <code>$select</code>).</p>
 <h2 id="capability-v040">Capability (V0.4.0)<a class="headerlink" href="#capability-v040" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Capability</span>
 <a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>
