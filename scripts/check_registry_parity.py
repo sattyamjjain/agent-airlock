@@ -548,8 +548,7 @@ def main(argv: list[str] | None = None) -> int:
     registry = registry_version()
     if registry is None:
         print(
-            "check_registry_parity: PyPI unreachable or unparseable — skipping "
-            "(not a hard fail)."
+            "check_registry_parity: PyPI unreachable or unparseable — skipping (not a hard fail)."
         )
         return 0
 
@@ -569,9 +568,7 @@ def main(argv: list[str] | None = None) -> int:
     documented = repo_documented_versions()
     tagged = repo_tagged_versions()
     failures += evaluate_documented_vs_tagged(documented, tagged)
-    failures += evaluate_declared_vs_tagged(
-        repo, tagged, declared_is_dated=repo in set(documented)
-    )
+    failures += evaluate_declared_vs_tagged(repo, tagged, declared_is_dated=repo in set(documented))
 
     if failures:
         print("\ncheck_registry_parity: FAIL", file=sys.stderr)
@@ -586,10 +583,7 @@ def main(argv: list[str] | None = None) -> int:
         if documented and tagged
         else ", CHANGELOG/tag comparison skipped"
     )
-    print(
-        f"check_registry_parity: OK — repo {repo}, PyPI {registry} "
-        f"({scope}{changelog_scope})."
-    )
+    print(f"check_registry_parity: OK — repo {repo}, PyPI {registry} ({scope}{changelog_scope}).")
     return 0
 
 
