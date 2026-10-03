@@ -8,7 +8,7 @@ Scenario source: **subset harness** (~20 scenarios/pattern; pending full-dataset
 
 | date | result | notes |
 |---|---|---|
-| 2026-10-04 | 100 scenarios · over-priv **100.0%** blocked · low-priv **100.0%** allowed · OPUR 100.0% → 0.0% | Reproduced exactly, against 0.10.23. A fresh `render_results_md` matches every table below byte for byte; only this table and the line-3 note are hand-kept. |
+| 2026-10-03 | 100 scenarios · over-priv **100.0%** blocked · low-priv **100.0%** allowed · OPUR 100.0% → 0.0% | Reproduced exactly, against 0.10.23. A fresh `render_results_md` matches every table below byte for byte; only this table and the line-3 note are hand-kept. |
 | 2026-09-08 | 100 scenarios · over-priv **100.0%** blocked · low-priv **100.0%** allowed · OPUR 100.0% → 0.0% | Reproduced exactly. `python -m benchmarks.toolprivbench` is deterministic and offline (`scenarios.py`: "No network access"), so it is re-run each release at no cost rather than left to age against the 30-day claim gate. |
 | 2026-08-17 | identical | Original published run. |
 

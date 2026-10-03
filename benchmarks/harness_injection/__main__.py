@@ -11,7 +11,7 @@ import datetime
 from pathlib import Path
 
 from .fixture import ARMS, TASK_PROMPT, build_fixture
-from .harnesses import HARNESSES, available_harnesses, resolve
+from .harnesses import HARNESSES, available_harnesses, harness_by_name, resolve
 from .power import describe as describe_power
 from .report import render_results_md, render_summary
 from .runner import DEFAULT_TIMEOUT, RunReport, run_matrix
@@ -40,8 +40,29 @@ def main(argv: list[str] | None = None) -> int:
             "kill loses every cell already bought."
         ),
     )
+    parser.add_argument(
+        "--model",
+        action="append",
+        default=[],
+        metavar="HARNESS=MODEL",
+        help=(
+            "pin a harness's model (repeatable), e.g. codex=gpt-6-astra; without it a "
+            "harness runs its CLI's configured default, which can change between runs"
+        ),
+    )
     parser.add_argument("--date", default=datetime.date.today().isoformat())
     args = parser.parse_args(argv)
+
+    models: dict[str, str] = {}
+    for item in args.model:
+        name, sep, model = item.partition("=")
+        if not sep or not model:
+            parser.error(f"--model takes HARNESS=MODEL, got {item!r}")
+        try:
+            harness_by_name(name)
+        except KeyError as exc:
+            parser.error(str(exc))
+        models[name] = model
 
     if args.emit_fixture:
         for arm in ARMS:
@@ -57,7 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         print("Harnesses:")
         for harness in HARNESSES:
             mark = "available" if harness.is_available() else "NOT ON PATH"
-            print(f"  {harness.name:16} [{mark}]  {' '.join(harness.argv('<PROMPT>'))}")
+            argv_shown = harness.argv("<PROMPT>", models.get(harness.name, ""))
+            print(f"  {harness.name:16} [{mark}]  {' '.join(argv_shown)}")
         cells = len(harnesses) * len(ARMS) * 2 * args.trials
         print(
             f"\nWould run {cells} cells ({len(harnesses)} harness x {len(ARMS)} arms x 2 airlock modes x {args.trials} trials)."
@@ -74,11 +96,21 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.checkpoint and args.checkpoint.exists():
-        resumed = len(RunReport.from_json(args.checkpoint.read_text(encoding="utf-8")).cells)
+        prior = RunReport.from_json(args.checkpoint.read_text(encoding="utf-8")).cells
+        # run_matrix re-runs an `error` cell, and one recorded under a different model.
+        resumed = sum(
+            1
+            for cell in prior
+            if cell.model == models.get(cell.harness, "") and cell.status != "error"
+        )
         print(f"Resuming from {args.checkpoint} — {resumed} cell(s) already recorded.\n")
 
     report: RunReport = run_matrix(
-        harnesses, trials=args.trials, timeout=args.timeout, checkpoint=args.checkpoint
+        harnesses,
+        trials=args.trials,
+        timeout=args.timeout,
+        checkpoint=args.checkpoint,
+        models=models,
     )
     print(render_summary(report))
 

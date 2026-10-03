@@ -26,6 +26,10 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   `--force` to repeat a heading.
 - **`harness_injection/`** — matched-pair README injection against real agent CLIs; a dry
   run unless `--run`. `--write` renders `RESULTS.md`; `power.py` owns the statistics.
+  `--model HARNESS=MODEL` pins a CLI's model (recorded per cell and in the rendered
+  command), because a CLI's configured default can change between runs; a resumed
+  checkpoint re-runs any cell recorded under a different model. A CLI that exits non-zero
+  before any observable work is an `error` cell, never a non-action.
 - **`vs_gateway/`** — airlock measured live against a gateway column replayed from
   `gateway_measurement.json`, which only `gateway_harness/regen.py` rewrites.
 - **`mcp_conformance/run.py`** — runs the `mcp_spec.conformance` cases; exits 1 on a failure.
@@ -74,7 +78,8 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
 - **Paid or host-touching runs — ask before starting one:** `agentdojo --model` (a provider
   key such as `OPENAI_API_KEY`; price the model id in `_MODEL_PRICES`), `harness_injection
   --run` (logged-in `claude` / `codex` / `cursor-agent` CLIs; its `--checkpoint` file is not
-  gitignored), `gateway_harness/regen.py` (Docker, the `docker mcp` plugin and the echo
+  gitignored, and every codex cell leaves a trusted-project entry for its temp dir in
+  `~/.codex/config.toml`), `gateway_harness/regen.py` (Docker, the `docker mcp` plugin and the echo
   image; it writes into `~/.docker/mcp/catalogs/`) and plain `python -m benchmarks.blockrate`
   when `[sandbox]` is installed and `E2B_API_KEY` set (its sandbox arm sends the benign
   probes and every policy item the allow-list admits to E2B).

@@ -81,7 +81,7 @@ class TestItDoesNotFireOnThingsThatAreNotLinks:
         assert dead_links(md) == []
 
     def test_a_mailto_is_not_flagged(self, tmp_path: Path) -> None:
-        md = _write(tmp_path, "a.md", "[mail](mailto:sattyamjjain@gmail.com)\n")
+        md = _write(tmp_path, "a.md", "[mail](mailto:sattyamjain96@gmail.com)\n")
         assert dead_links(md) == []
 
     def test_a_link_to_a_file_that_exists_passes(self, tmp_path: Path) -> None:

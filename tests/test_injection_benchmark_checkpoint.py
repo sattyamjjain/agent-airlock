@@ -35,7 +35,14 @@ def _stub_cells(monkeypatch: pytest.MonkeyPatch, seen: list[tuple[Any, ...]]) ->
     """Replace the real harness invocation with a recorder."""
 
     def fake_run_cell(
-        harness: Harness, arm: Any, *, airlock: bool, trial: int, timeout: float, version: str
+        harness: Harness,
+        arm: Any,
+        *,
+        airlock: bool,
+        trial: int,
+        timeout: float,
+        version: str,
+        model: str = "",
     ) -> CellResult:
         seen.append((harness.name, arm.name, airlock, trial))
         return CellResult(

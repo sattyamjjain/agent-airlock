@@ -106,7 +106,7 @@ worth trusting on where it does:
 If you discover a security vulnerability in Agent-Airlock, please report it responsibly:
 
 1. **Do NOT create a public GitHub issue**
-2. Report it privately via [**GitHub Security Advisories**](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) ("Report a vulnerability" on the repo's Security tab), or email **sattyamjjain@gmail.com**
+2. Report it privately via [**GitHub Security Advisories**](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) ("Report a vulnerability" on the repo's Security tab), or email **sattyamjain96@gmail.com**
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce
@@ -455,7 +455,7 @@ If you believe Agent-Airlock security has been compromised:
 
 1. **Isolate** - Stop affected AI agents
 2. **Collect** - Preserve audit logs for analysis
-3. **Report** - Report privately via [GitHub Security Advisories](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) or email sattyamjjain@gmail.com
+3. **Report** - Report privately via [GitHub Security Advisories](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) or email sattyamjain96@gmail.com
 4. **Remediate** - Apply patches when available
 5. **Review** - Assess policy and configuration
 

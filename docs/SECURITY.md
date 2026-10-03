@@ -433,7 +433,7 @@ structlog.configure(
 If you discover a security vulnerability in Agent-Airlock:
 
 1. **Do NOT** open a public GitHub issue
-2. Report it privately via [GitHub Security Advisories](https://github.com/sattyamjjain/agent-airlock/security/advisories/new), or email sattyamjjain@gmail.com
+2. Report it privately via [GitHub Security Advisories](https://github.com/sattyamjjain/agent-airlock/security/advisories/new), or email sattyamjain96@gmail.com
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce

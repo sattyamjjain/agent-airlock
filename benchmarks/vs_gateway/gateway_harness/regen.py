@@ -216,7 +216,9 @@ def main() -> int:
             "shipped bench replays this fixture so it runs without Docker."
         ),
         "provenance": {
-            "measured_utc_date": datetime.date.today().isoformat(),
+            # UTC, as the key says and as the freshness gate reads it. This was the local
+            # date until a run after midnight IST stamped tomorrow (2026-10-03 UTC).
+            "measured_utc_date": datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
             "gateway_product": server_info.get("name"),
             "gateway_image_version": server_info.get("version"),
             "docker_mcp_cli_version": _version(["docker", "mcp", "version"]),

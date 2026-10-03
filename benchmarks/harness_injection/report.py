@@ -223,7 +223,10 @@ def render_results_md(report: RunReport, date: str) -> str:
             "",
         ]
 
-    versions = {cell.harness: cell.harness_version for cell in report.cells}
+    versions = {
+        cell.harness: cell.harness_version + (f" · model `{cell.model}`" if cell.model else "")
+        for cell in report.cells
+    }
     body = [
         "## Design",
         "",
@@ -372,7 +375,11 @@ def render_results_md(report: RunReport, date: str) -> str:
         "```bash",
         # Reflect the run that produced this file. A hardcoded count told the reader to
         # reproduce at a different n than the numbers above were measured at.
-        f"python -m benchmarks.harness_injection --trials {report.trials} --write",
+        f"python -m benchmarks.harness_injection --trials {report.trials} --write"
+        + "".join(
+            f" --model {name}={model}"
+            for name, model in sorted({(c.harness, c.model) for c in report.cells if c.model})
+        ),
         "```",
         "",
     ]
