@@ -1,7 +1,8 @@
 # MCP conformance — agent-airlock (spec 2026-07-28)
 
-Last run: **2026-09-08**, a clean re-run with every check passing (recorded in commit
-`c04d297`, which moved the README marker; this line still said 2026-08-10 until v0.10.10).
+Last run: **2026-10-04**, a clean re-run against 0.10.23 with all 22 cases passing. The
+2026-09-08 re-run is recorded in commit `c04d297`, which moved the README marker; this line
+still said 2026-08-10 until v0.10.10.
 The cases below were last rewritten on 2026-08-10, when the three 2026-08-05 divergence
 probes were resolved against the ratified 2026-07-28 text and became scored contract cases.
 Official suite of record: **`@modelcontextprotocol/conformance@0.1.16`**.
@@ -23,7 +24,10 @@ npx -y @modelcontextprotocol/conformance@0.1.16 server --url <url> --spec-versio
 
 ## Headline
 
-- agent-airlock transport-contract conformance: **20 / 20** normative cases pass, **0 failures**.
+- agent-airlock transport-contract conformance: **22 / 22** normative cases pass, **0 failures**.
+  This line said 20 / 20 from 2026-08-10, when the two handle-channel cases
+  (`S-REJECT-GHOST-STATE`, `S-ACCEPT-DECLARED-STATE`) joined the table below, until the
+  2026-10-04 re-run; the table and the run have both counted 22 since then.
 - The three divergence probes published on 2026-08-05 (`D-PING-NAME`, `D-ACCEPT-JSON-ONLY`,
   `D-GET-NOVERSION`, issues #127/#128/#129) were **resolved** on 2026-08-10 against the ratified
   2026-07-28 clause text and are now the scored cases `H-ACCEPT-LIST-NO-NAME`,
