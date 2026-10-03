@@ -55,7 +55,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"  verdict parity vs local path:      "
         f"{arm.probes_in_parity}/{arm.probes_total} contract, "
-        f"{arm.policy_agreements}/{arm.policy_items} policy"
+        f"{arm.policy_agreements}/{arm.policy_items} policy "
+        f"({arm.policy_admitted} admitted, {arm.policy_refused} refused)"
     )
     if arm.backend_available:
         print(f"  isolation backend execution:       ran on {arm.backend_name}")

@@ -11,6 +11,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.23] - 2026-10-03
+
+### Security
+
+- **`reauth_on_untrusted_reinvocation` never fired through `@Airlock`.** `ContextExtractor`
+  builds a new `AirlockContext` for every call and copied only the caller's identity onto
+  it, so the untrusted-output count went to an object the next call never saw, and an
+  `authorize_once` grant made on the run's context was never read. A tool called again
+  after its output had flowed back into the model ran without re-authorization, with a
+  static policy or a resolver. `CAMOUFLAGE_RESISTANT_POLICY` and the CVE-2026-21520 and
+  CVE-2026-75130 presets turn this guard on. A call's context now shares the run's count
+  and grants: an `AirlockContext` its first argument carries, else the one set around it.
+
+- **The action-contradiction gate missed a signal set on the run's context.** It read its
+  `signal_field_key` from the per-call context, so a signal set with
+  `with AirlockContext(metadata=...)` never tripped it and the privileged call ran. It read
+  the `authorize_once` grant from there too, so a tripped gate could never be re-opened.
+  A call's context now carries the run's metadata under its own, the precedence
+  `_call_metadata` already used, and the run's grants.
+
+- **A policy resolver skipped two post-call steps.** Marking untrusted output and
+  reconciling the tier budget read `self.policy`, so they ran only for a static
+  `SecurityPolicy`. Both now use the policy the call was checked against.
+
+### Changed
+
+- **A policy with `reauth_on_untrusted_reinvocation` refuses a call that belongs to no
+  run**, rather than letting it through uncounted. Make the agent's calls inside
+  `with AirlockContext(agent_id=...)`, or pass an `AirlockContext` as the run wrapper's
+  `context`; the refusal says which. A surrounding context that names a different agent
+  than the call does is not borrowed.
+
+- **A call's context carries the surrounding context's metadata.** A policy resolver and
+  `get_current_context()` inside a tool now see keys set with
+  `with AirlockContext(metadata=...)`; where the call's own context sets the same key, the
+  call's value wins.
+
+### Fixed
+
+- **The `sandbox=True` arm's published 204/204 parity was vacuous.** `@Airlock` takes the
+  tool's name from the function it wraps, and the policy leg's stub was named `invoke`,
+  which no allow-list names, so both dispatch paths refused all 200 policy items, the 100
+  the allow-list admits included. The stub now carries each item's tool name and the leg
+  compares policy refusals only. Re-run 2026-10-03: 204/204 agree, with 100 policy items
+  admitted and 100 refused on both paths. The wrong figure stays in `RESULTS.md` beside the
+  correction. Where `[sandbox]` and `E2B_API_KEY` are present, the arm now sends those 100
+  admitted items to E2B as well as its 4 contract probes. The same run re-measured the headline: 100% blocked, 0% false-positive, p50
+  0.0017 ms (0.0020 ms on 2026-09-16).
+
+- **Eight CVEs the suite replays were not in the catalog**, while the marketplace said the
+  umbrella modules' CVEs were "already listed". CVE-2026-26015, -30617, -30618, -30623,
+  -30624, -30625 and -33224 (the OX supply-chain module) and CVE-2026-44717 (the Metis
+  corpus) are now in a generated umbrella section, each linked to the NVD URL its sources
+  carry. The README counts the 49 distinct CVEs the suite replays, 41 with a row of their
+  own and 8 in that section, and the marketplace's "the other N" is gated.
+
+- **The marketplace said the CVE suite works air-gapped.** Three allow-path tests resolve
+  real public hosts and fail offline, because the SSRF guards refuse a host they cannot
+  resolve. It says so now.
+
+- **The demo quoted ~1.5µs per decision**, faster than any measured run. It quotes the
+  measured p50, ~2µs.
+
+- **Stale comments and docstrings:** the `_pre_execution` step list, the docker-test and
+  suite counts in `ci.yml` and what its `test` job installs, the Makefile's note on
+  `check_links.py`, the archived-servers preset's "shipped fixture", an opentelemetry
+  "extra" that does not exist, and the `mcp_spec` package's list of 2026-07-28 guards.
+
 ## [0.10.22] - 2026-10-02
 
 ### Security

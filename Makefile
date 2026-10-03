@@ -68,9 +68,10 @@ check-cve-catalog:
 	python3 scripts/gen_cve_catalog.py --check
 
 # The CI 'docs' job runs `mkdocs build --strict`, where a link that leaves the docs/
-# tree is a warning and a warning is a failure. check_links.py does NOT catch it: it
-# resolves relative links from the repo root, so ../../PRIOR_ART.md passes there and
-# fails here. Needs the [docs] extra.
+# tree is a warning and a warning is a failure. `make check-links` now refuses such a
+# link too (pages under docs/ must link inside docs/), but strict mode fails on every
+# other warning as well, so run this before pushing a docs change. Needs the [docs]
+# extra.
 # Build OUTSIDE the repo. `mkdocs build --strict` defaults to ./site/, which is
 # gitignored but still leaves ~8M of stale HTML in the working tree between runs,
 # and tooling that classifies a project by scanning for *.html then reads this

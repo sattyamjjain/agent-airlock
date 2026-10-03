@@ -19,8 +19,8 @@ than omitted — four of the ten OWASP Agentic slots are in that state.
 
 | Benchmark | Headline result | Last re-run | Full results |
 |---|---|---|---|
-| **Cross-tool block rate** · 210 tool calls | 100% blocked · 0% false-positive · p50 ~2µs · _6 of 10 OWASP ASI slots measured; ASI07–ASI10 are n=0_ | 2026-09-16 | [Cross-tool block rate results](blockrate.md) |
-| **`sandbox=True` dispatch** · contract parity | 4/4 annotated-contract probes refused on the sandbox path (0/4 before v0.10.6) · 204/204 verdicts agree with the local path | 2026-09-16 | [Sandbox dispatch parity arm](blockrate.md#sandboxtrue-dispatch-arm) |
+| **Cross-tool block rate** · 210 tool calls | 100% blocked · 0% false-positive · p50 ~2µs · _6 of 10 OWASP ASI slots measured; ASI07–ASI10 are n=0_ | 2026-10-03 | [Cross-tool block rate results](blockrate.md) |
+| **`sandbox=True` dispatch** · contract parity | 4/4 annotated-contract probes refused on the sandbox path (0/4 before v0.10.6) · 204/204 verdicts agree with the local path, 100 policy items admitted and 100 refused on both. The 2026-09-16 run's 204/204 was vacuous: every policy item was refused on both paths | 2026-10-03 | [Sandbox dispatch parity arm](blockrate.md#sandboxtrue-dispatch-arm) |
 | **Least-privilege** · ToolPrivBench, 100 scenarios | 100% over-privileged blocked · 100% low-privileged allowed · OPUR 100% → 0% | 2026-09-08 | [ToolPrivBench results on GitHub](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/toolprivbench/RESULTS.md) |
 | **Adaptive attacker** · AgentDojo, all 4 suites | 86.0% of injection→target tool-calls blocked (524/609, deterministic bound). Model-in-the-loop ASR 45% → 10% (model pass of 2026-08-08), but that is one model family on a 60-pair subset | 2026-09-08 | [AgentDojo results on GitHub](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md) |
 | **vs. native MCP gateway** · 12 malformed payloads | airlock 12/12 blocked · Docker MCP Gateway 0/12 · 0% false-positive on both | 2026-09-12 | [Native MCP gateway head-to-head](vs-native-mcp-gateway.md) |

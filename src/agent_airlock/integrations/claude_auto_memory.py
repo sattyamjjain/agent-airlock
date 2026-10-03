@@ -298,7 +298,7 @@ def _get_tracer() -> Any:
         from opentelemetry import trace
 
         return trace.get_tracer("agent_airlock.integrations.claude_auto_memory")
-    except ImportError:  # pragma: no cover — opentelemetry is an optional extra
+    except ImportError:  # pragma: no cover — used when installed; no extra brings it
         return None
 
 

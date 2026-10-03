@@ -16,6 +16,10 @@ Two things are asserted here, and they are different:
 3. **One row per CVE** — the catalog is keyed by CVE id, so a CVE covered by two modules
    gets one row listing both. ``TestOneRowPerCve`` pins that, and is the gate ``--check``
    structurally could not provide.
+4. **Umbrella CVEs** — a module that replays several CVEs at once has no per-CVE header, and
+   until 0.10.23 the eight of its CVEs with no module of their own appeared nowhere in the
+   catalog while the marketplace said they were "already listed". ``TestUmbrellaCves`` pins
+   the section that lists them.
 """
 
 from __future__ import annotations
@@ -29,7 +33,9 @@ from scripts.gen_cve_catalog import (
     UnparseableCVEModule,
     _catalog_modules,
     _match_header,
+    _named_cves,
     collect,
+    collect_umbrella,
 )
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -192,6 +198,10 @@ class TestThePublishedSplitIsAccurate:
     def _distinct_cve_count() -> int:
         return len({e.cve_id for e in collect()})
 
+    @staticmethod
+    def _umbrella_cve_count() -> int:
+        return len(collect_umbrella(collect()))
+
     def test_the_module_counts_are_what_the_tree_holds(self) -> None:
         total, cve_numbered = self._module_counts()
         assert total == 49
@@ -213,13 +223,20 @@ class TestThePublishedSplitIsAccurate:
         total, cve_numbered = self._module_counts()
         assert f"{total} CVE / advisory regression tests" in text
         assert f"{cve_numbered} are CVE-numbered" in text
+        # Pinned since 0.10.23; it was the one figure in the sentence nothing read.
+        assert f"the other {total - cve_numbered} are" in text
 
     def test_the_readme_points_at_the_catalog_with_the_row_count(self) -> None:
-        """The README's number must be the catalog's row count, not the module count."""
+        """The README's numbers are the catalog's: its CVEs, split into rows and umbrella."""
         text = (_ROOT / "README.md").read_text(encoding="utf-8")
         total, _cve_numbered = self._module_counts()
+        rows, umbrella = self._distinct_cve_count(), self._umbrella_cve_count()
         assert f"{total} CVE/advisory regression tests" in text
-        assert f"{self._distinct_cve_count()} distinct CVEs" in text
+        assert f"{rows + umbrella} distinct CVEs" in text
+        assert f"{rows} with a row of their own, {umbrella} inside umbrella modules" in text
+
+    def test_the_umbrella_cve_count_is_what_the_catalog_publishes(self) -> None:
+        assert self._umbrella_cve_count() == 8
 
     def test_the_catalog_row_count_equals_the_distinct_cve_count(self) -> None:
         rows = len(re.findall(r"^\| \[CVE-", _CATALOG.read_text(encoding="utf-8"), re.M))
@@ -349,3 +366,31 @@ class TestTheCatalogsOwnCIClaim:
         from scripts.gen_cve_catalog import collect, render
 
         assert render(collect()).strip() in _CATALOG.read_text(encoding="utf-8").strip()
+
+
+class TestUmbrellaCves:
+    """An umbrella module's CVEs that have no module of their own are published too."""
+
+    def test_the_shorthand_is_expanded(self) -> None:
+        assert _named_cves("tampering (CVE-2026-30615/30617/30618)") == {
+            "CVE-2026-30615",
+            "CVE-2026-30617",
+            "CVE-2026-30618",
+        }
+
+    def test_no_umbrella_cve_duplicates_a_row(self) -> None:
+        rows = {e.cve_id for e in collect()}
+        assert not rows & {u.cve_id for u in collect_umbrella(collect())}
+
+    def test_every_umbrella_cve_links_a_primary_source_its_files_carry(self) -> None:
+        for u in collect_umbrella(collect()):
+            assert u.nvd == f"https://nvd.nist.gov/vuln/detail/{u.cve_id}", u.cve_id
+
+    def test_the_catalog_publishes_each_one(self) -> None:
+        catalog = _CATALOG.read_text(encoding="utf-8")
+        for u in collect_umbrella(collect()):
+            assert f"| {u.cve_id} |" in catalog, u.cve_id
+
+    def test_no_published_surface_says_they_were_already_rows(self) -> None:
+        marketplace = (_ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
+        assert "already listed" not in marketplace

@@ -1,12 +1,12 @@
 # Cross-tool block-rate comparison — results
 
-Last run: **2026-09-16**. Corpus: **210** tool calls.
+Last run: **2026-10-03**. Corpus: **210** tool calls.
 
 ## Headline
 
 - agent-airlock block-rate (malicious blocked): **100.0%**
 - agent-airlock false-positive rate (benign blocked): **0.0%**
-- Per-decision latency: **p50 0.0020 ms**, **p95 0.0270 ms** (in-process, no model call, no network)
+- Per-decision latency: **p50 0.0017 ms**, **p95 0.0208 ms** (in-process, no model call, no network)
 
 The latency line is why this is a different layer from model-in-the-loop guardrails: a deny-by-default policy / argument guard decides in microseconds with no model inference, no API round-trip, and a deterministic verdict.
 
@@ -65,7 +65,7 @@ Until v0.10.6 the headline above was measured **entirely on the local path**. Th
 | Leg | Result | Re-run? |
 |---|---|---|
 | **Argument contract on the sandbox path** (SafePath / SafeURL / HandleField / strict types) | **100.0%** refused (4/4 probes) | ✅ yes |
-| **Verdict parity, sandbox vs local** | **4/4** contract probes agree, **200/200** policy items agree | ✅ yes |
+| **Verdict parity, sandbox vs local** | **4/4** contract probes agree, **200/200** policy items agree (100 admitted and 100 refused on both paths) | ✅ yes |
 | **Isolation backend execution** | _not run — no E2B or Docker backend available in this runner_ | ❌ no |
 
 | Probe | Annotated type | Local path | Sandbox path | Agree |
@@ -76,6 +76,8 @@ Until v0.10.6 the headline above was measured **entirely on the local path**. Th
 | type coercion | `strict int` | refused | refused | ✅ |
 
 **Honest scope.** The backend-execution leg is reported as not-run rather than folded into a pass rate when no backend is present: with neither E2B nor Docker installed, `_execute_in_sandbox` raises and *every* call comes back blocked, benign included, so counting those as blocks would report a fake 100%. The arm separates a contract refusal (raised before dispatch, naming the field) from a backend failure. 10 corpus items declare neither a least-privilege allowlist nor an annotated parameter, so the decorator has nothing to enforce for them; they are counted here and not claimed as passes. The four in-process guards the local arm calls directly are not part of the decorator path and are not measured here.
+
+**Correction (0.10.23).** The policy-item parity published from the 2026-09-16 run, 200/200, measured nothing. `@Airlock` takes the tool's name from the function it wraps, and the stub in this arm was named `invoke`, which no allow-list names, so both paths refused all 200 items, the 100 whose tool the allow-list admits included. The stub now carries each item's tool name, the leg compares policy refusals only (an admitted call that then fails for want of a backend is not one), and the split above shows both verdicts.
 
 ## Reproduce
 

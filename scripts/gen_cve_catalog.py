@@ -249,20 +249,75 @@ def _dedent_block(block: list[str]) -> str:
 
 
 def _catalog_modules() -> list[Path]:
-    """The CVE-numbered regression modules this catalog publishes.
+    """The CVE-numbered regression modules, each of which gets a row of its own.
 
-    Deliberately ``test_cve_*.py`` and not every module under ``tests/cves/``. The wider
-    set that ``tests/test_marketplace_metadata.py`` counts (38) also contains advisory
-    regressions with **no CVE id of their own** — an archived-server gate, the Unit 42
-    sampling preset, the Vercel/Context.ai OAuth breach — plus two umbrella modules whose
-    constituent CVEs already have their own rows here. Forcing those into a table keyed by
-    CVE id would either invent ids or leave blank keys.
+    Deliberately ``test_cve_*.py`` and not every module under ``tests/cves/``. The rest are
+    advisory regressions with **no CVE id of their own** — an archived-server gate, the
+    Unit 42 sampling preset, the Vercel/Context.ai OAuth breach — and umbrella modules that
+    replay several CVEs at once. Forcing those into a table keyed by one CVE id would invent
+    ids or leave blank keys, so an umbrella module's CVEs that have no module of their own
+    are listed by :func:`collect_umbrella` in a section of their own instead.
 
-    So the split is real and the published wording has to match it: **40 regression
-    modules, of which 33 are CVE-numbered and appear below.** That sentence is asserted by
-    ``tests/test_cve_catalog_gate.py`` against both numbers, so neither can drift.
+    Until 0.10.23 this docstring, and the marketplace, said the umbrella modules' CVEs
+    "already have their own rows here"; eight did not, and appeared nowhere in the catalog.
+    ``tests/test_cve_catalog_gate.py`` pins the published counts as literals.
     """
     return sorted(TESTS_DIR.glob("test_cve_*.py"))
+
+
+# An umbrella module names its CVEs in its docstring, sometimes in the shorthand
+# ``CVE-2026-30615/30617/30618``; both spellings are read.
+_CVE_ID_RE = re.compile(r"CVE-\d{4}-\d{4,7}")
+_CVE_SHORTHAND_RE = re.compile(r"CVE-(\d{4})-\d{4,7}((?:/\d{4,7})+)")
+_NVD_URL = "https://nvd.nist.gov/vuln/detail/{}"
+
+
+@dataclass
+class UmbrellaEntry:
+    """A CVE replayed inside an umbrella module, with no module (so no row) of its own."""
+
+    cve_id: str
+    files: list[Path]
+    nvd: str | None
+
+    @property
+    def sort_key(self) -> tuple[str, str]:
+        return (self.cve_id.split("-")[1], self.cve_id)
+
+
+def _named_cves(doc: str) -> set[str]:
+    ids = set(_CVE_ID_RE.findall(doc))
+    for year, rest in _CVE_SHORTHAND_RE.findall(doc):
+        ids.update(f"CVE-{year}-{number}" for number in rest.strip("/").split("/"))
+    return ids
+
+
+def collect_umbrella(entries: list[CVEEntry]) -> list[UmbrellaEntry]:
+    """The CVEs the other ``tests/cves/`` modules name in their docstrings and have no row.
+
+    The NVD link is taken only where the module's docstring or a file under
+    ``tests/cves/fixtures/`` carries it verbatim; nothing is built from the id alone.
+    """
+    rowed = {e.cve_id for e in entries}
+    fixtures = "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted((TESTS_DIR / "fixtures").glob("*.json"))
+    )
+    catalogued = set(_catalog_modules())
+    docs: dict[Path, str] = {}
+    found: dict[str, list[Path]] = {}
+    for path in sorted(TESTS_DIR.glob("test_*.py")):
+        if path in catalogued:
+            continue
+        docs[path] = _extract_docstring(path) or ""
+        for cve in _named_cves(docs[path]) - rowed:
+            found.setdefault(cve, []).append(path)
+
+    umbrella: list[UmbrellaEntry] = []
+    for cve, files in found.items():
+        url = _NVD_URL.format(cve)
+        sources = fixtures + "".join(docs[f] for f in files)
+        umbrella.append(UmbrellaEntry(cve, files, url if url in sources else None))
+    return sorted(umbrella, key=lambda u: u.sort_key)
 
 
 class UnparseableCVEModule(RuntimeError):
@@ -469,6 +524,11 @@ catalog and the tests stay in lockstep.
 """
 
 
+def _blob_link(path: Path) -> str:
+    rel = path.relative_to(ROOT).as_posix()
+    return f"[`{rel}`](https://github.com/sattyamjjain/agent-airlock/blob/main/{rel})"
+
+
 def render(entries: list[CVEEntry]) -> str:
     out: list[str] = [HEADER, "", "## Summary", ""]
     out.append("| CVE | Component / title | CVSS | Airlock fit |")
@@ -477,6 +537,24 @@ def render(entries: list[CVEEntry]) -> str:
         anchor = e.cve_id.lower()
         out.append(f"| [{e.cve_id}](#{anchor}) | {e.title} | {e.cvss or '—'} | {e.fit_badge} |")
     out.append("")
+
+    umbrella = collect_umbrella(entries)
+    if umbrella:
+        out.append("## Covered inside umbrella modules")
+        out.append("")
+        out.append(
+            "These CVEs have no row above: a module that replays several at once names them "
+            "in its docstring rather than in a header of its own, so there is no per-CVE "
+            "CVSS or fit to show. Each one's pattern is replayed by the module listed."
+        )
+        out.append("")
+        out.append("| CVE | NVD | Regression test |")
+        out.append("| --- | --- | --- |")
+        for u in umbrella:
+            nvd = f"[NVD]({u.nvd})" if u.nvd else "—"
+            out.append(f"| {u.cve_id} | {nvd} | {', '.join(_blob_link(f) for f in u.files)} |")
+        out.append("")
+
     out.append("## Details")
     out.append("")
 
@@ -496,12 +574,8 @@ def render(entries: list[CVEEntry]) -> str:
             out.append(f"- **Advisory:** [{e.advisory}]({e.advisory})")
         if e.writeup:
             out.append(f"- **Write-up:** [{e.writeup}]({e.writeup})")
-        rels = [f.relative_to(ROOT).as_posix() for f in e.files]
-        links = ", ".join(
-            f"[`{rel}`](https://github.com/sattyamjjain/agent-airlock/blob/main/{rel})"
-            for rel in rels
-        )
-        label = "Regression test" if len(rels) == 1 else "Regression tests"
+        links = ", ".join(_blob_link(f) for f in e.files)
+        label = "Regression test" if len(e.files) == 1 else "Regression tests"
         out.append(f"- **{label}:** {links}")
         out.append("")
         if e.description:

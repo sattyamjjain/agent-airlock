@@ -16,7 +16,10 @@ what counts as in scope is in `docs/cve-triage.md`.
 - **The filename decides catalog membership.** `scripts/gen_cve_catalog.py` globs
   `test_cve_*.py` only, so a CVE module named any other way gets no row in
   `docs/cves/index.md`. Name them `test_cve_<yyyy>_<n>_<slug>.py` (`<n>` unpadded);
-  advisories with no CVE id of their own take a descriptive `test_<slug>.py`.
+  advisories with no CVE id of their own take a descriptive `test_<slug>.py`. A CVE that
+  only an umbrella module names in its docstring (the shorthand `CVE-YYYY-NNNNN/NNNNN`
+  included) is listed in the catalog's umbrella section instead (`collect_umbrella`),
+  linked to NVD only where the docstring or a fixture carries that URL.
 - **`fixtures/*.json`** hold per-advisory payloads. Shapes vary, but every file needs an ISO
   `disclosed_at` or `scripts/egress_bench.py` exits 2; the walker grades only fixtures in its
   `_DISPATCH` table and prints `# SKIP` for the rest. **`corpora/*.json`** are block-rate
@@ -34,9 +37,11 @@ what counts as in scope is in `docs/cve-triage.md`.
 - **Docstring header.** The canonical format is the module docstring of
   `scripts/gen_cve_catalog.py`. The opening `"""` line must be the CVE id then a title;
   labelled fields (`Advisory:`, `NVD:`, `CVSS:`, `Airlock fit:`) must start at column 0 —
-  an indented field is silently dropped. `--write` only warns about an unparseable module;
-  `--check`, the CI gate, fails on it. If no upstream fix existed when a row was added,
-  say so in the Vulnerability paragraph (`test_cve_2026_79538_metamcp_stdio_proxy.py`):
+  an indented one is not read as a field: `CVSS:` and `Airlock fit:` are lost, and the URL
+  fields fall back to bare URLs elsewhere in the docstring. `--write` only warns about an
+  unparseable module; `--check`, the CI gate, fails on it. If no upstream fix existed when
+  a row was added, say so in the Vulnerability paragraph
+  (`test_cve_2026_79538_metamcp_stdio_proxy.py`):
   the generated catalog intro relies on that paragraph rather than claiming every row was
   patched upstream.
 - **In-scope-and-deferred CVEs take `Airlock fit: none` plus a strict `xfail`**, never a
@@ -74,13 +79,18 @@ what counts as in scope is in `docs/cve-triage.md`.
 - **Count gates.** `tests/test_cve_catalog_gate.py` pins literal module and distinct-CVE
   totals, and the README's ASI04 row and `.claude-plugin/marketplace.json` repeat them.
   Adding or removing a module means editing all three, unless it is listed in
-  `_NON_DISCLOSURE_CVE_MODULES` (`tests/test_marketplace_metadata.py`). A strict `xfail`
+  `_NON_DISCLOSURE_CVE_MODULES` (`tests/test_marketplace_metadata.py`). The marketplace's
+  "the other N" (total minus CVE-numbered) and the README's split of distinct CVEs into
+  rows and umbrella entries are pinned by the same gate, the umbrella count as a literal.
+  A strict `xfail`
   is collected and counted but never passes, so the marketplace proof point says "N tests",
   not "N tests passing", while any exist. `test_proof_point_test_count_matches_the_badge`
   pins only the number, so that wording is on whoever edits the proof point.
-- **Fixture gates.** CI exercises the fixtures through `tests/cli/test_egress_bench_since.py`
-  and `tests/test_numeric_claim_parity.py`; no workflow runs `make egress-bench`. Fixtures
-  are not hash-pinned; per `AGENTS.md`, removing one cites its advisory and adds a successor.
+- **Fixture gates.** CI runs the egress walker over the fixtures through
+  `tests/cli/test_egress_bench_since.py` and `tests/test_numeric_claim_parity.py`, and a few
+  tests load single fixtures (the outside-reader grep lists them); no workflow runs
+  `make egress-bench`. Fixtures are not hash-pinned; per `AGENTS.md`, removing one cites its
+  advisory and adds a successor.
 
 <!-- END AUTO-MANAGED -->
 

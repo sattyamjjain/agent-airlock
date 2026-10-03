@@ -15,7 +15,10 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
 
 - **`blockrate/`** — policy + guard-chain block rate, with incumbents scope-claimed.
   `--write` re-measures into `RESULTS.md`; `render_comparison_section` also feeds
-  `BENCHMARK.md`.
+  `BENCHMARK.md`. Its `sandbox=True` arm names each policy stub after the item's tool
+  and compares policy refusals only, and reports the agreements split into admitted and
+  refused: a parity in which either side is zero says nothing (it was 200/200 refused
+  until 0.10.23).
 - **`toolprivbench/`** — least-privilege block rate; `subset_scenarios()` also seeds
   blockrate's corpus. `--write` drops the hand-kept `## Re-runs` table from `RESULTS.md`.
 - **`agentdojo/run.py`** — a free deterministic bound and a paid `--model` pass, dated
@@ -46,8 +49,9 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   ships with its benign control and every denominator; incumbents that were not executed
   are scope-claimed.
 - **Copies are hand-synced — grep the old figure repo-wide.** README, `docs/benchmarks/`,
-  `SECURITY.md`, harness READMEs, and prose hard-coded in `scripts/generate_benchmark.py`
-  (re-render with `make benchmark`) and `blockrate/report.py` all restate results.
+  `SECURITY.md`, `ROADMAP.md`, `demo/`, harness READMEs, and prose hard-coded in
+  `scripts/generate_benchmark.py` (re-render with `make benchmark`) and `blockrate/report.py`
+  all restate results.
 - **`blockrate/report.py` emits absolute blob URLs**: its text renders at its own path, in
   the root `BENCHMARK.md`, and inside `docs/benchmarks/` pages (each of which must be in
   the nav).
@@ -70,8 +74,10 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
 - **Paid or host-touching runs — ask before starting one:** `agentdojo --model` (a provider
   key such as `OPENAI_API_KEY`; price the model id in `_MODEL_PRICES`), `harness_injection
   --run` (logged-in `claude` / `codex` / `cursor-agent` CLIs; its `--checkpoint` file is not
-  gitignored) and `gateway_harness/regen.py` (Docker, the `docker mcp` plugin and the echo
-  image; it writes into `~/.docker/mcp/catalogs/`).
+  gitignored), `gateway_harness/regen.py` (Docker, the `docker mcp` plugin and the echo
+  image; it writes into `~/.docker/mcp/catalogs/`) and plain `python -m benchmarks.blockrate`
+  when `[sandbox]` is installed and `E2B_API_KEY` set (its sandbox arm sends the benign
+  probes and every policy item the allow-list admits to E2B).
 - **Internal:** mostly the package root and `agent_airlock.policy`; recount with
   `grep -rhoE 'from agent_airlock[.a-z_]*' benchmarks/ --include='*.py' | sort -u`.
   `vs_gateway/__main__.py` imports `structlog` directly, so it needs `[logging]` or `[dev]`.

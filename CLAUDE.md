@@ -14,8 +14,9 @@ The wedge is argument validation at the call boundary; every other layer wraps i
 - Policy engine: RBAC, token-bucket rate limits, time windows, per-model-tier cost budgets,
   per-run resource-amplification budgets
 - PII/secret detection and masking; Indic PII is opt-in (`pii_locales=["in"]`)
-- Sandboxed execution via pluggable backends (E2B Firecracker, Modal, Docker, local, plus a
-  beta, opt-in Anthropic Managed Agents backend)
+- Sandboxed execution via pluggable backends (E2B Firecracker, Modal, Docker, local). The
+  beta, opt-in Anthropic Managed Agents backend runs nothing: its `execute()` returns a
+  failed `SandboxResult` by design
 - `mcp_spec/` guards mapped to specific named CVEs and MCP spec clauses — stdio injection,
   OAuth, DNS rebinding, SSRF, eval-RCE, WebSocket origin hijack, task lifecycle, handle trust
 - Framework adapters: FastMCP, LangChain/LangGraph, Anthropic (Messages, Claude Agent SDK,
@@ -72,15 +73,18 @@ make check-registry-parity              # declared version must not outrun PyPI
 make check-registry-parity-distance     # release-only: refuse to skip a version
 ```
 
-What gates a merge — `ci.yml` jobs, on PRs and pushes to `main`:
+What CI runs — `ci.yml` jobs, on PRs and pushes to `main`. None is a required check (`main`
+has no branch protection or ruleset), so a red job blocks a merge by convention only:
 
-- `test` (full Python matrix) — installs `.[dev,redis,mcp]`; ruff check, mypy, pytest with the
-  coverage floor, `generate_benchmark.py --check`, and a pytest-benchmark smoke run that
-  asserts the suite executes (deliberately not a latency threshold).
+- `test` (full Python matrix) — installs `.[dev,redis,mcp]` and asserts the redis and FastMCP
+  extras import (a `--collect-only` step); ruff check, mypy, pytest with the coverage floor;
+  on 3.11 only, `generate_benchmark.py --check` and a pytest-benchmark smoke run that asserts
+  the suite executes (deliberately not a latency threshold).
 - `lint` — `ruff format --check` only.
 - `docs` — `mkdocs build --strict`, `check_links.py`, `gen_cve_catalog.py --check`, and the
   **default** modes of `check_benchmark_freshness.py` and `check_changelog.py`.
-- `bare-install` — `check_core_deps.py` against a no-extras install.
+- `bare-install` — `check_core_deps.py` against a no-extras install, then an import of the
+  package root, `agent_airlock.audit` and `policy_presets.list_active()` through the shim.
 - `docker-sandbox` — builds the repo `Dockerfile`, runs `pytest -m docker`, and greps for an
   exact passed-count, so adding or removing a docker-marked test means editing that count.
 - `security` — bandit (`-c pyproject.toml`) and a CycloneDX SBOM; `safety` runs with
@@ -96,8 +100,9 @@ needs `id-token: write` and there is no PyPI token to add back. That job install
 `make check-changelog-release` runs in no workflow: it is a manual pre-tag check, and
 wiring it per-PR would fail every PR between releases.
 
-`scripts/check_docs_api.py` imports the package, so it runs in `test` as
-`tests/test_docs_api_gate.py` rather than in `docs`, which installs only mkdocs. It checks
+`scripts/check_docs_api.py` imports the package and skips a module whose extra is missing,
+so it runs in `test` as `tests/test_docs_api_gate.py`, where `[dev,redis,mcp]` are
+installed, rather than in `docs`, which installs the package with only `[docs]`. It checks
 names imported from `agent_airlock` in each Python fence and `examples/` script: the import
 resolves, keywords match the signature, attributes exist.
 
@@ -129,9 +134,10 @@ Repo-level directories outside the package: `tests/` (mostly mirrors the package
 subpackages; `tests/cves/` is the signed CVE regression suite), `benchmarks/` (agentdojo,
 blockrate, harness_injection, mcp_conformance, scantools_mcptox, toolprivbench, vs_gateway),
 `scripts/` (`check_*` claim gates, the generators behind `make benchmark` / `test-badge` /
-`check-cve-catalog`, `smoke_*` end-to-end drivers, `cve_watcher.py`), `docs/` (mkdocs
+`check-cve-catalog`, `smoke_*` end-to-end drivers, `cve_watcher.py`, and `egress_bench.py` /
+`verify_corpus_manifest.py` behind `make egress-bench` / `verify-corpus`), `docs/` (mkdocs
 source), `examples/`, `demo/` (runnable live demo), `presets/`, `schemas/`, `tools/`, and
-`.claude-plugin/` (marketplace manifest).
+`.claude-plugin/` (plugin and marketplace manifests).
 
 **There is no committed `site/`.** The docs site is served from the `gh-pages` branch,
 which `docs.yml` rebuilds with `mkdocs gh-deploy --force` on pushes to `main` that touch
@@ -148,7 +154,8 @@ them into `docs/`, and keep cross-tree links inside them absolute.
 src/agent_airlock/
 ├── core.py            @Airlock decorator — the entrypoint; sync + async
 ├── __init__.py        public API surface (large, explicit __all__)
-├── config.py          ENV (AIRLOCK_*) > constructor > airlock.toml
+├── config.py          AirlockConfig; some env vars override the constructor, others only
+│                      fill gaps (see its docstring); airlock.toml is read only by from_toml()
 ├── exceptions.py      AirlockError base only; exception classes live where they're raised
 ├── testing.py         state-reset helpers for test isolation
 ├── _log.py            structlog-or-stdlib logging shim
@@ -190,12 +197,17 @@ src/agent_airlock/
 0. Kill switch — a fleet freeze refuses before the arguments are even examined
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Resolve policy (static, or `Callable[[AirlockContext], SecurityPolicy]`) and check it
-   against the caller's identity (the call's context object, else the one set around it)
+   against the caller's identity (the call's context object, else the one set around it).
+   Every call gets a fresh `AirlockContext`; `_share_run_state` points its untrusted-output
+   counts and `authorize_once` grants at the run's context (an `AirlockContext` the first
+   argument carries, else the one set around the call unless it names a different agent than
+   the call does) and merges that context's metadata under its own, so a policy with
+   `reauth_on_untrusted_reinvocation` refuses a call that belongs to no run
    - 2.5 behavioral tool-call sequence guard
    - 2.6 action-time contradiction gate
    - 2.7 unsafe-deserialization content guard
-   - 2.8 per-run resource-amplification budget — after the gates above, so a call that was
-     going to be refused anyway is never charged to the run's ledger
+   - 2.8 per-run resource-amplification budget — after the gates above, so a call they refuse
+     is never charged to the run's ledger (one that steps 3–7 refuse already has been)
 3. Filesystem path validation
 4. Capability requirements
 5. Endpoint policy validation
@@ -213,11 +225,13 @@ src/agent_airlock/
    other object is returned as-is and its detections reported as not masked). A generator
    result is wrapped instead (`_guard_stream`): its body runs when iterated, after the
    call returns, so each step re-enters the call's airgap and context and each item is
-   sanitized as it is yielded → audit log → mark untrusted output (when the policy sets
-   `reauth_on_untrusted_reinvocation`) → reconcile actual vs estimated cost
+   sanitized as it is yielded → audit log → mark untrusted output (when the resolved policy
+   sets `reauth_on_untrusted_reinvocation`) → reconcile actual vs estimated cost against the
+   resolved policy's budget
 
-Blocked calls return an `AirlockResponse`. Validation failures return structured JSON
-carrying `fix_hints` for the model to retry against, rather than raising.
+A blocked call, validation failures included, returns `AirlockResponse.to_dict()` rather than
+raising: a plain dict (`success: False`, `block_reason`, `error`, `fix_hints` for the model
+to retry against). With a honeypot configured, the caller may get fake success instead.
 
 <!-- END AUTO-MANAGED -->
 
@@ -231,7 +245,8 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   globally ignored: E501, SIM102, SIM103, B027. The `py310` target is deliberate — bumping
   it makes UP036/UP042 fire and emit code that breaks on 3.10. Do not raise it.
   Per-file `ARG` ignores exist for `integrations/`, `cli/`, `anomaly.py`, tests and examples —
-  those unused args are callback-interface signatures, so do not "fix" them.
+  those unused args are interface signatures (callbacks, test stubs, demo tools, a reserved
+  `anomaly.py` parameter), so do not "fix" them.
 - **bandit** reads `[tool.bandit]` in `pyproject.toml` (CI passes `-c pyproject.toml`).
   B101 (`assert`) is deliberately not skipped — it caught narrowing asserts on a security
   path. Where an assert is genuinely fine, use a scoped `# nosec B101 - <reason>`.
@@ -239,7 +254,7 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   for structured data; prefer it over plain dicts.
 - **Enums** extend `str, Enum` so they serialize to JSON.
 - **Logging** through `agent_airlock._log` (structlog when installed, stdlib shim otherwise):
-  `from agent_airlock._log import structlog` then
+  `from ._log import structlog` (`from .._log` one package down) then
   `logger = structlog.get_logger("agent-airlock.<dotted.module.path>")`. Never
   `import structlog` directly — the shim is the only module that does. Structured kwargs,
   never f-strings.
@@ -262,7 +277,7 @@ carrying `fix_hints` for the model to retry against, rather than raising.
 
 - **Decorator entrypoint** — `@Airlock()` wraps a function with the full layer stack, and
   preserves `__signature__` / `__annotations__` so framework introspection still works.
-- **Defense-in-depth** — validation → policy → capability → filesystem → network → sandbox.
+- **Defense-in-depth** — validation → policy → filesystem → capability → network → sandbox.
   Each layer exists because an earlier one proved insufficient for a specific CVE.
 - **Guard + preset pairs** — `mcp_spec/` guards come in three shapes (see
   `mcp_spec/CLAUDE.md`); a guard's preset factory, usually `*_defaults()`, lives in
@@ -270,11 +285,13 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   `policy_presets.__all__`, and any `policy_presets.<name>` named in README or `docs/` must
   resolve to a registered factory (`tests/presets/test_registry_parity.py`). An
   unregistered preset never shows up in `list_active()`. Many guards are re-exported from
-  the package root (`agent_airlock.__all__`); `mcp_spec/__init__.py` exports none.
+  the package root (`agent_airlock.__all__`); `mcp_spec/__init__.py` exports no per-CVE
+  guard — its `__all__` is the protocol surface only.
 - **Lazy optional imports** — anything from an extra (`e2b`, `redis`, `cryptography`,
-  `structlog`, framework SDKs) is imported inside the function that needs it, behind
-  `try/except ImportError`, raising an error that names the extra to install. This is what
-  keeps the `bare-install` job green.
+  framework SDKs) is imported inside the function that needs it, behind
+  `try/except ImportError`, raising an error that names the extra to install. `structlog` is
+  the exception: `_log.py` tries it once at import and falls back to the stdlib shim instead
+  of raising. This is what keeps the `bare-install` job green.
 - **Deny-by-default** — unknown tier, unregistered manifest, and unpinned spec revision all
   fail closed, and so does an input shape a guard cannot read, such as a list where a string
   was expected: it is refused rather than skipped (see `mcp_spec/CLAUDE.md`). New branches
@@ -294,7 +311,8 @@ carrying `fix_hints` for the model to retry against, rather than raising.
   `DeprecationWarning` outside `__main__`. Never add a setting that quietly does nothing.
 - **Dated snapshots** — pricing tables, advisory blast-radius data and redaction patterns
   ship as dated files under `data/` and `fixtures/`; a refresh is a new dated file, not an
-  edit to the old one.
+  edit to the old one. `cost_tracking.DEFAULT_PRICING` is the undated in-process fallback,
+  so a price refresh edits it too.
 - **Also by name** — `airlock attest` receipts (identity plus assume/guarantee
   `LayerContract`); `SandboxPool` of single-use sandboxes, one pool per config, hiding cold
   starts; `vaccinate()` monkeypatching
@@ -306,13 +324,15 @@ carrying `fix_hints` for the model to retry against, rather than raising.
 ## Git Insights
 
 History is dominated by `feat:` and `fix:`, with steady `docs:`, `chore:` and `bench:`
-work (`git log --format=%s | cut -d: -f1 | sort | uniq -c` recounts it). Three themes drive
-most recent development:
+work (`git log --format=%s | sed -E 's/^([a-z]+)[(!:].*/\1/' | sort | uniq -c | sort -rn`
+recounts it with scopes folded in). Four themes drive most recent development:
 
-1. **Per-CVE guards.** Most `feat:` commits add one guard for one named advisory
-   (`mcp_spec/*_guard.py`), its preset defaults, and a regression fixture. Commit messages
-   carry the primary-source URL. `cve-watcher.yml` files triage issues for argument-shaped
-   CVEs; each gets a disposition from the vocabulary in `docs/cve-triage.md`
+1. **Per-CVE guards.** The recurring guard commit, `feat:` or `fix(...)` alike, adds one
+   guard for one named advisory (`mcp_spec/*_guard.py`), its preset defaults, and a
+   regression test. AGENTS.md asks for the primary-source URL in the commit message, but
+   history is uneven: the test module's `Advisory:` / `NVD:` header is where to look.
+   `cve-watcher.yml` files triage issues for argument-shaped CVEs; each gets a disposition
+   from the vocabulary in `docs/cve-triage.md`
    (`in-scope-and-scheduled`, `in-scope-and-deferred-until-<DATE>`,
    `out-of-scope-because-<clause>`), and the queue closes with a fixture or a public,
    reasoned refusal (#177). An in-scope CVE that an existing guard already refuses lands as
@@ -331,6 +351,9 @@ most recent development:
    diagnosis stays on the record beside its correction (#179), and the sample scope is
    stated inline rather than rounded up. Match this register when touching `benchmarks/`
    or `BENCHMARK.md`.
+4. **Fail-closed fixes on the call path.** `fix(security):` and `fix(<area>):` commits close
+   a path where a check was skipped or a refusal failed open; since 0.10.16 each release's
+   fixes land in a regression module named for it (`ls tests/*_0_10_*.py` lists them).
 
 Practical consequence: **do not add a capability claim to README, docs, or a preset
 description unless code and a test back it.** There is tooling that will fail the build on it.
@@ -358,26 +381,31 @@ recounts it over a number pasted into prose.
   text, not calls.
 - **CVE fixtures are signed history.** Files under `corpus/wild_payload_corpus/` and
   `tests/cves/` require a primary-source URL in the commit message, and the same PR
-  regenerates `docs/cves/index.md` with `python3 scripts/gen_cve_catalog.py` — it is built
-  from the `tests/cves/` docstring headers, so never hand-edit it. Never remove a check
-  without naming the CVE that motivated it.
+  regenerates `docs/cves/index.md` with `python3 scripts/gen_cve_catalog.py --write` (with
+  no flag it only prints) — it is built from the `tests/cves/` docstring headers, so never
+  hand-edit it. Never remove a check without naming the CVE that motivated it.
 - Every `feat:` needs at least one regression test.
 - Run `make lint` and `pytest -m "not docker"` before committing.
 - `tests/conftest.py` redirects the default `airlock_audit.json` path to a temp file, but
   only inside that pytest process — a test that runs an example or script in a subprocess
   must pass `cwd=tmp_path` itself, or the child process writes its audit log into the
   checkout.
-- `bare-install` is the job that enforces the Pydantic-only core — if you add an import
-  that is not in an extra, that job fails, not the test suite.
+- `bare-install` is the job that enforces the Pydantic-only core: `check_core_deps.py` fails
+  on a new core dependency, and its import step fails on a module-level import of an extra —
+  but only in the modules it loads (the package root, `audit`, `policy_presets` and what they
+  import; `sandbox`, `cli/` and most of `integrations/` are not among them).
 - **Version bumps** must move every surface a test pins — `pyproject.toml` + `__version__`,
-  `.claude-plugin/plugin.json`, `CITATION.cff` (version plus that release's CHANGELOG
-  date), the supported minor line in `SECURITY.md`, the README badge (`make test-badge`) —
-  and need a conformant `## [X.Y.Z]` CHANGELOG heading. Tag `vX.Y.Z` within one commit of
-  the bump, or `version-tag-guard` turns `main` red. Push the tag as soon as the squash merge
-  lands: the merge's own push run also runs `check_registry_parity.py`, which fails on a
-  dated CHANGELOG section with no tag yet (re-run that job once the tag exists).
-- `make test-badge` rewrites the README test count; the hand-written copies under
-  `docs/distribution/` must match it in the same commit (`test_numeric_claim_parity.py`).
+  `.claude-plugin/plugin.json`, `CITATION.cff` (the newest *published* version and its
+  CHANGELOG date: a patch bump leaves it one behind, the most `test_version_consistency.py`
+  allows, and an X.Y.0 bump must cite X.Y.0), the supported minor line in `SECURITY.md`,
+  the README badge (`make test-badge`) — and need a conformant `## [X.Y.Z]` CHANGELOG
+  heading. Tag `vX.Y.Z` within one commit of the bump, or `version-tag-guard` turns `main`
+  red. Push the tag as soon as the squash merge lands: the merge's own push run also runs
+  `check_registry_parity.py`, which fails on a dated CHANGELOG section with no tag yet
+  (re-run that job once the tag exists).
+- `make test-badge` rewrites the README badge (test count, coverage, version); the
+  hand-written `vX.Y.Z = N` copies under `docs/distribution/` must match its count and
+  version in the same commit (`test_numeric_claim_parity.py`).
 - A new page under `docs/benchmarks/` must be added to the `mkdocs.yml` nav, and the dates
   in `docs/benchmarks/index.md` must match the README's — `check_benchmark_freshness.py`
   fails on either gap.
