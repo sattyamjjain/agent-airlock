@@ -97,24 +97,26 @@ jobs:
       # ever referenced the file it wrote.
 
   # ---------------------------------------------------------------------------
-  # The four `docker`-marked tests (tests/test_sandbox_backend_docker_integration.py).
+  # The `docker`-marked tests (tests/test_sandbox_backend_docker_integration.py). The job
+  # greps for their exact passed-count, so adding or removing one means editing it there.
   #
   # Separate from `test` on purpose: these need a live Docker daemon, so an
-  # infrastructure wobble must not redden the matrix job that covers the other
-  # ~4,281 tests. The default `addopts` carries `-m 'not docker'`, so `test`
+  # infrastructure wobble must not redden the matrix job that covers the rest of
+  # the suite. The default `addopts` carries `-m 'not docker'`, so `test`
   # never sees them.
   #
   # They cannot run against a stock `python:3.11-slim`. DockerBackend executes
   # its payload with `network_mode="none"` and the generated script opens with
   # `import cloudpickle`, and cloudpickle pickles the test helpers *by
   # reference* — so the container must import the test module itself, and
-  # therefore pytest and agent_airlock too. Verified: against python:3.11-slim
-  # 3 of the 4 fail with ModuleNotFoundError: No module named 'cloudpickle'.
+  # therefore pytest and agent_airlock too. Verified when there were four tests:
+  # against python:3.11-slim, 3 of the 4 failed with ModuleNotFoundError: No module
+  # named 'cloudpickle'.
   # The Dockerfile exists to satisfy exactly that.
   #
   # The `docker` Python SDK is in no extra (not even [dev]), so it is installed
-  # explicitly here — without it DockerBackend.is_available() is False and all
-  # four tests skip.
+  # explicitly here — without it DockerBackend.is_available() is False and every
+  # one of them skips.
   # ---------------------------------------------------------------------------
   docker-sandbox:
     runs-on: ubuntu-latest
@@ -156,8 +158,8 @@ jobs:
     # The zero-core-dependency claim, enforced as an EXHAUSTIVE allowlist. A bare
     # `pip install agent-airlock` (no extras) must resolve to Pydantic + its transitive
     # runtime closure and NOTHING else, and still import + run through the stdlib logging
-    # shim in agent_airlock/_log.py. The `test` job installs `.[dev]` (which includes
-    # structlog), so this is the ONLY job that exercises the Pydantic-only core — added
+    # shim in agent_airlock/_log.py. The `test` job installs `.[dev,redis,mcp]` ([dev]
+    # brings structlog), so this is the ONLY job that exercises the Pydantic-only core — added
     # in v0.8.59 when structlog moved to the [logging] extra. Through v0.8.67 the check
     # was a structlog-specific denylist, which would wave through any OTHER dependency
     # that crept into [project.dependencies]; scripts/check_core_deps.py now fails on any

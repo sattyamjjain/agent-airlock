@@ -167,17 +167,33 @@ def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
     )
 
 
+def _policy_refusal(result: Any) -> bool:
+    """True iff the least-privilege *policy* refused this call, as opposed to the backend.
+
+    With no isolation backend installed, a call the policy admits goes on to fail in
+    dispatch on the sandbox path; that ``sandbox_error`` is not a policy verdict, so the
+    policy leg compares this and not :func:`_blocked`.
+    """
+    return _blocked(result) and result.get("block_reason") == "policy_violation"
+
+
 def _policy_tool(call: ToolCall, *, sandbox: bool) -> Any:
-    """The decorator's least-privilege leg, exercised on one dispatch path."""
+    """The decorator's least-privilege leg, exercised on one dispatch path.
+
+    The policy decides on the tool's name, and ``@Airlock`` takes that name from the function
+    it wraps, so the stub is renamed to the corpus item's tool before it is wrapped. Until
+    0.10.23 it was not: every item reached the policy as ``invoke``, which no allow-list
+    names, so both paths refused every item, the ones the allow-list admits included.
+    """
     allow = [call.allowed_tool] if call.allowed_tool else []
     policy = SecurityPolicy(allowed_tools=allow, default_deny=True)
 
-    # The policy decides on the tool's name alone; the stub never reads its argument.
-    @Airlock(sandbox=sandbox, policy=policy)
+    # The stub never reads its argument; the policy decides on the name alone.
     def invoke(tool_name: str) -> str:  # noqa: ARG001
         return "RAN"
 
-    return invoke(tool_name=call.tool_name)
+    invoke.__name__ = invoke.__qualname__ = call.tool_name
+    return Airlock(sandbox=sandbox, policy=policy)(invoke)(tool_name=call.tool_name)
 
 
 @dataclass
@@ -190,6 +206,10 @@ class SandboxArmReport:
 
     policy_items: int = 0
     policy_agreements: int = 0
+    # The agreements, split by verdict. Both must be non-zero for the parity to say anything:
+    # until 0.10.23 every agreement was a refusal (see _policy_tool).
+    policy_admitted: int = 0
+    policy_refused: int = 0
     undeclared_items: int = 0
 
     probe_rows: list[dict[str, Any]] = field(default_factory=list)
@@ -267,11 +287,16 @@ def run_sandbox_arm() -> SandboxArmReport:
             report.undeclared_items += 1
             continue
         report.policy_items += 1
-        local = _blocked(_policy_tool(call, sandbox=False))
-        # The policy leg refuses before dispatch, so a missing backend cannot
-        # confuse it: a policy denial never reaches _execute_in_sandbox.
-        sandboxed = _blocked(_policy_tool(call, sandbox=True))
+        local = _policy_refusal(_policy_tool(call, sandbox=False))
+        # A policy denial is raised before dispatch, so it never reaches
+        # _execute_in_sandbox; an admitted call that then fails there for want of a
+        # backend is not a denial (_policy_refusal).
+        sandboxed = _policy_refusal(_policy_tool(call, sandbox=True))
         if local == sandboxed:
             report.policy_agreements += 1
+            if local:
+                report.policy_refused += 1
+            else:
+                report.policy_admitted += 1
 
     return report

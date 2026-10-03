@@ -75,6 +75,21 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-79748](#cve-2026-79748) | MCPHub server-config endpoints spawn attacker-supplied stdio commands | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-862 | Partial |
 | [CVE-2026-90898](#cve-2026-90898) | Bifrost MCP client registration spawns an unauthenticated stdio command | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-284 + CWE-306 | Partial |
 
+## Covered inside umbrella modules
+
+These CVEs have no row above: a module that replays several at once names them in its docstring rather than in a header of its own, so there is no per-CVE CVSS or fit to show. Each one's pattern is replayed by the module listed.
+
+| CVE | NVD | Regression test |
+| --- | --- | --- |
+| CVE-2026-26015 | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-26015) | [`tests/cves/test_ox_supply_chain_2026_04.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_ox_supply_chain_2026_04.py) |
+| CVE-2026-30617 | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-30617) | [`tests/cves/test_ox_supply_chain_2026_04.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_ox_supply_chain_2026_04.py) |
+| CVE-2026-30618 | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-30618) | [`tests/cves/test_ox_supply_chain_2026_04.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_ox_supply_chain_2026_04.py) |
+| CVE-2026-30623 | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-30623) | [`tests/cves/test_ox_supply_chain_2026_04.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_ox_supply_chain_2026_04.py) |
+| CVE-2026-30624 | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-30624) | [`tests/cves/test_ox_supply_chain_2026_04.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_ox_supply_chain_2026_04.py) |
+| CVE-2026-30625 | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-30625) | [`tests/cves/test_ox_supply_chain_2026_04.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_ox_supply_chain_2026_04.py) |
+| CVE-2026-33224 | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-33224) | [`tests/cves/test_ox_supply_chain_2026_04.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_ox_supply_chain_2026_04.py) |
+| CVE-2026-44717 | [NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-44717) | [`tests/cves/test_metis_inspired_corpus_2026_05_18.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_metis_inspired_corpus_2026_05_18.py) |
+
 ## Details
 
 ### CVE-2025-59528

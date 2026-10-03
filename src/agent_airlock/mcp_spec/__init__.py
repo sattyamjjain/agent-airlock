@@ -14,7 +14,8 @@ entry in :data:`SUPPORTED_PROTOCOL_VERSIONS`. The 2026-07-28-tagged guards in
 this package — schema-ref (SEP-2106), ``_meta`` trust, step-up scope
 (SEP-2350 / 2352 / 2468), Tasks lifecycle (SEP-1686), Tasks admission (SEP-2663),
 elicitation provenance (SEP-2260), header integrity (SEP-2243), statelessness
-(SEP-2567 / 2575), and ``mcp_spec_2026_07_defaults`` — target it. **airlock still
+(SEP-2567 / 2575), stateless handle-channel trust (SEP-2567 / 2243), and
+``mcp_spec_2026_07_defaults`` — target it. **airlock still
 makes NO conformance claim: no MCP conformance suite has been run against this
 package.** These are validators and forward-compatible hardening, not a
 certification — correcting the false "release candidate" premise does not upgrade

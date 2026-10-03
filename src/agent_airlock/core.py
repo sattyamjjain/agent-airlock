@@ -503,6 +503,45 @@ def _inherit_ambient_identity(context: AirlockContext[Any]) -> None:
         context.roles = list(ambient.roles)
 
 
+def _run_context(context: AirlockContext[Any]) -> AirlockContext[Any] | None:
+    """The ``AirlockContext`` that outlives this call, or None when there is none.
+
+    That is an ``AirlockContext`` the call's first argument carries (a run wrapper's
+    ``context`` / ``ctx``), else the one set around the call with ``with AirlockContext(...)``
+    — unless that one names a different agent than the call does, so belongs to another run.
+    """
+    if context.user_context is not None:
+        for attr in ContextExtractor.CONTEXT_ATTRS:
+            inner = getattr(context.user_context, attr, None)
+            if isinstance(inner, AirlockContext):
+                return inner
+    ambient = get_current_context()
+    if ambient is None or ambient is context:
+        return None
+    if ambient.agent_id and context.agent_id and ambient.agent_id != context.agent_id:
+        return None
+    return ambient
+
+
+def _share_run_state(context: AirlockContext[Any]) -> AirlockContext[Any] | None:
+    """Point this call's context at the run's guard state, in place; return the run's context.
+
+    ``ContextExtractor`` builds a new context for every call, so until 0.10.23 the untrusted-
+    output count and the ``authorize_once`` grants lived on an object the next call never saw:
+    ``reauth_on_untrusted_reinvocation`` never fired, a tripped action-contradiction gate could
+    not be re-opened, and a signal set on the run's metadata never reached that gate. The count
+    and the grants are shared, not copied, so a mark or a consumed grant lands on the run. The
+    run's metadata goes under the call's own, the precedence ``_call_metadata`` already uses.
+    """
+    run = _run_context(context)
+    if run is None:
+        return None
+    context.untrusted_reinvocation_count = run.untrusted_reinvocation_count
+    context._authorized_once = run._authorized_once
+    context.metadata = {**run.metadata, **context.metadata}
+    return run
+
+
 # The keyword arguments a router once tagged a call with. See _warn_on_retired_control_arguments.
 _RETIRED_CONTROL_ARGUMENTS = ("_airlock_tier", "_airlock_input_tokens")
 
@@ -663,21 +702,23 @@ class Airlock:
             AirlockContext[Any],
             AirlockResponse | None,
             BudgetEstimate | None,
+            SecurityPolicy | None,
         ]:
             """Shared pre-execution logic for sync and async wrappers.
 
-            Orchestrates 6 validation steps:
-            1. Ghost argument validation (strip/reject hallucinated params)
-            2. Security policy resolution and checking
-            3. Filesystem path validation
-            4. Capability gating
-            5. Endpoint policy validation (V0.4.1)
-            6. Per-model-tier budget check (V0.8.7)
+            Runs the gates in the order the ``# Step N`` comments below number them: the
+            kill switch (0), ghost arguments (1), policy resolution and check (2), the
+            sequence guard (2.5), the action-contradiction gate (2.6), the deserialization
+            guard (2.7), the amplification budget (2.8), filesystem paths (3), capabilities
+            (4), endpoint policies (5) and the per-model-tier budget (6). The first gate that
+            refuses ends the call.
 
             Returns:
                 Tuple of (cleaned_kwargs, start_time, context, error_response or None,
-                          budget_estimate or None). The budget_estimate is threaded to
-                ``_post_execution`` for actual-vs-estimated reconciliation.
+                          budget_estimate or None, resolved_policy or None). The estimate
+                and the resolved policy are threaded to ``_post_execution``, which marks
+                untrusted output and reconciles the tier budget against the policy the
+                gates used, a resolver's included.
             """
             start_time = time.time()
 
@@ -691,6 +732,7 @@ class Airlock:
             # Extract context from function arguments
             context = ContextExtractor.extract_from_args(args, kwargs)
             _inherit_ambient_identity(context)
+            run_context = _share_run_state(context)
 
             logger.debug(
                 "airlock_intercept",
@@ -732,17 +774,19 @@ class Airlock:
                     "kill switch engaged",
                     {"violation_type": "kill_switch", "operator_reason": reason},
                 )
-                return kwargs, start_time, context, frozen_error, None
+                return kwargs, start_time, context, frozen_error, None, None
 
             # Step 1: Validate and handle ghost arguments
             cleaned_kwargs, _, ghost_error = self._validate_ghost_arguments(func, func_name, kwargs)
             if ghost_error is not None:
-                return kwargs, start_time, context, ghost_error, None
+                return kwargs, start_time, context, ghost_error, None, None
 
             # Step 2: Resolve and check security policy
-            resolved_policy, policy_error = self._resolve_and_check_policy(func_name, context)
+            resolved_policy, policy_error = self._resolve_and_check_policy(
+                func_name, context, run_context=run_context
+            )
             if policy_error is not None:
-                return kwargs, start_time, context, policy_error, None
+                return kwargs, start_time, context, policy_error, None, None
 
             # Step 2.5: Behavioral tool-call sequence guard (V0.8.12).
             # Runs after the standard policy check so a denied tool never
@@ -755,7 +799,7 @@ class Airlock:
                 context=context,
             )
             if seq_error is not None:
-                return kwargs, start_time, context, seq_error, None
+                return kwargs, start_time, context, seq_error, None, None
 
             # Step 2.6: Action-time contradiction gate (V0.8.15,
             # arXiv:2605.27157). Runs after the sequence guard so a
@@ -767,7 +811,7 @@ class Airlock:
                 context=context,
             )
             if acg_error is not None:
-                return kwargs, start_time, context, acg_error, None
+                return kwargs, start_time, context, acg_error, None, None
 
             # Step 2.7: Unsafe-deserialization content guard (V0.8.19,
             # CVE-2026-25874). Inspects argument VALUES for pickle /
@@ -780,13 +824,14 @@ class Airlock:
                 kwargs=cleaned_kwargs,
             )
             if deser_error is not None:
-                return kwargs, start_time, context, deser_error, None
+                return kwargs, start_time, context, deser_error, None, None
 
             # Step 2.8: Per-run resource-amplification budget (V0.8.74,
             # issue #142, arXiv:2608.12273). Counts calls against the run and
-            # compares them to the budget the policy declares. Runs AFTER the
-            # gates above so a call that was going to be refused anyway is not
-            # first charged to the run's ledger. Inert when
+            # compares them to the budget the policy declares. Runs after the
+            # gates above, so a call one of them refuses is never charged to the
+            # run's ledger; one that steps 3-6 or validation refuse already has
+            # been. Inert when
             # policy.amplification_budget is None; blocks when it is set but
             # carries no threshold.
             tokens = _call_metadata(context, "input_tokens")
@@ -797,22 +842,22 @@ class Airlock:
                 input_tokens=tokens if isinstance(tokens, int) else None,
             )
             if amp_error is not None:
-                return kwargs, start_time, context, amp_error, None
+                return kwargs, start_time, context, amp_error, None, None
 
             # Step 3: Validate filesystem paths
             fs_error = self._validate_filesystem_paths(func_name, cleaned_kwargs)
             if fs_error is not None:
-                return kwargs, start_time, context, fs_error, None
+                return kwargs, start_time, context, fs_error, None, None
 
             # Step 4: Check capability requirements
             cap_error = self._check_capabilities(func, func_name, resolved_policy)
             if cap_error is not None:
-                return kwargs, start_time, context, cap_error, None
+                return kwargs, start_time, context, cap_error, None, None
 
             # Step 5: Validate endpoint policies (V0.4.1)
             ep_error = self._validate_endpoint_policies(func_name, cleaned_kwargs)
             if ep_error is not None:
-                return kwargs, start_time, context, ep_error, None
+                return kwargs, start_time, context, ep_error, None, None
 
             # Step 6: Per-model-tier budget check (V0.8.7)
             budget_estimate, budget_error = self._check_model_tier_budget(
@@ -821,9 +866,9 @@ class Airlock:
                 context=context,
             )
             if budget_error is not None:
-                return kwargs, start_time, context, budget_error, None
+                return kwargs, start_time, context, budget_error, None, None
 
-            return cleaned_kwargs, start_time, context, None, budget_estimate
+            return cleaned_kwargs, start_time, context, None, budget_estimate, resolved_policy
 
         def _post_execution(
             func_name: str,
@@ -832,8 +877,13 @@ class Airlock:
             kwargs: dict[str, Any],
             context: AirlockContext[Any] | None = None,
             budget_estimate: BudgetEstimate | None = None,
+            resolved_policy: SecurityPolicy | None = None,
         ) -> tuple[Any, list[str], int, bool]:
             """Shared post-execution logic for sync and async wrappers.
+
+            ``resolved_policy`` is the policy the gates checked this call against, so a
+            resolver's policy marks untrusted output and reconciles its budget the way a
+            static one does (until 0.10.23 both read ``self.policy`` and skipped a resolver).
 
             Returns:
                 Tuple of (processed_result, warnings, sanitized_count, was_truncated)
@@ -880,19 +930,24 @@ class Airlock:
             # Increment the counter so a SecurityPolicy with
             # reauth_on_untrusted_reinvocation=True can require a fresh
             # authorize_once() grant on the next call (arXiv:2605.22001).
-            if context is not None and isinstance(self.policy, SecurityPolicy):
-                if self.policy.reauth_on_untrusted_reinvocation:
-                    context.mark_untrusted_output(func_name)
+            # The count lands on the run's context (_share_run_state).
+            if (
+                context is not None
+                and resolved_policy is not None
+                and resolved_policy.reauth_on_untrusted_reinvocation
+            ):
+                context.mark_untrusted_output(func_name)
 
             # V0.8.7: reconcile actual vs estimated cost for the tier
             # budget. Never raises — reconciliation is observability, not
             # a second gate. Users who want a hard session cap should layer
             # ``BudgetConfig.max_cost_per_session`` on top.
-            if budget_estimate is not None and isinstance(self.policy, SecurityPolicy):
+            if budget_estimate is not None and resolved_policy is not None:
                 self._reconcile_tier_budget(
                     func_name=func_name,
                     result=result,
                     budget_estimate=budget_estimate,
+                    policy=resolved_policy,
                 )
 
             return result, warnings, sanitized_count, was_truncated
@@ -971,6 +1026,7 @@ class Airlock:
                     context,
                     error_response,
                     budget_estimate,
+                    resolved_policy,
                 ) = _pre_execution(func_name, args, dict(kwargs))
 
                 if error_response is not None:
@@ -1074,7 +1130,13 @@ class Airlock:
                     reset_context(token)
 
                 result, warnings, _, _ = _post_execution(
-                    func_name, result, start_time, cleaned_kwargs, context, budget_estimate
+                    func_name,
+                    result,
+                    start_time,
+                    cleaned_kwargs,
+                    context,
+                    budget_estimate,
+                    resolved_policy,
                 )
 
                 if self.return_dict:
@@ -1096,6 +1158,7 @@ class Airlock:
                     context,
                     error_response,
                     budget_estimate,
+                    resolved_policy,
                 ) = _pre_execution(func_name, args, dict(kwargs))
 
                 if error_response is not None:
@@ -1191,7 +1254,13 @@ class Airlock:
                     reset_context(token)
 
                 result, warnings, _, _ = _post_execution(
-                    func_name, result, start_time, cleaned_kwargs, context, budget_estimate
+                    func_name,
+                    result,
+                    start_time,
+                    cleaned_kwargs,
+                    context,
+                    budget_estimate,
+                    resolved_policy,
                 )
 
                 if self.return_dict:
@@ -1391,12 +1460,19 @@ class Airlock:
         self,
         func_name: str,
         context: AirlockContext[Any],
+        *,
+        run_context: AirlockContext[Any] | None,
     ) -> tuple[SecurityPolicy | None, AirlockResponse | None]:
         """Resolve and check security policy.
 
         Args:
             func_name: Name of the function being called.
             context: The current airlock context.
+            run_context: The run's context the call's guard state is shared with, or None
+                when the call has no run (see ``_share_run_state``). A policy with
+                ``reauth_on_untrusted_reinvocation`` refuses a call that has none: it counts
+                untrusted outputs across a run's calls, and with no run the count would
+                never pass one, which is how the guard did nothing until 0.10.23.
 
         Returns:
             Tuple of (resolved_policy, error_response).
@@ -1453,6 +1529,16 @@ class Airlock:
                     return resolved_policy, response
 
             try:
+                if resolved_policy.reauth_on_untrusted_reinvocation and run_context is None:
+                    raise PolicyViolation(
+                        f"Tool '{func_name}' is under reauth_on_untrusted_reinvocation, "
+                        "which counts a run's untrusted tool outputs across its calls, and "
+                        "this call belongs to no run. Make the agent's calls inside "
+                        "`with AirlockContext(agent_id=...)`, or pass an AirlockContext as "
+                        "the run wrapper's `context`.",
+                        violation_type=ViolationType.REAUTH_REQUIRED.value,
+                        details={"tool": func_name, "reason": "no_run_context"},
+                    )
                 resolved_policy.check_reauthorization(func_name, context)
                 resolved_policy.check(func_name, agent=_caller_identity(context))
             except PolicyEscalation as e:
@@ -2126,6 +2212,7 @@ class Airlock:
         func_name: str,
         result: Any,
         budget_estimate: BudgetEstimate,
+        policy: SecurityPolicy,
     ) -> None:
         """Reconcile actual vs estimated cost for a tier budget (v0.8.7).
 
@@ -2138,9 +2225,15 @@ class Airlock:
 
         Never raises; failures log a structlog warning. Reconciliation is
         observability, not a second gate.
+
+        Args:
+            func_name: Name of the tool, for logging.
+            result: The tool's return value, read for its token usage.
+            budget_estimate: The pre-execute estimate to reconcile.
+            policy: The policy the call was checked against — the resolved one, so a
+                policy resolver's budget is reconciled too.
         """
-        policy = self.policy if isinstance(self.policy, SecurityPolicy) else None
-        if policy is None or policy.model_tier_budget is None:
+        if policy.model_tier_budget is None:
             return
 
         usage = _extract_token_usage(result)

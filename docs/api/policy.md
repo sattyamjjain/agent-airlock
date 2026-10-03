@@ -64,6 +64,7 @@ class SecurityPolicy:
 | `model_tier_budget` | `ModelTierBudget \| None` | Per-model-tier cost caps, checked before the tool runs |
 | `amplification_budget` | `AmplificationBudget \| None` | Per-run call budget against a declared baseline |
 | `sequence_guard`, `action_contradiction_gate`, `deserialization_guard` | | Optional guards run after the policy check |
+| `reauth_on_untrusted_reinvocation`, `untrusted_reinvocation_threshold` | `bool`, `int` | Once a tool's output has flowed back into the model `threshold` times in a run, the next call to it needs `authorize_once(tool)` on the run's `AirlockContext`. The count lives on that context, so a call that belongs to no run (no `AirlockContext` passed in or set around it) is refused |
 | `trace_redaction` | `TraceRedactionPolicy \| None` | Redacts traces sent to a non-local sink |
 | `stdio_mode` | `str` | How STDIO subprocess launches are allowed: `"allowlist"`, `"manifest_only"` or `"disabled"` |
 

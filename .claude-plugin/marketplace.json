@@ -22,11 +22,11 @@
       "Runtime, not prompt-layer. We sit in front of tool execution, not in the system prompt.",
       "Zero-cost defaults. The core validator does not need an LLM judge model.",
       "Stdlib-first. No heavyweight deps; pip install agent-airlock is instantaneous.",
-      "Offline-capable. The CVE suite, policy presets, and validators all work air-gapped."
+      "Offline-capable. The policy presets and validators run air-gapped, and so does the CVE suite apart from a few allow-path tests that resolve real public hosts; offline, the SSRF guards refuse a host they cannot resolve rather than admit it."
     ],
     "proof_points": [
-      "4,927 tests (CI-enforced coverage floor 82%)",
-      "49 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), of which 43 are CVE-numbered and listed in the generated catalog at docs/cves/index.md (the other 6 are advisory regressions with no CVE id of their own, plus umbrella modules whose CVEs are already listed)",
+      "4,954 tests (CI-enforced coverage floor 82%)",
+      "49 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), of which 43 are CVE-numbered and listed in the generated catalog at docs/cves/index.md (the other 6 are advisory regressions with no CVE id of their own and umbrella modules that replay several CVEs at once; the catalog lists those CVEs too, in its umbrella section)",
       "75 policy presets (curated security defaults), enumerated at runtime by policy_presets.list_active()"
     ],
     "audience": [

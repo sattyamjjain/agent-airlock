@@ -12,12 +12,20 @@ Keeps the published comparison honest and reproducible:
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
 from benchmarks.blockrate import (
     COMPETITORS,
     load_corpus,
     render_comparison_section,
     run_blockrate,
+    sandbox_arm,
 )
+from benchmarks.blockrate.report import render_sandbox_arm_section
+
+from agent_airlock import Airlock
+from agent_airlock._sandbox_errors import SandboxExecutionError
 
 
 class TestCorpus:
@@ -70,3 +78,54 @@ class TestDeterministicRender:
         a = render_comparison_section(run_blockrate(measure_latency=False))
         b = render_comparison_section(run_blockrate(measure_latency=False))
         assert a == b
+
+
+class TestSandboxArmPolicyLeg:
+    """Regression (0.10.23): the policy leg's published 200/200 parity was vacuous.
+
+    The stub reached the policy as ``invoke``, which no allow-list names, so both dispatch
+    paths refused every item, the ones the allow-list admits included, and agreed.
+    """
+
+    @pytest.fixture
+    def no_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A runner with no isolation backend: dispatch fails, and nothing reaches E2B."""
+
+        def fail(self: Airlock, *args: Any, **kwargs: Any) -> Any:
+            raise SandboxExecutionError("no isolation backend in the test runner")
+
+        monkeypatch.setattr(Airlock, "_execute_in_sandbox", fail)
+        monkeypatch.setattr(sandbox_arm, "_detect_backend", lambda: (None, False, "test"))
+
+    @staticmethod
+    def _admitted(admitted: bool) -> Any:
+        return next(
+            c
+            for c in load_corpus()
+            if c.allowed_tool is not None and (c.tool_name == c.allowed_tool) is admitted
+        )
+
+    @pytest.mark.parametrize("sandbox", [False, True], ids=["local", "sandbox"])
+    def test_the_allow_listed_tool_is_admitted(self, sandbox: bool, no_backend: None) -> None:
+        result = sandbox_arm._policy_tool(self._admitted(True), sandbox=sandbox)
+        assert not sandbox_arm._policy_refusal(result)
+
+    @pytest.mark.parametrize("sandbox", [False, True], ids=["local", "sandbox"])
+    def test_any_other_tool_is_refused(self, sandbox: bool, no_backend: None) -> None:
+        result = sandbox_arm._policy_tool(self._admitted(False), sandbox=sandbox)
+        assert sandbox_arm._policy_refusal(result)
+
+    def test_parity_holds_for_both_verdicts(self, no_backend: None) -> None:
+        arm = sandbox_arm.run_sandbox_arm()
+        admitted = sum(
+            1 for c in load_corpus() if c.allowed_tool is not None and c.tool_name == c.allowed_tool
+        )
+
+        assert arm.policy_agreements == arm.policy_items
+        assert arm.policy_admitted == admitted > 0
+        assert arm.policy_refused == arm.policy_items - admitted > 0
+
+    def test_the_vacuous_figure_stays_on_the_record(self, no_backend: None) -> None:
+        section = render_sandbox_arm_section(sandbox_arm.run_sandbox_arm())
+        assert "**Correction (0.10.23).**" in section
+        assert "200/200, measured nothing" in section

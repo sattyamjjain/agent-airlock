@@ -26,7 +26,7 @@ Three acts, ~9 minutes:
    least-privilege policy: two pass, one fails (open surface on a destructive tool +
    capability exceeds policy). Exit code 2 for CI.
 3. **The proof** — the block-rate benchmark: 210 tool calls, 100% of malicious blocked,
-   0% false-positive, ~1.5µs per decision. Incumbents marked scope-claimed, not re-run.
+   0% false-positive, ~2µs per decision (p50). Incumbents marked scope-claimed, not re-run.
 
 ## Backup (if anything misbehaves live)
 

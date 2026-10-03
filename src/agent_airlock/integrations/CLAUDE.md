@@ -24,10 +24,11 @@ and framework vaccination in `../vaccine.py`; neither imports from here.
 - **`@Airlock` enforces only the signature it is handed.** Re-tag a tool with
   `_tool_proxy.named_tool_proxy`, which carries the tool's signature (annotations resolved)
   and is async when the tool is; pass framework-injected context parameters as
-  `relaxed_params`, as `google_adk._relax_injected_params` does for ADK. A Claude SDK
-  `SdkMcpTool` handler takes one `args` dict, so `_claude_sdk_tools` builds the signature
-  from its `input_schema` instead and spreads the dict into it; gates that read keyword
-  arguments would otherwise see one opaque parameter. Test every walker with a
+  `relaxed_params`, as `pydantic_ai._run_context_params` does for a `RunContext`;
+  `google_adk` predates the proxy and relaxes ADK's with its own `_relax_injected_params`.
+  A Claude SDK `SdkMcpTool` handler takes one `args` dict, so `_claude_sdk_tools` builds the
+  signature from its `input_schema` instead and spreads the dict into it; gates that read
+  keyword arguments would otherwise see one opaque parameter. Test every walker with a
   wrong-typed and a ghost argument through the SDK's real call path; async handling is
   pinned once, in `tests/integrations/test_tool_proxy.py`.
 - **`adapters/`** holds the commerce adapters, which satisfy the `CommerceAdapter` Protocol in
@@ -44,7 +45,8 @@ and framework vaccination in `../vaccine.py`; neither imports from here.
 ## Module-Specific Conventions
 
 - **SDK imports are function-local** — none is at module level. CI's `test` job installs
-  `.[dev,redis]`, which carries no SDK, and `bare-install` imports the package root.
+  `.[dev,redis,mcp]`, which carries none of the SDKs imported here, and `bare-install`
+  imports the package root.
 - **Missing SDK.** Each walker raises a `<X>MissingError(AirlockError)` built from a module
   `_INSTALL_HINT` that names the `agent-airlock[<extra>]` to install. Its `_maybe_check_sdk`
   imports the SDK only when `type(obj).__module__` belongs to it — local stubs never trigger
@@ -60,8 +62,9 @@ and framework vaccination in `../vaccine.py`; neither imports from here.
 - **Tests** live in `tests/integrations/test_<module>*.py`, except `langchain` / `anthropic`
   (`tests/test_new_features.py`) and Model Armor (`tests/test_model_armor_integration.py`).
   Drive adapters with stub objects instead of installing the SDK; simulate a missing SDK by
-  patching `sys.modules`, seeding the parent of a dotted package (`google`) as well. No CI
-  job installs an SDK, so an `importorskip` test is a skipped test there.
+  setting its `sys.modules` entry to `None`, and fake an installed one with stub modules,
+  seeding the parent of a dotted package (`google`) as well. No CI job installs an agent
+  SDK, so an `importorskip` on one is a skipped test there.
 - **A new framework adapter** also needs a row in `_ADAPTER_SHIPPED_MODULES`
   (`tests/test_readme_framework_claims.py`, kept by hand), the module named in the README's
   `Adapter-shipped (N)` paragraph with N bumped, and its doc page added to the `mkdocs.yml`

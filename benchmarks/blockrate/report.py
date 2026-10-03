@@ -223,7 +223,9 @@ def render_sandbox_arm_section(arm: SandboxArmReport | None) -> str:
     lines.append(
         f"| **Verdict parity, sandbox vs local** | "
         f"**{arm.probes_in_parity}/{arm.probes_total}** contract probes agree, "
-        f"**{arm.policy_agreements}/{arm.policy_items}** policy items agree | ✅ yes |"
+        f"**{arm.policy_agreements}/{arm.policy_items}** policy items agree "
+        f"({arm.policy_admitted} admitted and {arm.policy_refused} refused on both paths) "
+        f"| ✅ yes |"
     )
     if arm.backend_available:
         lines.append(f"| **Isolation backend execution** | ran on `{arm.backend_name}` | ✅ yes |")
@@ -252,6 +254,17 @@ def render_sandbox_arm_section(arm: SandboxArmReport | None) -> str:
         f"nothing to enforce for them; they are counted here and not claimed as passes. "
         f"The four in-process guards the local arm calls directly are not part of the "
         f"decorator path and are not measured here."
+    )
+    lines.append("")
+    # On the record for good, beside the run that corrected it: the row carried this figure.
+    lines.append(
+        "**Correction (0.10.23).** The policy-item parity published from the 2026-09-16 run, "
+        "200/200, measured nothing. `@Airlock` takes the tool's name from the function it "
+        "wraps, and the stub in this arm was named `invoke`, which no allow-list names, so "
+        "both paths refused all 200 items, the 100 whose tool the allow-list admits included. "
+        "The stub now carries each item's tool name, the leg compares policy refusals only (an "
+        "admitted call that then fails for want of a backend is not one), and the split above "
+        "shows both verdicts."
     )
     lines.append("")
     return "\n".join(lines)

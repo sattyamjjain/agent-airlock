@@ -1883,8 +1883,9 @@ def archived_mcp_server_advisory_defaults(
 
     Args:
         block_list: Iterable of package metadata dicts, each at minimum
-            with a ``"package"`` key. If ``None``, the default
-            shipped fixture is loaded.
+            with a ``"package"`` key. If ``None``, the inline
+            ``_ARCHIVED_MCP_DEFAULT_BLOCKLIST`` is used (a preset never reads
+            ``tests/cves/fixtures/``, which does not ship).
         allow_list: Package names that bypass the block check. Use
             sparingly; intended for in-house forks of an archived
             package where the archive text doesn't apply.

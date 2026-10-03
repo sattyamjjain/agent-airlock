@@ -5,12 +5,12 @@
 
 - **Target list:** `awesome-llm-security` <!-- verify canonical repo URL, e.g. corca-ai/awesome-llm-security -->
 - **Section:** Tools / Defense (or "Frameworks / Guardrails")
-- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.10.22 = 4,927).
+- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.10.23 = 4,954).
 
 ## Entry (list format)
 
 ```markdown
-- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) — in-process least-privilege decorator for AI tool calls; deny-by-default, PII masking, per-CVE presets, 4,927 tests.
+- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) — in-process least-privilege decorator for AI tool calls; deny-by-default, PII masking, per-CVE presets, 4,954 tests.
 ```
 
 ## PR title
@@ -26,7 +26,7 @@ agent-airlock guards the LLM→tool boundary in-process: it strict-validates too
 arguments (Pydantic, no coercion), strips hallucinated/ghost arguments, enforces
 a deny-by-default least-privilege policy, and masks PII/secrets in tool output
 (13 PII types incl. India DPDP). Opt-in per-CVE and MCP-spec presets. Apache-2.0,
-Pydantic-only core, 4,927 tests.
+Pydantic-only core, 4,954 tests.
 
 Repo: https://github.com/sattyamjjain/agent-airlock
 PyPI: https://pypi.org/project/agent-airlock/
