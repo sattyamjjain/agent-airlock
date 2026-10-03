@@ -56,7 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the allow-list admits included. The stub now carries each item's tool name and the leg
   compares policy refusals only. Re-run 2026-10-03: 204/204 agree, with 100 policy items
   admitted and 100 refused on both paths. The wrong figure stays in `RESULTS.md` beside the
-  correction. The same run re-measured the headline: 100% blocked, 0% false-positive, p50
+  correction. Where `[sandbox]` and `E2B_API_KEY` are present, the arm now sends those 100
+  admitted items to E2B as well as its 4 contract probes. The same run re-measured the headline: 100% blocked, 0% false-positive, p50
   0.0017 ms (0.0020 ms on 2026-09-16).
 
 - **Eight CVEs the suite replays were not in the catalog**, while the marketplace said the

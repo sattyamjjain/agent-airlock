@@ -77,7 +77,7 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   gitignored), `gateway_harness/regen.py` (Docker, the `docker mcp` plugin and the echo
   image; it writes into `~/.docker/mcp/catalogs/`) and plain `python -m benchmarks.blockrate`
   when `[sandbox]` is installed and `E2B_API_KEY` set (its sandbox arm sends the benign
-  probes to E2B).
+  probes and every policy item the allow-list admits to E2B).
 - **Internal:** mostly the package root and `agent_airlock.policy`; recount with
   `grep -rhoE 'from agent_airlock[.a-z_]*' benchmarks/ --include='*.py' | sort -u`.
   `vs_gateway/__main__.py` imports `structlog` directly, so it needs `[logging]` or `[dev]`.

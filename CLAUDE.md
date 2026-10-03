@@ -200,9 +200,9 @@ src/agent_airlock/
    against the caller's identity (the call's context object, else the one set around it).
    Every call gets a fresh `AirlockContext`; `_share_run_state` points its untrusted-output
    counts and `authorize_once` grants at the run's context (an `AirlockContext` the first
-   argument carries, else the one set around the call) and merges that context's metadata
-   under its own, so a policy with `reauth_on_untrusted_reinvocation` refuses a call that
-   belongs to no run
+   argument carries, else the one set around the call unless it names a different agent than
+   the call does) and merges that context's metadata under its own, so a policy with
+   `reauth_on_untrusted_reinvocation` refuses a call that belongs to no run
    - 2.5 behavioral tool-call sequence guard
    - 2.6 action-time contradiction gate
    - 2.7 unsafe-deserialization content guard
