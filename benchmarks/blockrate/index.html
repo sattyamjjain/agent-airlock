@@ -2451,12 +2451,12 @@ the file carries the date of the run that produced them rather than being
 re-rendered on each docs build.</p>
 </div>
 <h1 id="cross-tool-block-rate-comparison-results">Cross-tool block-rate comparison — results<a class="headerlink" href="#cross-tool-block-rate-comparison-results" title="Permanent link">&para;</a></h1>
-<p>Last run: <strong>2026-09-16</strong>. Corpus: <strong>210</strong> tool calls.</p>
+<p>Last run: <strong>2026-10-03</strong>. Corpus: <strong>210</strong> tool calls.</p>
 <h2 id="headline">Headline<a class="headerlink" href="#headline" title="Permanent link">&para;</a></h2>
 <ul>
 <li>agent-airlock block-rate (malicious blocked): <strong>100.0%</strong></li>
 <li>agent-airlock false-positive rate (benign blocked): <strong>0.0%</strong></li>
-<li>Per-decision latency: <strong>p50 0.0020 ms</strong>, <strong>p95 0.0270 ms</strong> (in-process, no model call, no network)</li>
+<li>Per-decision latency: <strong>p50 0.0017 ms</strong>, <strong>p95 0.0208 ms</strong> (in-process, no model call, no network)</li>
 </ul>
 <p>The latency line is why this is a different layer from model-in-the-loop guardrails: a deny-by-default policy / argument guard decides in microseconds with no model inference, no API round-trip, and a deterministic verdict.</p>
 <h2 id="cross-tool-block-rate-comparison">Cross-tool block-rate comparison<a class="headerlink" href="#cross-tool-block-rate-comparison" title="Permanent link">&para;</a></h2>
@@ -2658,7 +2658,7 @@ re-rendered on each docs build.</p>
 </tr>
 <tr>
 <td><strong>Verdict parity, sandbox vs local</strong></td>
-<td><strong>4/4</strong> contract probes agree, <strong>200/200</strong> policy items agree</td>
+<td><strong>4/4</strong> contract probes agree, <strong>200/200</strong> policy items agree (100 admitted and 100 refused on both paths)</td>
 <td>✅ yes</td>
 </tr>
 <tr>
@@ -2710,6 +2710,7 @@ re-rendered on each docs build.</p>
 </tbody>
 </table>
 <p><strong>Honest scope.</strong> The backend-execution leg is reported as not-run rather than folded into a pass rate when no backend is present: with neither E2B nor Docker installed, <code>_execute_in_sandbox</code> raises and <em>every</em> call comes back blocked, benign included, so counting those as blocks would report a fake 100%. The arm separates a contract refusal (raised before dispatch, naming the field) from a backend failure. 10 corpus items declare neither a least-privilege allowlist nor an annotated parameter, so the decorator has nothing to enforce for them; they are counted here and not claimed as passes. The four in-process guards the local arm calls directly are not part of the decorator path and are not measured here.</p>
+<p><strong>Correction (0.10.23).</strong> The policy-item parity published from the 2026-09-16 run, 200/200, measured nothing. <code>@Airlock</code> takes the tool's name from the function it wraps, and the stub in this arm was named <code>invoke</code>, which no allow-list names, so both paths refused all 200 items, the 100 whose tool the allow-list admits included. The stub now carries each item's tool name, the leg compares policy refusals only (an admitted call that then fails for want of a backend is not one), and the split above shows both verdicts.</p>
 <h2 id="reproduce">Reproduce<a class="headerlink" href="#reproduce" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.blockrate<span class="w">          </span><span class="c1"># print the summary</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.blockrate<span class="w"> </span>--write<span class="w">   </span><span class="c1"># also (re)write this RESULTS.md</span>

@@ -3065,6 +3065,11 @@
 <td>Optional guards run after the policy check</td>
 </tr>
 <tr>
+<td><code>reauth_on_untrusted_reinvocation</code>, <code>untrusted_reinvocation_threshold</code></td>
+<td><code>bool</code>, <code>int</code></td>
+<td>Once a tool's output has flowed back into the model <code>threshold</code> times in a run, the next call to it needs <code>authorize_once(tool)</code> on the run's <code>AirlockContext</code>. The count lives on that context, so a call that belongs to no run is refused: one with no <code>AirlockContext</code> passed in and none set around it, or whose surrounding context names a different agent</td>
+</tr>
+<tr>
 <td><code>trace_redaction</code></td>
 <td><code>TraceRedactionPolicy \| None</code></td>
 <td>Redacts traces sent to a non-local sink</td>
