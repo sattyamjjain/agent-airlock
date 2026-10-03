@@ -255,6 +255,13 @@ wide to separate families, so it establishes that the three arms execute and pro
 first directional reading — not a cross-family result. The power calculation says 163
 pairs/arm for that, and `power_sample_size()` in `run.py` is where that number comes from.
 
+### 2026-10-04 · deterministic bound only (no model, no API key, no cost)
+
+Re-ran `python -m benchmarks.agentdojo.run` with no `--model` on 2026-10-04, against
+agent-airlock 0.10.23 and `agentdojo 0.1.35`. Result 1 reproduced **exactly**:
+`524/609 pairs blocked = 86.0%`, and each suite's pairs, blocks and union match the table
+above. Nothing model-in-the-loop was re-run; Result 2 still dates from 2026-08-08.
+
 ### 2026-09-08 · deterministic bound only (no model, no API key, no cost)
 
 Re-ran `python -m benchmarks.agentdojo.run` with no `--model` on 2026-09-08.
