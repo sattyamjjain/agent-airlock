@@ -2586,31 +2586,31 @@ than omitted — four of the ten OWASP Agentic slots are in that state.</p>
 <tr>
 <td><strong>Least-privilege</strong> · ToolPrivBench, 100 scenarios</td>
 <td>100% over-privileged blocked · 100% low-privileged allowed · OPUR 100% → 0%</td>
-<td>2026-10-04</td>
+<td>2026-10-03</td>
 <td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/toolprivbench/RESULTS.md">ToolPrivBench results on GitHub</a></td>
 </tr>
 <tr>
 <td><strong>Adaptive attacker</strong> · AgentDojo, all 4 suites</td>
 <td>86.0% of injection→target tool-calls blocked (524/609, deterministic bound). Model-in-the-loop ASR 45% → 10% (model pass of 2026-08-08), but that is one model family on a 60-pair subset</td>
-<td>2026-10-04</td>
+<td>2026-10-03</td>
 <td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md">AgentDojo results on GitHub</a></td>
 </tr>
 <tr>
 <td><strong>vs. native MCP gateway</strong> · 12 malformed payloads</td>
 <td>airlock 12/12 blocked · Docker MCP Gateway 0/12 · 0% false-positive on both</td>
-<td>2026-09-12</td>
+<td>2026-10-03</td>
 <td><a href="vs-native-mcp-gateway/">Native MCP gateway head-to-head</a></td>
 </tr>
 <tr>
 <td><strong>Prompt injection across agent harnesses</strong></td>
 <td>A null result, published as one. <code>claude-code</code> and <code>codex</code> each acted on the planted script 0/36, and ignored the benign twin just as completely, so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made <code>codex</code>'s zero a choice did not reproduce, and <code>codex</code> finished only 52/72 cells</td>
-<td>2026-09-20</td>
+<td>2026-10-03</td>
 <td><a href="injection-multi-harness/">Multi-harness prompt injection</a></td>
 </tr>
 <tr>
 <td><strong>MCP spec conformance</strong> · <code>@modelcontextprotocol/conformance</code></td>
 <td>Run against the wire-path validators, outcome published in full. Not a full MCP server/client conformance pass — airlock is a request validator, not a server, so it does not claim one</td>
-<td>2026-10-04</td>
+<td>2026-10-03</td>
 <td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcp_conformance/RESULTS.md">MCP conformance results on GitHub</a></td>
 </tr>
 </tbody>
