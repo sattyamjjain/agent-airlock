@@ -173,24 +173,49 @@ def _index_date_mismatches(readme: str, readme_path: Path) -> list[str]:
     :func:`main` with a synthetic README in ``tmp_path`` to exercise the date
     arithmetic; no landing page could agree with those invented dates, and asserting
     one would fail the date-logic tests on an unrelated concern.
+
+    Each README row is compared with *its own* landing-page row, paired by title. Until
+    0.10.23 the check only asked whether the date appeared anywhere on the page, so a row
+    that drifted while another row shared its date passed: on 2026-10-03 six rows carried
+    the same date, and any one of them could have drifted unseen.
     """
     if readme_path != _ROOT / "README.md":
         return []
     if not _BENCHMARK_INDEX.is_file():
         return []
-    index = _BENCHMARK_INDEX.read_text(encoding="utf-8")
+    index_rows = {
+        _row_title(row): row
+        for row in _BENCHMARK_INDEX.read_text(encoding="utf-8").splitlines()
+        if row.startswith("| **")
+    }
     problems: list[str] = []
     for identifier, (label, _howto) in BENCHMARKS.items():
         found = _find_marker(readme, identifier)
         if found is None:
             continue  # the undated check below already reports this
-        _line, date = found
-        if date.isoformat() not in index:
+        line, date = found
+        row = index_rows.get(_row_title(line))
+        if row is None:
             problems.append(
-                f"{label}: README says {date.isoformat()}, "
-                f"which does not appear in docs/benchmarks/index.md"
+                f"{label}: no row in docs/benchmarks/index.md is titled like README's "
+                f"{_row_title(line)!r}"
+            )
+        elif date.isoformat() not in row:
+            problems.append(
+                f"{label}: README says {date.isoformat()}, but its row in "
+                f"docs/benchmarks/index.md says {', '.join(_DATE_RE.findall(row)) or 'no date'}"
             )
     return problems
+
+
+_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _row_title(row: str) -> str:
+    """A table row's first cell, normalised so a README row and its landing-page twin pair."""
+    cells = row.split("|")
+    title = cells[1] if len(cells) > 2 else ""
+    return re.sub(r"\s+", " ", re.sub(r"[*`]", "", title).replace("-", " ")).strip().lower()
 
 
 def main(argv: list[str] | None = None) -> int:

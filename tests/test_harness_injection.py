@@ -354,3 +354,101 @@ class TestVerificationNarrowing:
             md = render_results_md(self._with_ran_tests(value), "2026-08-15").lower()
             assert "demonstrates injection resistance" not in md
             assert "resistant to injection" not in md
+
+
+class TestModelPinning:
+    """0.10.23: a re-run must be able to pin the model its predecessor ran on.
+
+    On 2026-10-03 this machine's codex default (``gpt-6.1-sol``) was refused for a ChatGPT
+    account, so a like-for-like re-run of the 2026-09-20 matrix needed ``gpt-6-astra``.
+    """
+
+    @staticmethod
+    def _pinnable(name: str = "pinned") -> Harness:
+        return Harness(
+            name=name,
+            executable="sh",
+            argv_template=("sh", "-c", "true", "{model_slot}", "{prompt}"),
+            model_argv=("{model}",),
+        )
+
+    def test_a_pinned_model_goes_just_before_the_prompt(self) -> None:
+        codex = harness_by_name("codex")
+        assert codex.argv("P", "gpt-6-astra")[-3:] == ["-m", "gpt-6-astra", "P"]
+        claude = harness_by_name("claude-code")
+        assert claude.argv("P", "m1")[:5] == ["claude", "-p", "--model", "m1", "P"]
+
+    def test_no_model_leaves_the_command_unchanged(self) -> None:
+        codex = harness_by_name("codex")
+        assert codex.argv("P") == [p.replace("{prompt}", "P") for p in codex.argv_template]
+
+    def test_a_harness_with_no_model_flag_refuses_a_model(self) -> None:
+        with pytest.raises(ValueError, match="no model flag"):
+            _stub("plain", "true").argv("P", "m1")
+
+    def test_cells_record_the_model_and_the_report_names_it(self) -> None:
+        report = run_matrix(
+            [self._pinnable()],
+            trials=1,
+            timeout=60,
+            airlock_modes=(False,),
+            models={"pinned": "m1"},
+        )
+        assert {cell.model for cell in report.cells} == {"m1"}
+        md = render_results_md(report, "2026-10-03")
+        assert "model `m1`" in md
+        assert "--model pinned=m1" in md
+
+    def test_a_checkpointed_cell_under_another_model_is_re_run(self, tmp_path: Path) -> None:
+        ckpt = tmp_path / "ckpt.json"
+        kwargs = {"trials": 1, "timeout": 60, "airlock_modes": (False,), "checkpoint": ckpt}
+        run_matrix([self._pinnable()], models={"pinned": "a"}, **kwargs)
+        rerun = run_matrix([self._pinnable()], models={"pinned": "b"}, **kwargs)
+        assert len(rerun.cells) == 2
+        assert {cell.model for cell in rerun.cells} == {"b"}
+        resumed = run_matrix([self._pinnable()], models={"pinned": "b"}, **kwargs)
+        assert len(resumed.cells) == 2
+
+    def test_the_cli_refuses_a_malformed_or_unknown_pin(self) -> None:
+        from benchmarks.harness_injection.__main__ import main
+
+        for bad in (["--model", "codex"], ["--model", "bogus=x"]):
+            with pytest.raises(SystemExit):
+                main(bad)
+
+    def test_the_dry_run_shows_the_pinned_command(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from benchmarks.harness_injection.__main__ import main
+
+        assert main(["--harness", "codex", "--model", "codex=m1"]) == 0
+        assert "-m m1 <PROMPT>" in capsys.readouterr().out
+
+
+class TestACrashedHarnessIsNotANonAction:
+    """0.10.23: a CLI that exits non-zero before doing anything is an error, not a zero.
+
+    Until then such a cell was status ``ok``, and a codex refused at the API exited 1 in all
+    72 cells of the 2026-10-03 run, which would have published as 0/36 per arm.
+    """
+
+    def test_an_immediate_failure_is_excluded_from_the_denominator(self) -> None:
+        crashed = _stub("crashed", "echo 'model not supported' >&2; exit 1")
+        report = run_matrix([crashed], trials=1, timeout=60, airlock_modes=(False,))
+        assert {cell.status for cell in report.cells} == {"error"}
+        assert all(cell.acted is None for cell in report.cells)
+        assert report.rate("crashed", "injected") == (0, 0)
+        assert "model not supported" in report.cells[0].detail
+
+    def test_a_resumed_checkpoint_retries_cells_that_never_started(self, tmp_path: Path) -> None:
+        ckpt = tmp_path / "ckpt.json"
+        kwargs = {"trials": 1, "timeout": 60, "airlock_modes": (False,), "checkpoint": ckpt}
+        first = run_matrix([_stub("flaky", "exit 1")], **kwargs)
+        assert {cell.status for cell in first.cells} == {"error"}
+        second = run_matrix([_stub("flaky", "touch .pytest-ran")], **kwargs)
+        assert len(second.cells) == 2
+        assert {cell.status for cell in second.cells} == {"ok"}
+
+    def test_a_failure_after_real_work_is_still_measured(self) -> None:
+        worked = _stub("worked", "touch .pytest-ran; exit 1")
+        report = run_matrix([worked], trials=1, timeout=60, airlock_modes=(False,))
+        assert {cell.status for cell in report.cells} == {"ok"}
+        assert report.rate("worked", "injected") == (0, 1)

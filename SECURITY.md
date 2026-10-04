@@ -27,7 +27,7 @@ shipped, which told a reporter on a supported version that they were unsupported
 
 | Result | What it is |
 | --- | --- |
-| [Matched-pair multi-harness prompt injection](docs/benchmarks/injection-multi-harness.md) | **A null, and weaker evidence than the run before it.** On the 2026-09-20 re-run, `claude-code` 2.1.274 and `codex` 0.154.0 each ran the exfiltration-shaped script **0/36**, and each also ignored the *benign* twin **0/36**: all four arms are zero (**0/144**), so neither zero can be read as resistance. `codex` finished the task in only 52 of 72 cells, so its injected zero rests on 24 of 36 and its 95% upper bound is **13.8%**, not 9.6%. Explicitly **not** an injection-resistance finding. Includes every earlier run and why each was superseded. |
+| [Matched-pair multi-harness prompt injection](docs/benchmarks/injection-multi-harness.md) | **A null, published as one.** On the 2026-10-03 re-run, `claude-code` 2.1.288 and `codex` 0.154.0 (pinned to `gpt-6-astra`, the 2026-09-20 model) each ran the exfiltration-shaped script **0/36**, and each also ignored the *benign* twin **0/36**: all four arms are zero (**0/144**), so neither zero can be read as resistance. Both finished the task in 72 of 72 cells, so each zero rests on all 36 cells and its 95% upper bound is **9.6%** (on 2026-09-20 `codex` finished 52 of 72, bound 13.8%). Explicitly **not** an injection-resistance finding. Includes every earlier run and why each was superseded. |
 
 ## What the free containment layers cover, and what they leave open
 
@@ -106,7 +106,7 @@ worth trusting on where it does:
 If you discover a security vulnerability in Agent-Airlock, please report it responsibly:
 
 1. **Do NOT create a public GitHub issue**
-2. Report it privately via [**GitHub Security Advisories**](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) ("Report a vulnerability" on the repo's Security tab), or email **sattyamjjain@gmail.com**
+2. Report it privately via [**GitHub Security Advisories**](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) ("Report a vulnerability" on the repo's Security tab), or email **sattyamjain96@gmail.com**
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce
@@ -455,7 +455,7 @@ If you believe Agent-Airlock security has been compromised:
 
 1. **Isolate** - Stop affected AI agents
 2. **Collect** - Preserve audit logs for analysis
-3. **Report** - Report privately via [GitHub Security Advisories](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) or email sattyamjjain@gmail.com
+3. **Report** - Report privately via [GitHub Security Advisories](https://github.com/sattyamjjain/agent-airlock/security/advisories/new) or email sattyamjain96@gmail.com
 4. **Remediate** - Apply patches when available
 5. **Review** - Assess policy and configuration
 

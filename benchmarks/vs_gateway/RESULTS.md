@@ -12,7 +12,7 @@ column replays a **recorded live measurement** of a Docker MCP Gateway
 (`benchmarks/vs_gateway/gateway_measurement.json`); regenerate it with
 `benchmarks/vs_gateway/gateway_harness/` (needs a Docker daemon).
 
-## The number (re-measured live 2026-09-12)
+## The number (re-measured live 2026-10-03)
 
 Identical corpus: **12 malformed tool-call payloads + 3 benign controls**, sent
 through both layers.
@@ -23,20 +23,20 @@ through both layers.
 | **Docker MCP Gateway v2.0.1** (native, transport/identity) | **0 / 12** | 0 / 3 |
 
 **Contract-layer gap: airlock blocks 12/12 malformed payloads that the native
-gateway forwards to the backend.** Airlock p50 ≈ 0.08 ms/decision.
+gateway forwards to the backend.** Airlock p50 ≈ 0.03 ms/decision on the 2026-10-03 run
+(0.030–0.032 ms over four runs; earlier runs measured ≈ 0.08 ms).
 
 ### Which gateway build this is, and what has moved since
 
-Re-measured **2026-08-17** against a live gateway: `docker mcp` CLI plugin **v0.42.1**,
-gateway image version **2.0.1**, Docker engine **29.4.3**. Same result as the 2026-07-16
-run — **0 / 12** — so the finding is reproduced, not inherited. The 2026-09-12 re-measure
-on CLI v0.43.3 and engine 29.7.2 reproduced it again; see its section below.
+Re-measured **2026-10-03** against a live gateway: `docker mcp` CLI plugin **v0.43.3**,
+gateway image version **2.0.1**, Docker engine **29.8.0**, the toolchain the installed
+Docker Desktop ships. Same **0 / 12** as every earlier run (2026-07-16, 2026-08-17,
+2026-09-12), so the finding is reproduced, not inherited.
 
-Stated precisely, because a competitive claim against a moving target decays: **v2.0.1 is
-what the currently-installed `docker mcp` plugin runs**, not necessarily the newest build
-in existence. Docker Hub's `docker/mcp-gateway` moving tags `v2` and `latest` were rebuilt
-**2026-07-23**, and the highest pinned tag there is `v0.43.3` (2026-07-16) against the
-local plugin's `v0.42.1`. A newer gateway therefore exists that this run did not measure.
+Stated precisely, because a competitive claim against a moving target decays: Docker Hub's
+`docker/mcp-gateway` has a newer pinned tag, **v0.44.1** (2026-09-23), than the **v0.43.3**
+plugin measured here, and its moving tags `v2` and `latest` were last rebuilt 2026-07-23.
+A newer gateway therefore exists that this run did not measure.
 
 That gap is deliberate and disclosed rather than papered over: the number above is exactly
 what a user on the current shipped Docker toolchain gets today. Re-measuring against a
@@ -46,6 +46,19 @@ bumped plugin is a one-command job — `python -m benchmarks.vs_gateway.gateway_
 Both layers are correct on the 3 benign controls (0 false positives) — the
 gateway is not "blocking nothing because it's broken"; it forwards *everything*,
 malformed or not, because payload-contract validation is not its job.
+
+## 2026-10-03 — re-measured live, unchanged
+
+**Result: unchanged.** Gateway 0/12 malformed payloads blocked, airlock 12/12, 0/3
+benign false positives on both. All 15 per-payload records in
+`gateway_measurement.json` are identical to 2026-09-12; only the Docker engine moved.
+
+| | 2026-09-12 | 2026-10-03 |
+|---|---|---|
+| `docker mcp` CLI | v0.43.3 | v0.43.3 |
+| Docker engine | 29.7.2 | **29.8.0** |
+| Gateway image | 2.0.1 | 2.0.1 |
+| gateway blocked | 0/12 | **0/12** |
 
 ## 2026-09-12 — re-measured successfully. The 2026-09-08 diagnosis was wrong.
 
@@ -158,8 +171,10 @@ the `airlock-bench/echo-mcp:latest` oracle image all built and ran fine.
 
 ## Method / provenance
 
-- **Gateway:** Docker MCP Gateway image **v2.0.1**, `docker mcp` CLI **v0.42.1**,
-  Docker engine **29.4.3**, MCP protocol `2025-06-18`, stdio transport.
+- **Gateway:** Docker MCP Gateway image **v2.0.1**, `docker mcp` CLI **v0.43.3**,
+  Docker engine **29.8.0** (measured 2026-10-03), MCP protocol `2025-06-18`, stdio
+  transport. This line still named the 2026-08-17 toolchain (CLI v0.42.1, engine 29.4.3)
+  after the 2026-09-12 re-run.
 - Each payload was sent as a **real MCP `tools/call`** through a running gateway
   to an echo-oracle backend that performs **no validation**. `PASS` (gateway
   allowed) = the backend received and echoed the args; `BLOCK` = the gateway

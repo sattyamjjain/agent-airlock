@@ -29,12 +29,27 @@ class Harness:
     version_argv: tuple[str, ...] = ()
     notes: str = ""
     env: dict[str, str] = field(default_factory=dict)
+    model_argv: tuple[str, ...] = ()
+    """Inserted before ``{prompt}`` when a model is pinned; ``{model}`` is substituted.
+
+    A run on the CLI's configured default model is only comparable while that default holds.
+    On 2026-10-03 this machine's codex default (``gpt-6.1-sol``) was refused for a ChatGPT
+    account, every codex cell exited 1 before it started, and the run looked like 0/72
+    complete. Pinning the model the previous run used makes a re-run like-for-like.
+    """
 
     def is_available(self) -> bool:
         return shutil.which(self.executable) is not None
 
-    def argv(self, prompt: str) -> list[str]:
-        return [part.replace("{prompt}", prompt) for part in self.argv_template]
+    def argv(self, prompt: str, model: str = "") -> list[str]:
+        if model and (not self.model_argv or "{prompt}" not in self.argv_template):
+            raise ValueError(f"harness {self.name!r} has no model flag to pin {model!r} with")
+        parts: list[str] = []
+        for part in self.argv_template:
+            if part == "{prompt}" and model:
+                parts.extend(arg.replace("{model}", model) for arg in self.model_argv)
+            parts.append(part.replace("{prompt}", prompt))
+        return parts
 
 
 #: The harnesses this repo can drive. Every one is a real CLI with a documented
@@ -48,6 +63,7 @@ HARNESSES: tuple[Harness, ...] = (
         argv_template=("claude", "-p", "{prompt}", "--permission-mode", "acceptEdits"),
         version_argv=("claude", "--version"),
         notes="Anthropic Claude Code CLI, print mode.",
+        model_argv=("--model", "{model}"),
     ),
     Harness(
         name="cursor-agent",
@@ -64,6 +80,7 @@ HARNESSES: tuple[Harness, ...] = (
         ),
         version_argv=("cursor-agent", "--version"),
         notes="Cursor Agent CLI, print mode with commands force-allowed.",
+        model_argv=("--model", "{model}"),
     ),
     Harness(
         name="codex",
@@ -87,6 +104,7 @@ HARNESSES: tuple[Harness, ...] = (
         ),
         version_argv=("codex", "--version"),
         notes="OpenAI Codex CLI, `codex exec` non-interactive, workspace-write sandbox.",
+        model_argv=("-m", "{model}"),
     ),
 )
 

@@ -14,6 +14,7 @@ next one starts, and that re-invoking with the same checkpoint does not pay for 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +36,14 @@ def _stub_cells(monkeypatch: pytest.MonkeyPatch, seen: list[tuple[Any, ...]]) ->
     """Replace the real harness invocation with a recorder."""
 
     def fake_run_cell(
-        harness: Harness, arm: Any, *, airlock: bool, trial: int, timeout: float, version: str
+        harness: Harness,
+        arm: Any,
+        *,
+        airlock: bool,
+        trial: int,
+        timeout: float,
+        version: str,
+        model: str = "",
     ) -> CellResult:
         seen.append((harness.name, arm.name, airlock, trial))
         return CellResult(
@@ -319,9 +327,21 @@ class TestTheSanityCheckRespectsIncompleteCells:
         assert "In the other 20 the harness did not finish the task" in md
         assert "smaller denominator" in md
 
-    def test_the_shipped_results_carry_the_caveat(self) -> None:
-        """The 2026-09-20 run is a partial-completion run, so the file must say so."""
+    def test_the_shipped_results_read_each_harness_against_its_real_denominator(self) -> None:
+        """Whatever run is shipped, each harness's sanity line matches its completion count.
+
+        This asserted "rests on the **52** cells" while the 2026-09-20 run was shipped, and a
+        later run that finished every cell made it fail on a correct document. The rule was
+        always conditional, so it is pinned per harness, in both directions.
+        """
         md = (
             Path(__file__).resolve().parents[1] / "benchmarks" / "harness_injection" / "RESULTS.md"
         ).read_text(encoding="utf-8")
-        assert "rests on the **52** cells" in md
+        rows = re.findall(r"^\| `([^`]+)` \| [^|]+ \| (\d+)/(\d+) \|", md, re.M)
+        assert rows, "no per-harness rows in the shipped RESULTS.md"
+        for name, done, total in rows:
+            line = next(row for row in md.splitlines() if row.startswith(f"- `{name}`:"))
+            if done == total:
+                assert "choice not to run the planted script" in line, name
+            else:
+                assert f"rests on the **{done}** cells" in line, name

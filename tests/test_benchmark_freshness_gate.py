@@ -21,6 +21,7 @@ The two modes are tested separately because the split is the design:
 from __future__ import annotations
 
 import datetime as _dt
+import re
 from pathlib import Path
 
 import pytest
@@ -202,13 +203,49 @@ class TestTheLandingPageAndReadmeAgreeOnDates:
     def test_a_drifted_date_is_reported(self, tmp_path, monkeypatch) -> None:
         readme = (_ROOT / "README.md").read_text(encoding="utf-8")
         index = (_ROOT / "docs" / "benchmarks" / "index.md").read_text(encoding="utf-8")
-        # Break exactly one date on the landing page.
+        # Break exactly one date on the landing page. Taken from the page rather than
+        # hardcoded: a literal row date went stale the day that row was re-run, and the
+        # replacement then broke nothing. Several rows can share a date, so only the
+        # first occurrence moves.
+        real = re.search(r"\| (\d{4}-\d{2}-\d{2}) \|", index)
+        assert real, "no dated row on the landing page"
+        day = real.group(1)
+        moved = (_dt.date.fromisoformat(day) - _dt.timedelta(days=1)).isoformat()
         drifted = tmp_path / "index.md"
-        drifted.write_text(index.replace("2026-09-12", "2026-09-11"), encoding="utf-8")
+        drifted.write_text(index.replace(day, moved, 1), encoding="utf-8")
         monkeypatch.setattr("scripts.check_benchmark_freshness._BENCHMARK_INDEX", drifted)
         problems = _index_date_mismatches(readme, _ROOT / "README.md")
         assert len(problems) == 1
-        assert "2026-09-12" in problems[0]
+        assert day in problems[0]
+
+    def test_a_drift_hidden_by_a_shared_date_is_reported(self, tmp_path, monkeypatch) -> None:
+        """Regression (0.10.23): the check asked only whether a date appeared on the page.
+
+        With several rows on one date, one row could drift and the date still appear.
+        """
+        readme = (_ROOT / "README.md").read_text(encoding="utf-8")
+        index = (_ROOT / "docs" / "benchmarks" / "index.md").read_text(encoding="utf-8")
+        days = re.findall(r"\| (\d{4}-\d{2}-\d{2}) \|", index)
+        shared = next((d for d in days if days.count(d) > 1), None)
+        if shared is None:
+            pytest.skip("no two landing-page rows share a date today")
+        drifted = tmp_path / "index.md"
+        drifted.write_text(index.replace(f"| {shared} |", "| 2000-01-01 |", 1), encoding="utf-8")
+        monkeypatch.setattr("scripts.check_benchmark_freshness._BENCHMARK_INDEX", drifted)
+        problems = _index_date_mismatches(readme, _ROOT / "README.md")
+        assert len(problems) == 1
+        assert "2000-01-01" in problems[0]
+
+    def test_a_row_missing_from_the_landing_page_is_reported(self, tmp_path, monkeypatch) -> None:
+        readme = (_ROOT / "README.md").read_text(encoding="utf-8")
+        index = (_ROOT / "docs" / "benchmarks" / "index.md").read_text(encoding="utf-8")
+        kept = [row for row in index.splitlines() if "MCP spec conformance" not in row]
+        drifted = tmp_path / "index.md"
+        drifted.write_text("\n".join(kept), encoding="utf-8")
+        monkeypatch.setattr("scripts.check_benchmark_freshness._BENCHMARK_INDEX", drifted)
+        problems = _index_date_mismatches(readme, _ROOT / "README.md")
+        assert len(problems) == 1
+        assert "no row" in problems[0]
 
     def test_a_synthetic_readme_is_not_cross_checked(self, tmp_path) -> None:
         """The date-arithmetic tests above drive main() with an invented README.
