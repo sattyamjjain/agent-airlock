@@ -8,9 +8,10 @@ refusing it; CVE-2026-102911 was one until 0.10.22.
 
 The suite is a **second defence**: agent-airlock's job is to catch the same
 class of bug when a vulnerable server is still running, or when a new tool
-ships with the same shape. Upstream vendors have shipped fixes for every CVE
-listed below except CVE-2026-79538 (MetaMCP), which had no fixed release when
-it was added; for that one the second defence is the only one there is.
+ships with the same shape. Most CVEs the suite tests have an upstream fix;
+where none existed when a test was added, its module docstring says so, and
+for that CVE the second defence is the only one there is. CVE-2026-79538
+(MetaMCP) is one.
 
 ## Layout
 
