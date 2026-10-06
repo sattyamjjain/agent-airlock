@@ -39,6 +39,8 @@ catalog and the tests stay in lockstep.
 | [CVE-2025-68144](#cve-2025-68144) | Anthropic mcp-server-git argument injection | 8.1 (High) | Strongest |
 | [CVE-2025-68145](#cve-2025-68145) | mcp-server-git `--repository` root not enforced | 7.1 (High) | Strong |
 | [CVE-2026-102911](#cve-2026-102911) | pi-llm-wiki `wiki_capture_source` splices its `url` argument into `sh -c` | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78 | Partial |
+| [CVE-2026-105697](#cve-2026-105697) | Langflow MCP stdio transport spawns an unvalidated command | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78 | Partial |
+| [CVE-2026-105740](#cve-2026-105740) | Langflow MCP stdio command and env injection | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78 | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
@@ -277,6 +279,101 @@ carry an environment variable into the fetch. ``$name`` is ordinary URL syntax
 upstream one: pass the URL as its own argv element, with no shell.
 
 <a id="cve-2026-102911"></a>
+
+### CVE-2026-105697
+
+**Langflow MCP stdio transport spawns an unvalidated command**
+
+- **CVSS:** 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-105697](https://nvd.nist.gov/vuln/detail/CVE-2026-105697)
+- **Advisory:** [https://github.com/langflow-ai/langflow/security/advisories/GHSA-w794-rj3p-xv45](https://github.com/langflow-ai/langflow/security/advisories/GHSA-w794-rj3p-xv45)
+- **Regression test:** [`tests/cves/test_cve_2026_105697_langflow_stdio_spawn.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105697_langflow_stdio_spawn.py)
+
+**Vulnerability**
+
+Before Langflow 1.10.3, the MCP stdio transport launched whatever
+``command`` / ``args`` a user put in an MCP server configuration, with no
+allowlist and wrapped in ``bash -c "exec {command} ..."``. Any user able to
+reach the MCP server settings (``POST/PATCH /api/v2/mcp/servers/{name}``) or
+to build a flow with the MCP Tools component could add a "server" whose
+command is an arbitrary OS command; it runs on the Langflow host as the
+Langflow process user the moment Langflow tries to connect — listing
+servers, loading tools or running the flow — even when the UI then reports
+that the stdio server failed to start. With the default
+``LANGFLOW_AUTO_LOGIN=true`` this is reachable without an account. Fixed in
+Langflow 1.10.3 (langflow-base 0.10.3, lfx 1.10.3).
+
+**Airlock mitigation**
+
+This is the "both" case ``docs/cve-triage.md`` describes, and it splits the
+same way as CVE-2026-78575 (the earlier IBM Langflow stdio bulletin) and
+CVE-2026-79748 (MCPHub).
+
+**Out of scope: the settings endpoint.** That any user — or, with
+``AUTO_LOGIN``, an anonymous one — may POST an MCP server at all is Langflow's
+own authorization. It is a missing check on an HTTP route that never calls
+into a decorated tool, and a contract layer for tool-call arguments cannot
+add auth to someone else's endpoint. Langflow 1.10.3 is where that belongs.
+
+**In scope: the spawn primitive.** The thing the missing check hands over is
+a caller-supplied stdio ``command`` / ``args`` heading for a shell spawn —
+the documented in-scope shape (``docs/cve-triage.md``, "Command / argument
+injection into a spawn", anchored on CVE-2026-42271), which
+``McpSubprocessArgInjectionGuard`` already refuses deny-by-default. So this is
+a **second-defence regression fixture against an existing guard, not a new
+guard** — the CVE-2026-90898 / CVE-2026-57124 / CVE-2026-77521 pattern. The
+env-injection half disclosed as the sibling CVE-2026-105740 is covered in
+``test_cve_2026_105740_langflow_stdio_env.py``.
+
+<a id="cve-2026-105697"></a>
+
+### CVE-2026-105740
+
+**Langflow MCP stdio command and env injection**
+
+- **CVSS:** 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-105740](https://nvd.nist.gov/vuln/detail/CVE-2026-105740)
+- **Advisory:** [https://github.com/langflow-ai/langflow/security/advisories/GHSA-7w94-79vh-5mr2](https://github.com/langflow-ai/langflow/security/advisories/GHSA-7w94-79vh-5mr2)
+- **Regression test:** [`tests/cves/test_cve_2026_105740_langflow_stdio_env.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105740_langflow_stdio_env.py)
+
+**Vulnerability**
+
+Prior to Langflow 1.9.0, any authenticated Langflow user can achieve Remote
+Code Execution by adding an MCP server with the "Stdio" transport. The
+user-supplied ``command`` field is passed directly to ``bash -c "exec
+{command}"`` with zero validation, no allowlisting and no sandboxing, and
+executes immediately when the server list is fetched. Additionally, the
+``env`` field allows arbitrary environment variable injection (e.g.
+``LD_PRELOAD``, ``PATH`` override), which turns even an otherwise-benign
+launcher into an execution primitive. Fixed in Langflow 1.9.0.
+
+**Airlock mitigation**
+
+The sibling of CVE-2026-105697, on the same stdio transport. That one is
+covered in ``test_cve_2026_105697_langflow_stdio_spawn.py``; this file exists
+for the half CVE-2026-105740 adds, the **env field**.
+
+**Out of scope: the authenticated-add primitive.** That any authenticated
+user may add a stdio server is Langflow's own authorization, the same route
+check CVE-2026-105697 turns on, and not expressible at the tool-call
+boundary. Langflow 1.9.0 is where it belongs.
+
+**In scope: the env-injection primitive.** ``McpSubprocessArgInjectionGuard``
+refuses an ``env`` mapping carrying a known code-loading variable
+(``LD_PRELOAD`` / ``PATH`` / ``PYTHONPATH`` / ...) *regardless of whether the
+command was allowlisted*, because env turns any binary into an execution
+primitive. This is a **second-defence fixture against the existing guard, not
+a new guard** — the guard already carries ``LD_PRELOAD`` and ``PATH`` in its
+default dangerous-env set, so no env handling needed changing for this CVE.
+
+The command half (``bash -c "exec {command}"``) is the same shape the
+CVE-2026-105697 module pins; here it is asserted only enough to show it is the
+env leg, not the command leg, doing the refusing once a launcher is
+allowlisted.
+
+<a id="cve-2026-105740"></a>
 
 ### CVE-2026-11393
 
