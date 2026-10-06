@@ -1558,6 +1558,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-105697" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105697
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-105740" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105740
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3067,6 +3089,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-105697" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105697
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-105740" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105740
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3562,6 +3606,18 @@ catalog and the tests stay in lockstep.</p>
 <td>Partial</td>
 </tr>
 <tr>
+<td><a href="#cve-2026-105697">CVE-2026-105697</a></td>
+<td>Langflow MCP stdio transport spawns an unvalidated command</td>
+<td>9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78</td>
+<td>Partial</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-105740">CVE-2026-105740</a></td>
+<td>Langflow MCP stdio command and env injection</td>
+<td>9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78</td>
+<td>Partial</td>
+</tr>
+<tr>
 <td><a href="#cve-2026-11393">CVE-2026-11393</a></td>
 <td>AgentCore CLI triple-quote codegen RCE</td>
 <td>—</td>
@@ -3976,6 +4032,84 @@ carry an environment variable into the fetch. <code>$name</code> is ordinary URL
 (OData's <code>$select</code>), and refusing it would break real URLs. The complete fix is the
 upstream one: pass the URL as its own argv element, with no shell.</p>
 <p><a id="cve-2026-102911"></a></p>
+<h3 id="cve-2026-105697">CVE-2026-105697<a class="headerlink" href="#cve-2026-105697" title="Permanent link">&para;</a></h3>
+<p><strong>Langflow MCP stdio transport spawns an unvalidated command</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-105697">https://nvd.nist.gov/vuln/detail/CVE-2026-105697</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/langflow-ai/langflow/security/advisories/GHSA-w794-rj3p-xv45">https://github.com/langflow-ai/langflow/security/advisories/GHSA-w794-rj3p-xv45</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105697_langflow_stdio_spawn.py"><code>tests/cves/test_cve_2026_105697_langflow_stdio_spawn.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>Before Langflow 1.10.3, the MCP stdio transport launched whatever
+<code>command</code> / <code>args</code> a user put in an MCP server configuration, with no
+allowlist and wrapped in <code>bash -c "exec {command} ..."</code>. Any user able to
+reach the MCP server settings (<code>POST/PATCH /api/v2/mcp/servers/{name}</code>) or
+to build a flow with the MCP Tools component could add a "server" whose
+command is an arbitrary OS command; it runs on the Langflow host as the
+Langflow process user the moment Langflow tries to connect — listing
+servers, loading tools or running the flow — even when the UI then reports
+that the stdio server failed to start. With the default
+<code>LANGFLOW_AUTO_LOGIN=true</code> this is reachable without an account. Fixed in
+Langflow 1.10.3 (langflow-base 0.10.3, lfx 1.10.3).</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>This is the "both" case <code>docs/cve-triage.md</code> describes, and it splits the
+same way as CVE-2026-78575 (the earlier IBM Langflow stdio bulletin) and
+CVE-2026-79748 (MCPHub).</p>
+<p><strong>Out of scope: the settings endpoint.</strong> That any user — or, with
+<code>AUTO_LOGIN</code>, an anonymous one — may POST an MCP server at all is Langflow's
+own authorization. It is a missing check on an HTTP route that never calls
+into a decorated tool, and a contract layer for tool-call arguments cannot
+add auth to someone else's endpoint. Langflow 1.10.3 is where that belongs.</p>
+<p><strong>In scope: the spawn primitive.</strong> The thing the missing check hands over is
+a caller-supplied stdio <code>command</code> / <code>args</code> heading for a shell spawn —
+the documented in-scope shape (<code>docs/cve-triage.md</code>, "Command / argument
+injection into a spawn", anchored on CVE-2026-42271), which
+<code>McpSubprocessArgInjectionGuard</code> already refuses deny-by-default. So this is
+a <strong>second-defence regression fixture against an existing guard, not a new
+guard</strong> — the CVE-2026-90898 / CVE-2026-57124 / CVE-2026-77521 pattern. The
+env-injection half disclosed as the sibling CVE-2026-105740 is covered in
+<code>test_cve_2026_105740_langflow_stdio_env.py</code>.</p>
+<p><a id="cve-2026-105697"></a></p>
+<h3 id="cve-2026-105740">CVE-2026-105740<a class="headerlink" href="#cve-2026-105740" title="Permanent link">&para;</a></h3>
+<p><strong>Langflow MCP stdio command and env injection</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-105740">https://nvd.nist.gov/vuln/detail/CVE-2026-105740</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/langflow-ai/langflow/security/advisories/GHSA-7w94-79vh-5mr2">https://github.com/langflow-ai/langflow/security/advisories/GHSA-7w94-79vh-5mr2</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105740_langflow_stdio_env.py"><code>tests/cves/test_cve_2026_105740_langflow_stdio_env.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>Prior to Langflow 1.9.0, any authenticated Langflow user can achieve Remote
+Code Execution by adding an MCP server with the "Stdio" transport. The
+user-supplied <code>command</code> field is passed directly to <code>bash -c "exec
+{command}"</code> with zero validation, no allowlisting and no sandboxing, and
+executes immediately when the server list is fetched. Additionally, the
+<code>env</code> field allows arbitrary environment variable injection (e.g.
+<code>LD_PRELOAD</code>, <code>PATH</code> override), which turns even an otherwise-benign
+launcher into an execution primitive. Fixed in Langflow 1.9.0.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>The sibling of CVE-2026-105697, on the same stdio transport. That one is
+covered in <code>test_cve_2026_105697_langflow_stdio_spawn.py</code>; this file exists
+for the half CVE-2026-105740 adds, the <strong>env field</strong>.</p>
+<p><strong>Out of scope: the authenticated-add primitive.</strong> That any authenticated
+user may add a stdio server is Langflow's own authorization, the same route
+check CVE-2026-105697 turns on, and not expressible at the tool-call
+boundary. Langflow 1.9.0 is where it belongs.</p>
+<p><strong>In scope: the env-injection primitive.</strong> <code>McpSubprocessArgInjectionGuard</code>
+refuses an <code>env</code> mapping carrying a known code-loading variable
+(<code>LD_PRELOAD</code> / <code>PATH</code> / <code>PYTHONPATH</code> / ...) <em>regardless of whether the
+command was allowlisted</em>, because env turns any binary into an execution
+primitive. This is a <strong>second-defence fixture against the existing guard, not
+a new guard</strong> — the guard already carries <code>LD_PRELOAD</code> and <code>PATH</code> in its
+default dangerous-env set, so no env handling needed changing for this CVE.</p>
+<p>The command half (<code>bash -c "exec {command}"</code>) is the same shape the
+CVE-2026-105697 module pins; here it is asserted only enough to show it is the
+env leg, not the command leg, doing the refusing once a launcher is
+allowlisted.</p>
+<p><a id="cve-2026-105740"></a></p>
 <h3 id="cve-2026-11393">CVE-2026-11393<a class="headerlink" href="#cve-2026-11393" title="Permanent link">&para;</a></h3>
 <p><strong>AgentCore CLI triple-quote codegen RCE</strong></p>
 <ul>
