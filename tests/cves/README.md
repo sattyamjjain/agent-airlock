@@ -44,6 +44,8 @@ drift from the suite. This one can, which is why it says so.
 | CVE-2026-57124 | `test_cve_2026_57124_praisonai_mcp_connect.py` | partial (spawn primitive only, not the missing auth) | [GHSA-p75f-6fp4-p57w](https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-p75f-6fp4-p57w) |
 | CVE-2026-53710 | `test_cve_2026_53710_contextforge_sandbox_getattr.py` | partial (eval-sink primitive only, not the missing auth and not the RestrictedPython policy) | [GHSA-xm98-3vcf-fph7](https://github.com/advisories/GHSA-xm98-3vcf-fph7) |
 | CVE-2026-77521 | `test_cve_2026_77521_maxkb_sandbox_shell.py` | partial (metachar primitive only, not the exposed tool or the missing approval gate) | [GHSA-f36j-f34j-h3rx](https://github.com/1Panel-dev/MaxKB/security/advisories/GHSA-f36j-f34j-h3rx) |
+| CVE-2026-105697 | `test_cve_2026_105697_langflow_stdio_spawn.py` | partial (spawn primitive only, not the settings-endpoint authz) | [GHSA-w794-rj3p-xv45](https://github.com/langflow-ai/langflow/security/advisories/GHSA-w794-rj3p-xv45) |
+| CVE-2026-105740 | `test_cve_2026_105740_langflow_stdio_env.py` | partial (env-injection primitive only, not the authenticated-add authz) | [GHSA-7w94-79vh-5mr2](https://github.com/langflow-ai/langflow/security/advisories/GHSA-7w94-79vh-5mr2) |
 
 ## Out of scope as a *fix* (the defect itself is not blockable here)
 
