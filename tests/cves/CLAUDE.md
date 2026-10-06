@@ -20,6 +20,13 @@ what counts as in scope is in `docs/cve-triage.md`.
   only an umbrella module names in its docstring (the shorthand `CVE-YYYY-NNNNN/NNNNN`
   included) is listed in the catalog's umbrella section instead (`collect_umbrella`),
   linked to NVD only where the docstring or a fixture carries that URL.
+- **A `test_cve_*.py` module is one CVE.** Its header carries a single id, and
+  `collect_umbrella` skips every `test_cve_*.py` module, so a second id named only inside
+  one gets no row and no umbrella entry, while `scripts/cve_watcher.py` counts it tracked
+  and never files it. Give a sibling CVE its own module, as the Langflow stdio pair does
+  (`test_cve_2026_105697_langflow_stdio_spawn.py` and
+  `test_cve_2026_105740_langflow_stdio_env.py`). A module that replays several CVEs at once
+  is a `test_<slug>.py`, the only kind `collect_umbrella` reads.
 - **`fixtures/*.json`** hold per-advisory payloads. Shapes vary, but every file needs an ISO
   `disclosed_at` or `scripts/egress_bench.py` exits 2; the walker grades only fixtures in its
   `_DISPATCH` table and prints `# SKIP` for the rest. **`corpora/*.json`** are block-rate
