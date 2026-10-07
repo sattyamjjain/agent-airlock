@@ -1580,6 +1580,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-105788" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105788
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-105793" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105793
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3111,6 +3133,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-105788" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105788
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-105793" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105793
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3618,6 +3662,18 @@ catalog and the tests stay in lockstep.</p>
 <td>Partial</td>
 </tr>
 <tr>
+<td><a href="#cve-2026-105788">CVE-2026-105788</a></td>
+<td>Microsoft UFO mobile MCP type_text and launch_app injection</td>
+<td>8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-88</td>
+<td>Partial</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-105793">CVE-2026-105793</a></td>
+<td>Microsoft UFO mobile MCP press_key argument injection</td>
+<td>9.1 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:L, CWE-78</td>
+<td>Partial</td>
+</tr>
+<tr>
 <td><a href="#cve-2026-11393">CVE-2026-11393</a></td>
 <td>AgentCore CLI triple-quote codegen RCE</td>
 <td>—</td>
@@ -4110,6 +4166,77 @@ CVE-2026-105697 module pins; here it is asserted only enough to show it is the
 env leg, not the command leg, doing the refusing once a launcher is
 allowlisted.</p>
 <p><a id="cve-2026-105740"></a></p>
+<h3 id="cve-2026-105788">CVE-2026-105788<a class="headerlink" href="#cve-2026-105788" title="Permanent link">&para;</a></h3>
+<p><strong>Microsoft UFO mobile MCP type_text and launch_app injection</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-88</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-105788">https://nvd.nist.gov/vuln/detail/CVE-2026-105788</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/microsoft/UFO/security/advisories/GHSA-6ppj-5886-4f26">https://github.com/microsoft/UFO/security/advisories/GHSA-6ppj-5886-4f26</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105788_ufo_type_text.py"><code>tests/cves/test_cve_2026_105788_ufo_type_text.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>Prior to UFO 3.0.10, the <code>type_text</code> and <code>launch_app</code> tools in
+<code>ufo/client/mcp/http_servers/mobile_mcp_server.py</code> pass the authenticated
+caller-controlled <code>text</code> and <code>package_name</code> parameters into <code>adb shell</code>
+command argument positions without comprehensive validation. The adb client
+joins those arguments into a remote command string that the Android shell
+reparses, letting shell metacharacters run additional commands as the Android
+shell user on an authorized connected device. Exploitation needs a valid
+Mobile MCP API key and a reachable authorized device; it does not reach the
+host OS, Android root, or beyond the shell user. Fixed in 3.0.10 (by quoting
+the adb arguments in the callee).</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>Argument-shaped and authenticated, with no authorization half. The two
+parameters split on their <em>type</em>, and the sibling CVE-2026-105793 (press_key)
+is covered in <code>test_cve_2026_105793_ufo_press_key.py</code>.</p>
+<p><strong>package_name has a narrow shape</strong> — a dotted Android package name. A tool
+that declares it gets the separator refused by agent-airlock's strict
+validation, no new guard, the CVE-2025-68144 primitive. This fixture pins it.</p>
+<p><strong>text is free text by design.</strong> No contract on the caller's side can make
+free text safe for a shell that reparses it: the field's whole purpose is to
+carry arbitrary characters, so a <code>str</code> accepts them, separator and all. That
+is not a gap in validation, it is the honest boundary of an argument contract,
+and the fix is the callee's quoting (UFO 3.0.10). The test below documents
+that boundary rather than asserting a refusal that would be wrong to expect.</p>
+<p>So the fit is <em>partial</em>: strict typing reaches <code>package_name</code>, not <code>text</code>.</p>
+<p><a id="cve-2026-105788"></a></p>
+<h3 id="cve-2026-105793">CVE-2026-105793<a class="headerlink" href="#cve-2026-105793" title="Permanent link">&para;</a></h3>
+<p><strong>Microsoft UFO mobile MCP press_key argument injection</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 9.1 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:L, CWE-78</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-105793">https://nvd.nist.gov/vuln/detail/CVE-2026-105793</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/microsoft/UFO/security/advisories/GHSA-5cjx-4375-4877">https://github.com/microsoft/UFO/security/advisories/GHSA-5cjx-4375-4877</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105793_ufo_press_key.py"><code>tests/cves/test_cve_2026_105793_ufo_press_key.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>Prior to UFO 3.0.9, the <code>press_key</code> tool in
+<code>ufo/client/mcp/http_servers/mobile_mcp_server.py</code> accepts a free-form
+<code>key_code</code> parameter and passes it to <code>adb shell input keyevent</code>. The adb
+client joins the arguments into a remote command string that the Android
+shell reparses, letting an authenticated Mobile MCP caller run additional
+commands as the Android shell user on an authorized connected device.
+Exploitation needs a valid <code>UFO_MCP_API_KEY</code>, adb on the host, and a
+reachable authorized device; it does not reach the host OS, Android root, or
+beyond the shell user. Fixed in 3.0.9 (by quoting the adb arguments in the
+callee).</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>Argument-shaped and authenticated, with no authorization half: the key_code
+value is the whole defect. What decides the outcome is the argument's <em>type</em>.</p>
+<p><strong>Out of scope: the reparsing shell.</strong> That <code>adb shell</code> rejoins its
+arguments and the Android shell reparses them is a property of the callee, and
+the fix is to quote there, which UFO shipped in 3.0.9. A contract layer on the
+caller's side cannot change how a remote shell splits a string it is handed.</p>
+<p><strong>In scope: the argument's shape.</strong> <code>key_code</code> has a narrow legal form, an
+Android keycode name or number. A tool that <em>declares</em> that shape gets the
+separator rejected by agent-airlock's strict validation with no new guard and
+no preset, which is the CVE-2025-68144 (git flag-shaped ref) primitive. This
+fixture pins that: a decorated <code>press_key</code> whose <code>key_code</code> is
+<code>int | KEYCODE_...</code> accepts a real keycode and refuses one carrying a shell
+separator. It is a second defence contingent on the schema the vulnerable tool
+did not declare, which is why the fit is <em>partial</em> rather than <em>strong</em>.</p>
+<p><a id="cve-2026-105793"></a></p>
 <h3 id="cve-2026-11393">CVE-2026-11393<a class="headerlink" href="#cve-2026-11393" title="Permanent link">&para;</a></h3>
 <p><strong>AgentCore CLI triple-quote codegen RCE</strong></p>
 <ul>
