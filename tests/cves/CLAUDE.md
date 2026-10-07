@@ -63,6 +63,16 @@ what counts as in scope is in `docs/cve-triage.md`.
   reverse — the preset does *not* claim the CVE — plus the watcher signal that admitted it;
   copy `TestScopeBoundary` and `TestWatcherAdmittedThisOn*` from
   `test_cve_2026_77521_maxkb_sandbox_shell.py`.
+- **Strict typing alone can be the second defence: no guard, no preset.** When the defect
+  is an argument with a narrow legal shape (a git ref, a keycode, a package name), wrap a
+  placeholder `@Airlock(return_dict=True)` tool that declares the shape with `Annotated`
+  constraints, and assert the payload comes back `block_reason == "validation_error"`
+  while a benign value passes; `grep -l validation_error tests/cves/test_*.py` finds the
+  modules that do. Pin the half it cannot reach as `TestScopeBoundary` does: a control
+  that declares the same parameter as a bare `str` and asserts the payload is *admitted*
+  (`test_cve_2026_105788_ufo_type_text.py`). Free text has no narrower shape to declare,
+  so that is a boundary, not a gap: it takes the passing control and no `xfail`, because
+  the `xfail` rule above is for an in-scope CVE whose primitive is missing.
 - **When the vulnerable code decodes its request before spawning** (shell-quote split,
   `JSON.parse`, etc.), feed the guard that decoded shape through a small helper that
   repeats and quotes the decoding lines, so the verdict is about what actually reaches
