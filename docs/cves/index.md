@@ -41,6 +41,8 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-102911](#cve-2026-102911) | pi-llm-wiki `wiki_capture_source` splices its `url` argument into `sh -c` | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78 | Partial |
 | [CVE-2026-105697](#cve-2026-105697) | Langflow MCP stdio transport spawns an unvalidated command | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78 | Partial |
 | [CVE-2026-105740](#cve-2026-105740) | Langflow MCP stdio command and env injection | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78 | Partial |
+| [CVE-2026-105788](#cve-2026-105788) | Microsoft UFO mobile MCP type_text and launch_app injection | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-88 | Partial |
+| [CVE-2026-105793](#cve-2026-105793) | Microsoft UFO mobile MCP press_key argument injection | 9.1 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:L, CWE-78 | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
@@ -374,6 +376,94 @@ env leg, not the command leg, doing the refusing once a launcher is
 allowlisted.
 
 <a id="cve-2026-105740"></a>
+
+### CVE-2026-105788
+
+**Microsoft UFO mobile MCP type_text and launch_app injection**
+
+- **CVSS:** 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-88
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-105788](https://nvd.nist.gov/vuln/detail/CVE-2026-105788)
+- **Advisory:** [https://github.com/microsoft/UFO/security/advisories/GHSA-6ppj-5886-4f26](https://github.com/microsoft/UFO/security/advisories/GHSA-6ppj-5886-4f26)
+- **Regression test:** [`tests/cves/test_cve_2026_105788_ufo_type_text.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105788_ufo_type_text.py)
+
+**Vulnerability**
+
+Prior to UFO 3.0.10, the ``type_text`` and ``launch_app`` tools in
+``ufo/client/mcp/http_servers/mobile_mcp_server.py`` pass the authenticated
+caller-controlled ``text`` and ``package_name`` parameters into ``adb shell``
+command argument positions without comprehensive validation. The adb client
+joins those arguments into a remote command string that the Android shell
+reparses, letting shell metacharacters run additional commands as the Android
+shell user on an authorized connected device. Exploitation needs a valid
+Mobile MCP API key and a reachable authorized device; it does not reach the
+host OS, Android root, or beyond the shell user. Fixed in 3.0.10 (by quoting
+the adb arguments in the callee).
+
+**Airlock mitigation**
+
+Argument-shaped and authenticated, with no authorization half. The two
+parameters split on their *type*, and the sibling CVE-2026-105793 (press_key)
+is covered in ``test_cve_2026_105793_ufo_press_key.py``.
+
+**package_name has a narrow shape** — a dotted Android package name. A tool
+that declares it gets the separator refused by agent-airlock's strict
+validation, no new guard, the CVE-2025-68144 primitive. This fixture pins it.
+
+**text is free text by design.** No contract on the caller's side can make
+free text safe for a shell that reparses it: the field's whole purpose is to
+carry arbitrary characters, so a `str` accepts them, separator and all. That
+is not a gap in validation, it is the honest boundary of an argument contract,
+and the fix is the callee's quoting (UFO 3.0.10). The test below documents
+that boundary rather than asserting a refusal that would be wrong to expect.
+
+So the fit is *partial*: strict typing reaches ``package_name``, not ``text``.
+
+<a id="cve-2026-105788"></a>
+
+### CVE-2026-105793
+
+**Microsoft UFO mobile MCP press_key argument injection**
+
+- **CVSS:** 9.1 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:L, CWE-78
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-105793](https://nvd.nist.gov/vuln/detail/CVE-2026-105793)
+- **Advisory:** [https://github.com/microsoft/UFO/security/advisories/GHSA-5cjx-4375-4877](https://github.com/microsoft/UFO/security/advisories/GHSA-5cjx-4375-4877)
+- **Regression test:** [`tests/cves/test_cve_2026_105793_ufo_press_key.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105793_ufo_press_key.py)
+
+**Vulnerability**
+
+Prior to UFO 3.0.9, the ``press_key`` tool in
+``ufo/client/mcp/http_servers/mobile_mcp_server.py`` accepts a free-form
+``key_code`` parameter and passes it to ``adb shell input keyevent``. The adb
+client joins the arguments into a remote command string that the Android
+shell reparses, letting an authenticated Mobile MCP caller run additional
+commands as the Android shell user on an authorized connected device.
+Exploitation needs a valid ``UFO_MCP_API_KEY``, adb on the host, and a
+reachable authorized device; it does not reach the host OS, Android root, or
+beyond the shell user. Fixed in 3.0.9 (by quoting the adb arguments in the
+callee).
+
+**Airlock mitigation**
+
+Argument-shaped and authenticated, with no authorization half: the key_code
+value is the whole defect. What decides the outcome is the argument's *type*.
+
+**Out of scope: the reparsing shell.** That ``adb shell`` rejoins its
+arguments and the Android shell reparses them is a property of the callee, and
+the fix is to quote there, which UFO shipped in 3.0.9. A contract layer on the
+caller's side cannot change how a remote shell splits a string it is handed.
+
+**In scope: the argument's shape.** ``key_code`` has a narrow legal form, an
+Android keycode name or number. A tool that *declares* that shape gets the
+separator rejected by agent-airlock's strict validation with no new guard and
+no preset, which is the CVE-2025-68144 (git flag-shaped ref) primitive. This
+fixture pins that: a decorated ``press_key`` whose ``key_code`` is
+``int | KEYCODE_...`` accepts a real keycode and refuses one carrying a shell
+separator. It is a second defence contingent on the schema the vulnerable tool
+did not declare, which is why the fit is *partial* rather than *strong*.
+
+<a id="cve-2026-105793"></a>
 
 ### CVE-2026-11393
 
