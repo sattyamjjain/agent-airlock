@@ -43,6 +43,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-105740](#cve-2026-105740) | Langflow MCP stdio command and env injection | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78 | Partial |
 | [CVE-2026-105788](#cve-2026-105788) | Microsoft UFO mobile MCP type_text and launch_app injection | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-88 | Partial |
 | [CVE-2026-105793](#cve-2026-105793) | Microsoft UFO mobile MCP press_key argument injection | 9.1 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:L, CWE-78 | Partial |
+| [CVE-2026-105797](#cve-2026-105797) | SimpleChat personal MCP plugin spawns an attacker-selected stdio process | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-863 | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
@@ -464,6 +465,52 @@ separator. It is a second defence contingent on the schema the vulnerable tool
 did not declare, which is why the fit is *partial* rather than *strong*.
 
 <a id="cve-2026-105793"></a>
+
+### CVE-2026-105797
+
+**SimpleChat personal MCP plugin spawns an attacker-selected stdio process**
+
+- **CVSS:** 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-863
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-105797](https://nvd.nist.gov/vuln/detail/CVE-2026-105797)
+- **Advisory:** [https://github.com/microsoft/simplechat/security/advisories/GHSA-h4mw-qw8m-5x4j](https://github.com/microsoft/simplechat/security/advisories/GHSA-h4mw-qw8m-5x4j)
+- **Regression test:** [`tests/cves/test_cve_2026_105797_simplechat_stdio_plugin.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105797_simplechat_stdio_plugin.py)
+
+**Vulnerability**
+
+In SimpleChat 0.261.003 and 0.261.027, an authorization ordering flaw in
+``POST /api/user/plugins`` lets an authenticated low-privileged user omit the
+top-level MCP ``type`` so that ``_reject_non_admin_mcp_stdio`` skips inspection
+before the type is restored from metadata. The stored personal action then
+reaches ``McpPluginFactory.create_connector``, and ``MCPStdioPlugin.connect``
+starts the attacker-selected operating-system process under the application
+service identity when the action tool is invoked. Exploitation requires
+personal plugins enabled and governance permitting MCP actions. Fixed in
+0.261.031 (which restores the type before the admin check runs).
+
+**Airlock mitigation**
+
+The "both" case from ``docs/cve-triage.md``, splitting the same way as
+CVE-2026-79748 (MCPHub).
+
+**Out of scope: the authorization ordering (CWE-863).** That
+``_reject_non_admin_mcp_stdio`` runs before the ``type`` is restored, so
+omitting the top-level type skips the admin gate, is "incorrect authorization
+logic inside a router or hub" (``docs/cve-triage.md`` out-of-scope table): the
+bug is which principal may store the action, not the call's arguments. Only
+SimpleChat's own route can order that check correctly, and 0.261.031 does.
+
+**In scope: the spawn primitive the ordering flaw hands over.** The stored
+action carries a stdio ``command`` / ``args`` naming a caller-chosen process
+that ``MCPStdioPlugin.connect`` starts. That is the shape
+:class:`~agent_airlock.mcp_spec.subprocess_arg_guard.McpSubprocessArgInjectionGuard`
+already refuses deny-by-default for CVE-2026-42271, so this is a
+**second-defence regression fixture against an existing guard, not a new
+guard**. Crucially, the guard resolves the program from ``command`` / ``args``
+and never consults a top-level ``type`` discriminator, so the exact move this
+CVE uses — omit the ``type`` to skip inspection — does not skip the guard.
+
+<a id="cve-2026-105797"></a>
 
 ### CVE-2026-11393
 
