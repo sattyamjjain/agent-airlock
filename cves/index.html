@@ -1602,6 +1602,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-105797" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105797
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3155,6 +3166,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-105797" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-105797
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3671,6 +3693,12 @@ catalog and the tests stay in lockstep.</p>
 <td><a href="#cve-2026-105793">CVE-2026-105793</a></td>
 <td>Microsoft UFO mobile MCP press_key argument injection</td>
 <td>9.1 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:L, CWE-78</td>
+<td>Partial</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-105797">CVE-2026-105797</a></td>
+<td>SimpleChat personal MCP plugin spawns an attacker-selected stdio process</td>
+<td>8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-863</td>
 <td>Partial</td>
 </tr>
 <tr>
@@ -4237,6 +4265,44 @@ fixture pins that: a decorated <code>press_key</code> whose <code>key_code</code
 separator. It is a second defence contingent on the schema the vulnerable tool
 did not declare, which is why the fit is <em>partial</em> rather than <em>strong</em>.</p>
 <p><a id="cve-2026-105793"></a></p>
+<h3 id="cve-2026-105797">CVE-2026-105797<a class="headerlink" href="#cve-2026-105797" title="Permanent link">&para;</a></h3>
+<p><strong>SimpleChat personal MCP plugin spawns an attacker-selected stdio process</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-863</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-105797">https://nvd.nist.gov/vuln/detail/CVE-2026-105797</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/microsoft/simplechat/security/advisories/GHSA-h4mw-qw8m-5x4j">https://github.com/microsoft/simplechat/security/advisories/GHSA-h4mw-qw8m-5x4j</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_105797_simplechat_stdio_plugin.py"><code>tests/cves/test_cve_2026_105797_simplechat_stdio_plugin.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>In SimpleChat 0.261.003 and 0.261.027, an authorization ordering flaw in
+<code>POST /api/user/plugins</code> lets an authenticated low-privileged user omit the
+top-level MCP <code>type</code> so that <code>_reject_non_admin_mcp_stdio</code> skips inspection
+before the type is restored from metadata. The stored personal action then
+reaches <code>McpPluginFactory.create_connector</code>, and <code>MCPStdioPlugin.connect</code>
+starts the attacker-selected operating-system process under the application
+service identity when the action tool is invoked. Exploitation requires
+personal plugins enabled and governance permitting MCP actions. Fixed in
+0.261.031 (which restores the type before the admin check runs).</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>The "both" case from <code>docs/cve-triage.md</code>, splitting the same way as
+CVE-2026-79748 (MCPHub).</p>
+<p><strong>Out of scope: the authorization ordering (CWE-863).</strong> That
+<code>_reject_non_admin_mcp_stdio</code> runs before the <code>type</code> is restored, so
+omitting the top-level type skips the admin gate, is "incorrect authorization
+logic inside a router or hub" (<code>docs/cve-triage.md</code> out-of-scope table): the
+bug is which principal may store the action, not the call's arguments. Only
+SimpleChat's own route can order that check correctly, and 0.261.031 does.</p>
+<p><strong>In scope: the spawn primitive the ordering flaw hands over.</strong> The stored
+action carries a stdio <code>command</code> / <code>args</code> naming a caller-chosen process
+that <code>MCPStdioPlugin.connect</code> starts. That is the shape
+:class:<code>~agent_airlock.mcp_spec.subprocess_arg_guard.McpSubprocessArgInjectionGuard</code>
+already refuses deny-by-default for CVE-2026-42271, so this is a
+<strong>second-defence regression fixture against an existing guard, not a new
+guard</strong>. Crucially, the guard resolves the program from <code>command</code> / <code>args</code>
+and never consults a top-level <code>type</code> discriminator, so the exact move this
+CVE uses — omit the <code>type</code> to skip inspection — does not skip the guard.</p>
+<p><a id="cve-2026-105797"></a></p>
 <h3 id="cve-2026-11393">CVE-2026-11393<a class="headerlink" href="#cve-2026-11393" title="Permanent link">&para;</a></h3>
 <p><strong>AgentCore CLI triple-quote codegen RCE</strong></p>
 <ul>
