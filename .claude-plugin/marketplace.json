@@ -26,7 +26,7 @@
     ],
     "proof_points": [
       "4,954 tests (CI-enforced coverage floor 82%)",
-      "54 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), of which 48 are CVE-numbered and listed in the generated catalog at docs/cves/index.md (the other 6 are advisory regressions with no CVE id of their own and umbrella modules that replay several CVEs at once; the catalog lists those CVEs too, in its umbrella section)",
+      "55 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), of which 49 are CVE-numbered and listed in the generated catalog at docs/cves/index.md (the other 6 are advisory regressions with no CVE id of their own and umbrella modules that replay several CVEs at once; the catalog lists those CVEs too, in its umbrella section)",
       "75 policy presets (curated security defaults), enumerated at runtime by policy_presets.list_active()"
     ],
     "audience": [
