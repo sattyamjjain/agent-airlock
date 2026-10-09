@@ -1558,6 +1558,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-104120" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-104120
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-105697" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3122,6 +3133,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-104120" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-104120
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-105697" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3672,6 +3694,12 @@ catalog and the tests stay in lockstep.</p>
 <td>Partial</td>
 </tr>
 <tr>
+<td><a href="#cve-2026-104120">CVE-2026-104120</a></td>
+<td>modelcontextprotocol mcp-server-fetch fetch_url SSRF</td>
+<td>7.3 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L, CWE-918</td>
+<td>Strong</td>
+</tr>
+<tr>
 <td><a href="#cve-2026-105697">CVE-2026-105697</a></td>
 <td>Langflow MCP stdio transport spawns an unvalidated command</td>
 <td>9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78</td>
@@ -4116,6 +4144,41 @@ carry an environment variable into the fetch. <code>$name</code> is ordinary URL
 (OData's <code>$select</code>), and refusing it would break real URLs. The complete fix is the
 upstream one: pass the URL as its own argv element, with no shell.</p>
 <p><a id="cve-2026-102911"></a></p>
+<h3 id="cve-2026-104120">CVE-2026-104120<a class="headerlink" href="#cve-2026-104120" title="Permanent link">&para;</a></h3>
+<p><strong>modelcontextprotocol mcp-server-fetch fetch_url SSRF</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 7.3 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L, CWE-918</li>
+<li><strong>Airlock fit:</strong> strong</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-104120">https://nvd.nist.gov/vuln/detail/CVE-2026-104120</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/modelcontextprotocol/servers/issues/4492">https://github.com/modelcontextprotocol/servers/issues/4492</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_104120_mcp_fetch_ssrf.py"><code>tests/cves/test_cve_2026_104120_mcp_fetch_ssrf.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>modelcontextprotocol <code>mcp-server-fetch</code> and <code>mcp-server-everything</code> up to
+2026.6.4 expose a <code>fetch_url</code> tool (<code>mcp_server_fetch/server.py</code>) that
+takes a caller-supplied <code>url</code> / <code>path</code> and issues the request without
+restricting the destination. Manipulating that argument to point at a cloud
+metadata endpoint, loopback, or an RFC1918 host reaches internal resources —
+server-side request forgery, remotely, with a publicly disclosed exploit.
+<strong>No fixed release existed when this was catalogued:</strong> the fix pull request
+(modelcontextprotocol/servers#4890) awaited acceptance as of 2026-10-09, so
+for this CVE the second defence is the only one there is.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>SSRF via a <code>url</code> argument is the documented in-scope shape
+(<code>docs/cve-triage.md</code>, "SSRF via a URL argument", anchored on
+CVE-2026-26118). The fetch tool's whole input <em>is</em> the destination, so the
+contract is a destination filter:
+:class:<code>~agent_airlock.ssrf_egress_guard.SSRFEgressGuard</code> refuses the
+dangerous ones — cloud metadata, loopback, link-local, RFC1918, and a public
+name that resolves or rebinds to any of them — on the <strong>resolved IP</strong>, while
+allowing a genuine public fetch, which is the tool's legitimate purpose.</p>
+<p>An existing guard already refuses the shape, so this is a <strong>second-defence
+regression fixture against that guard, not a new guard</strong> — the CVE-2026-47390
+pattern, one layer up on the tool's <code>url</code> argument. The preset's <code>cves</code>
+tuple is deliberately <strong>not</strong> extended to name this CVE: it claims the CVE it
+was built for (CVE-2026-47390) and refuses this one's payload without
+claiming it.</p>
+<p><a id="cve-2026-104120"></a></p>
 <h3 id="cve-2026-105697">CVE-2026-105697<a class="headerlink" href="#cve-2026-105697" title="Permanent link">&para;</a></h3>
 <p><strong>Langflow MCP stdio transport spawns an unvalidated command</strong></p>
 <ul>
