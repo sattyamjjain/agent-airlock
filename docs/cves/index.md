@@ -39,6 +39,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2025-68144](#cve-2025-68144) | Anthropic mcp-server-git argument injection | 8.1 (High) | Strongest |
 | [CVE-2025-68145](#cve-2025-68145) | mcp-server-git `--repository` root not enforced | 7.1 (High) | Strong |
 | [CVE-2026-102911](#cve-2026-102911) | pi-llm-wiki `wiki_capture_source` splices its `url` argument into `sh -c` | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-77 + CWE-78 | Partial |
+| [CVE-2026-104120](#cve-2026-104120) | modelcontextprotocol mcp-server-fetch fetch_url SSRF | 7.3 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L, CWE-918 | Strong |
 | [CVE-2026-105697](#cve-2026-105697) | Langflow MCP stdio transport spawns an unvalidated command | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78 | Partial |
 | [CVE-2026-105740](#cve-2026-105740) | Langflow MCP stdio command and env injection | 9.9 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H, CWE-78 | Partial |
 | [CVE-2026-105788](#cve-2026-105788) | Microsoft UFO mobile MCP type_text and launch_app injection | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-88 | Partial |
@@ -282,6 +283,48 @@ carry an environment variable into the fetch. ``$name`` is ordinary URL syntax
 upstream one: pass the URL as its own argv element, with no shell.
 
 <a id="cve-2026-102911"></a>
+
+### CVE-2026-104120
+
+**modelcontextprotocol mcp-server-fetch fetch_url SSRF**
+
+- **CVSS:** 7.3 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L, CWE-918
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-104120](https://nvd.nist.gov/vuln/detail/CVE-2026-104120)
+- **Advisory:** [https://github.com/modelcontextprotocol/servers/issues/4492](https://github.com/modelcontextprotocol/servers/issues/4492)
+- **Regression test:** [`tests/cves/test_cve_2026_104120_mcp_fetch_ssrf.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_104120_mcp_fetch_ssrf.py)
+
+**Vulnerability**
+
+modelcontextprotocol ``mcp-server-fetch`` and ``mcp-server-everything`` up to
+2026.6.4 expose a ``fetch_url`` tool (``mcp_server_fetch/server.py``) that
+takes a caller-supplied ``url`` / ``path`` and issues the request without
+restricting the destination. Manipulating that argument to point at a cloud
+metadata endpoint, loopback, or an RFC1918 host reaches internal resources —
+server-side request forgery, remotely, with a publicly disclosed exploit.
+**No fixed release existed when this was catalogued:** the fix pull request
+(modelcontextprotocol/servers#4890) awaited acceptance as of 2026-10-09, so
+for this CVE the second defence is the only one there is.
+
+**Airlock mitigation**
+
+SSRF via a ``url`` argument is the documented in-scope shape
+(``docs/cve-triage.md``, "SSRF via a URL argument", anchored on
+CVE-2026-26118). The fetch tool's whole input *is* the destination, so the
+contract is a destination filter:
+:class:`~agent_airlock.ssrf_egress_guard.SSRFEgressGuard` refuses the
+dangerous ones — cloud metadata, loopback, link-local, RFC1918, and a public
+name that resolves or rebinds to any of them — on the **resolved IP**, while
+allowing a genuine public fetch, which is the tool's legitimate purpose.
+
+An existing guard already refuses the shape, so this is a **second-defence
+regression fixture against that guard, not a new guard** — the CVE-2026-47390
+pattern, one layer up on the tool's ``url`` argument. The preset's ``cves``
+tuple is deliberately **not** extended to name this CVE: it claims the CVE it
+was built for (CVE-2026-47390) and refuses this one's payload without
+claiming it.
+
+<a id="cve-2026-104120"></a>
 
 ### CVE-2026-105697
 

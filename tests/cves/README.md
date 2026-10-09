@@ -49,6 +49,7 @@ drift from the suite. This one can, which is why it says so.
 | CVE-2026-105788 | `test_cve_2026_105788_ufo_type_text.py` | partial (strict typing refuses the narrow `package_name`; free-text `text` is the callee's quoting) | [GHSA-6ppj-5886-4f26](https://github.com/microsoft/UFO/security/advisories/GHSA-6ppj-5886-4f26) |
 | CVE-2026-105793 | `test_cve_2026_105793_ufo_press_key.py` | partial (strict typing refuses the narrow `key_code`; the reparsing adb shell is the callee's quoting) | [GHSA-5cjx-4375-4877](https://github.com/microsoft/UFO/security/advisories/GHSA-5cjx-4375-4877) |
 | CVE-2026-105797 | `test_cve_2026_105797_simplechat_stdio_plugin.py` | partial (spawn primitive only, refused even with the `type` field omitted; not the route's authz ordering) | [GHSA-h4mw-qw8m-5x4j](https://github.com/microsoft/simplechat/security/advisories/GHSA-h4mw-qw8m-5x4j) |
+| CVE-2026-104120 | `test_cve_2026_104120_mcp_fetch_ssrf.py` | strong (SSRF via the `url` argument; `SSRFEgressGuard` refuses metadata/loopback/private; no upstream fix when catalogued) | [modelcontextprotocol/servers#4492](https://github.com/modelcontextprotocol/servers/issues/4492) |
 
 ## Out of scope as a *fix* (the defect itself is not blockable here)
 
