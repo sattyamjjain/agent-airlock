@@ -105,6 +105,9 @@ removed, and it is genuinely gated on API budget alone.** No pilot arm has run �
 "Cross-family widening" in [`benchmarks/agentdojo/RESULTS.md`](benchmarks/agentdojo/RESULTS.md)
 for exactly which arms did not run and why.
 
+**Status as of 2026-10-10: unscheduled.** It waits on an API-budget decision, and no date is
+committed until that decision is made. Read it as an open question, not a promise.
+
 **~~Give the matched-pair injection null enough sample to mean something.~~ Done 2026-08-26.**
 
 Run at `--trials 18` — 144 cells, n = 36 per harness per arm. The injected arm is **0/36** for
@@ -117,6 +120,8 @@ What is left here is a *different* item, and it is worth stating rather than clo
 at n = 36 a true **2%** action rate still escapes this run about half the time, and `codex`
 demonstrated a real behaviour at 1-in-36. Bounding rare behaviour needs n ≈ 74
 (`--trials 37`, 296 cells), which is again gated on API budget rather than code.
+**Status as of 2026-10-10: unscheduled**, for the same reason: no date is committed until the
+API budget is decided.
 
 ## Next
 

@@ -103,7 +103,7 @@ class TestAppendOnlyLog:
         append_run_to_results(p, block)
         with pytest.raises(ValueError, match="already exists"):
             append_run_to_results(p, block)  # same date+models heading
-        append_run_to_results(p, block, force=True)  # force replaces, no raise
+        append_run_to_results(p, block, force=True)  # force appends a second block; keeps the first
 
     def test_missing_marker_raises(self, tmp_path: Path) -> None:
         p = tmp_path / "no_marker.md"

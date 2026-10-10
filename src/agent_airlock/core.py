@@ -52,14 +52,27 @@ import asyncio
 import contextlib
 import functools
 import inspect
+import os
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator, Callable, Generator, Iterator
 from datetime import datetime, timezone
 from typing import Any, Literal, ParamSpec, TypeVar, overload
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from pydantic import ValidationError
 
+from ._arg_walk import (
+    ArgumentNestingError,
+    ArgumentValue,
+    bind_arguments,
+    iter_argument_values,
+    path_text,
+    signature_of,
+    url_text,
+)
 from ._log import structlog
 from ._sandbox_errors import SandboxError
 from ._sandbox_errors import SandboxExecutionError as SandboxExecutionError
@@ -132,7 +145,9 @@ logger = structlog.get_logger("agent-airlock")
 P = ParamSpec("P")
 R = TypeVar("R")
 
-# Type alias for policy resolver functions
+# Type alias for policy resolver functions. A resolver that returns None refuses the call
+# (V0.10.24; it used to run the call with no policy at all): return PERMISSIVE_POLICY to
+# allow a call on purpose.
 PolicyResolver = Callable[[AirlockContext[Any]], SecurityPolicy | None]
 
 # Substrings that indicate a parameter name is sensitive and must not
@@ -186,17 +201,26 @@ def _filter_sensitive_keys(keys: list[str]) -> list[str]:
     return filtered
 
 
-# Parameter names that typically contain file paths
+# Parameter names that typically contain file paths. The plurals name a list of paths: an
+# item of a list or set is checked under its container's name (`_arg_walk`).
 PATH_PARAM_NAMES = frozenset(
     {
         "path",
+        "paths",
         "file",
+        "files",
         "filename",
+        "filenames",
         "filepath",
+        "filepaths",
         "file_path",
+        "file_paths",
         "directory",
+        "directories",
         "dir",
+        "dirs",
         "folder",
+        "folders",
         "source",
         "destination",
         "dest",
@@ -260,6 +284,11 @@ URL_PARAM_NAMES = frozenset(
         "redirect_url",
         "webhook_url",
         "resource_url",
+        "urls",
+        "uris",
+        "endpoints",
+        "links",
+        "hrefs",
     }
 )
 
@@ -280,6 +309,106 @@ def _looks_like_url(key: str, value: Any) -> bool:
 
     # Check value patterns
     return value.startswith("http://") or value.startswith("https://")
+
+
+# A URL as a string: any `scheme://`, case-insensitive, after optional whitespace. HTTP
+# clients accept `HTTP://` and a leading space, and `file://` or `gopher://` reach a host or
+# a file just as surely; deny-by-default reads them all.
+_URL_SCHEME_PREFIX = re.compile(r"\s*[A-Za-z][A-Za-z0-9+.\-]*://")
+_FILE_URI_PREFIX = re.compile(r"\s*file:", re.IGNORECASE)
+_DRIVE_PATH = re.compile(r"[A-Za-z]:[\\/]")
+_PATH_EXTENSIONS = (".txt", ".json", ".yaml", ".yml", ".env", ".py")
+
+
+def _file_uri_path(value: str) -> str | None:
+    """The path a ``file:`` URI names (``file:///etc/passwd`` -> ``/etc/passwd``), else None."""
+    if _FILE_URI_PREFIX.match(value) is None:
+        return None
+    parsed = urlparse(value.strip())
+    return url2pathname(parsed.path) or "/"
+
+
+def _is_absolute_or_escaping(value: str) -> bool:
+    """An absolute, drive-rooted, home-relative or parent-traversing path, by its shape."""
+    stripped = value.strip()
+    return (
+        stripped.startswith(("/", "\\", "~/", "~\\"))
+        or _DRIVE_PATH.match(stripped) is not None
+        or stripped == ".."
+        or "../" in stripped
+        or "..\\" in stripped
+    )
+
+
+def _looks_like_nested_path(key: str, value: str) -> bool:
+    """Whether a string inside a container (or a mapping key) is a filesystem path.
+
+    Stricter than :func:`_looks_like_path`, which still decides top-level arguments: a
+    nested string is a path when its shape is absolute, home-relative or traversing, or
+    when it sits under a path-named key and has a separator or a file extension, or when
+    it has both a separator and a file extension. A MIME type (``application/json``),
+    ``and/or`` in prose, or a bare word under ``source`` is not.
+    """
+    if _is_absolute_or_escaping(value):
+        return True
+    has_separator = "/" in value or "\\" in value
+    has_extension = value.lower().endswith(_PATH_EXTENSIONS)
+    if key.lower() in PATH_PARAM_NAMES:
+        return (has_separator or has_extension) and "://" not in value
+    return has_separator and has_extension and "://" not in value
+
+
+def _filesystem_path(item: ArgumentValue) -> str | None:
+    """The filesystem path one argument value names, or None when it names none.
+
+    An ``os.PathLike`` always names one, and so does a ``file:`` URI. A top-level string
+    does when :func:`_looks_like_path` says so (unchanged); a nested string or a mapping
+    key when :func:`_looks_like_nested_path` does. Bytes count only under a path-named
+    key and only when they are shaped like a path (absolute or traversing, no NUL):
+    ``open(b"/etc/passwd")`` works, but most bytes arguments are content, and an upload's
+    bytes under ``file=`` are not a path.
+    """
+    value = item.value
+    pathlike = path_text(value)
+    if pathlike is not None:
+        return pathlike
+    if isinstance(value, (bytes, bytearray)):
+        raw = bytes(value)
+        if item.key.lower() not in PATH_PARAM_NAMES or b"\x00" in raw or len(raw) > 4096:
+            return None
+        decoded = os.fsdecode(raw)
+        return decoded if _is_absolute_or_escaping(decoded) else None
+    if not isinstance(value, str):
+        return None
+    file_path = _file_uri_path(value)
+    if file_path is not None:
+        return file_path
+    if item.depth == 0 and not item.is_key:
+        return value if _looks_like_path(item.key, value) else None
+    return value if _looks_like_nested_path(item.key, value) else None
+
+
+def _endpoint_url(item: ArgumentValue) -> str | None:
+    """The URL one argument value names, or None when it names none.
+
+    A URL object (pydantic ``AnyUrl``, ``urllib.parse`` results, ``httpx.URL``) always
+    names one. A string or bytes value does when it starts with a ``scheme://`` (any
+    scheme, any case, after whitespace) or, for a value rather than a mapping key, when it
+    sits under a URL-named key.
+    """
+    value = item.value
+    url = url_text(value)
+    if url is not None:
+        return url
+    if isinstance(value, (bytes, bytearray)):
+        value = bytes(value).decode("utf-8", "replace")
+    if not isinstance(value, str):
+        return None
+    if _URL_SCHEME_PREFIX.match(value) is not None:
+        return value.strip()
+    if not item.is_key and item.key.lower() in URL_PARAM_NAMES:
+        return value.strip()
+    return None
 
 
 def _extract_token_usage(result: Any) -> TokenUsage | None:
@@ -684,6 +813,9 @@ class Airlock:
         # micro-VM, so every `Annotated` validator was silently skipped there. Built once
         # here, next to the wrapper it mirrors, rather than per call.
         validate_sandbox_args = create_argument_validator(func)
+        # Positional arguments are named against this signature for the gates that read
+        # argument values (`_arg_walk.bind_arguments`); built once, not per call.
+        call_signature = signature_of(func)
         is_async = asyncio.iscoroutinefunction(func)
 
         # Initialize audit logger
@@ -691,6 +823,29 @@ class Airlock:
             self.config.audit_log_path if self.config.enable_audit_log else None,
             self.config.enable_audit_log,
         )
+
+        def _audit_honeypot(
+            func_name: str,
+            block_reason: str,
+            start_time: float,
+            args: dict[str, Any],
+            context: AirlockContext[Any],
+        ) -> None:
+            """Record a refusal the caller was answered with honeypot data for.
+
+            The caller sees fake success; the operator's audit log must still see the
+            refusal. Until 0.10.24 a honeypot reply wrote no record at all.
+            """
+            audit_logger.log(
+                tool_name=func_name,
+                blocked=True,
+                block_reason=block_reason,
+                duration_ms=(time.time() - start_time) * 1000,
+                args=args,
+                agent_id=context.agent_id,
+                session_id=context.session_id,
+                honeypot=True,
+            )
 
         def _pre_execution(
             func_name: str,
@@ -813,6 +968,24 @@ class Airlock:
             if acg_error is not None:
                 return kwargs, start_time, context, acg_error, None, None
 
+            # Steps 2.7, 3 and 5 read argument values. Until 0.10.24 they read only keyword
+            # arguments, and only str values, so a positional argument, a list of paths, a
+            # pathlib.Path or a URL object walked past all three. They now read every
+            # argument the call passes (`_arg_walk`), bound once and only when one of them
+            # is on. A refusal from them hands the honeypot the arguments by name.
+            arguments = (
+                bind_arguments(call_signature, args, cleaned_kwargs)
+                if self._reads_argument_values(func_name, resolved_policy)
+                else cleaned_kwargs
+            )
+            if context.user_context is not None:
+                # The run wrapper the context came from is the host's, not the model's.
+                arguments = {
+                    name: value
+                    for name, value in arguments.items()
+                    if value is not context.user_context
+                }
+
             # Step 2.7: Unsafe-deserialization content guard (V0.8.19,
             # CVE-2026-25874). Inspects argument VALUES for pickle /
             # marshal / dill / jsonpickle payloads (and serialized-object
@@ -821,10 +994,10 @@ class Airlock:
             deser_error = self._check_deserialization_guard(
                 func_name=func_name,
                 resolved_policy=resolved_policy,
-                kwargs=cleaned_kwargs,
+                arguments=arguments,
             )
             if deser_error is not None:
-                return kwargs, start_time, context, deser_error, None, None
+                return arguments, start_time, context, deser_error, None, None
 
             # Step 2.8: Per-run resource-amplification budget (V0.8.74,
             # issue #142, arXiv:2608.12273). Counts calls against the run and
@@ -845,9 +1018,9 @@ class Airlock:
                 return kwargs, start_time, context, amp_error, None, None
 
             # Step 3: Validate filesystem paths
-            fs_error = self._validate_filesystem_paths(func_name, cleaned_kwargs)
+            fs_error = self._validate_filesystem_paths(func_name, arguments)
             if fs_error is not None:
-                return kwargs, start_time, context, fs_error, None, None
+                return arguments, start_time, context, fs_error, None, None
 
             # Step 4: Check capability requirements
             cap_error = self._check_capabilities(func, func_name, resolved_policy)
@@ -855,9 +1028,9 @@ class Airlock:
                 return kwargs, start_time, context, cap_error, None, None
 
             # Step 5: Validate endpoint policies (V0.4.1)
-            ep_error = self._validate_endpoint_policies(func_name, cleaned_kwargs)
+            ep_error = self._validate_endpoint_policies(func_name, arguments)
             if ep_error is not None:
-                return kwargs, start_time, context, ep_error, None, None
+                return arguments, start_time, context, ep_error, None, None
 
             # Step 6: Per-model-tier budget check (V0.8.7)
             budget_estimate, budget_error = self._check_model_tier_budget(
@@ -940,8 +1113,9 @@ class Airlock:
 
             # V0.8.7: reconcile actual vs estimated cost for the tier
             # budget. Never raises — reconciliation is observability, not
-            # a second gate. Users who want a hard session cap should layer
-            # ``BudgetConfig.max_cost_per_session`` on top.
+            # a second gate, and it records nothing on the CostTracker. A hard
+            # session cap needs the host to record each call's usage on a tracker
+            # whose ``BudgetConfig.max_cost_per_session`` is set.
             if budget_estimate is not None and resolved_policy is not None:
                 self._reconcile_tier_budget(
                     func_name=func_name,
@@ -1032,16 +1206,22 @@ class Airlock:
                 if error_response is not None:
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
+                        block_reason = (
+                            error_response.block_reason.value
+                            if error_response.block_reason
+                            else "unknown"
+                        )
                         # Use async version to avoid blocking event loop
                         honeypot_result = await create_honeypot_response_async(
                             func_name,
                             cleaned_kwargs,
                             self.config.honeypot_config,
-                            block_reason=error_response.block_reason.value
-                            if error_response.block_reason
-                            else "unknown",
+                            block_reason=block_reason,
                         )
                         if honeypot_result is not None:
+                            _audit_honeypot(
+                                func_name, block_reason, start_time, dict(kwargs), context
+                            )
                             return honeypot_result  # type: ignore[no-any-return]
 
                     self._log_blocked(func_name, error_response, start_time)
@@ -1106,6 +1286,9 @@ class Airlock:
                             block_reason="network_blocked",
                         )
                         if honeypot_result is not None:
+                            _audit_honeypot(
+                                func_name, "network_blocked", start_time, cleaned_kwargs, context
+                            )
                             return honeypot_result  # type: ignore[no-any-return]
 
                     response = handle_network_blocked(
@@ -1164,15 +1347,21 @@ class Airlock:
                 if error_response is not None:
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
+                        block_reason = (
+                            error_response.block_reason.value
+                            if error_response.block_reason
+                            else "unknown"
+                        )
                         honeypot_result = create_honeypot_response(
                             func_name,
                             cleaned_kwargs,
                             self.config.honeypot_config,
-                            block_reason=error_response.block_reason.value
-                            if error_response.block_reason
-                            else "unknown",
+                            block_reason=block_reason,
                         )
                         if honeypot_result is not None:
+                            _audit_honeypot(
+                                func_name, block_reason, start_time, dict(kwargs), context
+                            )
                             return honeypot_result  # type: ignore[no-any-return]
 
                     self._log_blocked(func_name, error_response, start_time)
@@ -1230,6 +1419,9 @@ class Airlock:
                             block_reason="network_blocked",
                         )
                         if honeypot_result is not None:
+                            _audit_honeypot(
+                                func_name, "network_blocked", start_time, cleaned_kwargs, context
+                            )
                             return honeypot_result  # type: ignore[no-any-return]
 
                     response = handle_network_blocked(
@@ -1499,6 +1691,31 @@ class Airlock:
                     reason=f"Policy resolution failed: {e}",
                 )
                 return None, response
+            if resolved_policy is None:
+                # Until 0.10.24 a resolver that returned None ran the call with no policy
+                # at all, so any tenant or workspace the resolver did not know was allowed
+                # everything. A resolver allows on purpose by returning PERMISSIVE_POLICY.
+                logger.warning(
+                    "policy_resolver_returned_none",
+                    function=func_name,
+                    agent_id=context.agent_id,
+                    workspace_id=context.workspace_id,
+                )
+                self._safe_invoke_callback(
+                    self.config.on_blocked,
+                    "on_blocked",
+                    func_name,
+                    "policy resolver returned no policy",
+                    {"violation_type": "no_policy_resolved"},
+                )
+                return None, handle_policy_violation(
+                    func_name,
+                    policy_name="PolicyResolver",
+                    reason=(
+                        "the policy resolver returned no policy for this call; return "
+                        "PERMISSIVE_POLICY to allow it on purpose"
+                    ),
+                )
         else:
             resolved_policy = self.policy
 
@@ -1798,55 +2015,96 @@ class Airlock:
         )
         return response
 
+    def _reads_argument_values(self, func_name: str, resolved_policy: Any) -> bool:
+        """Whether a gate that reads argument values (steps 2.7, 3, 5) is on for this call."""
+        return (
+            self.config.filesystem_policy is not None
+            or func_name in self.config.endpoint_policies
+            or getattr(resolved_policy, "deserialization_guard", None) is not None
+        )
+
     def _validate_filesystem_paths(
         self,
         func_name: str,
-        cleaned_kwargs: dict[str, Any],
+        arguments: dict[str, Any],
     ) -> AirlockResponse | None:
-        """Validate filesystem paths in arguments.
+        """Validate every filesystem path the call's arguments carry.
+
+        Reads every argument (``_arg_walk``): positional and keyword, down through
+        mappings, lists, tuples and sets. :func:`_filesystem_path` decides which values
+        are paths. Input the walk cannot read (too deep, self-containing) is refused.
+
+        A violation is refused under the honeypot strategy too: the wrapper turns the
+        refusal into the honeypot's fake response. Until 0.10.24 the honeypot branch here
+        was a bare ``pass``, so the real tool ran on the forbidden path. Only
+        ``SOFT_BLOCK`` (log, then proceed) lets the call through.
 
         Args:
             func_name: Name of the function being called.
-            cleaned_kwargs: Cleaned keyword arguments to check.
+            arguments: Every argument of the call, by name (``bind_arguments``).
 
         Returns:
             Error response if validation failed, None otherwise.
         """
-        if self.config.filesystem_policy is None:
+        policy = self.config.filesystem_policy
+        if policy is None:
             return None
 
-        for key, value in cleaned_kwargs.items():
-            if _looks_like_path(key, value):
+        try:
+            for item in iter_argument_values(arguments):
+                path = _filesystem_path(item)
+                if path is None:
+                    continue
                 try:
-                    validate_path(value, self.config.filesystem_policy)
+                    validate_path(path, policy)
                 except PathValidationError as e:
                     logger.warning(
                         "path_validation_failed",
                         function=func_name,
+                        argument=item.path,
                         path=e.path,
                         violation_type=e.violation_type,
                     )
-                    # Check for honeypot or soft block strategies
-                    if should_use_honeypot(self.config.honeypot_config):
-                        # Honeypot response handled later in main flow
-                        pass
-                    elif not should_soft_block(self.config.honeypot_config):
-                        response = handle_path_violation(
-                            func_name,
-                            path=e.path,
-                            violation_type=e.violation_type,
-                            details=e.details,
-                        )
-                        self._safe_invoke_callback(
-                            self.config.on_blocked,
-                            "on_blocked",
-                            func_name,
-                            f"Path violation: {e.message}",
-                            {"path": e.path, "violation_type": e.violation_type},
-                        )
-                        return response
-
+                    if should_soft_block(self.config.honeypot_config):
+                        continue
+                    return self._refuse_path(
+                        func_name, e.path, e.violation_type, e.details, e.message
+                    )
+        except ArgumentNestingError as e:
+            logger.warning(
+                "path_validation_failed",
+                function=func_name,
+                argument=e.path,
+                violation_type="uninspectable_argument",
+            )
+            return self._refuse_path(
+                func_name, e.path, "uninspectable_argument", {"reason": e.reason}, str(e)
+            )
         return None
+
+    def _refuse_path(
+        self,
+        func_name: str,
+        path: str,
+        violation_type: str,
+        details: dict[str, Any] | None,
+        message: str,
+    ) -> AirlockResponse:
+        """The refusal for a path violation, after telling ``on_blocked``."""
+        response = handle_path_violation(
+            func_name,
+            path=path,
+            violation_type=violation_type,
+            details=details,
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            f"Path violation: {message}",
+            {"path": path, "violation_type": violation_type},
+        )
+        return response
 
     def _check_sequence_guard(
         self,
@@ -2021,11 +2279,11 @@ class Airlock:
         *,
         func_name: str,
         resolved_policy: SecurityPolicy | None,
-        kwargs: dict[str, Any],
+        arguments: dict[str, Any],
     ) -> AirlockResponse | None:
         """Unsafe-deserialization content guard (V0.8.19, CVE-2026-25874).
 
-        Calls ``policy.deserialization_guard.evaluate(kwargs)`` if
+        Calls ``policy.deserialization_guard.evaluate(arguments)`` if
         configured. Inspects the call's argument values for serialized-
         object payloads (pickle magic bytes, base64-encoded pickle,
         serializer marker tokens) and, when the guard requires it,
@@ -2035,7 +2293,8 @@ class Airlock:
         Args:
             func_name: Name of the function being called.
             resolved_policy: The resolved :class:`SecurityPolicy` (or None).
-            kwargs: Cleaned keyword args — inspected by value.
+            arguments: Every argument of the call, by name, positional ones
+                included (``bind_arguments``); the guard reads nested values.
 
         Returns:
             A blocked :class:`AirlockResponse` carrying the guard's
@@ -2045,7 +2304,7 @@ class Airlock:
         if resolved_policy is None or resolved_policy.deserialization_guard is None:
             return None
 
-        decision = resolved_policy.deserialization_guard.evaluate(kwargs)
+        decision = resolved_policy.deserialization_guard.evaluate(arguments)
         if decision.allowed:
             return None
 
@@ -2081,13 +2340,17 @@ class Airlock:
     def _validate_endpoint_policies(
         self,
         func_name: str,
-        cleaned_kwargs: dict[str, Any],
+        arguments: dict[str, Any],
     ) -> AirlockResponse | None:
-        """Validate URL parameters against per-tool endpoint policies.
+        """Validate every URL the call's arguments carry against the tool's endpoint policy.
+
+        Reads every argument (``_arg_walk``): positional and keyword, down through
+        mappings, lists, tuples and sets. :func:`_endpoint_url` decides which values are
+        URLs. Input the walk cannot read (too deep, self-containing) is refused.
 
         Args:
             func_name: Name of the function being called.
-            cleaned_kwargs: Cleaned keyword arguments to check.
+            arguments: Every argument of the call, by name (``bind_arguments``).
 
         Returns:
             Error response if validation failed, None otherwise.
@@ -2102,25 +2365,44 @@ class Airlock:
         from .network import NetworkBlockedError as _NetworkBlockedError
         from .network import validate_endpoint
 
-        for key, value in cleaned_kwargs.items():
-            if _looks_like_url(key, value):
+        allowed = policy.allowed_endpoints or None
+        try:
+            for item in iter_argument_values(arguments):
+                url = _endpoint_url(item)
+                if url is None:
+                    continue
                 try:
-                    validate_endpoint(value, policy)
+                    validate_endpoint(url, policy)
                 except _NetworkBlockedError as e:
+                    reason = e.details.get("reason", "unknown")
                     logger.warning(
                         "endpoint_policy_violation",
                         function=func_name,
-                        url=value,
-                        reason=e.details.get("reason", "unknown"),
+                        argument=item.path,
+                        url=url,
+                        reason=reason,
                     )
                     return handle_endpoint_violation(
                         func_name,
-                        url=value,
+                        url=url,
                         hostname=e.details.get("hostname", "unknown"),
-                        reason=e.details.get("reason", "unknown"),
-                        allowed_endpoints=policy.allowed_endpoints or None,
+                        reason=reason,
+                        allowed_endpoints=allowed,
                     )
-
+        except ArgumentNestingError as e:
+            logger.warning(
+                "endpoint_policy_violation",
+                function=func_name,
+                argument=e.path,
+                reason="uninspectable_argument",
+            )
+            return handle_endpoint_violation(
+                func_name,
+                url=e.path,
+                hostname="unknown",
+                reason=f"uninspectable_argument: {e.reason}",
+                allowed_endpoints=allowed,
+            )
         return None
 
     def _check_model_tier_budget(
@@ -2191,6 +2473,7 @@ class Airlock:
                 estimated_output_tokens=exc.estimated_output_tokens,
                 budget_type=exc.budget_type,
                 model_id=exc.model_id,
+                priced_as=exc.priced_as,
             )
         except UnknownTierError as exc:
             logger.warning(

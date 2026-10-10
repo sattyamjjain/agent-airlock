@@ -72,6 +72,11 @@ _PERCENT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)%")
 _DEFAULT_SCANNED_KEYS: tuple[str, ...] = ("url", "uri", "endpoint", "headers", "args", "command")
 
 
+#: Nesting deeper than this is refused rather than walked. A guard that stopped looking at
+#: some depth would fail open on the template placed one level below it.
+_MAX_DEPTH = 32
+
+
 class MCPEnvInterpolationVerdict(str, enum.Enum):
     """Stable reason codes for :class:`MCPEnvInterpolationDecision`."""
 
@@ -79,6 +84,7 @@ class MCPEnvInterpolationVerdict(str, enum.Enum):
     DENY_DOLLAR_BRACE = "deny_dollar_brace"  # ${VAR}
     DENY_BARE_DOLLAR = "deny_bare_dollar"  # $VAR
     DENY_PERCENT = "deny_percent"  # %VAR%
+    DENY_UNINSPECTABLE = "deny_uninspectable"  # a value the guard cannot read
 
 
 @dataclass(frozen=True)
@@ -177,9 +183,10 @@ class MCPServerEnvInterpolationGuard:
         """Decide whether a connection config carries a disallowed interpolation.
 
         Args:
-            config: An MCP server URL string, or a connection-config
-                mapping (``url`` / ``headers`` / ``args`` / ...).
-                ``None`` = nothing to inspect = allow.
+            config: An MCP server URL string (or ``bytes``), or a
+                connection-config mapping (``url`` / ``headers`` /
+                ``args`` / ...). ``None`` = nothing to inspect = allow.
+                Any other shape is refused (``DENY_UNINSPECTABLE``).
 
         Returns:
             :class:`MCPEnvInterpolationDecision`. ``allowed=False`` maps
@@ -190,11 +197,16 @@ class MCPServerEnvInterpolationGuard:
 
         if isinstance(config, str):
             return self._scan_field("url", config)
+        if isinstance(config, (bytes, bytearray)):
+            return self._scan_field("url", bytes(config).decode("utf-8", "replace"))
+        if not isinstance(config, Mapping):
+            return self._deny_uninspectable("config", f"a {type(config).__name__}, not a mapping")
 
+        top = frozenset({id(config)})
         for key in self._scanned_keys:
             if key not in config:
                 continue
-            decision = self._scan_value(key, config[key])
+            decision = self._scan_value(key, config[key], depth=1, ancestors=top)
             if not decision.allowed:
                 return decision
 
@@ -202,23 +214,66 @@ class MCPServerEnvInterpolationGuard:
 
     # -- internal helpers --------------------------------------------------
 
-    def _scan_value(self, field_name: str, value: Any) -> MCPEnvInterpolationDecision:
-        """Recursively scan a config value (str / list / dict) for tokens."""
+    def _scan_value(
+        self, field_name: str, value: Any, *, depth: int, ancestors: frozenset[int]
+    ) -> MCPEnvInterpolationDecision:
+        """Recursively scan a config value for tokens, or refuse one it cannot read.
+
+        Strings and ``bytes`` (decoded) are scanned; mappings, lists, tuples and sets
+        are walked. Numbers, booleans and ``None`` carry no template. Any other value
+        would be stringified by the host into a template the guard never saw, so it is
+        refused, as are nesting deeper than the guard walks and a container that
+        contains itself. Until v0.10.24 ``bytes``, sets and other objects were skipped.
+        """
         if isinstance(value, str):
             return self._scan_field(field_name, value)
+        if isinstance(value, (bytes, bytearray)):
+            return self._scan_field(field_name, bytes(value).decode("utf-8", "replace"))
+        if value is None or isinstance(value, (bool, int, float)):
+            return self._allow()
+        children: list[tuple[str, Any]]
         if isinstance(value, Mapping):
-            for sub_key, sub_val in value.items():
-                decision = self._scan_value(f"{field_name}.{sub_key}", sub_val)
-                if not decision.allowed:
-                    return decision
-            return self._allow()
-        if isinstance(value, (list, tuple)):
-            for idx, item in enumerate(value):
-                decision = self._scan_value(f"{field_name}[{idx}]", item)
-                if not decision.allowed:
-                    return decision
-            return self._allow()
+            children = [(f"{field_name}.{sub_key}", sub_val) for sub_key, sub_val in value.items()]
+        elif isinstance(value, (list, tuple, set, frozenset)):
+            children = [(f"{field_name}[{idx}]", item) for idx, item in enumerate(value)]
+        else:
+            return self._deny_uninspectable(field_name, f"a {type(value).__name__}")
+        if depth >= _MAX_DEPTH:
+            return self._deny_uninspectable(field_name, f"nested deeper than {_MAX_DEPTH} levels")
+        if id(value) in ancestors:
+            return self._deny_uninspectable(field_name, "a container that contains itself")
+        inner = ancestors | {id(value)}
+        for child_field, child in children:
+            decision = self._scan_value(child_field, child, depth=depth + 1, ancestors=inner)
+            if not decision.allowed:
+                return decision
         return self._allow()
+
+    def _deny_uninspectable(self, field_name: str, what: str) -> MCPEnvInterpolationDecision:
+        logger.warning(
+            "mcp_env_interpolation_blocked",
+            verdict=MCPEnvInterpolationVerdict.DENY_UNINSPECTABLE.value,
+            field=field_name,
+            reason=what,
+            advisory=self._advisory,
+        )
+        prefix = f"({self._advisory}) " if self._advisory else ""
+        hints = [
+            f"{prefix}Connection config field {field_name!r} is {what}, which this guard "
+            "cannot inspect for env-interpolation tokens, so it is refused rather than "
+            "skipped.",
+            "Send the connection config as JSON: strings, numbers, booleans, null, lists "
+            "and objects.",
+        ]
+        if self._advisory_url:
+            hints.append(f"See: {self._advisory_url}")
+        return MCPEnvInterpolationDecision(
+            allowed=False,
+            verdict=MCPEnvInterpolationVerdict.DENY_UNINSPECTABLE,
+            detail=f"connection field {field_name!r} is {what}; refused rather than skipped",
+            matched_field=field_name,
+            fix_hints=hints,
+        )
 
     def _scan_field(self, field_name: str, text: str) -> MCPEnvInterpolationDecision:
         """Scan a single string for the three interpolation forms."""

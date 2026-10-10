@@ -74,6 +74,11 @@ Thumbs.db
 # demo run artifact (generated fresh each run)
 demo/airlock_audit.jsonl
 
+# scripts/smoke_*.py: a failed run leaves its throwaway venv (.smoke-<name>-venv/) and
+# smoke_explain.py's .smoke-explain-fixtures/ in the checkout. Not ignored until 0.10.24,
+# so `git add -A` after a failed smoke run staged a whole virtualenv.
+/.smoke-*/
+
 # mkdocs build output. NOT committed: GitHub Pages serves the `gh-pages` branch,
 # which `mkdocs gh-deploy --force` rebuilds from docs/ on every push to main. The
 # copy that used to live here was a second, always-stale artifact of the same build

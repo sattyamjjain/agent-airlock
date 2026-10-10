@@ -308,17 +308,21 @@ class McpConfigPinViolation(AirlockError):
 
     Raised **fail-closed** (never warned) by :meth:`McpConfigPinSet.check`
     for the CVE-2026-30615 zero-click class — either the server name is not
-    in the pin set at all (an injected entry), or a previously-pinned
-    server's ``command`` / ``args`` / ``env``-keys changed between
-    registration and spawn (a mutated entry).
+    in the pin set at all (an injected entry), a previously-pinned server's
+    ``command`` / ``args`` / ``env``-keys changed between registration and
+    spawn (a mutated entry), or the spawn config's ``env`` / ``args`` has a
+    shape the pin cannot read (v0.10.24).
 
     Attributes:
         server_name: The offending STDIO server name.
-        reason: ``"unpinned"`` (not in the pin set) or ``"mutated"``
-            (fingerprint mismatch).
+        reason: ``"unpinned"`` (not in the pin set), ``"mutated"``
+            (fingerprint mismatch) or ``"unreadable"`` (an ``env`` /
+            ``args`` shape the pin cannot read).
         expected_fingerprint: The pinned fingerprint, or ``None`` when
             the server was unpinned.
-        actual_fingerprint: The fingerprint of the resolved spawn config.
+        actual_fingerprint: The fingerprint of the resolved spawn config,
+            or ``""`` when it could not be read.
+        detail: What could not be read, for an ``"unreadable"`` refusal.
     """
 
     def __init__(
@@ -328,16 +332,24 @@ class McpConfigPinViolation(AirlockError):
         reason: str,
         expected_fingerprint: str | None,
         actual_fingerprint: str,
+        detail: str = "",
     ) -> None:
         self.server_name = server_name
         self.reason = reason
         self.expected_fingerprint = expected_fingerprint
         self.actual_fingerprint = actual_fingerprint
+        self.detail = detail
         if reason == "unpinned":
             msg = (
                 f"STDIO MCP server {server_name!r} is not in the config pin set — "
                 f"refusing to spawn an unpinned server (CVE-2026-30615 zero-click "
                 f"class); fingerprint={actual_fingerprint}"
+            )
+        elif reason == "unreadable":
+            msg = (
+                f"STDIO MCP server {server_name!r} spawn config cannot be read ({detail}) — "
+                f"refusing rather than comparing a pin to a config it could not see "
+                f"(CVE-2026-30615 class)"
             )
         else:
             msg = (
@@ -399,15 +411,60 @@ def fingerprint_mcp_server(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _env_keys_of(entry: Mapping[str, Any]) -> list[str]:
-    """Resolve env-key names from a config entry (``env`` dict or ``env_keys`` list)."""
+def _env_keys_of(entry: Mapping[str, Any]) -> list[str] | None:
+    """Resolve env-key names from a config entry, or ``None`` when they cannot be read.
+
+    ``env`` is read as a mapping (its keys) or a sequence of ``KEY=VALUE`` / ``KEY``
+    strings (the part before ``=``); ``env_keys``, when ``env`` is absent, as a sequence
+    of key strings. Until v0.10.24 an ``env`` that was not a mapping resolved to *no*
+    keys, so a pin with no env admitted ``{"env": ["LD_PRELOAD=/tmp/x.so"]}``. Any other
+    shape now returns ``None``, which every caller refuses.
+    """
     env = entry.get("env")
-    if isinstance(env, Mapping):
-        return [str(k) for k in env]
+    if env is not None:
+        if isinstance(env, Mapping):
+            return [str(k) for k in env]
+        return _string_keys(env, split_assignment=True)
     env_keys = entry.get("env_keys")
-    if isinstance(env_keys, (list, tuple, set, frozenset)):
-        return [str(k) for k in env_keys]
-    return []
+    if env_keys is None:
+        return []
+    return _string_keys(env_keys, split_assignment=False)
+
+
+def _string_keys(value: object, *, split_assignment: bool) -> list[str] | None:
+    """Read a sequence of key strings, or ``None`` for any other shape or a non-str item."""
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        return None
+    keys: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            return None
+        keys.append(item.partition("=")[0] if split_assignment else item)
+    return keys
+
+
+def _spawn_fingerprint(entry: Mapping[str, Any], name: str) -> str | None:
+    """Fingerprint a spawn config, or ``None`` when its env keys or ``args`` cannot be read."""
+    env_keys = _env_keys_of(entry)
+    if env_keys is None:
+        return None
+    args = entry.get("args")
+    try:
+        return fingerprint_mcp_server(
+            name=name,
+            command=str(entry["command"]),
+            args=() if args is None else args,
+            env_keys=env_keys,
+        )
+    except TypeError:  # a non-iterable args, or an item json cannot encode (bytes, objects)
+        return None
+
+
+def _unreadable_field(entry: Mapping[str, Any]) -> str:
+    """Name what :func:`_spawn_fingerprint` could not read, for the refusal message."""
+    if _env_keys_of(entry) is None:
+        return "env must be a mapping or a sequence of KEY=VALUE strings (env_keys: key strings)"
+    return "args must be a sequence of JSON values"
 
 
 class McpConfigPinSet:
@@ -462,19 +519,19 @@ class McpConfigPinSet:
 
         Returns:
             A :class:`McpConfigPinSet`.
+
+        Raises:
+            ValueError: An entry's ``env`` / ``env_keys`` or ``args`` cannot be read
+                (see :meth:`check`); a pin over a shape the guard cannot read would
+                silently pin less than the operator wrote.
         """
-        pins = [
-            McpServerPin(
-                name=str(entry["name"]),
-                fingerprint=fingerprint_mcp_server(
-                    name=str(entry["name"]),
-                    command=str(entry["command"]),
-                    args=entry.get("args", ()),
-                    env_keys=_env_keys_of(entry),
-                ),
-            )
-            for entry in manifest
-        ]
+        pins: list[McpServerPin] = []
+        for entry in manifest:
+            name = str(entry["name"])
+            fingerprint = _spawn_fingerprint(entry, name)
+            if fingerprint is None:
+                raise ValueError(f"manifest entry {name!r}: {_unreadable_field(entry)}")
+            pins.append(McpServerPin(name=name, fingerprint=fingerprint))
         return cls(pins, audit_path=audit_path)
 
     @property
@@ -488,20 +545,28 @@ class McpConfigPinSet:
         Args:
             server_config: The resolved STDIO spawn config — ``name`` +
                 ``command`` and optional ``args`` and ``env`` / ``env_keys``.
+                ``env`` is read as a mapping or a sequence of ``KEY=VALUE``
+                strings; any other shape is refused, never read as "no keys".
 
         Raises:
-            McpConfigPinViolation: The server is unpinned (injected) or its
-                fingerprint does not match the pin (mutated).
+            McpConfigPinViolation: The server is unpinned (injected), its
+                fingerprint does not match the pin (mutated), or its ``env`` /
+                ``args`` cannot be read (unreadable).
             KeyError: ``server_config`` is missing ``name`` or ``command``.
         """
         name = str(server_config["name"])
-        actual = fingerprint_mcp_server(
-            name=name,
-            command=str(server_config["command"]),
-            args=server_config.get("args", ()),
-            env_keys=_env_keys_of(server_config),
-        )
         expected = self._pins.get(name)
+        fingerprint = _spawn_fingerprint(server_config, name)
+        if fingerprint is None:
+            self._emit_audit(server_name=name, reason="unreadable", actual="")
+            raise McpConfigPinViolation(
+                server_name=name,
+                reason="unreadable",
+                expected_fingerprint=expected,
+                actual_fingerprint="",
+                detail=_unreadable_field(server_config),
+            )
+        actual = fingerprint
         if expected is None:
             self._emit_audit(server_name=name, reason="unpinned", actual=actual)
             raise McpConfigPinViolation(

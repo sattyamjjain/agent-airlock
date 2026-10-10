@@ -16,18 +16,21 @@ monthly credit pool and emits a decision when:
 - **100% spend** — :attr:`AgentSDKCreditVerdict.EXHAUSTED` with
   ``allowed=False``.
 
-Rates load from a packaged pricing table
-(``data/anthropic_pricing_2026_06.json``) keyed by model id. Unknown
-models raise :class:`ValueError` — fail-closed; we do **not**
-synthesise prices for models we haven't curated.
+Rates load from the current packaged pricing snapshot
+(:func:`load_anthropic_pricing`, ``data/anthropic_pricing_2026_10.json``)
+keyed by model id. Until 0.10.24 the default was the superseded 2026-06
+snapshot, which undercounted Haiku 4.5 by a fifth, priced Opus 4.6 and 4.7
+at three times their rate, and knew no Claude 5 model. Unknown models raise
+:class:`ValueError` — fail-closed; we do **not** synthesise prices for
+models we haven't curated.
 
 Honest scope
 ------------
 - In-process accumulation only. Cross-process / cross-restart
   persistence is out of scope for the v0.8.0 first cut — operators
   who need it should layer their own sink.
-- The pricing table is a 2026-06 snapshot. Operators on enterprise
-  / annual contracts should pass their own rate card via
+- The pricing table is a dated snapshot of list rates. Operators on
+  enterprise / annual contracts should pass their own rate card via
   ``override_pricing=``.
 
 Primary source
@@ -54,8 +57,10 @@ _PRICING_PACKAGE = "agent_airlock.data"
 #: Haiku 4.5 at 0.80/4.0 (now 1.0/5.0).
 _PRICING_RESOURCE_2026_06 = "anthropic_pricing_2026_06.json"
 
-#: Current snapshot, read from the official pricing page on 2026-09-12.
-_PRICING_RESOURCE_NAME = "anthropic_pricing_2026_09.json"
+#: Current snapshot, read from the official pricing page on 2026-10-10. It adds the
+#: Claude 5.5 / 5.1 lineup to ``anthropic_pricing_2026_09.json``, which stays loadable
+#: by name through :func:`load_anthropic_pricing`.
+_PRICING_RESOURCE_NAME = "anthropic_pricing_2026_10.json"
 
 
 # Anthropic 2026-06-15 billing-split tier USD caps. Operators reference
@@ -171,8 +176,10 @@ class AgentSDKCreditBudget:
             primitive does not auto-resolve the pool from the label —
             pass ``monthly_credit_usd=AGENT_SDK_TIER_USD[tier_label]``
             if you want the canonical value.
-        override_pricing: Optional pricing-table override. Defaults
-            to the packaged 2026-06 fixture.
+        override_pricing: Optional pricing-table override. Defaults to the
+            current packaged snapshot (:func:`load_anthropic_pricing`). Pass
+            ``load_anthropic_pricing_2026_06()`` to reproduce a budget written
+            against June rates, the default until 0.10.24.
 
     Raises:
         ValueError: ``monthly_credit_usd`` ≤ 0.
@@ -190,7 +197,7 @@ class AgentSDKCreditBudget:
         self._monthly_credit_usd = float(monthly_credit_usd)
         self._tier_label = tier_label
         self._pricing = (
-            override_pricing if override_pricing is not None else load_anthropic_pricing_2026_06()
+            override_pricing if override_pricing is not None else load_anthropic_pricing()
         )
         self._spent_usd = 0.0
 

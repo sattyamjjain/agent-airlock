@@ -50,7 +50,13 @@ def main(argv: list[str] | None = None) -> int:
             "harness runs its CLI's configured default, which can change between runs"
         ),
     )
-    parser.add_argument("--date", default=datetime.date.today().isoformat())
+    parser.add_argument(
+        "--date",
+        # UTC, the day check_benchmark_freshness.py reads: a local default stamped tomorrow on
+        # a run after midnight IST.
+        default=datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
+        help="run date stamped into RESULTS.md (default: today in UTC, %(default)s)",
+    )
     args = parser.parse_args(argv)
 
     models: dict[str, str] = {}

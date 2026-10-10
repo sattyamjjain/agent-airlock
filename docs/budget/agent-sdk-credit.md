@@ -18,8 +18,8 @@ Agent SDK. The per-month credit pools:
 
 Before this primitive, agent-airlock operators tracking Anthropic
 spend had to roll their own. `AgentSDKCreditBudget` formalises the
-pool + 90% near-limit + 100% exhausted semantics, with the
-2026-06-01 rate card shipped as a packaged JSON fixture.
+pool + 90% near-limit + 100% exhausted semantics, with dated Anthropic
+rate cards shipped as packaged JSON fixtures.
 
 [zed]: https://zed.dev/blog/anthropic-subscription-changes
 
@@ -73,26 +73,47 @@ old one stays byte-for-byte, so a receipt written against June prices is still
 reproducible in September.
 
 The current fixture is
-`src/agent_airlock/data/anthropic_pricing_2026_09.json`, read from the
+`src/agent_airlock/data/anthropic_pricing_2026_10.json`, read from the
 [official pricing page](https://platform.claude.com/docs/en/about-claude/pricing)
-on 2026-09-12:
+on 2026-10-10, with model ids from the
+[models overview](https://platform.claude.com/docs/en/about-claude/models/overview).
+`AgentSDKCreditBudget` prices with it unless you pass `override_pricing=`:
 
 ```json
 {
+  "claude-fable-5-1":  {"input_usd_per_million": 10.0, "output_usd_per_million": 50.0},
+  "claude-opus-5-5":   {"input_usd_per_million": 4.0, "output_usd_per_million": 20.0},
+  "claude-sonnet-5-5": {"input_usd_per_million": 2.0, "output_usd_per_million": 10.0},
+  "claude-haiku-5-5":  {"input_usd_per_million": 0.1, "output_usd_per_million":  0.5},
   "claude-opus-5":     {"input_usd_per_million": 5.0, "output_usd_per_million": 25.0},
-  "claude-sonnet-5":   {"input_usd_per_million": 2.0, "output_usd_per_million": 10.0},
-  "claude-haiku-4-5":  {"input_usd_per_million": 1.0, "output_usd_per_million":  5.0},
   "claude-opus-4-8":   {"input_usd_per_million": 5.0, "output_usd_per_million": 25.0},
   "claude-opus-4-7":   {"input_usd_per_million": 5.0, "output_usd_per_million": 25.0},
-  "claude-sonnet-4-6": {"input_usd_per_million": 3.0, "output_usd_per_million": 15.0}
+  "claude-opus-4-6":   {"input_usd_per_million": 5.0, "output_usd_per_million": 25.0},
+  "claude-opus-4-5":   {"input_usd_per_million": 5.0, "output_usd_per_million": 25.0},
+  "claude-sonnet-5":   {"input_usd_per_million": 2.0, "output_usd_per_million": 10.0},
+  "claude-sonnet-4-6": {"input_usd_per_million": 3.0, "output_usd_per_million": 15.0},
+  "claude-sonnet-4-5": {"input_usd_per_million": 3.0, "output_usd_per_million": 15.0},
+  "claude-haiku-4-5":  {"input_usd_per_million": 1.0, "output_usd_per_million":  5.0}
 }
 ```
 
-**Base input and output only.** Prompt-caching multipliers (1.25x / 2x on write,
-0.1x on read), the 50% Batch API discount, the 1.1x us-only data-residency
-multiplier and fast-mode premium pricing all stack on top and are deliberately
-not encoded — a budget primitive that silently applied a discount would
-under-count.
+Until 0.10.24 the budget defaulted to the June table instead, so with no
+`override_pricing=` it counted a Haiku 4.5 call at four fifths of its cost, an
+Opus 4.6 or 4.7 call at three times its cost, and raised `ValueError` for every
+model the June table lacks, the Claude 5 family included.
+
+**Base input and output only.** Prompt-caching multipliers (cache reads are
+0.025x base input on Claude Fable 5.1, 0.05x on Claude Opus 5.5 and Claude
+Sonnet 5.5, 0.1x elsewhere), the 50% Batch API discount, data-residency
+multipliers and long-context rates all stack on top and are deliberately not
+encoded — a budget primitive that silently applied a discount would under-count.
+Claude Haiku 5.5 is listed at its rate for prompts up to 100,000 tokens; a longer
+prompt costs $0.50 / $2.50 per million, which this table under-counts.
+
+The September snapshot, `anthropic_pricing_2026_09.json`, stays loadable by name
+(`load_anthropic_pricing("anthropic_pricing_2026_09.json")`). Every rate it lists
+is unchanged; it lacks the Claude 5.5 / 5.1 lineup, so with it those ids raise
+`ValueError`.
 
 Load programmatically via `load_anthropic_pricing()`. The previous snapshot is
 still loadable via `load_anthropic_pricing_2026_06()`, which now reads the June
@@ -116,10 +137,11 @@ haven't curated.
   persistence is out of scope for v0.8.0. Operators who need it
   should layer their own sink (e.g. write `decision.spent_usd` to
   Redis after each call).
-- **The pricing table is a 2026-06 snapshot.** Anthropic publishes
-  rate-card changes irregularly; operators on long-running deploys
-  should override with a current rate card via `override_pricing=`
-  or update the packaged JSON.
+- **The pricing table is a dated snapshot of list rates.** Anthropic
+  publishes rate-card changes irregularly; operators on long-running
+  deploys, or on enterprise rates, should pass their own rate card via
+  `override_pricing=`. A refresh ships as a new dated file, never an edit
+  to an old one.
 - **No automatic month-rollover.** The primitive's spend counter
   resets only when the operator constructs a new
   `AgentSDKCreditBudget`. A simple month-aware wrapper is

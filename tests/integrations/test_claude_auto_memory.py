@@ -148,3 +148,32 @@ class TestErrorHierarchy:
                 "/memory/a/x",
                 lambda _: b"XX",
             )
+
+
+class TestTheTenantScopeRefusesTraversal:
+    """0.10.24: the cross-tenant check was a bare prefix test.
+
+    ``/memory/<tenant>/../<other>/x`` starts with the tenant's root and still reached
+    another tenant's notes. A ``..`` segment, a backslash-separated one or a NUL is now
+    refused, and the prefix is checked on the normalised path.
+    """
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/memory/acct-42/../acct-99/secrets.md",
+            "/memory/acct-42/notes/../../acct-99/secrets.md",
+            "/memory/acct-42/..\\acct-99\\secrets.md",
+            "/memory/acct-42/ok.md\x00/../../acct-99",
+            "/memory/acct-42",
+            "/memory/acct-421/plan.md",
+        ],
+    )
+    def test_a_path_that_leaves_the_tenant_root_is_refused(self, path: str) -> None:
+        policy = AutoMemoryAccessPolicy(tenant_id="acct-42")
+        with pytest.raises(AutoMemoryCrossTenantError):
+            guarded_read(policy, path, lambda _: b"other tenant's notes")
+
+    def test_a_path_inside_the_root_still_passes(self) -> None:
+        policy = AutoMemoryAccessPolicy(tenant_id="acct-42")
+        assert guarded_read(policy, "/memory/acct-42/a/./b.md", lambda _: b"ok") == b"ok"

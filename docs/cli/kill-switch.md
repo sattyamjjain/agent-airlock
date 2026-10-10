@@ -27,10 +27,17 @@ from agent_airlock.kill_switch import HMACBroadcastSigner, KillSwitchListener, r
 from agent_airlock.kill_switch.transports import RedisStreamTransport
 
 registry.install(KillSwitchListener(
-    signers=(HMACBroadcastSigner(keyid="ops-a", key=KEY),),
+    signers=(
+        HMACBroadcastSigner(keyid="ops-a", key=KEY_A),
+        HMACBroadcastSigner(keyid="ops-b", key=KEY_B),
+        HMACBroadcastSigner(keyid="ops-c", key=KEY_C),
+    ),
     transport=RedisStreamTransport.from_url("redis://localhost:6379/0"),
 ))
 ```
+
+Give every listener every operator's key. A listener holding fewer signers than the reset
+threshold (2 by default) can be frozen but never reset.
 
 After `install`, a blocked call returns `block_reason: "kill_switch"` — a distinct reason
 from `policy_violation`, because "an operator halted the fleet" and "this call is
@@ -40,8 +47,48 @@ forbidden" need different responses.
 
 An operator signs a `trigger` broadcast with a shared key. Every process running a
 `KillSwitchListener` that holds a matching key sees `state == TRIGGERED` on its next
-`poll()` and reports `is_frozen()`. Returning to service needs a quorum of *distinct*
-keyids — 2-of-3 by default — so one compromised key cannot unilaterally re-enable agents.
+`poll()` and reports `is_frozen()`. One signed broadcast is enough to freeze. Returning to
+service needs a quorum of *distinct configured signers*, 2-of-3 by default, so one
+compromised key cannot unilaterally re-enable agents.
+
+### How a reset vote is counted
+
+Since 0.10.24:
+
+- **A vote belongs to the key that verified it.** The listener counts a `reset` under the
+  configured signer whose MAC matched, not under the `keyid` the envelope claims. A reset
+  whose claimed `keyid` differs from its key's is refused as a vote and logged
+  (`kill_switch_keyid_mismatch`). A `trigger` with the same mismatch still freezes: the MAC
+  proves a configured key signed it, and refusing a freeze over a label would fail open.
+- **No sender's clock sets the window.** A signed `ts_epoch` is ordered no later than the
+  listener's own clock plus `max_clock_skew_seconds` (300 s by default); a stamp further
+  ahead is ordered as that bound and logged (`kill_switch_stamp_clamped`). A trigger stamped
+  years ahead still freezes at once, and its votes count once they are signed after the
+  bound, not after a date a fast clock picked.
+- **A trigger always freezes.** A distinct trigger is never dropped for its stamp, however
+  old: refusing a freeze would fail open. A newer trigger during a freeze restarts the vote.
+- **A vote counts only against the freeze it answers.** It counts only while the listener is
+  frozen, and only when its stamp is later than the freeze's threshold: the highest stamp
+  the listener had applied when the freeze began (triggers and counted votes alike). The
+  threshold never moves backward, so votes captured from an earlier incident cannot release
+  a later freeze, even one triggered from a slow clock.
+- **A replay is recognised by its signature.** The listener remembers the signatures of the
+  last 4096 broadcasts it verified, and ignores one it has already seen
+  (`kill_switch_replay_ignored`): a captured trigger cannot re-freeze a fleet that was reset,
+  and a replay of the active trigger cannot wipe the votes already cast. A fresh listener
+  replaying a stream's history sees each broadcast once, in order, and rebuilds the same
+  state.
+- **One unreadable frame never stops the batch.** A frame that is not JSON, has no HMAC-SHA256
+  hex signature or carries a non-finite `ts_epoch` is logged and skipped, and the broadcasts
+  queued behind it are still applied.
+- **Signers whose votes cannot be told apart are refused at construction.** Two signers that
+  repeat a keyid, or share a key, raise `QuorumError`.
+
+Until 0.10.24 the listener counted the claimed `keyid`, so one key signing two resets under
+two keyids met the default quorum alone, and `ts_epoch` was never compared, so the two
+resets that ended one incident, replayed off the stream, released the next freeze. The
+second needed no key, only write access to the transport. A malformed frame raised out of
+`poll()` and dropped a real trigger queued behind it, which needed no key either.
 
 The wire envelope is compact JSON with sorted keys, signed over its canonical form:
 
@@ -99,8 +146,9 @@ print(deploy(target="prod"))
 
 Two things worth reading twice. The forged message claims a keyid the listener trusts and
 is still rejected, because acceptance is decided by the MAC and not by the claimed
-identity. And the same key voting to reset five times is still one vote — the quorum
-counts distinct keyids, so a single compromised key cannot re-enable a fleet.
+identity. And the same key voting to reset five times, or under five different keyids, is
+still one vote: the quorum counts distinct verifying keys, so a single compromised key
+cannot re-enable a fleet.
 
 ## Commands
 
@@ -148,8 +196,20 @@ That refusal is the point. Until v0.8.86 these commands printed
   the deprecated `RedisTransportStub`. Only `RedisStreamTransport` crosses a process
   boundary. Anything else needs the two-method `BroadcastTransport` protocol implemented
   against your own bus.
-- **There is no replay protection.** `ts_epoch` is signed but never checked for freshness,
-  so a captured `reset` envelope stays valid indefinitely. Two captured votes from two
-  distinct keyids would disarm a fleet.
-- **`docs/kill-switch.md`, cited as the feature spec by the package docstring, does not
-  exist.** This page documents the code as it stands.
+- **Votes are ordered by the signers' clocks, within a bound.** A reset signed on a clock
+  behind the freeze's threshold is refused, which fails closed: re-send it from a
+  synchronised clock. A stamp more than `max_clock_skew_seconds` ahead of the listener is
+  ordered at that bound, so a trigger or vote from a fast clock delays the next reset by at
+  most that allowance (wait it out, then re-send the votes). A listener whose own clock runs
+  behind its signers by more than the allowance orders every stamp at its bound; a trigger
+  and the votes for it then need to arrive in different polls. Broadcasts from one process
+  are always ordered: the broadcaster never repeats a stamp.
+- **Replay memory is per process and bounded.** A listener started with
+  `replay_history=False` (cursor `$`) never saw the broadcasts before it started, so a
+  replayed old trigger freezes it. That fails closed; reset it with a fresh quorum. Past 4096
+  signatures the oldest are forgotten, and a replayed vote that old is still refused by the
+  threshold rule above.
+- **A listener holding fewer signers than the threshold cannot be reset.** It still freezes.
+  This is documented rather than refused because the CLI's `status` and `arm` build
+  single-key, read-only listeners. Until 0.10.24 one key under two `--keyid` labels could
+  reset such a listener; that was the forgery above, not a feature.

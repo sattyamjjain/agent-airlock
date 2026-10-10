@@ -18,8 +18,9 @@ direction in new branches.
 
 - **`_versions.py`** — a leaf (its only import is `from __future__ import annotations`) and
   the single source of `PROTOCOL_VERSION` and `SUPPORTED_PROTOCOL_VERSIONS`. `transport.py`
-  (which enforces them on the wire), `conformance.py` and the package `__init__` import
-  them, so the enforced set and the public constant are the same object. Two places still
+  (which enforces them on the wire), `conformance.py`, `cli/conformance.py` and the package
+  `__init__` import them, so the enforced set and the public constant are the same object.
+  Two places still
   spell the literals — `conformance.LEGACY_VERSION` and the `SPEC_REVISIONS` keys in
   `__init__.py`, which record provenance, not a conformance claim. Do not add a third.
 - **Three guard shapes coexist**; match the neighbours a new guard will be read next to:
@@ -32,8 +33,10 @@ direction in new branches.
      2026-07-28 spec validators (`meta_trust`, `statelessness`, `header_integrity`,
      `elicitation_provenance`, …), which the package docstring calls guards: they are
      guards, just not triples. `tasks` holds only task-state models and `conformance` the
-     case runner. One sanitizer fits none of the three: `PRMetadataGuard.sanitize()`
-     returns a `SanitizedField`.
+     case runner. Four modules fit none of the three: `LANUnauthRCEGuard` and
+     `StdioMetaGuard` return frozen-dataclass verdicts (`Verdict`, `MetaVerdict`) with no
+     `*Decision`, `PRMetadataGuard.sanitize()` returns a `SanitizedField`, and
+     `manifest_only_mode` is a registry plus `launch_from_manifest`.
 - **Sibling imports** exist and must stay acyclic — e.g. `transport` / `tasks` → `oauth`,
   `tasks_admission_guard` → `tasks_lifecycle_guard` → `step_up_scope_guard`
   (`grep -n '^from \.[a-z_]' src/agent_airlock/mcp_spec/*.py` lists them all).
@@ -48,7 +51,8 @@ the package root, whose `agent_airlock.__all__` re-exports many `*Guard` classes
 **Presets live one level up.** A guard's preset factory — usually `*_defaults()`, not
 always — is in `../policy_presets.py` and `@preset`-registered; an unregistered factory
 never appears in `list_active()`. Not every guard has one: `reasoning_replay_guard`,
-`session_guard` and `transcript_ingest_guard` ship without a preset, and
+`session_guard`, `transcript_ingest_guard` and the `transport` validators ship without a
+preset, and
 `manifest_only_mode` is opted into in code (`ManifestRegistry` + `launch_from_manifest`).
 
 <!-- END AUTO-MANAGED -->
@@ -60,23 +64,21 @@ never appears in `list_active()`. Not every guard has one: `reasoning_replay_gua
   `arXiv:` / `SEP-` id where one exists, with the primary-source URL. Coverage is uneven —
   some older modules cite only a blog or bulletin URL, several SEP-based modules give the
   SEP id with no URL, and `tool_definition_pin_guard` (an OWASP ASI04 answer) gives
-  neither — so do not copy an uncited neighbour. Never remove a check without naming the
-  CVE that motivated it.
-- **`docs/cves/index.md` is generated** from the `tests/cves/test_cve_*.py` docstring
-  headers by `scripts/gen_cve_catalog.py` (which documents the header format). Regenerate
-  it in the same PR; never hand-edit it. `make check-cve-catalog` is the CI gate.
+  neither — so do not copy an uncited neighbour.
 - **Read every shape a field can take, or refuse it.** A guard that inspects `command`,
   `args` or `env` handles a string and a sequence for each (a mapping for `env`), and
-  refuses any other shape. Skipping a shape it did not expect is fail-open: until v0.10.21
-  a list `command` walked past both spawn guards (`tests/test_spawn_guards_fail_closed_0_10_21.py`).
-- **`manifest_only_mode.py` is the only module importing `subprocess`**, and nothing in
-  this subpackage — including it — uses `shell=True`. Keep both true.
+  refuses any other shape, non-string items included. Skipping a shape it did not expect is
+  fail-open: until v0.10.21 a list `command` walked past both spawn guards, and until
+  v0.10.24 six more guards skipped shapes (`ConfigPathGuard`, `McpConfigPinSet`, both eval
+  guards, `StdioCommandInjectionGuard`'s non-string argv items, the env-interpolation guard).
+  A guard that walks nested values refuses input deeper than 32 levels or containing
+  itself, as `DENY_UNINSPECTABLE` where it has a verdict enum
+  (`tests/test_spawn_guards_fail_closed_0_10_21.py`,
+  `tests/test_guard_shapes_fail_closed_0_10_24.py`).
 - `*Decision` is a frozen `@dataclass`; `*Verdict` is `class X(str, enum.Enum)` so it
   serializes as its own string value. Two `*Verdict`s that are frozen dataclasses and the
   inspection-style `Literal[...]` aliases are exceptions, not shapes to spread.
-- Modules that log use `from .._log import structlog` then
-  `logger = structlog.get_logger("agent-airlock.mcp_spec.<module>")`, dotted after the
-  file name; structured kwargs, never f-strings. Pure validators may have no logger
+- Logger names are `agent-airlock.mcp_spec.<module>`. Pure validators may have no logger
   (`tool_definition_pin_guard` hands back `Decision.audit_event()` instead).
 - Exceptions subclass `..exceptions.AirlockError`, except the `ValueError` subclasses in
   `oauth`, `transport` and the 2026-07-28 spec validators, and
@@ -85,9 +87,7 @@ never appears in `list_active()`. Not every guard has one: `reasoning_replay_gua
   for an advisory with no CVE id in `tests/cves/test_<slug>.py`, other guards in
   `tests/mcp_spec/test_<module>.py`, and the 2026-07-28 validators in
   `tests/test_mcp_*_preset.py` (a few older CVE guards are tested only under
-  `tests/mcp_spec/`). CVE tests run against real fixtures; the one
-  `unittest.mock.patch` (`test_ox_supply_chain_2026_04.py`) fakes DNS resolution through
-  `socket.getaddrinfo`, not the fixture under test.
+  `tests/mcp_spec/`). `tests/cves/CLAUDE.md` holds the fixture and no-mock rules.
 - A guard whose behaviour a unit test cannot show may also get a `scripts/smoke_*.py`
   driver, as `attested_admission` and the Flowise stdio preset have.
 

@@ -36,9 +36,10 @@ ruff format src/ tests/
 
 ## Forbidden patterns
 
-- `subprocess.run(..., shell=True)` outside `mcp_spec/manifest_only_mode.py`
+- `subprocess.run(..., shell=True)` anywhere in `src/` (`mcp_spec/manifest_only_mode.py`,
+  the only `subprocess` importer, passes `shell=False`)
 - raw `eval()` / `exec()` (use `Airlock(sandbox=True, sandbox_required=True)`)
-- mocking the database in CVE regression tests — they must hit real fixtures
+- mocking the fixture under test in CVE regression tests — they run against real fixtures
 - removing a CVE fixture in `tests/cves/` without citing the upstream
   advisory and adding a successor
 
@@ -47,7 +48,9 @@ ruff format src/ tests/
 Files under `src/agent_airlock/corpus/wild_payload_corpus/` and
 `tests/cves/` are signed-history. Edits require:
 1. A primary-source URL (NVD, vendor advisory, OX/BlackHat write-up) in the commit message.
-2. The companion entry in `docs/cves/index.md` updated in the same PR.
+2. `docs/cves/index.md` regenerated in the same PR with
+   `python3 scripts/gen_cve_catalog.py --write`. It is built from the `tests/cves/`
+   docstring headers, so never hand-edit it.
 
 ## Default safety posture
 
@@ -72,7 +75,8 @@ Anything weaker (PERMISSIVE_POLICY, `sandbox_required=False`) needs a
 
 ## Conventions
 
-- **Conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `security:`)
+- **Conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `security:`,
+  `bench:`, `test:`)
 - **Branch naming** — `feat/<short>` / `fix/<short>` / `chore/<short>`
 - **Tests first** — every `feat:` row needs at least one regression test
 - **Coverage floor** — 82% (CI-enforced via `--cov-fail-under=82`)
@@ -80,7 +84,7 @@ Anything weaker (PERMISSIVE_POLICY, `sandbox_required=False`) needs a
 
 ## Primary references
 
-- Anthropic Claude Agent SDK — https://docs.claude.com/en/agents-and-tools/agent-skills
+- Anthropic Agent Skills — https://docs.claude.com/en/agents-and-tools/agent-skills
 - MCP specification — https://github.com/modelcontextprotocol/specification
 - OWASP Agentic-AI 2026 Q1 — https://owasp.org/www-project-agentic-ai/
 - This repo — https://github.com/sattyamjjain/agent-airlock

@@ -117,6 +117,10 @@ def my_tool(x: int) -> int:
     return x * 2
 ```
 
+A resolver that returns `None` refuses the call. Until 0.10.24 it ran the call with no
+policy at all, so a tenant the resolver did not know was allowed everything. Return
+`PERMISSIVE_POLICY` to allow a call on purpose.
+
 The resolver receives the context read from the tool's first argument (an object with a
 `context`, `ctx`, `request_context` or `session_context` attribute, such as an agent
 framework's run context). When that carries no agent id, the identity, roles and workspace
@@ -199,8 +203,11 @@ with tracker.track("expensive_tool") as call:
 
 The budget `@Airlock` itself enforces before a call runs is the per-model-tier one,
 `SecurityPolicy(model_tier_budget=...)`. A call is tagged with its tier through
-`AirlockContext` metadata (`airlock_tier`, `input_tokens`), never through tool arguments.
-See the [Policy API](policy.md).
+`AirlockContext` metadata (`airlock_tier`, `input_tokens`, `model_id`), never through tool
+arguments. The worst case is priced at `model_id`'s row in the tracker's pricing table (a
+dated snapshot, `<key>-YYYYMMDD`, at its model's row); a model the table does not list at
+the table's dearest row; with no `model_id`, at the tracker's own model. See the
+[Policy API](policy.md).
 
 ### With Retry Policy (V0.4.0)
 

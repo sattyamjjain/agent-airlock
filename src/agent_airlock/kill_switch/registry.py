@@ -70,6 +70,16 @@ def install(listener: KillSwitchListener, *, strict: bool = False) -> None:
         poll_interval_seconds=listener.poll_interval_seconds,
         strict=strict,
     )
+    if listener.reset_quorum_threshold > len(listener.signers):
+        # Since 0.10.24 each reset vote counts under the key that verified it, so a
+        # listener with fewer signers than its threshold can be frozen but never reset.
+        # That fails closed, so it is allowed; it is almost never what was meant.
+        logger.warning(
+            "kill_switch_reset_unreachable",
+            signers=len(listener.signers),
+            reset_quorum_threshold=listener.reset_quorum_threshold,
+            hint="give the listener at least as many signers as the reset threshold",
+        )
 
 
 def get() -> KillSwitchListener | None:

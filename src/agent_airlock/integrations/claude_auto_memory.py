@@ -278,8 +278,22 @@ def _tenant_root(tenant_id: str) -> str:
     return f"/memory/{tenant_id}/"
 
 
+def _escapes_tenant_root(tenant_id: str, path: str) -> bool:
+    """Whether ``path`` lands outside ``/memory/<tenant_id>/``, traversal included.
+
+    Until 0.10.24 the check was a bare prefix test, so ``/memory/<tenant>/../<other>/x``
+    passed and reached another tenant's notes. A ``..`` segment (``/`` or ``\\`` separated)
+    or a NUL is refused outright: no memory path needs one, and a backend may resolve it
+    differently than a normaliser would. The prefix test itself is unchanged.
+    """
+    segments = path.replace("\\", "/").split("/")
+    if ".." in segments or "\x00" in path:
+        return True
+    return not path.startswith(_tenant_root(tenant_id))
+
+
 def _check_scope(policy: AutoMemoryAccessPolicy, path: str) -> None:
-    if policy.forbid_cross_tenant and not path.startswith(_tenant_root(policy.tenant_id)):
+    if policy.forbid_cross_tenant and _escapes_tenant_root(policy.tenant_id, path):
         raise AutoMemoryCrossTenantError(
             tenant_id=policy.tenant_id,
             attempted_path=path,
@@ -298,7 +312,7 @@ def _get_tracer() -> Any:
         from opentelemetry import trace
 
         return trace.get_tracer("agent_airlock.integrations.claude_auto_memory")
-    except ImportError:  # pragma: no cover — used when installed; no extra brings it
+    except ImportError:  # pragma: no cover — no OTel; [mcp]'s FastMCP pulls it in for CI
         return None
 
 

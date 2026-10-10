@@ -128,7 +128,7 @@ def _cmd_reset(args: argparse.Namespace) -> int:
     print(f"OK: reset vote from keyid={args.keyid!r} published to {args.stream_key!r}.")
     print(
         f"This is 1 vote. Listeners configured {threshold}-of-{total} need "
-        f"{threshold} distinct keyids before they disarm."
+        f"votes from {threshold} distinct signer keys before they disarm."
     )
     if (threshold, total) != (2, 3):
         print(

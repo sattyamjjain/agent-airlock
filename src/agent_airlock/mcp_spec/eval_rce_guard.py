@@ -111,12 +111,18 @@ _PARSE_EXPR_PINNED_RE = re.compile(
 )
 
 
+#: Nesting deeper than this is refused rather than walked. A guard that stopped looking at
+#: some depth would fail open on the payload placed one level below it.
+_MAX_DEPTH = 32
+
+
 class EvalRCEVerdict(str, enum.Enum):
     """Stable reason codes for :class:`EvalRCEDecision`."""
 
     ALLOW = "allow"
     DENY_EVAL_SINK = "deny_eval_sink"
     DENY_VULNERABLE_PACKAGE = "deny_vulnerable_package"
+    DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
 @dataclass(frozen=True)
@@ -132,9 +138,9 @@ class EvalRCEDecision:
         verdict: Stable :class:`EvalRCEVerdict` value.
         detail: Free-form explanation.
         matched_sink: Sink label (``eval`` / ``parse_expr`` / etc.)
-            that fired, or ``None`` if the deny was a package match.
+            that fired, or ``None`` for a package or uninspectable deny.
         matched_package: Package name from the vulnerable-package
-            denylist, or ``None`` if the deny was a sink match.
+            denylist, or ``None`` for a sink or uninspectable deny.
     """
 
     allowed: bool
@@ -198,6 +204,12 @@ class EvalRCEGuard:
     def evaluate(self, args: Mapping[str, Any] | None) -> EvalRCEDecision:
         """Decide whether the call args carry an eval-RCE shape.
 
+        Every string is scanned at any depth: inside mappings, lists, tuples and sets,
+        with ``bytes`` decoded (``eval`` and ``exec`` accept bytes source). Until v0.10.24
+        only top-level string values were scanned, so ``{"code": ["eval(input())"]}`` and
+        ``{"payload": {"code": "eval(...)"}}`` passed. Nesting deeper than the guard walks,
+        or a container that contains itself, is refused (``DENY_UNINSPECTABLE``).
+
         Args:
             args: Tool call argument dict. ``None`` = allow.
 
@@ -207,6 +219,9 @@ class EvalRCEGuard:
         """
         if args is None:
             return self._allow("no args to inspect")
+        if not isinstance(args, Mapping):
+            decision = self._scan_value("args", args, depth=0, ancestors=frozenset())
+            return decision or self._allow("no eval-RCE pattern matched")
 
         # 1) Known-vulnerable package check (cheap dict-lookup).
         pkg = args.get("server_package")
@@ -229,15 +244,53 @@ class EvalRCEGuard:
                     matched_package=pkg,
                 )
 
-        # 2) Sink-pattern scan over every string-valued field.
+        # 2) Sink-pattern scan over every string, at any depth.
+        top = frozenset({id(args)})
         for key, value in args.items():
-            if not isinstance(value, str):
-                continue
-            decision = self._inspect_value(field=key, value=value)
+            decision = self._scan_value(str(key), value, depth=1, ancestors=top)
             if decision is not None:
                 return decision
 
         return self._allow("no eval-RCE pattern matched")
+
+    def _scan_value(
+        self, field: str, value: Any, *, depth: int, ancestors: frozenset[int]
+    ) -> EvalRCEDecision | None:
+        """Scan a str or bytes value, or walk a container; ``None`` when nothing fires."""
+        if isinstance(value, str):
+            return self._inspect_value(field=field, value=value)
+        if isinstance(value, (bytes, bytearray)):
+            text = bytes(value).decode("utf-8", errors="replace")
+            return self._inspect_value(field=field, value=text)
+        children: list[tuple[str, Any]]
+        if isinstance(value, Mapping):
+            children = [(f"{field}.{key}", item) for key, item in value.items()]
+        elif isinstance(value, (list, tuple, set, frozenset)):
+            children = [(f"{field}[{idx}]", item) for idx, item in enumerate(value)]
+        else:
+            return None  # numbers, booleans, None and other objects carry no source text
+        if depth >= _MAX_DEPTH or id(value) in ancestors:
+            return self._deny_uninspectable(field, depth >= _MAX_DEPTH)
+        inner = ancestors | {id(value)}
+        for child_field, child in children:
+            decision = self._scan_value(child_field, child, depth=depth + 1, ancestors=inner)
+            if decision is not None:
+                return decision
+        return None
+
+    def _deny_uninspectable(self, field: str, too_deep: bool) -> EvalRCEDecision:
+        why = f"nests deeper than {_MAX_DEPTH} levels" if too_deep else "contains itself"
+        logger.warning("eval_rce_uninspectable", field=field, reason=why)
+        return EvalRCEDecision(
+            allowed=False,
+            verdict=EvalRCEVerdict.DENY_UNINSPECTABLE,
+            detail=(
+                f"field {field!r} {why}, so the guard cannot inspect all of it; refused "
+                "rather than skipped"
+            ),
+            matched_sink=None,
+            matched_package=None,
+        )
 
     def _allow(self, reason: str) -> EvalRCEDecision:
         return EvalRCEDecision(

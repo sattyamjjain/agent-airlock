@@ -112,9 +112,9 @@ Agent-Airlock implements **six layers of protection**:
                         ▼
 ┌─────────────────────────────────────────────────────┐
 │ Layer 6: SANDBOX (optional)                          │
-│ • E2B Firecracker MicroVM execution                 │
-│ • Pluggable backends: E2B, Docker, Local            │
-│ • Circuit breaker for resilience                    │
+│ • E2B Firecracker MicroVM execution (the only       │
+│   backend sandbox=True dispatches to)               │
+│ • Docker / Modal / local backends: called directly  │
 └─────────────────────────────────────────────────────┘
                         │
                         ▼

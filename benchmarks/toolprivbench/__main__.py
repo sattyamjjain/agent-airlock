@@ -23,8 +23,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--date",
-        default=datetime.date.today().isoformat(),
-        help="run date stamped into RESULTS.md (default: today)",
+        # UTC, the day check_benchmark_freshness.py reads: a local default stamped tomorrow on
+        # a run after midnight IST.
+        default=datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
+        help="run date stamped into RESULTS.md (default: today in UTC, %(default)s)",
     )
     args = parser.parse_args(argv)
 
