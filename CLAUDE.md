@@ -244,11 +244,12 @@ src/agent_airlock/
    included), sequences, sets and mapping views, and into pydantic models and dataclasses
    the tool's author defined. The run wrapper the context came from and objects from agent
    frameworks (`_arg_walk.FRAMEWORK_PACKAGES`) are not walked. A top-level string is a path
-   by `_looks_like_path`; a nested one only by its shape (absolute, `~`, `..`) or under a
-   path-named key, so a MIME type is not; bytes only under a path-named key and shaped like
-   a path; a `file:` URI always. A URL is any `scheme://` in any case, or a value under a
-   URL-named key. Input nested deeper than 32 levels, or a container that contains itself,
-   is refused
+   by `_looks_like_path`; a nested one (`_looks_like_nested_path`) only by its shape
+   (absolute, `~`, `..`) or by a separator and a file extension, either one being enough
+   under a path-named key, so a MIME type is not; bytes only under a path-named key and
+   shaped like a path; a `file:` URI always. A URL is any `scheme://` in any case, or a
+   value under a URL-named key. Input nested deeper than 32 levels, or a container that
+   contains itself, is refused
 6. Per-model-tier budget check — the tier, token count and model id come from context
    metadata (`_call_metadata`), never from the tool's arguments, which the model writes.
    The worst case is priced at `model_id`'s row (a dated snapshot, `<key>-YYYYMMDD`, at
