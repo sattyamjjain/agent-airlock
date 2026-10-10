@@ -88,8 +88,10 @@ has no branch protection or ruleset), so a red job blocks a merge by convention 
   **default** modes of `check_benchmark_freshness.py` and `check_changelog.py`.
 - `bare-install` — `check_core_deps.py` against a no-extras install, then an import of the
   package root, `agent_airlock.audit` and `policy_presets.list_active()` through the shim.
-- `docker-sandbox` — builds the repo `Dockerfile`, runs `pytest -m docker`, and matches the
-  log's pytest summary line, anchored, for an exact passed-count: adding or removing a
+- `docker-sandbox` — builds the repo `Dockerfile`, runs `pytest -m docker` over only the
+  files that hold docker-marked tests (collecting all of `tests/` adds collection-time skips
+  of modules whose extras the job lacks), and matches the log's pytest summary line,
+  anchored, for an exact passed-count: adding or removing a
   docker-marked test means editing that count and the cases in
   `tests/test_tooling_honesty_0_10_24.py` that run it against real pytest output, and a
   skipped one turns the job red.

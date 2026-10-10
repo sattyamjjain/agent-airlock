@@ -148,7 +148,13 @@ jobs:
           AIRLOCK_DOCKER_TEST_IMAGE: agent-airlock-sandbox:local
         run: |
           set -o pipefail
-          pytest -m docker -v --no-cov | tee docker-tests.log
+          # Collect only the files that hold docker-marked tests. Collecting all of tests/
+          # skips, at collection, the modules whose optional extras this job does not
+          # install, and pytest counts those in the summary as "skipped", which the exact
+          # match below refuses. A skipped docker-marked test still fails the job.
+          docker_files=$(grep -rlE --include='*.py' '^\s*(@pytest\.mark\.docker|pytestmark\s*=.*mark\.docker)' tests/)
+          [ -n "$docker_files" ] || { echo "::error::no docker-marked test files found"; exit 1; }
+          pytest -m docker -v --no-cov $docker_files | tee docker-tests.log
           # Match pytest's final summary line, not any "5 passed" substring: until 0.10.24
           # "15 passed" and "5 passed, 1 skipped" both satisfied an unanchored grep. Exactly
           # five passed, and nothing failed, skipped or errored; the deselected count and

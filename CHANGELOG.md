@@ -146,7 +146,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now runs in a checkout, exits 2 with a reason elsewhere, and exits 2 on an invalid
   fixture instead of a traceback; `make egress-bench` was never affected.
 - **The docker CI job's `grep -q "5 passed"`** also matched `15 passed` and
-  `5 passed, 1 skipped`. It now matches pytest's summary line, anchored.
+  `5 passed, 1 skipped`. It now matches pytest's summary line, anchored, over only the
+  files that hold docker-marked tests: collecting all of `tests/` added three
+  collection-time skips of unrelated modules, which the loose grep had been hiding.
 - **Three benchmark harnesses stamped the local date** (`blockrate`, `toolprivbench`,
   `harness_injection`) while the freshness gate reads the UTC day; they stamp UTC.
 - **The blockrate sandbox arm could report a backend "ran" when nothing executed**, and it
