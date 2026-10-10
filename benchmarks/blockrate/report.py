@@ -227,8 +227,18 @@ def render_sandbox_arm_section(arm: SandboxArmReport | None) -> str:
         f"({arm.policy_admitted} admitted and {arm.policy_refused} refused on both paths) "
         f"| ✅ yes |"
     )
-    if arm.backend_available:
-        lines.append(f"| **Isolation backend execution** | ran on `{arm.backend_name}` | ✅ yes |")
+    # "Ran" is measured, not inferred: until 0.10.24 this row said a backend ran whenever one
+    # was detected, including a Docker daemon the decorator never dispatches to.
+    if arm.backend_available and arm.backend_executions:
+        lines.append(
+            f"| **Isolation backend execution** | ran on `{arm.backend_name}`: "
+            f"{arm.backend_executions} admitted calls returned from it | ✅ yes |"
+        )
+    elif arm.backend_available:
+        lines.append(
+            f"| **Isolation backend execution** | _not run — `{arm.backend_name}` was detected "
+            f"but no call returned from it_ | ❌ no |"
+        )
     else:
         lines.append(
             f"| **Isolation backend execution** | _not run — {arm.backend_reason}_ | ❌ no |"
@@ -245,9 +255,10 @@ def render_sandbox_arm_section(arm: SandboxArmReport | None) -> str:
     lines.append("")
     lines.append(
         f"**Honest scope.** The backend-execution leg is reported as not-run rather than "
-        f"folded into a pass rate when no backend is present: with neither E2B nor Docker "
-        f"installed, `_execute_in_sandbox` raises and *every* call comes back blocked, "
-        f"benign included, so counting those as blocks would report a fake 100%. The arm "
+        f"folded into a pass rate unless admitted calls actually returned from the backend. "
+        f"`@Airlock(sandbox=True)` dispatches only to E2B; with no usable E2B backend "
+        f"*every* call comes back refused as `sandbox_error`, benign included, so counting "
+        f"those as blocks would report a fake 100%. The arm "
         f"separates a contract refusal (raised before dispatch, naming the field) from a "
         f"backend failure. {arm.undeclared_items} corpus items declare neither a "
         f"least-privilege allowlist nor an annotated parameter, so the decorator has "

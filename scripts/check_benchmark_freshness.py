@@ -175,7 +175,8 @@ def _index_date_mismatches(readme: str, readme_path: Path) -> list[str]:
     one would fail the date-logic tests on an unrelated concern.
 
     Each README row is compared with *its own* landing-page row, paired by title. Until
-    0.10.23 the check only asked whether the date appeared anywhere on the page, so a row
+    0.10.24 (#278, merged after the v0.10.23 tag) the check only asked whether the date
+    appeared anywhere on the page, so a row
     that drifted while another row shared its date passed: on 2026-10-03 six rows carried
     the same date, and any one of them could have drifted unseen.
     """

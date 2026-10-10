@@ -11,7 +11,10 @@ injection path. This guard fails-closed on:
    ``command`` or ``args`` — see below, OR
 2. Shell metachars in any element of ``command`` or ``args``, OR
 3. Path traversal (``../`` resolving outside an operator-supplied
-   cwd allowlist).
+   cwd allowlist), OR
+4. A ``command`` or ``args`` the guard cannot read: anything but a
+   string or a sequence of strings (v0.10.24; such a field used to be
+   skipped, so nothing in it was checked).
 
 Stop-parsing tokens (CVE-2026-19591)
 ------------------------------------
@@ -105,6 +108,7 @@ class StdioCommandInjectionVerdict(str, enum.Enum):
     # member to dodge the heuristic would make the worse name win, and the value
     # is part of the public wire contract (``decision.verdict.value``).
     DENY_STOP_PARSING_TOKEN = "deny_stop_parsing_token"  # nosec B105
+    DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
 @dataclass(frozen=True)
@@ -196,7 +200,10 @@ class StdioCommandInjectionGuard:
                 = allow. Inspected fields: ``command`` and ``args``, each
                 a string or a sequence of strings. Until v0.10.21 a list
                 ``command`` and a string ``args`` were skipped, so nothing
-                in them was ever checked.
+                in them was ever checked; until v0.10.24 so were a non-string
+                element (a nested list, ``bytes``) and a ``command`` or
+                ``args`` of any other type. Those are now refused
+                (``DENY_UNINSPECTABLE``).
 
         Returns:
             :class:`StdioCommandInjectionDecision`. Callers map
@@ -205,6 +212,28 @@ class StdioCommandInjectionGuard:
         """
         if args is None:
             return self._allow("no args to inspect")
+
+        # Refuse an argv field this guard cannot read before reasoning about the rest:
+        # every check below sees only strings, so anything else would pass unexamined.
+        unreadable = _unreadable_argv_field(args)
+        if unreadable is not None:
+            field_name, value = unreadable
+            kind = type(value).__name__
+            logger.warning(
+                "stdio_command_injection_uninspectable",
+                field=field_name,
+                value_type=kind,
+            )
+            return StdioCommandInjectionDecision(
+                allowed=False,
+                verdict=StdioCommandInjectionVerdict.DENY_UNINSPECTABLE,
+                detail=(
+                    f"argv field {field_name!r} is a {kind}, not a string or a sequence of "
+                    f"strings; a shape this guard cannot read is refused, not skipped"
+                ),
+                matched_metachar=None,
+                matched_path=None,
+            )
 
         # 0) A stop-parsing token is checked FIRST and by whole-element
         #    equality. It has to come first because once the token is present
@@ -347,6 +376,24 @@ class StdioCommandInjectionGuard:
             normalised == root or normalised.startswith(root.rstrip("/") + "/")
             for root in self._cwd_allowlist
         )
+
+
+def _unreadable_argv_field(args: Mapping[str, Any]) -> tuple[str, object] | None:
+    """Return ``(field, value)`` for the first ``command`` / ``args`` part that is not a string.
+
+    Each field may be absent, ``None``, a string, or a list or tuple of strings.
+    """
+    for key in ("command", "args"):
+        value = args.get(key)
+        if value is None or isinstance(value, str):
+            continue
+        if isinstance(value, (list, tuple)):
+            for idx, item in enumerate(value):
+                if not isinstance(item, str):
+                    return f"{key}[{idx}]", item
+            continue
+        return key, value
+    return None
 
 
 def _shell_tokens(line: str) -> list[str]:

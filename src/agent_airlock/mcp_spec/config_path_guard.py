@@ -28,7 +28,9 @@ Reference
 from __future__ import annotations
 
 import os
+import shlex
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Literal
@@ -82,7 +84,8 @@ class ConfigPathGuard:
     """Validate every filesystem path inside an MCP server-registration config.
 
     The guard operates on the spec's ``{"command", "args", "env",
-    "workingDirectory"}`` shape but tolerates extra keys.
+    "workingDirectory"}`` shape but tolerates extra keys. A field in a shape it
+    cannot read is refused with an ``unreadable_shape`` finding (v0.10.24).
     """
 
     def __init__(
@@ -101,35 +104,34 @@ class ConfigPathGuard:
     # ------------------------------------------------------------------
 
     def evaluate(self, server_config: dict[str, Any]) -> ConfigInspection:
+        """Validate every filesystem path the config would hand the spawner.
+
+        Each field is read in every shape a spawner accepts, or refused with an
+        ``unreadable_shape`` finding: ``command`` as a string or a sequence of strings,
+        ``args`` likewise (a string is split the way a shell would split it), ``env`` as a
+        mapping or a sequence of ``KEY=VALUE`` strings, and ``workingDirectory`` as a
+        string. Until v0.10.24 a list ``command``, a string ``args`` and an ``env`` that was
+        not a ``dict`` were skipped, so a traversal in them was never seen.
+
+        Args:
+            server_config: The server-registration config to inspect.
+
+        Returns:
+            A :class:`ConfigInspection` carrying every finding, ``"block"`` when there is one.
+        """
         findings: list[PathFinding] = []
-
-        cmd = server_config.get("command")
-        if isinstance(cmd, str):
-            f = self._inspect("command", cmd)
-            if f is not None:
-                findings.append(f)
-
-        args = server_config.get("args") or ()
-        if isinstance(args, (list, tuple)):
-            for idx, value in enumerate(args):
-                if isinstance(value, str):
-                    f = self._inspect(f"args[{idx}]", value)
-                    if f is not None:
-                        findings.append(f)
+        findings.extend(self._inspect_argv("command", server_config.get("command"), split=False))
+        findings.extend(self._inspect_argv("args", server_config.get("args"), split=True))
 
         wd = server_config.get("workingDirectory")
         if isinstance(wd, str):
             f = self._inspect("workingDirectory", wd, must_be_inside_host_root=True)
             if f is not None:
                 findings.append(f)
+        elif wd is not None:
+            findings.append(_unreadable("workingDirectory", wd, "a string"))
 
-        env = server_config.get("env") or {}
-        if isinstance(env, dict):
-            for k, v in env.items():
-                if isinstance(v, str) and ("/" in v or "\\" in v):
-                    f = self._inspect(f"env[{k}]", v)
-                    if f is not None:
-                        findings.append(f)
+        findings.extend(self._inspect_env(server_config.get("env")))
 
         verdict: Verdict = "block" if findings else "allow"
         logger.info(
@@ -150,6 +152,73 @@ class ConfigPathGuard:
                 rule=f0.rule,
             )
         return inspection
+
+    # ------------------------------------------------------------------
+    # Field readers
+    # ------------------------------------------------------------------
+
+    def _inspect_argv(self, name: str, value: object, *, split: bool) -> list[PathFinding]:
+        """Read ``command`` or ``args`` as a string or a sequence of strings, or refuse it.
+
+        A string ``command`` is inspected whole, as it always was. A string ``args`` is a
+        shell-form argument line, so each of its tokens is inspected as one element.
+        """
+        if value is None:
+            return []
+        items: Sequence[object]
+        if isinstance(value, str):
+            if not split:
+                f = self._inspect(name, value)
+                return [f] if f is not None else []
+            items = _shell_tokens(value)
+        elif isinstance(value, (list, tuple)):
+            items = value
+        else:
+            return [_unreadable(name, value, "a string or a sequence of strings")]
+        findings: list[PathFinding] = []
+        for idx, item in enumerate(items):
+            field_name = f"{name}[{idx}]"
+            if not isinstance(item, str):
+                findings.append(_unreadable(field_name, item, "a string"))
+                continue
+            f = self._inspect(field_name, item)
+            if f is not None:
+                findings.append(f)
+        return findings
+
+    def _inspect_env(self, env: object) -> list[PathFinding]:
+        """Read ``env`` as a mapping or a sequence of ``KEY=VALUE`` strings, or refuse it.
+
+        A string value is inspected when it is path-shaped. Numbers, booleans and ``None``
+        carry no path. Any other value would reach the spawner coerced to a string the guard
+        never saw, so it is refused.
+        """
+        if env is None:
+            return []
+        findings: list[PathFinding] = []
+        entries: list[tuple[str, object]] = []
+        if isinstance(env, Mapping):
+            entries = [(str(key), val) for key, val in env.items()]
+        elif isinstance(env, (list, tuple)):
+            for idx, item in enumerate(env):
+                if not isinstance(item, str):
+                    findings.append(_unreadable(f"env[{idx}]", item, "a KEY=VALUE string"))
+                    continue
+                name, sep, assigned = item.partition("=")
+                if sep:
+                    entries.append((name, assigned))
+        else:
+            return [_unreadable("env", env, "a mapping or a sequence of KEY=VALUE strings")]
+        for name, value in entries:
+            field_name = f"env[{name}]"
+            if isinstance(value, str):
+                if "/" in value or "\\" in value:
+                    f = self._inspect(field_name, value)
+                    if f is not None:
+                        findings.append(f)
+            elif value is not None and not isinstance(value, (int, float)):
+                findings.append(_unreadable(field_name, value, "a string"))
+        return findings
 
     # ------------------------------------------------------------------
     # Inspection
@@ -279,6 +348,27 @@ class ConfigPathGuard:
             return True
         except ValueError:
             return False
+
+
+def _unreadable(field_name: str, value: object, expected: str) -> PathFinding:
+    """A finding for a field the guard cannot read: refused, never skipped."""
+    return PathFinding(
+        field_name=field_name,
+        raw_value=repr(value)[:200],
+        rule="unreadable_shape",
+        detail=(
+            f"expected {expected}, got {type(value).__name__}; a shape the guard cannot "
+            "read is refused, not skipped"
+        ),
+    )
+
+
+def _shell_tokens(line: str) -> list[str]:
+    """Split a shell-form argument line as a POSIX shell would, or on whitespace if it can't."""
+    try:
+        return shlex.split(line)
+    except ValueError:  # unbalanced quotes: still inspect what is there
+        return line.split()
 
 
 __all__ = [

@@ -156,6 +156,15 @@ def validate_path(
     """
     original_path = str(path)
 
+    # A NUL byte is never part of a real path, and os.stat / realpath raise ValueError on
+    # one rather than OSError, which escaped as a raw exception until 0.10.24.
+    if "\x00" in original_path:
+        raise PathValidationError(
+            "Path contains a NUL byte",
+            original_path,
+            "invalid_path",
+        )
+
     # Convert to Path object
     if isinstance(path, str):
         path = Path(path)
@@ -181,7 +190,7 @@ def validate_path(
     # SECURITY: Use os.path.realpath for canonical resolution
     try:
         resolved = Path(os.path.realpath(path))
-    except OSError as e:
+    except (OSError, ValueError) as e:
         raise PathValidationError(
             f"Failed to resolve path: {e}",
             original_path,

@@ -68,18 +68,21 @@ what counts as in scope is in `docs/cve-triage.md`.
   placeholder `@Airlock(return_dict=True)` tool that declares the shape with `Annotated`
   constraints, and assert the payload comes back `block_reason == "validation_error"`
   while a benign value passes; `grep -l validation_error tests/cves/test_*.py` finds the
-  modules that do. Pin the half it cannot reach as `TestScopeBoundary` does: a control
-  that declares the same parameter as a bare `str` and asserts the payload is *admitted*
-  (`test_cve_2026_105788_ufo_type_text.py`). Free text has no narrower shape to declare,
-  so that is a boundary, not a gap: it takes the passing control and no `xfail`, because
-  the `xfail` rule above is for an in-scope CVE whose primitive is missing.
+  modules that do. Pin the half it cannot reach with a passing control: the same parameter
+  declared as a bare `str` admits the payload (`TestTheReparsingShellIsOutOfReach` in
+  `test_cve_2026_105793_ufo_press_key.py`). Free text has no narrower shape to declare, so
+  that is a boundary, not a gap (`TestFreeTextIsTheCalleesQuotingNotTheContracts` in
+  `test_cve_2026_105788_ufo_type_text.py`): it takes the passing control and no `xfail`,
+  because the `xfail` rule above is for an in-scope CVE whose primitive is missing.
 - **When the vulnerable code decodes its request before spawning** (shell-quote split,
   `JSON.parse`, etc.), feed the guard that decoded shape through a small helper that
   repeats and quotes the decoding lines, so the verdict is about what actually reaches
   the spawn. See `_spawn_config` in `test_cve_2026_79538_metamcp_stdio_proxy.py`.
 - **No mocks.** The only `unittest.mock.patch` fakes `socket.getaddrinfo`
-  (`test_ox_supply_chain_2026_04.py`); everything else runs against real fixtures. Tests on
-  the allow path resolve real public hosts, so a few of them fail offline.
+  (`test_ox_supply_chain_2026_04.py`); SSRF and DNS-rebinding modules inject a stub through
+  the guard's own `resolver=` parameter instead (`grep -l 'resolver=' tests/cves/`), the
+  pattern a new one copies. Everything else runs against real fixtures; a few allow-path
+  tests resolve real public hosts and fail offline.
 - **A refusal needs no module**: one `docs/cve-triage.md` disposition on the triage issue
   and one row in the out-of-scope table in `tests/cves/README.md`.
 - **Any real CVE id written in a `.py` or `.md` here — this file included — marks that CVE
@@ -95,8 +98,10 @@ what counts as in scope is in `docs/cve-triage.md`.
   or a `docker` mark, so every test here runs in CI's `test` job.
 - **Count gates.** `tests/test_cve_catalog_gate.py` pins literal module and distinct-CVE
   totals, and the README's ASI04 row and `.claude-plugin/marketplace.json` repeat them.
-  Adding or removing a module means editing all three, unless it is listed in
-  `_NON_DISCLOSURE_CVE_MODULES` (`tests/test_marketplace_metadata.py`). The marketplace's
+  Adding or removing a module means editing all three. `_NON_DISCLOSURE_CVE_MODULES`
+  (`tests/test_marketplace_metadata.py`) exempts a module from the module total only:
+  `collect_umbrella` still reads it, so a CVE its docstring names still moves the umbrella
+  count (the Metis corpus module's anchor CVE reaches the catalog that way). The marketplace's
   "the other N" (total minus CVE-numbered) and the README's split of distinct CVEs into
   rows and umbrella entries are pinned by the same gate, the umbrella count as a literal.
   A strict `xfail`

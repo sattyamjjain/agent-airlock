@@ -948,7 +948,10 @@ def append_run_to_results(results_path: Path, dated_block: str, *, force: bool =
         )
     heading = dated_block.strip().splitlines()[0].strip()
     if heading in text and not force:
-        raise ValueError(f"a run block for {heading!r} already exists; pass force=True to replace")
+        raise ValueError(
+            f"a run block for {heading!r} already exists; pass force=True to append another "
+            "block under the same heading (dated blocks are never edited)"
+        )
     head, _, tail = text.partition(_RUNS_MARKER)
     new = f"{head}{_RUNS_MARKER}\n\n{dated_block.strip()}\n{tail}"
     results_path.write_text(new, encoding="utf-8")
@@ -1122,7 +1125,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Replace an existing dated run block of the same heading (default: refuse).",
+        help="Append another dated run block even when one with the same heading exists; "
+        "the existing block is kept, never edited (default: refuse).",
     )
     parser.add_argument(
         "--max-user-tasks", type=int, default=5, help="Model path: cap user tasks per suite."

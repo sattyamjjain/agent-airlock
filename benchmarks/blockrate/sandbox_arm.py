@@ -18,12 +18,12 @@ Two legs, reported separately because they are different claims:
   as ``@Airlock()``? This is the leg the fix changed. It runs on any machine, because the
   ``if self.sandbox:`` branch is taken whether or not a real backend is installed, and the
   parent-side validation now happens *before* ``_execute_in_sandbox`` is reached. With no
-  backend that call then raises, so a benign call comes back blocked for an unrelated
-  reason; :func:`_contract_refusal` separates the two so this arm never reports a backend
-  failure as a contract block.
-* **Backend execution.** Did a real isolation backend actually run the body? This needs
-  Docker or E2B and is reported as **not-run** when neither is present, never folded into a
-  pass rate.
+  backend that dispatch then fails, so a benign call comes back refused as ``sandbox_error``
+  for an unrelated reason; :func:`_contract_refusal` separates the two so this arm never
+  reports a backend failure as a contract block.
+* **Backend execution.** Did a real isolation backend actually run the body? This needs E2B,
+  the only backend ``@Airlock(sandbox=True)`` dispatches to, and is reported as **not-run**
+  unless admitted calls actually returned from it, never folded into a pass rate.
 
 Scope, stated rather than implied: the 210-item corpus carries no ``Annotated`` parameters,
 so feeding it through a ``**kwargs`` tool would measure nothing and report a vacuous 100%.
@@ -99,9 +99,9 @@ def _contract_refusal(result: Any) -> bool:
     """True iff the *argument contract* refused this call, as opposed to the backend.
 
     This distinction is what lets the arm run on a machine with no isolation backend.
-    With ``sandbox=True`` and neither E2B nor Docker installed, ``_execute_in_sandbox``
-    raises and every call, benign included, comes back blocked with
-    ``"Unexpected error in ..."``. Counting that as a block would report a fake 100%.
+    With ``sandbox=True`` and no usable E2B backend, dispatch fails and every call, benign
+    included, comes back refused as ``sandbox_error``. Counting that as a block would report
+    a fake 100%.
 
     A contract refusal is distinguishable by its message: Pydantic refusals say
     ``"validation failed"`` and name the field, and a handle refusal carries its own
@@ -203,6 +203,9 @@ class SandboxArmReport:
     backend_name: str | None = None
     backend_available: bool = False
     backend_reason: str = ""
+    # Admitted calls whose body returned from the backend. Availability is not execution:
+    # the report says the backend ran only when this is above zero.
+    backend_executions: int = 0
 
     policy_items: int = 0
     policy_agreements: int = 0
@@ -242,20 +245,34 @@ class SandboxArmReport:
         )
 
 
-def _detect_backend() -> tuple[str | None, bool, str]:
-    """Which isolation backend, if any, would actually run a body here."""
-    try:
-        from agent_airlock.sandbox_backend import DockerBackend, E2BBackend
-    except Exception as exc:  # pragma: no cover - import guard
-        return None, False, f"backend import failed: {type(exc).__name__}"
+#: Appended to every not-run reason, because the reader's next question is "what about Docker".
+_E2B_ONLY = "`@Airlock(sandbox=True)` dispatches only to E2B"
 
-    for name, factory in (("e2b", E2BBackend), ("docker", DockerBackend)):
-        try:
-            if factory().is_available():
-                return name, True, ""
-        except Exception:
-            continue
-    return None, False, "no E2B or Docker backend available in this runner"
+
+def _detect_backend() -> tuple[str | None, bool, str]:
+    """Whether the one backend ``@Airlock(sandbox=True)`` dispatches to could run a body here.
+
+    ``_execute_in_sandbox`` sends every call to E2B (``sandbox.execute_in_sandbox`` and its
+    ``SandboxPool``); no Docker or Modal backend is on that path. So E2B is the only backend
+    this arm reports, and only when dispatch's own preconditions hold: the SDK and cloudpickle
+    import (``sandbox._missing_dependency``) and an API key is configured. Until 0.10.24 a
+    Docker daemon that answered a ping counted as available, so the report could say a
+    backend ran while every admitted call failed in dispatch, and a plain run pinged the
+    local Docker daemon. Availability is still not execution: :func:`run_sandbox_arm` counts
+    the calls that returned from the sandbox.
+    """
+    try:
+        from agent_airlock import AirlockConfig
+        from agent_airlock.sandbox import _missing_dependency
+    except Exception as exc:  # pragma: no cover - import guard
+        return None, False, f"agent_airlock.sandbox did not import ({type(exc).__name__})"
+
+    missing = _missing_dependency()
+    if missing is not None:
+        return None, False, f"no E2B backend here ({missing.split('.')[0]}); {_E2B_ONLY}"
+    if not AirlockConfig().e2b_api_key:
+        return None, False, f"no E2B backend here (no E2B_API_KEY set); {_E2B_ONLY}"
+    return "e2b", True, ""
 
 
 def run_sandbox_arm() -> SandboxArmReport:
@@ -291,7 +308,13 @@ def run_sandbox_arm() -> SandboxArmReport:
         # A policy denial is raised before dispatch, so it never reaches
         # _execute_in_sandbox; an admitted call that then fails there for want of a
         # backend is not a denial (_policy_refusal).
-        sandboxed = _policy_refusal(_policy_tool(call, sandbox=True))
+        sandboxed_result = _policy_tool(call, sandbox=True)
+        sandboxed = _policy_refusal(sandboxed_result)
+        if available and sandboxed_result == "RAN":
+            # The body returned from the sandbox, so the backend executed it. Only counted
+            # when the backend was detected: with agent_airlock.sandbox unimportable and
+            # sandbox_required=False, the decorator runs the body in-process instead.
+            report.backend_executions += 1
         if local == sandboxed:
             report.policy_agreements += 1
             if local:

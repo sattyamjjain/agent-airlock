@@ -17,18 +17,23 @@ and framework vaccination in `../vaccine.py`; neither imports from here.
   agent, find its tools, and replace in place the callable the framework actually invokes,
   which is not always the obvious attribute: PydanticAI runs
   `tool.function_schema.function`, and a CrewAI `@tool` runs `func`, not `_run`. Prove
-  interception with a stub that mirrors the SDK's real call path. `langchain`, `anthropic`
+  interception with a stub that mirrors the SDK's real call path. The Claude SDK adapter's
+  `wrap_tools` returns guarded copies instead (only `wrap_agent` mutates in place), so wrap
+  before `create_sdk_mcp_server`, which keeps its own references. `langchain`, `anthropic`
   and `openai_guardrails` are the older decorator style. `smolagents_wrapper` runs
   caller-supplied `PolicyBundle` guards and never builds an `Airlock`. The `gpt5_5_*` /
-  `gemini3_*` shape adapters normalise vendor payloads.
+  `gemini3_*` shape adapters normalise vendor payloads. `langgraph_toolnode_compat` only
+  unwraps ToolNode output, and `model_armor`'s `ModelArmorScanner` is called by the user,
+  never by `@Airlock`; neither wraps tools.
 - **`@Airlock` enforces only the signature it is handed.** Re-tag a tool with
   `_tool_proxy.named_tool_proxy`, which carries the tool's signature (annotations resolved)
   and is async when the tool is; pass framework-injected context parameters as
   `relaxed_params`, as `pydantic_ai._run_context_params` does for a `RunContext`;
   `google_adk` predates the proxy and relaxes ADK's with its own `_relax_injected_params`.
   A Claude SDK `SdkMcpTool` handler takes one `args` dict, so `_claude_sdk_tools` builds the
-  signature from its `input_schema` instead and spreads the dict into it; gates that read
-  keyword arguments would otherwise see one opaque parameter. Test every walker with a
+  signature from its `input_schema` instead and spreads the dict into it; the per-field
+  contract (strict types, ghost arguments) would otherwise see one opaque parameter. Test
+  every walker with a
   wrong-typed and a ghost argument through the SDK's real call path; async handling is
   pinned once, in `tests/integrations/test_tool_proxy.py`.
 - **`adapters/`** holds the commerce adapters, which satisfy the `CommerceAdapter` Protocol in
@@ -45,7 +50,8 @@ and framework vaccination in `../vaccine.py`; neither imports from here.
 ## Module-Specific Conventions
 
 - **SDK imports are function-local** — none is at module level. CI's `test` job installs
-  `.[dev,redis,mcp]`, which carries none of the SDKs imported here, and `bare-install`
+  `.[dev,redis,mcp]`. That brings no agent SDK, but `[mcp]`'s FastMCP pulls in
+  `opentelemetry-api`, so `claude_auto_memory`'s OTel span path runs in CI. `bare-install`
   imports the package root.
 - **Missing SDK.** Each walker raises a `<X>MissingError(AirlockError)` built from a module
   `_INSTALL_HINT` that names the `agent-airlock[<extra>]` to install. Its `_maybe_check_sdk`
@@ -76,12 +82,15 @@ and framework vaccination in `../vaccine.py`; neither imports from here.
 ## Key Dependencies
 
 **External:** `claude_agent_sdk`, `crewai`, `pydantic_ai`, `google.adk` and `google.cloud`
-(Model Armor) each have a pyproject extra; `langchain_core` and `opentelemetry` have none.
+(Model Armor) each have a pyproject extra; `langchain_core` and `opentelemetry` have no
+extra of their own (`opentelemetry-api` arrives transitively through `[mcp]`'s FastMCP).
 The OpenAI Agents SDK, `anthropic`, `langgraph` and `smolagents` are never imported: those
 modules use duck typing, `importlib.util.find_spec` or `importlib.metadata` probes instead.
 
 **Internal:** `.._log`, `..exceptions`, and `..core` / `..policy` wherever an `Airlock` is
-built. `../policy_presets.py` imports from here only inside preset factories. Sibling
+built (the decorator-style adapters import them as `agent_airlock.*`); `..sanitizer`,
+`..config`, `..capabilities` and `..observability` each appear in one to three modules.
+`../policy_presets.py` imports from here only inside preset factories. Sibling
 imports are acyclic (`grep -rn '^\s*from \.[a-z_]' src/agent_airlock/integrations/`).
 
 <!-- END AUTO-MANAGED -->

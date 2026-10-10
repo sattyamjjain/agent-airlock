@@ -67,6 +67,7 @@ family for chain-friendly composition.
 | `DENY_SHELL_METACHAR` | any default or operator-extended metachar found |
 | `DENY_PATH_TRAVERSAL` | path-shaped argv element resolves outside `cwd_allowlist` |
 | `DENY_STOP_PARSING_TOKEN` | an argv element is a stop-parsing token (`--%`), so the argv no longer describes what would run |
+| `DENY_UNINSPECTABLE` | a `command` or `args` the guard cannot read: a non-string argv element (nested list, bytes) or a `command` that is neither a string nor a list (since 0.10.24) |
 
 ## Extending the metachar set
 

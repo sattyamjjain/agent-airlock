@@ -109,6 +109,11 @@ _TEMPLATE_EVAL_RE = re.compile(
 )
 
 
+#: Nesting deeper than this is refused rather than walked. A guard that stopped looking at
+#: some depth would fail open on the payload placed one level below it.
+_MAX_DEPTH = 32
+
+
 class FilterEvalRCEVerdict(str, enum.Enum):
     """Stable reason codes for :class:`FilterEvalRCEDecision`."""
 
@@ -116,6 +121,7 @@ class FilterEvalRCEVerdict(str, enum.Enum):
     DENY_PYTHON_LAMBDA = "deny_python_lambda"
     DENY_CSHARP_EXPRESSION = "deny_csharp_expression"
     DENY_TEMPLATE_EVAL = "deny_template_eval"
+    DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
 @dataclass(frozen=True)
@@ -133,10 +139,12 @@ class FilterEvalRCEDecision:
         detail: Free-form human-readable explanation, including the
             field name and a fragment of the matched pattern (truncated
             to avoid logging large payloads).
-        matched_field: The argument-dict key whose value matched, or
+        matched_field: The field path whose value matched (``"condition"``,
+            ``"payload.condition"``, ``"condition[0]"``), or ``None`` when
+            ``allowed=True``.
+        matched_pattern: A short label of the pattern class that fired
+            (``"uninspectable"`` for input nested too deep to walk), or
             ``None`` when ``allowed=True``.
-        matched_pattern: A short label of the pattern class that fired,
-            or ``None`` when ``allowed=True``.
     """
 
     allowed: bool
@@ -190,6 +198,13 @@ class FilterEvalRCEGuard:
     def evaluate(self, args: Mapping[str, Any] | None) -> FilterEvalRCEDecision:
         """Decide whether the call args carry a filter-eval RCE shape.
 
+        Values are walked at any depth: inside mappings, lists, tuples and sets, with
+        ``bytes`` decoded. A string is inspected when a key on its path is a suspect field
+        (``{"condition": ["lambda ..."]}``, ``{"payload": {"condition": "lambda ..."}}``),
+        or always under ``scan_all_fields``. Until v0.10.24 only top-level string values
+        were inspected, so both of those passed. Nesting deeper than the guard walks, or a
+        container that contains itself, is refused (``DENY_UNINSPECTABLE``).
+
         Args:
             args: The tool call's argument dict. ``None`` (no args) is
                 trivially allowed — there's nothing to compile.
@@ -199,29 +214,79 @@ class FilterEvalRCEGuard:
             to a refusal at the Airlock decorator boundary.
         """
         if args is None:
-            return FilterEvalRCEDecision(
-                allowed=True,
-                verdict=FilterEvalRCEVerdict.ALLOW,
-                detail="no args to inspect",
-                matched_field=None,
-                matched_pattern=None,
-            )
+            return self._allow("no args to inspect")
+        if not isinstance(args, Mapping):
+            # No keys to match against the suspect vocabulary: inspect everything.
+            decision = self._scan_value("args", args, suspect=True, depth=0, ancestors=frozenset())
+            return decision or self._allow("no filter-eval RCE pattern matched")
 
+        top = frozenset({id(args)})
         for key, value in args.items():
-            if not isinstance(value, str):
-                continue
-            if not self._scan_all_fields and key not in self._suspect_fields:
-                continue
-            decision = self._inspect_value(field=key, value=value)
+            decision = self._scan_value(
+                str(key), value, suspect=key in self._suspect_fields, depth=1, ancestors=top
+            )
             if decision is not None:
                 return decision
 
+        return self._allow("no filter-eval RCE pattern matched")
+
+    def _scan_value(
+        self,
+        field: str,
+        value: Any,
+        *,
+        suspect: bool,
+        depth: int,
+        ancestors: frozenset[int],
+    ) -> FilterEvalRCEDecision | None:
+        """Inspect a str or bytes value, or walk a container; ``None`` when nothing fires."""
+        if isinstance(value, (str, bytes, bytearray)):
+            if not (suspect or self._scan_all_fields):
+                return None
+            text = value if isinstance(value, str) else bytes(value).decode("utf-8", "replace")
+            return self._inspect_value(field=field, value=text)
+        children: list[tuple[str, Any, bool]]
+        if isinstance(value, Mapping):
+            children = [
+                (f"{field}.{key}", item, suspect or key in self._suspect_fields)
+                for key, item in value.items()
+            ]
+        elif isinstance(value, (list, tuple, set, frozenset)):
+            children = [(f"{field}[{idx}]", item, suspect) for idx, item in enumerate(value)]
+        else:
+            return None  # numbers, booleans, None and other objects carry no expression text
+        if depth >= _MAX_DEPTH or id(value) in ancestors:
+            return self._deny_uninspectable(field, depth >= _MAX_DEPTH)
+        inner = ancestors | {id(value)}
+        for child_field, child, child_suspect in children:
+            decision = self._scan_value(
+                child_field, child, suspect=child_suspect, depth=depth + 1, ancestors=inner
+            )
+            if decision is not None:
+                return decision
+        return None
+
+    def _allow(self, reason: str) -> FilterEvalRCEDecision:
         return FilterEvalRCEDecision(
             allowed=True,
             verdict=FilterEvalRCEVerdict.ALLOW,
-            detail="no filter-eval RCE pattern matched",
+            detail=reason,
             matched_field=None,
             matched_pattern=None,
+        )
+
+    def _deny_uninspectable(self, field: str, too_deep: bool) -> FilterEvalRCEDecision:
+        why = f"nests deeper than {_MAX_DEPTH} levels" if too_deep else "contains itself"
+        logger.warning("filter_eval_rce_uninspectable", matched_field=field, reason=why)
+        return FilterEvalRCEDecision(
+            allowed=False,
+            verdict=FilterEvalRCEVerdict.DENY_UNINSPECTABLE,
+            detail=(
+                f"field {field!r} {why}, so the guard cannot inspect all of it; refused "
+                "rather than skipped"
+            ),
+            matched_field=field,
+            matched_pattern="uninspectable",
         )
 
     def _inspect_value(self, *, field: str, value: str) -> FilterEvalRCEDecision | None:

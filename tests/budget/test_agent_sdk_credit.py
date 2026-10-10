@@ -52,12 +52,13 @@ class TestNinetyPercentWarnDeny:
 
     def test_ninety_percent_emits_near_limit(self) -> None:
         budget = AgentSDKCreditBudget(monthly_credit_usd=1.0, tier_label="pro")
-        # Burn ~97.5% of $1 in one call: Opus 4.6 input $15/Mtok × 65k tok = $0.975.
-        # Chosen to comfortably land ≥90% without hitting 100% (which would
-        # trigger EXHAUSTED instead).
+        # Burn ~97.5% of $1 in one call: Opus 4.6 input $5/Mtok × 195k tok = $0.975
+        # at the current (2026-09) rates the budget now defaults to. Chosen to
+        # comfortably land ≥90% without hitting 100% (which would trigger
+        # EXHAUSTED instead).
         decision = budget.register_call(
             model="claude-opus-4-6",
-            input_tokens=65_000,
+            input_tokens=195_000,
             output_tokens=0,
         )
         # The CVE spec says deny-90% but the doc spec says "warn-deny" at 90%
@@ -73,10 +74,10 @@ class TestOneHundredPercentHardDeny:
 
     def test_over_budget_hard_denies(self) -> None:
         budget = AgentSDKCreditBudget(monthly_credit_usd=0.10, tier_label="pro")
-        # 10k tokens × $15/Mtok = $0.15 → over the $0.10 cap.
+        # 30k tokens × $5/Mtok = $0.15 → over the $0.10 cap.
         decision = budget.register_call(
             model="claude-opus-4-6",
-            input_tokens=10_000,
+            input_tokens=30_000,
             output_tokens=0,
         )
         assert decision.allowed is False

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.10.23"
+version = "0.10.24"
 description = "A type-checker and contract layer for AI agent tool calls, deny-by-default, in-process, Pydantic-only. Strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks."
 readme = "README.md"
 license = "Apache-2.0"
@@ -273,9 +273,13 @@ exclude = [
 
 [tool.ruff]
 # requires-python remains ">=3.10"; ruff target stays at py310 so UP036
-# (sys.version_info >= (3, 11) blocks for tomllib) and UP042 (StrEnum)
-# don't fire — both *would* break py310. CI matrix adds 3.13 separately
-# so newer-Python wheels still get coverage.
+# (sys.version_info >= (3, 11) blocks for tomllib), UP042 (StrEnum) and
+# UP017 (datetime.UTC) don't fire — all three *would* break py310. UP017 is
+# the dangerous one: its fix is marked safe, so `make format`
+# (`ruff check --fix`) would rewrite every `timezone.utc` without asking,
+# where UP036/UP042 only fix under --unsafe-fixes. Check with
+# `ruff check src/ --target-version py311 --select UP --statistics`.
+# CI matrix adds 3.13 separately so newer-Python wheels still get coverage.
 target-version = "py310"
 line-length = 100
 src = ["src", "tests"]

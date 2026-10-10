@@ -6,6 +6,7 @@ error responses that help the LLM retry with corrected arguments.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
@@ -592,6 +593,14 @@ def handle_endpoint_violation(
     )
 
 
+def _priced_at_own_row(model_id: str, priced_as: str) -> bool:
+    """Whether ``priced_as`` is ``model_id``'s own row: the same key, or its dated snapshot."""
+    return (
+        model_id == priced_as
+        or re.fullmatch(re.escape(priced_as) + r"-\d{8}", model_id) is not None
+    )
+
+
 def handle_budget_exceeded(
     func_name: str,
     *,
@@ -602,6 +611,7 @@ def handle_budget_exceeded(
     estimated_output_tokens: int,
     budget_type: str,
     model_id: str | None = None,
+    priced_as: str | None = None,
 ) -> AirlockResponse:
     """Create a response for per-model-tier budget violations (v0.8.7).
 
@@ -614,6 +624,8 @@ def handle_budget_exceeded(
         estimated_output_tokens: Worst-case output assumed by the estimate.
         budget_type: "cost" or "tokens" — which cap was breached.
         model_id: Optional model identifier for telemetry.
+        priced_as: The pricing-table row the estimate used (v0.10.24). When it is not
+            ``model_id``'s own row, the model was unlisted and priced at the dearest one.
 
     Returns:
         AirlockResponse with ``block_reason=BUDGET_EXCEEDED`` and the tier,
@@ -627,6 +639,16 @@ def handle_budget_exceeded(
         )
     if cap_output_tokens is not None:
         fix_hints.append(f"Tier {tier!r} caps per-call output at {cap_output_tokens} tokens.")
+    if (
+        model_id is not None
+        and priced_as is not None
+        and not _priced_at_own_row(model_id, priced_as)
+    ):
+        fix_hints.append(
+            f"Model {model_id!r} is not in the pricing table, so its worst case was priced "
+            f"at the dearest row ({priced_as!r}). Tag the call with the table's key, or add "
+            "the model with CostTracker(pricing=...)."
+        )
     fix_hints.append("Reduce input_tokens, route to a cheaper tier, or raise the cap on this tier.")
 
     return AirlockResponse.blocked_response(
@@ -647,6 +669,7 @@ def handle_budget_exceeded(
             "estimated_output_tokens": estimated_output_tokens,
             "budget_type": budget_type,
             "model_id": model_id,
+            "priced_as": priced_as,
         },
     )
 

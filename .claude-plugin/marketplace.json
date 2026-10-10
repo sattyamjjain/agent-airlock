@@ -25,7 +25,7 @@
       "Offline-capable. The policy presets and validators run air-gapped, and so does the CVE suite apart from a few allow-path tests that resolve real public hosts; offline, the SSRF guards refuse a host they cannot resolve rather than admit it."
     ],
     "proof_points": [
-      "4,954 tests (CI-enforced coverage floor 82%)",
+      "5,207 tests (CI-enforced coverage floor 82%)",
       "55 CVE / advisory regression tests reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), of which 49 are CVE-numbered and listed in the generated catalog at docs/cves/index.md (the other 6 are advisory regressions with no CVE id of their own and umbrella modules that replay several CVEs at once; the catalog lists those CVEs too, in its umbrella section)",
       "75 policy presets (curated security defaults), enumerated at runtime by policy_presets.list_active()"
     ],

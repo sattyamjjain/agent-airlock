@@ -104,6 +104,10 @@ class AuditRecord:
     run_baseline_calls: int | None = None
     run_amplification_ratio: float | None = None
     amplification_verdict: str | None = None
+    # V0.10.24: True when the caller was answered with a honeypot's fake success instead of
+    # the refusal. Until then a honeypot reply wrote no record at all. None otherwise, so
+    # every other record is unchanged.
+    honeypot: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary, excluding None values."""
@@ -217,6 +221,7 @@ class AuditLogger:
         result: Any = None,
         error: str | None = None,
         amplification: AmplificationDecision | None = None,
+        honeypot: bool = False,
     ) -> None:
         """Write an audit record to the log file.
 
@@ -235,6 +240,8 @@ class AuditLogger:
             amplification: V0.8.74 per-run amplification decision (issue #142).
                 When None the five ``run_*`` fields stay unset and ``to_dict()``
                 omits them, so the record is byte-identical to a v0.8.73 one.
+            honeypot: True when the caller got a honeypot's fake success in place of
+                this refusal (V0.10.24). Recorded only when True.
         """
         if not self.enabled or self.path is None:
             return
@@ -258,6 +265,7 @@ class AuditLogger:
             run_baseline_calls=amplification.baseline_calls if amplification else None,
             run_amplification_ratio=(amplification.amplification_ratio if amplification else None),
             amplification_verdict=amplification.verdict.value if amplification else None,
+            honeypot=True if honeypot else None,
         )
 
         self._write_record(record)

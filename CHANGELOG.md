@@ -11,6 +11,198 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.24] - 2026-10-10
+
+### Security
+
+- **The gates that read argument values read only some of them.** The deserialization
+  guard (step 2.7), the filesystem check (step 3) and the endpoint check (step 5) looked at
+  keyword arguments only, and only at top-level `str` (or `bytes`) values. A positional
+  argument, a list of paths, a path inside a mapping, a `pathlib.Path`, a pydantic `AnyUrl`
+  or `urllib.parse` result, and a pickle inside a list all walked past them, and the real
+  tool ran: `read_file(SECRET)` returned the file that `read_file(path=SECRET)` was refused.
+  The three gates now read every argument the call passes, positional ones by their
+  parameter name (`agent_airlock._arg_walk`): down through mappings (keys included),
+  sequences, sets and mapping views, and into pydantic models and dataclasses the tool's
+  author defined, since FastMCP, PydanticAI and the OpenAI Agents SDK hand a model-typed
+  tool an instance. The run wrapper the call's context came from, and objects from agent
+  frameworks, are not walked. Input nested deeper than 32 levels, or a container that
+  contains itself, is refused rather than skipped. A URL is now any `scheme://`, in any
+  case, after leading whitespace (`HTTP://` and ` http://` walked past the endpoint
+  check), a `file:` URI is checked as a path, and a NUL byte in a path is refused instead
+  of escaping as a raw `ValueError`. `UnsafeDeserializationGuard` reads nested values
+  when called directly too.
+
+- **`BlockStrategy.HONEYPOT` turned the filesystem check off.** Its branch in step 3 was a
+  bare `pass`, so a path outside the allowed roots ran the real tool and returned the real
+  file instead of the honeypot's fake one. A violation is now refused under the honeypot
+  strategy too, and the wrapper answers with the honeypot data, as the docs always said.
+  A honeypot reply also wrote no audit record; it now writes `blocked: true` with
+  `honeypot: true`.
+
+- **A policy resolver that returned `None` ran the call with no policy at all**, so a
+  tenant or workspace the resolver did not know was allowed everything. It now refuses
+  the call. Return `PERMISSIVE_POLICY` to allow a call on purpose.
+
+- **One kill-switch key could release a freeze meant to need a quorum.** The listener
+  accepted any configured signer's MAC and then counted the envelope's self-declared
+  `keyid` as the vote, so one key signing two resets under two names met the 2-of-3
+  quorum. A vote now counts under the signer whose key verified it.
+
+- **Replayed kill-switch resets released a new freeze, with no key.** `ts_epoch` was
+  signed but never compared, so resets captured from an earlier incident and re-published
+  to the stream disarmed the next freeze. A broadcast whose signature the listener has
+  already seen is now a replay and is ignored; a reset counts only while frozen and only
+  when it is ordered after the freeze's threshold, the highest stamp the listener had
+  applied when the freeze began; a distinct trigger always freezes; and every stamp is
+  ordered no later than the listener's own clock plus `max_clock_skew_seconds` (300 s).
+  No sender's clock, fast or slow, can make a freeze unresettable or a trigger ignored.
+
+- **A malformed kill-switch frame could swallow a real trigger.** A frame `poll()` could
+  not read (`"version": null`, a list `ts_epoch`, a non-ASCII signature) raised out of the
+  loop after the transport had handed over the whole batch, so a trigger queued behind it
+  was lost and the fleet never froze. Each frame is now read on its own; the signature
+  must be 64 hex characters and `ts_epoch` finite.
+
+- **The per-model-tier budget priced every model at the `"default"` (Sonnet) row**,
+  whatever `model_id` the call carried, so a dearer model's call passed a cap it breaches:
+  `claude-opus-4-7` with 100k input tokens is 60¢ worst case against the strict preset's
+  50¢ frontier cap, and was allowed at 36¢. The worst case is now priced at `model_id`'s
+  own row (a dated snapshot, `<key>-YYYYMMDD`, at its model's), and an unlisted model at
+  the table's dearest row. Reconciliation prices the same way. The price table now lists
+  the current lineup, so `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5` and
+  `claude-haiku-5-5` price at their own rows rather than the dearest.
+
+- **`AgentSDKCreditBudget` defaulted to the superseded 2026-06 price snapshot**, which its
+  own module called stale: a $10 pool allowed a second 1M-in/1M-out Haiku 4.5 call at a
+  counted $9.60 when the real spend is $12.00, and every Claude 5 model raised
+  `ValueError`. It now defaults to the current snapshot, `anthropic_pricing_2026_10.json`,
+  read from the official pricing page on 2026-10-10: it adds the Claude 5.5 / 5.1 lineup
+  to the September card, whose rates are all unchanged.
+
+- **Six MCP guards let through shapes they could not read**, the class 0.10.21 closed in
+  the two spawn guards. `ConfigPathGuard` allowed a list `command`, a string `args`, and a
+  list or `MappingProxyType` `env`; `McpConfigPinSet` admitted `LD_PRELOAD` when `env` was
+  a list or a string; `EvalRCEGuard` and `FilterEvalRCEGuard` allowed payloads inside a
+  list or a nested mapping; `StdioCommandInjectionGuard` skipped non-string argv items;
+  `MCPServerEnvInterpolationGuard` skipped bytes, sets and a non-mapping config. Each now
+  reads every shape or refuses it.
+
+- **A tenant-scoped Claude auto-memory path could reach another tenant.**
+  `guarded_read` / `guarded_write` checked the path with a bare prefix test, so
+  `/memory/<tenant>/../<other>/notes.md` passed. A `..` segment (`/` or `\` separated) or
+  a NUL is now refused.
+
+- **`UnsafeDeserializationGuard` missed every pickle without 0x80 magic.** A protocol 0
+  (text) pickle, including the classic `cos\nsystem\n(S'id'\ntR.` payload, and any
+  protocol 0/1 pickle that names a callable passed as a string or bytes argument. They are
+  refused as `DENY_TEXT_PICKLE`. A data-only protocol-1 pickle is binary and still passes;
+  it can only build plain containers. The guard also reads its transport-declaration
+  argument for content now, instead of skipping it.
+
+### Changed
+
+- **The value-reading gates can refuse calls that used to pass:** a path or URL passed
+  positionally, nested in a container or model, or as a mapping key is now checked. A
+  top-level argument keeps the old path test. A nested string is a path only by its shape
+  (absolute, `~`, `..`) or under a path-named key with a separator or file extension, so
+  `application/json` in a headers mapping or a bare word under `source` is not; bytes are
+  a path only under a path-named key and only when shaped like one, so an upload's content
+  under `file=` is not. `PATH_PARAM_NAMES` gains the plurals (`paths`, `files`, ...), and
+  `URL_PARAM_NAMES` gains `urls`, `uris`, `endpoints`, `links` and `hrefs`.
+- **A policy resolver that returns `None` refuses the call** (see Security).
+- **Kill switch:** a listener needs at least `reset_quorum_threshold` signers to be
+  resettable (installing one with fewer logs `kill_switch_reset_unreachable`); duplicate
+  keyids or a shared key among signers raise `QuorumError`; `KillSwitchListener` gains
+  `max_clock_skew_seconds` (default 300) and an injectable `clock`; a trigger is never
+  dropped for its stamp, and a broadcast whose signature was already seen is ignored; a
+  stamp beyond the allowance delays the next reset by at most the allowance; a listener
+  started with `replay_history=False` can be refrozen by a replayed old trigger
+  (fail-closed); a trigger whose `keyid` names another signer still freezes and is logged;
+  `poll()` returns the number of broadcasts applied.
+- **Tier budgets:** an unlisted `model_id` is priced at the pricing table's dearest row,
+  which in `DEFAULT_PRICING` is `claude-3-opus`. Tag calls with the table's key, or add the
+  model with `CostTracker(pricing=...)`; the refusal says which row it used (`priced_as`)
+  and how to fix it. `BudgetEstimate`, `ReconciliationRecord` and `AirlockBudgetExceeded`
+  gain `priced_as`. `DEFAULT_PRICING` gains `claude-opus-4-8`, `-4-6`, `-4-5` and
+  `claude-sonnet-4-5`, so `CostTracker(model=...)` prices those at their own rows.
+- **`AgentSDKCreditBudget` counts differently by default:** Haiku 4.5 a quarter higher,
+  Opus 4.6 and 4.7 a third of before, and Claude 5 models are priced instead of raising.
+  `override_pricing=load_anthropic_pricing_2026_06()` reproduces the old table.
+- **New verdict members:** `DENY_TEXT_PICKLE` on `UnsafeDeserializationVerdict`, and
+  `DENY_UNINSPECTABLE` on `UnsafeDeserializationVerdict`,
+  `EvalRCEVerdict`, `FilterEvalRCEVerdict`, `StdioCommandInjectionVerdict` and
+  `MCPEnvInterpolationVerdict`. `McpConfigPinViolation` gains `reason="unreadable"` and a
+  `detail`; `McpConfigPinSet.from_manifest` raises `ValueError` on an unreadable entry; a
+  list `env` now pins its keys, so a fingerprint stored from one under 0.10.23 mismatches
+  (fail-closed).
+- **Audit records** gain an optional `honeypot` field, written only when true.
+
+### Fixed
+
+- **`airlock egress-bench` never worked from the CLI.** In a checkout it raised
+  `AttributeError` (the walker loaded into an unregistered module), and from an installed
+  wheel `FileNotFoundError` (neither `scripts/egress_bench.py` nor the fixtures ship). It
+  now runs in a checkout, exits 2 with a reason elsewhere, and exits 2 on an invalid
+  fixture instead of a traceback; `make egress-bench` was never affected.
+- **The docker CI job's `grep -q "5 passed"`** also matched `15 passed` and
+  `5 passed, 1 skipped`. It now matches pytest's summary line, anchored, over only the
+  files that hold docker-marked tests: collecting all of `tests/` added three
+  collection-time skips of unrelated modules, which the loose grep had been hiding.
+- **Three benchmark harnesses stamped the local date** (`blockrate`, `toolprivbench`,
+  `harness_injection`) while the freshness gate reads the UTC day; they stamp UTC.
+- **The blockrate sandbox arm could report a backend "ran" when nothing executed**, and it
+  pinged a local Docker daemon, which `@Airlock(sandbox=True)` never dispatches to. It
+  reports a backend only when admitted calls returned from it, in `RESULTS.md` and on
+  the console; E2B is the only target.
+- **`agentdojo --force`'s help said it replaces a dated block.** It appends one; dated
+  blocks are never edited.
+- **The README implied `@Airlock(sandbox=True)` could run on Docker, Modal or local
+  backends.** It dispatches only to E2B; the others in `sandbox_backend.py` are called
+  directly. The sandbox docs already said so. The README row now does too, and the
+  concepts diagram no longer puts those backends or the circuit breaker on the decorator's
+  path.
+- **Stale comments:** the `py310` ruff-target note now names UP017, a safe fix that
+  `make format` would apply unasked at `py311`; the reconciliation comment no longer says a
+  session cap is fed by it; the pricing table no longer says an unknown model is
+  over-estimated.
+
+### Benchmarks
+
+- **Every dated row was re-measured, not re-dated (#277, #278).** ToolPrivBench, the
+  AgentDojo deterministic bound (524/609) and MCP conformance reproduced exactly against
+  0.10.23; the conformance headline said 20/20 since 2026-08-10 and is corrected to 22/22,
+  with the old figure kept on record. The gateway head-to-head is unchanged (airlock 12/12,
+  Docker MCP Gateway 0/12). The harness-injection re-run is 0/36 on both arms for both
+  harnesses, and the control did not fire, so it remains a null result. The OWASP Agentic
+  matrix was re-verified, not restamped. All dates are UTC.
+- **The freshness gate pairs each README row with its own landing-page row** by title,
+  rather than checking the date against the whole page.
+- **Harness injection:** `--model HARNESS=MODEL` pins a CLI's model, recorded per cell; a
+  CLI that exits non-zero before doing anything is an `error` cell, not a zero, and a
+  resumed checkpoint re-runs error cells and cells recorded under another model.
+
+### CVE triage
+
+- **CVE-2026-55176** (Soft Machine, #284): out of scope, a cross-tenant authorization bug
+  in the service; a row in the out-of-scope table (#286).
+- **CVE-2026-105697 and CVE-2026-105740** (Langflow stdio spawn, #287, #288): the
+  authorization half is Langflow's; the spawn primitive is already refused by
+  `McpSubprocessArgInjectionGuard`. Two second-defence fixtures (#289).
+- **CVE-2026-105793 and CVE-2026-105788** (Microsoft UFO mobile adb, #290, #293): the
+  reparsing shell is the callee's quoting; strict typing refuses the separators when the
+  tool declares a narrow type. Two second-defence fixtures (#298) and the strict-typing
+  note in `tests/cves/CLAUDE.md` (#299).
+- **CVE-2026-105797** (SimpleChat stdio plugin, #296): the authorization ordering is the
+  callee's; the stored spawn primitive is refused by `McpSubprocessArgInjectionGuard` with
+  or without the `type` field. A second-defence fixture (#301).
+- **CVE-2026-104120** (mcp-server-fetch `fetch_url` SSRF, #302): in scope; `SSRFEgressGuard`
+  already refuses the destinations. A second-defence fixture (#306).
+- **CVE-2026-108263** (Astron code node, #311): out of scope with no test, because a
+  no-sandbox executor needs no eval-family call and a fixture would over-claim (#312).
+- The catalog counts 55 regression modules and 55 distinct CVEs (47 with a row of their
+  own, 8 in umbrella modules); a `test_cve_*.py` module is one catalog CVE (#291).
+
 ## [0.10.23] - 2026-10-03
 
 ### Security

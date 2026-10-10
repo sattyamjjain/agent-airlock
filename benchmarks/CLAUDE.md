@@ -18,18 +18,20 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   `BENCHMARK.md`. Its `sandbox=True` arm names each policy stub after the item's tool
   and compares policy refusals only, and reports the agreements split into admitted and
   refused: a parity in which either side is zero says nothing (it was 200/200 refused
-  until 0.10.23).
+  until 0.10.23). It reports a backend as having run only when admitted calls came back
+  from it, and E2B is the only one it looks for: `@Airlock(sandbox=True)` dispatches
+  nowhere else (until 0.10.24 it counted a Docker daemon that answered a ping).
 - **`toolprivbench/`** — least-privilege block rate; `subset_scenarios()` also seeds
   blockrate's corpus. `--write` drops the hand-kept `## Re-runs` table from `RESULTS.md`.
 - **`agentdojo/run.py`** — a free deterministic bound and a paid `--model` pass, dated
   separately; `--out` appends the paid block below the `CROSS-MODEL-RUNS` marker and needs
-  `--force` to repeat a heading.
+  `--force` to repeat a heading (it appends another block; a dated block is never edited).
 - **`harness_injection/`** — matched-pair README injection against real agent CLIs; a dry
   run unless `--run`. `--write` renders `RESULTS.md`; `power.py` owns the statistics.
   `--model HARNESS=MODEL` pins a CLI's model (recorded per cell and in the rendered
-  command), because a CLI's configured default can change between runs; a resumed
-  checkpoint re-runs any cell recorded under a different model. A CLI that exits non-zero
-  before any observable work is an `error` cell, never a non-action.
+  command), because a CLI's configured default can change between runs. A CLI that exits
+  non-zero before any observable work is an `error` cell, never a non-action, and a resumed
+  checkpoint re-runs every `error` cell and any cell recorded under a different model.
 - **`vs_gateway/`** — airlock measured live against a gateway column replayed from
   `gateway_measurement.json`, which only `gateway_harness/regen.py` rewrites.
 - **`mcp_conformance/run.py`** — runs the `mcp_spec.conformance` cases; exits 1 on a failure.
@@ -47,7 +49,8 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
 - **A date names its run.** Move a README freshness marker (`_re-run_`, `_re-measured live_`,
   `last verified`) and its `docs/benchmarks/index.md` twin only after a real run. A replay
   or re-render is not one, so hand-fix a generated file rather than regenerate it under an
-  old date.
+  old date. Dates are UTC, the day `check_benchmark_freshness.py` reads; every harness's
+  `--date` defaults to the UTC day, so a run after midnight IST still stamps the day before.
 - **Nothing is dropped.** Failed runs, did-not-run arms, wrong diagnoses and superseded runs
   stay beside their correction; unmeasured is "not measured" / `n=0`, never `0`; a null
   ships with its benign control and every denominator; incumbents that were not executed
@@ -60,7 +63,10 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   the root `BENCHMARK.md`, and inside `docs/benchmarks/` pages (each of which must be in
   the nav).
 - **Register a new README row** in `BENCHMARKS` (`scripts/check_benchmark_freshness.py`)
-  under a string unique to its line, or its date goes unchecked.
+  under a string unique to its line, or its date goes unchecked, and give it a twin row in
+  `docs/benchmarks/index.md` whose bold first cell matches README's (case, `*`, backticks
+  and hyphens ignored) with the same date: the default mode, run by CI's `docs` job, pairs
+  rows by title and fails on a missing or mismatched twin.
 - **Tests pin published figures** (`grep -rln 'from benchmarks' tests/`): move a pin and its
   `RESULTS.md` together, make run-dependent asserts conditional, and leave `power.Z_95`
   alone — the published intervals were computed with it.

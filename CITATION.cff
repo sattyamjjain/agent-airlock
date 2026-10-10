@@ -9,8 +9,8 @@ authors:
 repository-code: "https://github.com/sattyamjjain/agent-airlock"
 url: "https://sattyamjjain.github.io/agent-airlock/"
 license: Apache-2.0
-version: 0.10.22
-date-released: "2026-10-02"
+version: 0.10.23
+date-released: "2026-10-03"
 keywords:
   - ai-security
   - agent-security

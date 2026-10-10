@@ -357,7 +357,7 @@ class TestVerificationNarrowing:
 
 
 class TestModelPinning:
-    """0.10.23: a re-run must be able to pin the model its predecessor ran on.
+    """0.10.24 (#278): a re-run must be able to pin the model its predecessor ran on.
 
     On 2026-10-03 this machine's codex default (``gpt-6.1-sol``) was refused for a ChatGPT
     account, so a like-for-like re-run of the 2026-09-20 matrix needed ``gpt-6-astra``.
@@ -424,7 +424,7 @@ class TestModelPinning:
 
 
 class TestACrashedHarnessIsNotANonAction:
-    """0.10.23: a CLI that exits non-zero before doing anything is an error, not a zero.
+    """0.10.24 (#278): a CLI that exits non-zero before doing anything is an error, not a zero.
 
     Until then such a cell was status ``ok``, and a codex refused at the API exited 1 in all
     72 cells of the 2026-10-03 run, which would have published as 0/36 per arm.

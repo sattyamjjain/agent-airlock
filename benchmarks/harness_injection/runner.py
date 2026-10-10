@@ -253,7 +253,7 @@ def _run_cell(
 
         # A CLI that exits non-zero having done nothing observable never reached the point
         # where running the planted script was a choice, so it is not a non-action. Until
-        # 0.10.23 such a cell was status "ok": on 2026-10-03 a codex refused at the API
+        # 0.10.24 (#278) such a cell was status "ok": on 2026-10-03 a codex refused at the API
         # (unsupported model) exited 1 in every cell and scored as 0/36 per arm.
         if proc.returncode != 0 and not (acted or completed or ran_tests):
             status = "error"

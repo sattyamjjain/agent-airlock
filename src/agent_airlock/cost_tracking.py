@@ -6,9 +6,10 @@ with callback interface for external systems.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal, Protocol
@@ -141,16 +142,36 @@ class BudgetConfig:
 # Default pricing per 1K tokens.
 #
 # Anthropic rows read from https://platform.claude.com/docs/en/about-claude/pricing
-# on 2026-09-12; the per-million figures there are divided by 1000 for this table's
-# unit. Base input/output only — prompt-caching multipliers, the 50% Batch discount
-# and the 1.1x us-only data-residency multiplier stack on top and are not modelled.
+# on 2026-10-10; the per-million figures there are divided by 1000 for this table's
+# unit. Base input/output only — prompt-caching multipliers, the 50% Batch discount,
+# data-residency multipliers and long-context rates stack on top and are not modelled
+# (Claude Haiku 5.5 is listed at its rate for prompts up to 100,000 tokens).
 #
 # This is a *fallback* table for CostTracker, not a rate card: pass `pricing=` to
-# override, and note `"default"` catches anything unlisted rather than returning
-# zero, so an unknown model is over-estimated rather than silently free.
-# `agent_airlock.data/anthropic_pricing_2026_09.json` is the dated, loadable
-# snapshot (see `load_anthropic_pricing`); this dict is the in-process default.
+# override. `"default"` (Sonnet-class rates) prices a model the table does not list,
+# so a call is never priced at zero, but it is no ceiling: a model dearer than that row
+# is under-estimated. `ModelTierBudget` therefore never uses it for a `model_id` it was
+# told about and cannot find; it prices that call at the dearest row (`_price_for_model`).
+# `agent_airlock.data/anthropic_pricing_2026_10.json` is the dated, loadable
+# snapshot (see `load_anthropic_pricing`); this dict is the in-process default, and it
+# lists every model that snapshot prices (`tests/test_budget_pricing_0_10_24.py`).
 DEFAULT_PRICING: dict[str, dict[str, Decimal]] = {
+    "claude-fable-5-1": {
+        "input": Decimal("0.010"),
+        "output": Decimal("0.050"),
+    },
+    "claude-opus-5-5": {
+        "input": Decimal("0.004"),
+        "output": Decimal("0.020"),
+    },
+    "claude-sonnet-5-5": {
+        "input": Decimal("0.002"),
+        "output": Decimal("0.010"),
+    },
+    "claude-haiku-5-5": {
+        "input": Decimal("0.0001"),
+        "output": Decimal("0.0005"),
+    },
     "claude-opus-5": {
         "input": Decimal("0.005"),
         "output": Decimal("0.025"),
@@ -163,11 +184,27 @@ DEFAULT_PRICING: dict[str, dict[str, Decimal]] = {
         "input": Decimal("0.001"),
         "output": Decimal("0.005"),
     },
+    "claude-opus-4-8": {
+        "input": Decimal("0.005"),
+        "output": Decimal("0.025"),
+    },
     "claude-opus-4-7": {
         "input": Decimal("0.005"),
         "output": Decimal("0.025"),
     },
+    "claude-opus-4-6": {
+        "input": Decimal("0.005"),
+        "output": Decimal("0.025"),
+    },
+    "claude-opus-4-5": {
+        "input": Decimal("0.005"),
+        "output": Decimal("0.025"),
+    },
     "claude-sonnet-4-6": {
+        "input": Decimal("0.003"),
+        "output": Decimal("0.015"),
+    },
+    "claude-sonnet-4-5": {
         "input": Decimal("0.003"),
         "output": Decimal("0.015"),
     },
@@ -196,6 +233,13 @@ DEFAULT_PRICING: dict[str, dict[str, Decimal]] = {
         "output": Decimal("0.015"),
     },
 }
+
+
+def _cost_of(tokens: TokenUsage, rates: Mapping[str, Decimal]) -> Decimal:
+    """USD cost of ``tokens`` at one pricing row (prices are per 1K tokens)."""
+    input_cost = (Decimal(tokens.input_tokens) / 1000) * rates.get("input", Decimal("0"))
+    output_cost = (Decimal(tokens.output_tokens) / 1000) * rates.get("output", Decimal("0"))
+    return input_cost + output_cost
 
 
 class CostTracker:
@@ -255,9 +299,7 @@ class CostTracker:
         Returns:
             Cost in USD.
         """
-        input_cost = (Decimal(tokens.input_tokens) / 1000) * self.get_price("input")
-        output_cost = (Decimal(tokens.output_tokens) / 1000) * self.get_price("output")
-        return input_cost + output_cost
+        return _cost_of(tokens, self.pricing.get(self.model, self.pricing["default"]))
 
     def add_callback(self, callback: CostCallback) -> None:
         """Add callback for cost records.
@@ -610,6 +652,7 @@ class AirlockBudgetExceeded(AirlockError):
         estimated_output_tokens: int,
         budget_type: Literal["cost", "tokens"],
         model_id: str | None = None,
+        priced_as: str | None = None,
     ) -> None:
         super().__init__(message)
         self.tier = tier
@@ -618,6 +661,7 @@ class AirlockBudgetExceeded(AirlockError):
         self.estimated_output_tokens = estimated_output_tokens
         self.budget_type = budget_type
         self.model_id = model_id
+        self.priced_as = priced_as
 
     def to_block_metadata(self) -> dict[str, Any]:
         """Serialize to a JSON-safe dict for AirlockResponse.blocked_response(metadata=...)."""
@@ -628,6 +672,7 @@ class AirlockBudgetExceeded(AirlockError):
             "estimated_output_tokens": self.estimated_output_tokens,
             "budget_type": self.budget_type,
             "model_id": self.model_id,
+            "priced_as": self.priced_as,
         }
 
 
@@ -673,7 +718,8 @@ class BudgetEstimate:
     Threaded through ``_post_execution`` so the actual cost can be reconciled
     against the worst-case estimate. ``estimated_output_tokens`` is the
     worst-case output assumed by the estimator (the tier's ``max_output_tokens``,
-    or zero when no token cap is configured).
+    or zero when no token cap is configured). ``priced_as`` names the pricing row
+    the estimate used (see :meth:`ModelTierBudget.check_pre_execute`).
     """
 
     tier: str
@@ -682,15 +728,17 @@ class BudgetEstimate:
     estimated_output_tokens: int
     input_tokens: int
     model_id: str | None
+    priced_as: str | None = None
 
 
 @dataclass(frozen=True)
 class ReconciliationRecord:
     """Result of post-execute reconciliation of actual vs estimated cost.
 
-    Observability-only — emitted as a structlog event but never raised.
-    Users who want a hard session cap should layer ``BudgetConfig.max_cost_per_session``
-    on top.
+    Observability-only — emitted as a structlog event but never raised, and the actual
+    cost is not recorded on the tracker, so it does not feed a ``BudgetConfig`` session
+    cap. A host that wants one records its calls on that tracker itself.
+    ``priced_as`` names the pricing row the actual cost used.
     """
 
     tier: str
@@ -700,11 +748,59 @@ class ReconciliationRecord:
     input_tokens: int
     output_tokens: int
     output_tokens_over_cap: bool
+    priced_as: str | None = None
 
 
 def _usd_to_cents(usd: Decimal) -> int:
     """Convert a USD Decimal to integer cents, rounding half-up."""
     return int((usd * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+#: A dated snapshot id: a pricing-table key plus ``-YYYYMMDD`` (``claude-sonnet-4-5-20250929``).
+_DATED_SNAPSHOT = re.compile(r"(?P<base>.+)-\d{8}")
+
+
+def _price_for_model(
+    cost_tracker: CostTracker,
+    usage: TokenUsage,
+    model_id: str | None,
+) -> tuple[Decimal, str]:
+    """Price ``usage`` for a tier-budget check; return the cost and the row it used.
+
+    Until 0.10.24 the check priced every call at the tracker's own model, the
+    ``"default"`` row (Sonnet rates) unless the host configured another, whatever
+    ``model_id`` the call carried, so a dearer model's call was under-estimated and
+    passed a cap it breaches. Now:
+
+    * a ``model_id`` the tracker's table lists is priced at its own row, and so is a
+      dated snapshot of one (``claude-sonnet-4-5-20250929`` at ``claude-sonnet-4-5``);
+    * a ``model_id`` the table does not list is priced at the row that makes ``usage``
+      cost the most. The default row is mid-priced, and an under-estimate is the
+      fail-open direction for a cost cap;
+    * no ``model_id`` keeps the old behaviour, the tracker's own model.
+
+    Args:
+        cost_tracker: Tracker carrying the pricing table (per 1K tokens).
+        usage: Token usage to price.
+        model_id: The call's model, from its context metadata. May be None.
+
+    Returns:
+        ``(cost_usd, priced_as)``: the cost and the pricing-table key it was priced at.
+    """
+    pricing = cost_tracker.pricing
+    if model_id is None:
+        own = cost_tracker.model if cost_tracker.model in pricing else "default"
+        return cost_tracker.calculate_cost(usage), own
+    rates = pricing.get(model_id)
+    if rates is not None:
+        return _cost_of(usage, rates), model_id
+    dated = _DATED_SNAPSHOT.fullmatch(model_id)
+    if dated is not None and dated.group("base") in pricing:
+        base = dated.group("base")
+        return _cost_of(usage, pricing[base]), base
+    # Ties break on the key so the row an unknown model is priced at is stable.
+    priced_as = max(pricing, key=lambda key: (_cost_of(usage, pricing[key]), key))
+    return _cost_of(usage, pricing[priced_as]), priced_as
 
 
 @dataclass
@@ -731,6 +827,12 @@ class ModelTierBudget:
        ``tier_resolver: Callable[[str], str]`` that maps model IDs to
        tier labels. The router stays in the router; airlock just calls
        the callback.
+
+    The worst case is priced at the call's ``model_id`` row of the tracker's
+    pricing table; a ``model_id`` the table does not list at its dearest row, so
+    pass the table's exact key (or add the model with ``CostTracker(pricing=...)``)
+    to price it exactly; an untagged call at the tracker's own model. Until 0.10.24
+    every call was priced at the tracker's own model, whatever its ``model_id``.
 
     Example:
         budget = ModelTierBudget(
@@ -827,16 +929,16 @@ class ModelTierBudget:
             input_tokens: Best estimate of the input tokens the call will
                 consume. May be 0 if unknown — the estimate then covers
                 only the worst-case output cost.
-            cost_tracker: Cost tracker carrying the per-model pricing table
-                (reuses :meth:`CostTracker.calculate_cost` so we don't
-                duplicate the pricing surface).
-            model_id: Optional model identifier, attached to the estimate
-                and the exception for telemetry.
+            cost_tracker: Cost tracker carrying the per-model pricing table.
+            model_id: The call's model. Prices the worst case at its row of the
+                tracker's table, or at the table's dearest row when the table does
+                not list it; None prices it at the tracker's own model. Also
+                attached to the estimate and the exception for telemetry.
 
         Returns:
-            :class:`BudgetEstimate` carrying the tier, cap, and worst-case
-            cost. Pass this to :meth:`reconcile_post_execute` after the
-            call completes.
+            :class:`BudgetEstimate` carrying the tier, cap, worst-case cost and
+            the pricing row it used. Pass this to :meth:`reconcile_post_execute`
+            after the call completes.
 
         Raises:
             AirlockBudgetExceeded: If the worst-case estimate exceeds
@@ -853,21 +955,29 @@ class ModelTierBudget:
             input_tokens=input_tokens,
             output_tokens=worst_case_output,
         )
-        estimated_cost_usd = cost_tracker.calculate_cost(worst_case_usage)
+        estimated_cost_usd, priced_as = _price_for_model(cost_tracker, worst_case_usage, model_id)
         estimated_cost_cents = _usd_to_cents(estimated_cost_usd)
 
         if cap.max_cost_cents is not None and estimated_cost_cents > cap.max_cost_cents:
+            unlisted = model_id is not None and priced_as != model_id
             raise AirlockBudgetExceeded(
                 f"Tier {tier_label!r} cost cap exceeded: worst-case "
                 f"{estimated_cost_cents}¢ > cap {cap.max_cost_cents}¢ "
                 f"(input_tokens={input_tokens}, "
-                f"worst_case_output_tokens={worst_case_output})",
+                f"worst_case_output_tokens={worst_case_output}, priced_as={priced_as!r})"
+                + (
+                    f"; model_id {model_id!r} is not in the pricing table, so it was "
+                    f"priced at its dearest row"
+                    if unlisted
+                    else ""
+                ),
                 tier=tier_label,
                 cap=cap,
                 estimated_cost_cents=estimated_cost_cents,
                 estimated_output_tokens=worst_case_output,
                 budget_type="cost",
                 model_id=model_id,
+                priced_as=priced_as,
             )
 
         logger.debug(
@@ -878,6 +988,7 @@ class ModelTierBudget:
             estimated_cost_cents=estimated_cost_cents,
             cap_cents=cap.max_cost_cents,
             model_id=model_id,
+            priced_as=priced_as,
         )
         return BudgetEstimate(
             tier=tier_label,
@@ -886,6 +997,7 @@ class ModelTierBudget:
             estimated_output_tokens=worst_case_output,
             input_tokens=input_tokens,
             model_id=model_id,
+            priced_as=priced_as,
         )
 
     def reconcile_post_execute(
@@ -897,15 +1009,18 @@ class ModelTierBudget:
     ) -> ReconciliationRecord:
         """Reconcile actual vs estimated cost. Never raises.
 
-        Records the actual cost via ``cost_tracker.record()`` (which feeds
-        the session-level :class:`BudgetConfig` checks, if any). Emits a
-        structlog ``tier_budget_reconciled`` event with the delta. Does
-        NOT raise on over-cap actuals — a call that estimates 5¢ and
-        actually costs 50¢ is logged but its return value still flows
-        back to the caller. Users who want a hard session cap should
-        configure ``BudgetConfig.max_cost_per_session`` on the tracker.
+        Prices ``actual`` the way the estimate was priced, from the estimate's
+        ``model_id`` (see :meth:`check_pre_execute`), and emits a structlog
+        ``tier_budget_reconciled`` event with the delta. Does NOT raise on
+        over-cap actuals — a call that estimates 5¢ and actually costs 50¢ is
+        logged but its return value still flows back to the caller.
+
+        It computes the cost and does not record it: nothing here calls
+        ``cost_tracker.record()``, so a :class:`BudgetConfig` session cap on the
+        tracker never sees these calls. A host that wants one records its calls
+        on that tracker itself (``tracker.track(...)``).
         """
-        actual_cost_usd = cost_tracker.calculate_cost(actual)
+        actual_cost_usd, priced_as = _price_for_model(cost_tracker, actual, estimate.model_id)
         actual_cost_cents = _usd_to_cents(actual_cost_usd)
         delta_cents = actual_cost_cents - estimate.estimated_cost_cents
         cap = estimate.cap
@@ -922,6 +1037,7 @@ class ModelTierBudget:
             output_tokens=actual.output_tokens,
             output_tokens_over_cap=over_tokens,
             model_id=estimate.model_id,
+            priced_as=priced_as,
         )
         return ReconciliationRecord(
             tier=estimate.tier,
@@ -931,6 +1047,7 @@ class ModelTierBudget:
             input_tokens=actual.input_tokens,
             output_tokens=actual.output_tokens,
             output_tokens_over_cap=over_tokens,
+            priced_as=priced_as,
         )
 
     def canonical_payload(self) -> dict[str, Any]:

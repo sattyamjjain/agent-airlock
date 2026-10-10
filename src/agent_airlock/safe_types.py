@@ -34,6 +34,7 @@ import binascii
 import enum
 import fnmatch
 import ipaddress
+import re
 import socket
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -43,6 +44,7 @@ from urllib.parse import urlparse
 
 from pydantic import AfterValidator
 
+from ._arg_walk import ArgumentNestingError, iter_argument_values
 from ._log import structlog
 
 logger = structlog.get_logger("agent-airlock.safe_types")
@@ -895,6 +897,13 @@ _MAX_PICKLE_PROTOCOL = 5
 # Minimum length before a string is even considered as candidate base64
 # pickle. Below this, false-positive risk outweighs signal.
 _MIN_B64_PICKLE_LEN = 8
+# A protocol 0/1 pickle carries no 0x80 magic: it is text. Its GLOBAL (`c`) and INST
+# (`i`) opcodes name a callable as `module\nname\n`, the shape every text-pickle RCE
+# payload needs (`cos\nsystem\n(S'id'\ntR.`); a data-only one ends in the STOP opcode
+# `.` with memo PUTs (`\np0\n`) along the way. Until 0.10.24 both walked past the guard.
+_TEXT_PICKLE_GLOBAL = re.compile(r"(?:^|[\n(])[ci][A-Za-z_][\w.]*\n[A-Za-z_][\w.]*\n")
+_TEXT_PICKLE_MEMO = re.compile(r"\np\d+\n")
+_TEXT_PICKLE_FIRST_OPCODES = frozenset("()]}cdgilpFILNSV")
 
 
 class UnsafeDeserializationVerdict(str, enum.Enum):
@@ -902,9 +911,13 @@ class UnsafeDeserializationVerdict(str, enum.Enum):
 
     ALLOW = "allow"
     DENY_PICKLE_MAGIC = "deny_pickle_magic"
+    DENY_TEXT_PICKLE = "deny_text_pickle"
+    """A pickle with no 0x80 magic: protocol 0 text, or one naming a callable (v0.10.24)."""
     DENY_BASE64_PICKLE = "deny_base64_pickle"
     DENY_SERIALIZER_MARKER = "deny_serializer_marker"
     DENY_UNAUTHENTICATED_TRANSPORT = "deny_unauthenticated_transport"
+    DENY_UNINSPECTABLE = "deny_uninspectable"
+    """An argument nested too deep, or containing itself, to be read (v0.10.24)."""
 
 
 @dataclass(frozen=True)
@@ -1020,56 +1033,84 @@ class UnsafeDeserializationGuard:
 
         transport_ok = self._transport_authenticated(args)
 
-        for field_name, value in args.items():
-            if field_name == self._transport_key:
-                continue
-
-            # 1) Raw pickle magic bytes.
-            if isinstance(value, (bytes, bytearray)):
-                if self._is_pickle_magic(value):
-                    return self._deny(
-                        UnsafeDeserializationVerdict.DENY_PICKLE_MAGIC,
-                        field_name,
-                        "pickle-magic",
-                        f"argument {field_name!r} carries pickle magic bytes "
-                        f"(0x80 PROTO opcode) — an unsafe-deserialization payload",
-                    )
-                # 4) A serialized-object (bytes) arg over an unauthenticated
-                #    channel is denied even when its content is not a
-                #    recognised pickle (defence-in-depth for the airgap).
-                if self._require_auth and not transport_ok:
-                    return self._deny(
-                        UnsafeDeserializationVerdict.DENY_UNAUTHENTICATED_TRANSPORT,
-                        field_name,
-                        "unauthenticated-transport",
-                        f"argument {field_name!r} is a serialized-object (bytes) "
-                        f"payload but the call did not declare an authenticated + "
-                        f"TLS transport in {self._transport_key!r}",
-                    )
-                continue
-
-            # 2) + 3) String-valued args: base64 pickle, then marker tokens.
-            if isinstance(value, str):
-                if self._is_base64_pickle(value):
-                    return self._deny(
-                        UnsafeDeserializationVerdict.DENY_BASE64_PICKLE,
-                        field_name,
-                        "base64-pickle",
-                        f"argument {field_name!r} is base64 that decodes to a "
-                        f"pickle payload (0x80 PROTO opcode)",
-                    )
-                marker = self._find_marker(value)
-                if marker is not None:
-                    return self._deny(
-                        UnsafeDeserializationVerdict.DENY_SERIALIZER_MARKER,
-                        field_name,
-                        marker,
-                        f"argument {field_name!r} contains deserialization sink token {marker!r}",
-                    )
+        # Every value, nested ones included (v0.10.24): until then only top-level values
+        # were read, so a pickle inside a list or a mapping walked past the guard. The
+        # transport declaration is read for content too; only the unauthenticated-bytes
+        # rule, which it is the authority for, does not apply to it.
+        try:
+            for item in iter_argument_values(args):
+                is_transport = item.path == self._transport_key or item.path.startswith(
+                    (f"{self._transport_key}.", f"{self._transport_key}[")
+                )
+                decision = self._inspect_value(item.path, item.value, transport_ok or is_transport)
+                if decision is not None:
+                    return decision
+        except ArgumentNestingError as exc:
+            return self._deny(
+                UnsafeDeserializationVerdict.DENY_UNINSPECTABLE,
+                exc.path,
+                "uninspectable",
+                f"argument {exc.path!r} cannot be inspected: {exc.reason}",
+            )
 
         return self._allow()
 
     # -- internal helpers --------------------------------------------------
+
+    def _inspect_value(
+        self,
+        field_name: str,
+        value: Any,
+        transport_ok: bool,
+    ) -> UnsafeDeserializationDecision | None:
+        """The deny decision one argument value earns, or None when it is clean."""
+        # 1) Raw pickle magic bytes.
+        if isinstance(value, (bytes, bytearray)):
+            if self._is_pickle_magic(value):
+                return self._deny(
+                    UnsafeDeserializationVerdict.DENY_PICKLE_MAGIC,
+                    field_name,
+                    "pickle-magic",
+                    f"argument {field_name!r} carries pickle magic bytes "
+                    f"(0x80 PROTO opcode) — an unsafe-deserialization payload",
+                )
+            if self._is_text_pickle(bytes(value).decode("latin-1")):
+                return self._deny_text_pickle(field_name)
+            # 4) A serialized-object (bytes) arg over an unauthenticated
+            #    channel is denied even when its content is not a
+            #    recognised pickle (defence-in-depth for the airgap).
+            if self._require_auth and not transport_ok:
+                return self._deny(
+                    UnsafeDeserializationVerdict.DENY_UNAUTHENTICATED_TRANSPORT,
+                    field_name,
+                    "unauthenticated-transport",
+                    f"argument {field_name!r} is a serialized-object (bytes) "
+                    f"payload but the call did not declare an authenticated + "
+                    f"TLS transport in {self._transport_key!r}",
+                )
+            return None
+
+        # 2) + 3) String-valued args: base64 pickle, text pickle, then marker tokens.
+        if isinstance(value, str):
+            if self._is_text_pickle(value):
+                return self._deny_text_pickle(field_name)
+            if self._is_base64_pickle(value):
+                return self._deny(
+                    UnsafeDeserializationVerdict.DENY_BASE64_PICKLE,
+                    field_name,
+                    "base64-pickle",
+                    f"argument {field_name!r} is base64 that decodes to a "
+                    f"pickle payload (0x80 PROTO opcode)",
+                )
+            marker = self._find_marker(value)
+            if marker is not None:
+                return self._deny(
+                    UnsafeDeserializationVerdict.DENY_SERIALIZER_MARKER,
+                    field_name,
+                    marker,
+                    f"argument {field_name!r} contains deserialization sink token {marker!r}",
+                )
+        return None
 
     def _allow(self) -> UnsafeDeserializationDecision:
         return UnsafeDeserializationDecision(
@@ -1129,6 +1170,31 @@ class UnsafeDeserializationGuard:
         if len(value) < 2:
             return False
         return value[0] == _PICKLE_PROTO_OPCODE and value[1] <= _MAX_PICKLE_PROTOCOL
+
+    @staticmethod
+    def _is_text_pickle(value: str) -> bool:
+        """True iff ``value`` is a pickle without 0x80 magic: one that names a callable
+        with the GLOBAL / INST opcode (any protocol-0/1 code-execution payload must), or a
+        protocol-0 text stream (memo PUTs, ending in STOP). A data-only protocol-1 pickle
+        is binary and is not matched; it can only build plain containers."""
+        if _TEXT_PICKLE_GLOBAL.search(value) is not None:
+            return True
+        stripped = value.strip()
+        return (
+            len(stripped) >= 6
+            and stripped[0] in _TEXT_PICKLE_FIRST_OPCODES
+            and stripped.endswith(".")
+            and _TEXT_PICKLE_MEMO.search(stripped) is not None
+        )
+
+    def _deny_text_pickle(self, field_name: str) -> UnsafeDeserializationDecision:
+        return self._deny(
+            UnsafeDeserializationVerdict.DENY_TEXT_PICKLE,
+            field_name,
+            "text-pickle",
+            f"argument {field_name!r} is a protocol 0/1 (text) pickle, which carries no "
+            f"0x80 magic — an unsafe-deserialization payload",
+        )
 
     def _is_base64_pickle(self, value: str) -> bool:
         """True iff ``value`` is base64 that decodes to a pickle-magic byte string."""

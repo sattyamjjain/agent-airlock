@@ -19,8 +19,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--write", action="store_true", help="(re)write RESULTS.md")
     parser.add_argument(
         "--date",
-        default=datetime.date.today().isoformat(),
-        help="run date stamped into RESULTS.md (default: today)",
+        # UTC, the day check_benchmark_freshness.py reads: a local default stamped tomorrow on
+        # a run after midnight IST.
+        default=datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
+        help="run date stamped into RESULTS.md (default: today in UTC, %(default)s)",
     )
     args = parser.parse_args(argv)
 
@@ -58,8 +60,16 @@ def main(argv: list[str] | None = None) -> int:
         f"{arm.policy_agreements}/{arm.policy_items} policy "
         f"({arm.policy_admitted} admitted, {arm.policy_refused} refused)"
     )
-    if arm.backend_available:
-        print(f"  isolation backend execution:       ran on {arm.backend_name}")
+    if arm.backend_available and arm.backend_executions:
+        print(
+            f"  isolation backend execution:       ran on {arm.backend_name} "
+            f"({arm.backend_executions} admitted calls returned from it)"
+        )
+    elif arm.backend_available:
+        print(
+            f"  isolation backend execution:       NOT RUN ({arm.backend_name} detected, "
+            f"no call returned from it)"
+        )
     else:
         print(f"  isolation backend execution:       NOT RUN ({arm.backend_reason})")
     print(f"  corpus items the decorator cannot enforce: {arm.undeclared_items}")
