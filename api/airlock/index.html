@@ -3340,6 +3340,9 @@ below.</p>
 <a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="mi">2</span>
 </code></pre></div>
+<p>A resolver that returns <code>None</code> refuses the call. Until 0.10.24 it ran the call with no
+policy at all, so a tenant the resolver did not know was allowed everything. Return
+<code>PERMISSIVE_POLICY</code> to allow a call on purpose.</p>
 <p>The resolver receives the context read from the tool's first argument (an object with a
 <code>context</code>, <code>ctx</code>, <code>request_context</code> or <code>session_context</code> attribute, such as an agent
 framework's run context). When that carries no agent id, the identity, roles and workspace
@@ -3406,8 +3409,11 @@ or per session), <code>BudgetExceededError</code> is raised. Amounts are <code>D
 </code></pre></div>
 <p>The budget <code>@Airlock</code> itself enforces before a call runs is the per-model-tier one,
 <code>SecurityPolicy(model_tier_budget=...)</code>. A call is tagged with its tier through
-<code>AirlockContext</code> metadata (<code>airlock_tier</code>, <code>input_tokens</code>), never through tool arguments.
-See the <a href="../policy/">Policy API</a>.</p>
+<code>AirlockContext</code> metadata (<code>airlock_tier</code>, <code>input_tokens</code>, <code>model_id</code>), never through tool
+arguments. The worst case is priced at <code>model_id</code>'s row in the tracker's pricing table (a
+dated snapshot, <code>&lt;key&gt;-YYYYMMDD</code>, at its model's row); a model the table does not list at
+the table's dearest row; with no <code>model_id</code>, at the tracker's own model. See the
+<a href="../policy/">Policy API</a>.</p>
 <h3 id="with-retry-policy-v040">With Retry Policy (V0.4.0)<a class="headerlink" href="#with-retry-policy-v040" title="Permanent link">&para;</a></h3>
 <p><code>Airlock</code> takes no retry argument. <code>RetryPolicy</code> is its own decorator: stack it under
 <code>@Airlock</code>, so it retries the tool body. Arguments are validated before the body runs, so

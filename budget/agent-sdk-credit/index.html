@@ -2546,8 +2546,8 @@ Agent SDK. The per-month credit pools:</p>
 </table>
 <p>Before this primitive, agent-airlock operators tracking Anthropic
 spend had to roll their own. <code>AgentSDKCreditBudget</code> formalises the
-pool + 90% near-limit + 100% exhausted semantics, with the
-2026-06-01 rate card shipped as a packaged JSON fixture.</p>
+pool + 90% near-limit + 100% exhausted semantics, with dated Anthropic
+rate cards shipped as packaged JSON fixtures.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <p>Core. No optional extra. The Anthropic SDK is <strong>not</strong> loaded.</p>
 <h2 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h2>
@@ -2609,23 +2609,42 @@ decision in their own policy check.</p>
 old one stays byte-for-byte, so a receipt written against June prices is still
 reproducible in September.</p>
 <p>The current fixture is
-<code>src/agent_airlock/data/anthropic_pricing_2026_09.json</code>, read from the
+<code>src/agent_airlock/data/anthropic_pricing_2026_10.json</code>, read from the
 <a href="https://platform.claude.com/docs/en/about-claude/pricing">official pricing page</a>
-on 2026-09-12:</p>
+on 2026-10-10, with model ids from the
+<a href="https://platform.claude.com/docs/en/about-claude/models/overview">models overview</a>.
+<code>AgentSDKCreditBudget</code> prices with it unless you pass <code>override_pricing=</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">"claude-opus-5"</span><span class="p">:</span><span class="w">     </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">25.0</span><span class="p">},</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">"claude-sonnet-5"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">10.0</span><span class="p">},</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">"claude-haiku-4-5"</span><span class="p">:</span><span class="w">  </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w">  </span><span class="mf">5.0</span><span class="p">},</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">"claude-opus-4-8"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">25.0</span><span class="p">},</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">"claude-opus-4-7"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">25.0</span><span class="p">},</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">"claude-sonnet-4-6"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">3.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">15.0</span><span class="p">}</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">}</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">"claude-fable-5-1"</span><span class="p">:</span><span class="w">  </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">10.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">50.0</span><span class="p">},</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">"claude-opus-5-5"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">4.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">20.0</span><span class="p">},</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">"claude-sonnet-5-5"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">10.0</span><span class="p">},</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">"claude-haiku-5-5"</span><span class="p">:</span><span class="w">  </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.1</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w">  </span><span class="mf">0.5</span><span class="p">},</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">"claude-opus-5"</span><span class="p">:</span><span class="w">     </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">25.0</span><span class="p">},</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">"claude-opus-4-8"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">25.0</span><span class="p">},</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">"claude-opus-4-7"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">25.0</span><span class="p">},</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">"claude-opus-4-6"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">25.0</span><span class="p">},</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="nt">"claude-opus-4-5"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">25.0</span><span class="p">},</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="nt">"claude-sonnet-5"</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">10.0</span><span class="p">},</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="nt">"claude-sonnet-4-6"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">3.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">15.0</span><span class="p">},</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="nt">"claude-sonnet-4-5"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">3.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">15.0</span><span class="p">},</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">  </span><span class="nt">"claude-haiku-4-5"</span><span class="p">:</span><span class="w">  </span><span class="p">{</span><span class="nt">"input_usd_per_million"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"output_usd_per_million"</span><span class="p">:</span><span class="w">  </span><span class="mf">5.0</span><span class="p">}</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="p">}</span>
 </code></pre></div>
-<p><strong>Base input and output only.</strong> Prompt-caching multipliers (1.25x / 2x on write,
-0.1x on read), the 50% Batch API discount, the 1.1x us-only data-residency
-multiplier and fast-mode premium pricing all stack on top and are deliberately
-not encoded — a budget primitive that silently applied a discount would
-under-count.</p>
+<p>Until 0.10.24 the budget defaulted to the June table instead, so with no
+<code>override_pricing=</code> it counted a Haiku 4.5 call at four fifths of its cost, an
+Opus 4.6 or 4.7 call at three times its cost, and raised <code>ValueError</code> for every
+model the June table lacks, the Claude 5 family included.</p>
+<p><strong>Base input and output only.</strong> Prompt-caching multipliers (cache reads are
+0.025x base input on Claude Fable 5.1, 0.05x on Claude Opus 5.5 and Claude
+Sonnet 5.5, 0.1x elsewhere), the 50% Batch API discount, data-residency
+multipliers and long-context rates all stack on top and are deliberately not
+encoded — a budget primitive that silently applied a discount would under-count.
+Claude Haiku 5.5 is listed at its rate for prompts up to 100,000 tokens; a longer
+prompt costs $0.50 / $2.50 per million, which this table under-counts.</p>
+<p>The September snapshot, <code>anthropic_pricing_2026_09.json</code>, stays loadable by name
+(<code>load_anthropic_pricing("anthropic_pricing_2026_09.json")</code>). Every rate it lists
+is unchanged; it lacks the Claude 5.5 / 5.1 lineup, so with it those ids raise
+<code>ValueError</code>.</p>
 <p>Load programmatically via <code>load_anthropic_pricing()</code>. The previous snapshot is
 still loadable via <code>load_anthropic_pricing_2026_06()</code>, which now reads the June
 file <strong>explicitly</strong> rather than "whatever is current", so code pinned to that
@@ -2644,10 +2663,11 @@ haven't curated.</p>
   persistence is out of scope for v0.8.0. Operators who need it
   should layer their own sink (e.g. write <code>decision.spent_usd</code> to
   Redis after each call).</li>
-<li><strong>The pricing table is a 2026-06 snapshot.</strong> Anthropic publishes
-  rate-card changes irregularly; operators on long-running deploys
-  should override with a current rate card via <code>override_pricing=</code>
-  or update the packaged JSON.</li>
+<li><strong>The pricing table is a dated snapshot of list rates.</strong> Anthropic
+  publishes rate-card changes irregularly; operators on long-running
+  deploys, or on enterprise rates, should pass their own rate card via
+  <code>override_pricing=</code>. A refresh ships as a new dated file, never an edit
+  to an old one.</li>
 <li><strong>No automatic month-rollover.</strong> The primitive's spend counter
   resets only when the operator constructs a new
   <code>AgentSDKCreditBudget</code>. A simple month-aware wrapper is

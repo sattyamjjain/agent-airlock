@@ -2586,6 +2586,10 @@ family for chain-friendly composition.</p>
 <td><code>DENY_STOP_PARSING_TOKEN</code></td>
 <td>an argv element is a stop-parsing token (<code>--%</code>), so the argv no longer describes what would run</td>
 </tr>
+<tr>
+<td><code>DENY_UNINSPECTABLE</code></td>
+<td>a <code>command</code> or <code>args</code> the guard cannot read: a non-string argv element (nested list, bytes) or a <code>command</code> that is neither a string nor a list (since 0.10.24)</td>
+</tr>
 </tbody>
 </table>
 <h2 id="extending-the-metachar-set">Extending the metachar set<a class="headerlink" href="#extending-the-metachar-set" title="Permanent link">&para;</a></h2>
