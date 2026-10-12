@@ -8,7 +8,11 @@ poisoning scanners (MCP-Scan, eSentire MCP-Scanner).
 
 Run with::
 
-    python -m benchmarks.scantools_mcptox
+    python -m benchmarks.scantools_mcptox                         # the 23 fixtures
+    python -m benchmarks.scantools_mcptox --mcptox-data --fetch   # plus the real corpus
+
+The second form also scores MCPTox's real poisoned and clean tool descriptions
+(``real_corpus.py``), fetched and verified at run time and never committed.
 """
 
 from __future__ import annotations
