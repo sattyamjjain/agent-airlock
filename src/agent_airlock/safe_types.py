@@ -1013,6 +1013,8 @@ class UnsafeDeserializationGuard:
         self._markers = frozenset(m.lower() for m in DEFAULT_DESERIALIZATION_MARKERS) | frozenset(
             m.lower() for m in extra_markers
         )
+        # Longest first, then alphabetical: the deterministic, most specific match.
+        self._markers_ordered = tuple(sorted(self._markers, key=lambda m: (-len(m), m)))
         self._advisory = advisory
         self._advisory_url = advisory_url
 
@@ -1211,8 +1213,11 @@ class UnsafeDeserializationGuard:
         return self._is_pickle_magic(decoded)
 
     def _find_marker(self, value: str) -> str | None:
+        # ``self._markers`` is a frozenset, whose iteration order changes with hash
+        # randomisation, so "pickle.loads" was reported as "pickle.load" on some runs;
+        # ``_markers_ordered`` is the fixed, most-specific-first order.
         lowered = value.lower()
-        for marker in self._markers:
+        for marker in self._markers_ordered:
             if marker in lowered:
                 return marker
         return None

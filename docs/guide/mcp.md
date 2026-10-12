@@ -201,11 +201,11 @@ def delete_user(user_id: int) -> str:
     return f"deleted {user_id}"
 
 # A call gets an error result with this text, and the function body never runs:
-# Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')
+# Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy
 #
 # Suggested fixes:
-# - This operation is not permitted by the current security policy
-# - Contact the administrator if you believe this is an error
+# - This tool is not permitted whatever the arguments; do not retry it
+# - Continue without it, or tell the user it is not permitted
 ```
 
 Sync and async tools behave the same. A dict the tool returns itself, even one with

@@ -2333,11 +2333,21 @@ class Airlock:
         if decision.allowed:
             return None
 
+        # The model sees which argument was refused and why in general terms, never the
+        # detector that matched: ``decision.detail`` names the sink token or encoding it
+        # caught, and ``matched_pattern`` is that token. Both stay in the log line the
+        # guard writes and in ``on_blocked`` (0.10.25: refusals withhold deny lists).
         response = AirlockResponse.blocked_response(
             reason=BlockReason.POLICY_VIOLATION,
             error=(
-                f"AIRLOCK_BLOCK: Tool '{func_name}' blocked by "
-                f"UnsafeDeserializationGuard. {decision.detail}"
+                f"AIRLOCK_BLOCK: Tool '{func_name}' blocked by UnsafeDeserializationGuard: "
+                + (
+                    f"argument {decision.matched_field!r} could not be inspected (nested too "
+                    f"deeply, self-containing, or an unreadable shape)"
+                    if decision.verdict.value == "deny_uninspectable"
+                    else f"argument {decision.matched_field!r} carries a serialized-object "
+                    f"payload this tool does not accept"
+                )
             ),
             fix_hints=decision.fix_hints,
             metadata={
@@ -2345,7 +2355,6 @@ class Airlock:
                 "policy": "UnsafeDeserializationGuard",
                 "verdict": decision.verdict.value,
                 "matched_field": decision.matched_field,
-                "matched_pattern": decision.matched_pattern,
             },
         )
         self._safe_invoke_callback(

@@ -398,7 +398,7 @@ A call to `delete_records` refused by a `denied_tools=["delete_*"]` policy:
   "args_preview": {"table": "'users'", "where": "'id=1'"},
   "result_type": "None",
   "result_preview": "BLOCKED",
-  "error": "AIRLOCK_BLOCK: Policy violation for 'delete_records'. Tool 'delete_records' is denied by policy (matches 'delete_*')"
+  "error": "AIRLOCK_BLOCK: Policy violation for 'delete_records'. Tool 'delete_records' is denied by policy"
 }
 ```
 
