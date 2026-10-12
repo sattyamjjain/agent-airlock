@@ -318,6 +318,9 @@ def _looks_like_url(key: str, value: Any) -> bool:
 _URL_SCHEME_PREFIX = re.compile(r"\s*[A-Za-z][A-Za-z0-9+.\-]*://")
 _FILE_URI_PREFIX = re.compile(r"\s*file:", re.IGNORECASE)
 _DRIVE_PATH = re.compile(r"[A-Za-z]:[\\/]")
+# Home-relative by shape: a bare `~`, `~/...` or `~user/...` (a separator after the name).
+# Not `~5` or `~ 10 minutes`: approximations in free text are not paths.
+_HOME_RELATIVE = re.compile(r"~(?:[A-Za-z0-9._-]*[\\/]|$)")
 _PATH_EXTENSIONS = (".txt", ".json", ".yaml", ".yml", ".env", ".py")
 
 
@@ -333,7 +336,8 @@ def _is_absolute_or_escaping(value: str) -> bool:
     """An absolute, drive-rooted, home-relative or parent-traversing path, by its shape."""
     stripped = value.strip()
     return (
-        stripped.startswith(("/", "\\", "~/", "~\\"))
+        stripped.startswith(("/", "\\"))
+        or _HOME_RELATIVE.match(stripped) is not None
         or _DRIVE_PATH.match(stripped) is not None
         or stripped == ".."
         or "../" in stripped

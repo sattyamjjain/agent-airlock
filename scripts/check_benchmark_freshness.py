@@ -68,7 +68,7 @@ BENCHMARKS: dict[str, tuple[str, str]] = {
     "benchmarks.harness_injection": (
         "Matched-pair multi-harness prompt injection",
         "python -m benchmarks.harness_injection --run --trials 18 --write "
-        "--checkpoint ckpt.json  "
+        "--checkpoint ckpt.json --model claude-code=MODEL --model codex=MODEL  "
         "(drives third-party coding agents; ~100 min of their CLI plans' quota — the "
         "checkpoint makes an interrupted run resumable instead of a total loss)",
     ),

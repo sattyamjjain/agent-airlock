@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -171,3 +172,35 @@ class TestBothFormsMustPass:
         assert exc.value.violation_type == "outside_allowed_roots"
         assert "resolved_path" in exc.value.details
         assert "form" not in exc.value.details
+
+
+class TestNestedHomeRelativeValuesAreChecked:
+    """A nested ``~user/...`` string under a key not named like a path is a path by shape.
+
+    ``_is_absolute_or_escaping`` treated only ``~/`` and ``~\\`` as home-relative, so a
+    ``~root/.ssh/id_rsa`` nested in a container under an ordinary key was never
+    path-checked. Free-text approximations (``~5``, ``~ 10 minutes``) stay non-paths.
+    """
+
+    def _tool(self, root: Path) -> Any:
+        @Airlock(
+            config=AirlockConfig(
+                filesystem_policy=FilesystemPolicy(allowed_roots=[root]),
+                enable_audit_log=False,
+            )
+        )
+        def store(meta: dict[str, Any]) -> int:
+            return len(meta)
+
+        return store
+
+    def test_nested_tilde_user_path_is_refused(self, layout: dict[str, Path]) -> None:
+        result = self._tool(layout["root"])(meta={"note": "~root/.ssh/id_rsa"})
+        assert isinstance(result, dict)
+        assert result["success"] is False
+
+    @pytest.mark.parametrize("text", ["~5", "~ 10 minutes", "about ~3 hours"])
+    def test_free_text_approximation_is_not_a_path(
+        self, layout: dict[str, Path], text: str
+    ) -> None:
+        assert self._tool(layout["root"])(meta={"note": text}) == 1
