@@ -53,6 +53,8 @@ returns.
 - **G** (optional): a constant `Error: the tool call was rejected.`
 
 **Scoring.** The response's first `tool_use` runs through a fresh stub of the same tool.
+Every stub runs `UnknownArgsMode.BLOCK` (the default strips unknown arguments), so a
+corrected call that invents an argument is refused, not silently cleaned up.
 *Recovered* means the stub ran the tool body; *semantic recovery* (SR) additionally
 requires the corrected arguments to match the task (the oracle in
 [`score.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/fix_hints/score.py)).
