@@ -5,10 +5,8 @@ traversal that escapes a root must be refused; a NUL byte must be refused. Temp
 roots are created with ``realpath`` so a macOS ``/var`` -> ``/private/var`` symlink
 does not confuse the comparison.
 
-Includes a property the current code FAILS: a path beginning with ``~`` whose
-``expanduser`` form is outside the roots is admitted (the B7 tilde fail-open).
-That test is ``xfail(strict=True)`` so it stays green now and fails loudly the day
-``ws/library`` closes it — see this workstream's final report.
+Includes the property that caught the B7 tilde fail-open (fixed in 0.10.25): a path
+beginning with ``~`` whose ``expanduser`` form is outside the roots must be refused.
 """
 
 from __future__ import annotations
@@ -76,19 +74,14 @@ def test_deny_pattern_inside_root_is_refused(tmp_path: Path) -> None:
         validate_path(str(root / "secrets.env"), policy)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="finding: tilde-expansion fail-open (B7); fixed in ws/library",
-)
 def test_tilde_outside_roots_is_refused(tmp_path: Path) -> None:
     """A ``~`` path whose expanduser form escapes the roots must be refused.
 
     The real home directory is outside this temp allowed root, so after
-    ``expanduser`` the path is out of bounds and the call must be refused. Current
-    code resolves the literal ``~`` under the CWD instead, so when the CWD sits
-    inside an allowed root the call is ADMITTED — the fail-open. Marked
-    ``xfail(strict=True)``: it will start passing (and flip this marker red) the
-    day the expanduser fix lands.
+    ``expanduser`` the path is out of bounds and the call must be refused. Before
+    0.10.25 the literal ``~`` resolved under the CWD instead, so with the CWD inside
+    an allowed root the call was ADMITTED (the B7 fail-open, found independently by
+    this suite while it was still a strict xfail).
     """
     root = Path(os.path.realpath(tmp_path))
     policy = _policy(root)
