@@ -2,10 +2,9 @@
 
 `agent_airlock.integrations.anthropic_claude_agent_sdk` is the canonical
 adapter for the [Anthropic Claude Agent SDK][sdk-docs]. It guards the
-tools you serve from an in-process SDK MCP server, and it is a facade over
-the existing `claude_*.py` family (managed-agents, auto-memory,
-task-budget) so callers can find the entrypoint without learning the
-internal module layout.
+tools you serve from an in-process SDK MCP server, and re-exports the
+auto-memory and task-budget helpers so callers can find them without
+learning the internal module layout.
 
 ## Install
 
@@ -68,17 +67,29 @@ as they were. On every call:
    an `SdkMcpTool` with a guarded copy, an object's `forward` or a
    callable with an Airlock-wrapped shim that carries the tool's name and
    signature and is async when the tool is.
-3. **Re-exports the harness defences** from the existing `claude_*.py`
-   modules so callers can compose:
-   - `ManagedAgentsAuditConfig` — beta-header + toolset-version + tool
-     intersection check on the managed-agents request boundary.
+3. **Re-exports helpers** from the existing `claude_*.py` modules so
+   callers find them in one place. The adapter applies none of them
+   itself:
    - `AutoMemoryAccessPolicy` + `guarded_read` / `guarded_write` —
-     per-tenant scope, byte quota, redaction-on-write.
-   - `build_task_budget_headers` + `build_output_config` — populated by
-     the adapter's `task_budget_request_kit(remaining=...)` helper.
+     per-tenant scope, byte quota, redaction-on-write. Call them yourself;
+     the adapter wraps no memory access.
+   - `build_task_budget_headers` + `build_output_config` — the Messages
+     API task budget, `output_config={"task_budget": {"type": "tokens",
+     "total": N, "remaining": M}}` with the `task-budgets-2026-03-13` beta
+     (`total` at least 20,000). The adapter's
+     `task_budget_request_kit(remaining=...)` returns both, for a request
+     you build with `client.beta.messages.create`. Through the SDK itself,
+     pass `ClaudeAgentOptions(task_budget={"total": N})`, which sends the
+     header and the field for you.
 4. **Pins a `SUPPORTED_SDK_VERSIONS` tuple** recording the SDK versions
    the adapter was checked against. Wrapping an SDK object on any other
    version emits a `UserWarning` but still wraps.
+
+`AnthropicClaudeAgentSDKAdapter(managed_audit=..., auto_memory_policy=...)`
+accepted two settings that nothing ever read: no Managed Agents request
+passes through this adapter, and it wraps no memory access. Setting either
+now emits a `FutureWarning`; both go in v1.0.0. For Claude Managed Agents
+sessions, see [the Managed Agents approval gate](managed-agents.md).
 
 ## Honest scope
 

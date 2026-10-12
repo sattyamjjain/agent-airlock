@@ -472,32 +472,33 @@ class CostTracker:
             return list(self._records)
 
     def to_task_budget(self, total: int, soft: bool = True) -> dict[str, Any]:
-        """Render current usage as a Claude ``task_budget`` payload (v0.5.1+).
+        """Render current usage as a Claude Messages API task budget (v0.5.1+).
 
-        Returns the dict expected by the Anthropic ``task-budgets-2026-03-13``
-        beta (see ``agent_airlock.integrations.claude_task_budget`` for the
-        canonical builder). Computes ``remaining_tokens`` as
-        ``total - tracker.summary.total_tokens``, clamped to zero.
+        Delegates to
+        :func:`agent_airlock.integrations.claude_task_budget.build_task_budget`, with
+        ``remaining`` computed as ``total - summary.total_tokens``. Until 0.10.25 this
+        returned ``{"task_budget": {"total_tokens", "remaining_tokens", "policy"}}``, a
+        shape the API does not accept.
 
         Args:
-            total: The per-task token budget to report to the model.
-            soft: If True, policy is "soft" (model receives a countdown
-                  but may overshoot). If False, policy is "hard".
+            total: The token budget for the whole loop, at least 20,000.
+            soft: If True, an overspent budget is reported as 0 remaining. If False, an
+                exhausted budget raises ``TaskBudgetExhausted`` (a client-side stop: the
+                API has no hard mode).
 
         Returns:
-            A dict of the shape
-            ``{"task_budget": {"total_tokens", "remaining_tokens", "policy"}}``
-            ready to be merged into an Anthropic Messages API request body.
+            ``{"type": "tokens", "total": total, "remaining": n}``. Send it as
+            ``output_config={"task_budget": ...}`` on ``client.beta.messages.create``
+            with the ``task-budgets-2026-03-13`` beta.
+
+        Raises:
+            InvalidTaskBudgetError: ``total`` is below 20,000 or not an int.
+            TaskBudgetExhausted: ``soft`` is False and no budget remains.
         """
+        from .integrations.claude_task_budget import build_task_budget
+
         summary = self.get_summary()
-        remaining = max(0, total - summary.total_tokens)
-        return {
-            "task_budget": {
-                "total_tokens": total,
-                "remaining_tokens": remaining,
-                "policy": "soft" if soft else "hard",
-            }
-        }
+        return build_task_budget(total, total - summary.total_tokens, soft=soft)
 
     def reset(self) -> None:
         """Reset all tracked costs."""

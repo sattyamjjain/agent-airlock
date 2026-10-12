@@ -2,22 +2,36 @@
 
 Running this **spends real API budget** against whichever harness CLIs are logged in on the
 machine, so nothing runs by default beyond a dry-run listing. Pass ``--run`` to execute.
+
+Every harness starts with the ``ANTHROPIC_*`` and Claude Code session variables removed
+from its environment (``harnesses.SESSION_ENV_REMOVE``), and a harness whose CLI is not
+logged in the way it should be (``claude.ai`` for claude-code) is skipped rather than run
+on whatever credential it fell back to, unless ``--allow-any-auth`` is passed.
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime
 from pathlib import Path
 
 from .fixture import ARMS, TASK_PROMPT, build_fixture
-from .harnesses import HARNESSES, available_harnesses, harness_by_name, resolve
+from .harnesses import (
+    HARNESSES,
+    SESSION_ENV_REMOVE,
+    Harness,
+    available_harnesses,
+    harness_by_name,
+    resolve,
+)
 from .power import describe as describe_power
 from .report import render_results_md, render_summary
 from .runner import DEFAULT_TIMEOUT, RunReport, run_matrix
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The command-line parser, shared with the tests that parse a Reproduce line."""
     parser = argparse.ArgumentParser(
         prog="python -m benchmarks.harness_injection",
         description="Matched-pair multi-harness prompt-injection benchmark.",
@@ -47,7 +61,25 @@ def main(argv: list[str] | None = None) -> int:
         metavar="HARNESS=MODEL",
         help=(
             "pin a harness's model (repeatable), e.g. codex=gpt-6-astra; without it a "
-            "harness runs its CLI's configured default, which can change between runs"
+            "harness runs its CLI's configured default, which can change between runs. "
+            "--run requires a pin for claude-code"
+        ),
+    )
+    parser.add_argument(
+        "--claude-config-dir",
+        type=Path,
+        metavar="DIR",
+        help=(
+            "run claude-code with CLAUDE_CONFIG_DIR=DIR, so your own ~/.claude settings, "
+            "hooks and memory stay out of the measured cells (log that directory in first)"
+        ),
+    )
+    parser.add_argument(
+        "--allow-any-auth",
+        action="store_true",
+        help=(
+            "run a harness whose CLI is not logged in the expected way (claude.ai for "
+            "claude-code); without it such a harness is skipped, so no API credit is billed"
         ),
     )
     parser.add_argument(
@@ -57,10 +89,12 @@ def main(argv: list[str] | None = None) -> int:
         default=datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
         help="run date stamped into RESULTS.md (default: today in UTC, %(default)s)",
     )
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _pinned_models(parser: argparse.ArgumentParser, items: list[str]) -> dict[str, str]:
     models: dict[str, str] = {}
-    for item in args.model:
+    for item in items:
         name, sep, model = item.partition("=")
         if not sep or not model:
             parser.error(f"--model takes HARNESS=MODEL, got {item!r}")
@@ -69,6 +103,48 @@ def main(argv: list[str] | None = None) -> int:
         except KeyError as exc:
             parser.error(str(exc))
         models[name] = model
+    return models
+
+
+def _with_config_dir(
+    harnesses: tuple[Harness, ...], config_dir: Path | None
+) -> tuple[Harness, ...]:
+    """claude-code with ``CLAUDE_CONFIG_DIR`` set in its own environment, the rest as they are."""
+    if config_dir is None:
+        return harnesses
+    return tuple(
+        dataclasses.replace(h, env={**h.env, "CLAUDE_CONFIG_DIR": str(config_dir)})
+        if h.name == "claude-code"
+        else h
+        for h in harnesses
+    )
+
+
+def _dry_run(harnesses: tuple[Harness, ...], models: dict[str, str], trials: int) -> int:
+    print("DRY RUN — no harness invoked. Pass --run to execute (this costs API $).\n")
+    print(f"Task prompt: {TASK_PROMPT}\n")
+    print("Harnesses:")
+    for harness in HARNESSES:
+        mark = "available" if harness.is_available() else "NOT ON PATH"
+        argv_shown = harness.argv("<PROMPT>", models.get(harness.name, ""))
+        print(f"  {harness.name:16} [{mark}]  {' '.join(argv_shown)}")
+    print(f"\nRemoved from every harness's environment: {', '.join(SESSION_ENV_REMOVE)}")
+    cells = len(harnesses) * len(ARMS) * 2 * trials
+    print(
+        f"\nWould run {cells} cells ({len(harnesses)} harness x {len(ARMS)} arms x 2 airlock modes x {trials} trials)."
+    )
+    # The published result is a null, so the only thing a re-run buys is a tighter bound
+    # on it. Print what this --trials would actually license *before* the operator spends
+    # the API budget, rather than leaving them to work it out from the results afterwards.
+    print()
+    print(describe_power(trials, harnesses=len(harnesses), arms=len(ARMS)))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    models = _pinned_models(parser, args.model)
 
     if args.emit_fixture:
         for arm in ARMS:
@@ -76,26 +152,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wrote {dest}")
         return 0
 
-    harnesses = resolve(args.harness)
+    harnesses = _with_config_dir(resolve(args.harness), args.claude_config_dir)
 
     if not args.run:
-        print("DRY RUN — no harness invoked. Pass --run to execute (this costs API $).\n")
-        print(f"Task prompt: {TASK_PROMPT}\n")
-        print("Harnesses:")
-        for harness in HARNESSES:
-            mark = "available" if harness.is_available() else "NOT ON PATH"
-            argv_shown = harness.argv("<PROMPT>", models.get(harness.name, ""))
-            print(f"  {harness.name:16} [{mark}]  {' '.join(argv_shown)}")
-        cells = len(harnesses) * len(ARMS) * 2 * args.trials
-        print(
-            f"\nWould run {cells} cells ({len(harnesses)} harness x {len(ARMS)} arms x 2 airlock modes x {args.trials} trials)."
+        return _dry_run(harnesses, models, args.trials)
+
+    unpinned = [h.name for h in harnesses if h.requires_model and h.name not in models]
+    if unpinned:
+        parser.error(
+            f"--run needs a pinned model for {', '.join(unpinned)} "
+            f"(--model {unpinned[0]}=MODEL): a run on a CLI's default cannot be reproduced"
         )
-        # The published result is a null, so the only thing a re-run buys is a tighter bound
-        # on it. Print what this --trials would actually license *before* the operator spends
-        # the API budget, rather than leaving them to work it out from the results afterwards.
-        print()
-        print(describe_power(args.trials, harnesses=len(harnesses), arms=len(ARMS)))
-        return 0
 
     if not available_harnesses():
         print("No harness CLI found on PATH; nothing to run.")
@@ -103,13 +170,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.checkpoint and args.checkpoint.exists():
         prior = RunReport.from_json(args.checkpoint.read_text(encoding="utf-8")).cells
-        # run_matrix re-runs an `error` cell, and one recorded under a different model.
-        resumed = sum(
-            1
-            for cell in prior
-            if cell.model == models.get(cell.harness, "") and cell.status != "error"
+        recorded = sum(1 for cell in prior if cell.status != "error")
+        print(
+            f"Resuming from {args.checkpoint} — {recorded} cell(s) recorded; any recorded "
+            "under another model or auth is run again.\n"
         )
-        print(f"Resuming from {args.checkpoint} — {resumed} cell(s) already recorded.\n")
 
     report: RunReport = run_matrix(
         harnesses,
@@ -117,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         timeout=args.timeout,
         checkpoint=args.checkpoint,
         models=models,
+        allow_any_auth=args.allow_any_auth,
     )
     print(render_summary(report))
 

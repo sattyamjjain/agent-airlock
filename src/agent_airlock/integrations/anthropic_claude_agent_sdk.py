@@ -1,11 +1,11 @@
 """Anthropic Claude Agent SDK adapter (v0.6.1+).
 
-The canonical-list trio for the Anthropic Claude Agent SDK lives in
-this single facade. The underlying defences are already shipped under
-the ``claude_*.py`` family (managed-agents, auto-memory, task-budget),
-but the canonical contract is one adapter named for the framework
-plus matching test + doc, so callers can find the entrypoint without
-having to learn the internal module layout.
+The entrypoint for guarding the tools you serve to the Claude Agent SDK. It wraps
+``SdkMcpTool`` handlers with ``@Airlock`` (:func:`wrap_tools`), and re-exports the
+task-budget and auto-memory helpers from the ``claude_*.py`` modules so callers find
+them in one place. It does not front Claude Managed Agents sessions: for those, review
+each ``agent.tool_use`` event with
+:class:`~agent_airlock.integrations.claude_managed_agents.ManagedAgentToolGate`.
 
 Usage — guard the tools you serve from an in-process SDK MCP server::
 
@@ -110,25 +110,54 @@ class ClaudeAgentSDKMissingError(AirlockError):
     """
 
 
+#: Adapter fields that nothing reads, and what to use instead. Setting one away from
+#: ``None`` emits a ``FutureWarning`` (removal in v1.0.0), the same rule as
+#: ``config._NOT_APPLIED``: a setting that quietly does nothing reads as protection.
+_NOT_APPLIED: dict[str, str] = {
+    "managed_audit": (
+        "the adapter audits no Managed Agents request; review each agent.tool_use "
+        "event with ManagedAgentToolGate (agent_airlock.integrations.claude_managed_agents)"
+    ),
+    "auto_memory_policy": (
+        "the adapter wraps no memory reads or writes; call guarded_read / guarded_write "
+        "with the policy yourself"
+    ),
+}
+
+
 @dataclass
 class AnthropicClaudeAgentSDKAdapter:
-    """Single facade re-exporting the ``claude_*.py`` family.
+    """Guards Claude Agent SDK tools with Airlock and builds task-budget fragments.
+
+    ``wrap_agent`` routes an object's tools through ``@Airlock``;
+    ``task_budget_request_kit`` returns the Messages API task-budget fragments.
 
     Attributes:
-        managed_audit: Optional :class:`ManagedAgentsAuditConfig` to
-            apply on each request before egress. ``None`` (default)
-            disables managed-agent audit.
-        auto_memory_policy: Optional :class:`AutoMemoryAccessPolicy`.
-            ``None`` (default) means the adapter does not wrap memory
-            reads/writes — callers can still call
-            :func:`guarded_read` / :func:`guarded_write` directly.
-        task_budget_total: Optional total token budget. ``None``
-            (default) skips budget injection.
+        managed_audit: Deprecated, removal in v1.0.0. Nothing has ever read it: no
+            Managed Agents request passes through this adapter. Setting it emits a
+            ``FutureWarning``; use
+            :class:`~agent_airlock.integrations.claude_managed_agents.ManagedAgentToolGate`.
+        auto_memory_policy: Deprecated, removal in v1.0.0. Nothing has ever read it:
+            the adapter wraps no memory access. Setting it emits a ``FutureWarning``;
+            call :func:`guarded_read` / :func:`guarded_write` with the policy instead.
+        task_budget_total: Optional total token budget for
+            :meth:`task_budget_request_kit`. ``None`` (default) makes the kit empty.
     """
 
     managed_audit: ManagedAgentsAuditConfig | None = None
     auto_memory_policy: AutoMemoryAccessPolicy | None = None
     task_budget_total: int | None = None
+
+    def __post_init__(self) -> None:
+        """Warn about each field that is set but that nothing applies."""
+        for name, instead in _NOT_APPLIED.items():
+            if getattr(self, name) is not None:
+                warnings.warn(
+                    f"AnthropicClaudeAgentSDKAdapter.{name} is deprecated and will be "
+                    f"removed in v1.0.0. Nothing has ever applied it: {instead}.",
+                    FutureWarning,
+                    stacklevel=3,
+                )
 
     def wrap_agent(self, agent: Any, *, policy: SecurityPolicy | None = None) -> Any:
         """Route every entry of ``agent.tools`` through Airlock, in place.
@@ -189,17 +218,26 @@ class AnthropicClaudeAgentSDKAdapter:
         return agent
 
     def task_budget_request_kit(self, *, remaining: int, soft: bool = True) -> dict[str, Any]:
-        """Return the ``betas`` + body fragments needed for a budgeted call.
+        """Return the ``betas`` + body fragments for a budgeted Messages API call.
+
+        For a request you build yourself with ``client.beta.messages.create``. Through
+        the Claude Agent SDK, pass ``ClaudeAgentOptions(task_budget={"total": N})``
+        instead: the SDK sends the beta header and the body field itself.
 
         Args:
             remaining: Tokens left in the per-task budget.
-            soft: If ``True`` (default) the SDK only nudges the model;
-                if ``False`` Airlock raises :class:`TaskBudgetExhausted`
-                when remaining hits zero.
+            soft: If ``True`` (default) an overspent budget is sent as 0 remaining;
+                if ``False`` :class:`TaskBudgetExhausted` is raised when remaining
+                hits zero. The API itself has no hard mode.
 
         Returns:
-            A dict with ``"betas"`` (header value) and ``"body"`` keys
-            ready to splat into the SDK request.
+            ``{}`` when ``task_budget_total`` is unset; otherwise ``"betas"`` (the
+            header value, for ``betas=``) and ``"body"``
+            (``{"output_config": {"task_budget": {...}}}``, to splat into the call).
+
+        Raises:
+            InvalidTaskBudgetError: ``task_budget_total`` is below 20,000 tokens, or
+                ``remaining`` exceeds it.
         """
         if self.task_budget_total is None:
             return {}

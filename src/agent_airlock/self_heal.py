@@ -7,7 +7,7 @@ error responses that help the LLM retry with corrected arguments.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
@@ -136,6 +136,50 @@ class AirlockResponse:
             fix_hints=fix_hints or [],
             metadata=metadata or {},
         )
+
+
+def is_refusal(result: Any) -> bool:
+    """Whether ``result`` is Airlock's own refusal, ``AirlockResponse.to_dict()`` of a block.
+
+    ``status == "blocked"`` is checked as well as ``success``: a tool may itself return a
+    dict with ``"success": False``, and that is its result, not a refusal.
+
+    Args:
+        result: Whatever an ``@Airlock``-wrapped callable returned.
+
+    Returns:
+        True when ``result`` is a dict with ``success`` False and ``status`` "blocked".
+    """
+    return (
+        isinstance(result, dict)
+        and result.get("success") is False
+        and result.get("status") == "blocked"
+    )
+
+
+def refusal_text(refusal: Mapping[str, Any]) -> str:
+    """The text a model reads for a refusal: the error, then the fix hints.
+
+    The ``metadata`` of a refusal is never included. It is for the audit log and the
+    operator, and it can carry what a model must not be told (a resolved path, the
+    detail an operator attached), so the adapters that return a refusal to a model use
+    this one rendering.
+
+    Args:
+        refusal: A refusal, as :func:`is_refusal` recognises it.
+
+    Returns:
+        ``error`` on the first line, then ``Fix hints:`` and one ``- hint`` line per
+        hint when there are any.
+    """
+    lines = [str(refusal.get("error") or "AIRLOCK_BLOCK: call refused")]
+    hints = refusal.get("fix_hints") or []
+    if isinstance(hints, str):
+        hints = [hints]
+    if hints:
+        lines.append("Fix hints:")
+        lines.extend(f"- {hint}" for hint in hints)
+    return "\n".join(lines)
 
 
 def handle_validation_error(

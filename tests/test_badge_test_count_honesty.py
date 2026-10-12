@@ -1,8 +1,9 @@
 """CI guard: the README TEST-BADGE headline discloses the WHOLE suite, honestly.
 
 The badge is the "source of truth" the README points at, but the coverage run it
-is generated from excludes two buckets — ``tests/benchmarks`` (``--ignore``) and
-``docker``-marked tests (``-m 'not docker'``). Before v0.8.62 the headline silently
+is generated from excludes three buckets — ``tests/benchmarks`` (``--ignore``),
+``docker``-marked tests (``-m 'not docker'``) and, since 0.10.25, ``tests/live``
+(``--ignore``: they call the Anthropic API). Before v0.8.62 the headline silently
 showed only the coverage-run count, so a dozen real tests never entered the number.
 
 This locks the DISCLOSURE invariant so that cannot drift back — a *structural*
@@ -10,8 +11,8 @@ check, in the same spirit as ``tests/test_no_placeholder_cves.py`` (which assert
 shape, not a live re-verification):
 
 1. the block reconciles — headline total == coverage-run count + excluded, and
-   excluded == benchmark bucket + docker bucket; and
-2. both excluded buckets are disclosed, with their reasons.
+   excluded == benchmark bucket + docker bucket + live bucket; and
+2. every excluded bucket is disclosed, with its reason.
 
 It deliberately does NOT re-count against a live ``pytest --collect-only``: the
 absolute total is the badge script's job (regenerated from pytest on release) and
@@ -63,17 +64,20 @@ def _int(pattern: str, text: str, label: str) -> int:
     return int(m.group(1).replace(",", ""))
 
 
-def test_badge_discloses_and_reconciles_the_excluded_buckets() -> None:
-    body = _badge_body()
+_LIVE_RE = r"(\d+)\s+live API contract tests"
+
+
+def _check_reconciles(body: str, *, require_live: bool) -> None:
     total = _int(r"\*\*Test suite:\*\*\s*([\d,]+)\s*tests", body, "total")
     run = _int(r"runs\s+([\d,]+)\s+of", body, "coverage-run count")
     excluded = _int(r"the\s+(\d+)\s+excluded", body, "excluded count")
     benchmarks = _int(r"(\d+)\s+benchmark tests", body, "benchmark count")
     docker = _int(r"(\d+)\s+docker-marked", body, "docker count")
+    live = _int(_LIVE_RE, body, "live count") if require_live or re.search(_LIVE_RE, body) else 0
 
-    assert excluded == benchmarks + docker, (
+    assert excluded == benchmarks + docker + live, (
         f"badge note is inconsistent: {excluded} excluded != "
-        f"{benchmarks} benchmark + {docker} docker"
+        f"{benchmarks} benchmark + {docker} docker + {live} live"
     )
     assert total == run + excluded, (
         f"badge note is inconsistent: total {total} != run {run} + excluded {excluded}"
@@ -81,8 +85,49 @@ def test_badge_discloses_and_reconciles_the_excluded_buckets() -> None:
     # The reasons must travel with the counts — a bare number is what this guards against.
     assert "not correctness tests" in body, "badge dropped the benchmark-exclusion reason"
     assert "need a daemon" in body, "badge dropped the docker-exclusion reason"
+    if live or require_live:
+        assert "spend API credit" in body, "badge dropped the live-exclusion reason"
+
+
+def test_badge_discloses_and_reconciles_the_excluded_buckets() -> None:
+    """The README block as last generated.
+
+    The live bucket (0.10.25) is reconciled when the block carries it. A block generated
+    before tests/live existed has no live phrase and reads as 0 live; the next
+    ``make test-badge`` adds it, and ``test_the_generator_discloses_every_bucket`` pins
+    that the generator always does.
+    """
+    body = _badge_body()
+    _check_reconciles(body, require_live=False)
     # A real suite excludes a non-zero number; a "0 excluded" headline is the drift.
+    excluded = _int(r"the\s+(\d+)\s+excluded", body, "excluded count")
     assert excluded > 0, "badge claims nothing is excluded from the coverage run — it is"
+
+
+def test_the_generator_discloses_every_bucket() -> None:
+    """What ``make test-badge`` writes carries all three buckets and their reasons."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "update_test_badge", ROOT / "scripts" / "update_test_badge.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    body = module.BADGE_TEMPLATE.format(
+        start="",
+        end="",
+        total=1_234,
+        run=1_200,
+        docker=5,
+        benchmarks=8,
+        live=21,
+        excluded=34,
+        coverage="88.00%",
+        version="0.0.0",
+    )
+    _check_reconciles(body, require_live=True)
+    assert "`make test-live`" in body
 
 
 def test_guard_would_catch_a_silently_shrunk_headline() -> None:
