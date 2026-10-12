@@ -1,8 +1,9 @@
-.PHONY: help test coverage lint format bench benchmark test-badge egress-bench check-links check-docs-api check-docs check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release check-registry-parity check-registry-parity-distance verify-corpus check-cve-catalog
+.PHONY: help test test-live coverage lint format bench benchmark test-badge egress-bench check-links check-docs-api check-docs check-changelog check-changelog-release check-benchmark-freshness check-benchmark-freshness-release check-registry-parity check-registry-parity-distance verify-corpus check-cve-catalog
 
 help:
 	@echo "Targets:"
 	@echo "  test                    Run the pytest suite (no coverage)"
+	@echo "  test-live               Live API contract tests (needs ANTHROPIC_API_KEY; spends API credit)"
 	@echo "  coverage                Run pytest with coverage"
 	@echo "  lint                    Run ruff + mypy"
 	@echo "  format                  Apply ruff format"
@@ -27,6 +28,12 @@ verify-corpus:
 
 test:
 	python3 -m pytest tests/ -v --no-cov
+
+# Calls the Anthropic API and spends API credit (under $1 a run; see tests/live/README.md).
+# The default addopts ignore tests/live, so this names it and clears them. Each test also
+# skips unless ANTHROPIC_API_KEY is set; records land in tests/live/.results/ (gitignored).
+test-live:
+	AIRLOCK_LIVE=1 python3 -m pytest tests/live -o addopts="" -m live -v
 
 coverage:
 	python3 -m pytest tests/

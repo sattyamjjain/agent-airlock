@@ -402,10 +402,13 @@ disallow_untyped_calls = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 # Integration markers must be OPT-IN (``pytest -m docker``). The default
-# suite excludes them so CI does not need a Docker daemon.
-addopts = "-v --cov=agent_airlock --cov-report=term-missing --ignore=tests/benchmarks -m 'not docker'"
+# suite excludes them so CI does not need a Docker daemon. tests/live calls the
+# Anthropic API and spends API credit, so it is never collected by default:
+# `make test-live` names it and clears addopts.
+addopts = "-v --cov=agent_airlock --cov-report=term-missing --ignore=tests/benchmarks --ignore=tests/live -m 'not docker'"
 markers = [
     "docker: integration test that requires a running Docker daemon (opt in with `pytest -m docker`)",
+    "live: calls the Anthropic API and spends API credit; needs AIRLOCK_LIVE=1 and ANTHROPIC_API_KEY (`make test-live`)",
 ]
 
 [tool.coverage.run]
