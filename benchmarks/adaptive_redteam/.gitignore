@@ -1,0 +1,5 @@
+# Per-seed campaign ledgers are raw run output, not committed. Only the
+# aggregate RESULTS.md and summary JSON are committed (see the plan's
+# "Committed outputs and provenance").
+ledger/
+*.seed*.json
