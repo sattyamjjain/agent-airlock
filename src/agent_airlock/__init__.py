@@ -674,7 +674,7 @@ from .sdk_provenance import (
     SDKLineageMatch,
     classify_sdk_lineage,
 )
-from .self_heal import AirlockResponse, BlockReason
+from .self_heal import AirlockResponse, BlockReason, is_refusal, refusal_text
 from .ssrf_egress_guard import (
     SSRFEgressBlocked,
     SSRFEgressDecision,
@@ -1050,6 +1050,9 @@ __all__ = [
     # Response types
     "AirlockResponse",
     "BlockReason",
+    # V0.10.25 — one rendering of a refusal for every adapter that returns one to a model
+    "is_refusal",
+    "refusal_text",
     # V0.8.25 — Fail-closed terminal-claim guard (Goal-Autopilot arXiv:2606.11688)
     "DoneReceiptGuard",
     "DoneClaimDecision",
