@@ -301,7 +301,9 @@ def handle_policy_violation(
     Args:
         func_name: Name of the function that was blocked.
         policy_name: Name of the policy that was violated.
-        reason: Human-readable reason for the violation.
+        reason: The reason, as the model may read it. It reaches the model: pass one that
+            names no deny glob (``core`` drops the ``denied_tools`` pattern a
+            ``tool_denied`` message quotes; ``on_blocked`` and the log keep it).
 
     Returns:
         AirlockResponse explaining the policy violation.
@@ -480,6 +482,13 @@ def handle_rate_limit(
     )
 
 
+#: ``PathValidationError.details`` keys kept out of the model-visible metadata: the deny
+#: pattern that matched and where the refused symlink sits. A refusal reaches a model whose
+#: context may be attacker-influenced; a deny list is incomplete by nature, and publishing
+#: its coverage helps a search for the gaps. ``on_blocked`` still gets the full message.
+_WITHHELD_PATH_DETAILS = frozenset({"pattern", "symlink_location"})
+
+
 def handle_path_violation(
     func_name: str,
     path: str,
@@ -487,6 +496,9 @@ def handle_path_violation(
     details: dict[str, Any] | None = None,
 ) -> AirlockResponse:
     """Create a response for filesystem path violations.
+
+    The metadata carries the details except :data:`_WITHHELD_PATH_DETAILS`: until 0.10.25 a
+    refusal handed the model the deny pattern that matched and the symlink's location.
 
     Args:
         func_name: Name of the function that was blocked.
@@ -515,7 +527,11 @@ def handle_path_violation(
             "function": func_name,
             "path": path,
             "violation_type": violation_type,
-            **(details or {}),
+            **{
+                key: value
+                for key, value in (details or {}).items()
+                if key not in _WITHHELD_PATH_DETAILS
+            },
         },
     )
 

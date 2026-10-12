@@ -11,7 +11,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, TypeVar, get_args, get_type_hints
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, validate_call
@@ -313,8 +313,39 @@ def create_argument_validator(func: Callable[..., Any]) -> ArgumentValidator:
     return _validate
 
 
+#: ``SafePathValidator`` rules that are fixed and documented rather than a configurable
+#: deny list: no parent traversal, no home directory. Naming them tells the model which
+#: input shape to drop, so their messages are left as they are.
+_STRUCTURAL_PATH_RULES = frozenset({"..", "~"})
+
+#: What the model reads in place of a ``SafePath`` deny-list match's own message, which
+#: quotes the pattern that matched.
+_WITHHELD_PATH_MESSAGE = "Value error, this path matches a protected location"
+
+
+def _is_withheld_value_error(ctx: Mapping[str, Any] | None) -> bool:
+    """Whether a value error is a ``SafePath`` deny-list match, whose pattern is withheld.
+
+    A refusal reaches a model whose context may be attacker-influenced. The allowed space
+    (a root, an allowlist, the tool's own schema) is what it needs to recover; a deny list
+    is incomplete by nature, and quoting the entry that matched helps a search for the
+    entries it lacks. The pattern stays on the exception for the host's own handling.
+    """
+    from .safe_types import SafePathValidationError
+
+    error = (ctx or {}).get("error")
+    return (
+        isinstance(error, SafePathValidationError)
+        and error.pattern is not None
+        and error.pattern not in _STRUCTURAL_PATH_RULES
+    )
+
+
 def format_validation_error(error: ValidationError) -> dict[str, Any]:
     """Format a Pydantic ValidationError into LLM-friendly structure.
+
+    A ``SafePath`` deny-list match has its message replaced (:func:`_is_withheld_value_error`):
+    the refusal reaches the model, and the pattern that matched is not the model's to see.
 
     Args:
         error: The Pydantic validation error.
@@ -328,7 +359,8 @@ def format_validation_error(error: ValidationError) -> dict[str, Any]:
     for err in errors:
         location = ".".join(str(loc) for loc in err["loc"])
         error_type = err["type"]
-        message = err["msg"]
+        ctx = err.get("ctx")
+        message = _WITHHELD_PATH_MESSAGE if _is_withheld_value_error(ctx) else err["msg"]
         input_value = err.get("input")
 
         # Generate fix hint based on error type
