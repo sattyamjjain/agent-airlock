@@ -1,0 +1,331 @@
+{
+  "schema": 1,
+  "description": "Wave plan for the adaptive red-team campaign. Seeds per guard come from registry.seed_count (10 high-surface, 5 low-surface). Arms: 'hints' shows the guard's fix_hints to the attacker; 'nohints' is the ablation that hides them. Dates are the plan's targets (UTC); a wave runs only when the coordinator launches it, and RESULTS.md stays 'Not yet run' until then.",
+  "plateau_window": 15,
+  "candidate_budget_per_seed": 100,
+  "waves": [
+    {
+      "wave": 1,
+      "dates": "2026-10-13..14",
+      "content": "value gates + fix-hints ablation",
+      "targets": [
+        {
+          "guard": "deserialization_guard",
+          "seeds": 10,
+          "arms": [
+            "hints",
+            "nohints"
+          ]
+        },
+        {
+          "guard": "endpoint",
+          "seeds": 10,
+          "arms": [
+            "hints",
+            "nohints"
+          ]
+        },
+        {
+          "guard": "filesystem",
+          "seeds": 10,
+          "arms": [
+            "hints",
+            "nohints"
+          ]
+        }
+      ],
+      "fuzz_suites": [
+        "tests/fuzz/test_pbt_arg_walk.py",
+        "tests/fuzz/test_pbt_filesystem.py",
+        "tests/fuzz/test_pbt_deserialization.py",
+        "tests/fuzz/test_pbt_unknown_args.py",
+        "tests/fuzz/test_pbt_validator.py"
+      ]
+    },
+    {
+      "wave": 2,
+      "dates": "2026-10-14..16",
+      "content": "SSRF, eval-RCE, path and spawn guards + their PBT/differential suites",
+      "targets": [
+        {
+          "guard": "argv_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "config_path_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "eval_rce_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "filter_eval_rce_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "loopback_spawn_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "mcp_proxy_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "ssrf_egress_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "stdio_command_injection_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "stdio_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "stdio_meta_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "subprocess_arg_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        }
+      ],
+      "fuzz_suites": [
+        "tests/fuzz/test_diff_url.py",
+        "tests/fuzz/test_pbt_filesystem.py"
+      ]
+    },
+    {
+      "wave": 3,
+      "dates": "2026-10-17 onward (continues after the merge)",
+      "content": "everything else at its per-guard seed count",
+      "targets": [
+        {
+          "guard": "action_contradiction_gate",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "bind_address_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "codegen_delimiter_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "description_manifest_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "done_receipt_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "elicitation_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "env_interpolation_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "inspector_exposure_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "lan_unauth_rce_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "mcp_origin_host_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "oauth_state_entropy_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "oidc_publish_window_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "openapi_drift_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "pr_metadata_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "reasoning_replay_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "sampling_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "schema_ref_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "sequence_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "session_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "step_up_scope_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "tasks_admission_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "tasks_lifecycle_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "tool_definition_pin_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "tool_output_trust_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "transcript_ingest_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "ws_origin_guard",
+          "seeds": 5,
+          "arms": [
+            "hints"
+          ]
+        },
+        {
+          "guard": "zero_click_config_guard",
+          "seeds": 10,
+          "arms": [
+            "hints"
+          ]
+        }
+      ],
+      "fuzz_suites": []
+    }
+  ]
+}
