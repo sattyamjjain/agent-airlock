@@ -346,14 +346,14 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     out.append(render_comparison_section(run_blockrate(measure_latency=False)))
     out.append("---")
     out.append("")
-    # Adaptive-attacker robustness (AgentDojo). STATIC pointer: the numbers are
+    # Indirect prompt injection (AgentDojo). STATIC pointer: the numbers are
     # recorded from the pinned deterministic bench (benchmark v1.2.1), NOT computed
     # here — agentdojo is a bench-only extra that CI does not install, so importing
     # or running it in this generator would break the deterministic --check gate.
     # Source of record: benchmarks/agentdojo/RESULTS.md, Result 1 (all four suites,
     # reproduced exactly on 2026-09-08). This block said "workspace + banking,
     # 324/384 = 84.4%" for weeks after the bench moved to four suites.
-    out.append("### Adaptive-attacker robustness (AgentDojo)")
+    out.append("### Indirect prompt injection (AgentDojo)")
     out.append("")
     out.append(
         "agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) "
@@ -362,8 +362,10 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
         "sanitizer. On all four pinned suites (**workspace, banking, travel, slack**) "
         "under the `tool_knowledge` attack (benchmark `v1.2.1`), airlock's "
         "least-privilege policy blocks the target tool-call for **524/609 = 86.0%** of "
-        "injection→task pairs — a **deterministic upper bound on ASR reduction**, *not* "
-        "the model-in-the-loop ASR."
+        "the injection→task pairs that have a tool-call target (609 of the 949 attacked "
+        "pairs) — a **deterministic upper bound on ASR reduction**, *not* the "
+        "model-in-the-loop ASR. The attack is AgentDojo's fixed template, not an "
+        "adaptive one."
     )
     out.append("")
     out.append("| suite | injection→task pairs | blocked | block rate |")

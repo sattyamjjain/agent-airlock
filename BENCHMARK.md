@@ -139,9 +139,9 @@ Unmapped corpus items (no slot claimed): **0** malicious, **1** benign. An item 
 
 ---
 
-### Adaptive-attacker robustness (AgentDojo)
+### Indirect prompt injection (AgentDojo)
 
-agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) (Debenedetti et al., NeurIPS 2024) as a **defense** — `AirlockToolsExecutor`: deny-by-default least-privilege `SecurityPolicy` + ghost-arg BLOCK + output sanitizer. On all four pinned suites (**workspace, banking, travel, slack**) under the `tool_knowledge` attack (benchmark `v1.2.1`), airlock's least-privilege policy blocks the target tool-call for **524/609 = 86.0%** of injection→task pairs — a **deterministic upper bound on ASR reduction**, *not* the model-in-the-loop ASR.
+agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) (Debenedetti et al., NeurIPS 2024) as a **defense** — `AirlockToolsExecutor`: deny-by-default least-privilege `SecurityPolicy` + ghost-arg BLOCK + output sanitizer. On all four pinned suites (**workspace, banking, travel, slack**) under the `tool_knowledge` attack (benchmark `v1.2.1`), airlock's least-privilege policy blocks the target tool-call for **524/609 = 86.0%** of the injection→task pairs that have a tool-call target (609 of the 949 attacked pairs) — a **deterministic upper bound on ASR reduction**, *not* the model-in-the-loop ASR. The attack is AgentDojo's fixed template, not an adaptive one.
 
 | suite | injection→task pairs | blocked | block rate |
 |---|---|---|---|

@@ -36,7 +36,7 @@
   "install": {
     "pypi": "agent-airlock",
     "extras": {
-      "bench": "Adaptive-attacker benchmark harness (AgentDojo)",
+      "bench": "AgentDojo prompt-injection benchmark harness",
       "sandbox": "E2B Firecracker micro-VM sandbox execution",
       "modal": "Modal-backed sandbox execution",
       "mcp": "FastMCP integration + @secure_tool decorator",

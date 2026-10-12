@@ -319,7 +319,7 @@ def render_results_md(
     lines.append(">")
     lines.append(
         '> **AgentDojo now wired** (this replaces the earlier "not yet wired" note): '
-        "for an *adaptive-attacker* measurement, airlock runs as an "
+        "for a model-in-the-loop prompt-injection measurement, airlock runs as an "
         "[AgentDojo](https://arxiv.org/abs/2406.13352) defense and blocks **86.0%** "
         "(524/609) of `tool_knowledge` injection→task target tool-calls across all four "
         "pinned suites — a deterministic upper bound on ASR reduction, with "

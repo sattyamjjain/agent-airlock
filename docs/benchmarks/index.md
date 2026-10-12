@@ -1,7 +1,7 @@
 # Benchmarks
 
-Seven published measurements. Each one carries the date it was last re-run, and each
-date is machine-checked: `scripts/check_benchmark_freshness.py` fails the release if any
+Every published measurement carries the date it was last re-run, and each date is
+machine-checked: `scripts/check_benchmark_freshness.py` fails the release if any
 row is missing its marker, and `--release` fails if any row is older than 30 days.
 
 Two conventions are worth knowing before reading any number here.
@@ -15,16 +15,16 @@ does not execute, the incumbent's coverage is marked *scope-claimed, not re-run*
 than given a fabricated number. Where a slot has no samples, it is shown as `n=0` rather
 than omitted — four of the ten OWASP Agentic slots are in that state.
 
-## The seven published rows
+## The published rows
 
 | Benchmark | Headline result | Last re-run | Full results |
 |---|---|---|---|
 | **Cross-tool block rate** · 210 tool calls | 100% blocked (106/106, 95% CI 96.5–100%) · 0% false-positive (0/104, 95% CI 0–3.6%) · p50 ~2µs · _6 of 10 OWASP ASI slots measured; ASI07–ASI10 are n=0_ | 2026-10-03 | [Cross-tool block rate results](blockrate.md) |
 | **`sandbox=True` dispatch** · contract parity | 4/4 annotated-contract probes refused on the sandbox path (0/4 before v0.10.6) · 204/204 verdicts agree with the local path, 100 policy items admitted and 100 refused on both. The 2026-09-16 run's 204/204 was vacuous: every policy item was refused on both paths | 2026-10-03 | [Sandbox dispatch parity arm](blockrate.md#sandboxtrue-dispatch-arm) |
 | **Least-privilege** · ToolPrivBench, 100 scenarios | 100% over-privileged blocked · 100% low-privileged allowed · OPUR 100% → 0% | 2026-10-03 | [ToolPrivBench results on GitHub](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/toolprivbench/RESULTS.md) |
-| **Adaptive attacker** · AgentDojo, all 4 suites | 86.0% of injection→target tool-calls blocked (524/609, deterministic bound). Model-in-the-loop ASR 45% → 10% (model pass of 2026-08-08), but that is one model family on a 60-pair subset | 2026-10-03 | [AgentDojo results on GitHub](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md) |
+| **Indirect prompt injection** · AgentDojo, all 4 suites | 86.0% of injection→target tool-calls blocked (524/609 pairs that have a tool-call target, of 949 attacked pairs; deterministic bound). Model-in-the-loop ASR 45% → 10% (gpt-4o-mini, 2026-07-31), but that is one model family on a 60-pair subset, under AgentDojo's fixed-template attack, not an adaptive one | 2026-10-03 | [AgentDojo results on GitHub](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md) |
 | **vs. native MCP gateway** · 12 malformed payloads | airlock 12/12 blocked · Docker MCP Gateway 0/12 · 0% false-positive on both | 2026-10-03 | [Native MCP gateway head-to-head](vs-native-mcp-gateway.md) |
-| **Prompt injection across agent harnesses** | A null result, published as one. `claude-code` and `codex` each acted on the planted script 0/36, and ignored the benign twin just as completely, so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made `codex`'s zero a choice did not reproduce, and `codex` finished only 52/72 cells | 2026-10-03 | [Multi-harness prompt injection](injection-multi-harness.md) |
+| **Prompt injection across agent harnesses** | A null result, published as one. `claude-code` and `codex` each acted on the planted script 0/36, and ignored the benign twin just as completely, so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made `codex`'s zero a choice did not reproduce. Both harnesses finished all 72 of their cells (`codex` after its plan's usage limit paused it at 35) | 2026-10-03 | [Multi-harness prompt injection](injection-multi-harness.md) |
 | **MCP spec conformance** · `@modelcontextprotocol/conformance` | Run against the wire-path validators, outcome published in full. Not a full MCP server/client conformance pass — airlock is a request validator, not a server, so it does not claim one | 2026-10-03 | [MCP conformance results on GitHub](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcp_conformance/RESULTS.md) |
 
 The **Last re-run** column is the same date the freshness gate reads out of `README.md`,
@@ -45,8 +45,8 @@ the README, the build fails rather than publishing two different dates for one r
 - [MCP gateway payload gap](mcp-gateway-payload-gap.md) — what the gateway comparison
   does and does not establish.
 
-Four of the seven rows have their full results in the benchmark packages rather than on
-this site; those link to GitHub in the table above.
+Rows whose full results live in the benchmark packages rather than on this site link to
+GitHub in the table above.
 
 ## Re-running them
 
@@ -59,8 +59,9 @@ python -m benchmarks.toolprivbench      # least-privilege
 make benchmark                          # regenerate BENCHMARK.md from the corpus
 ```
 
-Three are not free. `benchmarks.agentdojo.run` and `benchmarks.harness_injection` spend
-real API budget, and `benchmarks.vs_gateway` needs a Docker daemon. The multi-harness run
+Three are not free. `benchmarks.agentdojo.run --model` spends API credit,
+`benchmarks.harness_injection` spends the agent CLIs' plan quota, and
+`benchmarks.vs_gateway` needs a Docker daemon. The multi-harness run
 is roughly 100 minutes of paid API time for a full `--trials 18` matrix, which is why it
 takes a `--checkpoint` flag and refuses to do anything without an explicit `--run`:
 

@@ -65,7 +65,7 @@ dependencies = [
 logging = [
     "structlog>=24.0",
 ]
-# Adaptive-attacker benchmark harness (v0.8.43+, issue: AgentDojo wiring).
+# AgentDojo prompt-injection benchmark harness (v0.8.43+, issue: AgentDojo wiring).
 # Install with: pip install "agent-airlock[bench]"
 # Pulls AgentDojo, used ONLY by benchmarks/agentdojo/. NEVER a core dependency —
 # the airlock core stays zero-dep and the harness gates the import.

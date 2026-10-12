@@ -3,7 +3,7 @@
 
 Why this exists
 ---------------
-The README publishes seven head-to-head benchmark rows, one of them a *competitive*
+The README publishes dated head-to-head benchmark rows, one of them a *competitive*
 claim against a named third-party product at a pinned version. A competitive claim
 against a moving target decays, and a stale one is worse for credibility than no claim
 at all — the reader cannot tell "measured last week" from "measured in July and never
@@ -58,8 +58,8 @@ BENCHMARKS: dict[str, tuple[str, str]] = {
         "python -m benchmarks.toolprivbench",
     ),
     "benchmarks.agentdojo.run": (
-        "Adaptive-attacker (AgentDojo)",
-        "python -m benchmarks.agentdojo.run  (needs API keys; costs money)",
+        "Indirect prompt injection (AgentDojo)",
+        "python -m benchmarks.agentdojo.run  (deterministic bound: free; --model --run: API credit)",
     ),
     "benchmarks.vs_gateway": (
         "Native MCP gateway head-to-head",
@@ -67,9 +67,9 @@ BENCHMARKS: dict[str, tuple[str, str]] = {
     ),
     "benchmarks.harness_injection": (
         "Matched-pair multi-harness prompt injection",
-        "python -m benchmarks.harness_injection --trials 18 --write "
+        "python -m benchmarks.harness_injection --run --trials 18 --write "
         "--checkpoint ckpt.json  "
-        "(drives third-party coding agents; ~100 min of real API budget — the "
+        "(drives third-party coding agents; ~100 min of their CLI plans' quota — the "
         "checkpoint makes an interrupted run resumable instead of a total loss)",
     ),
     # Its own identifier, not the bare module path. The sandbox arm is published as a
