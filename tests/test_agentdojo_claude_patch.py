@@ -536,3 +536,55 @@ class TestThroughAgentdojo:
         replayed = [m for m in second["messages"] if m["role"] == "assistant"][0]["content"]
         assert all(a is b for a, b in zip(replayed, tool_turn.content, strict=True))
         assert [r["outcome"] for r in _rows(tmp_path)] == ["ok", "refusal"]
+
+    def test_execute_model_runs_both_arms_once_each_and_replays_from_cache(
+        self, tmp_path: Path
+    ) -> None:
+        """The whole model pass, wired as ``run.py --run`` wires it, against a stub client.
+
+        One user task x one injection task in one suite is four episodes (benign and
+        attacked, in each arm) and nothing else: the unscored injection-task benign runs
+        ``benchmark_suite_with_injections`` would add are skipped. A second pass over the
+        same logdir is answered from agentdojo's cache without a single call, which is
+        what ``--resume`` relies on and why a reused logdir is otherwise refused.
+        """
+        pytest.importorskip("agentdojo", reason="agentdojo is the optional [bench] extra")
+        pytest.importorskip("anthropic")
+        from anthropic.types import Message
+        from benchmarks.agentdojo.model_registry_shim import ensure_registered
+        from benchmarks.agentdojo.run import execute_model
+
+        done = Message.model_validate(
+            {
+                "id": "msg_done",
+                "type": "message",
+                "role": "assistant",
+                "model": MODEL,
+                "content": [{"type": "text", "text": "Done."}],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 500, "output_tokens": 5},
+            }
+        )
+        client = _StubClient(*[done] * 8)
+        recorder = cp.CallRecorder(
+            tmp_path / "calls.jsonl", job="pass", ledger=Ledger(tmp_path / "ledger.jsonl")
+        )
+        ensure_registered([MODEL])
+        logdir = tmp_path / "logs"
+        with cp.install_claude_patch(
+            {MODEL: "medium"}, recorder=recorder, client_factory=lambda: client
+        ):
+            results, _, _ = execute_model(MODEL, ("banking",), 1, 1, logdir_arg=str(logdir))
+            assert len(client.calls) == 4
+            again, _, _ = execute_model(MODEL, ("banking",), 1, 1, logdir_arg=str(logdir))
+            assert len(client.calls) == 4  # every episode came back from the cache
+
+        for arm in ("undefended", "airlock"):
+            counts = results["banking"][arm]
+            assert (counts.benign_n, counts.atk_util_n, counts.asr_n) == (1, 1, 1)
+            assert again["banking"][arm] == counts
+        rows = _rows(tmp_path)
+        assert {r["pipeline"] for r in rows} == {f"{MODEL}-undefended", f"{MODEL}-airlock"}
+        assert {r["attack_type"] for r in rows} == {"none", "tool_knowledge"}
+        assert all(r["suite"] == "banking" for r in rows)
