@@ -244,7 +244,12 @@ from .integrations.claude_auto_memory import (
 from .integrations.claude_managed_agents import (
     ManagedAgentBetaHeaderMissingError,
     ManagedAgentToolBlocked,
+    ManagedAgentToolGate,
+    ManagedAgentToolsetError,
+    RemotePathPolicy,
+    ToolUseDecision,
     UnknownToolsetVersionError,
+    UnreviewableEventError,
 )
 
 # V0.7.2 — CrewAI canonical-leg trio (ADD-1 2026-05-05; closes #5).
@@ -848,6 +853,12 @@ __all__ = [
     "UnauthenticatedPublicBindError",
     "UnknownToolsetVersionError",
     "UnsignedMCPServerAdded",
+    # V0.10.25 — Claude Managed Agents approval gate (agent_toolset_20260401)
+    "ManagedAgentToolGate",
+    "ManagedAgentToolsetError",
+    "RemotePathPolicy",
+    "ToolUseDecision",
+    "UnreviewableEventError",
     # V0.6.1 — Anthropic Claude Agent SDK canonical-leg trio
     "AnthropicClaudeAgentSDKAdapter",
     "ClaudeAgentSDKMissingError",
