@@ -38,9 +38,14 @@ or programmatically::
     # ModelsEnum("claude-opus-5") now resolves; the pipeline can be built with a key.
 
 The paid run itself still needs an API key and real spend; this only unblocks the
-interface. The registered ids below are Anthropic ids current as of 2026-08 (the Claude 5
-family plus Haiku 4.5) and the GA ``claude-3-5-haiku-20241022`` that agentdojo's enum
-lacks; edit or extend via ``--register-model`` to match exactly what your key serves.
+interface. The registered ids below are the Anthropic ids current as of 2026-10 (the Claude
+5.5 / 5.1 line the credit-funded runs use, the Claude 5 family, Haiku 4.5) and the GA
+``claude-3-5-haiku-20241022`` that agentdojo's enum lacks; edit or extend via
+``--register-model`` to match exactly what your key serves.
+
+Registration is not enough on its own for a Claude 5.x id: unpatched agentdojo 0.1.35
+sends ``temperature`` and a 1024-token ``max_tokens`` that 5.x models reject or truncate.
+``run.py`` routes 5.x ids through ``claude_patch.py`` for that.
 """
 
 from __future__ import annotations
@@ -48,10 +53,15 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-# Anthropic ids current as of 2026-08 that agentdojo 0.1.35's ModelsEnum does not know.
+# Anthropic ids current as of 2026-10 that agentdojo 0.1.35's ModelsEnum does not know.
 # These are the default set registered by register_current_models(); the operator sets
-# --model to whichever their key serves and can add others with --register-model.
+# --model to whichever their key serves and can add others with --register-model. Every
+# id here must be priced in run._MODEL_PRICES (tests/test_agentdojo_crossmodel.py).
 DEFAULT_CURRENT_CLAUDE: tuple[str, ...] = (
+    "claude-haiku-5-5",
+    "claude-sonnet-5-5",
+    "claude-opus-5-5",
+    "claude-fable-5-1",
     "claude-opus-5",
     "claude-sonnet-5",
     "claude-haiku-4-5-20251001",

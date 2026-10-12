@@ -1,4 +1,7 @@
-"""Smoke test for the AgentDojo adaptive-attacker bench (``benchmarks/agentdojo``).
+"""Smoke test for the AgentDojo prompt-injection bench (``benchmarks/agentdojo``).
+
+The bench runs AgentDojo's fixed-template ``tool_knowledge`` attack, not an adaptive
+attacker.
 
 This lives under ``tests/benchmarks/`` which the default pytest run ``--ignore``s, so
 the zero-dep CI gate stays green without the ``bench`` extra. When run explicitly
