@@ -218,6 +218,12 @@ dev = [
     # branches in sandbox_backend.execute() get skipped on bare
     # `[dev]` installs and CI loses real coverage on them.
     "cloudpickle>=3.0",
+    # Property-based and differential guard tests (tests/fuzz/, v0.10.25+). Test-only:
+    # rfc3986 and yarl are the reference URL parsers the differential tests compare the
+    # SSRF / endpoint gates against. Never core dependencies (check_core_deps.py).
+    "hypothesis>=6.100",
+    "rfc3986>=2.0",
+    "yarl>=1.9",
 ]
 docs = [
     "mkdocs>=1.5",
