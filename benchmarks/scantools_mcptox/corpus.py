@@ -4,12 +4,16 @@
 tool-poisoning metadata-injection technique studied by MCPTox* (Wang et al.,
 "MCPTox: A Benchmark for Tool Poisoning Attack on Real-World MCP Servers",
 arXiv:2508.14925). They are **not** the paper's corpus: MCPTox is built on 45 live,
-real-world MCP servers and 353 authentic tools, and generates 1,312 malicious cases
-across 10 risk categories — a live, model-in-the-loop artifact this offline,
-deterministic bench does not (and should not claim to) redistribute or reproduce.
+real-world MCP servers and 353 authentic tools. Version 1 of the paper reported 1,312
+malicious cases; version 2 (2026-09-29) and the released ``response_all.json`` carry
+1,348 (1,312 with ``wrong_data`` 0 plus 36 with ``wrong_data`` 2) across 10 risk
+categories (11 counting "Other"). That live, model-in-the-loop artifact is never
+redistributed here; ``real_corpus.py`` scores its real descriptions from a verified
+download (``python -m benchmarks.scantools_mcptox --mcptox-data --fetch``).
 
 What this bench measures is therefore a **static contract-checking coverage** number
-on labeled fixtures, not MCPTox's published Attack Success Rate (ASR up to 72%),
+on labeled fixtures, not MCPTox's published Attack Success Rate (top reported: 72.8%,
+o1-mini, which reproduces only over all 1,348 cases, 574 of 788 labelled responses),
 which is a property of *models*, not of a static checker. The point of contrast is
 scope: MCP-Scan (Invariant Labs) and eSentire's MCP-Scanner are content-signature
 *tool-poisoning* scanners; ``scan-tools`` is a contract/type check against a

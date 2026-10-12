@@ -118,11 +118,17 @@ reconstructed from the tool-poisoning technique in
 - **69.2% static contract-checking coverage** of the injection-shaped descriptions,
 - **100% precision** (no false positives on clean descriptions).
 
-This is a *static* coverage number on labeled fixtures — **not** MCPTox's
-model-in-the-loop Attack Success Rate (up to 72% across 1,312 cases on 45 live
-servers), which is a property of agents, not of a static checker. The
+This is a *static* coverage number on 23 hand-written fixtures — **not** MCPTox's
+model-in-the-loop Attack Success Rate (MCPTox: 45 live servers, 353 tools; 1,348 cases
+in its released data, 1,312 in the paper's version 1; top reported attack success rate
+72.8%, o1-mini), which is a property of agents, not of a static checker. The
 `declarative_side_effect` fixtures (a malicious side effect stated with no
-imperative marker) are honest misses, which is why coverage is 69.2%, not 100%. See
+imperative marker) are honest misses, which is why coverage is 69.2%, not 100%.
+
+On MCPTox's **real** poisoned descriptions the same check flags far fewer: **157 of
+1,338 unique descriptions (11.7%)**, with 1 false positive in 362 clean tool blocks
+(measured 2026-10-12 with `python -m benchmarks.scantools_mcptox --mcptox-data --fetch`).
+Quote the fixture rate only beside that one. See
 [`benchmarks/scantools_mcptox/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/scantools_mcptox/RESULTS.md).
 
 ## Programmatic use
