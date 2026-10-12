@@ -123,6 +123,7 @@ from .self_heal import (
     BlockReason,
     handle_amplification_exceeded,
     handle_budget_exceeded,
+    handle_capability_denied,
     handle_endpoint_violation,
     handle_escalation,
     handle_ghost_argument_error,
@@ -1810,6 +1811,7 @@ class Airlock:
                         func_name,
                         policy_name="SecurityPolicy",
                         reason=_model_safe_policy_reason(func_name, e),
+                        violation_type=e.violation_type,
                     )
                     self._safe_invoke_callback(
                         self.config.on_blocked,
@@ -2607,9 +2609,11 @@ class Airlock:
                 missing=str(e.missing) if e.missing else None,
                 denied=str(e.denied) if e.denied else None,
             )
-            response = AirlockResponse.blocked_response(
-                reason=BlockReason.CAPABILITY_DENIED,
-                error=f"{func_name}: {e.message}",
+            # Until 0.10.25 this refusal carried no fix_hints and no AIRLOCK_BLOCK prefix.
+            response = handle_capability_denied(
+                func_name,
+                missing=capabilities_to_list(e.missing),
+                denied=capabilities_to_list(e.denied),
             )
             self._safe_invoke_callback(
                 self.config.on_blocked,
