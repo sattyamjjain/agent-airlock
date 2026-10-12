@@ -191,6 +191,12 @@ def parse_auth(stdout: str) -> str:
 
     Only the method and plan keys are read, and a value that is not a short plain token
     (an email has an ``@``) is dropped, so the account never reaches a cell or a report.
+    Claude Code (2.1.296, the CLI bundled with claude-agent-sdk 0.2.165) prints
+    ``loggedIn``, ``authMethod`` (``claude.ai`` or ``api_key``), ``apiProvider``, and for
+    a ``claude.ai`` login ``subscriptionType`` beside the email and organisation, which
+    are never read. An ``apiKeySource`` means an API key is configured beside the login
+    and may be the credential a request uses, so it is marked ``+apikey`` on the method,
+    which then no longer matches ``claude.ai``.
     """
     try:
         data = json.loads(stdout)
@@ -206,6 +212,8 @@ def parse_auth(stdout: str) -> str:
     plan = next((part for key in _AUTH_PLAN_KEYS if (part := _safe_auth_part(data.get(key)))), "")
     if not method:
         return "unknown"
+    if data.get("apiKeySource"):
+        method += "+apikey"
     return f"{method}/{plan}" if plan else method
 
 

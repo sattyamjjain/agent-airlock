@@ -165,6 +165,7 @@ class TestAuthIsRecordedWithoutTheAccount:
         ("document", "expected"),
         [
             ('{"authMethod": "claude.ai"}', "claude.ai"),
+            ('{"loggedIn": true, "authMethod": "api_key", "apiProvider": "firstParty"}', "api_key"),
             ('{"loggedIn": false}', "logged-out"),
             ('{"authMethod": "someone@example.com"}', "unknown"),
             ('{"authMethod": "claude.ai", "subscriptionType": "a b"}', "claude.ai"),
@@ -176,6 +177,12 @@ class TestAuthIsRecordedWithoutTheAccount:
     )
     def test_anything_else(self, document: str, expected: str) -> None:
         assert parse_auth(document) == expected
+
+    def test_an_api_key_beside_the_login_no_longer_matches(self) -> None:
+        document = json.loads(MAX_LOGIN) | {"apiKeySource": "apiKeyHelper"}
+        auth = parse_auth(json.dumps(document))
+        assert auth == "claude.ai+apikey/max"
+        assert not auth_matches(auth, "claude.ai")
 
     def test_auth_matches_the_method_whatever_the_plan(self) -> None:
         assert auth_matches("claude.ai/max", "claude.ai")
