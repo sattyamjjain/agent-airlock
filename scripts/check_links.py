@@ -44,6 +44,17 @@ _DOCS = _ROOT / "docs"
 #: Directories whose markdown is generated or vendored, not authored here.
 _SKIP_DIRS = {"site", ".git", "node_modules", ".venv", "htmlcov"}
 
+
+def _skipped(part: str) -> bool:
+    """A path part that is never project documentation.
+
+    Besides ``_SKIP_DIRS``: ``.claude`` holds agent worktrees (full checkout copies),
+    and ``.smoke-*`` the throwaway venvs ``scripts/smoke_*.py`` leave behind, whose
+    site-packages carry third-party markdown with links that resolve nowhere here.
+    """
+    return part in _SKIP_DIRS or part == ".claude" or part.startswith(".smoke-")
+
+
 #: ``[text](target)`` where target is not external, not a bare anchor, not a mail link.
 _LINK_RE = re.compile(r"\[[^\]]*\]\((?P<target>(?!https?://|#|mailto:|data:)[^)\s]+)\)")
 
@@ -69,7 +80,7 @@ def markdown_files() -> list[Path]:
     out: list[Path] = []
     for path in _ROOT.rglob("*.md"):
         rel = path.relative_to(_ROOT)
-        if any(part in _SKIP_DIRS for part in rel.parts):
+        if any(_skipped(part) for part in rel.parts):
             continue
         out.append(path)
     return sorted(out)

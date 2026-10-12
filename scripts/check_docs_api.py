@@ -45,6 +45,18 @@ from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SKIP_DIRS = {"site", ".git", "node_modules", ".venv", "htmlcov", ".github"}
+
+
+def _skipped(part: str) -> bool:
+    """A path part that is never project documentation.
+
+    Besides ``_SKIP_DIRS``: ``.claude`` holds agent worktrees (full checkout copies),
+    and ``.smoke-*`` the throwaway venvs ``scripts/smoke_*.py`` leave behind, whose
+    site-packages carry third-party markdown with links that resolve nowhere here.
+    """
+    return part in _SKIP_DIRS or part == ".claude" or part.startswith(".smoke-")
+
+
 _SKIP_FILES = {"CHANGELOG.md"}
 _FENCE = re.compile(r"^```(?:python|py)[ \t]*\n(.*?)^```", re.S | re.M)
 _SELF_ASSIGN = re.compile(r"\bself\.([A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=\n]*)?=(?!=)")
@@ -214,7 +226,7 @@ def doc_files(root: Path = _ROOT) -> list[Path]:
         path
         for path in [*root.rglob("*.md"), *(root / "examples").rglob("*.py")]
         if path.name not in _SKIP_FILES
-        and not any(part in _SKIP_DIRS for part in path.relative_to(root).parts)
+        and not any(_skipped(part) for part in path.relative_to(root).parts)
     ]
     return sorted(out)
 
