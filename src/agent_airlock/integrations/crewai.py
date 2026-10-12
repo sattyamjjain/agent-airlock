@@ -184,14 +184,24 @@ class CrewAIAdapter:
         return self._wrap_tools_collection(tools, policy=policy)
 
     def _wrap_tools_collection(self, tools: Any, *, policy: SecurityPolicy | None) -> int:
-        """Replace every tool's callable with the Airlock-decorated version."""
+        """Replace every tool's callable with the Airlock-decorated version.
+
+        Idempotent per tool: a tool already guarded is left alone. CrewAI hands
+        ``Task(agent=a)`` the agent's own ``tools`` list (the same object), so
+        :meth:`wrap_crew` walks one list twice; before 0.10.25 that stacked a second
+        Airlock layer on every tool and every allowed call wrote two audit records.
+        """
         count = 0
         if isinstance(tools, dict):
             for name, tool in tools.items():
+                if _is_guarded(tool):
+                    continue
                 tools[name] = self._wrap_one(tool, name=str(name), policy=policy)
                 count += 1
         elif isinstance(tools, list):
             for idx, tool in enumerate(tools):
+                if _is_guarded(tool):
+                    continue
                 tools[idx] = self._wrap_one(
                     tool,
                     name=getattr(tool, "name", f"tool_{idx}"),
@@ -236,6 +246,7 @@ class CrewAIAdapter:
         # rather than `_run` / `func`, and the tool's signature, so Airlock validates it.
         airlock = Airlock(policy=policy) if policy is not None else Airlock()
         wrapped = airlock(named_tool_proxy(forward, name=name))
+        setattr(wrapped, _GUARDED_MARKER, True)  # noqa: B010
 
         if target_attr is not None:
             setattr(tool, target_attr, wrapped)  # noqa: B010
@@ -267,6 +278,19 @@ class CrewAIAdapter:
                 UserWarning,
                 stacklevel=3,
             )
+
+
+_GUARDED_MARKER = "__airlock_crewai_guarded__"
+
+
+def _is_guarded(tool: Any) -> bool:
+    """True when ``tool`` (or its ``func`` / ``_run``) is already an Airlock shim."""
+    if getattr(tool, _GUARDED_MARKER, False):
+        return True
+    return any(
+        getattr(getattr(tool, candidate, None), _GUARDED_MARKER, False)
+        for candidate in ("func", "_run")
+    )
 
 
 __all__ = [
