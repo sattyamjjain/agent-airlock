@@ -123,6 +123,7 @@ from .self_heal import (
     BlockReason,
     handle_amplification_exceeded,
     handle_budget_exceeded,
+    handle_capability_denied,
     handle_endpoint_violation,
     handle_escalation,
     handle_ghost_argument_error,
@@ -706,6 +707,20 @@ def _warn_on_retired_control_arguments(func_name: str, kwargs: dict[str, Any]) -
             hint="tag the call with AirlockContext(metadata={'airlock_tier': ..., "
             "'input_tokens': ...}); tool arguments are the model's to write",
         )
+
+
+def _model_safe_policy_reason(func_name: str, violation: PolicyViolation) -> str:
+    """The reason a policy refusal gives the model: the violation's message, minus any deny glob.
+
+    A ``tool_denied`` message quotes the ``denied_tools`` pattern that matched. The refusal
+    reaches a model whose context may be attacker-influenced, and a deny list is incomplete
+    by nature: quoting the entry that matched helps a search for a tool name it misses.
+    Until 0.10.25 the model read it. The other messages ``SecurityPolicy`` raises name no
+    deny pattern: a time window and the roles a tool requires describe what is allowed.
+    """
+    if violation.violation_type == ViolationType.TOOL_DENIED.value:
+        return f"Tool '{func_name}' is denied by policy"
+    return violation.message
 
 
 class Airlock:
@@ -1783,10 +1798,20 @@ class Airlock:
                         reset_seconds,
                     )
                 else:
+                    # The refusal reaches the model, so it reads a reason that names no
+                    # deny glob; the operator keeps the full message here and in
+                    # on_blocked below.
+                    logger.warning(
+                        "policy_violation",
+                        function=func_name,
+                        violation_type=e.violation_type,
+                        reason=e.message,
+                    )
                     response = handle_policy_violation(
                         func_name,
                         policy_name="SecurityPolicy",
-                        reason=e.message,
+                        reason=_model_safe_policy_reason(func_name, e),
+                        violation_type=e.violation_type,
                     )
                     self._safe_invoke_callback(
                         self.config.on_blocked,
@@ -2584,9 +2609,11 @@ class Airlock:
                 missing=str(e.missing) if e.missing else None,
                 denied=str(e.denied) if e.denied else None,
             )
-            response = AirlockResponse.blocked_response(
-                reason=BlockReason.CAPABILITY_DENIED,
-                error=f"{func_name}: {e.message}",
+            # Until 0.10.25 this refusal carried no fix_hints and no AIRLOCK_BLOCK prefix.
+            response = handle_capability_denied(
+                func_name,
+                missing=capabilities_to_list(e.missing),
+                denied=capabilities_to_list(e.denied),
             )
             self._safe_invoke_callback(
                 self.config.on_blocked,
