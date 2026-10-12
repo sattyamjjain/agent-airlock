@@ -150,7 +150,7 @@ agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) (Deben
 | travel | 120 | 114 | **95.0%** |
 | slack | 105 | 86 | **81.9%** |
 
-> Deterministic, no model, no API key. The true benign-utility / utility-under-attack / ASR (defended vs undefended) come from the model path (`python -m benchmarks.agentdojo.run --model <id>`, needs a key). `agentdojo` is a bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: [`benchmarks/agentdojo/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md).
+> Deterministic, no model, no API key. The true benign-utility / utility-under-attack / ASR (defended vs undefended) come from the model path (`python -m benchmarks.agentdojo.run --model <id> --run --budget-usd N --logdir <new dir>`, needs a key; without `--run` it only prints the plan and cost). `agentdojo` is a bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: [`benchmarks/agentdojo/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md).
 
 ---
 
