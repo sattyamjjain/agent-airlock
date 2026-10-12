@@ -710,6 +710,23 @@ class TestRecorder:
         assert wire["prefill"] is True
 
 
+class TestChildVerdict:
+    KEYS = ("allowed_ran", "denied_ran", "denied_attempted", "denied_refused", "allowed_refused")
+
+    def test_the_childs_verdict_matches_the_drivers_on_every_combination(
+        self, child: dict[str, Any]
+    ) -> None:
+        for bits in range(2 ** (len(self.KEYS) + 1)):
+            observed = {key: bool(bits >> i & 1) for i, key in enumerate(self.KEYS)}
+            run_error = bool(bits >> len(self.KEYS) & 1)
+            payload = {"constructed": True, **observed, "error": "boom" if run_error else None}
+            assert child["child_status"](payload) == sf.status_for(payload, "mock"), payload
+
+    def test_construction_failures_agree_too(self, child: dict[str, Any]) -> None:
+        for payload in ({"constructed": False, "error_import": True}, {"constructed": False}):
+            assert child["child_status"](payload) == sf.status_for(payload, "mock")
+
+
 class TestObservations:
     def _audit(self, tmp_path: Path, *records: dict[str, Any]) -> None:
         lines = ["# Agent-Airlock Audit Log", *(json.dumps(r) for r in records)]

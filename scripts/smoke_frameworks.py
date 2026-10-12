@@ -912,10 +912,13 @@ def smoke_one(
     )
     secrets = [paid.key] if paid else []
     payload, problem = run_child(fw, py, env, timeout=CHILD_TIMEOUT_S[mode], secrets=secrets)
+    status = status_for(payload, mode)
     notes = findings(payload)
     if problem:
         notes.insert(0, problem)
-    return Outcome(status_for(payload, mode), payload, notes)
+    if payload is not None and payload.get("status") not in (None, status):
+        notes.insert(0, f"the child judged {payload['status']}; the driver's verdict stands")
+    return Outcome(status, payload, notes)
 
 
 def record_spend(paid: PaidRun, fw: Framework, outcome: Outcome, max_calls: int) -> None:
@@ -2095,6 +2098,21 @@ def observations():
     }
 
 
+def child_status(result):
+    """The child's own verdict; the parent recomputes it with ``classify`` and keeps its own."""
+    if not result.get("constructed"):
+        return "ENV" if result.get("error_import") else "ERROR"
+    if MODE == "construct":
+        return "READY"
+    if result.get("denied_ran") or result.get("allowed_refused"):
+        return "FAIL"
+    if result.get("allowed_ran") and result.get("denied_refused"):
+        return "PASS"
+    if not result.get("denied_attempted"):
+        return "ERROR" if result.get("error") else "INCONCLUSIVE"
+    return "FAIL"
+
+
 def versions():
     found = {}
     for dist in (*VERSIONS, "agent-airlock"):
@@ -2180,6 +2198,7 @@ def main():
             result["observe_error"] = describe(exc)
         result["versions"] = versions()
         result["notes"] = list(NOTES)
+        result["status"] = child_status(result)
         if server is not None:
             server.stop()
         emit(result)
