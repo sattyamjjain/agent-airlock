@@ -43,6 +43,7 @@ TIERS = (Tier.G0, Tier.G, Tier.LP)
 PACKAGE_DIR = Path(__file__).resolve().parent
 RESULTS_PATH = PACKAGE_DIR / "RESULTS.md"
 REPLAY_SUMMARY_PATH = PACKAGE_DIR / "replay_summary.json"
+FRESH_SUMMARY_PATH = PACKAGE_DIR / "fresh_summary.json"
 LP_LABELS_PATH = PACKAGE_DIR / "lp_labels.py"
 BLIND_LABELS_COMMIT = "5e856c228a0c21c6c6d885ba195572bb3d3e15f7"
 """``bench(mcptox): blind G0/G/LP policy labels``: the labels, before any replay code."""

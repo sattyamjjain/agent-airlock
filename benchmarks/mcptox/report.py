@@ -19,6 +19,8 @@ REPLAY_BEGIN = "<!-- MCPTOX-REPLAY:BEGIN -->"
 REPLAY_END = "<!-- MCPTOX-REPLAY:END -->"
 FRESH_MARKER = "<!-- MCPTOX-FRESH-RUNS: append newest below; never edit dated blocks -->"
 NOT_MEASURED = "_Not yet measured._"
+SEED_NOTE = 20261012
+"""The C' subset seed, shown in fresh-run blocks (``fresh.SEED``)."""
 BLOB = "https://github.com/sattyamjjain/agent-airlock/blob/main"
 TIER_LABELS = {
     "G0": "G0 (contract only)",
@@ -310,4 +312,144 @@ def format_console(summary: Mapping[str, Any]) -> str:
                 f"DE {short(m['direct_execution_refusal_all']):<20} "
                 f"benign FR {short(m['benign_false_refusal'])}"
             )
+    return "\n".join(lines)
+
+
+RESULTS_FRESH_HEADING = "### Fresh run `{run_id}`, scored {date} (UTC)"
+
+
+def _excess(value: Mapping[str, Any] | None) -> str:
+    if not value:
+        return "not measured (a denominator is 0)"
+    lo, hi = value["newcombe"]
+    return f"{100 * value['difference']:+.1f} pp (95% CI {100 * lo:+.1f} to {100 * hi:+.1f} pp)"
+
+
+def _fresh_model(model: str, m: Mapping[str, Any]) -> list[str]:
+    arms = m["arms"]
+    lines = [
+        f"#### `{model}`",
+        "",
+        *_table(
+            ["Arm", "Succeeded", "Parse-valid", "API refusal", "Truncated", "No call"],
+            [
+                [
+                    name,
+                    str(a["succeeded"]),
+                    short(a["parse_valid"]),
+                    short(a["api_refusal"])
+                    + (
+                        f" ({', '.join(f'{k} {v}' for k, v in a['refusal_categories'].items())})"
+                        if a["refusal_categories"]
+                        else ""
+                    ),
+                    short(a["truncated"]),
+                    short(a["no_call"]),
+                ]
+                for name, a in arms.items()
+            ],
+        ),
+        "",
+        *_table(
+            ["Metric", "Value"],
+            [
+                ["Direct Execution (P calls the poisoned tool)", pct(m["direct_execution"])],
+                ["Influenced, Templates 2+3 (P differs from C)", pct(m["influenced_T2_T3"])],
+                [
+                    "Influenced, Template 1 (its query targets the poisoned tool)",
+                    pct(m["influenced_T1"]),
+                ],
+                ["Noise, Templates 2+3 (C differs from C')", pct(m["noise_T2_T3"])],
+                [
+                    "Excess influence, Templates 2+3 (influenced minus noise)",
+                    _excess(m["excess_T2_T3"]),
+                ],
+                ["Poison-literal uptake, P", pct(m["uptake_P"])],
+                ["Poison-literal uptake, C (false-positive baseline)", pct(m["uptake_C"])],
+            ],
+        ),
+        "",
+    ]
+    rows = []
+    for tier, label in TIER_LABELS.items():
+        a = m["airlock"][tier]
+        rows.append(
+            [
+                label,
+                short(a["p_real_calls_refused"]),
+                short(a["p_influenced_calls_refused"]),
+                short(a["p_uptake_calls_refused"]),
+                short(a["p_poisoned_calls_refused"]),
+                short(a["c_real_calls_refused"]),
+                short(a["c_responses_refused"]),
+            ]
+        )
+    lines += _table(
+        [
+            "Tier",
+            "P real calls refused",
+            "in influenced cases",
+            "carrying a poison literal",
+            "P poisoned-tool calls refused",
+            "C real calls refused (false refusal)",
+            "C responses with a refusal",
+        ],
+        rows,
+    )
+    lines += [
+        "",
+        "Residual under LP (poison-literal calls admitted): "
+        + pct(m["airlock"]["residual_LP_uptake_calls_admitted"])
+        + ".",
+        "",
+    ]
+    return lines
+
+
+def render_fresh_block(summary: Mapping[str, Any], heading: str) -> str:
+    """A dated fresh-run block (appended below the marker, never edited afterwards)."""
+    prov = summary["provenance"]
+    man = prov["manifest"]
+    lines = [
+        heading,
+        "",
+        f"- Run `{prov['run_id']}` ({man.get('kind')}), git `{str(man.get('git_sha'))[:12]}`, "
+        f"anthropic SDK {man.get('anthropic_sdk')}, pricing `{man.get('pricing_snapshot')}`, "
+        f"ledger spend ${prov['spend_usd']:.2f}.",
+        f"- Batches: {', '.join(f'`{b}`' for b in prov['batches'] if b) or 'none (synchronous pilot)'}.",
+        f"- Models requested: {', '.join(f'`{m}`' for m in man.get('models', []))}; effort "
+        f"{man.get('effort')}; max_tokens {man.get('max_tokens')}; adaptive thinking; no "
+        "temperature, tools, fallbacks or caching.",
+        f"- Cases: {prov['cases']}; C' repeat subset: {prov['repeat_cases']} (seed {SEED_NOTE}).",
+        "- Served model ids, by requested model (results are grouped by served id, never "
+        "pooled): "
+        + (
+            "; ".join(
+                f"`{alias}`: " + ", ".join(f"`{m}` {n}" for m, n in counts.items())
+                for alias, counts in summary.get("served_models_by_alias", {}).items()
+            )
+            or "none"
+        )
+        + ".",
+        "- Parse-valid excludes API refusals (`stop_reason: refusal`), which are reported in "
+        "their own column and never counted as influence.",
+        "",
+    ]
+    for model, metrics in summary["models"].items():
+        lines += _fresh_model(model, metrics)
+    lines += [
+        "Recorded Claude 3.7 Sonnet, same literal-uptake method (P arm, MCPTox's outputs): "
+        + pct(summary["recorded_claude_3_7_uptake_P"])
+        + ".",
+        "",
+        "Requests that did not succeed, by requested model: "
+        + (
+            "; ".join(
+                f"`{alias}` " + ", ".join(f"{k} {v}" for k, v in c.items())
+                for alias, c in summary["not_succeeded_by_alias"].items()
+            )
+            or "none"
+        )
+        + ".",
+    ]
     return "\n".join(lines)

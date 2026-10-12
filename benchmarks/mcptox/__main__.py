@@ -2,6 +2,7 @@
 
     python -m benchmarks.mcptox clean-view [--fetch] [--data PATH] [--server KEY|IDX]
     python -m benchmarks.mcptox replay [--fetch] [--data PATH] [--write [--date D]]
+    python -m benchmarks.mcptox fresh --models h55,s55,o55 [--pilot N] [--run --budget-usd N]
 
 ``clean-view`` prints the clean side of each server only: its tool blocks, its clean
 queries, and the roots and hosts the LP tier derives from those queries. It never prints
@@ -13,6 +14,10 @@ replay block of ``RESULTS.md`` and ``replay_summary.json``; it refuses a non-Lin
 (macOS ``/etc``, ``/tmp`` and ``/var`` are symlinks that change filesystem verdicts) unless
 ``--non-canonical-host``, and a filesystem gate that takes ``~`` literally unless
 ``--allow-unexpanded-tilde``. Both overrides are recorded in the published provenance.
+
+``fresh`` is the paid Claude 5.5 run (:mod:`.fresh`). Without ``--run`` it is a dry run that
+prints request counts and costs and needs neither a key nor the SDK; ``--score RUN_ID``
+re-scores stored outputs for free.
 """
 
 from __future__ import annotations
@@ -174,6 +179,12 @@ def _replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fresh(args: argparse.Namespace) -> int:
+    from .fresh import main as fresh_main
+
+    return fresh_main(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m benchmarks.mcptox",
@@ -203,6 +214,13 @@ def main(argv: list[str] | None = None) -> int:
         help="allow --write when the filesystem gate takes '~' literally",
     )
     rep.set_defaults(handler=_replay)
+
+    from .fresh import add_arguments as add_fresh_arguments
+
+    fresh = sub.add_parser("fresh", help="the paid Claude 5.5 run (dry run by default)")
+    _add_data_args(fresh)
+    add_fresh_arguments(fresh)
+    fresh.set_defaults(handler=_fresh)
 
     args = parser.parse_args(argv)
     try:

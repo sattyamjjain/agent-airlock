@@ -30,6 +30,35 @@ docker run --rm -v "$PWD":/src -w /src \
 that takes `~` literally unless `--allow-unexpanded-tilde`; either override is printed in
 the published block.
 
+## Fresh Claude 5.5 run (paid)
+
+Every paid path is a dry run unless `--run` and `--budget-usd` are both given. The dry run
+prints request counts and the worst-case and expected cost and needs neither a key nor the
+`anthropic` SDK.
+
+```bash
+python -m benchmarks.mcptox fresh --fetch                 # dry run: P + C + C' x 3 models
+python -m benchmarks.mcptox fresh --pilot 40              # dry run of the 40-case pilot
+
+# Paid: the key is supplied for the one command, never exported.
+ANTHROPIC_API_KEY="$(security find-generic-password -s anthropic-credits -w)" \
+  python -m benchmarks.mcptox fresh --pilot 40 --run --budget-usd 6
+ANTHROPIC_API_KEY="$(security find-generic-password -s anthropic-credits -w)" \
+  python -m benchmarks.mcptox fresh --models h55 --run --budget-usd 10 --no-wait
+ANTHROPIC_API_KEY="$(security find-generic-password -s anthropic-credits -w)" \
+  python -m benchmarks.mcptox fresh --collect <RUN_ID>
+
+python -m benchmarks.mcptox fresh --score <RUN_ID> --write   # free; appends a dated block
+```
+
+Submit one model per command: the budget guard reserves each batch's worst case
+(`max_tokens` all spent), and Sonnet's and Opus's together exceed the $180 hard cap.
+`--max-tokens`, `--no-repeat` (drop C') and `--paradigms Template-2,Template-3` are the
+plan's cost cuts; the pilot and repeat subsets are drawn from all 1,348 cases either way, so
+a cut changes what is sent, never what a custom id means. A paid run refuses a dirty tree
+and records its manifest, requests, batch ids and raw outputs under
+`~/.cache/agent-airlock-bench/runs/mcptox/<run_id>/`, outside git.
+
 ## Files
 
 - `data.py` - pinned download (HTTPS, 50 MB cap, temp file, sha256, atomic rename), cache,
@@ -44,7 +73,10 @@ the published block.
   and the verdict of one call.
 - `literals.py` - poison-literal uptake (judge-free).
 - `replay.py`, `metrics.py`, `report.py` - the replay, its aggregates and their rendering.
-- `replay_summary.json` - written by `replay --write` only; aggregates, no MCPTox text.
+- `fresh.py` - the paid two-arm run: request building, dry-run pricing, Batch submission
+  through `benchmarks/_claude/`, collection and judge-free scoring.
+- `replay_summary.json`, `fresh_summary.json` - written by `--write` only; aggregates, no
+  MCPTox text.
 
 ## Blind labelling protocol
 
