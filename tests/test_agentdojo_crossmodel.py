@@ -16,6 +16,7 @@ from benchmarks.agentdojo.run import (
     ArmCounts,
     CostMeter,
     ModelRun,
+    TaskSelection,
     append_run_to_results,
     render_cross_model_comparison,
 )
@@ -48,6 +49,38 @@ class TestCostMeter:
         assert m.measured
         assert "$0.0300" in m.summary()
 
+    def test_an_unpriced_call_reads_unmeasured_never_zero(self) -> None:
+        """Until 0.10.25 an unpriced model's calls added $0 and the summary printed
+        ``$0.0000`` as if measured. A call with no list price now makes the dollar figure
+        read "unmeasured" and names the model."""
+        m = CostMeter()
+        m.record(prompt_tokens=1000, completion_tokens=100, usd=None, model="mystery-model-1")
+        summary = m.summary()
+        assert "unmeasured" in summary
+        assert "mystery-model-1" in summary
+        assert "$0.0000" not in summary
+
+    def test_one_unpriced_call_poisons_the_total(self) -> None:
+        m = CostMeter()
+        m.record(prompt_tokens=10, completion_tokens=1, usd=0.5)
+        m.record(prompt_tokens=10, completion_tokens=1, usd=None, model="mystery-model-1")
+        assert "1 of 2 calls have no list price" in m.summary()
+        assert "$0.5000" not in m.summary()
+
+    def test_cache_tokens_are_counted_and_shown(self) -> None:
+        m = CostMeter()
+        m.record(
+            prompt_tokens=100,
+            completion_tokens=20,
+            usd=0.001,
+            cache_read_tokens=3000,
+            cache_write_tokens=900,
+        )
+        assert m.total_tokens == 4020
+        summary = m.summary()
+        assert "3,000 cache read" in summary
+        assert "900 cache write" in summary
+
 
 class TestCrossModelRender:
     def test_per_model_rows_with_own_ci_and_cost(self) -> None:
@@ -73,6 +106,32 @@ class TestCrossModelRender:
 
     def test_empty_runs_render_empty(self) -> None:
         assert render_cross_model_comparison([], 0.86) == ""
+
+    def test_the_attack_is_named_as_a_fixed_template(self) -> None:
+        block = render_cross_model_comparison([_run("m", 9, 2)], 0.86)
+        assert "fixed template" in block
+        assert "not an adaptive" in block
+
+    def test_settings_and_call_outcomes_are_published(self) -> None:
+        run = _run("claude-haiku-5-5", 9, 2)
+        run.settings = {"effort": "medium", "thinking": "adaptive", "max_tokens": 16000}
+        run.call_outcomes = {"ok": 40, "refusal": 2, "max_tokens": 1}
+        block = render_cross_model_comparison([run], 0.86)
+        assert "| `claude-haiku-5-5` | medium | adaptive | 16000 | 43 |" in block
+        assert "max_tokens 1, refusal 2" in block
+
+    def test_the_injection_selection_marks_untargeted_tasks(self) -> None:
+        run = _run("m", 9, 2)
+        run.selection = [
+            TaskSelection(
+                suite="travel",
+                user_ids=["user_task_0", "user_task_1"],
+                injection_ids=["injection_task_6", "injection_task_0"],
+                untargeted=["injection_task_6"],
+            )
+        ]
+        block = render_cross_model_comparison([run], 0.86)
+        assert "travel `6*, 0` (2 user tasks)" in block
 
 
 class TestAppendOnlyLog:
@@ -113,13 +172,14 @@ class TestAppendOnlyLog:
 
 
 class TestEveryRegisterableModelIsPriced:
-    """An unpriced model records $0.00, which is a number that looks like a result.
+    """An unpriced model must never come back as a dollar figure that looks like a result.
 
-    ``CostMeter`` reports $0.00 as *unmeasured* rather than free, but a paid arm
-    still comes back with no dollar figure — and the widening plan's whole point
-    is a defensible cost per arm. Until 2026-09-12 three of the four ids
-    ``model_registry_shim.DEFAULT_CURRENT_CLAUDE`` registers had no entry in
-    ``_MODEL_PRICES``, so the Anthropic arm could not have reported its spend.
+    ``_price_usd`` returns ``None`` for an unpriced model (it returned ``0.0`` until
+    0.10.25), and ``CostMeter`` then reads "unmeasured"; but a paid arm would still come
+    back with no dollar figure, and the widening plan's whole point is a defensible cost
+    per arm. Until 2026-09-12 three of the four ids
+    ``model_registry_shim.DEFAULT_CURRENT_CLAUDE`` registered had no entry in
+    ``_MODEL_PRICES``, and until 0.10.25 ``claude-haiku-5-5`` had none either.
 
     This gate fails the next time someone adds a model to the shim without
     pricing it, which is the ordering the benchmark's own README asks for:
@@ -130,12 +190,54 @@ class TestEveryRegisterableModelIsPriced:
         from benchmarks.agentdojo.model_registry_shim import DEFAULT_CURRENT_CLAUDE
         from benchmarks.agentdojo.run import _price_usd
 
-        unpriced = [m for m in DEFAULT_CURRENT_CLAUDE if _price_usd(m, 1_000_000, 0) == 0.0]
+        unpriced = [m for m in DEFAULT_CURRENT_CLAUDE if not _price_usd(m, 1_000_000, 0)]
         assert not unpriced, (
             f"model_registry_shim registers {unpriced} but _MODEL_PRICES has no entry, "
-            "so a paid arm using them would record $0.00. Add the list price with its "
-            "source and date before running, not after."
+            "so a paid arm using them would record no dollar figure. Add the list price "
+            "with its source and date before running, not after."
         )
+
+    def test_an_unpriced_model_is_none_not_zero(self) -> None:
+        from benchmarks.agentdojo.run import _price_usd
+
+        assert _price_usd("some-lab/unpriced-model-x", 1_000_000, 1_000_000) is None
+        assert _price_usd(None, 1_000_000, 0) is None
+
+    @pytest.mark.parametrize(
+        ("model_id", "input_rate", "output_rate"),
+        [
+            # Before 0.10.25 claude-opus-5-5 prefix-matched claude-opus-5 ($5/$25) and
+            # claude-haiku-5-5 matched nothing and recorded $0.
+            ("claude-opus-5-5", 4.00, 20.00),
+            ("claude-sonnet-5-5", 2.00, 10.00),
+            ("claude-haiku-5-5", 0.10, 0.50),
+            ("claude-fable-5-1", 10.00, 50.00),
+        ],
+    )
+    def test_the_5_5_and_5_1_ids_have_their_own_rates(
+        self, model_id: str, input_rate: float, output_rate: float
+    ) -> None:
+        from benchmarks.agentdojo.run import _price_usd
+
+        assert _price_usd(model_id, 1_000_000, 0) == pytest.approx(input_rate)
+        assert _price_usd(model_id, 0, 1_000_000) == pytest.approx(output_rate)
+
+    def test_the_table_agrees_with_the_dated_snapshot(self) -> None:
+        """The exact-id rows must match the snapshot the shared ledger prices from."""
+        from benchmarks._claude.pricing import rates_for
+        from benchmarks.agentdojo.run import _MODEL_PRICES
+
+        for model_id in ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"):
+            rates = rates_for(model_id)
+            assert _MODEL_PRICES[model_id] == pytest.approx((rates.input, rates.output))
+        assert _MODEL_PRICES["claude-fable-5-1"] == pytest.approx(
+            (rates_for("claude-fable-5-1").input, rates_for("claude-fable-5-1").output)
+        )
+
+    def test_a_dated_snapshot_finds_its_family_by_longest_prefix(self) -> None:
+        from benchmarks.agentdojo.run import _price_usd
+
+        assert _price_usd("claude-haiku-4-5-20251001", 1_000_000, 0) == pytest.approx(1.00)
 
     def test_the_widening_plans_together_model_is_priced(self) -> None:
         """The third family named in benchmarks/agentdojo/RESULTS.md."""
