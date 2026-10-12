@@ -355,6 +355,17 @@ class TestFindings:
         assert "run error: APIConnectionError: boom" in notes
         assert notes[-2:] == ["child note", "crewai 9 is outside SUPPORTED_CREWAI_VERSIONS"]
 
+    def test_truncation_refusal_and_a_different_served_model_are_named(self) -> None:
+        payload = _payload(
+            stop_reasons=["end_turn", "max_tokens", "refusal", "tool_use"],
+            response_models=[sf.MODEL, "claude-haiku-9-9"],
+        )
+        notes = sf.findings(payload)
+        assert "a response stopped with stop_reason max_tokens" in notes
+        assert "a response stopped with stop_reason refusal" in notes
+        assert f"served by claude-haiku-9-9, not {sf.MODEL}" in notes
+        assert not any("end_turn" in n or "tool_use" in n for n in notes)
+
     def test_a_clean_exchange_has_nothing_to_say(self) -> None:
         payload = _payload(wire={"sampling": {}, "max_tokens": [sf.MAX_TOKENS]}, delivery="error")
         assert sf.findings(payload) == []
@@ -697,6 +708,44 @@ class TestRecorder:
         assert wire["max_tokens"] == [1024]
         assert wire["tool_choice"] == ['{"type": "any"}']
         assert wire["prefill"] is True
+
+
+class TestObservations:
+    def _audit(self, tmp_path: Path, *records: dict[str, Any]) -> None:
+        lines = ["# Agent-Airlock Audit Log", *(json.dumps(r) for r in records)]
+        (tmp_path / "audit.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_canaries_and_the_audit_log_decide_the_observation(
+        self, child: dict[str, Any], tmp_path: Path
+    ) -> None:
+        child["order_status_body"]("A-1001")
+        self._audit(
+            tmp_path,
+            {"tool_name": "get_order_status", "blocked": False},
+            {"tool_name": "delete_order", "blocked": True},
+        )
+        observed = child["observations"]()
+        assert observed["allowed_ran"] is True
+        assert observed["denied_ran"] is False
+        assert observed["denied_refused"] is True
+        assert observed["denied_attempted"] is True
+        assert observed["allowed_refused"] is False
+        assert child["NOTES"] == []
+
+    def test_a_guard_refusal_counts_without_an_audit_log(self, child: dict[str, Any]) -> None:
+        child["GUARD_REFUSALS"].append("delete_order")
+        observed = child["observations"]()
+        assert observed["denied_refused"] is True
+        assert observed["audit_records"] == 0
+
+    def test_an_allowed_call_audited_twice_is_called_out(
+        self, child: dict[str, Any], tmp_path: Path
+    ) -> None:
+        child["order_status_body"]("A-1001")
+        record = {"tool_name": "get_order_status", "blocked": False}
+        self._audit(tmp_path, record, record)
+        child["observations"]()
+        assert any("wrapped by Airlock more than once" in n for n in child["NOTES"])
 
 
 class TestChildRunModeGuard:

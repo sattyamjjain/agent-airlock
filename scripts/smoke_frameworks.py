@@ -457,11 +457,8 @@ def sampling_notes(params: Mapping[str, Any]) -> list[str]:
     return notes
 
 
-def findings(payload: Mapping[str, Any] | None) -> list[str]:
-    """Plain-language notes on what the framework sent and did, from a child's payload."""
-    if payload is None:
-        return []
-    wire = payload.get("wire") or {}
+def wire_notes(wire: Mapping[str, Any]) -> list[str]:
+    """What a framework put on the wire that matters to Haiku 5.5."""
     notes = sampling_notes(wire.get("sampling") or {})
     max_tokens = wire.get("max_tokens") or []
     if max_tokens and list(max_tokens) != [MAX_TOKENS]:
@@ -470,10 +467,23 @@ def findings(payload: Mapping[str, Any] | None) -> list[str]:
         notes.append("forces tool_choice (Haiku 5.5 accepts it; the forced call skips thinking)")
     if wire.get("prefill"):
         notes.append("ends a request on an assistant turn (a prefill; Haiku 5.5 returns 400)")
+    return notes
+
+
+def findings(payload: Mapping[str, Any] | None) -> list[str]:
+    """Plain-language notes on what the framework sent and did, from a child's payload."""
+    if payload is None:
+        return []
+    notes = wire_notes(payload.get("wire") or {})
     if payload.get("thinking") in {"dropped", "partial"}:
         notes.append(f"thinking blocks {payload['thinking']} on the next request")
     if payload.get("delivery") == "result":
         notes.append("the refusal reaches the model as a normal tool result, not is_error")
+    stops = set(payload.get("stop_reasons") or []) & {"max_tokens", "refusal", "pause_turn"}
+    notes.extend(f"a response stopped with stop_reason {stop}" for stop in sorted(stops))
+    served = set(payload.get("response_models") or []) - {MODEL}
+    if served:
+        notes.append(f"served by {', '.join(sorted(served))}, not {MODEL}")
     errors = payload.get("http_errors") or []
     if errors:
         notes.append(f"API error: {errors[0]}")
@@ -1805,6 +1815,7 @@ class Recorder:
                 "routes": sorted({c["route"] for c in calls}),
                 "wire": merge_wire([c["wire"] for c in calls if c.get("bytes")]),
                 "response_models": sorted({str(c["model"]) for c in calls if c.get("status") == 200}),
+                "stop_reasons": sorted({str(c["stop_reason"]) for c in calls if c.get("stop_reason")}),
                 "max_request_bytes": max((c["bytes"] for c in calls), default=0),
                 "thinking": thinking,
                 "delivery": delivery,
@@ -2066,6 +2077,11 @@ def observations():
     guarded = {base_tool_name(n) for n in GUARD_REFUSALS}
     summary = RECORDER.summary()
     denied_refused = DENIED in blocked or DENIED in guarded
+    admitted = sum(1 for r in audit if base_tool_name(r.get("tool_name")) == ALLOWED
+                   and not r.get("blocked"))
+    if CANARY[ALLOWED] and admitted > len(CANARY[ALLOWED]):
+        note(f"{admitted} audit records for {len(CANARY[ALLOWED])} allowed call(s): the tool "
+             "is wrapped by Airlock more than once")
     return {
         "allowed_ran": bool(CANARY[ALLOWED]),
         "denied_ran": bool(CANARY[DENIED]),
