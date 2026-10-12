@@ -14,12 +14,14 @@ Modes:
 
   (default)          $0. Build the wheel, create the venvs, install, import, construct the
                      agent with airlock wrapping, then drive it against a scripted stand-in
-                     for the Messages API. Nothing reaches Anthropic: every ``/v1/messages``
-                     request is answered inside the child, or by a loopback server for the
-                     Claude Agent SDK's CLI. The scripted model replies the way Claude Haiku
-                     5.5 does by default (a thinking block before each tool call), so what a
-                     framework sends on the wire, and what it does with thinking blocks and
-                     refusals, is recorded before any credit is spent.
+                     for the Messages API on a loopback server inside the child. Nothing
+                     reaches Anthropic: Python clients reach the stand-in over real HTTP
+                     (observed by the same code that observes Anthropic in a paid run), the
+                     Claude Agent SDK's CLI through ANTHROPIC_BASE_URL, and a request aimed
+                     anywhere else is answered in-process. The stand-in replies the way
+                     Claude Haiku 5.5 does by default (a thinking block before each tool
+                     call), so what a framework sends on the wire, and what it does with
+                     thinking blocks and refusals, is recorded before any credit is spent.
   --construct-only   Stop after construction: "ready" or the environment problem.
   --run --budget-usd N
                      Paid run on claude-haiku-5-5 (max_tokens=4096, no sampling parameters
@@ -43,10 +45,14 @@ Verdicts per framework, for the scripted exchange and the paid run alike:
   READY          --construct-only: installed, imported and constructed
 
 Exit codes: 0 no FAIL, ENV, ERROR or budget refusal; 1 a FAIL; 2 an environment problem
-(ENV or ERROR); 3 the budget refused the run.
+(ENV or ERROR); 3 the budget refused the run. The venvs are deleted after a clean run and
+kept after any other (or with --keep-venvs); while they exist, ``make check-links`` reads
+their site-packages markdown and fails.
 
-Run from the repo root:
-``PYTHONPATH="$PWD/src:$PWD" python scripts/smoke_frameworks.py [--only anthropic,crewai]``.
+Run from the repo root: ``python scripts/smoke_frameworks.py [--only anthropic,crewai]``
+(the script puts ``src/`` and the repo root on ``sys.path`` itself). ``--no-workarounds``
+runs every framework exactly as configured by default, ``--dump-requests`` keeps each
+request body for triage, and ``--reuse-venvs`` skips reinstalling unchanged venvs.
 """
 
 from __future__ import annotations
@@ -1097,7 +1103,12 @@ def run_matrix(args: argparse.Namespace) -> int:
         if VENV_ROOT.exists() and not any(VENV_ROOT.iterdir()):
             VENV_ROOT.rmdir()
     elif code != 0:
-        print(f"\nVenvs and child logs left under {VENV_ROOT} for triage.", file=sys.stderr)
+        print(
+            f"\nVenvs and child logs left under {VENV_ROOT} for triage. Remove the directory "
+            "before `make check-links`, which reads every markdown file in the checkout, "
+            "site-packages included.",
+            file=sys.stderr,
+        )
     return code
 
 
@@ -2079,6 +2090,10 @@ def observations():
     seen = {base_tool_name(r.get("tool_name")) for r in audit}
     guarded = {base_tool_name(n) for n in GUARD_REFUSALS}
     summary = RECORDER.summary()
+    if MODE == "run" and summary["model_calls"] == 0 and (CANARY[ALLOWED] or CANARY[DENIED]):
+        note("tools ran but no model call crossed the hooks; spend is booked at the worst case")
+        RECORDER.add_unobserved("unhooked", TURNS)
+        summary = RECORDER.summary()
     denied_refused = DENIED in blocked or DENIED in guarded
     admitted = sum(1 for r in audit if base_tool_name(r.get("tool_name")) == ALLOWED
                    and not r.get("blocked"))
@@ -2687,15 +2702,20 @@ CHILD_BODIES: dict[str, str] = {
             """Final per-model usage from the ResultMessage.
 
             AssistantMessage.usage is the message_start snapshot (output_tokens 1 on the
-            scripted stream), so only the ResultMessage totals are fit for the ledger.
+            scripted stream), so only the ResultMessage totals are fit for the ledger. The
+            per-model totals do not say which cache TTL a write used, so writes are booked
+            as 1-hour ones, the dearer rate: the ledger may overstate, never understate.
             """
             per_model = {}
             for model, usage in (result.model_usage or {}).items():
+                writes = int(usage.get("cacheCreationInputTokens", 0) or 0)
                 per_model[model] = {
                     "input_tokens": usage.get("inputTokens", 0),
                     "output_tokens": usage.get("outputTokens", 0),
                     "cache_read_input_tokens": usage.get("cacheReadInputTokens", 0),
-                    "cache_creation_input_tokens": usage.get("cacheCreationInputTokens", 0),
+                    "cache_creation_input_tokens": writes,
+                    "cache_creation": {"ephemeral_5m_input_tokens": 0,
+                                       "ephemeral_1h_input_tokens": writes},
                 }
             if not per_model and result.usage:
                 per_model[MODEL] = dict(result.usage)

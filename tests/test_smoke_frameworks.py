@@ -788,6 +788,14 @@ class TestChildRunModeGuard:
         with pytest.raises(run_child["SmokeBudgetAbort"], match="share"):
             recorder.begin("hook:test", huge)
 
+    def test_tools_that_ran_without_a_hooked_model_call_are_booked_at_worst_case(
+        self, run_child: dict[str, Any]
+    ) -> None:
+        run_child["order_status_body"]("A-1001")
+        observed = run_child["observations"]()
+        assert observed["unobserved_calls"] == run_child["TURNS"]
+        assert any("no model call crossed the hooks" in n for n in run_child["NOTES"])
+
     def test_the_child_redacts_its_own_key(self, run_child: dict[str, Any]) -> None:
         text = run_child["redact"]("failed with sk-ant-test-key-not-real-0000")
         assert "not-real" not in text
