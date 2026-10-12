@@ -114,6 +114,7 @@ nav:
     - Multi-harness prompt injection: benchmarks/injection-multi-harness.md
     - Native MCP gateway head-to-head: benchmarks/vs-native-mcp-gateway.md
     - MCP gateway payload gap: benchmarks/mcp-gateway-payload-gap.md
+    - fix_hints recovery: benchmarks/fix-hints-recovery.md
     - Adaptive red-team: benchmarks/adaptive-redteam.md
   - Framework Integrations:
     - Compatibility matrix: COMPATIBILITY.md
