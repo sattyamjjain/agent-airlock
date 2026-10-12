@@ -690,16 +690,27 @@ def ledger_entries(
 # --------------------------------------------------------------------------------------
 
 
+def scrubbed_env(parent: Mapping[str, str]) -> dict[str, str]:
+    """``parent`` without Anthropic or Claude credentials, for build and install commands."""
+    return {
+        k: v
+        for k, v in parent.items()
+        if not k.startswith("ANTHROPIC_") and k not in {"CLAUDE_CODE_OAUTH_TOKEN"}
+    }
+
+
 def _run(cmd: Sequence[str], *, log: Path | None = None, cwd: Path | None = None) -> None:
     print(f"$ {' '.join(cmd)}", flush=True)
+    env = scrubbed_env(os.environ)
     if log is None:
-        subprocess.run(cmd, check=True, cwd=cwd, timeout=INSTALL_TIMEOUT_S)  # noqa: S603
+        subprocess.run(cmd, check=True, cwd=cwd, env=env, timeout=INSTALL_TIMEOUT_S)  # noqa: S603
         return
     with log.open("a", encoding="utf-8") as handle:
         subprocess.run(  # noqa: S603 - argv built by this script
             cmd,
             check=True,
             cwd=cwd,
+            env=env,
             stdout=handle,
             stderr=subprocess.STDOUT,
             timeout=INSTALL_TIMEOUT_S,

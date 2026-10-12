@@ -187,6 +187,14 @@ class TestChildEnv:
         assert env["SMOKE_MAX_CALLS"] == "4"
 
 
+class TestScrubbedEnv:
+    def test_build_and_install_commands_never_see_a_credential(self) -> None:
+        env = sf.scrubbed_env(TestChildEnv.PARENT)
+        assert env["PATH"] == "/usr/bin"
+        assert not any(name.startswith("ANTHROPIC_") for name in env)
+        assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
+
+
 class TestRedact:
     def test_the_secret_value_is_replaced(self) -> None:
         text = sf.redact("auth failed for key abcdefgh12345678", ["abcdefgh12345678"])
