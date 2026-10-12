@@ -224,6 +224,7 @@ dev = [
     "hypothesis>=6.100",
     "rfc3986>=2.0",
     "yarl>=1.9",
+    "httpx>=0.27",
 ]
 docs = [
     "mkdocs>=1.5",
