@@ -74,8 +74,14 @@ as they were. On every call:
      intersection check on the managed-agents request boundary.
    - `AutoMemoryAccessPolicy` + `guarded_read` / `guarded_write` —
      per-tenant scope, byte quota, redaction-on-write.
-   - `build_task_budget_headers` + `build_output_config` — populated by
-     the adapter's `task_budget_request_kit(remaining=...)` helper.
+   - `build_task_budget_headers` + `build_output_config` — the Messages
+     API task budget, `output_config={"task_budget": {"type": "tokens",
+     "total": N, "remaining": M}}` with the `task-budgets-2026-03-13` beta
+     (`total` at least 20,000). The adapter's
+     `task_budget_request_kit(remaining=...)` returns both, for a request
+     you build with `client.beta.messages.create`. Through the SDK itself,
+     pass `ClaudeAgentOptions(task_budget={"total": N})`, which sends the
+     header and the field for you.
 4. **Pins a `SUPPORTED_SDK_VERSIONS` tuple** recording the SDK versions
    the adapter was checked against. Wrapping an SDK object on any other
    version emits a `UserWarning` but still wraps.

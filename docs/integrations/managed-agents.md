@@ -118,21 +118,26 @@ Every clean audit emits an OpenTelemetry span named
 Span emission is best-effort — a misconfigured OTel provider will
 never break the audit path.
 
-## Composition with `task_budget`
+## Session budgets, not task budgets
 
-`ManagedAgentSession.invocations` increments on every clean audit, so
-you can compose with the v0.5.1 `task_budget` adapter to enforce a
-per-session cap:
+A Managed Agents session is not a Messages API request, so the
+`task_budget` builders in `claude_task_budget` do not apply to it (this
+page used to say they compose; they do not). Cap a session's spend with
+its own budget, set when the session is created:
 
 ```python
-from agent_airlock.integrations.claude_task_budget import build_output_config
-
-# After each successful audit, render budget into the next request:
-body = {
-    **build_output_config(total=100_000, remaining=remaining_for(session), soft=False),
-    # ... other request fields
-}
+session = client.beta.sessions.create(
+    agent={"type": "agent", "id": agent.id, "version": agent.version},
+    environment_id=environment.id,
+    budget={"type": "limit", "max_list_cost": {"amount": "2500", "currency": "USD"}},
+)
 ```
+
+`amount` is in cents (`"2500"` is $25.00). The platform checks it
+before every model request and pauses the session at the cap
+(`stop_reason: budget_reached`). A task budget is advisory and
+token-denominated, for one agentic loop you drive through
+`client.beta.messages.create`.
 
 ## Primary sources
 

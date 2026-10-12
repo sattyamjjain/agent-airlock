@@ -189,17 +189,26 @@ class AnthropicClaudeAgentSDKAdapter:
         return agent
 
     def task_budget_request_kit(self, *, remaining: int, soft: bool = True) -> dict[str, Any]:
-        """Return the ``betas`` + body fragments needed for a budgeted call.
+        """Return the ``betas`` + body fragments for a budgeted Messages API call.
+
+        For a request you build yourself with ``client.beta.messages.create``. Through
+        the Claude Agent SDK, pass ``ClaudeAgentOptions(task_budget={"total": N})``
+        instead: the SDK sends the beta header and the body field itself.
 
         Args:
             remaining: Tokens left in the per-task budget.
-            soft: If ``True`` (default) the SDK only nudges the model;
-                if ``False`` Airlock raises :class:`TaskBudgetExhausted`
-                when remaining hits zero.
+            soft: If ``True`` (default) an overspent budget is sent as 0 remaining;
+                if ``False`` :class:`TaskBudgetExhausted` is raised when remaining
+                hits zero. The API itself has no hard mode.
 
         Returns:
-            A dict with ``"betas"`` (header value) and ``"body"`` keys
-            ready to splat into the SDK request.
+            ``{}`` when ``task_budget_total`` is unset; otherwise ``"betas"`` (the
+            header value, for ``betas=``) and ``"body"``
+            (``{"output_config": {"task_budget": {...}}}``, to splat into the call).
+
+        Raises:
+            InvalidTaskBudgetError: ``task_budget_total`` is below 20,000 tokens, or
+                ``remaining`` exceeds it.
         """
         if self.task_budget_total is None:
             return {}
