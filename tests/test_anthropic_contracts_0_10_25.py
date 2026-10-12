@@ -24,6 +24,9 @@ from agent_airlock.integrations.anthropic import (
     aprocess_message_tools,
     process_message_tools,
 )
+from agent_airlock.integrations.anthropic_claude_agent_sdk import AnthropicClaudeAgentSDKAdapter
+from agent_airlock.integrations.claude_auto_memory import AutoMemoryAccessPolicy
+from agent_airlock.integrations.claude_managed_agents import ManagedAgentsAuditConfig
 from agent_airlock.self_heal import AirlockResponse, BlockReason
 
 RAN: list[str] = []
@@ -509,3 +512,23 @@ class TestAutoProcessToolsIsDeprecated:
         client = SecureAnthropicClient(SimpleNamespace(messages=_Messages()), registry)
         assert client.messages.create(model="m") == "response"
         assert seen["tools"] == registry.get_tool_definitions()
+
+
+class TestAgentSdkAdapterFieldsNothingReads:
+    """B4: ``managed_audit`` and ``auto_memory_policy`` were stored and never read."""
+
+    def test_managed_audit_warns_and_points_to_the_gate(self) -> None:
+        with pytest.warns(FutureWarning, match="ManagedAgentToolGate") as record:
+            AnthropicClaudeAgentSDKAdapter(managed_audit=ManagedAgentsAuditConfig())
+        assert "removed in v1.0.0" in str(record[0].message)
+        assert record[0].filename == __file__  # attributed to the caller
+
+    def test_auto_memory_policy_warns(self) -> None:
+        with pytest.warns(FutureWarning, match="guarded_read"):
+            AnthropicClaudeAgentSDKAdapter(auto_memory_policy=AutoMemoryAccessPolicy("t1"))
+
+    def test_the_defaults_do_not_warn(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            AnthropicClaudeAgentSDKAdapter()
+            AnthropicClaudeAgentSDKAdapter(task_budget_total=64_000)
