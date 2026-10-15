@@ -29,6 +29,7 @@ import pytest
 
 from agent_airlock.mcp_spec.config_path_guard import ConfigPathGuard
 from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard
+from agent_airlock.mcp_spec.stdio_command_injection_guard import StdioCommandInjectionGuard
 from agent_airlock.mcp_spec.stdio_guard import StdioInjectionError, validate_stdio_command
 from agent_airlock.mcp_spec.stdio_meta_guard import StdioMetaGuard
 from agent_airlock.mcp_spec.subprocess_arg_guard import (
@@ -320,3 +321,37 @@ class TestStdioGuardHardening:
     )
     def test_benign_argv_admitted_under_ox_preset(self, cmd: list[str]) -> None:
         validate_stdio_command(cmd, stdio_guard_ox_defaults())  # no raise
+
+
+class TestStdioCommandInjectionMetachars:
+    """F12: single ``&`` and process substitution ``<(`` / ``>(`` must be refused; the
+    longest-matching metachar is reported deterministically."""
+
+    @pytest.fixture
+    def guard(self) -> StdioCommandInjectionGuard:
+        return StdioCommandInjectionGuard()
+
+    @pytest.mark.parametrize(
+        ("payload", "expected"),
+        [
+            ("app.py & id", "&"),
+            ("app.py&id", "&"),
+            ("cat <(id)", "<("),
+            (">(sh)", ">("),
+            ("a && b", "&&"),  # longest-first: reports && not &
+        ],
+    )
+    def test_metachar_refused_with_label(
+        self, guard: StdioCommandInjectionGuard, payload: str, expected: str
+    ) -> None:
+        decision = guard.evaluate({"command": "sh", "args": ["-c", payload]})
+        assert decision.allowed is False
+        assert decision.matched_metachar == expected
+
+    def test_standalone_ampersand_element_refused(self, guard: StdioCommandInjectionGuard) -> None:
+        assert guard.evaluate({"command": "sh", "args": ["-c", "app", "&", "id"]}).allowed is False
+
+    @pytest.mark.parametrize("arg", ["pkg>=1.0", "a<b", "--port=8080", "server.py"])
+    def test_benign_args_admitted(self, guard: StdioCommandInjectionGuard, arg: str) -> None:
+        # Bare < / > are intentionally not default metachars (benign version constraints).
+        assert guard.evaluate({"command": "python", "args": [arg]}).allowed is True
