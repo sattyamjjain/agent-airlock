@@ -21,8 +21,13 @@ also catches the bare ``.getattr(`` miss while still rejecting ``xeval(`` and
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+from typing import Any
+
 import pytest
 
+from agent_airlock.mcp_spec.config_path_guard import ConfigPathGuard
 from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard
 from agent_airlock.ssrf_egress_guard import SSRFEgressGuard, SSRFEgressVerdict
 
@@ -98,3 +103,47 @@ class TestEvalRCELoneDotSink:
     def test_parse_expr_pinned_dict_still_exempt(self, guard: EvalRCEGuard) -> None:
         # The CVE-2026-44717 safe form (local_dict pinned) stays allowed.
         assert guard.evaluate({"expr": "parse_expr(s, local_dict={})"}).allowed is True
+
+
+class TestConfigPathTilde:
+    """F5: a ``~`` home reference in command/args/env must be refused, not only in
+    workingDirectory; and a bare ``..``/``~`` env value must reach the inspector."""
+
+    @pytest.fixture
+    def guard(self, tmp_path: Path) -> ConfigPathGuard:
+        root = Path(os.path.realpath(str(tmp_path)))
+        return ConfigPathGuard(host_root=root, platform="posix")
+
+    @staticmethod
+    def _rules(guard: ConfigPathGuard, cfg: dict[str, Any]) -> list[str]:
+        return [f.rule for f in guard.evaluate(cfg).findings]
+
+    def test_tilde_command_is_refused(self, guard: ConfigPathGuard) -> None:
+        assert self._rules(guard, {"command": "~/evil/launcher"}) == ["home_dir_escape"]
+
+    def test_tilde_arg_is_refused(self, guard: ConfigPathGuard) -> None:
+        rules = self._rules(guard, {"command": "python", "args": ["~/.ssh/id_rsa"]})
+        assert "home_dir_escape" in rules
+
+    def test_tilde_env_value_is_refused(self, guard: ConfigPathGuard) -> None:
+        rules = self._rules(guard, {"command": "python", "env": {"KEYFILE": "~/.ssh/id_rsa"}})
+        assert "home_dir_escape" in rules
+
+    def test_bare_dotdot_env_value_reaches_inspector(self, guard: ConfigPathGuard) -> None:
+        # Previously skipped by the ``"/" in value`` prefilter.
+        assert self._rules(guard, {"command": "python", "env": {"X": ".."}}) == [
+            "posix_dot_dot_traversal"
+        ]
+
+    def test_bare_tilde_env_value_is_refused(self, guard: ConfigPathGuard) -> None:
+        assert self._rules(guard, {"command": "python", "env": {"X": "~"}}) == ["home_dir_escape"]
+
+    def test_tilde_user_is_refused(self, guard: ConfigPathGuard) -> None:
+        # ``~root`` resolves to a real home outside host_root (or is unresolvable); either way
+        # the config is refused.
+        rules = self._rules(guard, {"command": "python", "args": ["~root/.ssh/authorized_keys"]})
+        assert rules and rules[0] in {"home_dir_escape", "unresolvable_home"}
+
+    def test_benign_config_still_admitted(self, guard: ConfigPathGuard) -> None:
+        cfg = {"command": "python", "args": ["app.py"], "env": {"DEBUG": "1", "NAME": "prod"}}
+        assert guard.evaluate(cfg).verdict == "allow"
