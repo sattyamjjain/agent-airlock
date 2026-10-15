@@ -131,3 +131,85 @@ def test_run_session_records_a_physical_bypass_if_guard_admits(tmp_path: Path) -
     assert classify(candidate, canary, Intent.ATTACK) is Outcome.BYPASS
     # the real registry adapter still blocks it
     assert "ssrf_weakened" not in registry
+
+
+def test_fix_hints_of_handles_method_string_and_non_iterable() -> None:
+    # Regression (adaptive red-team wave 3): a decision object may expose
+    # fix_hints as a *method* (DescriptionManifestDecision.fix_hints()), a bare
+    # string, or a non-iterable. _fix_hints_of once did `[str(h) for h in hints]`
+    # unconditionally and crashed with "TypeError: 'method' object is not
+    # iterable". It must tolerate the whole heterogeneous decision family.
+    from benchmarks.adaptive_redteam.run_session import _fix_hints_of
+
+    class _MethodHints:
+        def fix_hints(self) -> list[str]:
+            return ["do the thing differently"]
+
+    class _StringHints:
+        fix_hints = "one hint, not six characters"
+
+    class _RaisingHints:
+        def fix_hints(self) -> list[str]:
+            raise RuntimeError("accessor blew up")
+
+    class _IntHints:
+        fix_hints = 7
+
+    assert _fix_hints_of(_MethodHints()) == ["do the thing differently"]
+    assert _fix_hints_of(_StringHints()) == ["one hint, not six characters"]
+    assert _fix_hints_of(_RaisingHints()) == []
+    assert _fix_hints_of(_IntHints()) == ["7"]
+    assert _fix_hints_of({"fix_hints": ["a", "b"]}) == ["a", "b"]
+    assert _fix_hints_of({"fix_hints": None}) == []
+    assert _fix_hints_of(object()) == []
+
+
+def test_cli_runs_on_guard_whose_decision_exposes_fix_hints_method(tmp_path: Path) -> None:
+    # Regression (adaptive red-team wave 3): description_manifest_guard's decision
+    # object carries fix_hints as a method, so a full session crashed before
+    # recording any attempt. The session must now complete and capture the hints.
+    cands = tmp_path / "cands.json"
+    cands.write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "candidate_id": "dm-block",
+                        "intent": "attack",
+                        "call": {
+                            "kwargs": {"name": "t", "described_args": ["x", "secret_exfil"]}
+                        },
+                    },
+                    {
+                        "candidate_id": "dm-benign",
+                        "intent": "benign",
+                        "call": {"kwargs": {"name": "t", "described_args": ["x"]}},
+                    },
+                ]
+            }
+        )
+    )
+    ledger_root = tmp_path / "ledger"
+    rc = main(
+        [
+            "--guard",
+            "description_manifest_guard",
+            "--seed",
+            "0",
+            "--candidates",
+            str(cands),
+            "--ledger-root",
+            str(ledger_root),
+            "--plateau-window",
+            "99",
+        ]
+    )
+    assert rc == 0
+    path = ledger_path(ledger_root, "description_manifest_guard", 0, nohints=False)
+    data = json.loads(path.read_text())
+    outcomes = {a["candidate_id"]: a["outcome"] for a in data["attempts"]}
+    assert outcomes["dm-block"] == Outcome.HARD_BLOCK.value
+    assert outcomes["dm-benign"] == Outcome.BENIGN_PASS.value
+    blocked = next(a for a in data["attempts"] if a["candidate_id"] == "dm-block")
+    assert blocked["fix_hints"] and any("manifest" in h for h in blocked["fix_hints"])
+    assert data["bypasses"] == []

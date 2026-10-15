@@ -77,12 +77,28 @@ def _block_reason_of(response: Any) -> str | None:
 
 
 def _fix_hints_of(response: Any) -> list[str]:
-    hints = None
+    hints: Any = None
     if isinstance(response, dict):
         hints = response.get("fix_hints")
     if hints is None:
         hints = getattr(response, "fix_hints", None)
-    return [str(h) for h in hints] if hints else []
+    # A decision object may expose fix_hints as a method, not an attribute
+    # (e.g. DescriptionManifestDecision.fix_hints()); call it before reading,
+    # the same way _block_reason_of unwraps a verdict enum.
+    if callable(hints):
+        try:
+            hints = hints()
+        except Exception:  # noqa: BLE001 - a hint accessor that raises yields no hints
+            return []
+    if not hints:
+        return []
+    # A bare string is one hint, not an iterable of single characters.
+    if isinstance(hints, str):
+        return [hints]
+    try:
+        return [str(h) for h in hints]
+    except TypeError:  # a non-iterable, non-string hint value
+        return [str(hints)]
 
 
 def run_session(
