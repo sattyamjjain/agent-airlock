@@ -29,6 +29,7 @@ import pytest
 
 from agent_airlock.mcp_spec.config_path_guard import ConfigPathGuard
 from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard
+from agent_airlock.mcp_spec.filter_eval_rce_guard import FilterEvalRCEGuard
 from agent_airlock.mcp_spec.loopback_spawn_guard import LoopbackSessionSpawnGuard
 from agent_airlock.mcp_spec.stdio_command_injection_guard import StdioCommandInjectionGuard
 from agent_airlock.mcp_spec.stdio_guard import StdioInjectionError, validate_stdio_command
@@ -400,3 +401,44 @@ class TestLoopbackWrapperOptionConsumption:
         decision = guard.check_spawn(cmd)
         assert decision.allowed is True
         assert decision.effective_command == "python"
+
+
+class TestFilterEvalLambda:
+    """F15: lambda param-list defaults (CVE-2026-25592), C# ``Expression . Lambda`` whitespace,
+    and the Razor ``@(eval())`` branch must all be caught."""
+
+    @pytest.fixture
+    def guard(self) -> FilterEvalRCEGuard:
+        return FilterEvalRCEGuard()
+
+    @pytest.mark.parametrize(
+        "expr",
+        [
+            "lambda r=0: r",
+            "lambda a, /: a",
+            "lambda t={}: t",
+            "lambda w=[]: w",
+            "lambda e=0.0: e",
+            "lambda s='': s",
+            "lambda: 0",
+        ],
+    )
+    def test_lambda_with_defaults_blocked(self, guard: FilterEvalRCEGuard, expr: str) -> None:
+        assert guard.evaluate({"filter": expr}).allowed is False
+
+    @pytest.mark.parametrize("expr", ["Expression . Lambda(x => x)", "Expression.Lambda(e)"])
+    def test_csharp_expression_whitespace_blocked(
+        self, guard: FilterEvalRCEGuard, expr: str
+    ) -> None:
+        assert guard.evaluate({"filter": expr}).allowed is False
+
+    @pytest.mark.parametrize("expr", ["@(eval(user))", "@( exec(x) )"])
+    def test_razor_template_eval_blocked(self, guard: FilterEvalRCEGuard, expr: str) -> None:
+        assert guard.evaluate({"filter": expr}).allowed is False
+
+    @pytest.mark.parametrize(
+        "expr",
+        ['user.name == "Lambda Inc"', "age > 21 and active", "the lambda calculus"],
+    )
+    def test_benign_filter_admitted(self, guard: FilterEvalRCEGuard, expr: str) -> None:
+        assert guard.evaluate({"filter": expr}).allowed is True

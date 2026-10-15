@@ -89,22 +89,30 @@ DEFAULT_SUSPECT_FIELDS: frozenset[str] = frozenset(
 # newlines / leading indentation. Word-boundary on ``lambda`` to
 # avoid matching the literal substring inside a benign string like
 # ``user.name == "Lambda Inc"``.
+# Python lambda: ``lambda <bindings>:``. The binding list between ``lambda`` and the colon
+# admits the full parameter grammar — default values (``lambda r=0:``, the ``=``), the
+# positional-only marker (``lambda a, /:``), and tuple / list / dict / string / numeric /
+# attribute defaults (``()``, ``[]``, ``{}``, ``'`` ``"``, ``.``, ``+``, ``-``) — not just
+# ``[\w\s,*]``, which let any lambda with a default arg (CVE-2026-25592) past the guard even
+# under ``scan_all_fields`` (adaptive red-team wave 2, v0.10.25). A colon inside a default
+# ends the scan early, which is fine: the lambda is already detected by then.
 _PYTHON_LAMBDA_RE = re.compile(
-    r"\blambda\b\s*[\w\s,*]*\s*:",
+    r"\blambda\b[\w\s,*=/.()\[\]{}'\"+-]*:",
     re.MULTILINE | re.DOTALL,
 )
 
-# C# Expression.Lambda<...> / Func<...> / Predicate<...> tokens.
+# C# Expression.Lambda<...> / Func<...> / Predicate<...> tokens. Whitespace is legal around
+# the ``.`` in ``Expression . Lambda`` (v0.10.25).
 _CSHARP_EXPRESSION_RE = re.compile(
-    r"\b(?:Expression\.Lambda|Func\s*<|Predicate\s*<)\b",
+    r"\b(?:Expression\s*\.\s*Lambda|Func\s*<|Predicate\s*<)\b",
     re.MULTILINE,
 )
 
-# Template-eval tokens: Mustache-style ``{{ eval(...) }}``,
-# Razor-style ``@(...)`` with eval/exec inside, JS-template-string
-# ``${...}`` containing eval/exec.
+# Template-eval tokens: Mustache-style ``{{ eval(...) }}``, Razor-style ``@( eval(...) )``,
+# and JS-template-string ``${ eval(...) }``. The ``@(`` branch was claimed in the docstring
+# but never implemented (v0.10.25).
 _TEMPLATE_EVAL_RE = re.compile(
-    r"(?:\{\{\s*(?:eval|exec)\s*\(|\$\{\s*(?:eval|exec)\s*\()",
+    r"(?:\{\{\s*(?:eval|exec)\s*\(|\$\{\s*(?:eval|exec)\s*\(|@\(\s*(?:eval|exec)\s*\()",
     re.MULTILINE,
 )
 
