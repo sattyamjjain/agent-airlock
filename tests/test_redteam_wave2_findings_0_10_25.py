@@ -27,6 +27,11 @@ from typing import Any
 
 import pytest
 
+from agent_airlock.mcp_spec.argv_guard import (
+    ArgvOptionInjectionError,
+    ArgvStringConcatenationError,
+    enforce_argv_array,
+)
 from agent_airlock.mcp_spec.config_path_guard import ConfigPathGuard
 from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard
 from agent_airlock.mcp_spec.filter_eval_rce_guard import FilterEvalRCEGuard
@@ -442,3 +447,32 @@ class TestFilterEvalLambda:
     )
     def test_benign_filter_admitted(self, guard: FilterEvalRCEGuard, expr: str) -> None:
         assert guard.evaluate({"filter": expr}).allowed is True
+
+
+class TestArgvOptionInjection:
+    """F16: opt-in rejection of option-like values in user-controlled argv slots
+    (CVE-2026-39884 argument injection a lone flag token slips past the shlex check)."""
+
+    def test_flag_token_allowed_by_default(self) -> None:
+        # Backward-compat: a shlex-safe flag passes without the opt-in.
+        enforce_argv_array(["port-forward", "pod/foo", "--kubeconfig=/etc/shadow"])
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["port-forward", "pod/foo", "--kubeconfig=/etc/shadow"],
+            ["get", "pods", "-o", "json"],
+            ["--as=system:admin"],
+        ],
+    )
+    def test_option_like_refused_under_opt_in(self, args: list[str]) -> None:
+        with pytest.raises(ArgvOptionInjectionError):
+            enforce_argv_array(args, reject_option_values=True)
+
+    @pytest.mark.parametrize("args", [["cat", "-"], ["seq", "-5"], ["pod/foo", "json", "a=b"]])
+    def test_non_option_values_allowed_under_opt_in(self, args: list[str]) -> None:
+        enforce_argv_array(args, reject_option_values=True)  # no raise
+
+    def test_space_concat_still_caught_under_opt_in(self) -> None:
+        with pytest.raises(ArgvStringConcatenationError):
+            enforce_argv_array(["8080 --kubeconfig=evil"], reject_option_values=True)
