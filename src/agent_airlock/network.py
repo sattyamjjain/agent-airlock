@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import contextlib
 import ipaddress
+import re
 import socket
 import threading
 from collections.abc import Generator
@@ -215,6 +216,30 @@ def is_blocked_ipv6_range(addr: str) -> bool:
     return any(ip in net for net, _reason in _BLOCKED_IPV6_NETS)
 
 
+_AUTHORITY_DIFFERENTIAL = re.compile(r"[\\\t\n\r]")
+
+
+def authority_has_differential(url: str) -> bool:
+    """Whether the URL's authority holds a character that WHATWG URL parsers and
+    ``urllib.parse`` read differently, so the host resolves one way here and another in
+    a browser / HTTP client — a parser-differential SSRF.
+
+    A backslash (WHATWG treats ``\\`` as ``/``, ending the authority early, so
+    ``http://127.0.0.1\\@allowed/`` is host ``allowed`` to ``urlparse`` but ``127.0.0.1``
+    to a browser) or a raw tab / newline / carriage return (WHATWG strips them from the
+    authority) is refused. A well-formed authority contains none of these, so this never
+    rejects a legitimate target. Adaptive red-team wave 1 (v0.10.25).
+    """
+    if "://" in url:
+        after = url.split("://", 1)[1]
+    elif url.startswith("//"):
+        after = url[2:]
+    else:
+        after = url
+    authority = re.split(r"[/?#]", after, maxsplit=1)[0]
+    return _AUTHORITY_DIFFERENTIAL.search(authority) is not None
+
+
 def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
     """Validate a URL against an endpoint policy.
 
@@ -259,6 +284,24 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
             operation="endpoint_validation",
             target=url,
             details={"reason": "missing_hostname"},
+        )
+
+    # A backslash or control character in the authority means urlparse and a WHATWG
+    # client disagree on the host (e.g. ``http://127.0.0.1\@allowed/`` is ``allowed``
+    # here, ``127.0.0.1`` in a browser). Refuse before the allowlist, so the differential
+    # cannot smuggle an allowlisted host past a loopback/metadata target.
+    if authority_has_differential(url):
+        logger.warning(
+            "endpoint_blocked",
+            url=url,
+            hostname=hostname,
+            reason="malformed_authority",
+        )
+        raise NetworkBlockedError(
+            "URL authority contains a backslash or control character; use a well-formed URL",
+            operation="endpoint_validation",
+            target=url,
+            details={"reason": "malformed_authority", "hostname": hostname},
         )
 
     # Check blocked patterns first

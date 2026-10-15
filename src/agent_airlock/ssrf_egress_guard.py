@@ -52,7 +52,7 @@ from urllib.parse import urlparse
 
 from ._log import structlog
 from .exceptions import AirlockError
-from .network import is_blocked_ipv6_range
+from .network import authority_has_differential, is_blocked_ipv6_range
 
 logger = structlog.get_logger("agent-airlock.ssrf_egress_guard")
 
@@ -82,6 +82,7 @@ class SSRFEgressVerdict(str, enum.Enum):
     DENY_IPV6_INTERNAL = "deny_ipv6_internal"
     DENY_UNRESOLVABLE = "deny_unresolvable"
     DENY_NO_HOST = "deny_no_host"
+    DENY_MALFORMED_AUTHORITY = "deny_malformed_authority"
 
 
 @dataclass(frozen=True)
@@ -262,6 +263,25 @@ class SSRFEgressGuard:
             :class:`SSRFEgressDecision`. ``allowed=False`` maps to a refusal
             of the egress, with a 3-line ``explain`` trace.
         """
+        # A backslash or control char in the authority parses to one host here
+        # (urllib) and another in a WHATWG client, so it could smuggle an
+        # allowlisted host string past a loopback/metadata target. Refuse before
+        # the allowlist check. Adaptive red-team wave 1.
+        if authority_has_differential(url):
+            return SSRFEgressDecision(
+                allowed=False,
+                verdict=SSRFEgressVerdict.DENY_MALFORMED_AUTHORITY,
+                host=None,
+                explain=[
+                    "rule=deny_malformed_authority: backslash/control char in URL authority",
+                    f"target={url!r}",
+                    "encoding=n/a",
+                ],
+                fix_hints=self._hints(
+                    "Use a well-formed http(s) URL with no backslash or control "
+                    "character in the host."
+                ),
+            )
         host = self._extract_host(url)
         if not host:
             return SSRFEgressDecision(
