@@ -79,7 +79,8 @@ entry is a prior `CallSpec` replayed before the scored call.
 
 A clean seed — `0/n` bypasses — publishes as `0/n (≤ 3/n at 95%)`, never as "the
 guard is safe". An automated null leaves room for a bypass a human could find.
-See [`RESULTS.md`](RESULTS.md) (currently "Not yet run") and the dated page at
+See [`RESULTS.md`](RESULTS.md) (waves 1–3 run at seed 0 on 2026-10-15; the full
+multi-seed campaign continues after the merge) and the dated page at
 `docs/benchmarks/adaptive-redteam.md`.
 
 The campaign plan (waves, seeds, severity rubric) is
