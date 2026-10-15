@@ -217,13 +217,34 @@ The sibling `lan_unauth_rce_guard` was checked and needs no change — its `_is_
 treats an `ipaddress`-unparseable address as LAN-bound, so the lenient spellings are blocked
 there already (fail-safe, not fail-open).
 
+### Also probed, no fail-open found
+
+Three more guards got a focused differential probe at this pass and were clean **within
+their documented threat model** (recorded so the negative result is not re-derived):
+
+- `mcp_origin_host_guard` and `ws_origin_guard` (the DNS-rebinding / cross-origin class,
+  CVE-2026-11624): exact normalized set-membership with port stripping. Every adversarial
+  authority shape tried — suffix (`ok.example.evil.com`), prefix (`xok.example`), `\`,
+  `%00`, CR/LF/TAB injection, trailing dot, `wss://`, scheme/port mismatch — is correctly
+  denied. `Host: ok.example:8080@evil.com` is admitted (its `_strip_port` reads the host as
+  `ok.example`), but that is **not** a browser-reachable rebinding bypass: a browser derives
+  `Host` from the URL authority, and in `http://ok.example:8080@evil.com/` the host the
+  browser dials and sends is `evil.com`, which is denied. Noted, not fixed.
+- `env_interpolation_guard` (secret-exfil via env interpolation, CVE-2026-32625): every
+  named-variable form in scope is denied — `${VAR}`, `${VAR:-x}`, `${VAR#x}`, `${ VAR }`,
+  `$VAR`, `%VAR%`. The admitted shapes (`$(cmd)`, backticks, `$$VAR`, `${!VAR}`) are outside
+  the guard's stated shell-style named-interpolation scope: `$(…)`/backticks are command
+  substitution (an RCE class, not this guard's), `$$VAR` is a PID in shell (not a leak), and
+  `${!VAR}` is indirect expansion that does not resolve the named secret directly.
+
 ### Scope of this pass
 
 This was a control baseline across all 27 guards plus a focused differential probe of the
-binding guards, **not** the full ~100-candidate attack session on every guard at every seed.
-The full multi-seed wave-3 campaign continues after the merge (`waves.json`), run by Opus
-attack agents out of band. A `0/n` control baseline is not a safety proof, and a careful
-human read of the remaining low-surface guards may still find fail-opens.
+binding, origin/host and env-interpolation guards, **not** the full ~100-candidate attack
+session on every guard at every seed. The full multi-seed wave-3 campaign continues after
+the merge (`waves.json`), run by Opus attack agents out of band. A `0/n` control baseline is
+not a safety proof, and a careful human read of the remaining low-surface guards may still
+find fail-opens.
 
 ## Provenance
 
