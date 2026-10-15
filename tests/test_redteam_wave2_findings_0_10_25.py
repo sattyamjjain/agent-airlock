@@ -29,6 +29,7 @@ import pytest
 
 from agent_airlock.mcp_spec.config_path_guard import ConfigPathGuard
 from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard
+from agent_airlock.mcp_spec.loopback_spawn_guard import LoopbackSessionSpawnGuard
 from agent_airlock.mcp_spec.stdio_command_injection_guard import StdioCommandInjectionGuard
 from agent_airlock.mcp_spec.stdio_guard import StdioInjectionError, validate_stdio_command
 from agent_airlock.mcp_spec.stdio_meta_guard import StdioMetaGuard
@@ -355,3 +356,47 @@ class TestStdioCommandInjectionMetachars:
     def test_benign_args_admitted(self, guard: StdioCommandInjectionGuard, arg: str) -> None:
         # Bare < / > are intentionally not default metachars (benign version constraints).
         assert guard.evaluate({"command": "python", "args": [arg]}).allowed is True
+
+
+class TestLoopbackWrapperOptionConsumption:
+    """F13: a value-taking wrapper option consumes its argument; the guard must not read
+    that argument as the downstream program (CVE-2026-53820 surface-vs-effective)."""
+
+    @pytest.fixture
+    def guard(self) -> LoopbackSessionSpawnGuard:
+        return LoopbackSessionSpawnGuard(allowed_commands=["python"])
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            ["env", "-u", "python", "bash"],
+            ["env", "--unset", "python", "bash"],
+            ["env", "-u", "python", "bash", "-c", "id"],
+            ["sudo", "-u", "root", "bash"],
+            ["doas", "-u", "root", "sh"],
+            ["env", "--unset=python", "bash"],  # attached form also blocked
+        ],
+    )
+    def test_wrapper_option_value_not_mistaken_for_program(
+        self, guard: LoopbackSessionSpawnGuard, cmd: list[str]
+    ) -> None:
+        decision = guard.check_spawn(cmd)
+        assert decision.allowed is False
+        assert decision.effective_command in {"bash", "sh"}
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            ["env", "-u", "FOO", "python"],
+            ["sudo", "-u", "root", "python"],
+            ["env", "-i", "python"],
+            ["env", "HOME=/x", "python"],
+            ["python", "s.py"],
+        ],
+    )
+    def test_legitimate_wrapped_program_admitted(
+        self, guard: LoopbackSessionSpawnGuard, cmd: list[str]
+    ) -> None:
+        decision = guard.check_spawn(cmd)
+        assert decision.allowed is True
+        assert decision.effective_command == "python"
