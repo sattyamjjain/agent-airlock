@@ -89,7 +89,10 @@ def _spec(
         forbidden=forbidden,
         blocked=lambda _s, k=blocked_kwargs, a=blocked_args: CallSpec(args=a, kwargs=dict(k)),
         benign=lambda _s, k=benign_kwargs, a=benign_args: CallSpec(args=a, kwargs=dict(k)),
-        reference=reference if reference is not None else (lambda _c: True),
+        # Fail safe: with no real independent detector, an admit is NOT auto-scored a bypass
+        # (it becomes benign_pass — "admitted, unconfirmed"). The earlier `lambda: True`
+        # over-reported every admit (adaptive red-team wave 2 / F17).
+        reference=reference if reference is not None else (lambda _c: False),
         refusal_types=refusal_types,
     )
 

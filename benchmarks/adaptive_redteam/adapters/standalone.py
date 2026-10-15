@@ -40,8 +40,12 @@ class StandaloneAdapter:
         blocked: ``(seed) -> CallSpec`` for a shape the guard's tests prove refused.
         benign: ``(seed) -> CallSpec`` for a shape the guard must admit.
         reference: ``(call) -> bool`` independent confirmation the call carries the
-            forbidden shape. Defaults to "always" (so an admit of an attack probe
-            is a sink hit); flagship adapters pass a real stdlib-backed detector.
+            forbidden shape. Defaults to **never** (v0.10.25): without a real,
+            independent detector the harness cannot confirm an admit is a fail-open,
+            so an admitted attack scores ``benign_pass`` ("admitted, unconfirmed"),
+            never an auto-``bypass``. Flagship adapters pass a real stdlib-backed
+            detector; the earlier default of "always" over-reported every admit as a
+            bypass (adaptive red-team wave 2 / F17).
         sink_probe: ``(call) -> list[str]`` the thin canary action when admitted.
             Defaults to a symbolic in-process marker.
         refusal_types: Exception types that mean "guard refused", not "harness
@@ -54,7 +58,7 @@ class StandaloneAdapter:
     forbidden: ForbiddenEffect
     blocked: Callable[[int], CallSpec]
     benign: Callable[[int], CallSpec]
-    reference: Callable[[CallSpec], bool] = field(default=lambda _call: True)
+    reference: Callable[[CallSpec], bool] = field(default=lambda _call: False)
     sink_probe: Callable[[CallSpec], list[str]] | None = None
     refusal_types: RefusalTypes = ()
     mode: str = "C"
