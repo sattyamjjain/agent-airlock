@@ -29,10 +29,12 @@ import pytest
 
 from agent_airlock.mcp_spec.config_path_guard import ConfigPathGuard
 from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard
+from agent_airlock.mcp_spec.stdio_meta_guard import StdioMetaGuard
 from agent_airlock.mcp_spec.subprocess_arg_guard import (
     McpSubprocessArgInjectionGuard,
     McpSubprocessArgVerdict,
 )
+from agent_airlock.policy import StdioGuardConfig
 from agent_airlock.ssrf_egress_guard import SSRFEgressGuard, SSRFEgressVerdict
 
 
@@ -230,3 +232,38 @@ class TestSubprocessArgNestedAndEnv:
     def test_benign_env_still_admitted(self, guard: McpSubprocessArgInjectionGuard) -> None:
         cfg = {"command": "python", "env": {"NODE_ENV": "prod", "DEBUG": "1"}}
         assert guard.evaluate(cfg).allowed is True
+
+
+class TestStdioMetaEnv:
+    """F6: StdioMetaGuard must inspect env for code-loading variables."""
+
+    @pytest.fixture
+    def guard(self) -> StdioMetaGuard:
+        return StdioMetaGuard(stdio_config=StdioGuardConfig(allowed_binaries={"python"}))
+
+    @pytest.mark.parametrize(
+        "var",
+        ["LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "NODE_OPTIONS", "PYTHONPATH", "GIT_SSH_COMMAND"],
+    )
+    def test_dangerous_env_blocks(self, guard: StdioMetaGuard, var: str) -> None:
+        result = guard.evaluate({"command": "python", "args": ["s.py"], "env": {var: "/tmp/x"}})
+        assert result.verdict == "block"
+        assert any(f.finding_id == "env_code_loading_var" for f in result.findings)
+
+    def test_env_list_form_blocks(self, guard: StdioMetaGuard) -> None:
+        result = guard.evaluate(
+            {"command": "python", "args": ["s.py"], "env": ["LD_PRELOAD=/tmp/x.so"]}
+        )
+        assert result.verdict == "block"
+
+    def test_unreadable_env_is_refused(self, guard: StdioMetaGuard) -> None:
+        result = guard.evaluate({"command": "python", "args": ["s.py"], "env": "LD_PRELOAD=/x"})
+        assert result.verdict == "block"
+        assert any(f.finding_id == "env_unreadable" for f in result.findings)
+
+    def test_clean_env_allowed(self, guard: StdioMetaGuard) -> None:
+        spec = {"command": "python", "args": ["s.py"], "env": {"NODE_ENV": "prod"}}
+        assert guard.evaluate(spec).verdict == "allow"
+
+    def test_variant_declared(self) -> None:
+        assert "env_code_loading_var" in StdioMetaGuard.__variants__
