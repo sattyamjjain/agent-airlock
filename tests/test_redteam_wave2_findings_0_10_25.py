@@ -29,12 +29,14 @@ import pytest
 
 from agent_airlock.mcp_spec.config_path_guard import ConfigPathGuard
 from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard
+from agent_airlock.mcp_spec.stdio_guard import StdioInjectionError, validate_stdio_command
 from agent_airlock.mcp_spec.stdio_meta_guard import StdioMetaGuard
 from agent_airlock.mcp_spec.subprocess_arg_guard import (
     McpSubprocessArgInjectionGuard,
     McpSubprocessArgVerdict,
 )
 from agent_airlock.policy import StdioGuardConfig
+from agent_airlock.policy_presets import stdio_guard_ox_defaults
 from agent_airlock.ssrf_egress_guard import SSRFEgressGuard, SSRFEgressVerdict
 
 
@@ -267,3 +269,54 @@ class TestStdioMetaEnv:
 
     def test_variant_declared(self) -> None:
         assert "env_code_loading_var" in StdioMetaGuard.__variants__
+
+
+class TestStdioGuardHardening:
+    """F9/F10/F11: stdio_guard relative-binary, unicode, and -c/-m deny-pattern gaps."""
+
+    @pytest.fixture
+    def bare(self) -> StdioGuardConfig:
+        return StdioGuardConfig(allowed_binaries={"python"})
+
+    @pytest.mark.parametrize("binary", ["../python", "evil/python", "./python", "a/b/python"])
+    def test_relative_binary_is_refused(self, bare: StdioGuardConfig, binary: str) -> None:
+        with pytest.raises(StdioInjectionError) as exc:
+            validate_stdio_command([binary, "app.py"], bare)
+        assert exc.value.rule == "relative_path_binary"
+
+    def test_bare_allowlisted_binary_admitted(self, bare: StdioGuardConfig) -> None:
+        validate_stdio_command(["python", "app.py"], bare)  # no raise
+
+    @pytest.mark.parametrize(
+        "ch",
+        [" ", " ", "‎", "‏", "؜", "​", "﻿", "­"],
+    )
+    def test_banned_unicode_in_arg_is_refused(self, bare: StdioGuardConfig, ch: str) -> None:
+        with pytest.raises(StdioInjectionError) as exc:
+            validate_stdio_command(["python", f"arg{ch}x"], bare)
+        assert exc.value.rule == "banned_unicode"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            ["python", "-cprint(1)"],
+            ["python", "-Ic", "print(1)"],
+            ["python", "-m", "http.server"],
+            ["python", "-mhttp.server"],
+        ],
+    )
+    def test_inline_and_module_exec_refused_under_ox_preset(self, cmd: list[str]) -> None:
+        with pytest.raises(StdioInjectionError) as exc:
+            validate_stdio_command(cmd, stdio_guard_ox_defaults())
+        assert exc.value.rule == "deny_pattern"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            ["python", "server.py"],
+            ["python", "-v"],
+            ["python", "server.py", "--config", "x"],  # double-dash long option
+        ],
+    )
+    def test_benign_argv_admitted_under_ox_preset(self, cmd: list[str]) -> None:
+        validate_stdio_command(cmd, stdio_guard_ox_defaults())  # no raise

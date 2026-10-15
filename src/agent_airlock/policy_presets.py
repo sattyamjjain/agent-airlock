@@ -630,11 +630,18 @@ def stdio_guard_ox_defaults() -> StdioGuardConfig:
             re.compile(r"curl[^\n]*\bsh\b", re.IGNORECASE),
             re.compile(r"wget[^\n]*\bsh\b", re.IGNORECASE),
             re.compile(r"base64\s+-d", re.IGNORECASE),
-            # Inline-code flags across interpreters we otherwise allow:
-            # - python/bash:  -c
+            # Inline-code / module-exec flags across interpreters we otherwise allow.
+            # Anchored at ``-`` but NOT ``$``: the interpreter's own parser reads ``-cCODE``
+            # as ``-c CODE`` and a cluster ``-Ic`` as ``-I -c``, so an exact ``^-c$`` missed
+            # the attached and clustered forms (adaptive red-team wave 2, v0.10.25). The
+            # optional ``[A-Za-z]*`` is the single-dash no-arg flag cluster that may precede
+            # the code flag; ``--`` long options never match.
+            # - python/bash:  -c  (and -cCODE, -Ic, -IcCODE)
+            # - python:       -m  (and -mhttp.server, -Im)
+            re.compile(r"^-[A-Za-z]*c"),
+            re.compile(r"^-[A-Za-z]*m"),
             # - node/deno:    -e / --eval
             # - perl:         -e
-            re.compile(r"^-c$"),
             re.compile(r"^-e$"),
             re.compile(r"^--eval$"),
             re.compile(r"IFS\s*=", re.IGNORECASE),
