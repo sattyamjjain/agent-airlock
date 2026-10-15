@@ -69,14 +69,6 @@ _DEFAULT_SPAWN_KEYS: tuple[str, ...] = ("command", "cmd", "args", "argv", "env")
 # directly, ``argv`` / ``args`` name it in their first element.
 _PROGRAM_KEYS: tuple[str, ...] = ("command", "cmd", "argv", "args")
 
-# Keys that unambiguously name a program at a NESTED level. A nested mapping is treated as a
-# server spawn config only when it carries one of these, so a stray ``args`` / ``env`` data
-# key elsewhere in the tree is not mistaken for a spawn. (An argv-only nested server with no
-# ``command``/``cmd`` is a known gap, accepted to avoid false positives on config data.)
-_NESTED_PROGRAM_KEYS: tuple[str, ...] = ("command", "cmd")
-
-# Nesting deeper than this (or self-referential) is refused rather than walked — fail closed.
-_MAX_CONFIG_DEPTH = 32
 
 # Environment variables that turn an otherwise-allowlisted binary into a
 # code-execution primitive (preload / search-path / interpreter hooks).
@@ -135,7 +127,6 @@ class McpSubprocessArgVerdict(str, enum.Enum):
     ALLOW = "allow"
     DENY_UNTRUSTED_COMMAND = "deny_untrusted_command"  # command not on the static allowlist
     DENY_UNTRUSTED_ENV = "deny_untrusted_env"  # env carries a code-loading var
-    DENY_UNINSPECTABLE = "deny_uninspectable"  # config nested too deep / self-referential
 
 
 @dataclass(frozen=True)
@@ -255,15 +246,13 @@ class McpSubprocessArgInjectionGuard:
         if any(key in config for key in self._spawn_keys):
             return self._evaluate_spawn_mapping(config)
 
-        # No spawn-shaped field at the top level. The canonical MCP client config nests the
-        # spawn under a named server map — {"mcpServers": {"x": {"command": "bash", ...}}}, or
-        # servers / transport / mcp / stdio / config wrappers — so a bridge that reads such a
-        # file would still spawn. Walk nested mappings/lists and evaluate every nested mapping
-        # that carries a direct program key. Input nested deeper than _MAX_CONFIG_DEPTH, or
-        # self-referential, is refused. Adaptive red-team wave 2 (v0.10.25).
-        nested = self._scan_nested(config, depth=0)
-        if nested is not None:
-            return nested
+        # No spawn-shaped field at the TOP level — plain data to this guard. It validates a
+        # single spawn config by deliberate scope: a nested server map
+        # ({"mcpServers": {"x": {"command": "bash", ...}}}) is NOT auto-recursed, because the
+        # caller owns iterating its server entries and auto-recursion would read arbitrary
+        # nested data as spawn configs. This boundary is pinned by the CVE-2026-42271 and
+        # CVE-2026-90898 regression tests; red-team wave 2's "F7" recursion lead was retracted
+        # on triage as a design decision, not a fail-open.
         return self._allow("config carries no spawn-shaped fields")
 
     # -- internal helpers --------------------------------------------------
@@ -297,53 +286,6 @@ class McpSubprocessArgInjectionGuard:
                     return self._deny_env(var)
 
         return self._allow("allowlisted static command with clean env")
-
-    def _scan_nested(self, node: Any, depth: int) -> McpSubprocessArgDecision | None:
-        """First denial from a spawn-shaped mapping nested in ``node``, or None.
-
-        A nested mapping is treated as a spawn config only when it carries a direct program
-        key (``command`` / ``cmd``) — the shape every confirmed nested-spawn attack uses — so
-        a stray ``args`` / ``env`` data key elsewhere is not mistaken for a spawn.
-        """
-        if depth > _MAX_CONFIG_DEPTH:
-            return self._deny_uninspectable(depth)
-        if isinstance(node, Mapping):
-            if any(key in node for key in _NESTED_PROGRAM_KEYS):
-                decision = self._evaluate_spawn_mapping(node)
-                if not decision.allowed:
-                    return decision
-            for value in node.values():
-                found = self._scan_nested(value, depth + 1)
-                if found is not None:
-                    return found
-        elif isinstance(node, (list, tuple)):
-            for item in node:
-                found = self._scan_nested(item, depth + 1)
-                if found is not None:
-                    return found
-        return None
-
-    def _deny_uninspectable(self, depth: int) -> McpSubprocessArgDecision:
-        logger.warning(
-            "mcp_subprocess_arg_blocked",
-            verdict=McpSubprocessArgVerdict.DENY_UNINSPECTABLE.value,
-            reason="nested_too_deep",
-            depth=depth,
-            advisory=self._advisory,
-        )
-        prefix = f"({self._advisory}) " if self._advisory else ""
-        return McpSubprocessArgDecision(
-            allowed=False,
-            verdict=McpSubprocessArgVerdict.DENY_UNINSPECTABLE,
-            detail=(
-                f"spawn config nests deeper than {_MAX_CONFIG_DEPTH} levels (or is "
-                "self-referential), so a nested spawn cannot be ruled out"
-            ),
-            fix_hints=[
-                f"{prefix}Flatten the server config so the guard can read every nested "
-                "spawn entry before anything is spawned.",
-            ],
-        )
 
     def _resolve_program(self, config: Mapping[str, Any]) -> tuple[str, str] | None:
         """Return ``(field_name, raw_program_string)``, or None when no program can be read.

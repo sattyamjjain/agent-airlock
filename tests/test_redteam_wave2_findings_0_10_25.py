@@ -165,55 +165,29 @@ class TestConfigPathTilde:
         assert guard.evaluate(cfg).verdict == "allow"
 
 
-class TestSubprocessArgNestedAndEnv:
-    """F7/F8: recurse into nested server configs; broaden the dangerous-env denylist."""
+class TestSubprocessArgEnvDenylist:
+    """F8: the dangerous-env denylist must cover code-loading / library-injection vars.
+
+    F7 (auto-recurse into nested server maps) was RETRACTED on triage: subprocess_arg_guard
+    validates a single spawn config by design — the caller iterates a nested server map — a
+    scope boundary pinned by the CVE-2026-42271 / CVE-2026-90898 tests. The two tests below
+    document that intentional non-recursion so it is not "re-fixed" later.
+    """
 
     @pytest.fixture
     def guard(self) -> McpSubprocessArgInjectionGuard:
         return McpSubprocessArgInjectionGuard(allowed_commands=["python"])
 
-    @pytest.mark.parametrize(
-        "cfg",
-        [
-            {"mcpServers": {"evil": {"command": "bash", "args": ["-c", "id"]}}},
-            {"servers": {"evil": {"command": "sh", "args": ["-c", "id"]}}},
-            {"transport": {"type": "stdio", "command": "ncat", "args": ["-e", "/bin/sh"]}},
-            {"mcp": {"servers": [{"command": "bash", "args": ["-c", "id"]}]}},
-            {"stdio": {"command": "ncat"}},
-            {"config": {"command": "bash"}},
-        ],
-    )
-    def test_nested_untrusted_command_is_refused(
-        self, guard: McpSubprocessArgInjectionGuard, cfg: dict[str, Any]
-    ) -> None:
-        assert guard.evaluate(cfg).allowed is False
-
-    def test_nested_allowlisted_command_is_admitted(
+    def test_nested_server_map_is_not_auto_recursed_by_design(
         self, guard: McpSubprocessArgInjectionGuard
     ) -> None:
-        cfg = {"mcpServers": {"ok": {"command": "python", "args": ["s.py"]}}}
+        # Top level carries no spawn field -> plain data. Caller must iterate server entries.
+        cfg = {"mcpServers": {"evil": {"command": "bash", "args": ["-c", "id"]}}}
         assert guard.evaluate(cfg).allowed is True
 
-    def test_stray_args_data_key_is_not_a_spawn(
-        self, guard: McpSubprocessArgInjectionGuard
-    ) -> None:
-        # A nested mapping without command/cmd is not mistaken for a spawn config.
-        cfg = {"tools": {"args": ["--help"]}, "meta": {"env": {"X": "1"}}}
-        assert guard.evaluate(cfg).allowed is True
-
-    def test_plain_data_config_admitted(self, guard: McpSubprocessArgInjectionGuard) -> None:
-        assert guard.evaluate({"query": "select 1", "limit": 10}).allowed is True
-
-    def test_deeply_nested_config_refused(self, guard: McpSubprocessArgInjectionGuard) -> None:
-        node: dict[str, Any] = {}
-        cur = node
-        for _ in range(40):
-            cur["n"] = {}
-            cur = cur["n"]
-        cur["command"] = "bash"
-        decision = guard.evaluate(node)
-        assert decision.allowed is False
-        assert decision.verdict is McpSubprocessArgVerdict.DENY_UNINSPECTABLE
+    def test_direct_spawn_config_is_evaluated(self, guard: McpSubprocessArgInjectionGuard) -> None:
+        # The shape the guard IS scoped to: one spawn config with a non-allowlisted command.
+        assert guard.evaluate({"command": "bash", "args": ["-c", "id"]}).allowed is False
 
     @pytest.mark.parametrize(
         "var",

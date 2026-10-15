@@ -146,8 +146,8 @@ over-reporting oracle); each landed as a failing regression test + `fix(security
 |---|---|---|---|---|
 | F5 | `config_path_guard` | `~` not `expanduser`'d in `command`/`args`/`env` (only `workingDirectory` is); env `/`-prefilter skips a bare `..`/`~` | High | **fixed 0.10.25** |
 | F6 | `stdio_meta_guard` | `evaluate()` never inspects `env`, so `env={"LD_PRELOAD":…}` (DYLD_*, BASH_ENV, NODE_OPTIONS, …) → allow → RCE at spawn | High | **fixed 0.10.25** |
-| F7 | `subprocess_arg_guard` | only top-level keys checked, so the canonical `{"mcpServers":{"x":{"command":"bash",…}}}` config is admitted (no recursion) | High | **fixed 0.10.25** |
-| F8 | `subprocess_arg_guard` | dangerous-env **denylist** misses LD_AUDIT, GCONV_PATH, RUBYLIB, PERL5OPT, CLASSPATH, JAVA_TOOL_OPTIONS, PYTHONHOME, DYLD_FALLBACK_* — should be deny-by-default | High | **fixed 0.10.25** |
+| F7 | `subprocess_arg_guard` | only top-level keys checked, so a nested `{"mcpServers":{"x":{"command":"bash",…}}}` config is not recursed | — | **RETRACTED on triage** — intentional scope boundary (see below) |
+| F8 | `subprocess_arg_guard` | dangerous-env **denylist** missed LD_AUDIT, GCONV_PATH, RUBYLIB, PERL5OPT, CLASSPATH, JAVA_TOOL_OPTIONS, PYTHONHOME, DYLD_FALLBACK_* | High | **fixed 0.10.25** (broadened set) |
 | F9 | `stdio_guard` | joined `-cCODE` defeats the `^-c$` deny (Python reads `-cXXX` as `-c XXX`) — inline RCE even under the shipped OX preset | High | **fixed 0.10.25** |
 | F10 | `stdio_guard` / `mcp_proxy_guard` | relative `argv[0]` matched by `basename` only, no traversal check (`../python`, `evil/python`) — planted binary admitted | High | **fixed 0.10.25** |
 | F11 | `stdio_guard` | U+2028/U+2029 line terminators + directional marks (LRM/RLM/ALM) pass the newline / Trojan-Source model the docstring claims | Medium | **fixed 0.10.25** |
@@ -157,6 +157,17 @@ over-reporting oracle); each landed as a failing regression test + `fix(security
 | F15 | `filter_eval_rce_guard` | lambda param-list regex `[\w\s,*]*` misses default args / positional-only `/` (CVE-2026-25592 class); C# `Expression . Lambda` whitespace; Razor `@(eval(…))` never implemented despite docstring | High | **fixed 0.10.25** |
 | F16 | `argv_guard` | single-token flag injection (`--kubeconfig=/etc/shadow`) admitted — guard blocks space-concatenation only (CVE-2026-39884 class) | High | **fixed 0.10.25** |
 | F17 | *harness* | most mode-C adapters lacked an independent reference detector, so admits over-reported as bypasses | n/a (harness) | **fixed 0.10.25** (fail-safe default) |
+
+**F7 retracted (intentional scope boundary).** The wave-2 agent read `subprocess_arg_guard`
+not recursing into a nested `mcpServers` map as a fail-open. On human triage it is a
+*deliberate, documented* design decision: the guard validates **one** spawn config, and the
+integration contract is that the caller iterates a nested server map and checks each entry.
+Auto-recursing would both contradict that contract and read arbitrary nested data as spawn
+configs (false positives). The boundary is pinned by
+`tests/cves/test_cve_2026_42271_kev_regression.py::TestScopeBoundary` and
+`test_cve_2026_90898_bifrost_stdio_registration.py` (e.g. "passing the whole request body
+protects nothing"). The recursion added in the first pass was reverted; F8 (the env-denylist
+breadth, an independent improvement) stands.
 
 **Excluded — not guard defects** (recorded so they are not re-raised): `eval_rce` `parse_expr`
 with a pinned `local_dict=`/`global_dict=` is the CVE-2026-44717 *safe* form and is
