@@ -112,6 +112,61 @@ allowlist / SSRF control when configured. Regression:
   bypass; the arm is kept for the fuller seed sweep where a hints-vs-nohints rate
   comparison becomes meaningful (one seed per arm here is too small to compare).
 
+## Wave 2 — 2026-10-15 (SSRF / eval-RCE / path / spawn / stdio guards, seed 0, hints arm)
+
+Wave 2 ran 11 guards against airlock 0.10.24 / SHA `7582b68` (the snapshot including the
+wave-1 fixes). Eleven Opus attack agents produced **496 attack candidates** (plus benign
+controls).
+
+**Harness-fidelity caveat — read before any count.** Most mode-C adapters are wired with
+the `StandaloneAdapter` default `reference=lambda _call: True` and a *symbolic* in-process
+sink, so the oracle scores **every admitted attack-intent candidate as a "bypass" with no
+independent confirmation** that the admitted value is actually the forbidden shape. Only
+`eval_rce_guard` (a `\b`-boundary sink reference) and `ssrf_egress_guard` (a stdlib
+`ipaddress` reference) carry a real independent detector. So the raw tally — **338 admits
+over 496 attack candidates** — is *"the guard admitted an attack-labelled probe,"* **not**
+338 confirmed fail-opens, and must not be published as one. Each admit was triaged by hand
+against the guard's own code; the genuine fail-opens are below, and a harness follow-up
+(give each mode-C adapter a real reference detector, or flip the default to fail-safe so an
+unconfirmed admit scores `benign_pass`, not `bypass`) is tracked as **F17**.
+
+Two findings were **oracle-anchored** (confirmed by the real reference detectors) and are
+fixed:
+
+| ID | guard | finding | severity | status |
+|---|---|---|---|---|
+| F3 | `ssrf_egress_guard` | IETF-reserved / unallocated IP space (IPv6 `200::/7`…`fe00::/9`, IPv4 `240/4`) admitted — no `is_reserved` catch | High | **fixed 0.10.25** (`020a3b7`) |
+| F4 | `eval_rce_guard` | eval-family call on a non-identifier receiver (`get_evaluator().eval(`, `.eval(`) — sink regex excluded `.` from its boundary | High | **fixed 0.10.25** (`020a3b7`) |
+
+The rest are **hand-triaged genuine fail-opens** (confirmed by reading the guard, not by the
+over-reporting oracle); each lands as a failing regression test + `fix(security):` in
+0.10.25, and is listed here first so the triage is on the record:
+
+| ID | guard | finding | severity | status |
+|---|---|---|---|---|
+| F5 | `config_path_guard` | `~` not `expanduser`'d in `command`/`args`/`env` (only `workingDirectory` is); env `/`-prefilter skips a bare `..`/`~` | High | triaged, fix pending |
+| F6 | `stdio_meta_guard` | `evaluate()` never inspects `env`, so `env={"LD_PRELOAD":…}` (DYLD_*, BASH_ENV, NODE_OPTIONS, …) → allow → RCE at spawn | High | triaged, fix pending |
+| F7 | `subprocess_arg_guard` | only top-level keys checked, so the canonical `{"mcpServers":{"x":{"command":"bash",…}}}` config is admitted (no recursion) | High | triaged, fix pending |
+| F8 | `subprocess_arg_guard` | dangerous-env **denylist** misses LD_AUDIT, GCONV_PATH, RUBYLIB, PERL5OPT, CLASSPATH, JAVA_TOOL_OPTIONS, PYTHONHOME, DYLD_FALLBACK_* — should be deny-by-default | High | triaged, fix pending |
+| F9 | `stdio_guard` | joined `-cCODE` defeats the `^-c$` deny (Python reads `-cXXX` as `-c XXX`) — inline RCE even under the shipped OX preset | High | triaged, fix pending |
+| F10 | `stdio_guard` / `mcp_proxy_guard` | relative `argv[0]` matched by `basename` only, no traversal check (`../python`, `evil/python`) — planted binary admitted | High | triaged, fix pending |
+| F11 | `stdio_guard` | U+2028/U+2029 line terminators + directional marks (LRM/RLM/ALM) pass the newline / Trojan-Source model the docstring claims | Medium | triaged, fix pending |
+| F12 | `stdio_command_injection_guard` | `DEFAULT_SHELL_METACHARS` omits single `&` (separator), `<`/`>` redirection, `<(`/`>(` process substitution | Medium | triaged, fix pending |
+| F13 | `loopback_spawn_guard` | wrapper option-arg consumption (`env -u python bash` latches `python`, execs `bash`); also 3 false refusals on legit `env -u FOO python` | High | triaged, fix pending |
+| F14 | `mcp_proxy_guard` | attached/combined `-cCODE`/`-Ic` and `-m` module-exec defeat the preset's `^-c$` (overlaps F9) | Medium | triaged, fix pending |
+| F15 | `filter_eval_rce_guard` | lambda param-list regex `[\w\s,*]*` misses default args / positional-only `/` (CVE-2026-25592 class); C# `Expression . Lambda` whitespace; Razor `@(eval(…))` never implemented despite docstring | High | triaged, fix pending |
+| F16 | `argv_guard` | single-token flag injection (`--kubeconfig=/etc/shadow`) admitted — guard blocks space-concatenation only (CVE-2026-39884 class) | High | triaged, fix pending |
+| F17 | *harness* | most mode-C adapters lack an independent reference detector, so admits over-report as bypasses | n/a (harness) | tracked |
+
+**Excluded — not guard defects** (recorded so they are not re-raised): `eval_rce` `parse_expr`
+with a pinned `local_dict=`/`global_dict=` is the CVE-2026-44717 *safe* form and is
+correctly admitted; `argv_guard` skipping non-string slots is documented by-design;
+`config_path` admitting a `\`-path under `platform=auto` on a POSIX host is arguable (the
+risk is cross-platform); and several `mcp_proxy` / `subprocess_arg` admits are closed by the
+shipped preset or are an operator allowlist choice (allowlisting an interpreter). An
+automated run at one seed with an over-reporting oracle is not a safety proof; these are the
+fail-opens a careful read of the guards confirmed, and the list may not be exhaustive.
+
 ## Provenance
 
 Per-seed ledgers (`ledger/<guard>/<guard>.seed<NN>[.nohints].json`) are raw run
