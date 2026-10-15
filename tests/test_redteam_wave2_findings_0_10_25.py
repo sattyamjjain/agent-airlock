@@ -29,6 +29,10 @@ import pytest
 
 from agent_airlock.mcp_spec.config_path_guard import ConfigPathGuard
 from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard
+from agent_airlock.mcp_spec.subprocess_arg_guard import (
+    McpSubprocessArgInjectionGuard,
+    McpSubprocessArgVerdict,
+)
 from agent_airlock.ssrf_egress_guard import SSRFEgressGuard, SSRFEgressVerdict
 
 
@@ -147,3 +151,82 @@ class TestConfigPathTilde:
     def test_benign_config_still_admitted(self, guard: ConfigPathGuard) -> None:
         cfg = {"command": "python", "args": ["app.py"], "env": {"DEBUG": "1", "NAME": "prod"}}
         assert guard.evaluate(cfg).verdict == "allow"
+
+
+class TestSubprocessArgNestedAndEnv:
+    """F7/F8: recurse into nested server configs; broaden the dangerous-env denylist."""
+
+    @pytest.fixture
+    def guard(self) -> McpSubprocessArgInjectionGuard:
+        return McpSubprocessArgInjectionGuard(allowed_commands=["python"])
+
+    @pytest.mark.parametrize(
+        "cfg",
+        [
+            {"mcpServers": {"evil": {"command": "bash", "args": ["-c", "id"]}}},
+            {"servers": {"evil": {"command": "sh", "args": ["-c", "id"]}}},
+            {"transport": {"type": "stdio", "command": "ncat", "args": ["-e", "/bin/sh"]}},
+            {"mcp": {"servers": [{"command": "bash", "args": ["-c", "id"]}]}},
+            {"stdio": {"command": "ncat"}},
+            {"config": {"command": "bash"}},
+        ],
+    )
+    def test_nested_untrusted_command_is_refused(
+        self, guard: McpSubprocessArgInjectionGuard, cfg: dict[str, Any]
+    ) -> None:
+        assert guard.evaluate(cfg).allowed is False
+
+    def test_nested_allowlisted_command_is_admitted(
+        self, guard: McpSubprocessArgInjectionGuard
+    ) -> None:
+        cfg = {"mcpServers": {"ok": {"command": "python", "args": ["s.py"]}}}
+        assert guard.evaluate(cfg).allowed is True
+
+    def test_stray_args_data_key_is_not_a_spawn(
+        self, guard: McpSubprocessArgInjectionGuard
+    ) -> None:
+        # A nested mapping without command/cmd is not mistaken for a spawn config.
+        cfg = {"tools": {"args": ["--help"]}, "meta": {"env": {"X": "1"}}}
+        assert guard.evaluate(cfg).allowed is True
+
+    def test_plain_data_config_admitted(self, guard: McpSubprocessArgInjectionGuard) -> None:
+        assert guard.evaluate({"query": "select 1", "limit": 10}).allowed is True
+
+    def test_deeply_nested_config_refused(self, guard: McpSubprocessArgInjectionGuard) -> None:
+        node: dict[str, Any] = {}
+        cur = node
+        for _ in range(40):
+            cur["n"] = {}
+            cur = cur["n"]
+        cur["command"] = "bash"
+        decision = guard.evaluate(node)
+        assert decision.allowed is False
+        assert decision.verdict is McpSubprocessArgVerdict.DENY_UNINSPECTABLE
+
+    @pytest.mark.parametrize(
+        "var",
+        [
+            "LD_AUDIT",
+            "GCONV_PATH",
+            "LD_PROFILE",
+            "DYLD_FALLBACK_LIBRARY_PATH",
+            "DYLD_FRAMEWORK_PATH",
+            "PYTHONHOME",
+            "RUBYLIB",
+            "PERL5OPT",
+            "CLASSPATH",
+            "JAVA_TOOL_OPTIONS",
+            "_JAVA_OPTIONS",
+            "GIT_SSH_COMMAND",
+        ],
+    )
+    def test_dangerous_env_var_is_refused(
+        self, guard: McpSubprocessArgInjectionGuard, var: str
+    ) -> None:
+        decision = guard.evaluate({"command": "python", "env": {var: "/tmp/x"}})
+        assert decision.allowed is False
+        assert decision.verdict is McpSubprocessArgVerdict.DENY_UNTRUSTED_ENV
+
+    def test_benign_env_still_admitted(self, guard: McpSubprocessArgInjectionGuard) -> None:
+        cfg = {"command": "python", "env": {"NODE_ENV": "prod", "DEBUG": "1"}}
+        assert guard.evaluate(cfg).allowed is True
