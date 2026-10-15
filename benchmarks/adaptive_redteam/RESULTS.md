@@ -8,16 +8,19 @@ reference detector to confirm the forbidden shape reached a sentinel sink. See
 and the adapter map in
 [`adapters_table.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/adaptive_redteam/adapters_table.md).
 
-## Status: wave 1 run 2026-10-15 (value gates, seed 0)
+## Status: waves 1–3 run 2026-10-15 (seed 0)
 
 Wave 1 ran the three value-gate adapters (`deserialization_guard`, `filesystem`,
 `endpoint`), each in the `hints` and `nohints` arms, at seed 0, against airlock
 0.10.24 / source SHA `a85551e` (a frozen snapshot worktree). Six Opus attack agents
 produced **491 attack candidates** in all (plus 66 benign controls); the harness
-executed and scored every one. **Oracle-scored bypasses: 0/491.** The remaining
-seeds in [`waves.json`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/adaptive_redteam/waves.json)
-(wave 1 is specified at 10 / 10 / 10 seeds) and waves 2–3 are **not yet run**
-(`n=0`), and continue after the merge.
+executed and scored every one. **Oracle-scored bypasses: 0/491.** Wave 2 (11 SSRF /
+eval-RCE / path / spawn / stdio guards) and wave 3 (a control baseline across the 27
+lower-surface guards plus a focused differential probe) have since run at seed 0 — see
+their sections below. The remaining seeds in
+[`waves.json`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/adaptive_redteam/waves.json)
+(wave 1 is specified at 10 / 10 / 10 seeds) and the full multi-seed wave-3 attack
+matrix are **not yet run** (`n=0`), and continue after the merge.
 
 An automated null is not a safety proof. A `0/n` row means only that this harness,
 with the candidates an Opus agent produced under a plateau budget at one seed, found
@@ -177,6 +180,50 @@ risk is cross-platform); and several `mcp_proxy` / `subprocess_arg` admits are c
 shipped preset or are an operator allowlist choice (allowlisting an interpreter). An
 automated run at one seed with an over-reporting oracle is not a safety proof; these are the
 fail-opens a careful read of the guards confirmed, and the list may not be exhaustive.
+
+## Wave 3 — 2026-10-15 (lower-surface inspection guards, seed 0, hints arm)
+
+Wave 3 covers the 27 lower-surface guards. A control baseline ran every one of them at
+seed 0 (each adapter's `known_blocked` shape and its benign control): all 27 `hard_block`
+their blocked shape and `benign_pass` their control — **0 bypasses, 0 harness errors** —
+which proves the adapters are wired to a real refusal and a real admit. One harness bug
+surfaced and was fixed first: `run_session._fix_hints_of` crashed on
+`description_manifest_guard`, whose decision object exposes `fix_hints` as a *method*, not
+an attribute (`890b4bd`).
+
+Most wave-3 adapters have no independent reference detector (the F17 fail-safe default), so
+the harness cannot auto-confirm a fail-open on them; candidates are triaged by hand against
+the guard's logic and, where there is a physical effect, against ground truth. A focused
+parser-differential probe of the network-binding guards — the class that produced wave-1 F2
+and wave-2 F3 — found one genuine fail-open, confirmed against the OS socket parser rather
+than the harness oracle:
+
+| wave | guard | finding | severity | status |
+|---|---|---|---|---|
+| 3 | `bind_address_guard` | every kernel-lenient spelling of `0.0.0.0` admitted — `0`, `0x0`, `00.00.00.00`, `000.000.000.000`, `0x0.0x0.0x0.0x0`, `0.0.0`, `0.00.0.0` (all `inet_aton` → `0.0.0.0`); `_is_public_bind` checked only the literal set + a strict `ipaddress` parse | High | **fixed 0.10.25** |
+
+### F18 — `bind_address_guard` kernel-lenient all-interfaces spellings (High, fixed in 0.10.25)
+
+The guard refuses binding to all interfaces (CVE-2026-23744). `_is_public_bind` matched a
+literal blocklist (`0.0.0.0`, `::`, `[::]`, `0:0:0:0:0:0:0:0`) and a strict `ipaddress`
+parse, but the socket layer's own IPv4 parser (`inet_aton`) also accepts octal, hex,
+bare-integer and short-dotted forms. A server handed `0`, `0x0`, `00.00.00.00` or `0.0.0`
+binds to `0.0.0.0` on every NIC — the exact surface the guard exists to refuse — and
+`ipaddress` rejected every one of them, so the guard let them through. Confirmed against
+ground truth with `socket.getaddrinfo` / `inet_aton` (resolution only, never a live bind):
+each maps to `0.0.0.0`. `_is_public_bind` now adds an `inet_aton` layer; a real address
+(`127.0.0.1`, `2130706433` → loopback, `1` → `0.0.0.1`) still passes, so no false positives.
+The sibling `lan_unauth_rce_guard` was checked and needs no change — its `_is_lan_bound`
+treats an `ipaddress`-unparseable address as LAN-bound, so the lenient spellings are blocked
+there already (fail-safe, not fail-open).
+
+### Scope of this pass
+
+This was a control baseline across all 27 guards plus a focused differential probe of the
+binding guards, **not** the full ~100-candidate attack session on every guard at every seed.
+The full multi-seed wave-3 campaign continues after the merge (`waves.json`), run by Opus
+attack agents out of band. A `0/n` control baseline is not a safety proof, and a careful
+human read of the remaining low-surface guards may still find fail-opens.
 
 ## Provenance
 
