@@ -24,8 +24,8 @@ Subtree conventions for the adaptive red-team campaign. These extend
 ## Reporting conventions
 
 - **Nulls ship as nulls.** A clean seed is `0/n (≤ 3/n at 95%)`, never "safe" and
-  never `0%`. An unrun arm is "not yet run" / `n=0`, never `0`. `RESULTS.md` stays
-  "Not yet run" until the coordinator actually runs a wave, and every published
+  never `0%`. An unrun arm is "not yet run" / `n=0`, never `0`. `RESULTS.md` lists
+  only the waves and seeds the coordinator actually ran, and every published
   number carries its denominator and run date (UTC).
 - **State the scope inline.** Say in the same sentence that an automated null
   leaves room for a human-found bypass, that a symbolic-sink finding needs human
@@ -63,7 +63,8 @@ Subtree conventions for the adaptive red-team campaign. These extend
 - `stats.py` — rule-of-three, histograms, plateau.
 - `waves.json` — the wave plan and seed counts.
 - `prompts/attacker.md` — the attack-session prompt skeleton.
-- `RESULTS.md` — dated aggregate output ("Not yet run" until a wave runs).
+- `RESULTS.md` — dated aggregate output: status, results table, per-wave sections,
+  Findings. A wave or seed that has not run stays "not yet run" (`n=0`).
 
 ## Notes
 
