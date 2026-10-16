@@ -843,7 +843,9 @@ class TestReport:
         assert block.startswith("### Round R1 · 2026-10-14 · run `fh-r1-20261014T000000Z`")
         assert "1/1 100%" in block and "n=0" in block
         results = tmp_path / "RESULTS.md"
-        results.write_text(cli.RESULTS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        base = cli.RESULTS_PATH.read_text(encoding="utf-8")
+        base_r1 = base.count("### Round R1")  # real published rounds, if any
+        results.write_text(base, encoding="utf-8")
         text = report.append_block(results, block)
         assert report.PLACEHOLDER_PREFIX not in text
         assert text.index(report.RESULTS_MARKER) < text.index("### Round R1")
@@ -852,7 +854,7 @@ class TestReport:
         second = block.replace("fh-r1-20261014T000000Z", "fh-r1-20261015T000000Z")
         text = report.append_block(results, second)
         assert text.index("20261015") < text.index("20261014")  # newest first
-        assert text.count("### Round R1") == 2
+        assert text.count("### Round R1") == base_r1 + 2
 
     def test_append_needs_the_marker(self, tmp_path: Path) -> None:
         results = tmp_path / "RESULTS.md"

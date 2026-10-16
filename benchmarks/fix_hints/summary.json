@@ -1,0 +1,6907 @@
+{
+  "benchmark": "fix_hints",
+  "latest": {
+    "r1": "fh-r1-20261016T200341Z",
+    "r2": "fh-r2-20261016T201103Z"
+  },
+  "results": "https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/fix_hints/RESULTS.md",
+  "runs": {
+    "fh-r1-20261016T200341Z": {
+      "arms": [
+        "h",
+        "n",
+        "s"
+      ],
+      "batches": {
+        "h55": "msgbatch_01TDXnozy6huYdYM5y2RpBBL",
+        "s55": "msgbatch_0134zPSaouscuCXB63V3FMfE"
+      },
+      "cells": [
+        {
+          "arm": "h",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 440,
+          "outcomes": {
+            "no_tool_call": 4,
+            "recovered": 422,
+            "same_error": 14
+          },
+          "rr": 0.9590909090909091,
+          "rr_ci": [
+            0.9362656283784379,
+            0.9739690138903356
+          ],
+          "semantic": 417,
+          "sr": 0.9477272727272728,
+          "sr_ci": [
+            0.9227853498064579,
+            0.9649187320101181
+          ],
+          "success": 422
+        },
+        {
+          "arm": "h",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "h",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 34,
+            "switched": 6
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "h",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "no_tool_call": 4,
+            "recovered": 26
+          },
+          "rr": 0.8666666666666667,
+          "rr_ci": [
+            0.7031831605558305,
+            0.946904305757819
+          ],
+          "semantic": 26,
+          "sr": 0.8666666666666667,
+          "sr_ci": [
+            0.7031831605558305,
+            0.946904305757819
+          ],
+          "success": 26
+        },
+        {
+          "arm": "h",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "h",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "h",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 19,
+          "sr": 0.95,
+          "sr_ci": [
+            0.7638641064874332,
+            0.9911187805671269
+          ],
+          "success": 20
+        },
+        {
+          "arm": "h",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 16,
+            "same_error": 14
+          },
+          "rr": 0.5333333333333333,
+          "rr_ci": [
+            0.36142013281525043,
+            0.6976787277587178
+          ],
+          "semantic": 16,
+          "sr": 0.5333333333333333,
+          "sr_ci": [
+            0.36142013281525043,
+            0.6976787277587178
+          ],
+          "success": 16
+        },
+        {
+          "arm": "h",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 14,
+          "sr": 0.9333333333333333,
+          "sr_ci": [
+            0.70182922447576,
+            0.9881334113938052
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 14,
+          "sr": 0.9333333333333333,
+          "sr_ci": [
+            0.70182922447576,
+            0.9881334113938052
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 440,
+          "outcomes": {
+            "no_tool_call": 5,
+            "recovered": 423,
+            "same_error": 12
+          },
+          "rr": 0.9613636363636363,
+          "rr_ci": [
+            0.939000930626884,
+            0.975739823732329
+          ],
+          "semantic": 421,
+          "sr": 0.9568181818181818,
+          "sr_ci": [
+            0.9335446524605465,
+            0.9721838777177875
+          ],
+          "success": 423
+        },
+        {
+          "arm": "n",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 38,
+            "switched": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "n",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "no_tool_call": 5,
+            "recovered": 25
+          },
+          "rr": 0.8333333333333334,
+          "rr_ci": [
+            0.6643529481431982,
+            0.9266356575964831
+          ],
+          "semantic": 25,
+          "sr": 0.8333333333333334,
+          "sr_ci": [
+            0.6643529481431982,
+            0.9266356575964831
+          ],
+          "success": 25
+        },
+        {
+          "arm": "n",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 60,
+          "sr": 1.0,
+          "sr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "success": 60
+        },
+        {
+          "arm": "n",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "n",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 19,
+          "sr": 0.95,
+          "sr_ci": [
+            0.7638641064874332,
+            0.9911187805671269
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 18,
+            "same_error": 12
+          },
+          "rr": 0.6,
+          "rr_ci": [
+            0.4232005249827383,
+            0.754096056739166
+          ],
+          "semantic": 18,
+          "sr": 0.6,
+          "sr_ci": [
+            0.4232005249827383,
+            0.754096056739166
+          ],
+          "success": 18
+        },
+        {
+          "arm": "n",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 440,
+          "outcomes": {
+            "no_tool_call": 3,
+            "recovered": 408,
+            "same_error": 29
+          },
+          "rr": 0.9272727272727272,
+          "rr_ci": [
+            0.8991332684504768,
+            0.948015804552144
+          ],
+          "semantic": 402,
+          "sr": 0.9136363636363637,
+          "sr_ci": [
+            0.8836788079553602,
+            0.9364335925046238
+          ],
+          "success": 408
+        },
+        {
+          "arm": "s",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "control_capability",
+          "identical_retries": 1,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 19,
+            "same_error": 1
+          },
+          "rr": 0.95,
+          "rr_ci": [
+            0.7638641064874332,
+            0.9911187805671269
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 19
+        },
+        {
+          "arm": "s",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 39,
+            "switched": 1
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "s",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "no_tool_call": 2,
+            "recovered": 28
+          },
+          "rr": 0.9333333333333333,
+          "rr_ci": [
+            0.7867618227892791,
+            0.9815233646723066
+          ],
+          "semantic": 28,
+          "sr": 0.9333333333333333,
+          "sr_ci": [
+            0.7867618227892791,
+            0.9815233646723066
+          ],
+          "success": 28
+        },
+        {
+          "arm": "s",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 58,
+          "sr": 0.9666666666666667,
+          "sr_ci": [
+            0.8863601247107462,
+            0.9908108735098498
+          ],
+          "success": 60
+        },
+        {
+          "arm": "s",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 58,
+          "sr": 0.9666666666666667,
+          "sr_ci": [
+            0.8863601247107462,
+            0.9908108735098498
+          ],
+          "success": 60
+        },
+        {
+          "arm": "s",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 20,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "success": 20
+        },
+        {
+          "arm": "s",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "no_tool_call": 1,
+            "same_error": 29
+          },
+          "rr": 0.0,
+          "rr_ci": [
+            0.0,
+            0.11351709139047798
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.11351709139047798
+          ],
+          "success": 0
+        },
+        {
+          "arm": "s",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 13,
+          "sr": 0.8666666666666667,
+          "sr_ci": [
+            0.6211750079348376,
+            0.9626395301086407
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 440,
+          "outcomes": {
+            "recovered": 425,
+            "same_error": 15
+          },
+          "rr": 0.9659090909090909,
+          "rr_ci": [
+            0.9445193253841373,
+            0.9792336531559545
+          ],
+          "semantic": 423,
+          "sr": 0.9613636363636363,
+          "sr_ci": [
+            0.939000930626884,
+            0.975739823732329
+          ],
+          "success": 425
+        },
+        {
+          "arm": "h",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "h",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 40
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "h",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 60,
+          "sr": 1.0,
+          "sr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "success": 60
+        },
+        {
+          "arm": "h",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "h",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 20,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "success": 20
+        },
+        {
+          "arm": "h",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 15,
+            "same_error": 15
+          },
+          "rr": 0.5,
+          "rr_ci": [
+            0.3315385122717376,
+            0.6684614877282624
+          ],
+          "semantic": 15,
+          "sr": 0.5,
+          "sr_ci": [
+            0.3315385122717376,
+            0.6684614877282624
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "h",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 14,
+          "sr": 0.9333333333333333,
+          "sr_ci": [
+            0.70182922447576,
+            0.9881334113938052
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 440,
+          "outcomes": {
+            "recovered": 419,
+            "same_error": 21
+          },
+          "rr": 0.9522727272727273,
+          "rr_ci": [
+            0.9281417306010293,
+            0.9685745753964257
+          ],
+          "semantic": 417,
+          "sr": 0.9477272727272728,
+          "sr_ci": [
+            0.9227853498064579,
+            0.9649187320101181
+          ],
+          "success": 419
+        },
+        {
+          "arm": "n",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 40
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "n",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 60,
+          "sr": 1.0,
+          "sr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "success": 60
+        },
+        {
+          "arm": "n",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "n",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 19,
+          "sr": 0.95,
+          "sr_ci": [
+            0.7638641064874332,
+            0.9911187805671269
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 9,
+            "same_error": 21
+          },
+          "rr": 0.3,
+          "rr_ci": [
+            0.1666456264395894,
+            0.47876121011660183
+          ],
+          "semantic": 9,
+          "sr": 0.3,
+          "sr_ci": [
+            0.1666456264395894,
+            0.47876121011660183
+          ],
+          "success": 9
+        },
+        {
+          "arm": "n",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "n",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 440,
+          "outcomes": {
+            "recovered": 410,
+            "same_error": 30
+          },
+          "rr": 0.9318181818181818,
+          "rr_ci": [
+            0.9043347146634997,
+            0.9518265825200001
+          ],
+          "semantic": 405,
+          "sr": 0.9204545454545454,
+          "sr_ci": [
+            0.8913797616896995,
+            0.942250975041603
+          ],
+          "success": 410
+        },
+        {
+          "arm": "s",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "s",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 40
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "s",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 60,
+          "sr": 1.0,
+          "sr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "success": 60
+        },
+        {
+          "arm": "s",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "s",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 20,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "success": 20
+        },
+        {
+          "arm": "s",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "same_error": 30
+          },
+          "rr": 0.0,
+          "rr_ci": [
+            0.0,
+            0.11351709139047798
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.11351709139047798
+          ],
+          "success": 0
+        },
+        {
+          "arm": "s",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 15,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 15,
+          "outcomes": {
+            "recovered": 15
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7961107336956521,
+            1.0
+          ],
+          "semantic": 11,
+          "sr": 0.7333333333333333,
+          "sr_ci": [
+            0.48049110342313256,
+            0.8910272389681719
+          ],
+          "success": 15
+        }
+      ],
+      "controls": [
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 19,
+          "other_tool": 0,
+          "retried": 1,
+          "scope": "capability",
+          "stopped": 19,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 14,
+          "switched": 6,
+          "switched_admitted": 6,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 18,
+          "switched": 2,
+          "switched_admitted": 2,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 19,
+          "switched": 1,
+          "switched_admitted": 1,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        }
+      ],
+      "corpus": {
+        "counts": {
+          "constraint_length": 30,
+          "constraint_literal": 30,
+          "constraint_numeric": 30,
+          "control_capability": 20,
+          "control_policy": 40,
+          "endpoint_stated": 30,
+          "endpoint_unstated": 30,
+          "ghost": 60,
+          "missing": 60,
+          "multi": 20,
+          "path_stated": 30,
+          "path_unstated": 30,
+          "type_bool": 15,
+          "type_dict": 15,
+          "type_float": 15,
+          "type_int": 15,
+          "type_list": 15,
+          "type_str": 15
+        },
+        "duplicates": 76,
+        "rejected": {
+          "type_float": {
+            "admitted, an integer for a float parameter": 8
+          }
+        },
+        "scenarios": 500,
+        "seed": 20261012,
+        "sha256": "c215355a98cb5485cc76fd1f65ea3932fd538eaed60be911140ca6b2a5bb4379"
+      },
+      "date": "2026-10-16",
+      "git": {
+        "dirty": false,
+        "sha": "2be860cd2b1b31ba2e0d1d0b862b16f2a79022dc"
+      },
+      "mcnemar": [
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "type"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "type"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "missing"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "missing"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "ghost"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "ghost"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "constraint"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "constraint"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "path_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "path_stated"
+        },
+        {
+          "b": 3,
+          "c": 5,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 0.7265625,
+          "pairs": 30,
+          "scope": "path_unstated"
+        },
+        {
+          "b": 0,
+          "c": 16,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 3.0517578125e-05,
+          "pairs": 30,
+          "scope": "path_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "endpoint_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "endpoint_stated"
+        },
+        {
+          "b": 3,
+          "c": 2,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "endpoint_unstated"
+        },
+        {
+          "b": 3,
+          "c": 1,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 0.625,
+          "pairs": 30,
+          "scope": "endpoint_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "multi"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "multi"
+        },
+        {
+          "b": 6,
+          "c": 7,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 440,
+          "scope": "all_repair"
+        },
+        {
+          "b": 3,
+          "c": 17,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 0.0025768280029296875,
+          "pairs": 440,
+          "scope": "all_repair"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 40,
+          "scope": "control_policy"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 40,
+          "scope": "control_policy"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 0,
+          "scope": "control_capability"
+        },
+        {
+          "b": 0,
+          "c": 1,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "control_capability"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "type"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "type"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "missing"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "missing"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "ghost"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "ghost"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "constraint"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "constraint"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "path_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "path_stated"
+        },
+        {
+          "b": 9,
+          "c": 3,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 0.14599609375,
+          "pairs": 30,
+          "scope": "path_unstated"
+        },
+        {
+          "b": 0,
+          "c": 15,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 6.103515625e-05,
+          "pairs": 30,
+          "scope": "path_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "endpoint_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "endpoint_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "endpoint_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "endpoint_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "multi"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "multi"
+        },
+        {
+          "b": 9,
+          "c": 3,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 0.14599609375,
+          "pairs": 440,
+          "scope": "all_repair"
+        },
+        {
+          "b": 0,
+          "c": 15,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 6.103515625e-05,
+          "pairs": 440,
+          "scope": "all_repair"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 40,
+          "scope": "control_policy"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 40,
+          "scope": "control_policy"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 0,
+          "scope": "control_capability"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "control_capability"
+        }
+      ],
+      "models": {
+        "h55": "claude-haiku-5-5",
+        "s55": "claude-sonnet-5-5"
+      },
+      "noise": [
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n_identical_payload",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 20
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n_identical_payload",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 20
+        }
+      ],
+      "pricing_snapshot": "anthropic_pricing_2026_10.json",
+      "protocol": "tool",
+      "request_template": {
+        "effort": {
+          "h55": "medium",
+          "s55": "high"
+        },
+        "fallbacks": null,
+        "max_tokens": 4096,
+        "system": "You are a helpful assistant. Use the tools provided to complete the user's request.",
+        "temperature": null,
+        "thinking": {
+          "type": "adaptive"
+        },
+        "tool_choice": null
+      },
+      "requests": {
+        "counted": 3000,
+        "errored": 0,
+        "harness_error": 0,
+        "missing": 0,
+        "planned": 3000,
+        "scored": 3000
+      },
+      "round": "r1",
+      "run_id": "fh-r1-20261016T200341Z",
+      "run_ids": [
+        "fh-r1-20261016T200341Z"
+      ],
+      "sdk": "1.15.0",
+      "served_models": {
+        "h55": [
+          "claude-haiku-5-5"
+        ],
+        "s55": [
+          "claude-sonnet-5-5"
+        ]
+      },
+      "source_sha256": {
+        "_claude_sdk_tools.py": "1709ccc211093af2e4ac73130e76af15f1f3ed83ab3df1af02f349f336a2c77f",
+        "core.py": "dd57df9204cd6ee991571fa04578925b435a10cb63dcca2261b8d06acdd3a75c",
+        "self_heal.py": "e1b32b18e428a5254b424545442574a23c31a452955b39922039c87851b6610a",
+        "validator.py": "2a45888c7d5bd5b6ff1ad2434575c6b0e459f2750bcc26dcff0fb820172c04d2"
+      },
+      "spend": {
+        "per_model": {
+          "h55": {
+            "input_tokens": 1050509,
+            "output_tokens": 324024,
+            "unpriced": 0,
+            "usd": 0.13353144999999986
+          },
+          "s55": {
+            "input_tokens": 1050509,
+            "output_tokens": 219386,
+            "unpriced": 0,
+            "usd": 2.1474389999999994
+          }
+        },
+        "usd": 2.281
+      }
+    },
+    "fh-r2-20261016T201103Z": {
+      "arms": [
+        "h",
+        "n",
+        "s"
+      ],
+      "batches": {
+        "h55": "msgbatch_019enKnEnbtUpLWnFM7et9bn",
+        "s55": "msgbatch_014o37aH1j8AVNKt8BpPsMGu"
+      },
+      "cells": [
+        {
+          "arm": "h",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 283,
+          "outcomes": {
+            "no_tool_call": 3,
+            "recovered": 276,
+            "same_error": 4
+          },
+          "rr": 0.9752650176678446,
+          "rr_ci": [
+            0.9498318649071553,
+            0.9879679521347244
+          ],
+          "semantic": 273,
+          "sr": 0.9646643109540636,
+          "sr_ci": [
+            0.936187019839339,
+            0.9806953291644317
+          ],
+          "success": 276
+        },
+        {
+          "arm": "h",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "h",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 37,
+            "switched": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "h",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "h",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 9,
+          "outcomes": {
+            "no_tool_call": 2,
+            "recovered": 7
+          },
+          "rr": 0.7777777777777778,
+          "rr_ci": [
+            0.4525833436728053,
+            0.9367762376877729
+          ],
+          "semantic": 7,
+          "sr": 0.7777777777777778,
+          "sr_ci": [
+            0.4525833436728053,
+            0.9367762376877729
+          ],
+          "success": 7
+        },
+        {
+          "arm": "h",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 13,
+          "outcomes": {
+            "recovered": 13
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "semantic": 13,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "success": 13
+        },
+        {
+          "arm": "h",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "h",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 19,
+          "sr": 0.95,
+          "sr_ci": [
+            0.7638641064874332,
+            0.9911187805671269
+          ],
+          "success": 20
+        },
+        {
+          "arm": "h",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "no_tool_call": 1,
+            "recovered": 25,
+            "same_error": 4
+          },
+          "rr": 0.8333333333333334,
+          "rr_ci": [
+            0.6643529481431982,
+            0.9266356575964831
+          ],
+          "semantic": 25,
+          "sr": 0.8333333333333334,
+          "sr_ci": [
+            0.6643529481431982,
+            0.9266356575964831
+          ],
+          "success": 25
+        },
+        {
+          "arm": "h",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 4,
+          "sr": 0.8,
+          "sr_ci": [
+            0.37552826411853873,
+            0.9637768390302126
+          ],
+          "success": 5
+        },
+        {
+          "arm": "h",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 2,
+          "outcomes": {
+            "recovered": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "semantic": 2,
+          "sr": 1.0,
+          "sr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "success": 2
+        },
+        {
+          "arm": "h",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "h",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "h",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "h",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 4,
+          "outcomes": {
+            "recovered": 4
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "semantic": 4,
+          "sr": 1.0,
+          "sr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "success": 4
+        },
+        {
+          "arm": "n",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 283,
+          "outcomes": {
+            "no_tool_call": 1,
+            "recovered": 273,
+            "same_error": 9
+          },
+          "rr": 0.9646643109540636,
+          "rr_ci": [
+            0.936187019839339,
+            0.9806953291644317
+          ],
+          "semantic": 271,
+          "sr": 0.9575971731448764,
+          "sr_ci": [
+            0.9273570910657215,
+            0.9755802792459768
+          ],
+          "success": 273
+        },
+        {
+          "arm": "n",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 38,
+            "switched": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "n",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "n",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "n",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 13,
+          "outcomes": {
+            "recovered": 13
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "semantic": 13,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "success": 13
+        },
+        {
+          "arm": "n",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "n",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 19,
+          "sr": 0.95,
+          "sr_ci": [
+            0.7638641064874332,
+            0.9911187805671269
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "no_tool_call": 1,
+            "recovered": 20,
+            "same_error": 9
+          },
+          "rr": 0.6666666666666666,
+          "rr_ci": [
+            0.48779725813830266,
+            0.807697044731538
+          ],
+          "semantic": 20,
+          "sr": 0.6666666666666666,
+          "sr_ci": [
+            0.48779725813830266,
+            0.807697044731538
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "n",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 2,
+          "outcomes": {
+            "recovered": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "semantic": 2,
+          "sr": 1.0,
+          "sr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "success": 2
+        },
+        {
+          "arm": "n",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "n",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "n",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "n",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 4,
+          "outcomes": {
+            "recovered": 4
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "semantic": 4,
+          "sr": 1.0,
+          "sr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "success": 4
+        },
+        {
+          "arm": "s",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 283,
+          "outcomes": {
+            "no_tool_call": 6,
+            "recovered": 267,
+            "same_error": 10
+          },
+          "rr": 0.9434628975265018,
+          "rr_ci": [
+            0.9101439238348634,
+            0.9649034890926897
+          ],
+          "semantic": 265,
+          "sr": 0.9363957597173145,
+          "sr_ci": [
+            0.9017100234145758,
+            0.9593924108209047
+          ],
+          "success": 267
+        },
+        {
+          "arm": "s",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "s",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 38,
+            "switched": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "s",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "s",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 9,
+          "outcomes": {
+            "no_tool_call": 1,
+            "recovered": 8
+          },
+          "rr": 0.8888888888888888,
+          "rr_ci": [
+            0.5649937852319399,
+            0.9801096286728695
+          ],
+          "semantic": 8,
+          "sr": 0.8888888888888888,
+          "sr_ci": [
+            0.5649937852319399,
+            0.9801096286728695
+          ],
+          "success": 8
+        },
+        {
+          "arm": "s",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 13,
+          "outcomes": {
+            "recovered": 13
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "semantic": 13,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "success": 13
+        },
+        {
+          "arm": "s",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 58,
+          "sr": 0.9666666666666667,
+          "sr_ci": [
+            0.8863601247107462,
+            0.9908108735098498
+          ],
+          "success": 60
+        },
+        {
+          "arm": "s",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 20,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "success": 20
+        },
+        {
+          "arm": "s",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 30,
+          "outcomes": {
+            "no_tool_call": 5,
+            "recovered": 15,
+            "same_error": 10
+          },
+          "rr": 0.5,
+          "rr_ci": [
+            0.3315385122717376,
+            0.6684614877282624
+          ],
+          "semantic": 15,
+          "sr": 0.5,
+          "sr_ci": [
+            0.3315385122717376,
+            0.6684614877282624
+          ],
+          "success": 15
+        },
+        {
+          "arm": "s",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "s",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 2,
+          "outcomes": {
+            "recovered": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "semantic": 2,
+          "sr": 1.0,
+          "sr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "success": 2
+        },
+        {
+          "arm": "s",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "s",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "s",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "s",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "h55",
+          "n": 4,
+          "outcomes": {
+            "recovered": 4
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "semantic": 4,
+          "sr": 1.0,
+          "sr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "success": 4
+        },
+        {
+          "arm": "h",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 283,
+          "outcomes": {
+            "no_tool_call": 2,
+            "recovered": 276,
+            "same_error": 5
+          },
+          "rr": 0.9752650176678446,
+          "rr_ci": [
+            0.9498318649071553,
+            0.9879679521347244
+          ],
+          "semantic": 275,
+          "sr": 0.9717314487632509,
+          "sr_ci": [
+            0.9452194577699372,
+            0.9856078699259062
+          ],
+          "success": 276
+        },
+        {
+          "arm": "h",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "h",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 40
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "h",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "h",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "h",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 13,
+          "outcomes": {
+            "recovered": 13
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "semantic": 13,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "success": 13
+        },
+        {
+          "arm": "h",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "h",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 20,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "success": 20
+        },
+        {
+          "arm": "h",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "h",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "no_tool_call": 2,
+            "recovered": 23,
+            "same_error": 5
+          },
+          "rr": 0.7666666666666667,
+          "rr_ci": [
+            0.5907132766967573,
+            0.8820776078949877
+          ],
+          "semantic": 23,
+          "sr": 0.7666666666666667,
+          "sr_ci": [
+            0.5907132766967573,
+            0.8820776078949877
+          ],
+          "success": 23
+        },
+        {
+          "arm": "h",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "h",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 2,
+          "outcomes": {
+            "recovered": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "semantic": 2,
+          "sr": 1.0,
+          "sr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "success": 2
+        },
+        {
+          "arm": "h",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "h",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "h",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "h",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 4,
+          "outcomes": {
+            "recovered": 4
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "semantic": 4,
+          "sr": 1.0,
+          "sr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "success": 4
+        },
+        {
+          "arm": "n",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 283,
+          "outcomes": {
+            "recovered": 260,
+            "same_error": 23
+          },
+          "rr": 0.9187279151943463,
+          "rr_ci": [
+            0.8810038776579611,
+            0.9452361098473382
+          ],
+          "semantic": 258,
+          "sr": 0.911660777385159,
+          "sr_ci": [
+            0.8728460431381065,
+            0.93944896567512
+          ],
+          "success": 260
+        },
+        {
+          "arm": "n",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 40
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "n",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "n",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "n",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 13,
+          "outcomes": {
+            "recovered": 13
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "semantic": 13,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "success": 13
+        },
+        {
+          "arm": "n",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "n",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 19,
+          "sr": 0.95,
+          "sr_ci": [
+            0.7638641064874332,
+            0.9911187805671269
+          ],
+          "success": 20
+        },
+        {
+          "arm": "n",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "n",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 7,
+            "same_error": 23
+          },
+          "rr": 0.23333333333333334,
+          "rr_ci": [
+            0.11792239210501226,
+            0.4092867233032426
+          ],
+          "semantic": 7,
+          "sr": 0.23333333333333334,
+          "sr_ci": [
+            0.11792239210501226,
+            0.4092867233032426
+          ],
+          "success": 7
+        },
+        {
+          "arm": "n",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "n",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 2,
+          "outcomes": {
+            "recovered": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "semantic": 2,
+          "sr": 1.0,
+          "sr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "success": 2
+        },
+        {
+          "arm": "n",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "n",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "n",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "n",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 4,
+          "outcomes": {
+            "recovered": 4
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "semantic": 4,
+          "sr": 1.0,
+          "sr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "success": 4
+        },
+        {
+          "arm": "s",
+          "category": "all_repair",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 283,
+          "outcomes": {
+            "recovered": 269,
+            "same_error": 14
+          },
+          "rr": 0.950530035335689,
+          "rr_ci": [
+            0.9186859135837745,
+            0.9703064780358511
+          ],
+          "semantic": 267,
+          "sr": 0.9434628975265018,
+          "sr_ci": [
+            0.9101439238348634,
+            0.9649034890926897
+          ],
+          "success": 269
+        },
+        {
+          "arm": "s",
+          "category": "constraint_length",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "constraint_literal",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "constraint_numeric",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "control_capability",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "no_tool_call": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.16113012549493322
+          ],
+          "success": 20
+        },
+        {
+          "arm": "s",
+          "category": "control_policy",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 40,
+          "outcomes": {
+            "no_tool_call": 40
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.9123754607496077,
+            1.0
+          ],
+          "semantic": 0,
+          "sr": 0.0,
+          "sr_ci": [
+            0.0,
+            0.08762453925039232
+          ],
+          "success": 40
+        },
+        {
+          "arm": "s",
+          "category": "endpoint_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "s",
+          "category": "endpoint_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 9,
+          "outcomes": {
+            "recovered": 9
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "semantic": 9,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7008472464490407,
+            1.0
+          ],
+          "success": 9
+        },
+        {
+          "arm": "s",
+          "category": "ghost",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 13,
+          "outcomes": {
+            "recovered": 13
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "semantic": 13,
+          "sr": 1.0,
+          "sr_ci": [
+            0.7718981569447083,
+            1.0
+          ],
+          "success": 13
+        },
+        {
+          "arm": "s",
+          "category": "missing",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 60,
+          "outcomes": {
+            "recovered": 60
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.939826069522067,
+            1.0
+          ],
+          "semantic": 59,
+          "sr": 0.9833333333333333,
+          "sr_ci": [
+            0.9114466177322053,
+            0.9970519161391264
+          ],
+          "success": 60
+        },
+        {
+          "arm": "s",
+          "category": "multi",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 20,
+          "outcomes": {
+            "recovered": 20
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "semantic": 20,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8388698745050669,
+            1.0
+          ],
+          "success": 20
+        },
+        {
+          "arm": "s",
+          "category": "path_stated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 30
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "semantic": 30,
+          "sr": 1.0,
+          "sr_ci": [
+            0.8864829086095221,
+            1.0
+          ],
+          "success": 30
+        },
+        {
+          "arm": "s",
+          "category": "path_unstated",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 30,
+          "outcomes": {
+            "recovered": 16,
+            "same_error": 14
+          },
+          "rr": 0.5333333333333333,
+          "rr_ci": [
+            0.36142013281525043,
+            0.6976787277587178
+          ],
+          "semantic": 16,
+          "sr": 0.5333333333333333,
+          "sr_ci": [
+            0.36142013281525043,
+            0.6976787277587178
+          ],
+          "success": 16
+        },
+        {
+          "arm": "s",
+          "category": "type_bool",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "s",
+          "category": "type_dict",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 2,
+          "outcomes": {
+            "recovered": 2
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "semantic": 2,
+          "sr": 1.0,
+          "sr_ci": [
+            0.34237195288961925,
+            1.0
+          ],
+          "success": 2
+        },
+        {
+          "arm": "s",
+          "category": "type_float",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 5,
+          "outcomes": {
+            "recovered": 5
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "semantic": 5,
+          "sr": 1.0,
+          "sr_ci": [
+            0.565508505247919,
+            1.0
+          ],
+          "success": 5
+        },
+        {
+          "arm": "s",
+          "category": "type_int",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "s",
+          "category": "type_list",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 3,
+          "outcomes": {
+            "recovered": 3
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 1.0,
+          "sr_ci": [
+            0.4384939195509822,
+            1.0
+          ],
+          "success": 3
+        },
+        {
+          "arm": "s",
+          "category": "type_str",
+          "identical_retries": 0,
+          "model": "s55",
+          "n": 4,
+          "outcomes": {
+            "recovered": 4
+          },
+          "rr": 1.0,
+          "rr_ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "semantic": 3,
+          "sr": 0.75,
+          "sr_ci": [
+            0.3006360524426366,
+            0.9544139373553637
+          ],
+          "success": 4
+        }
+      ],
+      "controls": [
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 17,
+          "switched": 3,
+          "switched_admitted": 3,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 18,
+          "switched": 2,
+          "switched_admitted": 2,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 18,
+          "switched": 2,
+          "switched_admitted": 2,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "h55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "capability",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, alternative offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "h",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "n",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        },
+        {
+          "api_refusal": 0,
+          "arm": "s",
+          "excluded": 0,
+          "model": "s55",
+          "n": 20,
+          "not_retried": 20,
+          "other_tool": 0,
+          "retried": 0,
+          "scope": "policy, none offered",
+          "stopped": 20,
+          "switched": 0,
+          "switched_admitted": 0,
+          "truncated": 0
+        }
+      ],
+      "corpus": {
+        "counts": {
+          "constraint_length": 30,
+          "constraint_literal": 30,
+          "constraint_numeric": 30,
+          "control_capability": 20,
+          "control_policy": 40,
+          "endpoint_stated": 30,
+          "endpoint_unstated": 30,
+          "ghost": 60,
+          "missing": 60,
+          "multi": 20,
+          "path_stated": 30,
+          "path_unstated": 30,
+          "type_bool": 15,
+          "type_dict": 15,
+          "type_float": 15,
+          "type_int": 15,
+          "type_list": 15,
+          "type_str": 15
+        },
+        "duplicates": 76,
+        "rejected": {
+          "type_float": {
+            "admitted, an integer for a float parameter": 8
+          }
+        },
+        "scenarios": 500,
+        "seed": 20261012,
+        "sha256": "c215355a98cb5485cc76fd1f65ea3932fd538eaed60be911140ca6b2a5bb4379"
+      },
+      "date": "2026-10-16",
+      "git": {
+        "dirty": false,
+        "sha": "8fdd9968fd52150b74b2b5545231e331af249669"
+      },
+      "mcnemar": [
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 22,
+          "scope": "type"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 22,
+          "scope": "type"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "missing"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "missing"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 13,
+          "scope": "ghost"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 13,
+          "scope": "ghost"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "constraint"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "constraint"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "path_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "path_stated"
+        },
+        {
+          "b": 5,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 0.0625,
+          "pairs": 30,
+          "scope": "path_unstated"
+        },
+        {
+          "b": 1,
+          "c": 11,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 0.00634765625,
+          "pairs": 30,
+          "scope": "path_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 9,
+          "scope": "endpoint_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 9,
+          "scope": "endpoint_stated"
+        },
+        {
+          "b": 0,
+          "c": 2,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 0.5,
+          "pairs": 9,
+          "scope": "endpoint_unstated"
+        },
+        {
+          "b": 1,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 9,
+          "scope": "endpoint_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "multi"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "multi"
+        },
+        {
+          "b": 5,
+          "c": 2,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 0.453125,
+          "pairs": 283,
+          "scope": "all_repair"
+        },
+        {
+          "b": 2,
+          "c": 11,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 0.0224609375,
+          "pairs": 283,
+          "scope": "all_repair"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 40,
+          "scope": "control_policy"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 40,
+          "scope": "control_policy"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "control_capability"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "control_capability"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 22,
+          "scope": "type"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 22,
+          "scope": "type"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "missing"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "missing"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 13,
+          "scope": "ghost"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 13,
+          "scope": "ghost"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "constraint"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 90,
+          "scope": "constraint"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "path_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 30,
+          "scope": "path_stated"
+        },
+        {
+          "b": 16,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 3.0517578125e-05,
+          "pairs": 30,
+          "scope": "path_unstated"
+        },
+        {
+          "b": 2,
+          "c": 9,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 0.0654296875,
+          "pairs": 30,
+          "scope": "path_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 9,
+          "scope": "endpoint_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 9,
+          "scope": "endpoint_stated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 9,
+          "scope": "endpoint_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 9,
+          "scope": "endpoint_unstated"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "multi"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "multi"
+        },
+        {
+          "b": 16,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 3.0517578125e-05,
+          "pairs": 283,
+          "scope": "all_repair"
+        },
+        {
+          "b": 2,
+          "c": 9,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 0.0654296875,
+          "pairs": 283,
+          "scope": "all_repair"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 40,
+          "scope": "control_policy"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 40,
+          "scope": "control_policy"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "h_vs_n",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "control_capability"
+        },
+        {
+          "b": 0,
+          "c": 0,
+          "comparison": "s_vs_h",
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 20,
+          "scope": "control_capability"
+        }
+      ],
+      "models": {
+        "h55": "claude-haiku-5-5",
+        "s55": "claude-sonnet-5-5"
+      },
+      "noise": [],
+      "pricing_snapshot": "anthropic_pricing_2026_10.json",
+      "protocol": "tool",
+      "r1_run_id": "fh-r1-20261016T200341Z",
+      "r1_run_ids": [
+        "fh-r1-20261016T200341Z"
+      ],
+      "r2_plan": {
+        "changed": {
+          "h": 290,
+          "n": 60,
+          "s": 290
+        },
+        "retest": 53
+      },
+      "r2_vs_r1": [
+        {
+          "arm": "h",
+          "b": 1,
+          "c": 10,
+          "model": "h55",
+          "p": 0.01171875,
+          "pairs": 290,
+          "scope": "changed"
+        },
+        {
+          "arm": "h",
+          "b": 1,
+          "c": 0,
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 53,
+          "scope": "retest"
+        },
+        {
+          "arm": "h",
+          "b": 0,
+          "c": 0,
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 0,
+          "scope": "unchanged, other arm changed"
+        },
+        {
+          "arm": "n",
+          "b": 0,
+          "c": 0,
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "changed"
+        },
+        {
+          "arm": "n",
+          "b": 0,
+          "c": 1,
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 53,
+          "scope": "retest"
+        },
+        {
+          "arm": "n",
+          "b": 1,
+          "c": 3,
+          "model": "h55",
+          "p": 0.625,
+          "pairs": 230,
+          "scope": "unchanged, other arm changed"
+        },
+        {
+          "arm": "s",
+          "b": 0,
+          "c": 16,
+          "model": "h55",
+          "p": 3.0517578125e-05,
+          "pairs": 290,
+          "scope": "changed"
+        },
+        {
+          "arm": "s",
+          "b": 0,
+          "c": 0,
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 53,
+          "scope": "retest"
+        },
+        {
+          "arm": "s",
+          "b": 0,
+          "c": 0,
+          "model": "h55",
+          "p": 1.0,
+          "pairs": 0,
+          "scope": "unchanged, other arm changed"
+        },
+        {
+          "arm": "h",
+          "b": 3,
+          "c": 11,
+          "model": "s55",
+          "p": 0.057373046875,
+          "pairs": 290,
+          "scope": "changed"
+        },
+        {
+          "arm": "h",
+          "b": 0,
+          "c": 0,
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 53,
+          "scope": "retest"
+        },
+        {
+          "arm": "h",
+          "b": 0,
+          "c": 0,
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 0,
+          "scope": "unchanged, other arm changed"
+        },
+        {
+          "arm": "n",
+          "b": 0,
+          "c": 0,
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 60,
+          "scope": "changed"
+        },
+        {
+          "arm": "n",
+          "b": 0,
+          "c": 0,
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 53,
+          "scope": "retest"
+        },
+        {
+          "arm": "n",
+          "b": 3,
+          "c": 1,
+          "model": "s55",
+          "p": 0.625,
+          "pairs": 230,
+          "scope": "unchanged, other arm changed"
+        },
+        {
+          "arm": "s",
+          "b": 0,
+          "c": 16,
+          "model": "s55",
+          "p": 3.0517578125e-05,
+          "pairs": 290,
+          "scope": "changed"
+        },
+        {
+          "arm": "s",
+          "b": 0,
+          "c": 0,
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 53,
+          "scope": "retest"
+        },
+        {
+          "arm": "s",
+          "b": 0,
+          "c": 0,
+          "model": "s55",
+          "p": 1.0,
+          "pairs": 0,
+          "scope": "unchanged, other arm changed"
+        }
+      ],
+      "request_template": {
+        "effort": {
+          "h55": "medium",
+          "s55": "high"
+        },
+        "fallbacks": null,
+        "max_tokens": 4096,
+        "system": "You are a helpful assistant. Use the tools provided to complete the user's request.",
+        "temperature": null,
+        "thinking": {
+          "type": "adaptive"
+        },
+        "tool_choice": null
+      },
+      "requests": {
+        "counted": 2058,
+        "errored": 0,
+        "harness_error": 0,
+        "missing": 0,
+        "planned": 2058,
+        "scored": 2058
+      },
+      "round": "r2",
+      "run_id": "fh-r2-20261016T201103Z",
+      "run_ids": [
+        "fh-r2-20261016T201103Z"
+      ],
+      "sdk": "1.15.0",
+      "served_models": {
+        "h55": [
+          "claude-haiku-5-5"
+        ],
+        "s55": [
+          "claude-sonnet-5-5"
+        ]
+      },
+      "source_sha256": {
+        "_claude_sdk_tools.py": "ffb01661da05f622b6764bf4cb06319c3cd5b154bab89ed35b57c50845e018ff",
+        "core.py": "17f120c796eccb80a2ecd0333be88c15c71708e1ed6a23a9d804394f9967e2f3",
+        "self_heal.py": "83c5fbcd05926cdd2beab2601b44597eff493c62ba9a3a62e030c4fe8b5abb25",
+        "validator.py": "1eeab7f60b7766370d045618e5935356a2f81a751620e5305f27d71fd31fbc1c"
+      },
+      "spend": {
+        "per_model": {
+          "h55": {
+            "input_tokens": 729019,
+            "output_tokens": 230578,
+            "unpriced": 0,
+            "usd": 0.09409544999999986
+          },
+          "s55": {
+            "input_tokens": 729019,
+            "output_tokens": 158503,
+            "unpriced": 0,
+            "usd": 1.521534000000001
+          }
+        },
+        "usd": 1.6156
+      }
+    }
+  }
+}

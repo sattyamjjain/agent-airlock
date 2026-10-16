@@ -41,7 +41,9 @@ from ..exceptions import AirlockError
 from ..policy import StdioGuardConfig
 from .argv_guard import ArgvStringConcatenationError, enforce_argv_array
 from .stdio_guard import StdioInjectionError, validate_stdio_command
-from .subprocess_arg_guard import _DEFAULT_DANGEROUS_ENV_VARS
+from .subprocess_arg_guard import (
+    _DEFAULT_DANGEROUS_ENV_VARS,  # nosec B404 - a frozenset constant, not the subprocess stdlib
+)
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.stdio_meta_guard")
 
