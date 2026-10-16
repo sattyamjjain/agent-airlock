@@ -176,9 +176,7 @@ def test_cli_runs_on_guard_whose_decision_exposes_fix_hints_method(tmp_path: Pat
                     {
                         "candidate_id": "dm-block",
                         "intent": "attack",
-                        "call": {
-                            "kwargs": {"name": "t", "described_args": ["x", "secret_exfil"]}
-                        },
+                        "call": {"kwargs": {"name": "t", "described_args": ["x", "secret_exfil"]}},
                     },
                     {
                         "candidate_id": "dm-benign",
