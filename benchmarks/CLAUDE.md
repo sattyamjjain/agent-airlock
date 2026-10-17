@@ -38,6 +38,16 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
 - **`scantools_mcptox/`** — `airlock scan-tools` coverage on MCPTox-style fixtures; it has
   no README row, so no date gate. It, `vs_gateway` and `mcp_conformance` keep hand-written
   `RESULTS.md` files.
+- **`adaptive_redteam/`** — sentinel-driven red-team campaign over the guards; no LLM judge,
+  no paid API. Its own `CLAUDE.md` extends this file, and the stricter rule wins.
+- **`_claude/`** — not a harness but the shared plumbing for credit-funded Claude API runs:
+  an append-only, file-locked spend ledger; a budget guard that admits a job only if its
+  worst case fits under both the per-command `--budget-usd` and the ledger's cumulative
+  cap (`$AIRLOCK_BENCH_HARD_CAP_USD`); pricing by exact model id (an unknown id raises,
+  never `$0`); an idempotent Batch client; a run store. The ledger and raw outputs live
+  under `~/.cache/agent-airlock-bench/`, never in git. `python -m benchmarks._claude ledger`
+  prints spend with no network; `grep -rln 'from benchmarks\._claude' benchmarks scripts`
+  lists its users.
 - Nothing runs the top-level `bench_airlock.py` / `benchmark_*.py` (pytest collects only
   `test_*.py`).
 
@@ -89,6 +99,13 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   image; it writes into `~/.docker/mcp/catalogs/`) and plain `python -m benchmarks.blockrate`
   when `[sandbox]` is installed and `E2B_API_KEY` set (its sandbox arm sends the benign
   probes and every policy item the allow-list admits to E2B).
+- **Runs through `_claude/` spend the Claude API credit — ask before starting one too:**
+  `mcptox fresh --run`, `fix_hints --run`, `agentdojo --model <claude id> --run` and
+  `scripts/smoke_frameworks.py --run` (each sends nothing without `--run`; `--run` needs
+  `--budget-usd`). Read the key per command from Keychain, never export it:
+  `ANTHROPIC_API_KEY="$(security find-generic-password -s anthropic-credits -w)"` before the
+  command. An exported key overrides the Claude Code login, so every `claude -p` run would
+  bill the credit.
 - **Internal:** mostly the package root and `agent_airlock.policy`; recount with
   `grep -rhoE 'from agent_airlock[.a-z_]*' benchmarks/ --include='*.py' | sort -u`.
   `vs_gateway/__main__.py` imports `structlog` directly, so it needs `[logging]` or `[dev]`.

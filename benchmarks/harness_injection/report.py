@@ -12,7 +12,7 @@ from __future__ import annotations
 from .power import fisher_exact_two_sided, wilson_interval
 from .runner import RunReport
 
-__all__ = ["render_results_md", "render_summary"]
+__all__ = ["render_results_md", "render_summary", "reproduce_command"]
 
 _NOT_SHOWN = """### What this number does NOT show
 
@@ -223,10 +223,7 @@ def render_results_md(report: RunReport, date: str) -> str:
             "",
         ]
 
-    versions = {
-        cell.harness: cell.harness_version + (f" · model `{cell.model}`" if cell.model else "")
-        for cell in report.cells
-    }
+    versions = {name: _version_cell(report, name) for name in names}
     body = [
         "## Design",
         "",
@@ -368,19 +365,56 @@ def render_results_md(report: RunReport, date: str) -> str:
             "",
         ]
 
+    if report.env_removed:
+        body += [
+            "**Environment:** removed from each harness's inherited environment: "
+            + ", ".join(f"`{name}`" for name in report.env_removed)
+            + ". Names only; a run started inside a Claude Code session would otherwise "
+            "bill API credit or nest in that session.",
+            "",
+        ]
+
     body += [
         _NOT_SHOWN,
         "## Reproduce",
         "",
         "```bash",
-        # Reflect the run that produced this file. A hardcoded count told the reader to
-        # reproduce at a different n than the numbers above were measured at.
-        f"python -m benchmarks.harness_injection --trials {report.trials} --write"
-        + "".join(
-            f" --model {name}={model}"
-            for name, model in sorted({(c.harness, c.model) for c in report.cells if c.model})
-        ),
+        reproduce_command(report),
         "```",
         "",
     ]
     return "\n".join(head + body)
+
+
+def reproduce_command(report: RunReport) -> str:
+    """The command that re-runs this report's matrix.
+
+    It reflects the run that produced the report: a hardcoded count told the reader to
+    reproduce at a different n than the numbers were measured at, and a line without
+    ``--run`` was a dry run that reproduced nothing.
+    """
+    pins = sorted({(cell.harness, cell.model) for cell in report.cells if cell.model})
+    command = (
+        f"python -m benchmarks.harness_injection --run --trials {report.trials} --write "
+        "--checkpoint ckpt.json"
+    )
+    command += "".join(f" --model {name}={model}" for name, model in pins)
+    if any(cell.config_isolated for cell in report.cells):
+        command += " --claude-config-dir <DIR>"
+    return command
+
+
+def _version_cell(report: RunReport, name: str) -> str:
+    """The Version column: CLI version, pinned model, auth, and the models that ran."""
+    cells = [cell for cell in report.cells if cell.harness == name]
+    text = cells[0].harness_version if cells else "unknown"
+    models = sorted({cell.model for cell in cells if cell.model})
+    if models:
+        text += "".join(f" · model `{model}`" for model in models)
+    auths = sorted({cell.auth for cell in cells if cell.auth})
+    if auths:
+        text += "".join(f" · auth `{auth}`" for auth in auths)
+    observed = sorted({m for cell in cells for m in cell.models_observed.split(",") if m})
+    if observed:
+        text += " · ran " + ", ".join(f"`{model}`" for model in observed)
+    return text

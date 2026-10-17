@@ -139,9 +139,9 @@ Unmapped corpus items (no slot claimed): **0** malicious, **1** benign. An item 
 
 ---
 
-### Adaptive-attacker robustness (AgentDojo)
+### Indirect prompt injection (AgentDojo)
 
-agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) (Debenedetti et al., NeurIPS 2024) as a **defense** — `AirlockToolsExecutor`: deny-by-default least-privilege `SecurityPolicy` + ghost-arg BLOCK + output sanitizer. On all four pinned suites (**workspace, banking, travel, slack**) under the `tool_knowledge` attack (benchmark `v1.2.1`), airlock's least-privilege policy blocks the target tool-call for **524/609 = 86.0%** of injection→task pairs — a **deterministic upper bound on ASR reduction**, *not* the model-in-the-loop ASR.
+agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) (Debenedetti et al., NeurIPS 2024) as a **defense** — `AirlockToolsExecutor`: deny-by-default least-privilege `SecurityPolicy` + ghost-arg BLOCK + output sanitizer. On all four pinned suites (**workspace, banking, travel, slack**) under the `tool_knowledge` attack (benchmark `v1.2.1`), airlock's least-privilege policy blocks the target tool-call for **524/609 = 86.0%** of the injection→task pairs that have a tool-call target (609 of the 949 attacked pairs) — a **deterministic upper bound on ASR reduction**, *not* the model-in-the-loop ASR. The attack is AgentDojo's fixed template, not an adaptive one.
 
 | suite | injection→task pairs | blocked | block rate |
 |---|---|---|---|
@@ -150,7 +150,7 @@ agent-airlock is wired into [AgentDojo](https://arxiv.org/abs/2406.13352) (Deben
 | travel | 120 | 114 | **95.0%** |
 | slack | 105 | 86 | **81.9%** |
 
-> Deterministic, no model, no API key. The true benign-utility / utility-under-attack / ASR (defended vs undefended) come from the model path (`python -m benchmarks.agentdojo.run --model <id>`, needs a key). `agentdojo` is a bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: [`benchmarks/agentdojo/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md).
+> Deterministic, no model, no API key. The true benign-utility / utility-under-attack / ASR (defended vs undefended) come from the model path (`python -m benchmarks.agentdojo.run --model <id> --run --budget-usd N --logdir <new dir>`, needs a key; without `--run` it only prints the plan and cost). `agentdojo` is a bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: [`benchmarks/agentdojo/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md).
 
 ---
 

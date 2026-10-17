@@ -95,8 +95,18 @@ def _compile_sink_pattern(sink: str) -> re.Pattern[str]:
     # Escape dunders for regex; ``__import__`` would otherwise be
     # interpreted literally which is fine, but ``__`` triggers no
     # special regex semantics so escape is a no-op here.
+    #
+    # A leading word boundary (``\b``) is the sink boundary, not ``(?:^|[^\w.])`` with an
+    # optional ``[\w.]+\.`` namespace: the latter excluded ``.`` from the boundary class, so
+    # a ``.`` before the sink that was not itself preceded by a word/dot char — a method call
+    # on a non-identifier receiver (``get_evaluator().eval(``, ``cfg["x"].eval(``), a leading
+    # ``.eval(``, or a lone dot after ``)``/``]``/space — slipped past while real Python (and
+    # the ``\b``-based reference detector) see an eval-family call. ``\b`` still rejects a
+    # word-prefixed name (``xeval(``) and a longer identifier (``parse_expression(``), and the
+    # namespaced form (``sympy.eval(``) still matches on the sink's own boundary.
+    # Adaptive red-team wave 2 (v0.10.25).
     return re.compile(
-        rf"(?:^|[^\w.])(?:[\w.]+\.)?{re.escape(sink)}\s*\(",
+        rf"\b{re.escape(sink)}\s*\(",
         re.MULTILINE,
     )
 

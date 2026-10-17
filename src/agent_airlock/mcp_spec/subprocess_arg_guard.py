@@ -69,22 +69,54 @@ _DEFAULT_SPAWN_KEYS: tuple[str, ...] = ("command", "cmd", "args", "argv", "env")
 # directly, ``argv`` / ``args`` name it in their first element.
 _PROGRAM_KEYS: tuple[str, ...] = ("command", "cmd", "argv", "args")
 
+
 # Environment variables that turn an otherwise-allowlisted binary into a
 # code-execution primitive (preload / search-path / interpreter hooks).
 _DEFAULT_DANGEROUS_ENV_VARS: frozenset[str] = frozenset(
     {
+        # Dynamic linker / loader (glibc, musl)
         "LD_PRELOAD",
         "LD_LIBRARY_PATH",
+        "LD_AUDIT",
+        "LD_PROFILE",
+        "LD_ORIGIN_PATH",
+        "GCONV_PATH",
+        # macOS dyld
         "DYLD_INSERT_LIBRARIES",
         "DYLD_LIBRARY_PATH",
+        "DYLD_FRAMEWORK_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+        "DYLD_FALLBACK_FRAMEWORK_PATH",
+        "DYLD_VERSIONED_LIBRARY_PATH",
+        "DYLD_VERSIONED_FRAMEWORK_PATH",
+        # PATH / shell init
         "PATH",
-        "PYTHONPATH",
-        "PYTHONSTARTUP",
-        "NODE_OPTIONS",
         "BASH_ENV",
         "ENV",
+        "ZDOTDIR",
+        "PROMPT_COMMAND",
+        # Python
+        "PYTHONPATH",
+        "PYTHONSTARTUP",
+        "PYTHONHOME",
+        # Node
+        "NODE_OPTIONS",
+        # Perl
         "PERL5LIB",
+        "PERLLIB",
+        "PERL5OPT",
+        "PERL5DB",
         "RUBYOPT",
+        # Ruby
+        "RUBYLIB",
+        # Java / JVM
+        "CLASSPATH",
+        "JAVA_TOOL_OPTIONS",
+        "_JAVA_OPTIONS",
+        "JDK_JAVA_OPTIONS",
+        # Git (spawns helpers)
+        "GIT_SSH_COMMAND",
+        "GIT_EXTERNAL_DIFF",
     }
 )
 
@@ -211,11 +243,22 @@ class McpSubprocessArgInjectionGuard:
         if not config or not isinstance(config, Mapping):
             return self._allow("no spawn config to inspect")
 
-        has_spawn_field = any(key in config for key in self._spawn_keys)
-        if not has_spawn_field:
-            # A plain data argument — this guard gates the spawn surface only.
-            return self._allow("config carries no spawn-shaped fields")
+        if any(key in config for key in self._spawn_keys):
+            return self._evaluate_spawn_mapping(config)
 
+        # No spawn-shaped field at the TOP level — plain data to this guard. It validates a
+        # single spawn config by deliberate scope: a nested server map
+        # ({"mcpServers": {"x": {"command": "bash", ...}}}) is NOT auto-recursed, because the
+        # caller owns iterating its server entries and auto-recursion would read arbitrary
+        # nested data as spawn configs. This boundary is pinned by the CVE-2026-42271 and
+        # CVE-2026-90898 regression tests; red-team wave 2's "F7" recursion lead was retracted
+        # on triage as a design decision, not a fail-open.
+        return self._allow("config carries no spawn-shaped fields")
+
+    # -- internal helpers --------------------------------------------------
+
+    def _evaluate_spawn_mapping(self, config: Mapping[str, Any]) -> McpSubprocessArgDecision:
+        """Evaluate one spawn-shaped mapping against the allowlist and the env denylist."""
         # 1) Resolve the program: command / cmd, else argv[0] / args[0], each a string
         #    or a sequence of strings. A spawn config whose program cannot be read is
         #    refused (v0.10.21): until then a list ``command`` such as
@@ -243,8 +286,6 @@ class McpSubprocessArgInjectionGuard:
                     return self._deny_env(var)
 
         return self._allow("allowlisted static command with clean env")
-
-    # -- internal helpers --------------------------------------------------
 
     def _resolve_program(self, config: Mapping[str, Any]) -> tuple[str, str] | None:
         """Return ``(field_name, raw_program_string)``, or None when no program can be read.

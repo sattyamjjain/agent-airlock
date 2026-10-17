@@ -85,3 +85,7 @@ demo/airlock_audit.jsonl
 # — 135 files / 7.1 MB that nothing served and that drifted from docs/ between
 # releases (99 files out of date when it was removed in v0.8.81).
 site/
+
+# Live API contract test records (tests/live, `make test-live`): request metadata, usage
+# and list cost from runs against the Anthropic API. Kept local, never committed.
+tests/live/.results/

@@ -84,7 +84,14 @@ logger = structlog.get_logger("agent-airlock.mcp_spec.stdio_command_injection_gu
 # ``extra_metachars``. Newline + carriage return cover the multi-line
 # injection variant where the attacker hides the second command
 # after a newline. Backtick + ``$(`` cover command substitution.
-DEFAULT_SHELL_METACHARS: frozenset[str] = frozenset({";", "&&", "||", "|", "\n", "\r", "`", "$("})
+# ``&`` (single) is the async / background separator — a one-char swap from the caught ``;``
+# that evaded the guard until v0.10.25 (adaptive red-team wave 2); ``<(`` / ``>(`` are process
+# substitution, the direct analogue of the caught ``$(``. Bare ``<`` / ``>`` are deliberately
+# NOT in the default set: they appear in benign args (``pkg>=1.0``), so an operator who needs
+# redirection blocked adds them via ``extra_metachars``.
+DEFAULT_SHELL_METACHARS: frozenset[str] = frozenset(
+    {";", "&", "&&", "||", "|", "\n", "\r", "`", "$(", "<(", ">("}
+)
 
 # Tokens that switch the shell out of its normal parsing rules, so that an
 # argv-shaped safety scan no longer describes the command that will run.
@@ -190,6 +197,10 @@ class StdioCommandInjectionGuard:
             )
         self._cwd_allowlist = cwd_allowlist
         self._metachars = DEFAULT_SHELL_METACHARS | extra_metachars
+        # Longest first (then alphabetical) so a specific token wins over a substring of it:
+        # "&&" / "<(" / ">(" / "$(" report before "&", and the match is deterministic across
+        # runs rather than depending on frozenset iteration order (v0.10.25).
+        self._metachars_ordered = tuple(sorted(self._metachars, key=lambda m: (-len(m), m)))
         self._stop_parsing_tokens = stop_parsing_tokens
 
     def evaluate(self, args: Mapping[str, Any] | None) -> StdioCommandInjectionDecision:
@@ -345,7 +356,7 @@ class StdioCommandInjectionGuard:
                         yield item
 
     def _find_metachar(self, value: str) -> str | None:
-        for ch in self._metachars:
+        for ch in self._metachars_ordered:
             if ch in value:
                 return ch
         return None

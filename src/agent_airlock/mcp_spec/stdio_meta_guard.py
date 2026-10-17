@@ -32,6 +32,7 @@ References
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -40,6 +41,9 @@ from ..exceptions import AirlockError
 from ..policy import StdioGuardConfig
 from .argv_guard import ArgvStringConcatenationError, enforce_argv_array
 from .stdio_guard import StdioInjectionError, validate_stdio_command
+from .subprocess_arg_guard import (
+    _DEFAULT_DANGEROUS_ENV_VARS,  # nosec B404 - a frozenset constant, not the subprocess stdlib
+)
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.stdio_meta_guard")
 
@@ -88,6 +92,7 @@ _DEFAULT_VARIANTS: tuple[str, ...] = (
     "argv_absolute_path_smuggle",  # absolute binary outside allowed prefixes
     "argv_basename_not_allowlisted",  # plausible basename, not in allowlist
     "argv_env_path_traversal",  # ``../`` traversal in argv element
+    "env_code_loading_var",  # env sets LD_PRELOAD / DYLD_* / NODE_OPTIONS / ... (RCE at spawn)
     "manifest_runtime_drift",  # runtime argv diverges from signed manifest
     "stdin_remote_input_taint",  # remote input reaches stdin sink (AST taint)
 )
@@ -223,6 +228,12 @@ class StdioMetaGuard:
                     )
                 )
 
+        # Step 1c: env — a code-loading variable (LD_PRELOAD, DYLD_*, NODE_OPTIONS, PYTHONPATH,
+        # ...) turns an allowlisted command into an execution primitive at spawn. evaluate()
+        # never read env before, so a clean command with env={"LD_PRELOAD": …} was admitted.
+        # Adaptive red-team wave 2 (v0.10.25).
+        findings.extend(self._inspect_env(server_spec.get("env")))
+
         # Step 2: stdio_guard — per-arg metachar / unicode / allowlist.
         try:
             validate_stdio_command(argv, self.stdio_config)
@@ -296,6 +307,62 @@ class StdioMetaGuard:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    def _inspect_env(self, env: Any) -> list[Finding]:
+        """Refuse an ``env`` that sets a code-loading variable, or that cannot be read.
+
+        ``env`` is read as a mapping or a sequence of ``KEY=VALUE`` strings (the two shapes an
+        MCP server spec uses); any other shape is refused rather than skipped, so a payload in
+        a shape the guard did not expect cannot slip through.
+        """
+        if env is None:
+            return []
+        entries: list[tuple[str, Any]] = []
+        findings: list[Finding] = []
+        if isinstance(env, Mapping):
+            entries = [(str(key), val) for key, val in env.items()]
+        elif isinstance(env, (list, tuple)):
+            for idx, item in enumerate(env):
+                if isinstance(item, str) and "=" in item:
+                    entries.append((item.split("=", 1)[0], item))
+                else:
+                    findings.append(
+                        Finding(
+                            guard_id="stdio_meta_guard",
+                            finding_id="env_unreadable",
+                            rule="env_unreadable",
+                            severity="critical",
+                            message=f"server_spec['env'][{idx}] is not a KEY=VALUE string",
+                            details={"index": idx},
+                        )
+                    )
+        else:
+            return [
+                Finding(
+                    guard_id="stdio_meta_guard",
+                    finding_id="env_unreadable",
+                    rule="env_unreadable",
+                    severity="critical",
+                    message=(
+                        f"server_spec['env'] is a {type(env).__name__}, not a mapping or a "
+                        "KEY=VALUE list, so it cannot be checked for code-loading variables"
+                    ),
+                )
+            ]
+        for name, _value in entries:
+            if name.upper() in _DEFAULT_DANGEROUS_ENV_VARS:
+                findings.append(
+                    Finding(
+                        guard_id="stdio_meta_guard",
+                        finding_id="env_code_loading_var",
+                        rule="env_code_loading_var",
+                        severity="critical",
+                        message=f"server_spec['env'] sets code-loading variable {name!r}",
+                        offending_arg=name,
+                        details={"var": name},
+                    )
+                )
+        return findings
 
     def _finalize(self, findings: list[Finding], started: float) -> MetaVerdict:
         deduped = _dedupe_findings(findings)

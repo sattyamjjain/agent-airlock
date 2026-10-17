@@ -123,6 +123,7 @@ from .self_heal import (
     BlockReason,
     handle_amplification_exceeded,
     handle_budget_exceeded,
+    handle_capability_denied,
     handle_endpoint_violation,
     handle_escalation,
     handle_ghost_argument_error,
@@ -317,6 +318,9 @@ def _looks_like_url(key: str, value: Any) -> bool:
 _URL_SCHEME_PREFIX = re.compile(r"\s*[A-Za-z][A-Za-z0-9+.\-]*://")
 _FILE_URI_PREFIX = re.compile(r"\s*file:", re.IGNORECASE)
 _DRIVE_PATH = re.compile(r"[A-Za-z]:[\\/]")
+# Home-relative by shape: a bare `~`, `~/...` or `~user/...` (a separator after the name).
+# Not `~5` or `~ 10 minutes`: approximations in free text are not paths.
+_HOME_RELATIVE = re.compile(r"~(?:[A-Za-z0-9._-]*[\\/]|$)")
 _PATH_EXTENSIONS = (".txt", ".json", ".yaml", ".yml", ".env", ".py")
 
 
@@ -332,7 +336,8 @@ def _is_absolute_or_escaping(value: str) -> bool:
     """An absolute, drive-rooted, home-relative or parent-traversing path, by its shape."""
     stripped = value.strip()
     return (
-        stripped.startswith(("/", "\\", "~/", "~\\"))
+        stripped.startswith(("/", "\\"))
+        or _HOME_RELATIVE.match(stripped) is not None
         or _DRIVE_PATH.match(stripped) is not None
         or stripped == ".."
         or "../" in stripped
@@ -706,6 +711,20 @@ def _warn_on_retired_control_arguments(func_name: str, kwargs: dict[str, Any]) -
             hint="tag the call with AirlockContext(metadata={'airlock_tier': ..., "
             "'input_tokens': ...}); tool arguments are the model's to write",
         )
+
+
+def _model_safe_policy_reason(func_name: str, violation: PolicyViolation) -> str:
+    """The reason a policy refusal gives the model: the violation's message, minus any deny glob.
+
+    A ``tool_denied`` message quotes the ``denied_tools`` pattern that matched. The refusal
+    reaches a model whose context may be attacker-influenced, and a deny list is incomplete
+    by nature: quoting the entry that matched helps a search for a tool name it misses.
+    Until 0.10.25 the model read it. The other messages ``SecurityPolicy`` raises name no
+    deny pattern: a time window and the roles a tool requires describe what is allowed.
+    """
+    if violation.violation_type == ViolationType.TOOL_DENIED.value:
+        return f"Tool '{func_name}' is denied by policy"
+    return violation.message
 
 
 class Airlock:
@@ -1783,10 +1802,20 @@ class Airlock:
                         reset_seconds,
                     )
                 else:
+                    # The refusal reaches the model, so it reads a reason that names no
+                    # deny glob; the operator keeps the full message here and in
+                    # on_blocked below.
+                    logger.warning(
+                        "policy_violation",
+                        function=func_name,
+                        violation_type=e.violation_type,
+                        reason=e.message,
+                    )
                     response = handle_policy_violation(
                         func_name,
                         policy_name="SecurityPolicy",
-                        reason=e.message,
+                        reason=_model_safe_policy_reason(func_name, e),
+                        violation_type=e.violation_type,
                     )
                     self._safe_invoke_callback(
                         self.config.on_blocked,
@@ -2308,11 +2337,21 @@ class Airlock:
         if decision.allowed:
             return None
 
+        # The model sees which argument was refused and why in general terms, never the
+        # detector that matched: ``decision.detail`` names the sink token or encoding it
+        # caught, and ``matched_pattern`` is that token. Both stay in the log line the
+        # guard writes and in ``on_blocked`` (0.10.25: refusals withhold deny lists).
         response = AirlockResponse.blocked_response(
             reason=BlockReason.POLICY_VIOLATION,
             error=(
-                f"AIRLOCK_BLOCK: Tool '{func_name}' blocked by "
-                f"UnsafeDeserializationGuard. {decision.detail}"
+                f"AIRLOCK_BLOCK: Tool '{func_name}' blocked by UnsafeDeserializationGuard: "
+                + (
+                    f"argument {decision.matched_field!r} could not be inspected (nested too "
+                    f"deeply, self-containing, or an unreadable shape)"
+                    if decision.verdict.value == "deny_uninspectable"
+                    else f"argument {decision.matched_field!r} carries a serialized-object "
+                    f"payload this tool does not accept"
+                )
             ),
             fix_hints=decision.fix_hints,
             metadata={
@@ -2320,7 +2359,6 @@ class Airlock:
                 "policy": "UnsafeDeserializationGuard",
                 "verdict": decision.verdict.value,
                 "matched_field": decision.matched_field,
-                "matched_pattern": decision.matched_pattern,
             },
         )
         self._safe_invoke_callback(
@@ -2584,9 +2622,11 @@ class Airlock:
                 missing=str(e.missing) if e.missing else None,
                 denied=str(e.denied) if e.denied else None,
             )
-            response = AirlockResponse.blocked_response(
-                reason=BlockReason.CAPABILITY_DENIED,
-                error=f"{func_name}: {e.message}",
+            # Until 0.10.25 this refusal carried no fix_hints and no AIRLOCK_BLOCK prefix.
+            response = handle_capability_denied(
+                func_name,
+                missing=capabilities_to_list(e.missing),
+                denied=capabilities_to_list(e.denied),
             )
             self._safe_invoke_callback(
                 self.config.on_blocked,

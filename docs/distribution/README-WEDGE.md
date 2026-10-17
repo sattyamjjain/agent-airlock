@@ -19,12 +19,12 @@ per-argument angle).
 One factual sentence, reused verbatim across every list:
 
 > **agent-airlock** — in-process least-privilege decorator for AI tool calls;
-> deny-by-default, PII masking, per-CVE presets, 5,207 tests.
+> deny-by-default, PII masking, per-CVE presets, 6,482 tests.
 
 > [!NOTE]
 > **Refresh the test count** to the current README **TEST-BADGE** value at the
 > moment you submit each PR (badge is regenerated every release). As of v0.8.84
-> it is **5,207**.
+> it is **6,482**.
 
 ## PyPI description (already on-message)
 

@@ -35,6 +35,7 @@ Primary source
 from __future__ import annotations
 
 import ipaddress
+import socket
 from dataclasses import dataclass
 
 from .._log import structlog
@@ -106,16 +107,40 @@ class UnauthenticatedPublicBindError(AirlockError):
 
 
 def _is_public_bind(addr: str) -> bool:
-    """Whether ``addr`` resolves to "all interfaces" on this host."""
+    """Whether ``addr`` resolves to "all interfaces" on this host.
+
+    Three layers, because the kernel's address parser is more permissive
+    than :mod:`ipaddress`: the literal blocklist, a strict ``ipaddress``
+    parse (which catches ``::`` and the expanded IPv6 forms), and finally
+    :func:`socket.inet_aton` — the classic BSD IPv4 parser the socket layer
+    actually uses. ``inet_aton`` accepts octal, hex, bare-integer and
+    short-dotted spellings that ``ipaddress`` rejects (``0``, ``0x0``,
+    ``00.00.00.00``, ``000.000.000.000``, ``0.0.0``), and a server handed any
+    of them binds to ``0.0.0.0`` on every NIC all the same — the exact
+    CVE-2026-23744 surface. Checking only ``ipaddress`` let every one of those
+    spellings through (adaptive red-team wave 3). ``inet_aton`` maps a real
+    address elsewhere (``127.0.0.1``, ``2130706433`` → loopback; ``1`` →
+    ``0.0.0.1``), so this adds no false positives.
+    """
     if not addr:
         return False
     if addr in _PUBLIC_BIND_LITERALS:
         return True
+    stripped = addr.strip("[]")
     try:
-        ip = ipaddress.ip_address(addr.strip("[]"))
+        if ipaddress.ip_address(stripped).is_unspecified:
+            return True
     except ValueError:
-        return False
-    return ip.is_unspecified
+        pass
+    # Kernel-lenient IPv4 parse: anything inet_aton maps to 0.0.0.0 is an
+    # all-interfaces bind, however it was spelled. IPv6 is already covered
+    # above — inet_aton is IPv4-only and raises OSError on an IPv6 literal.
+    try:
+        if socket.inet_aton(stripped) == b"\x00\x00\x00\x00":
+            return True
+    except OSError:
+        pass
+    return False
 
 
 def validate_bind_address(addr: str, cfg: BindAddressGuardConfig) -> None:

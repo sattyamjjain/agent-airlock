@@ -630,11 +630,18 @@ def stdio_guard_ox_defaults() -> StdioGuardConfig:
             re.compile(r"curl[^\n]*\bsh\b", re.IGNORECASE),
             re.compile(r"wget[^\n]*\bsh\b", re.IGNORECASE),
             re.compile(r"base64\s+-d", re.IGNORECASE),
-            # Inline-code flags across interpreters we otherwise allow:
-            # - python/bash:  -c
+            # Inline-code / module-exec flags across interpreters we otherwise allow.
+            # Anchored at ``-`` but NOT ``$``: the interpreter's own parser reads ``-cCODE``
+            # as ``-c CODE`` and a cluster ``-Ic`` as ``-I -c``, so an exact ``^-c$`` missed
+            # the attached and clustered forms (adaptive red-team wave 2, v0.10.25). The
+            # optional ``[A-Za-z]*`` is the single-dash no-arg flag cluster that may precede
+            # the code flag; ``--`` long options never match.
+            # - python/bash:  -c  (and -cCODE, -Ic, -IcCODE)
+            # - python:       -m  (and -mhttp.server, -Im)
+            re.compile(r"^-[A-Za-z]*c"),
+            re.compile(r"^-[A-Za-z]*m"),
             # - node/deno:    -e / --eval
             # - perl:         -e
-            re.compile(r"^-c$"),
             re.compile(r"^-e$"),
             re.compile(r"^--eval$"),
             re.compile(r"IFS\s*=", re.IGNORECASE),
@@ -1943,52 +1950,52 @@ def archived_mcp_server_advisory_defaults(
 
 @preset
 def claude_managed_agents_safe_defaults() -> dict[str, Any]:
-    """Conservative defaults for the Claude Managed Agents harness.
+    """Deny-all defaults for Claude Managed Agents built-in tools.
 
-    Anthropic launched Managed Agents to public beta on 2026-04-08
-    (used by Notion, Rakuten, Asana, Vibecode, Sentry; $0.08/runtime-
-    hour). The runtime ships a curated tool surface — ``read_file``,
-    ``bash``, ``web_browse``, ``code_execute`` — and streams raw tool
-    inputs/outputs over Server-Sent Events.
+    Managed Agents runs the built-in tools of ``agent_toolset_20260401`` (``bash``,
+    ``read``, ``write``, ``edit``, ``glob``, ``grep``, ``web_fetch``, ``web_search``) in
+    a container. A call reaches the client before it runs only under ``always_ask``,
+    and the toolset's default is ``always_allow``.
 
-    This preset returns a :class:`ManagedAgentsAuditConfig` with:
+    Returns:
+        A mapping with:
 
-    - ``allowed_tools`` = empty (no managed-agent tool calls until
-      caller explicitly opts in by listing tools).
-    - ``require_beta_header`` = True
-    - ``toolset_version`` = pinned at :data:`AGENT_TOOLSET_VERSION`
-    - ``redact_sse_payloads`` = True
+        - ``gate``: a :class:`ManagedAgentToolGate` that allows no tool. Build your own
+          with the tools a session needs and their path and endpoint policies.
+        - ``agent_toolset``: every tool listed, disabled, under ``always_ask``.
+        - ``toolset_tools`` (and ``harness_tools``, kept for compatibility): the eight
+          tool names.
+        - ``audit_config``: the deprecated :class:`ManagedAgentsAuditConfig`, empty.
+        - ``beta_header``, ``toolset_version`` and the primary ``source``.
 
-    The mapping returned also includes the harness tool list so
-    callers can build their own intersection::
+    Until 0.10.25 this preset returned only the audit config, built around tool names
+    (``read_file``, ``web_browse``, ``code_execute``) the API does not have.
 
-        cfg = claude_managed_agents_safe_defaults()
-        audit = cfg["audit_config"]
-        # Opt in to read-only operations
-        audit.allowed_tools = ("read_file", "web_browse")
-
-    Primary sources:
-      https://claude.com/blog/claude-managed-agents
-      https://platform.claude.com/docs/en/managed-agents/overview
+    Primary source: https://platform.claude.com/docs/en/managed-agents/tools
     """
     from .integrations.claude_managed_agents import (
+        AGENT_TOOLSET_TOOLS,
         AGENT_TOOLSET_VERSION,
-        DEFAULT_HARNESS_TOOLS,
         MANAGED_AGENTS_BETA_HEADER,
         ManagedAgentsAuditConfig,
+        ManagedAgentToolGate,
+        build_agent_toolset,
     )
 
     return {
+        "gate": ManagedAgentToolGate(),
+        "agent_toolset": build_agent_toolset(()),
+        "toolset_tools": AGENT_TOOLSET_TOOLS,
+        "harness_tools": AGENT_TOOLSET_TOOLS,
         "audit_config": ManagedAgentsAuditConfig(
             allowed_tools=(),
             require_beta_header=True,
             toolset_version=AGENT_TOOLSET_VERSION,
             redact_sse_payloads=True,
         ),
-        "harness_tools": DEFAULT_HARNESS_TOOLS,
         "beta_header": MANAGED_AGENTS_BETA_HEADER,
         "toolset_version": AGENT_TOOLSET_VERSION,
-        "source": "https://claude.com/blog/claude-managed-agents",
+        "source": "https://platform.claude.com/docs/en/managed-agents/tools",
     }
 
 

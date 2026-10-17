@@ -132,6 +132,39 @@ def is_path_within_roots(path: Path, roots: list[Path]) -> bool:
     return False
 
 
+def _home_relative(path_text: str) -> str | None:
+    """``path_text`` without leading whitespace when it begins with ``~``, else None."""
+    stripped = path_text.lstrip()
+    return stripped if stripped.startswith("~") else None
+
+
+def _expand_home(original_path: str, home_relative: str) -> str:
+    """The form a tool that calls ``os.path.expanduser`` would open.
+
+    Raises:
+        PathValidationError: The ``~`` prefix names no home directory this process can
+            resolve (``~nosuchuser/...``, or no ``HOME`` and no password entry), so what
+            a tool would open is unknown and the path is refused.
+    """
+    try:
+        expanded = os.path.expanduser(home_relative)
+    except (KeyError, OSError, ValueError) as exc:  # pragma: no cover - platform specific
+        raise PathValidationError(
+            "Path names a home directory that cannot be resolved",
+            original_path,
+            "unresolvable_home",
+            {"reason": type(exc).__name__},
+        ) from exc
+    if expanded.startswith("~"):
+        raise PathValidationError(
+            "Path names a home directory that cannot be resolved",
+            original_path,
+            "unresolvable_home",
+            {"reason": "no home directory for this ~ prefix"},
+        )
+    return expanded
+
+
 def validate_path(
     path: str | Path,
     policy: FilesystemPolicy,
@@ -143,13 +176,22 @@ def validate_path(
     SECURITY: This function performs atomic path resolution to prevent TOCTOU
     race conditions. All checks are performed on the resolved path.
 
+    A path that begins with ``~`` (after any leading whitespace) is checked in **both**
+    forms, and both must pass: the literal one, which is what ``open()`` and
+    ``os.path.realpath`` see (``$CWD/~/...``), and the ``os.path.expanduser`` one, which is
+    what a tool that expands ``~`` opens. Until 0.10.25 only the literal form was checked,
+    so with the working directory inside an allowed root, ``~/.ssh/id_rsa`` passed and a
+    tool that expanded it read the real key. A ``~user`` prefix this process cannot expand
+    is refused, because what a tool would open is then unknown.
+
     Args:
         path: The path to validate (can be relative or absolute).
         policy: The filesystem policy to enforce.
-        must_exist: If True, raise error if path doesn't exist.
+        must_exist: If True, raise error if path doesn't exist. Applies to the literal
+            form, as before.
 
     Returns:
-        The validated, resolved absolute Path.
+        The validated, resolved absolute Path of the literal form.
 
     Raises:
         PathValidationError: If the path violates the policy.
@@ -165,9 +207,46 @@ def validate_path(
             "invalid_path",
         )
 
-    # Convert to Path object
-    if isinstance(path, str):
-        path = Path(path)
+    home_relative = _home_relative(original_path)
+    expanded = _expand_home(original_path, home_relative) if home_relative is not None else None
+
+    resolved = _validate_form(
+        Path(path) if isinstance(path, str) else path,
+        original_path,
+        policy,
+        must_exist=must_exist,
+    )
+    if expanded is not None:
+        _validate_form(Path(expanded), original_path, policy, must_exist=False, home_form=True)
+
+    logger.debug(
+        "path_validated",
+        original_path=original_path,
+        resolved_path=str(resolved),
+        home_form_checked=expanded is not None,
+        allowed_roots_count=len(policy.allowed_roots),
+    )
+
+    return resolved
+
+
+def _validate_form(
+    path: Path,
+    original_path: str,
+    policy: FilesystemPolicy,
+    *,
+    must_exist: bool,
+    home_form: bool = False,
+) -> Path:
+    """Check one form of a path against ``policy`` and return its resolution.
+
+    ``home_form`` marks the ``expanduser`` form of a ``~`` path. Its refusals say so and
+    leave out the resolved path, which would tell the model the home directory.
+    """
+    form_details: dict[str, Any] = {"form": "home_expanded"} if home_form else {}
+
+    def resolved_detail(resolved: Path) -> dict[str, Any]:
+        return form_details if home_form else {"resolved_path": str(resolved)}
 
     # Check for path depth before resolution (DoS prevention)
     if _get_path_depth(path) > policy.max_path_depth:
@@ -175,7 +254,7 @@ def validate_path(
             f"Path exceeds maximum depth of {policy.max_path_depth}",
             original_path,
             "max_depth_exceeded",
-            {"depth": _get_path_depth(path), "max_depth": policy.max_path_depth},
+            {"depth": _get_path_depth(path), "max_depth": policy.max_path_depth, **form_details},
         )
 
     # Check if path exists for must_exist validation
@@ -200,26 +279,7 @@ def validate_path(
 
     # Check for symlinks if not allowed
     if not policy.allow_symlinks:
-        # Compare the path before and after symlink resolution
-        try:
-            # Path.resolve() normalizes the path; realpath follows symlinks
-            # If they differ significantly, there's a symlink involved
-            absolute_path = path.absolute()
-            if absolute_path.exists():
-                # Check if any component is a symlink
-                current = absolute_path
-                while current != current.parent:  # Stop at root
-                    if current.is_symlink():
-                        raise PathValidationError(
-                            f"Path contains symlink at {current}",
-                            original_path,
-                            "symlink_detected",
-                            {"symlink_location": str(current)},
-                        )
-                    current = current.parent
-        except OSError:
-            # Path doesn't exist yet or permission error - OK for non-must_exist
-            pass
+        _refuse_symlinked(path, original_path, form_details)
 
     # Check allowed roots
     if policy.allowed_roots and not is_path_within_roots(resolved, policy.allowed_roots):
@@ -228,7 +288,7 @@ def validate_path(
             original_path,
             "outside_allowed_roots",
             {
-                "resolved_path": str(resolved),
+                **resolved_detail(resolved),
                 "allowed_roots": [str(r) for r in policy.allowed_roots],
             },
         )
@@ -241,7 +301,7 @@ def validate_path(
                 f"Path matches denied pattern: {matched_pattern}",
                 original_path,
                 "denied_pattern",
-                {"pattern": matched_pattern, "resolved_path": str(resolved)},
+                {"pattern": matched_pattern, **resolved_detail(resolved)},
             )
 
     # Check resolved path depth
@@ -250,17 +310,38 @@ def validate_path(
             f"Resolved path exceeds maximum depth of {policy.max_path_depth}",
             original_path,
             "max_depth_exceeded",
-            {"depth": _get_path_depth(resolved), "max_depth": policy.max_path_depth},
+            {
+                "depth": _get_path_depth(resolved),
+                "max_depth": policy.max_path_depth,
+                **form_details,
+            },
         )
 
-    logger.debug(
-        "path_validated",
-        original_path=original_path,
-        resolved_path=str(resolved),
-        allowed_roots_count=len(policy.allowed_roots),
-    )
-
     return resolved
+
+
+def _refuse_symlinked(path: Path, original_path: str, form_details: dict[str, Any]) -> None:
+    """Refuse ``path`` when any component of its absolute form is a symlink.
+
+    ``form_details`` is empty for the literal form, whose refusal names the symlink, and
+    marks the ``expanduser`` form, whose refusal leaves the location out.
+    """
+    try:
+        absolute_path = path.absolute()
+        if absolute_path.exists():
+            current = absolute_path
+            while current != current.parent:  # Stop at root
+                if current.is_symlink():
+                    raise PathValidationError(
+                        f"Path contains symlink at {current}",
+                        original_path,
+                        "symlink_detected",
+                        form_details or {"symlink_location": str(current)},
+                    )
+                current = current.parent
+    except OSError:
+        # Path doesn't exist yet or permission error - OK for non-must_exist
+        pass
 
 
 # Predefined policies for common use cases

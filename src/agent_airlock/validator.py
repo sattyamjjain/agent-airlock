@@ -11,7 +11,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, TypeVar, get_args, get_type_hints
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, validate_call
@@ -313,8 +313,41 @@ def create_argument_validator(func: Callable[..., Any]) -> ArgumentValidator:
     return _validate
 
 
+#: ``SafePathValidator`` rules that are fixed and documented rather than a configurable
+#: deny list: no parent traversal, no home directory. Naming them tells the model which
+#: input shape to drop, so their messages are left as they are.
+_STRUCTURAL_PATH_RULES = frozenset({"..", "~"})
+
+#: What the model reads in place of a ``SafePath`` deny-list match's own message, which
+#: quotes the pattern that matched.
+_WITHHELD_PATH_MESSAGE = "Value error, this path matches a protected location"
+
+
+def _is_withheld_value_error(ctx: Mapping[str, Any] | None) -> bool:
+    """Whether a value error is a ``SafePath`` deny-list match, whose pattern is withheld.
+
+    A refusal reaches a model whose context may be attacker-influenced. The allowed space
+    (a root, an allowlist, the tool's own schema) is what it needs to recover; a deny list
+    is incomplete by nature, and quoting the entry that matched helps a search for the
+    entries it lacks. The pattern stays on the exception for the host's own handling.
+    """
+    from .safe_types import SafePathValidationError
+
+    error = (ctx or {}).get("error")
+    return (
+        isinstance(error, SafePathValidationError)
+        and error.pattern is not None
+        and error.pattern not in _STRUCTURAL_PATH_RULES
+    )
+
+
 def format_validation_error(error: ValidationError) -> dict[str, Any]:
     """Format a Pydantic ValidationError into LLM-friendly structure.
+
+    Each error's ``fix_hint`` comes from :func:`_generate_fix_hint`, the one function the
+    top-level ``fix_hints`` of a refusal are built from too (``handle_validation_error``).
+    A ``SafePath`` deny-list match has its message replaced (:func:`_is_withheld_value_error`):
+    the refusal reaches the model, and the pattern that matched is not the model's to see.
 
     Args:
         error: The Pydantic validation error.
@@ -328,11 +361,11 @@ def format_validation_error(error: ValidationError) -> dict[str, Any]:
     for err in errors:
         location = ".".join(str(loc) for loc in err["loc"])
         error_type = err["type"]
-        message = err["msg"]
+        ctx = err.get("ctx")
+        message = _WITHHELD_PATH_MESSAGE if _is_withheld_value_error(ctx) else err["msg"]
         input_value = err.get("input")
 
-        # Generate fix hint based on error type
-        fix_hint = _generate_fix_hint(error_type, location, input_value)
+        fix_hint = _generate_fix_hint(error_type, location, input_value, ctx)
 
         formatted_errors.append(
             {
@@ -350,20 +383,120 @@ def format_validation_error(error: ValidationError) -> dict[str, Any]:
     }
 
 
-def _generate_fix_hint(error_type: str, field: str, input_value: Any) -> str:
-    """Generate a helpful fix hint for the LLM based on error type."""
-    hints = {
-        "string_type": f"'{field}' must be a string, not {type(input_value).__name__}",
-        "int_type": f"'{field}' must be an integer, not {type(input_value).__name__}",
-        "float_type": f"'{field}' must be a number, not {type(input_value).__name__}",
-        "bool_type": f"'{field}' must be a boolean (true/false), not {type(input_value).__name__}",
-        "list_type": f"'{field}' must be a list/array, not {type(input_value).__name__}",
-        "dict_type": f"'{field}' must be an object/dict, not {type(input_value).__name__}",
-        "missing": f"'{field}' is required but was not provided",
-        "string_pattern_mismatch": f"'{field}' does not match the required pattern",
-        "greater_than": f"'{field}' must be greater than the minimum value",
-        "less_than": f"'{field}' must be less than the maximum value",
-        "value_error": f"'{field}' has an invalid value",
-    }
+#: Type errors and their wording. Tests pin these strings byte-for-byte: keep them stable,
+#: so that model recovery measured against one release compares like for like with the next.
+_TYPE_NAMES: dict[str, str] = {
+    "string_type": "a string",
+    "int_type": "an integer",
+    "float_type": "a number",
+    "bool_type": "a boolean (true/false)",
+    "list_type": "a list/array",
+    "dict_type": "an object/dict",
+}
 
-    return hints.get(error_type, f"'{field}' failed validation: check the type and format")
+#: A required argument (``validate_call``'s three kinds) or a required field of a nested
+#: model, dataclass or TypedDict (``missing``) was not given.
+_MISSING_TYPES = frozenset(
+    {
+        "missing",
+        "missing_argument",
+        "missing_keyword_only_argument",
+        "missing_positional_only_argument",
+    }
+)
+
+#: Numeric bound -> (the ``ctx`` key holding it, its wording).
+_BOUND_HINTS: dict[str, tuple[str, str]] = {
+    "greater_than": ("gt", "greater than"),
+    "greater_than_equal": ("ge", "greater than or equal to"),
+    "less_than": ("lt", "less than"),
+    "less_than_equal": ("le", "less than or equal to"),
+    "multiple_of": ("multiple_of", "a multiple of"),
+}
+
+#: Length limit -> (the ``ctx`` key holding it, its wording, the unit counted).
+_LENGTH_HINTS: dict[str, tuple[str, str, str]] = {
+    "string_too_short": ("min_length", "at least", "character"),
+    "string_too_long": ("max_length", "at most", "character"),
+    "too_short": ("min_length", "at least", "item"),
+    "too_long": ("max_length", "at most", "item"),
+}
+
+
+def _argument_hint(error_type: str, field: str) -> str | None:
+    """The hint for an argument that is missing, unexpected or repeated, else None."""
+    if error_type in _MISSING_TYPES:
+        if error_type == "missing_positional_only_argument" and field.isdigit():
+            # A positional-only parameter's location is its index, not its name.
+            return (
+                f"The positional argument at index {field} is required but was not provided; add it"
+            )
+        return f"'{field}' is required but was not provided; add it"
+    if error_type == "unexpected_keyword_argument":
+        return f"'{field}' is not a parameter of this tool; remove it"
+    if error_type == "extra_forbidden":
+        return f"'{field}' is not a field this tool accepts; remove it"
+    if error_type == "unexpected_positional_argument":
+        return "Too many positional arguments; pass arguments by name"
+    if error_type == "multiple_argument_values":
+        return f"'{field}' was given twice; pass it only once"
+    return None
+
+
+def _constraint_hint(error_type: str, field: str, ctx: Mapping[str, Any]) -> str | None:
+    """The hint naming a constraint the tool's own schema declares, else None.
+
+    The bound, length, pattern or allowed values come from the error's ``ctx``; without
+    them the caller falls back to a hint that names the error type.
+    """
+    if error_type in ("literal_error", "enum") and "expected" in ctx:
+        return f"'{field}' must be {ctx['expected']}"
+    if error_type in _BOUND_HINTS:
+        key, wording = _BOUND_HINTS[error_type]
+        if key in ctx:
+            return f"'{field}' must be {wording} {ctx[key]}"
+    if error_type in _LENGTH_HINTS:
+        key, wording, unit = _LENGTH_HINTS[error_type]
+        if key in ctx:
+            limit = ctx[key]
+            hint = f"'{field}' must have {wording} {limit} {unit}{'' if limit == 1 else 's'}"
+            if "actual_length" in ctx:
+                hint += f" (it has {ctx['actual_length']})"
+            return hint
+    if error_type == "string_pattern_mismatch" and "pattern" in ctx:
+        return f"'{field}' must match the pattern '{ctx['pattern']}'"
+    return None
+
+
+def _generate_fix_hint(
+    error_type: str,
+    field: str,
+    input_value: Any,
+    ctx: Mapping[str, Any] | None = None,
+) -> str:
+    """Generate a fix hint the model can act on, from a Pydantic error's type and ``ctx``.
+
+    A hint names what to change: the argument to add or remove, the bound, length, pattern
+    or values the tool's own schema allows. Until 0.10.25 a missing argument
+    (``missing_argument`` and its keyword-only and positional-only variants) was told only
+    to "check the type and format", and a constraint was named without its value.
+
+    Args:
+        error_type: The Pydantic error type, e.g. ``"missing_argument"``.
+        field: The dotted error location, e.g. ``"user.age"``.
+        input_value: The value that failed validation; a type error names its type.
+        ctx: The error's ``ctx``, which holds the constraint (``{"gt": 0}``), if any.
+
+    Returns:
+        One hint. An error type with no specific wording gets one that names the type.
+    """
+    if error_type in _TYPE_NAMES:
+        return f"'{field}' must be {_TYPE_NAMES[error_type]}, not {type(input_value).__name__}"
+    hint = _argument_hint(error_type, field) or _constraint_hint(error_type, field, ctx or {})
+    if hint is not None:
+        return hint
+    if error_type == "value_error":
+        if _is_withheld_value_error(ctx):
+            return f"'{field}' points to a protected location; choose a different path"
+        return f"'{field}' has an invalid value"
+    return f"'{field}' failed validation ({error_type}): check the type and format"

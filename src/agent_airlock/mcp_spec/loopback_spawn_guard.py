@@ -85,6 +85,69 @@ DEFAULT_DENIED_COMMANDS: frozenset[str] = frozenset(
     {"sh", "bash", "dash", "zsh", "ksh", "fish", "csh", "tcsh", "ash", "busybox"}
 )
 
+# Per-wrapper options that take a SEPARATE value argument (space-separated form). When one
+# appears, the guard must skip the value too, or the value (e.g. the NAME in ``env -u NAME``)
+# is mistaken for the downstream program — the CVE-2026-53820 surface-vs-effective bypass, and
+# the mirror false-refusal where ``env -u FOO python`` read FOO as the program. Attached forms
+# (``-uNAME``, ``--unset=NAME``) carry the value in the same token and need no extra skip. A
+# wrapper not listed here has no value-taking option modelled (its options are treated as
+# no-arg flags, the prior behaviour). Adaptive red-team wave 2 (v0.10.25).
+_WRAPPER_VALUE_OPTS: dict[str, frozenset[str]] = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string", "--argv0"}),
+    "sudo": frozenset(
+        {
+            "-u",
+            "--user",
+            "-g",
+            "--group",
+            "-p",
+            "--prompt",
+            "-C",
+            "--close-from",
+            "-D",
+            "--chdir",
+            "-h",
+            "--host",
+            "-R",
+            "--chroot",
+            "-r",
+            "--role",
+            "-t",
+            "--type",
+            "-U",
+            "--other-user",
+            "-T",
+            "--command-timeout",
+        }
+    ),
+    "doas": frozenset({"-u", "-C", "-a"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "ionice": frozenset({"-c", "--class", "-n", "--classdata", "-p", "--pid"}),
+    "timeout": frozenset({"-s", "--signal", "-k", "--kill-after"}),
+    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
+    "xargs": frozenset(
+        {
+            "-I",
+            "-i",
+            "--replace",
+            "-E",
+            "-e",
+            "--eof",
+            "-n",
+            "--max-args",
+            "-d",
+            "--delimiter",
+            "-P",
+            "--max-procs",
+            "-s",
+            "--max-chars",
+            "-L",
+            "-a",
+            "--arg-file",
+        }
+    ),
+}
+
 _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _MAX_UNWRAP = 16
 
@@ -300,19 +363,33 @@ class LoopbackSessionSpawnGuard:
     def _downstream_after_wrapper(self, argv: list[str]) -> list[str] | None:
         """Return the argv starting at the wrapper's downstream program.
 
-        Skips options (``-x``), env assignments (``K=V``), and pure-numeric
+        Skips options (``-x``), the value a value-taking option consumes
+        (``env -u NAME``, ``sudo -u USER``, ``xargs -I REPL`` — see
+        :data:`_WRAPPER_VALUE_OPTS`), env assignments (``K=V``), and pure-numeric
         wrapper arguments (e.g. ``timeout 5`` / ``nice -n 10``). The first
         remaining token is the downstream program. Conservative: an ambiguous
         token is treated as the program (and then checked), never silently
         dropped — deny-by-default means a wrong guess fails safe.
         """
-        for i in range(1, len(argv)):
+        value_opts = _WRAPPER_VALUE_OPTS.get(_norm(argv[0]), frozenset())
+        i = 1
+        n = len(argv)
+        while i < n:
             tok = argv[i]
             if tok.startswith("-"):
+                # A value-taking option in space-separated form consumes the next token as
+                # its argument; skip both so the value is not read as the program. Attached
+                # forms (``-uNAME`` / ``--unset=NAME``) keep the value in this token.
+                if tok in value_opts and "=" not in tok and i + 1 < n:
+                    i += 2
+                    continue
+                i += 1
                 continue
             if _ENV_ASSIGNMENT.match(tok):
+                i += 1
                 continue
             if tok.isdigit():
+                i += 1
                 continue
             return argv[i:]
         return None

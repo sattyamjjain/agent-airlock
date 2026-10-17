@@ -244,7 +244,12 @@ from .integrations.claude_auto_memory import (
 from .integrations.claude_managed_agents import (
     ManagedAgentBetaHeaderMissingError,
     ManagedAgentToolBlocked,
+    ManagedAgentToolGate,
+    ManagedAgentToolsetError,
+    RemotePathPolicy,
+    ToolUseDecision,
     UnknownToolsetVersionError,
+    UnreviewableEventError,
 )
 
 # V0.7.2 — CrewAI canonical-leg trio (ADD-1 2026-05-05; closes #5).
@@ -674,7 +679,7 @@ from .sdk_provenance import (
     SDKLineageMatch,
     classify_sdk_lineage,
 )
-from .self_heal import AirlockResponse, BlockReason
+from .self_heal import AirlockResponse, BlockReason, is_refusal, refusal_text
 from .ssrf_egress_guard import (
     SSRFEgressBlocked,
     SSRFEgressDecision,
@@ -741,7 +746,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.10.24"
+__version__ = "0.10.25"
 
 __all__ = [
     # Core
@@ -848,6 +853,12 @@ __all__ = [
     "UnauthenticatedPublicBindError",
     "UnknownToolsetVersionError",
     "UnsignedMCPServerAdded",
+    # V0.10.25 — Claude Managed Agents approval gate (agent_toolset_20260401)
+    "ManagedAgentToolGate",
+    "ManagedAgentToolsetError",
+    "RemotePathPolicy",
+    "ToolUseDecision",
+    "UnreviewableEventError",
     # V0.6.1 — Anthropic Claude Agent SDK canonical-leg trio
     "AnthropicClaudeAgentSDKAdapter",
     "ClaudeAgentSDKMissingError",
@@ -1050,6 +1061,9 @@ __all__ = [
     # Response types
     "AirlockResponse",
     "BlockReason",
+    # V0.10.25 — one rendering of a refusal for every adapter that returns one to a model
+    "is_refusal",
+    "refusal_text",
     # V0.8.25 — Fail-closed terminal-claim guard (Goal-Autopilot arXiv:2606.11688)
     "DoneReceiptGuard",
     "DoneClaimDecision",

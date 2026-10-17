@@ -1013,6 +1013,8 @@ class UnsafeDeserializationGuard:
         self._markers = frozenset(m.lower() for m in DEFAULT_DESERIALIZATION_MARKERS) | frozenset(
             m.lower() for m in extra_markers
         )
+        # Longest first, then alphabetical: the deterministic, most specific match.
+        self._markers_ordered = tuple(sorted(self._markers, key=lambda m: (-len(m), m)))
         self._advisory = advisory
         self._advisory_url = advisory_url
 
@@ -1176,8 +1178,17 @@ class UnsafeDeserializationGuard:
         """True iff ``value`` is a pickle without 0x80 magic: one that names a callable
         with the GLOBAL / INST opcode (any protocol-0/1 code-execution payload must), or a
         protocol-0 text stream (memo PUTs, ending in STOP). A data-only protocol-1 pickle
-        is binary and is not matched; it can only build plain containers."""
-        if _TEXT_PICKLE_GLOBAL.search(value) is not None:
+        is binary and is not matched; it can only build plain containers.
+
+        The GLOBAL / INST opcode is matched on the left-stripped value too: leading
+        whitespace that is not a newline (spaces, tabs) moved the opcode off the ``^``
+        anchor and past the guard, yet a tool that strips the payload before
+        ``pickle.loads`` — or a lenient parser that skips it — still executes it
+        (v0.10.25; adaptive red-team wave 1)."""
+        if (
+            _TEXT_PICKLE_GLOBAL.search(value) is not None
+            or _TEXT_PICKLE_GLOBAL.search(value.lstrip()) is not None
+        ):
             return True
         stripped = value.strip()
         return (
@@ -1211,8 +1222,11 @@ class UnsafeDeserializationGuard:
         return self._is_pickle_magic(decoded)
 
     def _find_marker(self, value: str) -> str | None:
+        # ``self._markers`` is a frozenset, whose iteration order changes with hash
+        # randomisation, so "pickle.loads" was reported as "pickle.load" on some runs;
+        # ``_markers_ordered`` is the fixed, most-specific-first order.
         lowered = value.lower()
-        for marker in self._markers:
+        for marker in self._markers_ordered:
             if marker in lowered:
                 return marker
         return None

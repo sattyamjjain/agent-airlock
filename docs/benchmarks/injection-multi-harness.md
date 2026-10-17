@@ -25,7 +25,7 @@ The plan's usage limit stopped that re-run after 35 cells; the remaining 37, the
 benign arm among them, ran after the limit reset the same day (UTC).
 
 - **Run date:** 2026-10-03 · **Cells:** 144/144 measured, no exclusions
-- **Reproduce:** `python -m benchmarks.harness_injection --trials 18 --write --checkpoint ckpt.json --model codex=gpt-6-astra`
+- **Reproduce:** `python -m benchmarks.harness_injection --run --trials 18 --write --checkpoint ckpt.json --model codex=gpt-6-astra`
 - **Raw table and full caveats:** [`benchmarks/harness_injection/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md)
 - **Not run in CI:** it drives third-party coding agents against an injection-seeded
   fixture and spends real API budget, so it needs explicit operator sign-off.

@@ -76,9 +76,9 @@ Shape is Now / Next / Later, ordered by how bounded the work is, not by importan
 
 **Widen the AgentDojo model-in-the-loop run past a single model family.**
 
-The [AgentDojo gap section](README.md#the-agentdojo-gap--the-most-defensible-number-here)
-publishes a deterministic **86.0% (524/609)** upper bound alongside a much smaller *realised*
-reduction, and states the two "disagree by ~51pp." Two OpenAI models is still **one family**,
+The [AgentDojo results](benchmarks/agentdojo/RESULTS.md) publish a deterministic **86.0%
+(524/609)** upper bound alongside a much smaller *realised* reduction (the 2026-07-31 pass
+put the gap at +51pp, the 2026-08-08 pass at +46pp). Two OpenAI models is still **one family**,
 and ActBench ([arXiv:2608.09476](https://arxiv.org/abs/2608.09476)) measured ASR spanning
 10.1%–94.4% *across* models under a fixed harness — so a single family cannot speak for the
 defense no matter how many of its members are sampled.

@@ -37,6 +37,7 @@ Primary source
 
 from __future__ import annotations
 
+import re
 import shlex
 from collections.abc import Sequence
 
@@ -81,6 +82,51 @@ class ArgvStringConcatenationError(AirlockError):
         )
 
 
+class ArgvOptionInjectionError(AirlockError):
+    """Raised when a user-controlled argv slot is an option-like token.
+
+    Under ``shell=False`` each argv element is its own slot, so a shell-safe token like
+    ``--kubeconfig=/etc/shadow`` needs no space to inject: a user-controlled value that IS a
+    flag becomes an extra flag to the spawned program directly — the CVE-2026-39884 argument
+    injection the shlex round-trip alone does not catch. Only raised for slots the caller
+    marks user-controlled via ``reject_option_values``.
+
+    Attributes:
+        argv_index: 0-based index of the offending element.
+        offending_value: The raw option-like value.
+        field_name: Optional human-readable field name.
+    """
+
+    def __init__(
+        self,
+        *,
+        argv_index: int,
+        offending_value: str,
+        field_name: str | None = None,
+    ) -> None:
+        self.argv_index = argv_index
+        self.offending_value = offending_value
+        self.field_name = field_name
+        location = f"argv[{argv_index}]"
+        if field_name is not None:
+            location = f"{location} ({field_name!r})"
+        super().__init__(
+            f"{location} is the option-like value {offending_value!r} — a user-controlled "
+            "slot must not be a flag (CVE-2026-39884 argument injection). Pass it after a "
+            "'--' end-of-options separator, or validate it against a per-field grammar."
+        )
+
+
+# An option-like token: a single or double dash immediately followed by a letter
+# (``-o``, ``--kubeconfig``, ``--as=x``). A bare ``-`` (stdin) and a negative number
+# (``-5``) are deliberately NOT option-like.
+_OPTION_LIKE = re.compile(r"^--?[A-Za-z]")
+
+
+def _is_option_like(value: str) -> bool:
+    return _OPTION_LIKE.match(value) is not None
+
+
 def _is_safe_token(value: str) -> bool:
     """Whether ``value`` survives ``shlex.quote`` unwrapped.
 
@@ -95,6 +141,7 @@ def enforce_argv_array(
     *,
     field_names: Sequence[str] | None = None,
     allow_spaces: bool = False,
+    reject_option_values: bool = False,
 ) -> None:
     """Validate that every element of ``args`` is a single shell-safe token.
 
@@ -107,9 +154,18 @@ def enforce_argv_array(
             Shell metacharacters are still rejected. Off by default —
             the CVE-2026-39884 attack pattern is space-injection of
             additional flags.
+        reject_option_values: If True, an option-like element (``-o``,
+            ``--kubeconfig=…``) is refused. OPT-IN and off by default,
+            because a legitimate operator-fixed argv contains flags; turn
+            it on only for argv whose slots are user-controlled, where a
+            flag-shaped value is argument injection (CVE-2026-39884) that
+            needs no space and so passes the shlex round-trip. A bare
+            ``-`` and a negative number are not option-like.
 
     Raises:
-        ArgvStringConcatenationError: First offending element wins.
+        ArgvStringConcatenationError: First shlex-unsafe element wins.
+        ArgvOptionInjectionError: Under ``reject_option_values``, first
+            option-like element wins (checked before the shlex round-trip).
     """
     for idx, value in enumerate(args):
         if not isinstance(value, str):
@@ -117,13 +173,19 @@ def enforce_argv_array(
             # class we're guarding. Skip silently; type checks belong
             # elsewhere.
             continue
+        field_name = (
+            field_names[idx] if field_names is not None and idx < len(field_names) else None
+        )
+        if reject_option_values and _is_option_like(value):
+            raise ArgvOptionInjectionError(
+                argv_index=idx,
+                offending_value=value,
+                field_name=field_name,
+            )
         if allow_spaces and _is_safe_modulo_space(value):
             continue
         if _is_safe_token(value):
             continue
-        field_name = (
-            field_names[idx] if field_names is not None and idx < len(field_names) else None
-        )
         raise ArgvStringConcatenationError(
             argv_index=idx,
             offending_value=value,
@@ -147,6 +209,7 @@ def _is_safe_modulo_space(value: str) -> bool:
 
 
 __all__ = [
+    "ArgvOptionInjectionError",
     "ArgvStringConcatenationError",
     "enforce_argv_array",
 ]

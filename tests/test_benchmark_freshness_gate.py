@@ -1,6 +1,6 @@
 """The benchmark-freshness gate must actually fire.
 
-`scripts/check_benchmark_freshness.py` exists because the README's seven benchmark rows —
+`scripts/check_benchmark_freshness.py` exists because the README's dated benchmark rows —
 one of them a competitive claim against a named third-party product at a pinned version —
 were kept honest only by a human remembering to re-run. The 2026-07-16 gateway claim sat a
 month past its run before anyone noticed.

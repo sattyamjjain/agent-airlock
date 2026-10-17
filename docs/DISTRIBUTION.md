@@ -83,4 +83,6 @@ link-first posts). Lead with the problem, not the project.
 - Say "self-curated corpus / coverage baseline," never imply ASR or robustness.
 - Say incumbents are **cited, not re-run** — never a fabricated competitor number.
 - Frame vs gateways as **complementary layers**, no disparagement.
-- AgentDojo is roadmap, not wired — don't claim it.
+- AgentDojo is wired: quote the deterministic bound (524/609 pairs that have a tool-call
+  target, of 949) and any model-in-the-loop number with its model, date and sample size.
+  The attack is AgentDojo's fixed template; never call it adaptive.

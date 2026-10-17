@@ -12,7 +12,8 @@
 
     Read the honest-scope note in the first section before the headline number: this
     is a **self-corpus**, grading agent-airlock against its own fixtures. It is not a
-    competitive benchmark and not an adaptive-attacker measurement. For the latter see
-    [Adaptive attacker (AgentDojo)](index.md#the-seven-published-rows).
+    competitive benchmark and not an adaptive-attacker measurement. For a model-in-the-loop
+    prompt-injection measurement see
+    [Indirect prompt injection (AgentDojo)](index.md#the-published-rows).
 
 --8<-- "BENCHMARK.md"

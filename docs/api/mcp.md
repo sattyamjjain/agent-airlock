@@ -242,14 +242,16 @@ async def long_task(data: str, ctx: Context) -> dict:
 sends the client an error result (`isError` true) carrying it:
 
 ```text
-Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')
+Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy
 
 Suggested fixes:
-- This operation is not permitted by the current security policy
-- Contact the administrator if you believe this is an error
+- This tool is not permitted whatever the arguments; do not retry it
+- Continue without it, or tell the user it is not permitted
 ```
 
-The LLM can read the suggested fixes and adjust its next call. Being an error result, it
+The LLM can read the suggested fixes and adjust its next call. The refusal names what is
+allowed, never which deny rule matched: the `delete_*` glob stays in your logs and
+`on_blocked`, out of the model's context (since 0.10.25). Being an error result, it
 does not have to fit the tool's output schema, so it reaches the client the same way for a
 `-> str`, `-> dict` or `-> int` tool. Until 0.10.18 the text was returned in place of the
 tool's result, and only a `-> str` tool passed it on intact. Without FastMCP installed, the
@@ -261,16 +263,17 @@ A tool wrapped in plain `@Airlock()` returns Airlock's response dict instead:
 {
     "success": False,
     "status": "blocked",
-    "error": "AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')",
+    "error": "AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy",
     "block_reason": "policy_violation",
     "fix_hints": [
-        "This operation is not permitted by the current security policy",
-        "Contact the administrator if you believe this is an error",
+        "This tool is not permitted whatever the arguments; do not retry it",
+        "Continue without it, or tell the user it is not permitted",
     ],
     "metadata": {
         "function": "delete_user",
         "policy": "SecurityPolicy",
-        "violation_reason": "Tool 'delete_user' is denied by policy (matches 'delete_*')",
+        "violation_reason": "Tool 'delete_user' is denied by policy",
+        "violation_type": "tool_denied",
     },
 }
 ```

@@ -50,6 +50,7 @@ from typing_extensions import get_type_hints, is_typeddict
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
+from ..self_heal import is_refusal, refusal_text
 from ._tool_proxy import _adopt_identity
 
 # Typed Any so a union built at runtime is not read by mypy as a type expression.
@@ -289,20 +290,14 @@ def _wire_annotation(tp: Any) -> Any:
     return str  # the SDK advertises and checks any other type as a string
 
 
-def _is_refusal(result: Any) -> bool:
-    """Whether ``result`` is Airlock's own refusal (``AirlockResponse.to_dict()``)."""
-    return (
-        isinstance(result, dict)
-        and result.get("success") is False
-        and result.get("status") == "blocked"
-    )
+#: Kept under its old private name; the check itself lives in ``self_heal``.
+_is_refusal = is_refusal
 
 
 def _sdk_error_result(refusal: dict[str, Any]) -> dict[str, Any]:
-    """Airlock's refusal in the shape an SDK handler returns, read by the model as an error."""
-    lines = [str(refusal.get("error") or "AIRLOCK_BLOCK: call refused")]
-    hints = refusal.get("fix_hints") or []
-    if hints:
-        lines.append("Fix hints:")
-        lines.extend(f"- {hint}" for hint in hints)
-    return {"content": [{"type": "text", "text": "\n".join(lines)}], "is_error": True}
+    """Airlock's refusal in the shape an SDK handler returns, read by the model as an error.
+
+    The text is :func:`~agent_airlock.self_heal.refusal_text`: the error, then the fix
+    hints, never the metadata.
+    """
+    return {"content": [{"type": "text", "text": refusal_text(refusal)}], "is_error": True}

@@ -11,6 +11,170 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.25] - 2026-10-17
+
+### Security
+
+- **`~` in a path was never expanded, so the filesystem gate checked the wrong string.**
+  `~/.ssh/id_rsa` resolved to `$CWD/~/.ssh/id_rsa`; if the working directory sat inside an
+  allowed root and the tool itself expanded `~`, the real read passed the gate. A path that
+  starts with `~` is now required to pass the roots and deny patterns in **both** its literal
+  and its `expanduser` form, and a nested `~user/...` value is path-checked by its shape.
+- **Path and policy refusals disclosed the negative space.** A filesystem refusal quoted the
+  matching deny glob and a value's `symlink_location`; a policy refusal quoted the deny
+  pattern. The model only needs the positive space (allowed roots, allowed endpoints), so the
+  deny pattern, glob and symlink location are stripped from model-visible `fix_hints` and
+  metadata.
+- **A deserialization refusal named the detector that matched**, handing a probing caller the
+  signature that tripped it. The refusal now withholds the matched detector.
+- **Managed Agents tool calls were audited, never gated.** `audit_managed_agent_invocation`
+  only logged, and `DEFAULT_HARNESS_TOOLS` named tools the real toolset does not have
+  (`read_file`, `web_browse`, `code_execute`), so the real `always_allow` toolset was never
+  reviewed. A new `ManagedAgentToolGate.review()` runs kill switch → tool-known → allowlist →
+  per-tool input checks (lexical POSIX path policy, glob/grep prefix, `web_fetch`
+  `validate_endpoint`, `bash` command check) → `policy.check`, any error denying, and returns
+  a `user.tool_confirmation` whose `deny_message` is the refusal text. `build_agent_toolset()`
+  puts every enabled tool under `always_ask`; `check_agent_toolset()` flags any `auto` /
+  `always_allow` tool that would bypass the gate. Scope is stated honestly: path checks are
+  lexical, `bash` is not parsed, a call the server allows on its own cannot be stopped, and
+  the `deny_message` is visible to the model.
+- **Adaptive red-team wave 1–3 fail-opens** (campaign against the project's own guards; each
+  confirmed against ground truth or a careful read, each with a regression test):
+  - **F1** `deserialization_guard` admitted a protocol-0 (text) pickle behind leading
+    whitespace. Refused as `DENY_TEXT_PICKLE`.
+  - **F2** backslash / control-character authority parser-differential SSRF (`http://host\@evil`):
+    the authority span is now rejected when it carries `\`, TAB, CR or LF (`malformed_authority`).
+  - **F3** `ssrf_egress_guard` admitted IETF-reserved / unallocated IP space (IPv6 `200::/7`…
+    `fe00::/9`, IPv4 `240/4`) — no `is_reserved` catch. Now `DENY_RESERVED`.
+  - **F4** `eval_rce_guard` admitted an eval-family call on a non-identifier receiver
+    (`get_evaluator().eval(`, a leading `.eval(`): the sink regex excluded `.` from its left
+    boundary. Aligned to a `\b` word boundary.
+  - **F5** `config_path_guard` did not `expanduser` a `~` in `command` / `args` / `env`.
+  - **F6** `stdio_meta_guard` never inspected `env`, so `env={"LD_PRELOAD": …}` (DYLD_*,
+    BASH_ENV, NODE_OPTIONS, …) reached spawn — RCE. `env` is now inspected.
+  - **F8** `subprocess_arg_guard`'s dangerous-env denylist missed LD_AUDIT, GCONV_PATH,
+    RUBYLIB, PERL5OPT, CLASSPATH, JAVA_TOOL_OPTIONS, PYTHONHOME, DYLD_FALLBACK_* and more.
+  - **F9** `stdio_guard` let a joined `-cCODE` defeat the `^-c$` deny (Python reads `-cXXX`
+    as `-c XXX`) — inline RCE even under the shipped OX preset. Deny widened to `^-[A-Za-z]*c`
+    / `^-[A-Za-z]*m`.
+  - **F10** relative `argv[0]` was matched by basename only; `../python` / `evil/python`
+    (a planted binary) is now refused (`relative_path_binary`).
+  - **F11** `stdio_guard` passed U+2028/U+2029 line terminators and directional marks
+    (LRM/RLM/ALM) the Trojan-Source model claims to catch. Added to the banned set.
+  - **F12** `stdio_command_injection_guard` omitted a single `&`, `<`/`>` redirection and
+    `<(` / `>(` process substitution from its metachars.
+  - **F13** `loopback_spawn_guard` latched a wrapper's value-taking option onto the wrong
+    program (`env -u python bash` → execs `bash`); the option's argument is now skipped.
+  - **F15** `filter_eval_rce_guard` missed lambda default args / positional-only `/`
+    (CVE-2026-25592 class), C# `Expression . Lambda` whitespace, and Razor `@(eval(…))`.
+  - **F16** `argv_guard` admitted single-token option injection (`--kubeconfig=/etc/shadow`):
+    new opt-in `reject_option_values` + `ArgvOptionInjectionError` (default off, no behaviour
+    change).
+  - **F18** `bind_address_guard` admitted every kernel-lenient spelling of `0.0.0.0`
+    (`0`, `0x0`, `00.00.00.00`, `000.000.000.000`, `0x0.0x0.0x0.0x0`, `0.0.0`, `0.00.0.0`):
+    `_is_public_bind` checked only a literal set + strict `ipaddress`. Now also refuses
+    anything `socket.inet_aton` maps to `0.0.0.0` (CVE-2026-23744 class), with no false
+    positives on real addresses.
+
+### Changed
+
+- **Task-budget wire shape.** `build_task_budget(total, remaining=None)` now returns
+  `{"type": "tokens", "total": N[, "remaining": M]}` (20,000-token minimum,
+  `InvalidTaskBudgetError`), wrapped by `build_output_config` as
+  `{"output_config": {"task_budget": …}}`. `CostTracker.to_task_budget` and the SDK kit
+  delegate to it. The old body shape is rejected.
+- **Messages adapter tool schema** is derived from resolved type hints, so a tool's
+  parameters carry real `integer` / `number` / `boolean` types, `anyOf`, `enum`, `$defs` and
+  constraints instead of every field being `"string"`; an unresolvable annotation raises at
+  registration. A refusal now returns `is_error: true` with the refusal text; an unknown tool
+  and a coroutine result also return `is_error`.
+- **`DEFAULT_HARNESS_TOOLS`** is corrected to alias the real eight-tool `AGENT_TOOLSET_TOOLS`.
+
+### Deprecated
+
+Each still works, now warns (`FutureWarning`, removal in v1.0.0):
+
+- Agent SDK adapter `managed_audit` and `auto_memory_policy` — nothing ever read them.
+- Messages adapter `auto_process_tools` — nothing ever applied it.
+- Managed Agents `audit_managed_agent_invocation` — superseded by `ManagedAgentToolGate`.
+
+### Added
+
+- `self_heal.is_refusal()` / `refusal_text()` — the error plus "Fix hints:" lines, never the
+  metadata; the Claude Agent SDK adapter's error result delegates to them byte-for-byte.
+- Actionable `fix_hints` across the refusal families (missing / unexpected / repeated
+  arguments, literal and enum values, numeric bounds, length and pattern constraints, path
+  refusals naming the allowed roots), and `handle_capability_denied` wired into
+  `core._check_capabilities`, which returned no hints before.
+- `build_task_budget` / `build_output_config` (see Changed).
+- `build_agent_toolset` / `check_agent_toolset` / `ManagedAgentToolGate` / `RemotePathPolicy`
+  / `AGENT_TOOLSET_TOOLS` (see Security).
+- Async `aprocess_tool_use` / `aprocess_message_tools` on the Messages adapter.
+- Live API contract tests under `tests/live/` (`AIRLOCK_LIVE=1` + a key), a `make test-live`
+  target, `--ignore=tests/live` in the default run, and a third "live API contract tests"
+  bucket in the test-count badge.
+
+### Fixed
+
+- The CrewAI adapter wrapped each tool twice under some entry points; it now wraps exactly
+  once.
+- `@requires` kept an async tool async when a capability is denied (it could return a
+  non-awaitable).
+- The link and docs-API claim gates skip agent worktrees and smoke venvs.
+
+### Benchmarks
+
+Offline, deterministic results (no API, no paid calls):
+
+- **Adaptive red-team** (`benchmarks/adaptive_redteam/`): a no-LLM-judge campaign against the
+  project's own 38 bypass-target guards. Waves 1–3 ran at seed 0; wave 1's value gates scored
+  0/491 oracle-confirmed bypasses, wave 3 a clean control baseline across all 27 lower-surface
+  guards. Findings F1–F18 are in Security above; the harness's own over-report (F17) and a
+  crash on a method-style `fix_hints` were fixed. Nulls ship as nulls with denominators; the
+  full multi-seed campaign continues after the merge.
+- **AgentDojo** deterministic bound + the 949-pair census, and the replay of AgentDojo's
+  published Claude 3.x runs (the per-task least-privilege policy refuses an injection-target
+  call in 433/532 successful attacks).
+- **scan-tools** over the real MCPTox corpus (1,338 unique poisoned descriptions, 362 clean
+  tools).
+- Harness-injection cells now scrub the session env (`ANTHROPIC_*`, `CLAUDE_CODE_*`, …) and
+  record the auth method and observed models per cell.
+
+Credit-funded Claude 5.x passes (priced by exact model id; $43 total against a $180 hard cap;
+every denominator, API-refusal category and interval is in the per-harness `RESULTS.md`; raw
+outputs stay in `~/.cache/agent-airlock-bench/`, never vendored):
+
+- **Tool poisoning — MCPTox v2 (1,348 cases), fresh two-arm run** on Haiku 5.5, Sonnet 5.5
+  and Opus 5.5 (plus a 200-case Fable 5.1 subset), poisoned (P) vs clean (C), judge-free.
+  Under the G (tool allowlist) and LP (least-privilege) tiers every direct poisoned-tool call
+  is refused (Haiku 74/74, Sonnet 42/42, Opus 26/26), at a clean-call false-refusal cost of
+  0–1.8% (G) and 4.2–6.2% (LP); G0 (contract only) admits them by design. Poisoned-prompt API
+  refusal rises with capability (Haiku 0%, Sonnet 12.7%, Opus 24.1%) and direct execution
+  falls (5.5% → 3.6% → 2.5%); influence over Templates 2+3 is ~40–55%. Residual: LP still
+  admits 93–98% of poison-literal calls (it scopes resources, not argument content).
+- **Indirect prompt injection — AgentDojo, Claude 5.5 model-in-the-loop** (Haiku and Sonnet,
+  168 pairs/arm, all 4 suites, `tool_knowledge`). An honest near-null: the models resist this
+  fixed-template attack unaided (undefended ASR 5–8%), so airlock's realised reduction is
+  +0–1% at a +14% benign-refusal cost; the 86% deterministic bound (the per-task policy would
+  refuse the injection-target call) is the informative measure against capable models.
+- **fix_hints recovery — Claude 5.5, R1 (pre-B5 hints) vs R2 (B5 hints)** over 500 synthetic
+  refusal scenarios, arms H (full payload) / N (no hints) / S (SDK refusal text). Capable
+  models recover ~95–98% of refusals from the error alone, so hints give a small overall
+  uplift, concentrated where the positive space is actionable (path-outside-roots, scope
+  unstated: H 83% vs N 67% vs S 50%); the full payload beats the terse SDK text significantly
+  on changed scenarios (p < 0.001). Docs-only; no README row.
+- **Framework smoke matrix — Haiku 5.5** (`docs/COMPATIBILITY.md`): one allowed + one denied
+  tool call through each framework's airlock integration; 10/11 PASS, AutoGen ERROR (it sends
+  `temperature=1.0`, needs `anthropic<1`, then hits an autogen-side HTTP 400).
+
+### Corrected public claims
+
+- The "45% → 10%" block-rate figure is relabeled as the 2026-07-31 gpt-4o-mini pass (the
+  2026-08-08 pass measured 42→12 and 72→22); the AgentDojo row is retitled "Indirect prompt
+  injection · AgentDojo" (the attack was always a fixed template, not adaptive); codex
+  finished 72/72, not 52/72; the "609" set is described as the tool-call-target subset of 949;
+  MCPTox citations move to v2 (1,348 cases). Each was fixed in every hand-synced copy.
+
 ## [0.10.24] - 2026-10-10
 
 ### Security

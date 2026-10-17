@@ -212,10 +212,12 @@ class ConfigPathGuard:
         for name, value in entries:
             field_name = f"env[{name}]"
             if isinstance(value, str):
-                if "/" in value or "\\" in value:
-                    f = self._inspect(field_name, value)
-                    if f is not None:
-                        findings.append(f)
+                # Every string value is inspected: the old ``"/" in value`` prefilter skipped a
+                # bare ``..`` or ``~`` env value, which ``_inspect`` otherwise refuses. A
+                # non-path value returns no finding. Adaptive red-team wave 2 (v0.10.25).
+                f = self._inspect(field_name, value)
+                if f is not None:
+                    findings.append(f)
             elif value is not None and not isinstance(value, (int, float)):
                 findings.append(_unreadable(field_name, value, "a string"))
         return findings
@@ -276,6 +278,39 @@ class ConfigPathGuard:
                 rule=traversal,
                 detail=f"decoded value: {decoded!r}",
             )
+
+        # A leading ``~`` (``~/…`` or ``~user/…``) expands to a home directory. Outside the
+        # ``must_be_inside_host_root`` field (``workingDirectory``, handled below) it was never
+        # expanded, so a ``~`` path in ``command`` / ``args`` / ``env`` escaped to $HOME while
+        # the same value in ``workingDirectory`` was blocked. Expand it and refuse when it
+        # leaves host_root; a ``~user`` this process cannot expand is refused outright, since
+        # what the spawner would open is unknown. Adaptive red-team wave 2 (v0.10.25).
+        stripped = decoded.lstrip()
+        if not must_be_inside_host_root and stripped.startswith("~"):
+            expanded = os.path.expanduser(stripped)
+            if expanded.startswith("~"):
+                return PathFinding(
+                    field_name=field_name,
+                    raw_value=raw,
+                    rule="unresolvable_home",
+                    detail=f"home reference {stripped!r} could not be expanded",
+                )
+            try:
+                resolved_home = Path(expanded).resolve(strict=False)
+            except OSError:
+                return PathFinding(
+                    field_name=field_name,
+                    raw_value=raw,
+                    rule="unresolvable_home",
+                    detail=f"home reference {stripped!r} could not be resolved",
+                )
+            if not self._is_inside(resolved_home):
+                return PathFinding(
+                    field_name=field_name,
+                    raw_value=raw,
+                    rule="home_dir_escape",
+                    detail=f"{stripped!r} expands to {resolved_home!s}, outside host_root",
+                )
 
         if must_be_inside_host_root:
             try:

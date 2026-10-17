@@ -7,6 +7,7 @@ error responses that help the LLM retry with corrected arguments.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
@@ -137,6 +138,50 @@ class AirlockResponse:
         )
 
 
+def is_refusal(result: Any) -> bool:
+    """Whether ``result`` is Airlock's own refusal, ``AirlockResponse.to_dict()`` of a block.
+
+    ``status == "blocked"`` is checked as well as ``success``: a tool may itself return a
+    dict with ``"success": False``, and that is its result, not a refusal.
+
+    Args:
+        result: Whatever an ``@Airlock``-wrapped callable returned.
+
+    Returns:
+        True when ``result`` is a dict with ``success`` False and ``status`` "blocked".
+    """
+    return (
+        isinstance(result, dict)
+        and result.get("success") is False
+        and result.get("status") == "blocked"
+    )
+
+
+def refusal_text(refusal: Mapping[str, Any]) -> str:
+    """The text a model reads for a refusal: the error, then the fix hints.
+
+    The ``metadata`` of a refusal is never included. It is for the audit log and the
+    operator, and it can carry what a model must not be told (a resolved path, the
+    detail an operator attached), so the adapters that return a refusal to a model use
+    this one rendering.
+
+    Args:
+        refusal: A refusal, as :func:`is_refusal` recognises it.
+
+    Returns:
+        ``error`` on the first line, then ``Fix hints:`` and one ``- hint`` line per
+        hint when there are any.
+    """
+    lines = [str(refusal.get("error") or "AIRLOCK_BLOCK: call refused")]
+    hints = refusal.get("fix_hints") or []
+    if isinstance(hints, str):
+        hints = [hints]
+    if hints:
+        lines.append("Fix hints:")
+        lines.extend(f"- {hint}" for hint in hints)
+    return "\n".join(lines)
+
+
 def handle_validation_error(
     error: ValidationError,
     func_name: str,
@@ -158,7 +203,9 @@ def handle_validation_error(
         return handle_response
 
     formatted = format_validation_error(error)
-    fix_hints = [err["fix_hint"] for err in formatted["errors"]]
+    # Once each, in the order the errors came: three surplus positional arguments are one
+    # thing to fix, not three. ``metadata.errors`` keeps one hint per error.
+    fix_hints = list(dict.fromkeys(err["fix_hint"] for err in formatted["errors"]))
 
     # Create LLM-friendly error message
     error_summary = "; ".join(f"{err['field']}: {err['message']}" for err in formatted["errors"])
@@ -291,32 +338,120 @@ def handle_ghost_argument_error(
     )
 
 
+_CONTINUE_OR_TELL = "Continue without it, or tell the user"
+
+#: What the model should do about a policy denial, by ``PolicyViolation.violation_type``.
+#: Each says whether a retry can help: told only "not permitted", a model retries with
+#: other arguments, and no argument changes any of these verdicts.
+_POLICY_FIX_HINTS: dict[str, list[str]] = {
+    "tool_denied": [
+        "This tool is not permitted whatever the arguments; do not retry it",
+        f"{_CONTINUE_OR_TELL} it is not permitted",
+    ],
+    "tool_not_allowed": [
+        "This tool is not permitted whatever the arguments; do not retry it",
+        f"{_CONTINUE_OR_TELL} it is not permitted",
+    ],
+    "time_restricted": [
+        "This tool is permitted only during its allowed time window; retrying now will not help",
+        f"{_CONTINUE_OR_TELL} when it is available",
+    ],
+    "agent_required": [
+        "This tool requires an agent identity and this call carried none; changing the "
+        "arguments will not help",
+        _CONTINUE_OR_TELL,
+    ],
+    "role_required": [
+        "This tool requires a role this agent does not hold; changing the arguments will not help",
+        _CONTINUE_OR_TELL,
+    ],
+    "reauth_required": [
+        "The host must authorize this call before it can run; changing the arguments will not help",
+        _CONTINUE_OR_TELL,
+    ],
+}
+
+_DEFAULT_POLICY_FIX_HINTS = [
+    "This operation is not permitted by the current security policy",
+    "Contact the administrator if you believe this is an error",
+]
+
+
 def handle_policy_violation(
     func_name: str,
     policy_name: str,
     reason: str,
+    *,
+    violation_type: str | None = None,
 ) -> AirlockResponse:
     """Create a response for policy violations.
 
     Args:
         func_name: Name of the function that was blocked.
         policy_name: Name of the policy that was violated.
-        reason: Human-readable reason for the violation.
+        reason: The reason, as the model may read it. It reaches the model: pass one that
+            names no deny glob (``core`` drops the ``denied_tools`` pattern a
+            ``tool_denied`` message quotes; ``on_blocked`` and the log keep it).
+        violation_type: ``PolicyViolation.violation_type``, which picks hints that say
+            whether a retry can help. Without one, the hints are generic.
 
     Returns:
         AirlockResponse explaining the policy violation.
     """
+    metadata: dict[str, Any] = {
+        "function": func_name,
+        "policy": policy_name,
+        "violation_reason": reason,
+    }
+    if violation_type is not None:
+        metadata["violation_type"] = violation_type
     return AirlockResponse.blocked_response(
         reason=BlockReason.POLICY_VIOLATION,
         error=f"AIRLOCK_BLOCK: Policy violation for '{func_name}'. {reason}",
+        fix_hints=list(_POLICY_FIX_HINTS.get(violation_type or "", _DEFAULT_POLICY_FIX_HINTS)),
+        metadata=metadata,
+    )
+
+
+def handle_capability_denied(
+    func_name: str,
+    *,
+    missing: Sequence[str],
+    denied: Sequence[str],
+) -> AirlockResponse:
+    """Create a response for a tool whose declared capabilities the policy does not allow.
+
+    The refusal is about what the tool does (its ``@requires`` declaration), not how it was
+    called, so the hints say that no argument change helps. Until 0.10.25 this refusal
+    carried no hints and no ``AIRLOCK_BLOCK`` prefix.
+
+    Args:
+        func_name: Name of the function that was blocked.
+        missing: Capabilities the tool requires that the policy does not grant.
+        denied: Capabilities the tool requires that the policy explicitly denies.
+
+    Returns:
+        AirlockResponse with ``block_reason=CAPABILITY_DENIED``.
+    """
+    parts: list[str] = []
+    if denied:
+        parts.append(f"the policy denies: {', '.join(denied)}")
+    if missing:
+        parts.append(f"the policy does not grant: {', '.join(missing)}")
+    needed = "; ".join(parts) or "the policy does not allow"
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.CAPABILITY_DENIED,
+        error=f"AIRLOCK_BLOCK: Tool '{func_name}' requires capabilities {needed}",
         fix_hints=[
-            "This operation is not permitted by the current security policy",
-            "Contact the administrator if you believe this is an error",
+            f"This tool needs capabilities {needed}",
+            "Changing the arguments will not help: the refusal is about what the tool "
+            "does, not how it was called",
+            "Use a tool that does not need these capabilities, or tell the user",
         ],
         metadata={
             "function": func_name,
-            "policy": policy_name,
-            "violation_reason": reason,
+            "missing_capabilities": list(missing),
+            "denied_capabilities": list(denied),
         },
     )
 
@@ -480,6 +615,67 @@ def handle_rate_limit(
     )
 
 
+#: ``PathValidationError.details`` keys kept out of the model-visible metadata: the deny
+#: pattern that matched and where the refused symlink sits. A refusal reaches a model whose
+#: context may be attacker-influenced; a deny list is incomplete by nature, and publishing
+#: its coverage helps a search for the gaps. ``on_blocked`` still gets the full message.
+_WITHHELD_PATH_DETAILS = frozenset({"pattern", "symlink_location"})
+
+#: Path refusals whose hints need nothing from the refusal's details.
+_STATIC_PATH_FIX_HINTS: dict[str, list[str]] = {
+    "denied_pattern": [
+        "This path matches a protected location; choose a different file",
+        "If the task needs this exact file, tell the user it is protected",
+    ],
+    "symlink_detected": [
+        "This path goes through a symbolic link, which this tool does not follow; use a "
+        "path with no symbolic link in it",
+    ],
+    "invalid_path": [
+        "This path contains a NUL byte, which no real path contains; remove it",
+    ],
+    "path_not_found": [
+        "This path does not exist; check the name",
+    ],
+}
+
+
+def _path_fix_hints(violation_type: str, details: dict[str, Any]) -> list[str]:
+    """The hints for one path refusal, by ``PathValidationError.violation_type``.
+
+    They name the allowed roots (the space the model may use) and never the deny pattern
+    or symlink location (the space it may not).
+    """
+    if violation_type in _STATIC_PATH_FIX_HINTS:
+        return list(_STATIC_PATH_FIX_HINTS[violation_type])
+    roots = details.get("allowed_roots")
+    use_roots = (
+        f"Use a path inside one of: {', '.join(str(root) for root in roots)}"
+        if isinstance(roots, list) and roots
+        else None
+    )
+    if violation_type == "outside_allowed_roots":
+        return [
+            "This path is outside the directories this tool may access",
+            use_roots or "Use a path inside the directories this tool may access",
+        ]
+    if violation_type == "max_depth_exceeded":
+        limit = details.get("max_depth")
+        depth = f"more than {limit} levels" if limit is not None else "too many levels"
+        return [f"This path is nested {depth} deep; use a shorter path"]
+    if violation_type == "uninspectable_argument":
+        reason = details.get("reason") or "it is nested too deeply or contains itself"
+        return [f"This argument could not be inspected for paths ({reason}); pass a simpler value"]
+    if violation_type == "resolution_failed":
+        error = details.get("error")
+        cause = f" ({error})" if error else ""
+        return [f"This path could not be resolved{cause}; check that it is a well-formed path"]
+    return [
+        "This path is not accessible under the security policy; choose a different path",
+        *([use_roots] if use_roots else []),
+    ]
+
+
 def handle_path_violation(
     func_name: str,
     path: str,
@@ -488,34 +684,36 @@ def handle_path_violation(
 ) -> AirlockResponse:
     """Create a response for filesystem path violations.
 
+    The hints depend on the violation: a path outside the allowed roots is told the roots
+    to use, a deny-pattern match is told the location is protected, and so on. The
+    metadata carries the details except :data:`_WITHHELD_PATH_DETAILS`: until 0.10.25 a
+    refusal handed the model the deny pattern that matched and the symlink's location.
+
     Args:
         func_name: Name of the function that was blocked.
-        path: The path that violated the policy.
+        path: The path that violated the policy (for ``uninspectable_argument``, where
+            the argument walk stopped, e.g. ``"paths[0]"``).
         violation_type: Type of path violation (e.g., "outside_allowed_roots").
         details: Additional details about the violation.
 
     Returns:
         AirlockResponse explaining the path violation.
     """
-    fix_hints = [
-        "The specified path is not accessible due to security policy",
-        "Use paths within the allowed directory roots",
-    ]
-
-    if violation_type == "symlink_detected":
-        fix_hints.append("Symlinks are not allowed; use direct paths")
-    elif violation_type == "denied_pattern":
-        fix_hints.append("This file type or location is explicitly blocked")
-
+    details = details or {}
+    error = (
+        f"AIRLOCK_BLOCK: Argument '{path}' of '{func_name}' could not be inspected for paths"
+        if violation_type == "uninspectable_argument"
+        else f"AIRLOCK_BLOCK: Path '{path}' blocked for '{func_name}'"
+    )
     return AirlockResponse.blocked_response(
         reason=BlockReason.PATH_VIOLATION,
-        error=f"AIRLOCK_BLOCK: Path '{path}' blocked for '{func_name}'",
-        fix_hints=fix_hints,
+        error=error,
+        fix_hints=_path_fix_hints(violation_type, details),
         metadata={
             "function": func_name,
             "path": path,
             "violation_type": violation_type,
-            **(details or {}),
+            **{key: value for key, value in details.items() if key not in _WITHHELD_PATH_DETAILS},
         },
     )
 

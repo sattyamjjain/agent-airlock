@@ -57,5 +57,7 @@ The benign column is the control, and it is the reason the injected column means
 ## Reproduce
 
 ```bash
-python -m benchmarks.harness_injection --trials 18 --write --model codex=gpt-6-astra
+python -m benchmarks.harness_injection --run --trials 18 --write --model codex=gpt-6-astra
 ```
+
+claude-code ran its CLI default; this run recorded neither its model nor its auth.

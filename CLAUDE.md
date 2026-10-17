@@ -146,12 +146,21 @@ site-packages.
 
 Repo-level directories outside the package: `tests/` (mostly mirrors the package's
 subpackages; `tests/cves/` is the signed CVE regression suite), `benchmarks/` (agentdojo,
-blockrate, harness_injection, mcp_conformance, scantools_mcptox, toolprivbench, vs_gateway),
+adaptive_redteam, blockrate, fix_hints, harness_injection, mcp_conformance, mcptox,
+scantools_mcptox, toolprivbench, vs_gateway, and `_claude` shared paid-run plumbing),
 `scripts/` (`check_*` claim gates, the generators behind `make benchmark` / `test-badge` /
 `check-cve-catalog`, `smoke_*` end-to-end drivers, `cve_watcher.py`, and `egress_bench.py` /
 `verify_corpus_manifest.py` behind `make egress-bench` / `verify-corpus`), `docs/` (mkdocs
 source), `examples/`, `demo/` (runnable live demo), `presets/`, `schemas/`, `tools/`, and
 `.claude-plugin/` (plugin and marketplace manifests).
+
+`tests/fuzz/` holds the Hypothesis property and differential suites; `HYPOTHESIS_PROFILE`
+(`tests/fuzz/conftest.py`) picks `ci`, the default that CI runs, or `deep`, reserved for the
+`benchmarks/adaptive_redteam/` waves. `tests/live/` calls the Anthropic API and spends
+credit, so default `addopts` ignores it and each test also skips without `AIRLOCK_LIVE=1`
+and `ANTHROPIC_API_KEY`: no workflow runs it, `make test-live` does (recipe in
+`tests/live/README.md`), and `make test-badge` counts it as a third excluded bucket beside
+`tests/benchmarks/` and the docker-marked tests.
 
 **There is no committed `site/`.** The docs site is served from the `gh-pages` branch,
 which `docs.yml` rebuilds with `mkdocs gh-deploy --force` on pushes to `main` that touch

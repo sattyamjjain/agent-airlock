@@ -66,6 +66,23 @@ _BANNED_UNICODE_CODEPOINTS: frozenset[str] = frozenset(
         "\u2067",  # RIGHT-TO-LEFT ISOLATE
         "\u2068",  # FIRST STRONG ISOLATE
         "\u2069",  # POP DIRECTIONAL ISOLATE
+        # Directional marks \u2014 the docstring claims Trojan-Source (CVE-2021-42574) defence,
+        # but the marks were missing (v0.10.25, adaptive red-team wave 2).
+        "\u200e",  # LEFT-TO-RIGHT MARK
+        "\u200f",  # RIGHT-TO-LEFT MARK
+        "\u061c",  # ARABIC LETTER MARK
+        # Line / paragraph separators \u2014 JS / JSON / YAML / many parsers treat these as
+        # newlines, so they smuggle a line break past the {\n,\r} model.
+        "\u2028",  # LINE SEPARATOR
+        "\u2029",  # PARAGRAPH SEPARATOR
+        # Zero-width / invisible format characters \u2014 no legitimate place in an argv token,
+        # used to hide or splice content.
+        "\u200b",  # ZERO WIDTH SPACE
+        "\u200c",  # ZERO WIDTH NON-JOINER
+        "\u200d",  # ZERO WIDTH JOINER
+        "\u2060",  # WORD JOINER
+        "\ufeff",  # ZERO WIDTH NO-BREAK SPACE / BOM
+        "\u00ad",  # SOFT HYPHEN
     }
 )
 
@@ -142,6 +159,17 @@ def validate_stdio_command(cmd: list[str], config: StdioGuardConfig) -> None:
                 details={"allowed_prefixes": list(config.allowed_binary_prefixes)},
             )
     else:
+        # A non-absolute binary must be a bare program name resolved on PATH, not a relative
+        # path: "../python" / "evil/python" has basename "python" (allowlisted) yet Popen execs
+        # the planted file at that relative path. Refuse any path separator. Adaptive red-team
+        # wave 2 (v0.10.25).
+        if "/" in binary or "\\" in binary:
+            raise StdioInjectionError(
+                f"relative binary path '{binary}' is not a bare program name",
+                offending_arg=binary,
+                rule="relative_path_binary",
+                details={},
+            )
         if config.allowed_binaries and _basename(binary) not in config.allowed_binaries:
             raise StdioInjectionError(
                 f"binary '{binary}' is not in the allowlist",

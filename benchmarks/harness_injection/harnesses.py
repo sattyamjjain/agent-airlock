@@ -12,10 +12,38 @@ of silently shrinking the sample.
 from __future__ import annotations
 
 import shutil
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-__all__ = ["HARNESSES", "Harness", "available_harnesses", "harness_by_name"]
+__all__ = [
+    "HARNESSES",
+    "SESSION_ENV_KEEP",
+    "SESSION_ENV_REMOVE",
+    "Harness",
+    "available_harnesses",
+    "harness_by_name",
+    "harness_env",
+    "removed_env_names",
+]
+
+#: Removed from every harness's environment; a trailing ``*`` is a prefix. A harness run
+#: from inside a Claude Code session inherits that session's variables: an
+#: ``ANTHROPIC_API_KEY`` would bill the run to API credit instead of the CLI's own login,
+#: ``ANTHROPIC_BASE_URL`` would reroute it, and ``CLAUDECODE`` / ``CLAUDE_CODE_*`` would
+#: tell the child it is nested inside another session.
+SESSION_ENV_REMOVE: tuple[str, ...] = (
+    "ANTHROPIC_*",
+    "CLAUDECODE",
+    "CLAUDE_CODE_*",
+    "CLAUDE_EFFORT",
+    "CLAUDE_PID",
+    "ENABLE_TOOL_SEARCH",
+    "ENABLE_LSP_TOOL",
+    "MAX_THINKING_TOKENS",
+)
+
+#: Kept although a pattern above matches it: the CLI's own subscription login.
+SESSION_ENV_KEEP: tuple[str, ...] = ("CLAUDE_CODE_OAUTH_TOKEN",)
 
 
 @dataclass(frozen=True)
@@ -29,6 +57,7 @@ class Harness:
     version_argv: tuple[str, ...] = ()
     notes: str = ""
     env: dict[str, str] = field(default_factory=dict)
+    """Set in the harness's environment after :attr:`env_remove` is applied."""
     model_argv: tuple[str, ...] = ()
     """Inserted before ``{prompt}`` when a model is pinned; ``{model}`` is substituted.
 
@@ -37,6 +66,17 @@ class Harness:
     account, every codex cell exited 1 before it started, and the run looked like 0/72
     complete. Pinning the model the previous run used makes a re-run like-for-like.
     """
+    env_remove: tuple[str, ...] = SESSION_ENV_REMOVE
+    """Variables removed from the inherited environment (``*`` suffix = prefix)."""
+    auth_argv: tuple[str, ...] = ()
+    """Prints the CLI's login state as JSON; empty when the harness has no such command."""
+    expected_auth: str = ""
+    """The auth method a paid run must use (``claude.ai`` for a subscription login).
+    Any other recorded method skips the harness unless ``--allow-any-auth`` is passed."""
+    stdout_json: bool = False
+    """The CLI prints a JSON result whose model usage and cost are recorded per cell."""
+    requires_model: bool = False
+    """``--run`` refuses to start until this harness's model is pinned with ``--model``."""
 
     def is_available(self) -> bool:
         return shutil.which(self.executable) is not None
@@ -59,11 +99,26 @@ HARNESSES: tuple[Harness, ...] = (
         name="claude-code",
         executable="claude",
         # -p is print/non-interactive. The permission mode must allow tool use or the
-        # harness structurally cannot act, which would score a false 0%.
-        argv_template=("claude", "-p", "{prompt}", "--permission-mode", "acceptEdits"),
+        # harness structurally cannot act, which would score a false 0%. The JSON result
+        # names the models that ran and the cost, recorded per cell.
+        argv_template=(
+            "claude",
+            "-p",
+            "{prompt}",
+            "--permission-mode",
+            "acceptEdits",
+            "--output-format",
+            "json",
+        ),
         version_argv=("claude", "--version"),
         notes="Anthropic Claude Code CLI, print mode.",
         model_argv=("--model", "{model}"),
+        auth_argv=("claude", "auth", "status", "--json"),
+        expected_auth="claude.ai",
+        stdout_json=True,
+        # The 2026-10-03 run used the CLI's default and recorded neither its model nor
+        # its auth, so it cannot be reproduced like-for-like. A paid run pins both.
+        requires_model=True,
     ),
     Harness(
         name="cursor-agent",
@@ -107,6 +162,27 @@ HARNESSES: tuple[Harness, ...] = (
         model_argv=("-m", "{model}"),
     ),
 )
+
+
+def _removes(name: str, patterns: Sequence[str]) -> bool:
+    if name in SESSION_ENV_KEEP:
+        return False
+    return any(
+        name.startswith(pattern[:-1]) if pattern.endswith("*") else name == pattern
+        for pattern in patterns
+    )
+
+
+def removed_env_names(harness: Harness, base: Mapping[str, str]) -> list[str]:
+    """The names of the variables in ``base`` that :func:`harness_env` drops, sorted."""
+    return sorted(name for name in base if _removes(name, harness.env_remove))
+
+
+def harness_env(harness: Harness, base: Mapping[str, str]) -> dict[str, str]:
+    """``base`` without the harness's :attr:`~Harness.env_remove` names, plus its ``env``."""
+    env = {name: value for name, value in base.items() if not _removes(name, harness.env_remove)}
+    env.update(harness.env)
+    return env
 
 
 def available_harnesses() -> tuple[Harness, ...]:

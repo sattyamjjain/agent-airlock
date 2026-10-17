@@ -152,8 +152,9 @@ payload at the function boundary. That's the gap the 12/12 measures:
   The corpus is agent-airlock's own fixtures — shapes the guards are built to
   catch. A novel payload outside a guard's pattern set can pass airlock too. Treat
   this as "the contract layer catches the contract-layer classes it claims to,"
-  not "airlock is robust against a determined attacker." For the adaptive angle,
-  see the AgentDojo result in
+  not "airlock is robust against a determined attacker." For a model-in-the-loop
+  prompt-injection measurement (a fixed-template attack, not an adaptive one), see the
+  AgentDojo result in
   [`benchmarks/agentdojo/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md).
 - **Airlock's value depends on the developer declaring the contract.** The
   `amount=-1` block only happens because the airlocked tool declares

@@ -71,6 +71,9 @@ preset, and
   fail-open: until v0.10.21 a list `command` walked past both spawn guards, and until
   v0.10.24 six more guards skipped shapes (`ConfigPathGuard`, `McpConfigPinSet`, both eval
   guards, `StdioCommandInjectionGuard`'s non-string argv items, the env-interpolation guard).
+  v0.10.25 closed the same fail-open for a spelling, not a container: `bind_address_guard`
+  checked a literal list and a strict `ipaddress` parse, so the `inet_aton` spellings of
+  `0.0.0.0` (`0`, `0x0`) passed (`tests/test_redteam_wave3_findings_0_10_25.py`).
   A guard that walks nested values refuses input deeper than 32 levels or containing
   itself, as `DENY_UNINSPECTABLE` where it has a verdict enum
   (`tests/test_spawn_guards_fail_closed_0_10_21.py`,

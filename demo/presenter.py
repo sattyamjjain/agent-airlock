@@ -244,7 +244,7 @@ def act3() -> None:
     )
     print(f"\n  {dim('Incumbents (LlamaFirewall, Invariant) are model-in-the-loop —')}")
     print(f"  {dim('marked scope-claimed, not re-run. No fabricated competitor number.')}")
-    print(f"  {dim('Wired into AgentDojo as a defense: 84.4% of tool_knowledge')}")
+    print(f"  {dim('Wired into AgentDojo as a defense: 86.0% of tool_knowledge')}")
     print(f"  {dim('injection targets blocked at the tool seam.')}")
 
 

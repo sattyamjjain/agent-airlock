@@ -25,10 +25,11 @@ Usage:
 from __future__ import annotations
 
 import functools
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, Flag, auto
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from ._log import structlog
 
@@ -296,12 +297,37 @@ def requires(*capabilities: Capability) -> Callable[[F], F]:
     def decorator(func: F) -> F:
         func.__airlock_capabilities__ = combined  # type: ignore[attr-defined]
 
-        @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            return func(*args, **kwargs)
+        # The wrapper must keep the function's kind. `@Airlock` picks its sync or async
+        # wrapper with `asyncio.iscoroutinefunction`, so a plain `def` wrapper around an
+        # `async def` tool made it sync: a refusal came back as a dict the caller then
+        # awaited (TypeError), and an allowed call returned the un-run coroutine, which
+        # skipped output sanitization and the audit of the real result (fixed in 0.10.25).
+        wrapper: Any
+        if inspect.iscoroutinefunction(func):
 
-        wrapper.__airlock_capabilities__ = combined  # type: ignore[attr-defined]
-        return wrapper  # type: ignore[return-value]
+            @functools.wraps(func)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                return await func(*args, **kwargs)
+
+            wrapper = async_wrapper
+        elif inspect.isasyncgenfunction(func):
+
+            @functools.wraps(func)
+            async def async_gen_wrapper(*args: Any, **kwargs: Any) -> Any:
+                async for item in func(*args, **kwargs):
+                    yield item
+
+            wrapper = async_gen_wrapper
+        else:
+
+            @functools.wraps(func)
+            def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+                return func(*args, **kwargs)
+
+            wrapper = sync_wrapper
+
+        wrapper.__airlock_capabilities__ = combined
+        return cast(F, wrapper)
 
     return decorator
 

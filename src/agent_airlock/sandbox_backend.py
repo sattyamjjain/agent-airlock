@@ -626,8 +626,6 @@ class ManagedSandboxBackend(SandboxBackend):
 
     Why this backend exists:
 
-    - A Managed Agents story was tracked in #6 (v0.5.0 roadmap), which
-      closed 2026-05-03 without this landing. It is untracked today.
     - Users need a clear opt-in hook rather than discovering later that
       Managed Agents is not plug-compatible with `E2BBackend`.
 
@@ -642,12 +640,11 @@ class ManagedSandboxBackend(SandboxBackend):
       that wraps an agent loop rather than a single function call.
     - ``warmup()`` and ``shutdown()`` are no-ops.
 
-    Future work (**not currently tracked** — #6 is closed): a
-    session-based ``ManagedAgentExecutor``
-    that accepts a tool registry and a prompt, then runs a full agent
-    loop inside a Managed session. That lives outside the
-    ``SandboxBackend`` interface because the shapes disagree. When it
-    lands, this class will document the integration point.
+    Where Managed Agents is integrated instead: a session's built-in tool
+    calls are reviewed one by one with
+    :class:`~agent_airlock.integrations.claude_managed_agents.ManagedAgentToolGate`,
+    which answers the ``always_ask`` confirmation each call waits on. That
+    is an event loop, not a ``SandboxBackend``: the shapes disagree.
     """
 
     def __init__(self, api_key: str | None = None) -> None:
@@ -704,8 +701,9 @@ class ManagedSandboxBackend(SandboxBackend):
                 "ManagedSandboxBackend is a session-based backend: "
                 "single-function execute() is not supported. "
                 "See examples/anthropic_integration.py for the agent-loop "
-                "integration, or roadmap issue #6 for the planned "
-                "ManagedAgentExecutor interface."
+                "integration. To gate the built-in tools of a Managed Agents "
+                "session, review each agent.tool_use event with "
+                "ManagedAgentToolGate (agent_airlock.integrations.claude_managed_agents)."
             ),
             backend=self.name,
         )

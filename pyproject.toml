@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-airlock"
-version = "0.10.24"
+version = "0.10.25"
 description = "A type-checker and contract layer for AI agent tool calls, deny-by-default, in-process, Pydantic-only. Strict argument validation, ghost-argument stripping, and self-healing retries for MCP servers and agent frameworks."
 readme = "README.md"
 license = "Apache-2.0"
@@ -65,7 +65,7 @@ dependencies = [
 logging = [
     "structlog>=24.0",
 ]
-# Adaptive-attacker benchmark harness (v0.8.43+, issue: AgentDojo wiring).
+# AgentDojo prompt-injection benchmark harness (v0.8.43+, issue: AgentDojo wiring).
 # Install with: pip install "agent-airlock[bench]"
 # Pulls AgentDojo, used ONLY by benchmarks/agentdojo/. NEVER a core dependency —
 # the airlock core stays zero-dep and the harness gates the import.
@@ -218,6 +218,13 @@ dev = [
     # branches in sandbox_backend.execute() get skipped on bare
     # `[dev]` installs and CI loses real coverage on them.
     "cloudpickle>=3.0",
+    # Property-based and differential guard tests (tests/fuzz/, v0.10.25+). Test-only:
+    # rfc3986 and yarl are the reference URL parsers the differential tests compare the
+    # SSRF / endpoint gates against. Never core dependencies (check_core_deps.py).
+    "hypothesis>=6.100",
+    "rfc3986>=2.0",
+    "yarl>=1.9",
+    "httpx>=0.27",
 ]
 docs = [
     "mkdocs>=1.5",
@@ -402,10 +409,13 @@ disallow_untyped_calls = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 # Integration markers must be OPT-IN (``pytest -m docker``). The default
-# suite excludes them so CI does not need a Docker daemon.
-addopts = "-v --cov=agent_airlock --cov-report=term-missing --ignore=tests/benchmarks -m 'not docker'"
+# suite excludes them so CI does not need a Docker daemon. tests/live calls the
+# Anthropic API and spends API credit, so it is never collected by default:
+# `make test-live` names it and clears addopts.
+addopts = "-v --cov=agent_airlock --cov-report=term-missing --ignore=tests/benchmarks --ignore=tests/live -m 'not docker'"
 markers = [
     "docker: integration test that requires a running Docker daemon (opt in with `pytest -m docker`)",
+    "live: calls the Anthropic API and spends API credit; needs AIRLOCK_LIVE=1 and ANTHROPIC_API_KEY (`make test-live`)",
 ]
 
 [tool.coverage.run]
