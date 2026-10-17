@@ -1883,6 +1883,90 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcptox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool poisoning: MCPTox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fix-hints-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fix_hints recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adaptive-redteam/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adaptive red-team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2836,7 +2920,7 @@ The plan's usage limit stopped that re-run after 35 cells; the remaining 37, the
 benign arm among them, ran after the limit reset the same day (UTC).</p>
 <ul>
 <li><strong>Run date:</strong> 2026-10-03 · <strong>Cells:</strong> 144/144 measured, no exclusions</li>
-<li><strong>Reproduce:</strong> <code>python -m benchmarks.harness_injection --trials 18 --write --checkpoint ckpt.json --model codex=gpt-6-astra</code></li>
+<li><strong>Reproduce:</strong> <code>python -m benchmarks.harness_injection --run --trials 18 --write --checkpoint ckpt.json --model codex=gpt-6-astra</code></li>
 <li><strong>Raw table and full caveats:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md"><code>benchmarks/harness_injection/RESULTS.md</code></a></li>
 <li><strong>Not run in CI:</strong> it drives third-party coding agents against an injection-seeded
   fixture and spends real API budget, so it needs explicit operator sign-off.</li>

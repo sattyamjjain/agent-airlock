@@ -1928,6 +1928,90 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/mcptox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool poisoning: MCPTox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/fix-hints-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fix_hints recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/adaptive-redteam/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adaptive red-team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3098,13 +3182,15 @@ FastMCP expects <code>total</code>.</p>
 <h2 id="error-responses">Error Responses<a class="headerlink" href="#error-responses" title="Permanent link">&para;</a></h2>
 <p><code>MCPAirlock</code> raises a blocked call as FastMCP's <code>ToolError</code> with this text, and FastMCP
 sends the client an error result (<code>isError</code> true) carrying it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>Error: AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy
 <a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
 <a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>Suggested fixes:
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>- This operation is not permitted by the current security policy
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>- Contact the administrator if you believe this is an error
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>- This tool is not permitted whatever the arguments; do not retry it
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>- Continue without it, or tell the user it is not permitted
 </code></pre></div>
-<p>The LLM can read the suggested fixes and adjust its next call. Being an error result, it
+<p>The LLM can read the suggested fixes and adjust its next call. The refusal names what is
+allowed, never which deny rule matched: the <code>delete_*</code> glob stays in your logs and
+<code>on_blocked</code>, out of the model's context (since 0.10.25). Being an error result, it
 does not have to fit the tool's output schema, so it reaches the client the same way for a
 <code>-&gt; str</code>, <code>-&gt; dict</code> or <code>-&gt; int</code> tool. Until 0.10.18 the text was returned in place of the
 tool's result, and only a <code>-&gt; str</code> tool passed it on intact. Without FastMCP installed, the
@@ -3113,18 +3199,19 @@ wrapper returns the text instead of raising.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="s2">"success"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="s2">"status"</span><span class="p">:</span> <span class="s2">"blocked"</span><span class="p">,</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="s2">"error"</span><span class="p">:</span> <span class="s2">"AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy (matches 'delete_*')"</span><span class="p">,</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="s2">"error"</span><span class="p">:</span> <span class="s2">"AIRLOCK_BLOCK: Policy violation for 'delete_user'. Tool 'delete_user' is denied by policy"</span><span class="p">,</span>
 <a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="s2">"block_reason"</span><span class="p">:</span> <span class="s2">"policy_violation"</span><span class="p">,</span>
 <a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="s2">"fix_hints"</span><span class="p">:</span> <span class="p">[</span>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>        <span class="s2">"This operation is not permitted by the current security policy"</span><span class="p">,</span>
-<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>        <span class="s2">"Contact the administrator if you believe this is an error"</span><span class="p">,</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>        <span class="s2">"This tool is not permitted whatever the arguments; do not retry it"</span><span class="p">,</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>        <span class="s2">"Continue without it, or tell the user it is not permitted"</span><span class="p">,</span>
 <a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    <span class="p">],</span>
 <a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="s2">"metadata"</span><span class="p">:</span> <span class="p">{</span>
 <a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>        <span class="s2">"function"</span><span class="p">:</span> <span class="s2">"delete_user"</span><span class="p">,</span>
 <a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>        <span class="s2">"policy"</span><span class="p">:</span> <span class="s2">"SecurityPolicy"</span><span class="p">,</span>
-<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>        <span class="s2">"violation_reason"</span><span class="p">:</span> <span class="s2">"Tool 'delete_user' is denied by policy (matches 'delete_*')"</span><span class="p">,</span>
-<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a>    <span class="p">},</span>
-<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a><span class="p">}</span>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>        <span class="s2">"violation_reason"</span><span class="p">:</span> <span class="s2">"Tool 'delete_user' is denied by policy"</span><span class="p">,</span>
+<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a>        <span class="s2">"violation_type"</span><span class="p">:</span> <span class="s2">"tool_denied"</span><span class="p">,</span>
+<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a>    <span class="p">},</span>
+<a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a><span class="p">}</span>
 </code></pre></div>
 <p>Arguments FastMCP rejects never reach Airlock: a value it cannot coerce to the parameter's
 type, or an argument the tool does not declare, gets FastMCP's own validation error.</p>

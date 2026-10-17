@@ -1667,6 +1667,90 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/mcptox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool poisoning: MCPTox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/fix-hints-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fix_hints recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/adaptive-redteam/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adaptive red-team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2851,11 +2935,16 @@ reconstructed from the tool-poisoning technique in
 <li><strong>69.2% static contract-checking coverage</strong> of the injection-shaped descriptions,</li>
 <li><strong>100% precision</strong> (no false positives on clean descriptions).</li>
 </ul>
-<p>This is a <em>static</em> coverage number on labeled fixtures — <strong>not</strong> MCPTox's
-model-in-the-loop Attack Success Rate (up to 72% across 1,312 cases on 45 live
-servers), which is a property of agents, not of a static checker. The
+<p>This is a <em>static</em> coverage number on 23 hand-written fixtures — <strong>not</strong> MCPTox's
+model-in-the-loop Attack Success Rate (MCPTox: 45 live servers, 353 tools; 1,348 cases
+in its released data, 1,312 in the paper's version 1; top reported attack success rate
+72.8%, o1-mini), which is a property of agents, not of a static checker. The
 <code>declarative_side_effect</code> fixtures (a malicious side effect stated with no
-imperative marker) are honest misses, which is why coverage is 69.2%, not 100%. See
+imperative marker) are honest misses, which is why coverage is 69.2%, not 100%.</p>
+<p>On MCPTox's <strong>real</strong> poisoned descriptions the same check flags far fewer: <strong>157 of
+1,338 unique descriptions (11.7%)</strong>, with 1 false positive in 362 clean tool blocks
+(measured 2026-10-12 with <code>python -m benchmarks.scantools_mcptox --mcptox-data --fetch</code>).
+Quote the fixture rate only beside that one. See
 <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/scantools_mcptox/RESULTS.md"><code>benchmarks/scantools_mcptox/RESULTS.md</code></a>.</p>
 <h2 id="programmatic-use">Programmatic use<a class="headerlink" href="#programmatic-use" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.scan</span><span class="w"> </span><span class="kn">import</span> <span class="n">scan_tools</span><span class="p">,</span> <span class="n">resolve_policy</span><span class="p">,</span> <span class="n">load_tool_defs</span>

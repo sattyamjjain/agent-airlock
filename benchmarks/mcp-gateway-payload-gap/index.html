@@ -16,7 +16,7 @@
         <link rel="prev" href="../vs-native-mcp-gateway/">
       
       
-        <link rel="next" href="../../COMPATIBILITY/">
+        <link rel="next" href="../mcptox/">
       
       
         
@@ -1828,6 +1828,90 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcptox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool poisoning: MCPTox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fix-hints-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fix_hints recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adaptive-redteam/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adaptive red-team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2951,8 +3035,9 @@ payload at the function boundary. That's the gap the 12/12 measures:</p>
   The corpus is agent-airlock's own fixtures — shapes the guards are built to
   catch. A novel payload outside a guard's pattern set can pass airlock too. Treat
   this as "the contract layer catches the contract-layer classes it claims to,"
-  not "airlock is robust against a determined attacker." For the adaptive angle,
-  see the AgentDojo result in
+  not "airlock is robust against a determined attacker." For a model-in-the-loop
+  prompt-injection measurement (a fixed-template attack, not an adaptive one), see the
+  AgentDojo result in
   <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md"><code>benchmarks/agentdojo/RESULTS.md</code></a>.</li>
 <li><strong>Airlock's value depends on the developer declaring the contract.</strong> The
   <code>amount=-1</code> block only happens because the airlocked tool declares

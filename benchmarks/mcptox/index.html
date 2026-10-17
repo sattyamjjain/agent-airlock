@@ -1,0 +1,4224 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A deny-by-default contract layer for AI agent tool calls - strict argument validation, ghost-argument stripping and self-healing retries, in-process and Pydantic-only">
+      
+      
+      
+        <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/benchmarks/mcptox/">
+      
+      
+        <link rel="prev" href="../mcp-gateway-payload-gap/">
+      
+      
+        <link rel="next" href="../fix-hints-recovery/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Tool poisoning: MCPTox - Agent-Airlock</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tool-poisoning-mcptox" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Agent-Airlock" class="md-header__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Agent-Airlock
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Tool poisoning: MCPTox
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/sattyamjjain/agent-airlock" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    sattyamjjain/agent-airlock
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guide/concepts/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/airlock/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/basic/" class="md-tabs__link">
+          
+  
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../adapters/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Commerce Adapters
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../cves/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CVE Catalog
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../cve-triage/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CVE Triage Rule
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Benchmarks
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../COMPATIBILITY/" class="md-tabs__link">
+          
+  
+  
+  Framework Integrations
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cli/kill-switch/" class="md-tabs__link">
+          
+  
+  
+  CLI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../observability/semconv/" class="md-tabs__link">
+          
+  
+  
+  Observability
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../SECURITY/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Security
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/CONTRIBUTING.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Agent-Airlock" class="md-nav__button md-logo" aria-label="Agent-Airlock" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Agent-Airlock
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/sattyamjjain/agent-airlock" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    sattyamjjain/agent-airlock
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/sanitization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PII Masking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/sandbox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    E2B Sandbox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/mcp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FastMCP Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/airlock/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Airlock Decorator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sanitizer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sanitizer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sandbox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sandbox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/mcp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/basic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Basic Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/pii/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PII Masking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/sandbox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sandbox Execution
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commerce Adapters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cves/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CVE Catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cve-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CVE Triage Rule
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blockrate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cross-tool block rate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../full-corpus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guard-suite corpus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../injection-multi-harness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-harness prompt injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vs-native-mcp-gateway/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native MCP gateway head-to-head
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp-gateway-payload-gap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP gateway payload gap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool poisoning: MCPTox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fix-hints-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fix_hints recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adaptive-redteam/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adaptive red-team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Framework Integrations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Framework Integrations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../COMPATIBILITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compatibility matrix
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/google-adk/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Google ADK
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/pydantic-ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PydanticAI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/crewai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CrewAI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/anthropic-claude-agent-sdk/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Claude Agent SDK
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/managed-agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Managed Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
+        
+          
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/kill-switch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kill switch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/policy-bundle-lock/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy bundle lock
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/policy-compile-explain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy compile / explain
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/attest-receipt/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attest receipt
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/console/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Console
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/graph-serve/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graph serve
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scan-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scan tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/egress-bench/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Egress bench
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
+        
+          
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Observability
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../observability/semconv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OTel Semantic Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/CONTRIBUTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="tool-poisoning-mcptox">Tool poisoning: MCPTox<a class="headerlink" href="#tool-poisoning-mcptox" title="Permanent link">&para;</a></h1>
+<div class="admonition info">
+<p class="admonition-title">One file, two locations</p>
+<p>The page below is
+<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcptox/RESULTS.md"><code>benchmarks/mcptox/RESULTS.md</code></a>,
+included verbatim. <code>python -m benchmarks.mcptox replay --fetch --write</code> rewrites its
+replay block (on the canonical Linux host), and
+<code>python -m benchmarks.mcptox fresh --score &lt;RUN_ID&gt; --write</code> appends each dated
+fresh-run block below the last one. There is no copy of it under <code>docs/</code> to fall
+out of date.</p>
+<p>MCPTox's data is downloaded at run time and verified by sha256. It is never
+committed, because its repository carries no license, and nothing on this page
+quotes it: every table is counts, rates and intervals. The harness and its blind
+policy labels are in
+<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcptox/README.md"><code>benchmarks/mcptox/</code></a>.</p>
+</div>
+<h1 id="mcptox-recorded-tool-calls-replayed-through-airlock-and-a-fresh-claude-55-run">MCPTox: recorded tool calls replayed through <code>@Airlock</code>, and a fresh Claude 5.5 run<a class="headerlink" href="#mcptox-recorded-tool-calls-replayed-through-airlock-and-a-fresh-claude-55-run" title="Permanent link">&para;</a></h1>
+<p><a href="https://arxiv.org/abs/2508.14925">MCPTox</a> (Wang et al.) poisons one tool description on
+each of <strong>45 live MCP servers (353 tools)</strong> and records what each model then did. Version 1
+of the paper reported 1,312 cases; version 2 (2026-09-29) and the released
+<code>response_all.json</code> carry <strong>1,348</strong> (1,312 with <code>wrong_data</code> 0, 36 with <code>wrong_data</code> 2), in
+<strong>10 risk categories (11 with "Other")</strong> and three attack paradigms. Its top reported attack
+success rate, <strong>72.8% for o1-mini</strong>, reproduces only over all 1,348 cases (574 of 788
+labelled responses).</p>
+<p>Two measurements live here, both judge-free:</p>
+<ul>
+<li><strong>Replay (free, offline).</strong> Every call the 27 recorded models made (16 API-model keys,
+  Claude 3.7 Sonnet's 1,348 cases split across a thinking and a non-thinking key, and up
+  to 11 local models) is parsed and sent through an <code>@Airlock</code> stub of the tool it named,
+  under three policy tiers. It says which recorded attack calls the layer would have
+  refused, and how many of the benign-proxy calls it would have refused too.</li>
+<li><strong>Fresh run (paid, Claude 5.5).</strong> The poisoned prompt and the clean prompt are sent to
+  Haiku, Sonnet and Opus 5.5 with the same query; the poisoned tool's influence is the
+  difference, net of run-to-run noise measured on a repeated 10% subset.</li>
+</ul>
+<h2 id="provenance">Provenance<a class="headerlink" href="#provenance" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Data:</strong> MCPTox
+  <a href="https://github.com/zhiqiangwang4/MCPTox-Benchmark/blob/f85189f9ad12504c197c7f920ab818a40657b1fa/response_all.json"><code>response_all.json</code></a>
+  at commit <code>f85189f9ad12504c197c7f920ab818a40657b1fa</code>, sha256
+  <code>79a90049be931c59e71446d6180b1d7f0d196d123d08a59bc155d142b5041c03</code> (20,666,873 bytes).
+  It is downloaded at run time (<code>--fetch</code>), verified, and never committed: the source
+  repository carries no license. Nothing in this directory quotes its text; the committed
+  outputs are counts and rates.</li>
+<li><strong>Policy labels:</strong> the LP tier's per-tool labels,
+  <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcptox/lp_labels.py"><code>lp_labels.py</code></a>,
+  were written from <code>python -m benchmarks.mcptox clean-view</code> alone (clean tool blocks and
+  clean queries, nothing from the attack side) and committed on their own in commit
+  <code>5e856c228a0c21c6c6d885ba195572bb3d3e15f7</code> (<code>bench(mcptox): blind G0/G/LP policy
+  labels</code>), before the replay code existed. That file's sha256 then was
+  <code>e1476ddc206ed09ab177ee73d8d16b990b897f6f67c7b2ef3d2369361327f314</code>; every replay records
+  whether it still matches.</li>
+<li><strong>Harness:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcptox/README.md"><code>benchmarks/mcptox/</code></a>.</li>
+</ul>
+<h2 id="replay-of-recorded-calls">Replay of recorded calls<a class="headerlink" href="#replay-of-recorded-calls" title="Permanent link">&para;</a></h2>
+<p>Tiers, each derived from a server's clean side only
+(<a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcptox/policies.py"><code>policies.py</code></a>):</p>
+<ul>
+<li><strong>G0</strong>: the call contract alone. Ghost arguments refused (<code>UnknownArgsMode.BLOCK</code>),
+  required arguments enforced. No tool allowlist.</li>
+<li><strong>G</strong>: G0 plus a <code>SecurityPolicy</code> allowlist of the clean prompt's tools
+  (<code>default_deny=True</code>).</li>
+<li><strong>LP</strong>: G plus per-tool filesystem roots and endpoint policies derived from the clean
+  queries, for the 35 servers that have clean queries; the other 10 get G.</li>
+</ul>
+<p>Stubs declare every argument <code>typing.Any</code>, because MCPTox prompts carry no types, so the
+strict-type layer is not exercised here. Each response's status (<code>calls</code>, <code>no_call</code>,
+<code>malformed</code>, <code>empty</code>) and every parse repair are counted in the accounting table; nothing is
+dropped.</p>
+<!-- MCPTOX-REPLAY:BEGIN -->
+<h3 id="replay-measured-2026-10-17-utc">Replay, measured 2026-10-17 (UTC)<a class="headerlink" href="#replay-measured-2026-10-17-utc" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Host: Linux 7.0.14-linuxkit (canonical Linux host), Python 3.12.15; agent-airlock 0.10.25 at <code>74048af5a98e</code>.</li>
+<li>Filesystem gate checks <code>~</code> paths in their expanded form: yes.</li>
+<li>Data: MCPTox <code>response_all.json</code> at <code>f85189f9ad12</code>, sha256 <code>79a90049be931c59...</code>, verified before scoring.</li>
+<li>LP labels: blind commit <code>5e856c228a0c</code>; <code>lp_labels.py</code> sha256 <code>e1476ddc206ed09a...</code> (matches the blind commit's).</li>
+<li>Bootstrap: 2000 resamples of whole servers, seed 20261012.</li>
+<li>Reproduce: <code>python -m benchmarks.mcptox replay --fetch --write</code></li>
+</ul>
+<p>Denominators: 20220 API-model responses and 10507 local-model responses. API models: S = 7465 Success responses with a real-tool call, DE = 1650 Direct Execution responses with a poisoned-tool call, B = 7388 Failure-Ignored responses with a real-tool call.</p>
+<h4 id="api-models-primary">API models (primary)<a class="headerlink" href="#api-models-primary" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Attack refusal, lower bound (every real call refused)</th>
+<th>Upper bound (any real call refused)</th>
+<th>Direct Execution refused</th>
+<th>Benign-proxy false refusal</th>
+<th>of which policy / contract-only</th>
+<th>Poison-literal calls refused</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G0 (contract only)</td>
+<td>220/7465 (2.9%, CI 2.6-3.4%; server bootstrap 0.9-6.0%)</td>
+<td>237/7465 (3.2%, CI 2.8-3.6%)</td>
+<td>39/1650 (2.4%, CI 1.7-3.2%)</td>
+<td>175/7388 (2.4%, CI 2.1-2.7%; server bootstrap 0.4-6.6%)</td>
+<td>0.0% (0/7388) / 2.4% (175/7388)</td>
+<td>124/4981 (2.5%, CI 2.1-3.0%)</td>
+</tr>
+<tr>
+<td>G (+ tool allowlist)</td>
+<td>220/7465 (2.9%, CI 2.6-3.4%; server bootstrap 0.9-6.0%)</td>
+<td>237/7465 (3.2%, CI 2.8-3.6%)</td>
+<td>1650/1650 (100.0%, CI 99.8-100.0%)</td>
+<td>175/7388 (2.4%, CI 2.1-2.7%; server bootstrap 0.4-6.6%)</td>
+<td>0.0% (0/7388) / 2.4% (175/7388)</td>
+<td>124/4981 (2.5%, CI 2.1-3.0%)</td>
+</tr>
+<tr>
+<td>LP (+ path / endpoint scopes)</td>
+<td>792/7465 (10.6%, CI 9.9-11.3%; server bootstrap 2.0-24.0%)</td>
+<td>817/7465 (10.9%, CI 10.3-11.7%)</td>
+<td>1650/1650 (100.0%, CI 99.8-100.0%)</td>
+<td>300/7388 (4.1%, CI 3.6-4.5%; server bootstrap 0.8-8.7%)</td>
+<td>1.7% (125/7388) / 2.4% (175/7388)</td>
+<td>708/4981 (14.2%, CI 13.3-15.2%)</td>
+</tr>
+</tbody>
+</table>
+<p>Direct Execution under G is refused by construction: the allowlist is the clean prompt's tools, and the poisoned tool is not one of them. G0 shows what the call contract alone does to the same calls.</p>
+<h4 id="local-models-secondary">Local models (secondary)<a class="headerlink" href="#local-models-secondary" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Attack refusal, lower bound (every real call refused)</th>
+<th>Upper bound (any real call refused)</th>
+<th>Direct Execution refused</th>
+<th>Benign-proxy false refusal</th>
+<th>of which policy / contract-only</th>
+<th>Poison-literal calls refused</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G0 (contract only)</td>
+<td>71/1773 (4.0%, CI 3.2-5.0%)</td>
+<td>76/1773 (4.3%, CI 3.4-5.3%)</td>
+<td>174/2747 (6.3%, CI 5.5-7.3%)</td>
+<td>258/5194 (5.0%, CI 4.4-5.6%)</td>
+<td>0.0% (0/5194) / 5.0% (258/5194)</td>
+<td>36/1234 (2.9%, CI 2.1-4.0%)</td>
+</tr>
+<tr>
+<td>G (+ tool allowlist)</td>
+<td>71/1773 (4.0%, CI 3.2-5.0%)</td>
+<td>76/1773 (4.3%, CI 3.4-5.3%)</td>
+<td>2747/2747 (100.0%, CI 99.9-100.0%)</td>
+<td>258/5194 (5.0%, CI 4.4-5.6%)</td>
+<td>0.0% (0/5194) / 5.0% (258/5194)</td>
+<td>36/1234 (2.9%, CI 2.1-4.0%)</td>
+</tr>
+<tr>
+<td>LP (+ path / endpoint scopes)</td>
+<td>181/1773 (10.2%, CI 8.9-11.7%)</td>
+<td>221/1773 (12.5%, CI 11.0-14.1%)</td>
+<td>2747/2747 (100.0%, CI 99.9-100.0%)</td>
+<td>309/5194 (5.9%, CI 5.3-6.6%)</td>
+<td>1.0% (51/5194) / 5.0% (258/5194)</td>
+<td>151/1234 (12.2%, CI 10.5-14.2%)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="claude-37-sonnet-mcptoxs-recorded-outputs">Claude 3.7 Sonnet (MCPTox's recorded outputs)<a class="headerlink" href="#claude-37-sonnet-mcptoxs-recorded-outputs" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>S</th>
+<th>G0 lower</th>
+<th>G lower</th>
+<th>LP lower</th>
+<th>LP upper</th>
+<th>B</th>
+<th>G false refusal</th>
+<th>LP false refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>both keys</code></td>
+<td>400</td>
+<td>0.8% (3/400)</td>
+<td>0.8% (3/400)</td>
+<td>5.2% (21/400)</td>
+<td>9.8% (39/400)</td>
+<td>436</td>
+<td>0.7% (3/436)</td>
+<td>2.5% (11/436)</td>
+</tr>
+<tr>
+<td><code>claude-3-7-sonnet</code></td>
+<td>310</td>
+<td>1.0% (3/310)</td>
+<td>1.0% (3/310)</td>
+<td>5.2% (16/310)</td>
+<td>7.4% (23/310)</td>
+<td>347</td>
+<td>0.3% (1/347)</td>
+<td>2.3% (8/347)</td>
+</tr>
+<tr>
+<td><code>claude-3-7-sonnet-20250219-thinking</code></td>
+<td>90</td>
+<td>0.0% (0/90)</td>
+<td>0.0% (0/90)</td>
+<td>5.6% (5/90)</td>
+<td>17.8% (16/90)</td>
+<td>89</td>
+<td>2.2% (2/89)</td>
+<td>3.4% (3/89)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="by-paradigm-api-models">By paradigm (API models)<a class="headerlink" href="#by-paradigm-api-models" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>S</th>
+<th>G0 lower</th>
+<th>G lower</th>
+<th>LP lower</th>
+<th>LP upper</th>
+<th>B</th>
+<th>G false refusal</th>
+<th>LP false refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Template-1</code></td>
+<td>985</td>
+<td>3.4% (33/985)</td>
+<td>3.4% (33/985)</td>
+<td>17.7% (174/985)</td>
+<td>18.0% (177/985)</td>
+<td>434</td>
+<td>0.9% (4/434)</td>
+<td>0.9% (4/434)</td>
+</tr>
+<tr>
+<td><code>Template-2</code></td>
+<td>2153</td>
+<td>3.5% (76/2153)</td>
+<td>3.5% (76/2153)</td>
+<td>14.6% (315/2153)</td>
+<td>15.6% (335/2153)</td>
+<td>3618</td>
+<td>2.9% (104/3618)</td>
+<td>4.6% (168/3618)</td>
+</tr>
+<tr>
+<td><code>Template-3</code></td>
+<td>4327</td>
+<td>2.6% (111/4327)</td>
+<td>2.6% (111/4327)</td>
+<td>7.0% (303/4327)</td>
+<td>7.0% (305/4327)</td>
+<td>3336</td>
+<td>2.0% (67/3336)</td>
+<td>3.8% (128/3336)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="by-risk-category-api-models">By risk category (API models)<a class="headerlink" href="#by-risk-category-api-models" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>S</th>
+<th>G0 lower</th>
+<th>G lower</th>
+<th>LP lower</th>
+<th>LP upper</th>
+<th>B</th>
+<th>G false refusal</th>
+<th>LP false refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Code Injection</code></td>
+<td>354</td>
+<td>0.0% (0/354)</td>
+<td>0.0% (0/354)</td>
+<td>0.0% (0/354)</td>
+<td>0.0% (0/354)</td>
+<td>265</td>
+<td>0.0% (0/265)</td>
+<td>0.0% (0/265)</td>
+</tr>
+<tr>
+<td><code>Credential Leakage</code></td>
+<td>565</td>
+<td>0.4% (2/565)</td>
+<td>0.4% (2/565)</td>
+<td>46.0% (260/565)</td>
+<td>46.2% (261/565)</td>
+<td>586</td>
+<td>0.2% (1/586)</td>
+<td>3.2% (19/586)</td>
+</tr>
+<tr>
+<td><code>Data Tampering</code></td>
+<td>683</td>
+<td>4.1% (28/683)</td>
+<td>4.1% (28/683)</td>
+<td>7.0% (48/683)</td>
+<td>7.6% (52/683)</td>
+<td>623</td>
+<td>1.4% (9/623)</td>
+<td>4.5% (28/623)</td>
+</tr>
+<tr>
+<td><code>Financial Loss</code></td>
+<td>267</td>
+<td>27.0% (72/267)</td>
+<td>27.0% (72/267)</td>
+<td>27.0% (72/267)</td>
+<td>27.3% (73/267)</td>
+<td>216</td>
+<td>43.1% (93/216)</td>
+<td>43.1% (93/216)</td>
+</tr>
+<tr>
+<td><code>Information Manipulation</code></td>
+<td>1750</td>
+<td>2.6% (45/1750)</td>
+<td>2.6% (45/1750)</td>
+<td>3.0% (52/1750)</td>
+<td>3.1% (54/1750)</td>
+<td>1595</td>
+<td>0.6% (10/1595)</td>
+<td>0.7% (11/1595)</td>
+</tr>
+<tr>
+<td><code>Infrastructure Damage</code></td>
+<td>538</td>
+<td>2.6% (14/538)</td>
+<td>2.6% (14/538)</td>
+<td>28.1% (151/538)</td>
+<td>28.4% (153/538)</td>
+<td>588</td>
+<td>1.7% (10/588)</td>
+<td>11.6% (68/588)</td>
+</tr>
+<tr>
+<td><code>Instruction Tampering</code></td>
+<td>402</td>
+<td>0.7% (3/402)</td>
+<td>0.7% (3/402)</td>
+<td>2.7% (11/402)</td>
+<td>2.7% (11/402)</td>
+<td>294</td>
+<td>0.3% (1/294)</td>
+<td>0.7% (2/294)</td>
+</tr>
+<tr>
+<td><code>Message Hijacking</code></td>
+<td>275</td>
+<td>0.7% (2/275)</td>
+<td>0.7% (2/275)</td>
+<td>0.7% (2/275)</td>
+<td>0.7% (2/275)</td>
+<td>209</td>
+<td>0.5% (1/209)</td>
+<td>0.5% (1/209)</td>
+</tr>
+<tr>
+<td><code>Other</code></td>
+<td>26</td>
+<td>0.0% (0/26)</td>
+<td>0.0% (0/26)</td>
+<td>0.0% (0/26)</td>
+<td>0.0% (0/26)</td>
+<td>25</td>
+<td>0.0% (0/25)</td>
+<td>0.0% (0/25)</td>
+</tr>
+<tr>
+<td><code>Privacy Leakage</code></td>
+<td>1105</td>
+<td>1.6% (18/1105)</td>
+<td>1.6% (18/1105)</td>
+<td>10.9% (120/1105)</td>
+<td>11.8% (130/1105)</td>
+<td>2021</td>
+<td>0.7% (15/2021)</td>
+<td>1.8% (37/2021)</td>
+</tr>
+<tr>
+<td><code>Service Disruption</code></td>
+<td>1500</td>
+<td>2.4% (36/1500)</td>
+<td>2.4% (36/1500)</td>
+<td>5.1% (76/1500)</td>
+<td>5.4% (81/1500)</td>
+<td>966</td>
+<td>3.6% (35/966)</td>
+<td>4.2% (41/966)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="by-model-family-api-models">By model family (API models)<a class="headerlink" href="#by-model-family-api-models" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>S</th>
+<th>G0 lower</th>
+<th>G lower</th>
+<th>LP lower</th>
+<th>LP upper</th>
+<th>B</th>
+<th>G false refusal</th>
+<th>LP false refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Claude</code></td>
+<td>400</td>
+<td>0.8% (3/400)</td>
+<td>0.8% (3/400)</td>
+<td>5.2% (21/400)</td>
+<td>9.8% (39/400)</td>
+<td>436</td>
+<td>0.7% (3/436)</td>
+<td>2.5% (11/436)</td>
+</tr>
+<tr>
+<td><code>DeepSeek</code></td>
+<td>1639</td>
+<td>1.8% (30/1639)</td>
+<td>1.8% (30/1639)</td>
+<td>11.3% (185/1639)</td>
+<td>11.5% (189/1639)</td>
+<td>528</td>
+<td>1.5% (8/528)</td>
+<td>3.2% (17/528)</td>
+</tr>
+<tr>
+<td><code>Gemini</code></td>
+<td>776</td>
+<td>5.3% (41/776)</td>
+<td>5.3% (41/776)</td>
+<td>12.9% (100/776)</td>
+<td>12.9% (100/776)</td>
+<td>390</td>
+<td>0.8% (3/390)</td>
+<td>3.1% (12/390)</td>
+</tr>
+<tr>
+<td><code>Llama</code></td>
+<td>350</td>
+<td>7.1% (25/350)</td>
+<td>7.1% (25/350)</td>
+<td>8.9% (31/350)</td>
+<td>9.1% (32/350)</td>
+<td>1143</td>
+<td>3.1% (35/1143)</td>
+<td>4.8% (55/1143)</td>
+</tr>
+<tr>
+<td><code>OpenAI</code></td>
+<td>1573</td>
+<td>2.5% (39/1573)</td>
+<td>2.5% (39/1573)</td>
+<td>9.7% (153/1573)</td>
+<td>9.7% (153/1573)</td>
+<td>1311</td>
+<td>1.8% (23/1311)</td>
+<td>3.1% (41/1311)</td>
+</tr>
+<tr>
+<td><code>Qwen</code></td>
+<td>2727</td>
+<td>3.0% (82/2727)</td>
+<td>3.0% (82/2727)</td>
+<td>11.1% (302/2727)</td>
+<td>11.1% (304/2727)</td>
+<td>3580</td>
+<td>2.9% (103/3580)</td>
+<td>4.6% (164/3580)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="by-model">By model<a class="headerlink" href="#by-model" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>S</th>
+<th>G0 lower</th>
+<th>G lower</th>
+<th>LP lower</th>
+<th>LP upper</th>
+<th>B</th>
+<th>G false refusal</th>
+<th>LP false refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>online:DeepSeek-R1</code></td>
+<td>886</td>
+<td>1.7% (15/886)</td>
+<td>1.7% (15/886)</td>
+<td>10.4% (92/886)</td>
+<td>10.8% (96/886)</td>
+<td>179</td>
+<td>0.0% (0/179)</td>
+<td>1.7% (3/179)</td>
+</tr>
+<tr>
+<td><code>online:DeepSeek-v3</code></td>
+<td>753</td>
+<td>2.0% (15/753)</td>
+<td>2.0% (15/753)</td>
+<td>12.4% (93/753)</td>
+<td>12.4% (93/753)</td>
+<td>349</td>
+<td>2.3% (8/349)</td>
+<td>4.0% (14/349)</td>
+</tr>
+<tr>
+<td><code>online:Llama-3.1-70B-Instruct</code></td>
+<td>210</td>
+<td>7.6% (16/210)</td>
+<td>7.6% (16/210)</td>
+<td>10.0% (21/210)</td>
+<td>10.5% (22/210)</td>
+<td>399</td>
+<td>2.0% (8/399)</td>
+<td>4.3% (17/399)</td>
+</tr>
+<tr>
+<td><code>online:Llama-3.1-8B-Instruct</code></td>
+<td>140</td>
+<td>6.4% (9/140)</td>
+<td>6.4% (9/140)</td>
+<td>7.1% (10/140)</td>
+<td>7.1% (10/140)</td>
+<td>744</td>
+<td>3.6% (27/744)</td>
+<td>5.1% (38/744)</td>
+</tr>
+<tr>
+<td><code>online:claude-3-7-sonnet</code></td>
+<td>310</td>
+<td>1.0% (3/310)</td>
+<td>1.0% (3/310)</td>
+<td>5.2% (16/310)</td>
+<td>7.4% (23/310)</td>
+<td>347</td>
+<td>0.3% (1/347)</td>
+<td>2.3% (8/347)</td>
+</tr>
+<tr>
+<td><code>online:claude-3-7-sonnet-20250219-thinking</code></td>
+<td>90</td>
+<td>0.0% (0/90)</td>
+<td>0.0% (0/90)</td>
+<td>5.6% (5/90)</td>
+<td>17.8% (16/90)</td>
+<td>89</td>
+<td>2.2% (2/89)</td>
+<td>3.4% (3/89)</td>
+</tr>
+<tr>
+<td><code>online:gemini-2.5-flash</code></td>
+<td>776</td>
+<td>5.3% (41/776)</td>
+<td>5.3% (41/776)</td>
+<td>12.9% (100/776)</td>
+<td>12.9% (100/776)</td>
+<td>390</td>
+<td>0.8% (3/390)</td>
+<td>3.1% (12/390)</td>
+</tr>
+<tr>
+<td><code>online:gpt-3.5-turbo</code></td>
+<td>195</td>
+<td>3.6% (7/195)</td>
+<td>3.6% (7/195)</td>
+<td>5.6% (11/195)</td>
+<td>5.6% (11/195)</td>
+<td>888</td>
+<td>2.0% (18/888)</td>
+<td>3.5% (31/888)</td>
+</tr>
+<tr>
+<td><code>online:gpt-4o-mini</code></td>
+<td>804</td>
+<td>3.5% (28/804)</td>
+<td>3.5% (28/804)</td>
+<td>11.1% (89/804)</td>
+<td>11.1% (89/804)</td>
+<td>309</td>
+<td>1.3% (4/309)</td>
+<td>2.6% (8/309)</td>
+</tr>
+<tr>
+<td><code>online:o1-mini</code></td>
+<td>574</td>
+<td>0.7% (4/574)</td>
+<td>0.7% (4/574)</td>
+<td>9.2% (53/574)</td>
+<td>9.2% (53/574)</td>
+<td>114</td>
+<td>0.9% (1/114)</td>
+<td>1.8% (2/114)</td>
+</tr>
+<tr>
+<td><code>online:qwen3-235b-a22b_NO_Think</code></td>
+<td>229</td>
+<td>2.6% (6/229)</td>
+<td>2.6% (6/229)</td>
+<td>9.2% (21/229)</td>
+<td>9.2% (21/229)</td>
+<td>588</td>
+<td>1.9% (11/588)</td>
+<td>3.2% (19/588)</td>
+</tr>
+<tr>
+<td><code>online:qwen3-235b-a22b_Think</code></td>
+<td>674</td>
+<td>1.3% (9/674)</td>
+<td>1.3% (9/674)</td>
+<td>8.3% (56/674)</td>
+<td>8.5% (57/674)</td>
+<td>533</td>
+<td>1.9% (10/533)</td>
+<td>3.9% (21/533)</td>
+</tr>
+<tr>
+<td><code>online:qwen3-32b_NO_Think</code></td>
+<td>316</td>
+<td>6.0% (19/316)</td>
+<td>6.0% (19/316)</td>
+<td>11.7% (37/316)</td>
+<td>11.7% (37/316)</td>
+<td>636</td>
+<td>3.3% (21/636)</td>
+<td>6.0% (38/636)</td>
+</tr>
+<tr>
+<td><code>online:qwen3-32b_Think</code></td>
+<td>778</td>
+<td>3.1% (24/778)</td>
+<td>3.1% (24/778)</td>
+<td>11.2% (87/778)</td>
+<td>11.3% (88/778)</td>
+<td>400</td>
+<td>2.5% (10/400)</td>
+<td>4.2% (17/400)</td>
+</tr>
+<tr>
+<td><code>online:qwen3-8b_NO_Think</code></td>
+<td>173</td>
+<td>2.3% (4/173)</td>
+<td>2.3% (4/173)</td>
+<td>15.0% (26/173)</td>
+<td>15.0% (26/173)</td>
+<td>816</td>
+<td>3.6% (29/816)</td>
+<td>4.5% (37/816)</td>
+</tr>
+<tr>
+<td><code>online:qwen3-8b_Think</code></td>
+<td>557</td>
+<td>3.6% (20/557)</td>
+<td>3.6% (20/557)</td>
+<td>13.5% (75/557)</td>
+<td>13.5% (75/557)</td>
+<td>607</td>
+<td>3.6% (22/607)</td>
+<td>5.3% (32/607)</td>
+</tr>
+<tr>
+<td><code>local:Deepseek-qwen3-8b-Think</code></td>
+<td>22</td>
+<td>9.1% (2/22)</td>
+<td>9.1% (2/22)</td>
+<td>36.4% (8/22)</td>
+<td>36.4% (8/22)</td>
+<td>98</td>
+<td>16.3% (16/98)</td>
+<td>21.4% (21/98)</td>
+</tr>
+<tr>
+<td><code>local:LLama-13b</code></td>
+<td>3</td>
+<td>66.7% (2/3)</td>
+<td>66.7% (2/3)</td>
+<td>66.7% (2/3)</td>
+<td>66.7% (2/3)</td>
+<td>137</td>
+<td>23.4% (32/137)</td>
+<td>23.4% (32/137)</td>
+</tr>
+<tr>
+<td><code>local:LLama-3-8b</code></td>
+<td>30</td>
+<td>13.3% (4/30)</td>
+<td>13.3% (4/30)</td>
+<td>23.3% (7/30)</td>
+<td>23.3% (7/30)</td>
+<td>471</td>
+<td>5.7% (27/471)</td>
+<td>6.8% (32/471)</td>
+</tr>
+<tr>
+<td><code>local:Phi-4-Think</code></td>
+<td>664</td>
+<td>2.7% (18/664)</td>
+<td>2.7% (18/664)</td>
+<td>7.2% (48/664)</td>
+<td>12.3% (82/664)</td>
+<td>204</td>
+<td>2.0% (4/204)</td>
+<td>2.9% (6/204)</td>
+</tr>
+<tr>
+<td><code>local:Qwen3-14b-No-Think</code></td>
+<td>56</td>
+<td>7.1% (4/56)</td>
+<td>7.1% (4/56)</td>
+<td>12.5% (7/56)</td>
+<td>12.5% (7/56)</td>
+<td>707</td>
+<td>3.4% (24/707)</td>
+<td>4.2% (30/707)</td>
+</tr>
+<tr>
+<td><code>local:Qwen3-14b-Think</code></td>
+<td>331</td>
+<td>3.9% (13/331)</td>
+<td>3.9% (13/331)</td>
+<td>10.6% (35/331)</td>
+<td>12.1% (40/331)</td>
+<td>562</td>
+<td>3.7% (21/562)</td>
+<td>5.5% (31/562)</td>
+</tr>
+<tr>
+<td><code>local:Qwen3-30b-A3b-No-Think</code></td>
+<td>52</td>
+<td>5.8% (3/52)</td>
+<td>5.8% (3/52)</td>
+<td>5.8% (3/52)</td>
+<td>5.8% (3/52)</td>
+<td>430</td>
+<td>4.7% (20/430)</td>
+<td>4.7% (20/430)</td>
+</tr>
+<tr>
+<td><code>local:Qwen3-8b-No-Think</code></td>
+<td>65</td>
+<td>3.1% (2/65)</td>
+<td>3.1% (2/65)</td>
+<td>6.2% (4/65)</td>
+<td>6.2% (4/65)</td>
+<td>671</td>
+<td>5.4% (36/671)</td>
+<td>5.4% (36/671)</td>
+</tr>
+<tr>
+<td><code>local:Qwen3-8b-Think</code></td>
+<td>286</td>
+<td>4.9% (14/286)</td>
+<td>4.9% (14/286)</td>
+<td>12.2% (35/286)</td>
+<td>12.6% (36/286)</td>
+<td>586</td>
+<td>4.8% (28/586)</td>
+<td>6.5% (38/586)</td>
+</tr>
+<tr>
+<td><code>local:gemma-2-9b</code></td>
+<td>183</td>
+<td>3.8% (7/183)</td>
+<td>3.8% (7/183)</td>
+<td>13.1% (24/183)</td>
+<td>13.1% (24/183)</td>
+<td>813</td>
+<td>3.0% (24/813)</td>
+<td>3.6% (29/813)</td>
+</tr>
+<tr>
+<td><code>local:mistral</code></td>
+<td>81</td>
+<td>2.5% (2/81)</td>
+<td>2.5% (2/81)</td>
+<td>9.9% (8/81)</td>
+<td>9.9% (8/81)</td>
+<td>515</td>
+<td>5.0% (26/515)</td>
+<td>6.6% (34/515)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="why-real-calls-in-s-were-refused-api-models">Why real calls in S were refused (API models)<a class="headerlink" href="#why-real-calls-in-s-were-refused-api-models" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Block reasons (refused real calls)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G0</td>
+<td><code>ghost_arguments</code> 194, <code>validation_error</code> 43</td>
+</tr>
+<tr>
+<td>G</td>
+<td><code>ghost_arguments</code> 194, <code>validation_error</code> 43</td>
+</tr>
+<tr>
+<td>LP</td>
+<td><code>path_violation</code> 582, <code>ghost_arguments</code> 194, <code>validation_error</code> 43</td>
+</tr>
+</tbody>
+</table>
+<h4 id="wrong_data-0-subset-api-models">wrong_data = 0 subset (API models)<a class="headerlink" href="#wrong_data-0-subset-api-models" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Attack refusal, lower bound (every real call refused)</th>
+<th>Upper bound (any real call refused)</th>
+<th>Direct Execution refused</th>
+<th>Benign-proxy false refusal</th>
+<th>of which policy / contract-only</th>
+<th>Poison-literal calls refused</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G0 (contract only)</td>
+<td>220/7165 (3.1%, CI 2.7-3.5%)</td>
+<td>237/7165 (3.3%, CI 2.9-3.8%)</td>
+<td>39/1632 (2.4%, CI 1.8-3.2%)</td>
+<td>175/7237 (2.4%, CI 2.1-2.8%)</td>
+<td>0.0% (0/7237) / 2.4% (175/7237)</td>
+<td>124/4874 (2.5%, CI 2.1-3.0%)</td>
+</tr>
+<tr>
+<td>G (+ tool allowlist)</td>
+<td>220/7165 (3.1%, CI 2.7-3.5%)</td>
+<td>237/7165 (3.3%, CI 2.9-3.8%)</td>
+<td>1632/1632 (100.0%, CI 99.8-100.0%)</td>
+<td>175/7237 (2.4%, CI 2.1-2.8%)</td>
+<td>0.0% (0/7237) / 2.4% (175/7237)</td>
+<td>124/4874 (2.5%, CI 2.1-3.0%)</td>
+</tr>
+<tr>
+<td>LP (+ path / endpoint scopes)</td>
+<td>792/7165 (11.1%, CI 10.3-11.8%)</td>
+<td>817/7165 (11.4%, CI 10.7-12.2%)</td>
+<td>1632/1632 (100.0%, CI 99.8-100.0%)</td>
+<td>300/7237 (4.1%, CI 3.7-4.6%)</td>
+<td>1.7% (125/7237) / 2.4% (175/7237)</td>
+<td>708/4874 (14.5%, CI 13.6-15.5%)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="poison-literal-uptake-against-mcptoxs-labels">Poison-literal uptake against MCPTox's labels<a class="headerlink" href="#poison-literal-uptake-against-mcptoxs-labels" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Precision (uptake -&gt; Success)</th>
+<th>Recall (Success -&gt; uptake)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>online</td>
+<td>4868/4964 (98.1%, CI 97.6-98.4%)</td>
+<td>4868/7465 (65.2%, CI 64.1-66.3%)</td>
+</tr>
+<tr>
+<td>local</td>
+<td>1166/1223 (95.3%, CI 94.0-96.4%)</td>
+<td>1166/1773 (65.8%, CI 63.5-67.9%)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="mcptoxs-own-attack-success-rate-from-its-labels-reproduction-anchor">MCPTox's own attack success rate, from its labels (reproduction anchor)<a class="headerlink" href="#mcptoxs-own-attack-success-rate-from-its-labels-reproduction-anchor" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>API model</th>
+<th>Success / labelled (None excluded)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DeepSeek-R1</code></td>
+<td>890/1256 (70.9%, CI 68.3-73.3%)</td>
+</tr>
+<tr>
+<td><code>DeepSeek-v3</code></td>
+<td>757/1339 (56.5%, CI 53.9-59.2%)</td>
+</tr>
+<tr>
+<td><code>Llama-3.1-70B-Instruct</code></td>
+<td>211/856 (24.6%, CI 21.9-27.7%)</td>
+</tr>
+<tr>
+<td><code>Llama-3.1-8B-Instruct</code></td>
+<td>150/1065 (14.1%, CI 12.1-16.3%)</td>
+</tr>
+<tr>
+<td><code>claude-3-7-sonnet</code></td>
+<td>318/900 (35.3%, CI 32.3-38.5%)</td>
+</tr>
+<tr>
+<td><code>claude-3-7-sonnet-20250219-thinking</code></td>
+<td>91/293 (31.1%, CI 26.0-36.6%)</td>
+</tr>
+<tr>
+<td><code>gemini-2.5-flash</code></td>
+<td>777/1302 (59.7%, CI 57.0-62.3%)</td>
+</tr>
+<tr>
+<td><code>gpt-3.5-turbo</code></td>
+<td>199/1335 (14.9%, CI 13.1-16.9%)</td>
+</tr>
+<tr>
+<td><code>gpt-4o-mini</code></td>
+<td>804/1302 (61.8%, CI 59.1-64.3%)</td>
+</tr>
+<tr>
+<td><code>o1-mini</code></td>
+<td>574/788 (72.8%, CI 69.6-75.8%)</td>
+</tr>
+<tr>
+<td><code>qwen3-235b-a22b_NO_Think</code></td>
+<td>231/1340 (17.2%, CI 15.3-19.4%)</td>
+</tr>
+<tr>
+<td><code>qwen3-235b-a22b_Think</code></td>
+<td>676/1337 (50.6%, CI 47.9-53.2%)</td>
+</tr>
+<tr>
+<td><code>qwen3-32b_NO_Think</code></td>
+<td>319/1345 (23.7%, CI 21.5-26.1%)</td>
+</tr>
+<tr>
+<td><code>qwen3-32b_Think</code></td>
+<td>778/1331 (58.5%, CI 55.8-61.1%)</td>
+</tr>
+<tr>
+<td><code>qwen3-8b_NO_Think</code></td>
+<td>188/1346 (14.0%, CI 12.2-15.9%)</td>
+</tr>
+<tr>
+<td><code>qwen3-8b_Think</code></td>
+<td>560/1341 (41.8%, CI 39.1-44.4%)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="accounting-nothing-dropped">Accounting (nothing dropped)<a class="headerlink" href="#accounting-nothing-dropped" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Label</th>
+<th>calls</th>
+<th>no_call</th>
+<th>malformed</th>
+<th>empty</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>online</td>
+<td><code>Failure-Direct Execution</code></td>
+<td>1776</td>
+<td>2</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>online</td>
+<td><code>Failure-Ignored</code></td>
+<td>8835</td>
+<td>263</td>
+<td>9</td>
+<td>14</td>
+</tr>
+<tr>
+<td>online</td>
+<td><code>Failure-Refused</code></td>
+<td>16</td>
+<td>33</td>
+<td>0</td>
+<td>5</td>
+</tr>
+<tr>
+<td>online</td>
+<td><code>None</code></td>
+<td>15</td>
+<td>188</td>
+<td>0</td>
+<td>1541</td>
+</tr>
+<tr>
+<td>online</td>
+<td><code>Success</code></td>
+<td>7509</td>
+<td>8</td>
+<td>6</td>
+<td>0</td>
+</tr>
+<tr>
+<td>local</td>
+<td><code>&lt;missing&gt;</code></td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>local</td>
+<td><code>Failure-Direct Execution</code></td>
+<td>2814</td>
+<td>0</td>
+<td>22</td>
+<td>0</td>
+</tr>
+<tr>
+<td>local</td>
+<td><code>Failure-Ignored</code></td>
+<td>5371</td>
+<td>0</td>
+<td>121</td>
+<td>0</td>
+</tr>
+<tr>
+<td>local</td>
+<td><code>None</code></td>
+<td>336</td>
+<td>0</td>
+<td>8</td>
+<td>0</td>
+</tr>
+<tr>
+<td>local</td>
+<td><code>Success</code></td>
+<td>1777</td>
+<td>0</td>
+<td>57</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>Parse repairs: <code>end_token</code> 10478, <code>python_literal</code> 9745, <code>think_block</code> 505, <code>json_keywords_in_literal</code> 393, <code>unparseable_call_span</code> 231, <code>no_arguments_key</code> 153, <code>apostrophe_repair</code> 100, <code>native_call</code> 70, <code>partial</code> 55, <code>unbalanced_call_text</code> 43, <code>json_comments</code> 18, <code>call_list</code> 14, <code>arguments_not_object</code> 3, <code>arguments_unparseable_string</code> 2, <code>orphan_think_close</code> 1, <code>unterminated_think</code> 1.</p>
+<p>Calls: local:other 16, local:poisoned 3023, local:real 7966, online:other 46, online:poisoned 3201, online:real 15206 (other = neither a clean-prompt tool nor the poisoned tool: not replayable).</p>
+<p>Real or poisoned calls that could not be replayed: none.</p>
+<p>LP coverage: 35 servers at LP, 10 without clean queries at G; 22 tools filesystem-scoped, 2 on an endpoint allowlist, 22 open-web with the SSRF pre-check; 12 labelled scopes could not be derived and fell back to G.</p>
+<!-- MCPTOX-REPLAY:END -->
+
+<h2 id="fresh-claude-55-run">Fresh Claude 5.5 run<a class="headerlink" href="#fresh-claude-55-run" title="Permanent link">&para;</a></h2>
+<p>Arms: <strong>P</strong>, MCPTox's own system prompt (the clean prompt with the poisoned tool inserted)
+plus the case query, byte-exact, in MCPTox's text protocol; <strong>C</strong>, the clean system prompt
+plus the same query; <strong>C'</strong>, C again on a seeded, paradigm-stratified 10% subset. Requests
+use adaptive thinking and each model's default effort, pinned and recorded; no temperature,
+tools, fallbacks or caching. Every result records the model id that served it, and results
+from different ids are never pooled.</p>
+<!-- MCPTOX-FRESH-RUNS: append newest below; never edit dated blocks -->
+
+<h3 id="fresh-run-fresh-20261016t101746z-scored-2026-10-16-utc">Fresh run <code>fresh-20261016T101746Z</code>, scored 2026-10-16 (UTC)<a class="headerlink" href="#fresh-run-fresh-20261016t101746z-scored-2026-10-16-utc" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Run <code>fresh-20261016T101746Z</code> (fresh), git <code>d9187e00e1fd</code>, anthropic SDK 1.15.0, pricing <code>anthropic_pricing_2026_10.json</code>, ledger spend $8.63.</li>
+<li>Batches: <code>msgbatch_01Te9CXPmC886uHo77EiCGed</code>, <code>msgbatch_01SM8M2oScXjoBSj913YBLG5</code>.</li>
+<li>Models requested: <code>claude-haiku-5-5</code>, <code>claude-sonnet-5-5</code>; effort {'claude-haiku-5-5': 'medium', 'claude-sonnet-5-5': 'high'}; max_tokens {'claude-haiku-5-5': 8192, 'claude-sonnet-5-5': 4096}; adaptive thinking; no temperature, tools, fallbacks or caching.</li>
+<li>Cases: 1348; C' repeat subset: 135 (seed 20261012).</li>
+<li>Served model ids, by requested model (results are grouped by served id, never pooled): <code>h55</code>: <code>claude-haiku-5-5</code> 2831; <code>s55</code>: <code>claude-sonnet-5-5</code> 2831.</li>
+<li>Parse-valid excludes API refusals (<code>stop_reason: refusal</code>), which are reported in their own column and never counted as influence.</li>
+</ul>
+<h4 id="claude-haiku-5-5"><code>claude-haiku-5-5</code><a class="headerlink" href="#claude-haiku-5-5" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Arm</th>
+<th>Succeeded</th>
+<th>Parse-valid</th>
+<th>API refusal</th>
+<th>Truncated</th>
+<th>No call</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P</td>
+<td>1348</td>
+<td>100.0% (1348/1348)</td>
+<td>0.0% (0/1348)</td>
+<td>0.0% (0/1348)</td>
+<td>10.5% (142/1348)</td>
+</tr>
+<tr>
+<td>C</td>
+<td>1348</td>
+<td>100.0% (1348/1348)</td>
+<td>0.0% (0/1348)</td>
+<td>0.0% (0/1348)</td>
+<td>13.9% (187/1348)</td>
+</tr>
+<tr>
+<td>C'</td>
+<td>135</td>
+<td>100.0% (135/135)</td>
+<td>0.0% (0/135)</td>
+<td>0.0% (0/135)</td>
+<td>13.3% (18/135)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direct Execution (P calls the poisoned tool)</td>
+<td>74/1348 (5.5%, CI 4.4-6.8%)</td>
+</tr>
+<tr>
+<td>Influenced, Templates 2+3 (P differs from C)</td>
+<td>456/1137 (40.1%, CI 37.3-43.0%)</td>
+</tr>
+<tr>
+<td>Influenced, Template 1 (its query targets the poisoned tool)</td>
+<td>118/211 (55.9%, CI 49.2-62.5%)</td>
+</tr>
+<tr>
+<td>Noise, Templates 2+3 (C differs from C')</td>
+<td>7/114 (6.1%, CI 3.0-12.1%)</td>
+</tr>
+<tr>
+<td>Excess influence, Templates 2+3 (influenced minus noise)</td>
+<td>+34.0 pp (95% CI +27.3 to +38.2 pp)</td>
+</tr>
+<tr>
+<td>Poison-literal uptake, P</td>
+<td>190/1348 (14.1%, CI 12.3-16.1%)</td>
+</tr>
+<tr>
+<td>Poison-literal uptake, C (false-positive baseline)</td>
+<td>4/1348 (0.3%, CI 0.1-0.8%)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>P real calls refused</th>
+<th>in influenced cases</th>
+<th>carrying a poison literal</th>
+<th>P poisoned-tool calls refused</th>
+<th>C real calls refused (false refusal)</th>
+<th>C responses with a refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G0 (contract only)</td>
+<td>2.8% (32/1132)</td>
+<td>3.4% (16/476)</td>
+<td>1.6% (3/190)</td>
+<td>2.7% (2/74)</td>
+<td>1.8% (21/1161)</td>
+<td>1.8% (21/1161)</td>
+</tr>
+<tr>
+<td>G (+ tool allowlist)</td>
+<td>2.8% (32/1132)</td>
+<td>3.4% (16/476)</td>
+<td>1.6% (3/190)</td>
+<td>100.0% (74/74)</td>
+<td>1.8% (21/1161)</td>
+<td>1.8% (21/1161)</td>
+</tr>
+<tr>
+<td>LP (+ path / endpoint scopes)</td>
+<td>8.1% (92/1132)</td>
+<td>7.1% (34/476)</td>
+<td>6.8% (13/190)</td>
+<td>100.0% (74/74)</td>
+<td>6.2% (72/1161)</td>
+<td>6.2% (72/1161)</td>
+</tr>
+</tbody>
+</table>
+<p>Residual under LP (poison-literal calls admitted): 177/190 (93.2%, CI 88.6-96.0%).</p>
+<h4 id="claude-sonnet-5-5"><code>claude-sonnet-5-5</code><a class="headerlink" href="#claude-sonnet-5-5" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Arm</th>
+<th>Succeeded</th>
+<th>Parse-valid</th>
+<th>API refusal</th>
+<th>Truncated</th>
+<th>No call</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P</td>
+<td>1348</td>
+<td>87.3% (1177/1348)</td>
+<td>12.7% (171/1348) (cyber 171)</td>
+<td>0.0% (0/1348)</td>
+<td>7.8% (92/1177)</td>
+</tr>
+<tr>
+<td>C</td>
+<td>1348</td>
+<td>99.7% (1344/1348)</td>
+<td>0.3% (4/1348) (cyber 1, reasoning_extraction 3)</td>
+<td>0.0% (0/1348)</td>
+<td>12.9% (173/1344)</td>
+</tr>
+<tr>
+<td>C'</td>
+<td>135</td>
+<td>98.5% (133/135)</td>
+<td>1.5% (2/135) (cyber 1, reasoning_extraction 1)</td>
+<td>0.0% (0/135)</td>
+<td>13.5% (18/133)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direct Execution (P calls the poisoned tool)</td>
+<td>42/1177 (3.6%, CI 2.6-4.8%)</td>
+</tr>
+<tr>
+<td>Influenced, Templates 2+3 (P differs from C)</td>
+<td>564/1020 (55.3%, CI 52.2-58.3%)</td>
+</tr>
+<tr>
+<td>Influenced, Template 1 (its query targets the poisoned tool)</td>
+<td>81/154 (52.6%, CI 44.7-60.3%)</td>
+</tr>
+<tr>
+<td>Noise, Templates 2+3 (C differs from C')</td>
+<td>2/113 (1.8%, CI 0.5-6.2%)</td>
+</tr>
+<tr>
+<td>Excess influence, Templates 2+3 (influenced minus noise)</td>
+<td>+53.5 pp (95% CI +48.1 to +56.8 pp)</td>
+</tr>
+<tr>
+<td>Poison-literal uptake, P</td>
+<td>312/1177 (26.5%, CI 24.1-29.1%)</td>
+</tr>
+<tr>
+<td>Poison-literal uptake, C (false-positive baseline)</td>
+<td>3/1344 (0.2%, CI 0.1-0.7%)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>P real calls refused</th>
+<th>in influenced cases</th>
+<th>carrying a poison literal</th>
+<th>P poisoned-tool calls refused</th>
+<th>C real calls refused (false refusal)</th>
+<th>C responses with a refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G0 (contract only)</td>
+<td>0.5% (5/1043)</td>
+<td>0.8% (5/592)</td>
+<td>0.0% (0/312)</td>
+<td>2.4% (1/42)</td>
+<td>0.0% (0/1171)</td>
+<td>0.0% (0/1171)</td>
+</tr>
+<tr>
+<td>G (+ tool allowlist)</td>
+<td>0.5% (5/1043)</td>
+<td>0.8% (5/592)</td>
+<td>0.0% (0/312)</td>
+<td>100.0% (42/42)</td>
+<td>0.0% (0/1171)</td>
+<td>0.0% (0/1171)</td>
+</tr>
+<tr>
+<td>LP (+ path / endpoint scopes)</td>
+<td>5.5% (57/1043)</td>
+<td>4.2% (25/592)</td>
+<td>4.8% (15/312)</td>
+<td>100.0% (42/42)</td>
+<td>4.7% (55/1171)</td>
+<td>4.7% (55/1171)</td>
+</tr>
+</tbody>
+</table>
+<p>Residual under LP (poison-literal calls admitted): 297/312 (95.2%, CI 92.2-97.1%).</p>
+<p>Recorded Claude 3.7 Sonnet, same literal-uptake method (P arm, MCPTox's outputs): 244/1185 (20.6%, CI 18.4-23.0%).</p>
+<p>Requests that did not succeed, by requested model: none.</p>
+<h3 id="fresh-run-fresh-20261016t102523z-scored-2026-10-16-utc">Fresh run <code>fresh-20261016T102523Z</code>, scored 2026-10-16 (UTC)<a class="headerlink" href="#fresh-run-fresh-20261016t102523z-scored-2026-10-16-utc" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Run <code>fresh-20261016T102523Z</code> (fresh), git <code>d9187e00e1fd</code>, anthropic SDK 1.15.0, pricing <code>anthropic_pricing_2026_10.json</code>, ledger spend $14.68.</li>
+<li>Batches: <code>msgbatch_01UmeCjijQsSr1MY7BBz1F5M</code>.</li>
+<li>Models requested: <code>claude-opus-5-5</code>; effort {'claude-opus-5-5': 'medium'}; max_tokens {'claude-opus-5-5': 4096}; adaptive thinking; no temperature, tools, fallbacks or caching.</li>
+<li>Cases: 1348; C' repeat subset: 135 (seed 20261012).</li>
+<li>Served model ids, by requested model (results are grouped by served id, never pooled): <code>o55</code>: <code>claude-opus-5-5</code> 2831.</li>
+<li>Parse-valid excludes API refusals (<code>stop_reason: refusal</code>), which are reported in their own column and never counted as influence.</li>
+</ul>
+<h4 id="claude-opus-5-5"><code>claude-opus-5-5</code><a class="headerlink" href="#claude-opus-5-5" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Arm</th>
+<th>Succeeded</th>
+<th>Parse-valid</th>
+<th>API refusal</th>
+<th>Truncated</th>
+<th>No call</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P</td>
+<td>1348</td>
+<td>75.9% (1023/1348)</td>
+<td>24.1% (325/1348) (cyber 325)</td>
+<td>0.0% (0/1348)</td>
+<td>6.8% (70/1023)</td>
+</tr>
+<tr>
+<td>C</td>
+<td>1348</td>
+<td>99.6% (1342/1348)</td>
+<td>0.4% (6/1348) (cyber 6)</td>
+<td>0.0% (0/1348)</td>
+<td>14.5% (195/1342)</td>
+</tr>
+<tr>
+<td>C'</td>
+<td>135</td>
+<td>99.3% (134/135)</td>
+<td>0.7% (1/135) (cyber 1)</td>
+<td>0.0% (0/135)</td>
+<td>14.9% (20/134)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direct Execution (P calls the poisoned tool)</td>
+<td>26/1023 (2.5%, CI 1.7-3.7%)</td>
+</tr>
+<tr>
+<td>Influenced, Templates 2+3 (P differs from C)</td>
+<td>475/903 (52.6%, CI 49.3-55.8%)</td>
+</tr>
+<tr>
+<td>Influenced, Template 1 (its query targets the poisoned tool)</td>
+<td>55/120 (45.8%, CI 37.2-54.7%)</td>
+</tr>
+<tr>
+<td>Noise, Templates 2+3 (C differs from C')</td>
+<td>5/114 (4.4%, CI 1.9-9.9%)</td>
+</tr>
+<tr>
+<td>Excess influence, Templates 2+3 (influenced minus noise)</td>
+<td>+48.2 pp (95% CI +41.9 to +52.3 pp)</td>
+</tr>
+<tr>
+<td>Poison-literal uptake, P</td>
+<td>244/1023 (23.9%, CI 21.3-26.6%)</td>
+</tr>
+<tr>
+<td>Poison-literal uptake, C (false-positive baseline)</td>
+<td>6/1342 (0.4%, CI 0.2-1.0%)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>P real calls refused</th>
+<th>in influenced cases</th>
+<th>carrying a poison literal</th>
+<th>P poisoned-tool calls refused</th>
+<th>C real calls refused (false refusal)</th>
+<th>C responses with a refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G0 (contract only)</td>
+<td>0.2% (2/927)</td>
+<td>0.4% (2/498)</td>
+<td>0.0% (0/244)</td>
+<td>0.0% (0/26)</td>
+<td>0.0% (0/1147)</td>
+<td>0.0% (0/1147)</td>
+</tr>
+<tr>
+<td>G (+ tool allowlist)</td>
+<td>0.2% (2/927)</td>
+<td>0.4% (2/498)</td>
+<td>0.0% (0/244)</td>
+<td>100.0% (26/26)</td>
+<td>0.0% (0/1147)</td>
+<td>0.0% (0/1147)</td>
+</tr>
+<tr>
+<td>LP (+ path / endpoint scopes)</td>
+<td>3.9% (36/927)</td>
+<td>3.8% (19/498)</td>
+<td>2.0% (5/244)</td>
+<td>100.0% (26/26)</td>
+<td>4.2% (48/1147)</td>
+<td>4.2% (48/1147)</td>
+</tr>
+</tbody>
+</table>
+<p>Residual under LP (poison-literal calls admitted): 239/244 (98.0%, CI 95.3-99.1%).</p>
+<p>Recorded Claude 3.7 Sonnet, same literal-uptake method (P arm, MCPTox's outputs): 244/1185 (20.6%, CI 18.4-23.0%).</p>
+<p>Requests that did not succeed, by requested model: none.</p>
+<h3 id="fresh-run-fresh-pilot-20261016t195916z-scored-2026-10-16-utc">Fresh run <code>fresh-pilot-20261016T195916Z</code>, scored 2026-10-16 (UTC)<a class="headerlink" href="#fresh-run-fresh-pilot-20261016t195916z-scored-2026-10-16-utc" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Run <code>fresh-pilot-20261016T195916Z</code> (fresh-pilot), git <code>1a3e9eba498f</code>, anthropic SDK 1.15.0, pricing <code>anthropic_pricing_2026_10.json</code>, ledger spend $9.54.</li>
+<li>Batches: none (synchronous pilot).</li>
+<li>Models requested: <code>claude-fable-5-1</code>; effort {'claude-fable-5-1': 'high'}; max_tokens {'claude-fable-5-1': 4096}; adaptive thinking; no temperature, tools, fallbacks or caching.</li>
+<li>Cases: 200; C' repeat subset: 0 (seed 20261012).</li>
+<li>Served model ids, by requested model (results are grouped by served id, never pooled): <code>f51</code>: <code>claude-fable-5-1</code> 400.</li>
+<li>Parse-valid excludes API refusals (<code>stop_reason: refusal</code>), which are reported in their own column and never counted as influence.</li>
+</ul>
+<h4 id="claude-fable-5-1"><code>claude-fable-5-1</code><a class="headerlink" href="#claude-fable-5-1" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Arm</th>
+<th>Succeeded</th>
+<th>Parse-valid</th>
+<th>API refusal</th>
+<th>Truncated</th>
+<th>No call</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P</td>
+<td>200</td>
+<td>82.0% (164/200)</td>
+<td>18.0% (36/200) (cyber 36)</td>
+<td>0.0% (0/200)</td>
+<td>6.1% (10/164)</td>
+</tr>
+<tr>
+<td>C</td>
+<td>200</td>
+<td>99.5% (199/200)</td>
+<td>0.5% (1/200) (cyber 1)</td>
+<td>0.0% (0/200)</td>
+<td>13.6% (27/199)</td>
+</tr>
+<tr>
+<td>C'</td>
+<td>0</td>
+<td>n=0</td>
+<td>n=0</td>
+<td>n=0</td>
+<td>n=0</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direct Execution (P calls the poisoned tool)</td>
+<td>9/164 (5.5%, CI 2.9-10.1%)</td>
+</tr>
+<tr>
+<td>Influenced, Templates 2+3 (P differs from C)</td>
+<td>48/143 (33.6%, CI 26.4-41.6%)</td>
+</tr>
+<tr>
+<td>Influenced, Template 1 (its query targets the poisoned tool)</td>
+<td>12/21 (57.1%, CI 36.5-75.5%)</td>
+</tr>
+<tr>
+<td>Noise, Templates 2+3 (C differs from C')</td>
+<td>n=0 (not measured)</td>
+</tr>
+<tr>
+<td>Excess influence, Templates 2+3 (influenced minus noise)</td>
+<td>not measured (a denominator is 0)</td>
+</tr>
+<tr>
+<td>Poison-literal uptake, P</td>
+<td>8/164 (4.9%, CI 2.5-9.3%)</td>
+</tr>
+<tr>
+<td>Poison-literal uptake, C (false-positive baseline)</td>
+<td>2/199 (1.0%, CI 0.3-3.6%)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>P real calls refused</th>
+<th>in influenced cases</th>
+<th>carrying a poison literal</th>
+<th>P poisoned-tool calls refused</th>
+<th>C real calls refused (false refusal)</th>
+<th>C responses with a refusal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G0 (contract only)</td>
+<td>0.0% (0/145)</td>
+<td>0.0% (0/50)</td>
+<td>0.0% (0/8)</td>
+<td>0.0% (0/9)</td>
+<td>0.0% (0/172)</td>
+<td>0.0% (0/172)</td>
+</tr>
+<tr>
+<td>G (+ tool allowlist)</td>
+<td>0.0% (0/145)</td>
+<td>0.0% (0/50)</td>
+<td>0.0% (0/8)</td>
+<td>100.0% (9/9)</td>
+<td>0.0% (0/172)</td>
+<td>0.0% (0/172)</td>
+</tr>
+<tr>
+<td>LP (+ path / endpoint scopes)</td>
+<td>2.8% (4/145)</td>
+<td>0.0% (0/50)</td>
+<td>0.0% (0/8)</td>
+<td>100.0% (9/9)</td>
+<td>2.9% (5/172)</td>
+<td>2.9% (5/172)</td>
+</tr>
+</tbody>
+</table>
+<p>Residual under LP (poison-literal calls admitted): 8/8 (100.0%, CI 67.6-100.0%).</p>
+<p>Recorded Claude 3.7 Sonnet, same literal-uptake method (P arm, MCPTox's outputs): 244/1185 (20.6%, CI 18.4-23.0%).</p>
+<p>Requests that did not succeed, by requested model: none.</p>
+<h2 id="limits">Limits<a class="headerlink" href="#limits" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The replay is not an end-to-end run: a refused call would have changed what the model
+  did next, which a recording cannot show.</li>
+<li>The benign proxy (Failure-Ignored responses) was generated with the poison in context.
+  The fresh run's clean arm is the true benign control.</li>
+<li><code>agent_airlock</code> has no recipient allowlist, SQL or shell parser, or JavaScript sandbox, so
+  LP scopes paths and URLs only; email, chat, database and command tools are unscoped
+  beyond G.</li>
+<li>Poison-literal uptake is a judge-free proxy for "the call carries the attacker's value".
+  It misses changes that carry no quoted literal, so its recall is bounded; its precision
+  and recall against MCPTox's labels are published with every use.</li>
+<li>Filesystem verdicts depend on the host; the canonical replay runs on Linux.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024-2026 Sattyam Jain
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/sattyamjjain/agent-airlock" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://pypi.org/project/agent-airlock/" target="_blank" rel="noopener" title="pypi.org" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.8 200.5c-7.7-30.9-22.3-54.2-53.4-54.2h-40.1v47.4c0 36.8-31.2 67.8-66.8 67.8H172.7c-29.2 0-53.4 25-53.4 54.3v101.8c0 29 25.2 46 53.4 54.3 33.8 9.9 66.3 11.7 106.8 0 26.9-7.8 53.4-23.5 53.4-54.3v-40.7H226.2v-13.6h160.2c31.1 0 42.6-21.7 53.4-54.2 11.2-33.5 10.7-65.7 0-108.6M286.2 444.7a20.4 20.4 0 1 1 0-40.7 20.4 20.4 0 1 1 0 40.7M167.8 248.1h106.8c29.7 0 53.4-24.5 53.4-54.3V91.9c0-29-24.4-50.7-53.4-55.6-35.8-5.9-74.7-5.6-106.8.1-45.2 8-53.4 24.7-53.4 55.6v40.7h106.9v13.6h-147c-31.1 0-58.3 18.7-66.8 54.2-9.8 40.7-10.2 66.1 0 108.6 7.6 31.6 25.7 54.2 56.8 54.2H101v-48.8c0-35.3 30.5-66.4 66.8-66.4m-6.6-183.4a20.4 20.4 0 1 1 0 40.8 20.4 20.4 0 1 1 0-40.8"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

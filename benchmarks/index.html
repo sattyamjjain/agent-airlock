@@ -1569,10 +1569,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-seven-published-rows" class="md-nav__link">
+  <a href="#the-published-rows" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The seven published rows
+        The published rows
       
     </span>
   </a>
@@ -1737,6 +1737,90 @@
     
   
     MCP gateway payload gap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="mcptox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool poisoning: MCPTox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="fix-hints-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fix_hints recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="adaptive-redteam/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adaptive red-team
   
 
     
@@ -2496,10 +2580,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-seven-published-rows" class="md-nav__link">
+  <a href="#the-published-rows" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The seven published rows
+        The published rows
       
     </span>
   </a>
@@ -2549,8 +2633,8 @@
 
 
 <h1 id="benchmarks">Benchmarks<a class="headerlink" href="#benchmarks" title="Permanent link">&para;</a></h1>
-<p>Seven published measurements. Each one carries the date it was last re-run, and each
-date is machine-checked: <code>scripts/check_benchmark_freshness.py</code> fails the release if any
+<p>Every published measurement carries the date it was last re-run, and each date is
+machine-checked: <code>scripts/check_benchmark_freshness.py</code> fails the release if any
 row is missing its marker, and <code>--release</code> fails if any row is older than 30 days.</p>
 <p>Two conventions are worth knowing before reading any number here.</p>
 <p><strong>A null result is published as a null result.</strong> The multi-harness prompt-injection row
@@ -2560,7 +2644,7 @@ resistance. A benchmark that only ever reports wins is not a benchmark.</p>
 does not execute, the incumbent's coverage is marked <em>scope-claimed, not re-run</em> rather
 than given a fabricated number. Where a slot has no samples, it is shown as <code>n=0</code> rather
 than omitted — four of the ten OWASP Agentic slots are in that state.</p>
-<h2 id="the-seven-published-rows">The seven published rows<a class="headerlink" href="#the-seven-published-rows" title="Permanent link">&para;</a></h2>
+<h2 id="the-published-rows">The published rows<a class="headerlink" href="#the-published-rows" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -2590,10 +2674,16 @@ than omitted — four of the ten OWASP Agentic slots are in that state.</p>
 <td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/toolprivbench/RESULTS.md">ToolPrivBench results on GitHub</a></td>
 </tr>
 <tr>
-<td><strong>Adaptive attacker</strong> · AgentDojo, all 4 suites</td>
-<td>86.0% of injection→target tool-calls blocked (524/609, deterministic bound). Model-in-the-loop ASR 45% → 10% (model pass of 2026-08-08), but that is one model family on a 60-pair subset</td>
-<td>2026-10-03</td>
+<td><strong>Indirect prompt injection</strong> · AgentDojo, all 4 suites</td>
+<td>86.0% of injection→target tool-calls blocked (524/609 pairs that have a tool-call target, of 949 attacked pairs; deterministic bound). Model-in-the-loop ASR 45% → 10% (gpt-4o-mini, 2026-07-31), but that is one model family on a 60-pair subset, under AgentDojo's fixed-template attack, not an adaptive one. Replay of AgentDojo's published Claude 3.x runs: the per-task policy refuses an emitted target call in 433/532 successful attacks (81%), and some call in 70/412 successful benign runs (17%). Claude 5.5 model-in-the-loop (168 pairs/arm, 2026-10-16) is a near-null: Haiku and Sonnet resist this fixed-template attack unaided (undefended ASR 5-8%), so airlock's realised reduction is +0-1% (pooled +0%, 336 attacked trajectories, Wilson CI [4%, 9%]) at a +14% benign-refusal cost; against models this robust the 86% deterministic bound is the informative measure</td>
+<td>2026-10-12</td>
 <td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md">AgentDojo results on GitHub</a></td>
+</tr>
+<tr>
+<td><strong>Tool poisoning</strong> · MCPTox, 1,348 cases</td>
+<td>Direct execution of the poisoned tool refused 100% under G (tool allowlist) and LP (1650/1650 API-model DE calls; G0 contract-only 2.4%), benign-proxy false-refusal 2.4% (G) / 4.1% (LP), over a free judge-free replay of 27 models' recorded calls. Fresh Claude 5.5 two-arm run: G/LP refuse every direct poisoned-tool call (Haiku 74/74, Sonnet 42/42, Opus 26/26) at 0-6% benign cost; poisoned-prompt API-refusal rises with capability (Haiku 0%, Sonnet 12.7%, Opus 24.1%)</td>
+<td>2026-10-17</td>
+<td><a href="mcptox/">MCPTox results</a></td>
 </tr>
 <tr>
 <td><strong>vs. native MCP gateway</strong> · 12 malformed payloads</td>
@@ -2603,7 +2693,7 @@ than omitted — four of the ten OWASP Agentic slots are in that state.</p>
 </tr>
 <tr>
 <td><strong>Prompt injection across agent harnesses</strong></td>
-<td>A null result, published as one. <code>claude-code</code> and <code>codex</code> each acted on the planted script 0/36, and ignored the benign twin just as completely, so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made <code>codex</code>'s zero a choice did not reproduce, and <code>codex</code> finished only 52/72 cells</td>
+<td>A null result, published as one. <code>claude-code</code> and <code>codex</code> each acted on the planted script 0/36, and ignored the benign twin just as completely, so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made <code>codex</code>'s zero a choice did not reproduce. Both harnesses finished all 72 of their cells (<code>codex</code> after its plan's usage limit paused it at 35)</td>
 <td>2026-10-03</td>
 <td><a href="injection-multi-harness/">Multi-harness prompt injection</a></td>
 </tr>
@@ -2632,8 +2722,8 @@ the README, the build fails rather than publishing two different dates for one r
 <li><a href="mcp-gateway-payload-gap/">MCP gateway payload gap</a> — what the gateway comparison
   does and does not establish.</li>
 </ul>
-<p>Four of the seven rows have their full results in the benchmark packages rather than on
-this site; those link to GitHub in the table above.</p>
+<p>Rows whose full results live in the benchmark packages rather than on this site link to
+GitHub in the table above.</p>
 <h2 id="re-running-them">Re-running them<a class="headerlink" href="#re-running-them" title="Permanent link">&para;</a></h2>
 <p>Every row is reproducible from the repository. The deterministic ones need nothing but a
 checkout:</p>
@@ -2641,8 +2731,9 @@ checkout:</p>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.toolprivbench<span class="w">      </span><span class="c1"># least-privilege</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>make<span class="w"> </span>benchmark<span class="w">                          </span><span class="c1"># regenerate BENCHMARK.md from the corpus</span>
 </code></pre></div>
-<p>Three are not free. <code>benchmarks.agentdojo.run</code> and <code>benchmarks.harness_injection</code> spend
-real API budget, and <code>benchmarks.vs_gateway</code> needs a Docker daemon. The multi-harness run
+<p>Three are not free. <code>benchmarks.agentdojo.run --model</code> spends API credit,
+<code>benchmarks.harness_injection</code> spends the agent CLIs' plan quota, and
+<code>benchmarks.vs_gateway</code> needs a Docker daemon. The multi-harness run
 is roughly 100 minutes of paid API time for a full <code>--trials 18</code> matrix, which is why it
 takes a <code>--checkpoint</code> flag and refuses to do anything without an explicit <code>--run</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>-m<span class="w"> </span>benchmarks.harness_injection<span class="w"> </span>--trials<span class="w"> </span><span class="m">18</span><span class="w"> </span>--write<span class="w"> </span>--checkpoint<span class="w"> </span>ckpt.json<span class="w"> </span>--run

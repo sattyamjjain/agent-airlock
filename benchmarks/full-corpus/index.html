@@ -1680,6 +1680,90 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcptox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool poisoning: MCPTox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fix-hints-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fix_hints recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adaptive-redteam/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adaptive red-team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2449,8 +2533,9 @@ cannot be edited by hand and cannot be moved without breaking that gate. It is
 included here rather than copied, so there is exactly one of it on disk.</p>
 <p>Read the honest-scope note in the first section before the headline number: this
 is a <strong>self-corpus</strong>, grading agent-airlock against its own fixtures. It is not a
-competitive benchmark and not an adaptive-attacker measurement. For the latter see
-<a href="../#the-seven-published-rows">Adaptive attacker (AgentDojo)</a>.</p>
+competitive benchmark and not an adaptive-attacker measurement. For a model-in-the-loop
+prompt-injection measurement see
+<a href="../#the-published-rows">Indirect prompt injection (AgentDojo)</a>.</p>
 </div>
 <h1 id="agent-airlock-guard-suite-benchmark">agent-airlock — guard-suite benchmark<a class="headerlink" href="#agent-airlock-guard-suite-benchmark" title="Permanent link">&para;</a></h1>
 <blockquote>
@@ -3026,8 +3111,8 @@ per-class, false-positive-aware breakdown — not the headline number.</p>
 <p><strong>Honest scope.</strong> agent-airlock's 100% here is on a <strong>self-curated</strong> corpus of exploit shapes it is built to catch — it is a coverage / regression baseline, <strong>not</strong> an adaptive-attacker score, and <strong>not</strong> a head-to-head where the incumbents were run. The contrast that matters is <em>categorical</em>: agent-airlock blocks <strong>tool-argument exploit shapes and least-privilege tool selection deterministically in-process</strong>, which the cited prompt-injection / trace-policy systems do not target as fixed in-process checks. Different layers — use both.</p>
 </blockquote>
 <hr />
-<h3 id="adaptive-attacker-robustness-agentdojo">Adaptive-attacker robustness (AgentDojo)<a class="headerlink" href="#adaptive-attacker-robustness-agentdojo" title="Permanent link">&para;</a></h3>
-<p>agent-airlock is wired into <a href="https://arxiv.org/abs/2406.13352">AgentDojo</a> (Debenedetti et al., NeurIPS 2024) as a <strong>defense</strong> — <code>AirlockToolsExecutor</code>: deny-by-default least-privilege <code>SecurityPolicy</code> + ghost-arg BLOCK + output sanitizer. On all four pinned suites (<strong>workspace, banking, travel, slack</strong>) under the <code>tool_knowledge</code> attack (benchmark <code>v1.2.1</code>), airlock's least-privilege policy blocks the target tool-call for <strong>524/609 = 86.0%</strong> of injection→task pairs — a <strong>deterministic upper bound on ASR reduction</strong>, <em>not</em> the model-in-the-loop ASR.</p>
+<h3 id="indirect-prompt-injection-agentdojo">Indirect prompt injection (AgentDojo)<a class="headerlink" href="#indirect-prompt-injection-agentdojo" title="Permanent link">&para;</a></h3>
+<p>agent-airlock is wired into <a href="https://arxiv.org/abs/2406.13352">AgentDojo</a> (Debenedetti et al., NeurIPS 2024) as a <strong>defense</strong> — <code>AirlockToolsExecutor</code>: deny-by-default least-privilege <code>SecurityPolicy</code> + ghost-arg BLOCK + output sanitizer. On all four pinned suites (<strong>workspace, banking, travel, slack</strong>) under the <code>tool_knowledge</code> attack (benchmark <code>v1.2.1</code>), airlock's least-privilege policy blocks the target tool-call for <strong>524/609 = 86.0%</strong> of the injection→task pairs that have a tool-call target (609 of the 949 attacked pairs) — a <strong>deterministic upper bound on ASR reduction</strong>, <em>not</em> the model-in-the-loop ASR. The attack is AgentDojo's fixed template, not an adaptive one.</p>
 <table>
 <thead>
 <tr>
@@ -3065,7 +3150,7 @@ per-class, false-positive-aware breakdown — not the headline number.</p>
 </tbody>
 </table>
 <blockquote>
-<p>Deterministic, no model, no API key. The true benign-utility / utility-under-attack / ASR (defended vs undefended) come from the model path (<code>python -m benchmarks.agentdojo.run --model &lt;id&gt;</code>, needs a key). <code>agentdojo</code> is a bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md"><code>benchmarks/agentdojo/RESULTS.md</code></a>.</p>
+<p>Deterministic, no model, no API key. The true benign-utility / utility-under-attack / ASR (defended vs undefended) come from the model path (<code>python -m benchmarks.agentdojo.run --model &lt;id&gt; --run --budget-usd N --logdir &lt;new dir&gt;</code>, needs a key; without <code>--run</code> it only prints the plan and cost). <code>agentdojo</code> is a bench-only extra — the airlock core stays zero-dep. Full result + honest nuance: <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/agentdojo/RESULTS.md"><code>benchmarks/agentdojo/RESULTS.md</code></a>.</p>
 </blockquote>
 <hr />
 <h2 id="matched-pair-multi-harness-prompt-injection">Matched-pair multi-harness prompt injection<a class="headerlink" href="#matched-pair-multi-harness-prompt-injection" title="Permanent link">&para;</a></h2>

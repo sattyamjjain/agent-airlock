@@ -1667,6 +1667,90 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/mcptox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool poisoning: MCPTox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/fix-hints-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fix_hints recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarks/adaptive-redteam/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adaptive red-team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2595,10 +2679,9 @@
 <h1 id="anthropic-claude-agent-sdk">Anthropic Claude Agent SDK<a class="headerlink" href="#anthropic-claude-agent-sdk" title="Permanent link">&para;</a></h1>
 <p><code>agent_airlock.integrations.anthropic_claude_agent_sdk</code> is the canonical
 adapter for the <a href="https://docs.claude.com/en/agents-and-tools/agent-skills">Anthropic Claude Agent SDK</a>. It guards the
-tools you serve from an in-process SDK MCP server, and it is a facade over
-the existing <code>claude_*.py</code> family (managed-agents, auto-memory,
-task-budget) so callers can find the entrypoint without learning the
-internal module layout.</p>
+tools you serve from an in-process SDK MCP server, and re-exports the
+auto-memory and task-budget helpers so callers can find them without
+learning the internal module layout.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"agent-airlock[claude-agent]"</span>
 </code></pre></div>
@@ -2653,18 +2736,29 @@ as they were. On every call:</p>
    an <code>SdkMcpTool</code> with a guarded copy, an object's <code>forward</code> or a
    callable with an Airlock-wrapped shim that carries the tool's name and
    signature and is async when the tool is.</li>
-<li><strong>Re-exports the harness defences</strong> from the existing <code>claude_*.py</code>
-   modules so callers can compose:</li>
-<li><code>ManagedAgentsAuditConfig</code> — beta-header + toolset-version + tool
-     intersection check on the managed-agents request boundary.</li>
+<li><strong>Re-exports helpers</strong> from the existing <code>claude_*.py</code> modules so
+   callers find them in one place. The adapter applies none of them
+   itself:</li>
 <li><code>AutoMemoryAccessPolicy</code> + <code>guarded_read</code> / <code>guarded_write</code> —
-     per-tenant scope, byte quota, redaction-on-write.</li>
-<li><code>build_task_budget_headers</code> + <code>build_output_config</code> — populated by
-     the adapter's <code>task_budget_request_kit(remaining=...)</code> helper.</li>
+     per-tenant scope, byte quota, redaction-on-write. Call them yourself;
+     the adapter wraps no memory access.</li>
+<li><code>build_task_budget_headers</code> + <code>build_output_config</code> — the Messages
+     API task budget, <code>output_config={"task_budget": {"type": "tokens",
+     "total": N, "remaining": M}}</code> with the <code>task-budgets-2026-03-13</code> beta
+     (<code>total</code> at least 20,000). The adapter's
+     <code>task_budget_request_kit(remaining=...)</code> returns both, for a request
+     you build with <code>client.beta.messages.create</code>. Through the SDK itself,
+     pass <code>ClaudeAgentOptions(task_budget={"total": N})</code>, which sends the
+     header and the field for you.</li>
 <li><strong>Pins a <code>SUPPORTED_SDK_VERSIONS</code> tuple</strong> recording the SDK versions
    the adapter was checked against. Wrapping an SDK object on any other
    version emits a <code>UserWarning</code> but still wraps.</li>
 </ol>
+<p><code>AnthropicClaudeAgentSDKAdapter(managed_audit=..., auto_memory_policy=...)</code>
+accepted two settings that nothing ever read: no Managed Agents request
+passes through this adapter, and it wraps no memory access. Setting either
+now emits a <code>FutureWarning</code>; both go in v1.0.0. For Claude Managed Agents
+sessions, see <a href="../managed-agents/">the Managed Agents approval gate</a>.</p>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Each argument is checked against the type the SDK advertises and hands
