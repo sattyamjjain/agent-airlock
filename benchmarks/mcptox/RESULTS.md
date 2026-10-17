@@ -56,10 +56,176 @@ strict-type layer is not exercised here. Each response's status (`calls`, `no_ca
 dropped.
 
 <!-- MCPTOX-REPLAY:BEGIN -->
-_Not yet measured._ The canonical replay runs on Linux, after the filesystem gate's `~`
-fix, with `python -m benchmarks.mcptox replay --fetch --write`; see the
-[README](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcptox/README.md)
-for the container command.
+### Replay, measured 2026-10-17 (UTC)
+
+- Host: Linux 7.0.14-linuxkit (canonical Linux host), Python 3.12.15; agent-airlock 0.10.25 at `74048af5a98e`.
+- Filesystem gate checks `~` paths in their expanded form: yes.
+- Data: MCPTox `response_all.json` at `f85189f9ad12`, sha256 `79a90049be931c59...`, verified before scoring.
+- LP labels: blind commit `5e856c228a0c`; `lp_labels.py` sha256 `e1476ddc206ed09a...` (matches the blind commit's).
+- Bootstrap: 2000 resamples of whole servers, seed 20261012.
+- Reproduce: `python -m benchmarks.mcptox replay --fetch --write`
+
+Denominators: 20220 API-model responses and 10507 local-model responses. API models: S = 7465 Success responses with a real-tool call, DE = 1650 Direct Execution responses with a poisoned-tool call, B = 7388 Failure-Ignored responses with a real-tool call.
+
+#### API models (primary)
+
+| Tier | Attack refusal, lower bound (every real call refused) | Upper bound (any real call refused) | Direct Execution refused | Benign-proxy false refusal | of which policy / contract-only | Poison-literal calls refused |
+| --- | --- | --- | --- | --- | --- | --- |
+| G0 (contract only) | 220/7465 (2.9%, CI 2.6-3.4%; server bootstrap 0.9-6.0%) | 237/7465 (3.2%, CI 2.8-3.6%) | 39/1650 (2.4%, CI 1.7-3.2%) | 175/7388 (2.4%, CI 2.1-2.7%; server bootstrap 0.4-6.6%) | 0.0% (0/7388) / 2.4% (175/7388) | 124/4981 (2.5%, CI 2.1-3.0%) |
+| G (+ tool allowlist) | 220/7465 (2.9%, CI 2.6-3.4%; server bootstrap 0.9-6.0%) | 237/7465 (3.2%, CI 2.8-3.6%) | 1650/1650 (100.0%, CI 99.8-100.0%) | 175/7388 (2.4%, CI 2.1-2.7%; server bootstrap 0.4-6.6%) | 0.0% (0/7388) / 2.4% (175/7388) | 124/4981 (2.5%, CI 2.1-3.0%) |
+| LP (+ path / endpoint scopes) | 792/7465 (10.6%, CI 9.9-11.3%; server bootstrap 2.0-24.0%) | 817/7465 (10.9%, CI 10.3-11.7%) | 1650/1650 (100.0%, CI 99.8-100.0%) | 300/7388 (4.1%, CI 3.6-4.5%; server bootstrap 0.8-8.7%) | 1.7% (125/7388) / 2.4% (175/7388) | 708/4981 (14.2%, CI 13.3-15.2%) |
+
+Direct Execution under G is refused by construction: the allowlist is the clean prompt's tools, and the poisoned tool is not one of them. G0 shows what the call contract alone does to the same calls.
+
+#### Local models (secondary)
+
+| Tier | Attack refusal, lower bound (every real call refused) | Upper bound (any real call refused) | Direct Execution refused | Benign-proxy false refusal | of which policy / contract-only | Poison-literal calls refused |
+| --- | --- | --- | --- | --- | --- | --- |
+| G0 (contract only) | 71/1773 (4.0%, CI 3.2-5.0%) | 76/1773 (4.3%, CI 3.4-5.3%) | 174/2747 (6.3%, CI 5.5-7.3%) | 258/5194 (5.0%, CI 4.4-5.6%) | 0.0% (0/5194) / 5.0% (258/5194) | 36/1234 (2.9%, CI 2.1-4.0%) |
+| G (+ tool allowlist) | 71/1773 (4.0%, CI 3.2-5.0%) | 76/1773 (4.3%, CI 3.4-5.3%) | 2747/2747 (100.0%, CI 99.9-100.0%) | 258/5194 (5.0%, CI 4.4-5.6%) | 0.0% (0/5194) / 5.0% (258/5194) | 36/1234 (2.9%, CI 2.1-4.0%) |
+| LP (+ path / endpoint scopes) | 181/1773 (10.2%, CI 8.9-11.7%) | 221/1773 (12.5%, CI 11.0-14.1%) | 2747/2747 (100.0%, CI 99.9-100.0%) | 309/5194 (5.9%, CI 5.3-6.6%) | 1.0% (51/5194) / 5.0% (258/5194) | 151/1234 (12.2%, CI 10.5-14.2%) |
+
+#### Claude 3.7 Sonnet (MCPTox's recorded outputs)
+
+| Group | S | G0 lower | G lower | LP lower | LP upper | B | G false refusal | LP false refusal |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `both keys` | 400 | 0.8% (3/400) | 0.8% (3/400) | 5.2% (21/400) | 9.8% (39/400) | 436 | 0.7% (3/436) | 2.5% (11/436) |
+| `claude-3-7-sonnet` | 310 | 1.0% (3/310) | 1.0% (3/310) | 5.2% (16/310) | 7.4% (23/310) | 347 | 0.3% (1/347) | 2.3% (8/347) |
+| `claude-3-7-sonnet-20250219-thinking` | 90 | 0.0% (0/90) | 0.0% (0/90) | 5.6% (5/90) | 17.8% (16/90) | 89 | 2.2% (2/89) | 3.4% (3/89) |
+
+#### By paradigm (API models)
+
+| Group | S | G0 lower | G lower | LP lower | LP upper | B | G false refusal | LP false refusal |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `Template-1` | 985 | 3.4% (33/985) | 3.4% (33/985) | 17.7% (174/985) | 18.0% (177/985) | 434 | 0.9% (4/434) | 0.9% (4/434) |
+| `Template-2` | 2153 | 3.5% (76/2153) | 3.5% (76/2153) | 14.6% (315/2153) | 15.6% (335/2153) | 3618 | 2.9% (104/3618) | 4.6% (168/3618) |
+| `Template-3` | 4327 | 2.6% (111/4327) | 2.6% (111/4327) | 7.0% (303/4327) | 7.0% (305/4327) | 3336 | 2.0% (67/3336) | 3.8% (128/3336) |
+
+#### By risk category (API models)
+
+| Group | S | G0 lower | G lower | LP lower | LP upper | B | G false refusal | LP false refusal |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `Code Injection` | 354 | 0.0% (0/354) | 0.0% (0/354) | 0.0% (0/354) | 0.0% (0/354) | 265 | 0.0% (0/265) | 0.0% (0/265) |
+| `Credential Leakage` | 565 | 0.4% (2/565) | 0.4% (2/565) | 46.0% (260/565) | 46.2% (261/565) | 586 | 0.2% (1/586) | 3.2% (19/586) |
+| `Data Tampering` | 683 | 4.1% (28/683) | 4.1% (28/683) | 7.0% (48/683) | 7.6% (52/683) | 623 | 1.4% (9/623) | 4.5% (28/623) |
+| `Financial Loss` | 267 | 27.0% (72/267) | 27.0% (72/267) | 27.0% (72/267) | 27.3% (73/267) | 216 | 43.1% (93/216) | 43.1% (93/216) |
+| `Information Manipulation` | 1750 | 2.6% (45/1750) | 2.6% (45/1750) | 3.0% (52/1750) | 3.1% (54/1750) | 1595 | 0.6% (10/1595) | 0.7% (11/1595) |
+| `Infrastructure Damage` | 538 | 2.6% (14/538) | 2.6% (14/538) | 28.1% (151/538) | 28.4% (153/538) | 588 | 1.7% (10/588) | 11.6% (68/588) |
+| `Instruction Tampering` | 402 | 0.7% (3/402) | 0.7% (3/402) | 2.7% (11/402) | 2.7% (11/402) | 294 | 0.3% (1/294) | 0.7% (2/294) |
+| `Message Hijacking` | 275 | 0.7% (2/275) | 0.7% (2/275) | 0.7% (2/275) | 0.7% (2/275) | 209 | 0.5% (1/209) | 0.5% (1/209) |
+| `Other` | 26 | 0.0% (0/26) | 0.0% (0/26) | 0.0% (0/26) | 0.0% (0/26) | 25 | 0.0% (0/25) | 0.0% (0/25) |
+| `Privacy Leakage` | 1105 | 1.6% (18/1105) | 1.6% (18/1105) | 10.9% (120/1105) | 11.8% (130/1105) | 2021 | 0.7% (15/2021) | 1.8% (37/2021) |
+| `Service Disruption` | 1500 | 2.4% (36/1500) | 2.4% (36/1500) | 5.1% (76/1500) | 5.4% (81/1500) | 966 | 3.6% (35/966) | 4.2% (41/966) |
+
+#### By model family (API models)
+
+| Group | S | G0 lower | G lower | LP lower | LP upper | B | G false refusal | LP false refusal |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `Claude` | 400 | 0.8% (3/400) | 0.8% (3/400) | 5.2% (21/400) | 9.8% (39/400) | 436 | 0.7% (3/436) | 2.5% (11/436) |
+| `DeepSeek` | 1639 | 1.8% (30/1639) | 1.8% (30/1639) | 11.3% (185/1639) | 11.5% (189/1639) | 528 | 1.5% (8/528) | 3.2% (17/528) |
+| `Gemini` | 776 | 5.3% (41/776) | 5.3% (41/776) | 12.9% (100/776) | 12.9% (100/776) | 390 | 0.8% (3/390) | 3.1% (12/390) |
+| `Llama` | 350 | 7.1% (25/350) | 7.1% (25/350) | 8.9% (31/350) | 9.1% (32/350) | 1143 | 3.1% (35/1143) | 4.8% (55/1143) |
+| `OpenAI` | 1573 | 2.5% (39/1573) | 2.5% (39/1573) | 9.7% (153/1573) | 9.7% (153/1573) | 1311 | 1.8% (23/1311) | 3.1% (41/1311) |
+| `Qwen` | 2727 | 3.0% (82/2727) | 3.0% (82/2727) | 11.1% (302/2727) | 11.1% (304/2727) | 3580 | 2.9% (103/3580) | 4.6% (164/3580) |
+
+#### By model
+
+| Group | S | G0 lower | G lower | LP lower | LP upper | B | G false refusal | LP false refusal |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `online:DeepSeek-R1` | 886 | 1.7% (15/886) | 1.7% (15/886) | 10.4% (92/886) | 10.8% (96/886) | 179 | 0.0% (0/179) | 1.7% (3/179) |
+| `online:DeepSeek-v3` | 753 | 2.0% (15/753) | 2.0% (15/753) | 12.4% (93/753) | 12.4% (93/753) | 349 | 2.3% (8/349) | 4.0% (14/349) |
+| `online:Llama-3.1-70B-Instruct` | 210 | 7.6% (16/210) | 7.6% (16/210) | 10.0% (21/210) | 10.5% (22/210) | 399 | 2.0% (8/399) | 4.3% (17/399) |
+| `online:Llama-3.1-8B-Instruct` | 140 | 6.4% (9/140) | 6.4% (9/140) | 7.1% (10/140) | 7.1% (10/140) | 744 | 3.6% (27/744) | 5.1% (38/744) |
+| `online:claude-3-7-sonnet` | 310 | 1.0% (3/310) | 1.0% (3/310) | 5.2% (16/310) | 7.4% (23/310) | 347 | 0.3% (1/347) | 2.3% (8/347) |
+| `online:claude-3-7-sonnet-20250219-thinking` | 90 | 0.0% (0/90) | 0.0% (0/90) | 5.6% (5/90) | 17.8% (16/90) | 89 | 2.2% (2/89) | 3.4% (3/89) |
+| `online:gemini-2.5-flash` | 776 | 5.3% (41/776) | 5.3% (41/776) | 12.9% (100/776) | 12.9% (100/776) | 390 | 0.8% (3/390) | 3.1% (12/390) |
+| `online:gpt-3.5-turbo` | 195 | 3.6% (7/195) | 3.6% (7/195) | 5.6% (11/195) | 5.6% (11/195) | 888 | 2.0% (18/888) | 3.5% (31/888) |
+| `online:gpt-4o-mini` | 804 | 3.5% (28/804) | 3.5% (28/804) | 11.1% (89/804) | 11.1% (89/804) | 309 | 1.3% (4/309) | 2.6% (8/309) |
+| `online:o1-mini` | 574 | 0.7% (4/574) | 0.7% (4/574) | 9.2% (53/574) | 9.2% (53/574) | 114 | 0.9% (1/114) | 1.8% (2/114) |
+| `online:qwen3-235b-a22b_NO_Think` | 229 | 2.6% (6/229) | 2.6% (6/229) | 9.2% (21/229) | 9.2% (21/229) | 588 | 1.9% (11/588) | 3.2% (19/588) |
+| `online:qwen3-235b-a22b_Think` | 674 | 1.3% (9/674) | 1.3% (9/674) | 8.3% (56/674) | 8.5% (57/674) | 533 | 1.9% (10/533) | 3.9% (21/533) |
+| `online:qwen3-32b_NO_Think` | 316 | 6.0% (19/316) | 6.0% (19/316) | 11.7% (37/316) | 11.7% (37/316) | 636 | 3.3% (21/636) | 6.0% (38/636) |
+| `online:qwen3-32b_Think` | 778 | 3.1% (24/778) | 3.1% (24/778) | 11.2% (87/778) | 11.3% (88/778) | 400 | 2.5% (10/400) | 4.2% (17/400) |
+| `online:qwen3-8b_NO_Think` | 173 | 2.3% (4/173) | 2.3% (4/173) | 15.0% (26/173) | 15.0% (26/173) | 816 | 3.6% (29/816) | 4.5% (37/816) |
+| `online:qwen3-8b_Think` | 557 | 3.6% (20/557) | 3.6% (20/557) | 13.5% (75/557) | 13.5% (75/557) | 607 | 3.6% (22/607) | 5.3% (32/607) |
+| `local:Deepseek-qwen3-8b-Think` | 22 | 9.1% (2/22) | 9.1% (2/22) | 36.4% (8/22) | 36.4% (8/22) | 98 | 16.3% (16/98) | 21.4% (21/98) |
+| `local:LLama-13b` | 3 | 66.7% (2/3) | 66.7% (2/3) | 66.7% (2/3) | 66.7% (2/3) | 137 | 23.4% (32/137) | 23.4% (32/137) |
+| `local:LLama-3-8b` | 30 | 13.3% (4/30) | 13.3% (4/30) | 23.3% (7/30) | 23.3% (7/30) | 471 | 5.7% (27/471) | 6.8% (32/471) |
+| `local:Phi-4-Think` | 664 | 2.7% (18/664) | 2.7% (18/664) | 7.2% (48/664) | 12.3% (82/664) | 204 | 2.0% (4/204) | 2.9% (6/204) |
+| `local:Qwen3-14b-No-Think` | 56 | 7.1% (4/56) | 7.1% (4/56) | 12.5% (7/56) | 12.5% (7/56) | 707 | 3.4% (24/707) | 4.2% (30/707) |
+| `local:Qwen3-14b-Think` | 331 | 3.9% (13/331) | 3.9% (13/331) | 10.6% (35/331) | 12.1% (40/331) | 562 | 3.7% (21/562) | 5.5% (31/562) |
+| `local:Qwen3-30b-A3b-No-Think` | 52 | 5.8% (3/52) | 5.8% (3/52) | 5.8% (3/52) | 5.8% (3/52) | 430 | 4.7% (20/430) | 4.7% (20/430) |
+| `local:Qwen3-8b-No-Think` | 65 | 3.1% (2/65) | 3.1% (2/65) | 6.2% (4/65) | 6.2% (4/65) | 671 | 5.4% (36/671) | 5.4% (36/671) |
+| `local:Qwen3-8b-Think` | 286 | 4.9% (14/286) | 4.9% (14/286) | 12.2% (35/286) | 12.6% (36/286) | 586 | 4.8% (28/586) | 6.5% (38/586) |
+| `local:gemma-2-9b` | 183 | 3.8% (7/183) | 3.8% (7/183) | 13.1% (24/183) | 13.1% (24/183) | 813 | 3.0% (24/813) | 3.6% (29/813) |
+| `local:mistral` | 81 | 2.5% (2/81) | 2.5% (2/81) | 9.9% (8/81) | 9.9% (8/81) | 515 | 5.0% (26/515) | 6.6% (34/515) |
+
+#### Why real calls in S were refused (API models)
+
+| Tier | Block reasons (refused real calls) |
+| --- | --- |
+| G0 | `ghost_arguments` 194, `validation_error` 43 |
+| G | `ghost_arguments` 194, `validation_error` 43 |
+| LP | `path_violation` 582, `ghost_arguments` 194, `validation_error` 43 |
+
+#### wrong_data = 0 subset (API models)
+
+| Tier | Attack refusal, lower bound (every real call refused) | Upper bound (any real call refused) | Direct Execution refused | Benign-proxy false refusal | of which policy / contract-only | Poison-literal calls refused |
+| --- | --- | --- | --- | --- | --- | --- |
+| G0 (contract only) | 220/7165 (3.1%, CI 2.7-3.5%) | 237/7165 (3.3%, CI 2.9-3.8%) | 39/1632 (2.4%, CI 1.8-3.2%) | 175/7237 (2.4%, CI 2.1-2.8%) | 0.0% (0/7237) / 2.4% (175/7237) | 124/4874 (2.5%, CI 2.1-3.0%) |
+| G (+ tool allowlist) | 220/7165 (3.1%, CI 2.7-3.5%) | 237/7165 (3.3%, CI 2.9-3.8%) | 1632/1632 (100.0%, CI 99.8-100.0%) | 175/7237 (2.4%, CI 2.1-2.8%) | 0.0% (0/7237) / 2.4% (175/7237) | 124/4874 (2.5%, CI 2.1-3.0%) |
+| LP (+ path / endpoint scopes) | 792/7165 (11.1%, CI 10.3-11.8%) | 817/7165 (11.4%, CI 10.7-12.2%) | 1632/1632 (100.0%, CI 99.8-100.0%) | 300/7237 (4.1%, CI 3.7-4.6%) | 1.7% (125/7237) / 2.4% (175/7237) | 708/4874 (14.5%, CI 13.6-15.5%) |
+
+#### Poison-literal uptake against MCPTox's labels
+
+| Source | Precision (uptake -> Success) | Recall (Success -> uptake) |
+| --- | --- | --- |
+| online | 4868/4964 (98.1%, CI 97.6-98.4%) | 4868/7465 (65.2%, CI 64.1-66.3%) |
+| local | 1166/1223 (95.3%, CI 94.0-96.4%) | 1166/1773 (65.8%, CI 63.5-67.9%) |
+
+#### MCPTox's own attack success rate, from its labels (reproduction anchor)
+
+| API model | Success / labelled (None excluded) |
+| --- | --- |
+| `DeepSeek-R1` | 890/1256 (70.9%, CI 68.3-73.3%) |
+| `DeepSeek-v3` | 757/1339 (56.5%, CI 53.9-59.2%) |
+| `Llama-3.1-70B-Instruct` | 211/856 (24.6%, CI 21.9-27.7%) |
+| `Llama-3.1-8B-Instruct` | 150/1065 (14.1%, CI 12.1-16.3%) |
+| `claude-3-7-sonnet` | 318/900 (35.3%, CI 32.3-38.5%) |
+| `claude-3-7-sonnet-20250219-thinking` | 91/293 (31.1%, CI 26.0-36.6%) |
+| `gemini-2.5-flash` | 777/1302 (59.7%, CI 57.0-62.3%) |
+| `gpt-3.5-turbo` | 199/1335 (14.9%, CI 13.1-16.9%) |
+| `gpt-4o-mini` | 804/1302 (61.8%, CI 59.1-64.3%) |
+| `o1-mini` | 574/788 (72.8%, CI 69.6-75.8%) |
+| `qwen3-235b-a22b_NO_Think` | 231/1340 (17.2%, CI 15.3-19.4%) |
+| `qwen3-235b-a22b_Think` | 676/1337 (50.6%, CI 47.9-53.2%) |
+| `qwen3-32b_NO_Think` | 319/1345 (23.7%, CI 21.5-26.1%) |
+| `qwen3-32b_Think` | 778/1331 (58.5%, CI 55.8-61.1%) |
+| `qwen3-8b_NO_Think` | 188/1346 (14.0%, CI 12.2-15.9%) |
+| `qwen3-8b_Think` | 560/1341 (41.8%, CI 39.1-44.4%) |
+
+#### Accounting (nothing dropped)
+
+| Source | Label | calls | no_call | malformed | empty |
+| --- | --- | --- | --- | --- | --- |
+| online | `Failure-Direct Execution` | 1776 | 2 | 0 | 0 |
+| online | `Failure-Ignored` | 8835 | 263 | 9 | 14 |
+| online | `Failure-Refused` | 16 | 33 | 0 | 5 |
+| online | `None` | 15 | 188 | 0 | 1541 |
+| online | `Success` | 7509 | 8 | 6 | 0 |
+| local | `<missing>` | 1 | 0 | 0 | 0 |
+| local | `Failure-Direct Execution` | 2814 | 0 | 22 | 0 |
+| local | `Failure-Ignored` | 5371 | 0 | 121 | 0 |
+| local | `None` | 336 | 0 | 8 | 0 |
+| local | `Success` | 1777 | 0 | 57 | 0 |
+
+Parse repairs: `end_token` 10478, `python_literal` 9745, `think_block` 505, `json_keywords_in_literal` 393, `unparseable_call_span` 231, `no_arguments_key` 153, `apostrophe_repair` 100, `native_call` 70, `partial` 55, `unbalanced_call_text` 43, `json_comments` 18, `call_list` 14, `arguments_not_object` 3, `arguments_unparseable_string` 2, `orphan_think_close` 1, `unterminated_think` 1.
+
+Calls: local:other 16, local:poisoned 3023, local:real 7966, online:other 46, online:poisoned 3201, online:real 15206 (other = neither a clean-prompt tool nor the poisoned tool: not replayable).
+
+Real or poisoned calls that could not be replayed: none.
+
+LP coverage: 35 servers at LP, 10 without clean queries at G; 22 tools filesystem-scoped, 2 on an endpoint allowlist, 22 open-web with the SSRF pre-check; 12 labelled scopes could not be derived and fell back to G.
 <!-- MCPTOX-REPLAY:END -->
 
 ## Fresh Claude 5.5 run

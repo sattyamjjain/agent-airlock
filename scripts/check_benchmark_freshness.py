@@ -61,6 +61,10 @@ BENCHMARKS: dict[str, tuple[str, str]] = {
         "Indirect prompt injection (AgentDojo)",
         "python -m benchmarks.agentdojo.run  (deterministic bound: free; --model --run: API credit)",
     ),
+    "benchmarks.mcptox": (
+        "Tool poisoning (MCPTox)",
+        "python -m benchmarks.mcptox replay  (free offline replay; fresh --run spends API credit)",
+    ),
     "benchmarks.vs_gateway": (
         "Native MCP gateway head-to-head",
         "python -m benchmarks.vs_gateway.gateway_harness.regen  (needs a Docker daemon)",
