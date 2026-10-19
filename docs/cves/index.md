@@ -45,6 +45,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-105788](#cve-2026-105788) | Microsoft UFO mobile MCP type_text and launch_app injection | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-88 | Partial |
 | [CVE-2026-105793](#cve-2026-105793) | Microsoft UFO mobile MCP press_key argument injection | 9.1 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:L, CWE-78 | Partial |
 | [CVE-2026-105797](#cve-2026-105797) | SimpleChat personal MCP plugin spawns an attacker-selected stdio process | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-863 | Partial |
+| [CVE-2026-108953](#cve-2026-108953) | mac-shell-mcp bypasses its command whitelist via shell metachars in args | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
@@ -72,6 +73,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-53710](#cve-2026-53710) | ContextForge python_sandbox_server: RestrictedPython escape via raw ``getattr`` | 10.0 (CRITICAL) — CWE-94 + CWE-693 | Partial |
 | [CVE-2026-53820](#cve-2026-53820) | OpenClaw exec-denylist bypass at MCP loopback spawn | 6.9 | — |
 | [CVE-2026-57124](#cve-2026-57124) | PraisonAI UI /api/mcp/connect spawns caller-chosen local commands | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-306 + CWE-78 | Partial |
+| [CVE-2026-57496](#cve-2026-57496) | NetLicensing MCP splices product_number into a REST path, no segment check | 9.6 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N | Partial |
 | [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
 | [CVE-2026-75062](#cve-2026-75062) | Google langfun lf.query evaluates model-generated Python unsandboxed | 9.2 (CRITICAL) — CWE-95, CWE-1188 | Partial |
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
@@ -554,6 +556,55 @@ and never consults a top-level ``type`` discriminator, so the exact move this
 CVE uses — omit the ``type`` to skip inspection — does not skip the guard.
 
 <a id="cve-2026-105797"></a>
+
+### CVE-2026-108953
+
+**mac-shell-mcp bypasses its command whitelist via shell metachars in args**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-108953](https://nvd.nist.gov/vuln/detail/CVE-2026-108953)
+- **Advisory:** [https://github.com/cfdude/mac-shell-mcp/issues/45](https://github.com/cfdude/mac-shell-mcp/issues/45)
+- **Regression test:** [`tests/cves/test_cve_2026_108953_mac_shell_mcp.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_108953_mac_shell_mcp.py)
+
+**Vulnerability**
+
+mac-shell-mcp before 2.0.0 exposes an ``execute_command`` MCP tool guarded by a
+command whitelist. The whitelist vets the *command* but not its *arguments*, so a
+client calls an allowed command such as ``pwd`` and smuggles a forbidden command in
+the arguments behind a shell metacharacter — ``pwd ; …``, ``pwd && …``, a pipe,
+``$( )`` or a backtick — which the server then runs through a shell as the server
+user, without approval. NVD, verbatim: *"mac-shell-mcp before 2.0.0 contains an OS
+command injection vulnerability that allows MCP clients to bypass the command
+whitelist by injecting shell metacharacters into execute_command arguments.
+Attackers or malicious prompts can call a safe command such as pwd with arguments
+like ';' to run forbidden commands as the server user without approval."* Fixed in
+2.0.0, whose commit stops building a shell string from the arguments.
+
+**Airlock mitigation**
+
+**Out of scope: the whitelist and the approval gate.** Whether ``execute_command``
+is offered, what its command whitelist contains, and whether a human approves a run
+are decisions in mac-shell-mcp's own server, downstream of the tool call. A contract
+layer cannot impose them on someone else's server, and 2.0.0 is the right place for
+the fix.
+
+**In scope: the primitive.** Shell metacharacters riding in a caller-controlled
+argument is the documented in-scope shape (``docs/cve-triage.md``, "Metacharacter /
+escape neutralisation mismatch", anchored on CVE-2026-19591), and
+``StdioCommandInjectionGuard`` already refuses it. So this is a **second-defence
+regression fixture against an existing guard, not a new guard** — the
+CVE-2026-77521 pattern. The guard runs on the argument, before the server ever
+builds a shell string, so it still fires when the whitelist is the only thing the
+server relied on.
+
+One honest boundary: a bare ``$VAR`` (no ``$(``) is not in the default metachar set
+and passes, because ``$`` appears in ordinary arguments and a blanket refusal would
+break them — the same line ``SafeURL`` draws for ``$name`` in CVE-2026-102911. Once
+the server still splices the value into a shell, ``$VAR`` would expand; the complete
+fix is the upstream one — 2.0.0 passes arguments as argv with no shell.
+
+<a id="cve-2026-108953"></a>
 
 ### CVE-2026-11393
 
@@ -1251,6 +1302,51 @@ session is already too late; the refusal has to happen on the registration
 argument itself.
 
 <a id="cve-2026-57124"></a>
+
+### CVE-2026-57496
+
+**NetLicensing MCP splices product_number into a REST path, no segment check**
+
+- **CVSS:** 9.6 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-57496](https://nvd.nist.gov/vuln/detail/CVE-2026-57496)
+- **Advisory:** [https://github.com/Labs64/NetLicensing-MCP/security/advisories/GHSA-hxpf-9xvq-wph8](https://github.com/Labs64/NetLicensing-MCP/security/advisories/GHSA-hxpf-9xvq-wph8)
+- **Regression test:** [`tests/cves/test_cve_2026_57496_netlicensing_product_path.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_57496_netlicensing_product_path.py)
+
+**Vulnerability**
+
+NetLicensing MCP Server (Labs64) before 0.1.8: ``netlicensing_get_product`` passes
+the caller-controlled ``product_number`` into a REST path (consumed by ``nl_get()``)
+without path-segment validation. A traversal segment normalizes the intended product
+path onto the ``/token`` endpoint, whose response is serialized through ``_wrap_json``
+instead of ``_wrap_json_token_read`` — bypassing ``redact_token_read()`` and leaking
+plaintext APIKEY ``number`` and SHOP ``shopURL`` token values. A non-administrative
+API key can thereby recover an administrative token. Fixed in 0.1.8.
+
+**Airlock mitigation**
+
+The traversal rides in the ``product_number`` argument — the seam this library sits
+on — so ``SafePathValidator``, the same primitive that answers the git_init
+traversal (CVE-2025-68143), refuses any ``product_number`` carrying a ``..`` segment
+before it can be interpolated into the REST path and normalized onto ``/token``. Its
+pre-resolution check is a substring test, so the ``..%2F`` slash-encoded form is
+refused too.
+
+Two honest boundaries, both because the argument is a **URL** path segment, not a
+filesystem path, and no URL-path-segment guard exists — by design, a filesystem-path
+validator must not URL-decode, or it would reject legitimate filenames containing a
+literal ``%``:
+
+- A **fully** percent-encoded segment (``%2e%2e%2f``) carries no literal ``..`` and
+  passes; whether it then traverses depends on the downstream HTTP layer, which is
+  out of a filesystem-path validator's reach. ``TestScopeBoundary`` pins it.
+- The redaction bypass itself (``_wrap_json`` vs ``_wrap_json_token_read``) is
+  server-side and structurally invisible here.
+
+The complete fix is the upstream path-segment validation in 0.1.8. This is a
+second-defence regression fixture against an existing primitive, not a new guard.
+
+<a id="cve-2026-57496"></a>
 
 ### CVE-2026-6980
 
