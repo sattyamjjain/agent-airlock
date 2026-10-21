@@ -223,6 +223,25 @@ class StdioCommandInjectionGuard:
         """
         if args is None:
             return self._allow("no args to inspect")
+        if not isinstance(args, Mapping):
+            # Until 0.10.26 a list or a string here raised ``AttributeError`` out of
+            # ``evaluate``; a payload this guard cannot read is refused, not skipped.
+            kind = type(args).__name__
+            logger.warning(
+                "stdio_command_injection_uninspectable",
+                field="args",
+                value_type=kind,
+            )
+            return StdioCommandInjectionDecision(
+                allowed=False,
+                verdict=StdioCommandInjectionVerdict.DENY_UNINSPECTABLE,
+                detail=(
+                    f"call args are a {kind}, not a mapping; a shape this guard cannot "
+                    "read is refused, not skipped"
+                ),
+                matched_metachar=None,
+                matched_path=None,
+            )
 
         # Refuse an argv field this guard cannot read before reasoning about the rest:
         # every check below sees only strings, so anything else would pass unexamined.

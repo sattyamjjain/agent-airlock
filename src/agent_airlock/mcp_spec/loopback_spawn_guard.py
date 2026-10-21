@@ -159,6 +159,7 @@ class LoopbackSpawnVerdict(str, enum.Enum):
     DENY_EMPTY_COMMAND = "deny_empty_command"
     DENY_RESOLVED_DENIED = "deny_resolved_denied"  # effective hits the denylist
     DENY_NOT_ALLOWLISTED = "deny_not_allowlisted"  # effective not in the allow set
+    DENY_UNINSPECTABLE = "deny_uninspectable"  # not a string or a sequence of strings
 
 
 @dataclass(frozen=True)
@@ -279,6 +280,31 @@ class LoopbackSessionSpawnGuard:
             :class:`LoopbackSpawnDecision`. ``allowed=False`` maps to a refusal
             of the spawn at the loopback session boundary.
         """
+        if not _is_command_shape(command):
+            # Until 0.10.26 a number raised ``TypeError`` here and a sequence holding a
+            # non-string was coerced with ``str()``; a shape the guard cannot read is
+            # refused, not skipped.
+            kind = type(command).__name__
+            logger.warning(
+                "loopback_spawn_blocked",
+                verdict=LoopbackSpawnVerdict.DENY_UNINSPECTABLE.value,
+                surface=None,
+                effective=None,
+                reason="command_not_readable",
+                command_type=kind,
+            )
+            return LoopbackSpawnDecision(
+                allowed=False,
+                verdict=LoopbackSpawnVerdict.DENY_UNINSPECTABLE,
+                detail=(
+                    f"spawn command is a {kind}, not a string or a sequence of strings; a "
+                    "shape this guard cannot read is refused, not skipped"
+                ),
+                resolution_chain=[],
+                fix_hints=self._hints(
+                    "Pass the spawn command as a shell string or a list of string argv elements."
+                ),
+            )
         argv = self._to_argv(command)
         if not argv or not argv[0].strip():
             return LoopbackSpawnDecision(
@@ -330,6 +356,7 @@ class LoopbackSessionSpawnGuard:
     # -- internals --------------------------------------------------------
 
     def _to_argv(self, command: str | Sequence[str]) -> list[str]:
+        """Split a shell string, or copy a sequence :func:`_is_command_shape` accepted."""
         if isinstance(command, str):
             try:
                 return shlex.split(command)
@@ -429,6 +456,15 @@ class LoopbackSessionSpawnGuard:
         if self._advisory_url:
             hints.append(f"See: {self._advisory_url}")
         return hints
+
+
+def _is_command_shape(command: object) -> bool:
+    """A shell string, or a sequence (not bytes) whose every element is a string."""
+    if isinstance(command, str):
+        return True
+    if isinstance(command, (bytes, bytearray)) or not isinstance(command, Sequence):
+        return False
+    return all(isinstance(part, str) for part in command)
 
 
 __all__ = [

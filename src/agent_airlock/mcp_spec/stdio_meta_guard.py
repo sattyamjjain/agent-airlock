@@ -31,6 +31,7 @@ References
 
 from __future__ import annotations
 
+import shlex
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -163,12 +164,31 @@ class StdioMetaGuard:
         started = time.perf_counter()
         findings: list[Finding] = []
 
+        # Every field is read in each shape a spawner accepts, or the spec is refused with
+        # an ``unreadable_shape`` finding (0.10.26). Until then a spec that was not a
+        # mapping or an ``args`` that was not a sequence raised out of ``evaluate``, and a
+        # ``command`` of any other type was dropped, so argv[0] was never the program.
+        if not isinstance(server_spec, Mapping):
+            findings.append(_unreadable_finding("server_spec", server_spec, "a mapping"))
+            return self._finalize(findings, started)
         cmd_obj = server_spec.get("command")
-        cmd_args = server_spec.get("args") or []
+        raw_args = server_spec.get("args")
+        cmd_args: list[Any]
+        if raw_args is None:
+            cmd_args = []
+        elif isinstance(raw_args, str):
+            cmd_args = _shell_tokens(raw_args)
+        elif isinstance(raw_args, (list, tuple)):
+            cmd_args = list(raw_args)
+        else:
+            findings.append(
+                _unreadable_finding("args", raw_args, "a string or a sequence of strings")
+            )
+            return self._finalize(findings, started)
 
         # Build the canonical argv list for downstream steps.
-        if isinstance(cmd_obj, list):
-            argv: list[str] = list(cmd_obj) + list(cmd_args)
+        if isinstance(cmd_obj, (list, tuple)):
+            argv: list[Any] = list(cmd_obj) + list(cmd_args)
         elif isinstance(cmd_obj, str):
             # Single-string ``command`` with no separate args is the
             # canonical shell-form smuggle when it contains spaces; only
@@ -189,8 +209,34 @@ class StdioMetaGuard:
                 )
                 return self._finalize(findings, started)
             argv = [cmd_obj] + list(cmd_args)
-        else:
+        elif cmd_obj is None:
             argv = list(cmd_args)
+        else:
+            findings.append(
+                _unreadable_finding("command", cmd_obj, "a string or a sequence of strings")
+            )
+            return self._finalize(findings, started)
+
+        # Step 0: every argv slot is a string, or the spec is refused. Until 0.10.26 a
+        # ``bytes`` or nested-list element reached step 1b's substring test and raised
+        # ``TypeError`` out of ``evaluate`` instead of producing a verdict.
+        for idx, value in enumerate(argv):
+            if not isinstance(value, str):
+                findings.append(
+                    Finding(
+                        guard_id="stdio_meta_guard",
+                        finding_id="non_string_argv",
+                        rule="non_string_argv",
+                        severity="critical",
+                        message=(
+                            f"argv[{idx}] is a {type(value).__name__}, not a string; a slot "
+                            "the chain cannot read is refused, not skipped"
+                        ),
+                        offending_arg=None,
+                        details={"index": idx, "type": type(value).__name__},
+                    )
+                )
+                return self._finalize(findings, started)
 
         # Step 1: argv_guard — refuses any shell-form (string concatenation)
         # in any non-binary slot.
@@ -413,6 +459,31 @@ class TaintCheck:
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
+
+
+def _shell_tokens(line: str) -> list[str]:
+    """Split a shell-form ``args`` string as a POSIX shell would, or on whitespace if it can't."""
+    try:
+        return shlex.split(line)
+    except ValueError:  # unbalanced quotes: still inspect what is there
+        return line.split()
+
+
+def _unreadable_finding(field_name: str, value: object, expected: str) -> Finding:
+    """A finding for a spec field the chain cannot read: refused, never skipped (0.10.26)."""
+    kind = type(value).__name__
+    return Finding(
+        guard_id="stdio_meta_guard",
+        finding_id=f"{field_name}_unreadable",
+        rule="unreadable_shape",
+        severity="critical",
+        message=(
+            f"server_spec[{field_name!r}] is a {kind}, not {expected}; a shape the chain "
+            "cannot read is refused, not skipped"
+        ),
+        offending_arg=None,
+        details={"field": field_name, "type": kind},
+    )
 
 
 def _finding_id_for_rule(rule: str) -> str:

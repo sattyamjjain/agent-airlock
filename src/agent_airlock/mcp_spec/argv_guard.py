@@ -82,6 +82,42 @@ class ArgvStringConcatenationError(AirlockError):
         )
 
 
+class ArgvNonStringSlotError(ArgvStringConcatenationError):
+    """Raised when an argv slot is not a string (``bytes``, a nested list, a number).
+
+    Every check in :func:`enforce_argv_array` reads a ``str``, so a slot of any other type
+    passed them unexamined until 0.10.26, when it was skipped as "the caller's bug" — and
+    ``subprocess`` spawns a ``bytes`` element as written. It is refused, like the
+    non-string element ``validate_stdio_command`` refuses. A subclass of the concatenation
+    error, so a caller that already refuses on that refuses on this.
+
+    Attributes:
+        argv_index: 0-based index of the offending element.
+        offending_type: The element's type name.
+        field_name: Optional human-readable field name.
+    """
+
+    def __init__(
+        self,
+        *,
+        argv_index: int,
+        offending_type: str,
+        field_name: str | None = None,
+    ) -> None:
+        self.argv_index = argv_index
+        self.offending_value = f"<{offending_type}>"
+        self.offending_type = offending_type
+        self.field_name = field_name
+        location = f"argv[{argv_index}]"
+        if field_name is not None:
+            location = f"{location} ({field_name!r})"
+        AirlockError.__init__(
+            self,
+            f"{location} is a {offending_type}, not a string — a slot the argv checks "
+            "cannot read is refused, not skipped (until 0.10.26 it passed unexamined)",
+        )
+
+
 class ArgvOptionInjectionError(AirlockError):
     """Raised when a user-controlled argv slot is an option-like token.
 
@@ -163,19 +199,25 @@ def enforce_argv_array(
             ``-`` and a negative number are not option-like.
 
     Raises:
+        ArgvNonStringSlotError: First element that is not a string wins
+            (checked before anything else; a subclass of the error below).
         ArgvStringConcatenationError: First shlex-unsafe element wins.
         ArgvOptionInjectionError: Under ``reject_option_values``, first
             option-like element wins (checked before the shlex round-trip).
     """
     for idx, value in enumerate(args):
-        if not isinstance(value, str):
-            # Non-string slot — caller's bug, but not the injection
-            # class we're guarding. Skip silently; type checks belong
-            # elsewhere.
-            continue
         field_name = (
             field_names[idx] if field_names is not None and idx < len(field_names) else None
         )
+        if not isinstance(value, str):
+            # Until 0.10.26 a non-string slot was skipped as "the caller's bug". Nothing
+            # below reads it, ``subprocess`` spawns a ``bytes`` element as written, and a
+            # nested list or a number reaches the spawner unexamined: refused.
+            raise ArgvNonStringSlotError(
+                argv_index=idx,
+                offending_type=type(value).__name__,
+                field_name=field_name,
+            )
         if reject_option_values and _is_option_like(value):
             raise ArgvOptionInjectionError(
                 argv_index=idx,
@@ -209,6 +251,7 @@ def _is_safe_modulo_space(value: str) -> bool:
 
 
 __all__ = [
+    "ArgvNonStringSlotError",
     "ArgvOptionInjectionError",
     "ArgvStringConcatenationError",
     "enforce_argv_array",

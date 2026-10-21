@@ -456,7 +456,9 @@ def _spawn_fingerprint(entry: Mapping[str, Any], name: str) -> str | None:
             args=() if args is None else args,
             env_keys=env_keys,
         )
-    except TypeError:  # a non-iterable args, or an item json cannot encode (bytes, objects)
+    except (TypeError, ValueError, RecursionError):
+        # A non-iterable args, an item json cannot encode (bytes, objects), or an args
+        # that contains itself (json: "Circular reference detected", 0.10.26).
         return None
 
 
@@ -554,6 +556,18 @@ class McpConfigPinSet:
                 ``args`` cannot be read (unreadable).
             KeyError: ``server_config`` is missing ``name`` or ``command``.
         """
+        if not isinstance(server_config, Mapping):
+            # A config that is not a mapping has no name to look up and no fields to
+            # fingerprint; until 0.10.26 this raised ``TypeError`` instead of the refusal.
+            kind = type(server_config).__name__
+            self._emit_audit(server_name="", reason="unreadable", actual="")
+            raise McpConfigPinViolation(
+                server_name="",
+                reason="unreadable",
+                expected_fingerprint=None,
+                actual_fingerprint="",
+                detail=f"server_config must be a mapping, got {kind}",
+            )
         name = str(server_config["name"])
         expected = self._pins.get(name)
         fingerprint = _spawn_fingerprint(server_config, name)

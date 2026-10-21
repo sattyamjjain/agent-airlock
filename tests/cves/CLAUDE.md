@@ -85,9 +85,9 @@ what counts as in scope is in `docs/cve-triage.md`.
   tests resolve real public hosts and fail offline.
 - **A refusal needs no module**: one `docs/cve-triage.md` disposition on the triage issue
   and one row in the out-of-scope table in `tests/cves/README.md`.
-- **Any real CVE id written in a `.py` or `.md` here — this file included — marks that CVE
-  as tracked** for `scripts/cve_watcher.py`, which then never files it. Use placeholders
-  such as `CVE-YYYY-NNNNN` in examples.
+- **Any real CVE id written in a `.py` or `.md` here — this file included — or carried in
+  a filename under this directory marks that CVE as tracked** for `scripts/cve_watcher.py`,
+  which then never files it. Use placeholders such as `CVE-YYYY-NNNNN` in examples.
 
 <!-- END AUTO-MANAGED -->
 
@@ -109,7 +109,8 @@ what counts as in scope is in `docs/cve-triage.md`.
   not "N tests passing", while any exist. `test_proof_point_test_count_matches_the_badge`
   pins only the number, so that wording is on whoever edits the proof point.
 - **Fixture gates.** CI runs the egress walker over the fixtures through
-  `tests/cli/test_egress_bench_since.py` and `tests/test_numeric_claim_parity.py`, and a few
+  `tests/cli/test_egress_bench_since.py`, `tests/test_numeric_claim_parity.py` and, via the
+  `airlock egress-bench` CLI function, `tests/test_tooling_honesty_0_10_24.py`, and a few
   tests load single fixtures (the outside-reader grep lists them); no workflow runs
   `make egress-bench`. Fixtures are not hash-pinned; per `AGENTS.md`, removing one cites its
   advisory and adds a successor.

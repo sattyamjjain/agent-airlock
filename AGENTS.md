@@ -77,7 +77,8 @@ Anything weaker (PERMISSIVE_POLICY, `sandbox_required=False`) needs a
 
 - **Conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `security:`,
   `bench:`, `test:`)
-- **Branch naming** — `feat/<short>` / `fix/<short>` / `chore/<short>`
+- **Branch naming** — `<type>/<short>`, the commit vocabulary (`feat/`, `fix/`, `chore/`,
+  `test/`, `docs/`, `ci/`)
 - **Tests first** — every `feat:` row needs at least one regression test
 - **Coverage floor** — 82% (CI-enforced via `--cov-fail-under=82`)
 - **Squash-merge** PRs into `main`; `main` is always tag-able

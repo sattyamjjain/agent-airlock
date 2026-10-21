@@ -71,13 +71,36 @@ preset, and
   fail-open: until v0.10.21 a list `command` walked past both spawn guards, and until
   v0.10.24 six more guards skipped shapes (`ConfigPathGuard`, `McpConfigPinSet`, both eval
   guards, `StdioCommandInjectionGuard`'s non-string argv items, the env-interpolation guard).
-  v0.10.25 closed the same fail-open for a spelling, not a container: `bind_address_guard`
-  checked a literal list and a strict `ipaddress` parse, so the `inet_aton` spellings of
-  `0.0.0.0` (`0`, `0x0`) passed (`tests/test_redteam_wave3_findings_0_10_25.py`).
+  v0.10.25 closed the same fail-open for a spelling, not a container (`bind_address_guard`
+  accepted the `inet_aton` spellings of `0.0.0.0`), for a field never read (`StdioMetaGuard`
+  ignored `env`; now a mapping or a `KEY=VALUE` list, anything else `env_unreadable`) and
+  for a value left unnormalised (`ConfigPathGuard` never expanded a leading `~`; now
+  `unresolvable_home` / `home_dir_escape`), plus boundary gaps in the eval sink regex, the
+  stdio metachar set (`DEFAULT_SHELL_METACHARS`), the banned-codepoint set, the
+  dangerous-env set and wrapper option parsing
+  (`tests/test_redteam_wave2_findings_0_10_25.py`,
+  `tests/test_redteam_wave3_findings_0_10_25.py`). The OX preset's deny regexes, the
+  `-cCODE` widening included, live in `../policy_presets.py`, not here. One refusal shipped
+  opt-in, `enforce_argv_array(reject_option_values=True)`, because an operator-fixed argv
+  legitimately carries flags. v0.10.26 closed the skips the rule still allowed: a
+  non-string argv slot in `enforce_argv_array` (`ArgvNonStringSlotError`), a non-mapping
+  config in `McpSubprocessArgInjectionGuard` (`DENY_UNINSPECTABLE`), and the top-level
+  shapes on which `StdioMetaGuard`, `StdioCommandInjectionGuard`, `ConfigPathGuard`,
+  `LoopbackSessionSpawnGuard` and `McpConfigPinSet` raised a bare `TypeError` /
+  `AttributeError` / `ValueError` instead of their own refusal
+  (`tests/test_guard_shapes_fail_closed_0_10_26.py`): a crash is not a verdict.
   A guard that walks nested values refuses input deeper than 32 levels or containing
   itself, as `DENY_UNINSPECTABLE` where it has a verdict enum
   (`tests/test_spawn_guards_fail_closed_0_10_21.py`,
-  `tests/test_guard_shapes_fail_closed_0_10_24.py`).
+  `tests/test_guard_shapes_fail_closed_0_10_24.py`). `McpSubprocessArgInjectionGuard` is
+  not a walker: it reads `command` / `argv[0]` and env names only, so nested `args` never
+  changes its verdict.
+- **A new guard also joins the red-team campaign by hand.** Add it to `BYPASS_TARGETS` and
+  `build_registry` in `benchmarks/adaptive_redteam/adapters/registry.py` with a
+  `known_blocked` shape its tests prove refused and a `benign_control` it admits, a row in
+  `adapters_table.md`, and bump the count literals in
+  `tests/test_adaptive_redteam_adapters.py`. Nothing derives that list from this directory;
+  `tests/test_adaptive_redteam_registry_parity.py` fails until the module is registered.
 - `*Decision` is a frozen `@dataclass`; `*Verdict` is `class X(str, enum.Enum)` so it
   serializes as its own string value. Two `*Verdict`s that are frozen dataclasses and the
   inspection-style `Literal[...]` aliases are exceptions, not shapes to spread.
@@ -104,10 +127,11 @@ module level.** Importing any submodule still loads pydantic through the root pa
 one other third-party use is `attested_admission.py`, which imports `cryptography`
 *lazily* inside its verifier functions behind the `[attested]` extra and raises a
 `RuntimeError` naming the extra when it is missing. That is the pattern to copy.
-`bare-install`'s import step loads this subpackage through the package root and
-`policy_presets`, so it catches a module-level third-party import in most modules here —
-but not in `attested_admission`, `conformance`, `supply_chain` or
-`transcript_ingest_guard`, which it never loads.
+`bare-install`'s first import step loads this subpackage through the package root and the
+preset factories `policy_presets` calls at import time (`NAME = factory()`), which misses
+`attested_admission`, `conformance`, `supply_chain` and `transcript_ingest_guard`; its
+`check_bare_imports.py` step (0.10.26) imports every module, so a module-level third-party
+import anywhere here fails the job.
 
 **Internal:** `.._log` and `..exceptions` in most modules, `..observability` in a few; every
 other parent-package import (`..policy`, `..attest.receipt`, `..scan.schema`,

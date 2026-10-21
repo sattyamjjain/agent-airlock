@@ -11,6 +11,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.26] - 2026-10-21
+
+A `/init` drift audit of every `CLAUDE.md` against the tree after 0.10.25. Each code change
+below was reproduced against the shipped behaviour and has a passing control beside its
+regression test; the rest of the audit's findings are documentation and are listed last.
+
+### Security
+
+- **`enforce_argv_array` skipped a non-string argv slot.** A `bytes`, nested-list or
+  numeric element was passed over with a comment calling it the caller's bug: nothing
+  below the skip read it, `subprocess` spawns a `bytes` element as written, and the
+  opt-in `reject_option_values` check (0.10.25 F16) never saw such a slot either. It is
+  now refused with `ArgvNonStringSlotError`, a subclass of `ArgvStringConcatenationError`
+  so every caller that already refuses on that refuses on this.
+- **`McpSubprocessArgInjectionGuard.evaluate` allowed any config that was not a mapping**
+  (a list, a string, `bytes`, a number) as "no spawn config to inspect". Only `None` means
+  that; anything else that is not a mapping is now `DENY_UNINSPECTABLE`, a new verdict.
+- **Five guards crashed instead of refusing an unexpected top-level shape.**
+  `StdioMetaGuard.evaluate` raised `TypeError` on a non-string argv element and on an
+  `args` that was not a sequence, `AttributeError` on a spec that was not a mapping, and
+  dropped a `command` of any type other than `str` / `list`, so argv[0] was never the
+  program; `StdioCommandInjectionGuard.evaluate` and `ConfigPathGuard.evaluate` raised
+  `AttributeError` on a payload that was not a mapping; `LoopbackSessionSpawnGuard
+  .check_spawn` raised `TypeError` on a number and `str()`-coerced a non-string element;
+  `McpConfigPinSet.check` raised `ValueError` on an `args` that contained itself and
+  `TypeError` on a config that was not a mapping. Each now returns its own refusal
+  (`non_string_argv` / `unreadable_shape` findings, `DENY_UNINSPECTABLE`,
+  `McpConfigPinViolation(reason="unreadable")`): a crash is not a verdict, and a caller of
+  `evaluate_or_raise` expects the guard's own error.
+- **A bare `~` or `..` as a top-level argument never reached the filesystem gate.**
+  `_looks_like_path` read a path-named key, a leading separator, a drive prefix, a
+  separator anywhere or a file extension, but not the home-relative or traversing shape
+  the nested walk already read, so `read(label="~")` under a parameter not named like a
+  path ran unchecked while `read(labels=["~"])` was refused. The top-level test now shares
+  `_is_absolute_or_escaping` with the nested one.
+- **`@requires` placed above `@Airlock` enforced nothing.** It set its attribute on the
+  wrapper `@Airlock` returned, but the capability gate read the undecorated tool, so the
+  requirement was never checked and the tool ran. The gate now reads the wrapper and the
+  `__wrapped__` chain beneath it, and `get_required_capabilities` combines every
+  requirement it finds along the chain instead of returning the first.
+
+### Fixed
+
+- A run marked with `with AirlockContext(session_id=...)` and no agent id gave its calls
+  no session id (the ambient context was inherited only together with an agent id), so the
+  per-run amplification ledger and the session-keyed guards folded every such run into one
+  anonymous key, refusing a fresh run for another run's calls. The session, workspace and
+  user ids now follow the rule `_run_context` applies: taken whenever the call lacks them,
+  unless the ambient context names a different agent. Identity (agent id, roles) still
+  needs an ambient agent id.
+- The endpoint gate's refusal of an argument it could not read said `Endpoint blocked:
+  unknown` and hinted about a URL that was never found; it now names the argument and the
+  reason (nested too deeply, contains itself) like the filesystem and deserialization gates.
+
+### Added
+
+- `ArgvNonStringSlotError`; `McpSubprocessArgVerdict.DENY_UNINSPECTABLE`;
+  `LoopbackSpawnVerdict.DENY_UNINSPECTABLE`.
+- `scripts/check_bare_imports.py`, run by the `bare-install` job: imports every module
+  under the package in the Pydantic-only venv. The job's import line loaded about three
+  fifths of the package; `sequence_guard`, `action_contradiction_gate`, all of `cli/`, most
+  of `integrations/` and several `mcp_spec` modules are imported lazily or by nothing, so a
+  module-level extra import in one of them passed CI.
+- `tests/test_adaptive_redteam_registry_parity.py`: every `mcp_spec/*guard*.py` module must
+  be a red-team bypass target; the registry was a hand-kept tuple nothing checked against
+  the directory.
+
+### CI
+
+- The `test` job installs `[crypto]` and asserts `cryptography` imports.
+  `tests/test_identity.py` and `tests/test_attested_admission.py` importorskip it, and it
+  arrived only transitively, through `mcp`'s `pyjwt[crypto]` and FastMCP's `authlib`: a
+  release of either that dropped the dependency would have turned the Ed25519 identity and
+  attested-admission suites into silent skips.
+
+### Docs
+
+- `CLAUDE.md` files re-audited against the tree, one read-only pass per section: the
+  sandbox backend sentence (`get_default_backend()` never returns Modal), the adapter list
+  (the README's gated twelve plus two user-invoked gates), the five snippet-included
+  results files, the `deep` Hypothesis profile (wired to nothing), `from_toml_if_exists`,
+  the four `ContextExtractor.CONTEXT_ATTRS` names, UP035 among the rules that fire at
+  `py311`, the two post-v0.5.1 bare-`Exception` classes, the branch-prefix vocabulary in
+  use, `Capability` as the one `Flag`, `credential_scopes` as the one carrier field,
+  the superseded pricing snapshots; `integrations/CLAUDE.md` gains the Managed Agents gate,
+  the Messages schema contract, the task-budget wire shape and the deprecation rule;
+  `mcp_spec/CLAUDE.md` the 0.10.25 and 0.10.26 shape fixes and the red-team registry
+  step; `benchmarks/CLAUDE.md` the `mcptox/` and `fix_hints/` harnesses and the corrected
+  `--write` / checkpoint semantics; `tests/cves/CLAUDE.md` the filename rule of the watcher.
+  AGENTS.md's branch-naming line matches the history.
+
 ## [0.10.25] - 2026-10-17
 
 ### Security
