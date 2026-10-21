@@ -65,6 +65,7 @@ from urllib.request import url2pathname
 from pydantic import ValidationError
 
 from ._arg_walk import (
+    MAX_DEPTH,
     ArgumentNestingError,
     ArgumentValue,
     bind_arguments,
@@ -240,7 +241,8 @@ def _looks_like_path(key: str, value: Any) -> bool:
 
     Uses heuristics based on:
     - Parameter name patterns
-    - Value patterns (starts with /, contains path separators)
+    - Value patterns (absolute, drive-rooted, home-relative or traversing shape, path
+      separators, common file extensions)
     """
     if not isinstance(value, str):
         return False
@@ -252,12 +254,11 @@ def _looks_like_path(key: str, value: Any) -> bool:
     # Check value patterns
     value_lower = value.lower()
 
-    # Absolute paths
-    if value.startswith("/") or value.startswith("\\"):
-        return True
-
-    # Windows paths
-    if len(value) > 2 and value[1] == ":" and value[2] in ("/", "\\"):
+    # Absolute, drive-rooted, home-relative or parent-traversing by shape: the test the
+    # nested walk applies. Until 0.10.26 only the first two were read here, so a bare
+    # ``~`` or ``..`` under a parameter not named like a path had no separator to match
+    # and never reached the filesystem gate, while the same value inside a list did.
+    if _is_absolute_or_escaping(value):
         return True
 
     # Relative paths with separators
@@ -617,24 +618,31 @@ def _caller_identity(context: AirlockContext[Any]) -> AgentIdentity | None:
 
 
 def _inherit_ambient_identity(context: AirlockContext[Any]) -> None:
-    """Give a call with no identity of its own the one set around it, in place.
+    """Give a call the identity and run ids of the context set around it, in place.
 
     The policy check has fallen back to the ambient context since 0.10.13, but the audit
     record, a policy resolver and ``get_current_context()`` inside the tool read the call's
     own context, so an identity set with ``with AirlockContext(...)`` was checked and never
-    recorded. Nothing is taken when the call carries an agent id of its own.
+    recorded. The agent id and roles are taken only when the call has none of its own. The
+    session, workspace and user ids follow the rule ``_run_context`` applies: taken from
+    the ambient context whenever the call lacks them, unless that context names a
+    different agent. Until 0.10.26 they came only with an ambient agent id, so a run
+    marked with ``with AirlockContext(session_id=...)`` alone kept no session on its
+    calls: the per-run amplification ledger and the session-keyed guards folded every
+    such run into one anonymous key.
     """
-    if context.agent_id:
-        return
     ambient = get_current_context()
-    if ambient is None or not ambient.agent_id:
+    if ambient is None or ambient is context:
         return
-    context.agent_id = ambient.agent_id
+    if ambient.agent_id and context.agent_id and ambient.agent_id != context.agent_id:
+        return
+    if not context.agent_id and ambient.agent_id:
+        context.agent_id = ambient.agent_id
+        if not context.roles:
+            context.roles = list(ambient.roles)
     context.session_id = context.session_id or ambient.session_id
     context.workspace_id = context.workspace_id or ambient.workspace_id
     context.user_id = context.user_id or ambient.user_id
-    if not context.roles:
-        context.roles = list(ambient.roles)
 
 
 def _run_context(context: AirlockContext[Any]) -> AirlockContext[Any] | None:
@@ -836,6 +844,10 @@ class Airlock:
         # argument values (`_arg_walk.bind_arguments`); built once, not per call.
         call_signature = signature_of(func)
         is_async = asyncio.iscoroutinefunction(func)
+        # The wrapper this decorator returns: assigned below, read by the capability gate
+        # at call time, because ``@requires`` applied above ``@Airlock`` sets its attribute
+        # on this object (until 0.10.26 the gate read ``func`` and never saw it).
+        wrapper: Callable[..., Any]
 
         # Initialize audit logger
         audit_logger = AuditLogger(
@@ -1041,8 +1053,9 @@ class Airlock:
             if fs_error is not None:
                 return arguments, start_time, context, fs_error, None, None
 
-            # Step 4: Check capability requirements
-            cap_error = self._check_capabilities(func, func_name, resolved_policy)
+            # Step 4: Check capability requirements, read from the wrapper and the chain
+            # beneath it so a ``@requires`` above or below ``@Airlock`` counts.
+            cap_error = self._check_capabilities(wrapper, func_name, resolved_policy)
             if cap_error is not None:
                 return kwargs, start_time, context, cap_error, None, None
 
@@ -1204,9 +1217,6 @@ class Airlock:
             )
 
             return response.to_dict()
-
-        # Initialize wrapper variable - will be assigned to sync or async wrapper
-        wrapper: Callable[..., Any]
 
         if is_async:
             # Async wrapper for async functions
@@ -2434,12 +2444,32 @@ class Airlock:
                 argument=e.path,
                 reason="uninspectable_argument",
             )
-            return handle_endpoint_violation(
-                func_name,
-                url=e.path,
-                hostname="unknown",
-                reason=f"uninspectable_argument: {e.reason}",
-                allowed_endpoints=allowed,
+            # Until 0.10.26 this went through ``handle_endpoint_violation`` with the
+            # hostname "unknown", so the model read "Endpoint blocked: unknown" and a hint
+            # about a URL that was never found. Say what the other value gates say.
+            return AirlockResponse.blocked_response(
+                reason=BlockReason.ENDPOINT_BLOCKED,
+                error=(
+                    f"AIRLOCK_BLOCK: Endpoint policy for '{func_name}' could not check "
+                    f"argument {e.path!r}: {e.reason}"
+                ),
+                fix_hints=[
+                    f"Argument {e.path!r} is nested too deeply or contains itself, so the "
+                    "URLs in it cannot be read",
+                    "Pass URLs as strings, or in containers nested no deeper than "
+                    f"{MAX_DEPTH} levels with no self-references",
+                    *(
+                        [f"Allowed endpoints for this tool: {', '.join(allowed)}"]
+                        if allowed
+                        else []
+                    ),
+                ],
+                metadata={
+                    "function": func_name,
+                    "argument": e.path,
+                    "block_reason": f"uninspectable_argument: {e.reason}",
+                    "allowed_endpoints": list(allowed) if allowed else [],
+                },
             )
         return None
 
@@ -2588,7 +2618,12 @@ class Airlock:
         """Check capability requirements for the function.
 
         Args:
-            func: The function being called.
+            func: The callable whose requirement is read: the wrapper ``@Airlock``
+                returned, so a ``@requires`` applied above it (which sets the attribute on
+                that wrapper) counts as well as one applied below it, which
+                ``get_required_capabilities`` finds down the ``__wrapped__`` chain. Until
+                0.10.26 the undecorated tool was read and a ``@requires`` above
+                ``@Airlock`` enforced nothing.
             func_name: Name of the function.
             resolved_policy: The resolved security policy (may have capability_policy).
 

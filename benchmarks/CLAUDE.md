@@ -23,31 +23,55 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   nowhere else (until 0.10.24 it counted a Docker daemon that answered a ping).
 - **`toolprivbench/`** — least-privilege block rate; `subset_scenarios()` also seeds
   blockrate's corpus. `--write` drops the hand-kept `## Re-runs` table from `RESULTS.md`.
-- **`agentdojo/run.py`** — a free deterministic bound and a paid `--model` pass, dated
-  separately; `--out` appends the paid block below the `CROSS-MODEL-RUNS` marker and needs
-  `--force` to repeat a heading (it appends another block; a dated block is never edited).
+- **`agentdojo/run.py`** — a free deterministic bound and a paid `--model` pass (a Claude id
+  needs `--run --budget-usd` and goes through `_claude`), dated separately; `--out` appends
+  the paid block below the `CROSS-MODEL-RUNS` marker and needs `--force` to repeat a heading
+  (it appends another block; a dated block is never edited). **`agentdojo/replay_published.py`**
+  replays AgentDojo's published Claude runs for free (`--fetch` is GitHub API calls plus
+  thousands of raw downloads into the data dir; `--write` appends a dated block);
+  `claude_patch.py` is the Anthropic LLM shim the model pass installs.
 - **`harness_injection/`** — matched-pair README injection against real agent CLIs; a dry
   run unless `--run`. `--write` renders `RESULTS.md`; `power.py` owns the statistics.
   `--model HARNESS=MODEL` pins a CLI's model (recorded per cell and in the rendered
   command), because a CLI's configured default can change between runs. A CLI that exits
   non-zero before any observable work is an `error` cell, never a non-action, and a resumed
-  checkpoint re-runs every `error` cell and any cell recorded under a different model.
+  checkpoint re-runs every `error` cell and any cell recorded under a different model or
+  auth method (`--allow-any-auth` widens the latter).
 - **`vs_gateway/`** — airlock measured live against a gateway column replayed from
   `gateway_measurement.json`, which only `gateway_harness/regen.py` rewrites.
 - **`mcp_conformance/run.py`** — runs the `mcp_spec.conformance` cases; exits 1 on a failure.
-- **`scantools_mcptox/`** — `airlock scan-tools` coverage on MCPTox-style fixtures; it has
-  no README row, so no date gate. It, `vs_gateway` and `mcp_conformance` keep hand-written
-  `RESULTS.md` files.
+- **`scantools_mcptox/`** — `airlock scan-tools` coverage on MCPTox-style fixtures (always
+  printed; CI pins it) and, with `--mcptox-data`, on the real corpus; `--write` rewrites
+  only the dated section between the `SCANTOOLS-MCPTOX-REAL` markers of `RESULTS.md`, the
+  rest is hand-written. It, `fix_hints` and `adaptive_redteam` have no README row, so no
+  date gate. `vs_gateway` and `mcp_conformance` keep wholly hand-written `RESULTS.md` files.
 - **`adaptive_redteam/`** — sentinel-driven red-team campaign over the guards; no LLM judge,
   no paid API. Its own `CLAUDE.md` extends this file, and the stricter rule wins.
+  `python -m benchmarks.adaptive_redteam` is `run_session.main` (`--guard`, `--seed`,
+  `--candidates`, `--nohints`), resumable against an append-only ledger under
+  `ledger/<guard>/`. Every `mcp_spec/*guard*.py` module must be in its adapter registry
+  (`tests/test_adaptive_redteam_registry_parity.py`).
+- **`mcptox/`** — `clean-view` prints only the clean side of each server (labels written
+  from it are blind to attack outcomes); `replay` scores every recorded call under G0, G and
+  LP for free, and `--write` rewrites the replay block of `RESULTS.md` plus
+  `replay_summary.json`, refusing a non-Linux host unless `--non-canonical-host` and a
+  filesystem gate that takes `~` literally unless `--allow-unexpanded-tilde` (both recorded
+  in provenance); `fresh` is the paid pass, a dry run without `--run`, and `--score RUN_ID`
+  re-scores stored outputs for free.
+- **`fix_hints/`** — `--round r1|r2`, `--pilot`, `--collect RUN_ID`, `--score RUN_ID`;
+  nothing is sent without `--run`, which needs `--budget-usd`, a clean git tree and the key
+  for that command only; raw results stay in the run store and `--write` appends a round
+  block of aggregates to `RESULTS.md` and `summary.json`. Exit codes: 0 done, 1 a pilot
+  request rejected, 2 bad arguments or environment, 3 a budget cap refused the job.
 - **`_claude/`** — not a harness but the shared plumbing for credit-funded Claude API runs:
   an append-only, file-locked spend ledger; a budget guard that admits a job only if its
   worst case fits under both the per-command `--budget-usd` and the ledger's cumulative
   cap (`$AIRLOCK_BENCH_HARD_CAP_USD`); pricing by exact model id (an unknown id raises,
   never `$0`); an idempotent Batch client; a run store. The ledger and raw outputs live
   under `~/.cache/agent-airlock-bench/`, never in git. `python -m benchmarks._claude ledger`
-  prints spend with no network; `grep -rln 'from benchmarks\._claude' benchmarks scripts`
-  lists its users.
+  prints spend with no network, while `python -m benchmarks._claude models --run` and
+  `agentdojo.replay_published --fetch` touch the network without spending credit;
+  `grep -rln 'from benchmarks\._claude' benchmarks scripts` lists its users.
 - Nothing runs the top-level `bench_airlock.py` / `benchmark_*.py` (pytest collects only
   `test_*.py`).
 
@@ -59,8 +83,9 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
 - **A date names its run.** Move a README freshness marker (`_re-run_`, `_re-measured live_`,
   `last verified`) and its `docs/benchmarks/index.md` twin only after a real run. A replay
   or re-render is not one, so hand-fix a generated file rather than regenerate it under an
-  old date. Dates are UTC, the day `check_benchmark_freshness.py` reads; every harness's
-  `--date` defaults to the UTC day, so a run after midnight IST still stamps the day before.
+  old date. Dates are UTC, the day `check_benchmark_freshness.py` reads; every harness that
+  takes `--date` defaults it to the UTC day, so a run after midnight IST still stamps the
+  day before.
 - **Nothing is dropped.** Failed runs, did-not-run arms, wrong diagnoses and superseded runs
   stay beside their correction; unmeasured is "not measured" / `n=0`, never `0`; a null
   ships with its benign control and every denominator; incumbents that were not executed
@@ -69,9 +94,11 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   `SECURITY.md`, `ROADMAP.md`, `demo/`, harness READMEs, and prose hard-coded in
   `scripts/generate_benchmark.py` (re-render with `make benchmark`) and `blockrate/report.py`
   all restate results.
-- **`blockrate/report.py` emits absolute blob URLs**: its text renders at its own path, in
-  the root `BENCHMARK.md`, and inside `docs/benchmarks/` pages (each of which must be in
-  the nav).
+- **Every file a `docs/benchmarks/` page snippet-includes emits absolute blob URLs**
+  (`grep -rn -- '--8<--' docs/benchmarks/` lists them: `BENCHMARK.md` and the `RESULTS.md`
+  of `blockrate`, `mcptox`, `fix_hints`, `adaptive_redteam`): each renders at its own path,
+  in the tree, and inside a docs page that must be in the nav, so a relative link breaks in
+  two of the three.
 - **Register a new README row** in `BENCHMARKS` (`scripts/check_benchmark_freshness.py`)
   under a string unique to its line, or its date goes unchecked, and give it a twin row in
   `docs/benchmarks/index.md` whose bold first cell matches README's (case, `*`, backticks

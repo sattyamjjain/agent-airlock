@@ -127,6 +127,7 @@ class McpSubprocessArgVerdict(str, enum.Enum):
     ALLOW = "allow"
     DENY_UNTRUSTED_COMMAND = "deny_untrusted_command"  # command not on the static allowlist
     DENY_UNTRUSTED_ENV = "deny_untrusted_env"  # env carries a code-loading var
+    DENY_UNINSPECTABLE = "deny_uninspectable"  # the config is not a mapping (0.10.26)
 
 
 @dataclass(frozen=True)
@@ -234,13 +235,19 @@ class McpSubprocessArgInjectionGuard:
         Args:
             config: The proposed MCP server / tool configuration. ``None``
                 or a mapping with no spawn-shaped fields = nothing to
-                spawn = allow.
+                spawn = allow. Anything that is not a mapping (a list, a
+                string, a number) is refused as ``DENY_UNINSPECTABLE``:
+                until 0.10.26 it was allowed as "no spawn config".
 
         Returns:
             :class:`McpSubprocessArgDecision`. ``allowed=False`` maps to a
             refusal at the spawn boundary.
         """
-        if not config or not isinstance(config, Mapping):
+        if config is None:
+            return self._allow("no spawn config to inspect")
+        if not isinstance(config, Mapping):
+            return self._deny_uninspectable(config)
+        if not config:
             return self._allow("no spawn config to inspect")
 
         if any(key in config for key in self._spawn_keys):
@@ -399,6 +406,34 @@ class McpSubprocessArgInjectionGuard:
                 f"allowlist (program field: {field_name!r})"
             ),
             matched_field=field_name,
+            matched_command=None,
+            fix_hints=hints,
+        )
+
+    def _deny_uninspectable(self, config: object) -> McpSubprocessArgDecision:
+        kind = type(config).__name__
+        logger.warning(
+            "mcp_subprocess_arg_blocked",
+            verdict=McpSubprocessArgVerdict.DENY_UNINSPECTABLE.value,
+            field=None,
+            reason="config_not_a_mapping",
+            config_type=kind,
+            advisory=self._advisory,
+        )
+        prefix = f"({self._advisory}) " if self._advisory else ""
+        hints = [
+            f"{prefix}The spawn config is a {kind}, not a mapping, so no program or env "
+            "can be read from it; a shape the guard cannot read is refused, not skipped.",
+            "Send the spawn config as a mapping with the program in `command` (or `cmd`, "
+            "`argv`, `args`) and the environment in `env`.",
+        ]
+        if self._advisory_url:
+            hints.append(f"See: {self._advisory_url}")
+        return McpSubprocessArgDecision(
+            allowed=False,
+            verdict=McpSubprocessArgVerdict.DENY_UNINSPECTABLE,
+            detail=f"spawn config is a {kind}, not a mapping, so it cannot be checked",
+            matched_field=None,
             matched_command=None,
             fix_hints=hints,
         )

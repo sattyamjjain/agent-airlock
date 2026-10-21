@@ -37,9 +37,15 @@ jobs:
         # tests in tests/test_mcp.py and tests/test_mcp_integration_0_10_18.py
         # skip, and until 0.10.18 no FastMCP test had run in CI. It resolves to
         # the newest FastMCP the pin allows.
+        # `[crypto]` is here for the same reason again (0.10.26): tests/test_identity.py
+        # and tests/test_attested_admission.py importorskip `cryptography`, which no
+        # extra above declares. They ran only because `mcp` happens to depend on
+        # `pyjwt[crypto]` and FastMCP on `authlib`; a release of either that drops the
+        # dependency would have turned the Ed25519 identity and attested-admission
+        # suites into silent skips.
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,redis,mcp]"
+          pip install -e ".[dev,redis,mcp,crypto]"
 
       - name: Assert the extra-backed tests are not silently skipped
         # The failure mode this guards is invisible by construction: importorskip
@@ -49,8 +55,10 @@ jobs:
         run: |
           python -c "import fakeredis, redis, lupa; print('redis', redis.__version__, '| fakeredis', fakeredis.__version__)"
           python -c "import fastmcp; print('fastmcp', fastmcp.__version__)"
+          python -c "import cryptography; print('cryptography', cryptography.__version__)"
           pytest tests/test_redis_rate_limit.py tests/kill_switch/test_kill_switch_wiring.py \
-            tests/test_mcp_integration_0_10_18.py --collect-only -q --no-cov > /dev/null
+            tests/test_mcp_integration_0_10_18.py tests/test_identity.py \
+            tests/test_attested_admission.py --collect-only -q --no-cov > /dev/null
 
       - name: Lint with ruff
         run: |
@@ -199,6 +207,15 @@ jobs:
       - name: Core imports and runs through the logging shim
         run: |
           /tmp/bare/bin/python -c "import agent_airlock; from agent_airlock import Airlock; from agent_airlock.audit import AuditLogger; from agent_airlock.policy_presets import list_active; print(len(list_active()))"
+
+      # The import line above loads what the package root, `audit` and `policy_presets`
+      # pull in — about three fifths of the package. `sequence_guard`,
+      # `action_contradiction_gate`, all of `cli/`, most of `integrations/` and several
+      # `mcp_spec` modules are imported lazily or by nothing at all, so a module-level
+      # extra import in one of them passed this job until 0.10.26. This imports every
+      # module under the package (scripts/check_bare_imports.py, stdlib-only).
+      - name: Every module imports with the Pydantic-only core
+        run: /tmp/bare/bin/python scripts/check_bare_imports.py
 
   lint:
     runs-on: ubuntu-latest

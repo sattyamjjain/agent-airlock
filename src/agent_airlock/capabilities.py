@@ -281,6 +281,10 @@ def requires(*capabilities: Capability) -> Callable[[F], F]:
     Returns:
         Decorator that adds __airlock_capabilities__ attribute to the function.
 
+    ``@Airlock`` reads the requirement from the wrapper it returns and from the chain
+    beneath it, so ``@requires`` may sit above or below ``@Airlock``. Until 0.10.26 one
+    placed above it was never read and the tool ran unchecked.
+
     Examples:
         @requires(Capability.FILESYSTEM_READ)
         def read_file(path: str) -> str:
@@ -347,12 +351,14 @@ def get_required_capabilities(func: Callable[..., Any]) -> Capability:
     Returns:
         Capability flags required by the function, or NONE if not decorated.
     """
+    combined = Capability.NONE
     caps = getattr(func, "__airlock_capabilities__", None)
-    if caps is not None:
-        return caps  # type: ignore[no-any-return]
+    if isinstance(caps, Capability):
+        combined |= caps
 
     # Walk the __wrapped__ chain (bounded depth to avoid infinite loops on
-    # pathological cycles).
+    # pathological cycles). Every requirement found along it is combined: until 0.10.26
+    # the first one found won, so a ``@requires`` above another dropped the inner one.
     seen: set[int] = set()
     current = func
     for _ in range(32):
@@ -361,11 +367,11 @@ def get_required_capabilities(func: Callable[..., Any]) -> Capability:
             break
         seen.add(id(inner))
         inner_caps = getattr(inner, "__airlock_capabilities__", None)
-        if inner_caps is not None:
-            return inner_caps  # type: ignore[no-any-return]
+        if isinstance(inner_caps, Capability):
+            combined |= inner_caps
         current = inner
 
-    return Capability.NONE
+    return combined
 
 
 def _capability_flag_names(caps: Capability) -> list[str]:

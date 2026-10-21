@@ -119,6 +119,17 @@ class ConfigPathGuard:
         Returns:
             A :class:`ConfigInspection` carrying every finding, ``"block"`` when there is one.
         """
+        if not isinstance(server_config, Mapping):
+            # A config that is not a mapping cannot be read field by field; until 0.10.26
+            # it raised ``AttributeError`` here instead of a block verdict.
+            unreadable = _unreadable("server_config", server_config, "a mapping")
+            logger.info(
+                "config_path_evaluated",
+                verdict="block",
+                findings=1,
+                host_root=str(self._host_root),
+            )
+            return ConfigInspection(verdict="block", findings=(unreadable,))
         findings: list[PathFinding] = []
         findings.extend(self._inspect_argv("command", server_config.get("command"), split=False))
         findings.extend(self._inspect_argv("args", server_config.get("args"), split=True))

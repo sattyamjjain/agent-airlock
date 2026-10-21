@@ -14,15 +14,20 @@ The wedge is argument validation at the call boundary; every other layer wraps i
 - Policy engine: RBAC, token-bucket rate limits, time windows, per-model-tier cost budgets,
   per-run resource-amplification budgets
 - PII/secret detection and masking; Indic PII is opt-in (`pii_locales=["in"]`)
-- Sandboxed execution: `@Airlock(sandbox=True)` dispatches only to E2B Firecracker; the
-  Docker, Modal and local backends in `sandbox_backend.py` are called directly
-  (`get_default_backend()`). The beta, opt-in Anthropic Managed Agents backend runs nothing:
-  its `execute()` returns a failed `SandboxResult` by design
+- Sandboxed execution: `@Airlock(sandbox=True)` dispatches only to E2B Firecracker. The
+  Docker, Modal and local backends in `sandbox_backend.py` are used directly:
+  `get_default_backend()` picks E2B, then Docker, and returns the local backend only with
+  `allow_unsafe_local=True`; `ModalBackend` is only ever constructed by the caller. The
+  beta, opt-in Anthropic Managed Agents backend runs nothing: its `execute()` returns a
+  failed `SandboxResult` by design
 - `mcp_spec/` guards mapped to specific named CVEs and MCP spec clauses — stdio injection,
-  OAuth, DNS rebinding, SSRF, eval-RCE, WebSocket origin hijack, task lifecycle, handle trust
-- Framework adapters: FastMCP, LangChain/LangGraph, Anthropic (Messages, Claude Agent SDK,
-  Managed Agents), OpenAI, Gemini, PydanticAI, CrewAI, smolagents, Google ADK, Google Model
-  Armor
+  OAuth, DNS rebinding, SSRF (`$ref` dereference, through `ssrf_egress_guard`), eval-RCE,
+  WebSocket origin hijack, task lifecycle, handle trust
+- Framework adapters (the README's gated list, `_ADAPTER_SHIPPED_MODULES` in
+  `tests/test_readme_framework_claims.py`): FastMCP, LangChain/LangGraph, Anthropic Messages
+  and Claude Agent SDK, OpenAI, Gemini, PydanticAI, CrewAI, smolagents, Google ADK; plus two
+  user-invoked gates that wrap no tool, the Managed Agents `ManagedAgentToolGate` and the
+  Model Armor scanner
 - Fleet-wide kill switch, checked before any other gate: one signed broadcast freezes; a
   reset needs votes from an M-of-N quorum of signer keys (`kill_switch/broadcast.py`)
 - `airlock` CLI — one dispatcher fronting every `cli/<name>.py`; the `_COMMANDS` table in
@@ -49,6 +54,7 @@ pip install -e ".[redis]"          # distributed rate limiter
 pip install -e ".[all]"            # runtime extras EXCEPT modal, bench, attested (and dev/docs)
 
 make test          # pytest tests/ -v --no-cov
+make test-live     # tests/live against the real API: needs ANTHROPIC_API_KEY, spends credit
 make coverage      # pytest with coverage (floor enforced; see [tool.coverage.report])
 make lint          # ruff check + ruff format --check + mypy src/
 make format        # ruff format + ruff check --fix
@@ -79,15 +85,17 @@ make check-registry-parity-distance     # release-only: refuse to skip a version
 What CI runs — `ci.yml` jobs, on PRs and pushes to `main`. None is a required check (`main`
 has no branch protection or ruleset), so a red job blocks a merge by convention only:
 
-- `test` (full Python matrix) — installs `.[dev,redis,mcp]` and asserts the redis and FastMCP
-  extras import (a `--collect-only` step); ruff check, mypy, pytest with the coverage floor;
+- `test` (full Python matrix) — installs `.[dev,redis,mcp,crypto]` and asserts the redis,
+  FastMCP and cryptography extras import (a `--collect-only` step); ruff check, mypy, pytest
+  with the coverage floor;
   on 3.11 only, `generate_benchmark.py --check` and a pytest-benchmark smoke run that asserts
   the suite executes (deliberately not a latency threshold).
 - `lint` — `ruff format --check` only.
 - `docs` — `mkdocs build --strict`, `check_links.py`, `gen_cve_catalog.py --check`, and the
   **default** modes of `check_benchmark_freshness.py` and `check_changelog.py`.
-- `bare-install` — `check_core_deps.py` against a no-extras install, then an import of the
-  package root, `agent_airlock.audit` and `policy_presets.list_active()` through the shim.
+- `bare-install` — `check_core_deps.py` against a no-extras install, an import of the
+  package root, `agent_airlock.audit` and `policy_presets.list_active()` through the shim,
+  then `check_bare_imports.py`, which imports every module under the package.
 - `docker-sandbox` — builds the repo `Dockerfile`, runs `pytest -m docker` over only the
   files that hold docker-marked tests (collecting all of `tests/` adds collection-time skips
   of modules whose extras the job lacks), and matches the log's pytest summary line,
@@ -103,8 +111,9 @@ has no branch protection or ruleset), so a red job blocks a merge by convention 
 `publish.yml` (on a published release) adds `check_benchmark_freshness.py --release`,
 `check_registry_parity.py --distance-only`, a GitHub-description drift check and
 `twine check`. The upload authenticates through PyPI Trusted Publishing (OIDC), so the job
-needs `id-token: write` and there is no PyPI token to add back. That job installs only
-`build` and `twine`, so any script it runs must stay stdlib-only.
+needs `id-token: write` and there is no PyPI token to add back. Its gate steps run before
+it installs anything (it later installs only `build` and `twine`), so any script it runs
+must stay stdlib-only.
 `make check-changelog-release` runs in no workflow, and this repo's release flow never turns
 it green: release PRs write notes straight under the new `## [X.Y.Z]` heading, so
 `[Unreleased]` is already empty at the tagged commit. Do not satisfy it by leaving entries
@@ -112,19 +121,22 @@ under `[Unreleased]`: once the version is bumped, the `docs` job's default-mode
 `check_changelog.py` fails on them.
 
 `scripts/check_docs_api.py` imports the package and skips a module whose extra is missing,
-so it runs in `test` as `tests/test_docs_api_gate.py`, where `[dev,redis,mcp]` are
-installed, rather than in `docs`, which installs the package with only `[docs]`. It checks
-names imported from `agent_airlock` in each Python fence and `examples/` script: the import
-resolves, keywords match the signature, attributes exist.
+so it runs in `test` as `tests/test_docs_api_gate.py`, where `[dev,redis,mcp,crypto]`
+are installed, rather than in `docs`, which installs the package with only `[docs]`. It checks
+names imported from `agent_airlock` in each Python fence of every authored markdown file
+(README included; `CHANGELOG.md` and `.github/` excepted) and in each `examples/` script:
+the import resolves, keywords match the signature, attributes exist.
 
-`test` installs the `[redis]` and `[mcp]` extras because the redis-backed and FastMCP-backed
-modules skip without them (`pytest.importorskip`), and a skipped module reads like a passing
-one in the summary line. `[mcp]` resolves to the newest FastMCP the pin allows, so a FastMCP
-major that breaks the integration fails CI rather than a user. If you add an
-`importorskip`, add its dependency to a CI job in the same PR. Several existing ones break
-that rule: the real-SDK tests for google-adk, crewai, smolagents, anthropic, llama_index,
-autogen and agentdojo import SDKs no CI job installs, so they skip in every run
-(`grep -rn importorskip tests/`).
+`test` installs the `[redis]`, `[mcp]` and `[crypto]` extras because the redis-backed,
+FastMCP-backed, Ed25519-identity and attested-admission modules skip without them
+(`pytest.importorskip`), and a skipped module reads like a passing one in the summary line.
+`[crypto]` joined in 0.10.26: `cryptography` had arrived only transitively, through `mcp`'s
+`pyjwt[crypto]` and FastMCP's `authlib`. `[mcp]` resolves to the newest FastMCP the pin
+allows, so a FastMCP major that breaks the integration fails CI rather than a user. If you
+add an `importorskip`, add its dependency to a CI job in the same PR. Several existing ones
+break that rule: the real-SDK tests for google-adk, crewai, smolagents, anthropic,
+llama_index, autogen and agentdojo import SDKs no CI job installs, so they skip in every
+run (`grep -rn importorskip tests/ --include='*.py'`).
 
 Docker integration tests are **opt-in** — default `addopts` carries `-m 'not docker'`; run
 them with `pytest -m docker`. `cve-watcher.yml` polls NVD on a schedule, diffs against the
@@ -140,9 +152,10 @@ every `agent_airlock.cli.<name>:main(argv)` in space-form (`airlock scan-tools`)
 are identical to the `python -m agent_airlock.cli.<name>` long form. Three pre-dispatcher
 scripts (`airlock-explain`, `airlock-conformance`, `airlock-scan-tools`) survive as stable
 aliases. Subtree `CLAUDE.md` files live in `src/agent_airlock/mcp_spec/`,
-`src/agent_airlock/integrations/`, `tests/cves/` and `benchmarks/`; they are excluded from
-the sdist and wheel (`[tool.hatch.build.targets.*]`), so they never reach a user's
-site-packages.
+`src/agent_airlock/integrations/`, `tests/cves/`, `benchmarks/` and, hand-written to extend
+`benchmarks/CLAUDE.md`, `benchmarks/adaptive_redteam/`; `**/CLAUDE.md` is excluded from
+the sdist and wheel (`[tool.hatch.build.targets.*]`), so the two under `src/` never reach a
+user's site-packages.
 
 Repo-level directories outside the package: `tests/` (mostly mirrors the package's
 subpackages; `tests/cves/` is the signed CVE regression suite), `benchmarks/` (agentdojo,
@@ -155,8 +168,9 @@ source), `examples/`, `demo/` (runnable live demo), `presets/`, `schemas/`, `too
 `.claude-plugin/` (plugin and marketplace manifests).
 
 `tests/fuzz/` holds the Hypothesis property and differential suites; `HYPOTHESIS_PROFILE`
-(`tests/fuzz/conftest.py`) picks `ci`, the default that CI runs, or `deep`, reserved for the
-`benchmarks/adaptive_redteam/` waves. `tests/live/` calls the Anthropic API and spends
+(`tests/fuzz/conftest.py`) picks `ci`, the derandomized default that CI runs, or `deep`
+(5,000 examples, no deadline) for a manual run; nothing in the repo invokes `deep`.
+`tests/live/` calls the Anthropic API and spends
 credit, so default `addopts` ignores it and each test also skips without `AIRLOCK_LIVE=1`
 and `ANTHROPIC_API_KEY`: no workflow runs it, `make test-live` does (recipe in
 `tests/live/README.md`), and `make test-badge` counts it as a third excluded bucket beside
@@ -164,25 +178,27 @@ and `ANTHROPIC_API_KEY`: no workflow runs it, `make test-live` does (recipe in
 
 **There is no committed `site/`.** The docs site is served from the `gh-pages` branch,
 which `docs.yml` rebuilds with `mkdocs gh-deploy --force` on pushes to `main` that touch
-`docs/`, `mkdocs.yml`, `src/` or the workflow itself (or on `workflow_dispatch`). The
-snippet-included `BENCHMARK.md` and `benchmarks/blockrate/RESULTS.md` are not trigger
-paths, so a push that changes only them redeploys nothing. `site/` is gitignored — do not
+`docs/`, `mkdocs.yml`, `src/agent_airlock/` or the workflow itself (or on
+`workflow_dispatch`). No snippet-included file is a trigger path (no `benchmarks/**` path
+is), so a push that changes only them redeploys nothing. `site/` is gitignored — do not
 add it back: the committed copy was a stale duplicate of the gh-pages build (#151).
 `make check-docs` builds to `$TMPDIR/agent-airlock-mkdocs-check`, not `./site/`, because
 even gitignored HTML in the working tree made project-classifying tooling read this
 library as a web app.
 
-Generated files stay where their generator writes them. `BENCHMARK.md` and
-`benchmarks/blockrate/RESULTS.md` reach the site through `pymdownx.snippets` includes under
-`docs/benchmarks/` (`check_paths` is on, so a moved file fails the strict build). Never copy
-them into `docs/`, and keep cross-tree links inside them absolute.
+Generated files stay where their generator writes them. `BENCHMARK.md` and the
+`RESULTS.md` files of `blockrate`, `mcptox`, `fix_hints` and `adaptive_redteam` reach the
+site through `pymdownx.snippets` includes under `docs/benchmarks/`
+(`grep -rn -- '--8<--' docs/` lists them; `check_paths` is on, so a moved file fails the
+strict build). Never copy them into `docs/`, and keep cross-tree links inside them absolute.
 
 ```
 src/agent_airlock/
 ├── core.py            @Airlock decorator — the entrypoint; sync + async
 ├── __init__.py        public API surface (large, explicit __all__)
 ├── config.py          AirlockConfig; some env vars override the constructor, others only
-│                      fill gaps (see its docstring); airlock.toml is read only by from_toml()
+│                      fill gaps (see its docstring); airlock.toml is read only by the
+│                      explicit from_toml() / from_toml_if_exists(), never implicitly
 ├── exceptions.py      AirlockError base only; exception classes live where they're raised
 ├── testing.py         state-reset helpers for test isolation
 ├── _log.py            structlog-or-stdlib logging shim
@@ -227,25 +243,32 @@ src/agent_airlock/
 **Call flow through `@Airlock`** — `_pre_execution` gates, then execute, then
 `_post_execution`. Steps 0–6 match the `# Step N` comments in `core.py`:
 
-0. Kill switch — a fleet freeze refuses before any gate looks at the arguments (only the
-   call's context is extracted first)
+0. Kill switch — a fleet freeze refuses before any gate looks at the arguments (the call's
+   context is extracted and the call logged first; no gate runs)
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Resolve policy (static, or `Callable[[AirlockContext], SecurityPolicy | None]`; a
    resolver that returns None refuses the call) and check it against the caller's identity
-   (one a first argument carries at `.context` / `.ctx`, else the one set around the call).
-   Every call gets a fresh `AirlockContext`; `_share_run_state` points its untrusted-output
-   counts and `authorize_once` grants at the run's context (an `AirlockContext` the first
-   argument carries, else the one set around the call unless it names a different agent than
-   the call does) and merges that context's metadata under its own, so a policy with
-   `reauth_on_untrusted_reinvocation` refuses a call that belongs to no run
+   (one a first argument carries at a `ContextExtractor.CONTEXT_ATTRS` name such as
+   `.context` / `.ctx`, else the one set around the call). Every call gets a fresh
+   `AirlockContext`: it takes the agent id and roles of the context set around the call when
+   it has none of its own, and that context's session, workspace and user ids whenever it
+   lacks them, unless that context names a different agent (`_inherit_ambient_identity`).
+   `_share_run_state` points its untrusted-output counts and `authorize_once` grants at the
+   run's context (an `AirlockContext` the first argument carries, else the one set around
+   the call unless it names a different agent than the call does) and merges that context's
+   metadata under its own, so a policy with `reauth_on_untrusted_reinvocation` refuses a
+   call that belongs to no run
    - 2.5 behavioral tool-call sequence guard
    - 2.6 action-time contradiction gate
    - 2.7 unsafe-deserialization content guard
-   - 2.8 per-run resource-amplification budget — after the gates above, so a call they refuse
+   - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one
+     anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)
 3. Filesystem path validation. A violation is refused under `BlockStrategy.HONEYPOT` too
    (the wrapper then answers with honeypot data); only `SOFT_BLOCK` logs and proceeds
-4. Capability requirements
+4. Capability requirements, read from the wrapper `@Airlock` returned and the
+   `__wrapped__` chain beneath it and combined, so `@requires` counts above or below
+   `@Airlock`
 5. Endpoint policy validation
 
    Steps 2.7, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
@@ -253,12 +276,14 @@ src/agent_airlock/
    included), sequences, sets and mapping views, and into pydantic models and dataclasses
    the tool's author defined. The run wrapper the context came from and objects from agent
    frameworks (`_arg_walk.FRAMEWORK_PACKAGES`) are not walked. A top-level string is a path
-   by `_looks_like_path`; a nested one (`_looks_like_nested_path`) only by its shape
-   (absolute, `~`, `..`) or by a separator and a file extension, either one being enough
-   under a path-named key, so a MIME type is not; bytes only under a path-named key and
-   shaped like a path; a `file:` URI always. A URL is any `scheme://` in any case, or a
-   value under a URL-named key. Input nested deeper than 32 levels, or a container that
-   contains itself, is refused
+   by `_looks_like_path`: a path-named key, the absolute / drive-rooted / home-relative /
+   traversing shape (`_is_absolute_or_escaping`, shared with the nested test), a separator,
+   or a file extension; a nested one (`_looks_like_nested_path`) only by that shape or by a
+   separator and a file extension, either one being enough under a path-named key, so a
+   MIME type is not; bytes only under a path-named key and shaped like a path; a `file:`
+   URI always. A URL is any `scheme://` in any case, or a value under a URL-named key.
+   Input nested deeper than 32 levels, or a container that contains itself, is refused by
+   whichever of the three gates reads it, in words that say so
 6. Per-model-tier budget check — the tier, token count and model id come from context
    metadata (`_call_metadata`), never from the tool's arguments, which the model writes.
    The worst case is priced at `model_id`'s row (a dated snapshot, `<key>-YYYYMMDD`, at
@@ -293,27 +318,31 @@ its audit record still says `blocked: true` and `honeypot: true`.
 <!-- AUTO-MANAGED: conventions -->
 ## Code Conventions
 
-- **Python 3.10+**, `from __future__ import annotations` first. Use `X | Y`, not `Optional`.
+- **Python 3.10+**, `from __future__ import annotations` first (every module but the
+  `__init__.py` files). Use `X | Y`, not `Optional`.
 - **mypy strict** (`disallow_untyped_defs`, `warn_return_any`, pydantic plugin). Type every
   signature. `TypeVar` / `ParamSpec` / `@overload` for generics.
 - **ruff**, line length 100, target `py310`. Selected: E, W, F, I, B, C4, UP, ARG, SIM;
   globally ignored: E501, SIM102, SIM103, B027. The `py310` target is deliberate: at
-  `py311`, UP017, UP036 and UP042 fire, and `make format`'s `ruff check --fix` would apply
-  UP017 (`datetime.UTC`, 3.11+) unasked, which breaks 3.10. Do not raise it
+  `py311`, UP017, UP035, UP036 and UP042 fire, and `make format`'s `ruff check --fix` would
+  apply UP017 (`datetime.UTC`) and UP035 (`typing.NotRequired`), both 3.11+, unasked, which
+  breaks 3.10. Do not raise it
   (`ruff check src/ --target-version py311 --select UP --statistics` shows what fires).
   Per-file `ARG` ignores exist for top-level `integrations/*.py`, `cli/*.py`, `anomaly.py`,
-  tests and examples —
-  those unused args are interface signatures (callbacks, test stubs, demo tools, a reserved
-  `anomaly.py` parameter), so do not "fix" them.
+  tests (which also ignore `SIM117`) and examples (also `F841`) — those unused args are
+  interface signatures (callbacks, test stubs, demo tools, a reserved `anomaly.py`
+  parameter), so do not "fix" them.
 - **bandit** reads `[tool.bandit]` in `pyproject.toml` (CI passes `-c pyproject.toml`).
   B101 (`assert`) is deliberately not skipped — it caught narrowing asserts on a security
   path. Where an assert is genuinely fine, use a scoped `# nosec B101 - <reason>`.
 - **Pydantic V2 strict mode** for validation. `@dataclass` with `field(default_factory=...)`
   for structured data; prefer it over plain dicts.
-- **Enums** extend `str, Enum` so they serialize to JSON.
+- **Enums** extend `str, Enum` so they serialize to JSON (`Capability` is a `Flag`, the one
+  exception).
 - **Logging** through `agent_airlock._log` (structlog when installed, stdlib shim otherwise):
   `from ._log import structlog` (`from .._log` one package down) then
-  `logger = structlog.get_logger("agent-airlock.<dotted.module.path>")`. Never
+  `logger = structlog.get_logger("agent-airlock.<dotted.module.path>")` (`core.py` alone
+  uses the bare root name). Never
   `import structlog` directly — in `src/` the shim is the only module that does.
   Structured kwargs, never f-strings.
 - **Imports** stdlib → third-party → first-party (`known-first-party = ["agent_airlock"]`).
@@ -322,15 +351,20 @@ its audit record still says `blocked: true` and `honeypot: true`.
 - **Exceptions** live in the module that raises them; new ones subclass
   `exceptions.AirlockError`, store details as attributes and call `super().__init__()`.
   Pre-v0.5.1 ones keep their `Exception` / `ValueError` bases on purpose (`exceptions.py`
-  docstring), so `except AirlockError` does not catch `PolicyViolation`,
-  `PathValidationError` and the like; do not rebase them in a patch release.
+  docstring), two later ones do too (`OversightDeniedError`, `OpenAPIDriftViolation`), and
+  `SequenceViolation` / `ActionContradictionViolation` subclass `PolicyViolation` by design,
+  so `except AirlockError` does not catch `PolicyViolation`, `PathValidationError` and the
+  like; do not rebase any of them in a patch release.
 - `TYPE_CHECKING` guards for type-only imports.
-- **Tests**: `Test<Feature>` classes with `test_<scenario>` methods; keep each under ~5s.
+- **Tests**: almost all are `Test<Feature>` classes with `test_<scenario>` methods; keep
+  each under ~5s.
 - **Commits**: conventional — `feat:` `fix:` `docs:` `chore:` `ci:` `security:` `bench:`
   `test:` (`test(cves):` for a second-defence CVE fixture).
-  Branches `feat/<short>` `fix/<short>` `chore/<short>`. Squash-merge into `main`, which
-  stays tag-able at all times. The squash subject is the PR title, so write the PR title in
-  conventional form too — prose PR titles are how unprefixed subjects reached `main`.
+  Branches `<type>/<short>` with the same vocabulary (`fix/`, `test/`, `docs/`, `ci/`, ...).
+  Squash-merge into `main`, which stays tag-able at all times. GitHub defaults the squash
+  subject to the PR title for a multi-commit PR and to the commit's own message for a
+  single-commit one, so write both in conventional form — prose PR titles are how
+  unprefixed subjects reached `main`.
 
 <!-- END AUTO-MANAGED -->
 
@@ -355,12 +389,14 @@ its audit record still says `blocked: true` and `honeypot: true`.
   framework SDKs) is imported inside the function that needs it, behind
   `try/except ImportError`, raising an error that names the extra to install. `structlog` is
   the exception: `_log.py` tries it once at import and falls back to the stdlib shim instead
-  of raising. This is what keeps the `bare-install` job green.
+  of raising. This is what keeps the `bare-install` job green, where
+  `scripts/check_bare_imports.py` imports every module under the package.
 - **Deny-by-default** — unknown tier, unregistered manifest, and unpinned spec revision all
   fail closed, and so does an input shape a guard cannot read, such as a list where a string
   was expected: it is refused rather than skipped (see `mcp_spec/CLAUDE.md`). The core
-  value-reading gates refuse input too deep or self-containing to read, and a resolver that
-  returns no policy refuses the call. New branches should preserve that direction.
+  value-reading gates, when one of them is on (`_reads_argument_values`), refuse input too
+  deep or self-containing to read, and a resolver that returns no policy refuses the call.
+  New branches should preserve that direction.
 - **Context propagation** — `contextvars`-backed `AirlockContext`; `get_current_context()`
   is available inside the wrapped tool, and a policy may be a callable over that context
   for per-tenant / per-workspace rules.
@@ -370,14 +406,18 @@ its audit record still says `blocked: true` and `honeypot: true`.
   `policy_presets.list_active()` — `tests/presets/test_ox_mcp_yaml.py` checks this
   against every file under `presets/`, not just the one it's named for.
 - **No silent config no-ops** — a stored `AirlockConfig` field that nothing applies must
-  be listed in `config._NOT_APPLIED` (field name → what to use instead), so
+  be listed in `config._NOT_APPLIED` (field name → what to use instead), or documented in
+  its field comment as a carrier for a named consumer (`credential_scopes` →
+  `MCPProxyConfig(tool_scopes=...)` is the one such field), so
   `_warn_on_settings_not_applied` emits a `FutureWarning` (deprecated, removal in v1.0.0)
   when it's set away from its default. `FutureWarning`, because Python hides
   `DeprecationWarning` outside `__main__`. Never add a setting that quietly does nothing.
 - **Dated snapshots** — pricing tables, advisory blast-radius data and redaction patterns
   ship as dated files under `data/` and `fixtures/`; a refresh is a new dated file, not an
   edit to the old one, plus a repoint of the one constant naming the current file
-  (`grep -rnE '_20[0-9]{2}_[0-9]{2}[^"]*\.(json|txt)"' src/agent_airlock`).
+  (`grep -rnE '_20[0-9]{2}_[0-9]{2}[^"]*\.(json|txt)"' src/agent_airlock`; the grep also
+  lists the kept June pricing loader and one preset's provenance path). Superseded
+  snapshots stay in `data/`, the 2026-06 pricing one with a loader, the 2026-09 one without.
   `cost_tracking.DEFAULT_PRICING` is the undated in-process fallback, so a price refresh
   edits it too; `tests/test_budget_pricing_0_10_24.py` fails when it lacks a model the
   current snapshot prices.
@@ -468,9 +508,14 @@ recounts it over a number pasted into prose.
   child writes its audit log into the checkout. The same variable keeps an ad-hoc
   snippet's log out of the checkout.
 - `bare-install` is the job that enforces the Pydantic-only core: `check_core_deps.py` fails
-  on a new core dependency, and its import step fails on a module-level import of an extra —
-  but only in the modules it loads (the package root, `audit`, `policy_presets` and what they
-  import; `sandbox`, `cli/` and most of `integrations/` are not among them).
+  on a new core dependency, its import step fails on a module-level import of an extra in
+  the modules it loads (the package root, `audit`, `policy_presets` and what they import:
+  about three fifths of the package, not `sequence_guard`, `action_contradiction_gate`,
+  `sandbox`, `cli/` or most of `integrations/`), and since 0.10.26 `check_bare_imports.py`
+  imports every module under the package, so such an import anywhere fails there.
+- A new `mcp_spec/*guard*.py` module also needs a red-team adapter
+  (`tests/test_adaptive_redteam_registry_parity.py` fails until it is in
+  `benchmarks/adaptive_redteam/adapters/registry.py`; `mcp_spec/CLAUDE.md` has the recipe).
 - **Version bumps** must move every surface a test pins — `pyproject.toml` + `__version__`,
   `.claude-plugin/plugin.json`, `CITATION.cff` (the newest *published* version and its
   CHANGELOG date: a patch bump leaves it one behind, the most `test_version_consistency.py`
