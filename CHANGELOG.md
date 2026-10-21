@@ -102,6 +102,20 @@ regression test; the rest of the audit's findings are documentation and are list
   `--write` / checkpoint semantics; `tests/cves/CLAUDE.md` the filename rule of the watcher.
   AGENTS.md's branch-naming line matches the history.
 
+### CVE triage
+
+- **CVE-2026-57496** (NetLicensing MCP `product_number` path traversal, #329): in scope;
+  `SafePathValidator` refuses the traversal segment as a second defence, the `..%2F`
+  slash-encoded form included, and a fully percent-encoded segment passes on purpose: a
+  filesystem-path validator does not URL-decode. The complete fix is upstream in 0.1.8. A
+  second-defence fixture that pins where it stops (#346).
+- **CVE-2026-108953** (mac-shell-mcp `execute_command` metacharacters, #317): in scope;
+  `StdioCommandInjectionGuard` refuses the metacharacter form as a second defence, and a
+  bare `$VAR` passes on purpose. The complete fix is upstream in 2.0.0. A second-defence
+  fixture that pins where it stops (#346).
+- The catalog counts 57 regression modules and 57 distinct CVEs (49 with a row of their
+  own, 8 in umbrella modules) (#346).
+
 ## [0.10.25] - 2026-10-17
 
 ### Security
