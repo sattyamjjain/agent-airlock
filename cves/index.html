@@ -1635,6 +1635,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-111451" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-111451
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3316,6 +3327,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-111451" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-111451
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-11393" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3861,6 +3883,12 @@ catalog and the tests stay in lockstep.</p>
 <td><a href="#cve-2026-108953">CVE-2026-108953</a></td>
 <td>mac-shell-mcp bypasses its command whitelist via shell metachars in args</td>
 <td>7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H</td>
+<td>Partial</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-111451">CVE-2026-111451</a></td>
+<td>Wheels CLI MCP tool arguments reach deploy shells, file paths and generated CFML</td>
+<td>7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H</td>
 <td>Partial</td>
 </tr>
 <tr>
@@ -4547,6 +4575,55 @@ break them — the same line <code>SafeURL</code> draws for <code>$name</code> i
 the server still splices the value into a shell, <code>$VAR</code> would expand; the complete
 fix is the upstream one — 2.0.0 passes arguments as argv with no shell.</p>
 <p><a id="cve-2026-108953"></a></p>
+<h3 id="cve-2026-111451">CVE-2026-111451<a class="headerlink" href="#cve-2026-111451" title="Permanent link">&para;</a></h3>
+<p><strong>Wheels CLI MCP tool arguments reach deploy shells, file paths and generated CFML</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-111451">https://nvd.nist.gov/vuln/detail/CVE-2026-111451</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/wheels-dev/wheels/security/advisories/GHSA-cghp-86c6-6fjc">https://github.com/wheels-dev/wheels/security/advisories/GHSA-cghp-86c6-6fjc</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_111451_wheels_cli_mcp_tools.py"><code>tests/cves/test_cve_2026_111451_wheels_cli_mcp_tools.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>Wheels CLI 4.0.0 through 4.1.1 uses caller-supplied values without validating or
+escaping them. The advisory lists eight defects. Three of them reach the CLI as the
+arguments of an MCP tool call, the seam this library sits on:</p>
+<ul>
+<li><code>wheels deploy</code> interpolates its release, version or rollback value into remote
+  shell commands, container names and image tags without escaping, so a value that
+  carries a shell metacharacter runs commands on every deploy host as the SSH user.
+  Through 4.1.0 <code>deploy</code> was listed as an MCP tool; 4.1.1 hid it. Its advertised
+  input schema was empty, but LuCLI's <code>tools/call</code> forwards every argument key to
+  the module as <code>key=value</code> regardless, and Wheels 4.1.0 reads <code>release=&lt;value&gt;</code>
+  exactly as it reads <code>--release=&lt;value&gt;</code>, the version its deploy parser uses.</li>
+<li><code>packages remove</code> and <code>generate</code> take a name with no validation, so <code>..</code> or a
+  <code>../</code> prefix deletes the project's contents or writes <code>.cfm</code> files outside it.</li>
+<li>Model, property, action and app names are interpolated into generated CFML, so a
+  <code>#</code> expression or a quote in a name becomes executable code.</li>
+</ul>
+<p>Fixed in 4.1.2, which validates names and versions strictly and shell-escapes every
+interpolated value.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p><strong>In scope: the three argument shapes.</strong> Each is refused by a primitive that already
+exists, so this is a second-defence fixture, not a new guard or preset:</p>
+<ul>
+<li>The deploy value, in the argv LuCLI builds from the call, is refused by
+  <code>StdioCommandInjectionGuard</code> when it carries a shell metacharacter: the
+  CVE-2026-108953 pattern. <code>_lucli_argv</code> repeats LuCLI's lines, as <code>_spawn_config</code>
+  does for CVE-2026-79538.</li>
+<li>A traversal name is refused by <code>SafePathValidator</code>: the CVE-2026-57496 pattern.</li>
+<li>A name carrying a CFML <code>#</code> or a quote is refused by strict validation when the tool
+  declares the identifier shape a Wheels name has: the CVE-2026-105793 pattern. No
+  guard reads CFML, so the declared shape is the whole defence for that half.</li>
+</ul>
+<p><strong>Out of reach.</strong> A deploy value that comes from a CI variable or a branch name never
+crosses a tool call. Package archive contents, <code>destroy</code> following a symlink on disk,
+unencoded output in generated views and a stale RustCFML process id are not arguments
+either. Two boundaries are pinned below: a bare <code>$VAR</code> passes the stdio guard, as in
+CVE-2026-108953, and a name declared as a bare <code>str</code>, the shape the Wheels MCP schema
+advertised, admits the CFML delimiter. The complete fix is the upstream validation and
+escaping in 4.1.2.</p>
+<p><a id="cve-2026-111451"></a></p>
 <h3 id="cve-2026-11393">CVE-2026-11393<a class="headerlink" href="#cve-2026-11393" title="Permanent link">&para;</a></h3>
 <p><strong>AgentCore CLI triple-quote codegen RCE</strong></p>
 <ul>
