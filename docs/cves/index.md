@@ -46,6 +46,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-105793](#cve-2026-105793) | Microsoft UFO mobile MCP press_key argument injection | 9.1 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:L, CWE-78 | Partial |
 | [CVE-2026-105797](#cve-2026-105797) | SimpleChat personal MCP plugin spawns an attacker-selected stdio process | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78, CWE-863 | Partial |
 | [CVE-2026-108953](#cve-2026-108953) | mac-shell-mcp bypasses its command whitelist via shell metachars in args | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H | Partial |
+| [CVE-2026-111451](#cve-2026-111451) | Wheels CLI MCP tool arguments reach deploy shells, file paths and generated CFML | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
@@ -605,6 +606,61 @@ the server still splices the value into a shell, ``$VAR`` would expand; the comp
 fix is the upstream one — 2.0.0 passes arguments as argv with no shell.
 
 <a id="cve-2026-108953"></a>
+
+### CVE-2026-111451
+
+**Wheels CLI MCP tool arguments reach deploy shells, file paths and generated CFML**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-111451](https://nvd.nist.gov/vuln/detail/CVE-2026-111451)
+- **Advisory:** [https://github.com/wheels-dev/wheels/security/advisories/GHSA-cghp-86c6-6fjc](https://github.com/wheels-dev/wheels/security/advisories/GHSA-cghp-86c6-6fjc)
+- **Regression test:** [`tests/cves/test_cve_2026_111451_wheels_cli_mcp_tools.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_111451_wheels_cli_mcp_tools.py)
+
+**Vulnerability**
+
+Wheels CLI 4.0.0 through 4.1.1 uses caller-supplied values without validating or
+escaping them. The advisory lists eight defects. Three of them reach the CLI as the
+arguments of an MCP tool call, the seam this library sits on:
+
+- ``wheels deploy`` interpolates its release, version or rollback value into remote
+  shell commands, container names and image tags without escaping, so a value that
+  carries a shell metacharacter runs commands on every deploy host as the SSH user.
+  Through 4.1.0 ``deploy`` was listed as an MCP tool; 4.1.1 hid it. Its advertised
+  input schema was empty, but LuCLI's ``tools/call`` forwards every argument key to
+  the module as ``key=value`` regardless, and Wheels 4.1.0 reads ``release=<value>``
+  exactly as it reads ``--release=<value>``, the version its deploy parser uses.
+- ``packages remove`` and ``generate`` take a name with no validation, so ``..`` or a
+  ``../`` prefix deletes the project's contents or writes ``.cfm`` files outside it.
+- Model, property, action and app names are interpolated into generated CFML, so a
+  ``#`` expression or a quote in a name becomes executable code.
+
+Fixed in 4.1.2, which validates names and versions strictly and shell-escapes every
+interpolated value.
+
+**Airlock mitigation**
+
+**In scope: the three argument shapes.** Each is refused by a primitive that already
+exists, so this is a second-defence fixture, not a new guard or preset:
+
+- The deploy value, in the argv LuCLI builds from the call, is refused by
+  ``StdioCommandInjectionGuard`` when it carries a shell metacharacter: the
+  CVE-2026-108953 pattern. ``_lucli_argv`` repeats LuCLI's lines, as ``_spawn_config``
+  does for CVE-2026-79538.
+- A traversal name is refused by ``SafePathValidator``: the CVE-2026-57496 pattern.
+- A name carrying a CFML ``#`` or a quote is refused by strict validation when the tool
+  declares the identifier shape a Wheels name has: the CVE-2026-105793 pattern. No
+  guard reads CFML, so the declared shape is the whole defence for that half.
+
+**Out of reach.** A deploy value that comes from a CI variable or a branch name never
+crosses a tool call. Package archive contents, ``destroy`` following a symlink on disk,
+unencoded output in generated views and a stale RustCFML process id are not arguments
+either. Two boundaries are pinned below: a bare ``$VAR`` passes the stdio guard, as in
+CVE-2026-108953, and a name declared as a bare ``str``, the shape the Wheels MCP schema
+advertised, admits the CFML delimiter. The complete fix is the upstream validation and
+escaping in 4.1.2.
+
+<a id="cve-2026-111451"></a>
 
 ### CVE-2026-11393
 
