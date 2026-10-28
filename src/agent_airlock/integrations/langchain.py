@@ -153,8 +153,11 @@ def wrap_langchain_tool(
     ``.invoke``, ``.ainvoke``, ``.run`` and ``.arun`` are all checked. Policy lists match
     the tool's ``name`` (the name the model calls), not the callable's own name.
 
-    Wrapping is idempotent per callable: one already guarded is left alone, so wrapping a
-    tool twice still costs one audit record and one rate-limit token per call.
+    Wrapping is idempotent per callable: one already guarded with the same ``config``,
+    ``policy`` and ``sandbox`` is left alone, so wrapping a tool twice still costs one audit
+    record and one rate-limit token per call. One guarded with other settings is wrapped
+    again, with a warning, so both apply: until the 0.10.28 review only the policy was
+    compared, and a second wrap asking for a sandbox or for masking was skipped silently.
 
     Args:
         tool: LangChain BaseTool instance.
@@ -186,13 +189,14 @@ def wrap_langchain_tool(
         )
 
     airlock = Airlock(config=config, policy=policy, sandbox=sandbox)
+    settings = (policy, config, sandbox)
     guarded = 0
     for attr, forward in entry_points:
-        if already_guarded(forward, policy=policy, tool=name):
+        if already_guarded(forward, *settings, tool=name):
             continue
         # setattr: the attribute is a pydantic field (func, coroutine) or a method shadowed
         # on the instance (_run, _arun), which static analysis would otherwise flag.
-        setattr(tool, attr, _guard(forward, name=name, airlock=airlock, policy=policy))  # noqa: B010
+        setattr(tool, attr, _guard(forward, name=name, airlock=airlock, settings=settings))  # noqa: B010
         guarded += 1
 
     logger.debug(
@@ -252,7 +256,7 @@ def _guard(
     *,
     name: str,
     airlock: Airlock,
-    policy: SecurityPolicy | None,
+    settings: tuple[object, ...],
 ) -> Callable[..., Any]:
     """``forward`` behind ``airlock``, re-tagged with the tool's name and contract.
 
@@ -264,7 +268,7 @@ def _guard(
     """
     proxy = named_tool_proxy(forward, name=name, relaxed_params=_filled_params(forward))
     guarded: Callable[..., Any] = airlock(proxy)
-    mark_guarded(guarded, policy)
+    mark_guarded(guarded, *settings)
     return guarded
 
 
@@ -317,7 +321,7 @@ def create_secure_tool(
 
     tool_name = name or func.__name__
     airlock = Airlock(config=config, policy=policy, sandbox=sandbox)
-    secured = _guard(func, name=tool_name, airlock=airlock, policy=policy)
+    secured = _guard(func, name=tool_name, airlock=airlock, settings=(policy, config, sandbox))
     callable_kind = "coroutine" if inspect.iscoroutinefunction(secured) else "func"
 
     return StructuredTool.from_function(

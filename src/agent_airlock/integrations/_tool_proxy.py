@@ -22,9 +22,10 @@ Annotations are resolved with ``get_type_hints(..., include_extras=True)`` for t
 tool's module globals.
 
 It also holds the walkers' idempotency marker (:data:`GUARDED_MARKER`). Every shim a
-walker installs carries it, and a walker leaves a tool whose callable carries it alone, so
-wrapping an agent twice (or walking one tool list twice) stacks no second ``Airlock``
-layer: one audit record and one rate-limit charge per call.
+walker installs carries it, with the settings its ``Airlock`` was built from, and a walker
+leaves a tool whose callable carries it with the same settings alone, so wrapping an agent
+twice (or walking one tool list twice) stacks no second ``Airlock`` layer: one audit record
+and one rate-limit charge per call. A wrap with other settings adds a layer (both apply).
 """
 
 from __future__ import annotations
@@ -46,14 +47,19 @@ logger = structlog.get_logger("agent-airlock.integrations._tool_proxy")
 #: and spent two rate-limit tokens (a ``1/hour`` tool was refused on its first call).
 GUARDED_MARKER = "__airlock_guarded__"
 
-#: The policy a shim was installed with, read when a later walk finds it already guarded.
-_GUARDED_POLICY = "__airlock_guarded_policy__"
+#: The settings a shim was installed with, read when a later walk finds it already guarded.
+_GUARDED_SETTINGS = "__airlock_guarded_settings__"
 
 
-def mark_guarded(shim: Any, policy: object) -> None:
-    """Mark ``shim`` as a walker-installed ``Airlock`` shim built with ``policy``."""
+def mark_guarded(shim: Any, *settings: object) -> None:
+    """Mark ``shim`` as a walker-installed ``Airlock`` shim built from ``settings``.
+
+    ``settings`` are everything the shim's ``Airlock`` was built from (its policy, and its
+    config and sandbox where the walker takes them), in the order the walker passes them
+    to :func:`already_guarded`.
+    """
     setattr(shim, GUARDED_MARKER, True)
-    setattr(shim, _GUARDED_POLICY, policy)
+    setattr(shim, _GUARDED_SETTINGS, settings)
 
 
 def is_guarded(obj: Any) -> bool:
@@ -65,32 +71,51 @@ def is_guarded(obj: Any) -> bool:
     return getattr(obj, GUARDED_MARKER, False) is True
 
 
-def already_guarded(obj: Any, *, policy: object, tool: str) -> bool:
-    """Whether a walk should leave ``obj`` alone because it is already guarded.
+def guarded_with(obj: Any, *settings: object) -> bool:
+    """Whether ``obj`` is a shim a walker built from exactly ``settings`` (the same objects)."""
+    if not is_guarded(obj):
+        return False
+    recorded = getattr(obj, _GUARDED_SETTINGS, None)
+    return (
+        isinstance(recorded, tuple)
+        and len(recorded) == len(settings)
+        and all(old is new for old, new in zip(recorded, settings, strict=True))
+    )
 
-    A tool keeps the policy it was first guarded with. When this walk carries another
-    policy object, that is said with a ``UserWarning`` rather than ignored, because a
-    policy that quietly does not apply reads as protection.
+
+def already_guarded(obj: Any, *settings: object, tool: str) -> bool:
+    """Whether a walk should leave ``obj`` alone: it is already guarded with ``settings``.
+
+    A shim built from the same settings (the same objects) is left alone, so wrapping twice
+    stacks nothing. A shim built from other settings (another policy or config, or a
+    sandbox the first wrap did not ask for) is wrapped again: the new ``Airlock`` runs
+    outside the old one, so both apply and nothing either wrap asked for is dropped. That
+    costs each call a second check, audit record and rate-limit charge, and is said with a
+    ``UserWarning``. Until the 0.10.28 review only the policy was compared, and a tool
+    already guarded under another policy kept the first: a second wrap asking for a
+    sandbox or for masking under the same policy was skipped without a word.
 
     Args:
         obj: The callable the framework invokes (or the tool itself).
-        policy: The policy this walk would apply.
+        *settings: What this walk's ``Airlock`` is built from, as :func:`mark_guarded`
+            recorded them.
         tool: The tool's name, for the warning.
 
     Returns:
-        ``True`` when ``obj`` is already a guarded shim.
+        ``True`` when ``obj`` is already a shim built from ``settings``.
     """
     if not is_guarded(obj):
         return False
-    if getattr(obj, _GUARDED_POLICY, None) is not policy:
-        warnings.warn(
-            f"agent-airlock: tool {tool!r} is already guarded under another policy and keeps "
-            "it; the policy passed to this wrap is NOT applied to it. Wrap a fresh tool to "
-            "change its policy.",
-            UserWarning,
-            stacklevel=4,
-        )
-    return True
+    if guarded_with(obj, *settings):
+        return True
+    warnings.warn(
+        f"agent-airlock: tool {tool!r} is already guarded with other settings; it is wrapped "
+        "again, so both apply and each call is checked, audited and rate-limited twice. "
+        "Wrap a fresh tool to replace its settings.",
+        UserWarning,
+        stacklevel=4,
+    )
+    return False
 
 
 def named_tool_proxy(

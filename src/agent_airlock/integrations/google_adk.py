@@ -320,7 +320,7 @@ class GoogleADKAdapter:
         #    computed at tool construction.
         func = getattr(tool, "func", None)
         if callable(func):
-            if not already_guarded(func, policy=policy, tool=_tool_name(tool)):
+            if not already_guarded(func, policy, tool=_tool_name(tool)):
                 tool.func = _airlock_guard(func, policy=policy)
             return tool, None
 
@@ -331,7 +331,7 @@ class GoogleADKAdapter:
 
         # 3. Bare callable — ADK keeps these as-is in ``tools``.
         if callable(tool):
-            if already_guarded(tool, policy=policy, tool=_tool_name(tool)):
+            if already_guarded(tool, policy, tool=_tool_name(tool)):
                 return tool, None
             return _airlock_guard(tool, policy=policy), None
 

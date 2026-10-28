@@ -284,7 +284,7 @@ class AnthropicClaudeAgentSDKAdapter:
             raise AirlockError(
                 f"tool {name!r} exposes neither `forward` nor `__call__`; cannot wrap"
             )
-        if already_guarded(forward, policy=policy, tool=name):
+        if already_guarded(forward, policy, tool=name):
             return tool
 
         # Airlock uses ``func.__name__`` for policy checks, so the proxy carries the

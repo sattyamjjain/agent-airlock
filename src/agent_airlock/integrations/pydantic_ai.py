@@ -61,7 +61,7 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,7 +69,7 @@ from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
-from ._tool_proxy import already_guarded, is_guarded, mark_guarded, named_tool_proxy
+from ._tool_proxy import already_guarded, guarded_with, mark_guarded, named_tool_proxy
 
 logger = structlog.get_logger("agent-airlock.integrations.pydantic_ai")
 
@@ -187,10 +187,11 @@ def _describe_toolset(toolset: Any) -> str:
 
 
 def _is_output_toolset(toolset: Any, skip: set[int]) -> bool:
-    """Whether ``toolset`` is the run's output toolset, which holds no agent tools.
+    """Whether ``toolset`` is the run's output toolset, the model's final-answer schema.
 
-    ``agent.toolsets`` leaves output tools out, and so does this walk: they are the
-    model's final-answer schema, not tools registered on the agent.
+    It holds no agent tools (``agent.toolsets`` leaves it out), but an output *function*
+    in it (``output_type=[fn]``) runs with arguments the model wrote, so the walk guards
+    those (:meth:`PydanticAIAdapter._guard_output_functions`).
     """
     return id(toolset) in skip or (
         type(toolset).__name__ == "OutputToolset"
@@ -255,6 +256,9 @@ class PydanticAIAdapter:
         self._maybe_check_sdk(agent)
         unwrappable: list[tuple[int, str]] = []
         wrapped_count = self._wrap_toolsets_or_tools(agent, policy=policy, report=unwrappable)
+        output_toolset = getattr(agent, "_output_toolset", None)
+        if output_toolset is not None:
+            wrapped_count += self._guard_output_functions(output_toolset, policy=policy)
         run_toolsets_hooked = self._hook_run_toolsets(agent, policy=policy)
         if self.attach_output_validate:
             self._maybe_attach_output_validate(agent)
@@ -311,9 +315,11 @@ class PydanticAIAdapter:
         ``DynamicToolset.toolset_func`` are named in pydantic-ai 1.88 to 2.63, so test
         stubs of the same shape walk the same way.
         """
-        if toolset is None or id(toolset) in seen or _is_output_toolset(toolset, skip):
+        if toolset is None or id(toolset) in seen:
             return 0
         seen.add(id(toolset))
+        if _is_output_toolset(toolset, skip):
+            return self._guard_output_functions(toolset, policy=policy)
 
         tools = getattr(toolset, "tools", None)
         if tools is not None:
@@ -339,6 +345,32 @@ class PydanticAIAdapter:
         report.append((id(toolset), _describe_toolset(toolset)))
         return 0
 
+    def _guard_output_functions(self, toolset: Any, *, policy: SecurityPolicy | None) -> int:
+        """Guard the functions an output toolset calls with the model's final answer.
+
+        With ``output_type=[fn]`` the model writes ``fn``'s arguments and PydanticAI runs
+        it, through ``processor._function_schema.function``: a tool call by another name.
+        That callable is re-pointed to a guarded shim named for the function, so policy
+        lists match the function's name. An output type that is a model or a scalar calls
+        nothing and is left alone. Until the 0.10.28 review the output toolset was skipped
+        whole, and so was the warning that its functions ran unguarded.
+        """
+        processors = getattr(toolset, "processors", None)
+        if not isinstance(processors, Mapping):
+            return 0
+        count = 0
+        for key, processor in processors.items():
+            schema = getattr(processor, "_function_schema", None)
+            function = getattr(schema, "function", None)
+            if schema is None or not callable(function):
+                continue
+            name = str(getattr(function, "__name__", key))
+            if already_guarded(function, policy, tool=name):
+                continue
+            schema.function = _guard_callable(schema, function, name=name, policy=policy)
+            count += 1
+        return count
+
     def _guard_factory(
         self, toolset: Any, factory: Callable[..., Any], *, policy: SecurityPolicy | None
     ) -> None:
@@ -348,7 +380,7 @@ class PydanticAIAdapter:
         the run context; there is nothing static to wrap. Its per-run copies are made from
         the same ``toolset_func`` attribute, so they inherit the re-pointed factory.
         """
-        if already_guarded(factory, policy=policy, tool=_describe_toolset(toolset)):
+        if already_guarded(factory, policy, tool=_describe_toolset(toolset)):
             return
         adapter = self
 
@@ -395,7 +427,7 @@ class PydanticAIAdapter:
                     stacklevel=4,
                 )
             return False
-        if already_guarded(original, policy=policy, tool="the agent's run toolsets"):
+        if already_guarded(original, policy, tool="the agent's run toolsets"):
             return True
 
         adapter = self
@@ -413,6 +445,9 @@ class PydanticAIAdapter:
                 if candidate is not None
             }
             report: list[tuple[int, str]] = []
+            for output in (kwargs.get("output_toolset"), getattr(agent, "_output_toolset", None)):
+                if output is not None:
+                    adapter._guard_output_functions(output, policy=policy)
             adapter._walk_toolset(toolset, policy=policy, report=report, seen=set(), skip=skip)
             fresh = [(key, description) for key, description in report if key not in warned]
             warned.update(key for key, _ in fresh)
@@ -464,7 +499,7 @@ class PydanticAIAdapter:
         whether or not it is the same object as ``tool.function``. A tool whose call path
         is already guarded is left alone (idempotent per tool).
         """
-        if already_guarded(_call_path(tool), policy=policy, tool=name):
+        if already_guarded(_call_path(tool), policy, tool=name):
             return tool
 
         target_attr: str | None = None
@@ -487,7 +522,7 @@ class PydanticAIAdapter:
 
         wrapped = (
             forward
-            if is_guarded(forward)
+            if guarded_with(forward, policy)
             else _guard_callable(tool, forward, name=name, policy=policy)
         )
         schema: Any = getattr(tool, "function_schema", None)

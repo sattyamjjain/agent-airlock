@@ -362,10 +362,13 @@ class AirlockGuardrails:
         ]
 
     def get_input_guardrails(self) -> list[Callable[..., Any]]:
-        """Get the input checks, as plain ``(ctx, data) -> GuardrailResult`` callables.
+        """Get the per-tool policy checks, as plain ``(ctx, data) -> GuardrailResult`` callables.
 
-        The Agents SDK runs ``InputGuardrail`` objects, not these: give it
-        :meth:`wrap_agent`, which builds them.
+        Each checks one secured tool against the policy (allow and deny lists, time
+        window, rate limit) and belongs before a call of that tool. :meth:`secure_tool`
+        already applies the same policy on every call, so :meth:`wrap_agent` does not
+        install these: as an SDK input guardrail, which runs once per run, a check for
+        one tool would refuse runs that never call it.
 
         Returns:
             List of guardrail functions.
@@ -408,13 +411,16 @@ class AirlockGuardrails:
         return guardrails
 
     def wrap_agent(self, agent: Any) -> Any:
-        """Add Airlock's checks to an OpenAI Agents SDK ``Agent`` as SDK guardrails.
+        """Add Airlock's PII check to an OpenAI Agents SDK ``Agent`` as an SDK guardrail.
 
-        Appends one ``agents.InputGuardrail`` per secured tool (the policy check, run
-        before the agent starts where the SDK supports ``run_in_parallel=False``) and an
-        ``agents.OutputGuardrail`` for PII in the final output. A failed check trips the
-        guardrail, so ``Runner.run`` raises the SDK's tripwire exception. Until 0.10.28
-        plain functions were appended, which the SDK cannot run: every run failed with
+        Appends an ``agents.OutputGuardrail`` for PII in the final output (when
+        ``detect_pii``); a hit trips it, so ``Runner.run`` raises the SDK's tripwire
+        exception. The policy is not a guardrail: :meth:`secure_tool` applies it to every
+        call of each tool it wrapped, where the call's name, time and rate budget are
+        known. An input guardrail runs once per run, before the model has chosen any
+        tool, so in the 0.10.28 review one per tool refused every run while any one tool
+        was outside its time window or had spent its rate budget. Until 0.10.28 plain
+        functions were appended, which the SDK cannot run: every run failed with
         ``AttributeError`` (``get_name``), and an object without the guardrail lists got
         nothing at all.
 
@@ -426,23 +432,12 @@ class AirlockGuardrails:
 
         Raises:
             ImportError: openai-agents is not installed.
-            TypeError: ``agent`` has no ``input_guardrails`` / ``output_guardrails`` list
-                to add to, so the checks could not be attached.
+            TypeError: ``agent`` has no ``output_guardrails`` list to add to, so the
+                check could not be attached.
         """
         sdk = _agents_sdk()
         output_cls = sdk.GuardrailFunctionOutput
 
-        input_guardrails = [
-            sdk.InputGuardrail(
-                **_sdk_guardrail_kwargs(
-                    sdk.InputGuardrail,
-                    guardrail_function=_input_guardrail_function(guardrail, output_cls),
-                    name=f"airlock_policy:{guardrail.tool_name}",
-                    run_in_parallel=False,
-                )
-            )
-            for guardrail in self._policy_guardrails()
-        ]
         output_guardrails = []
         if self.detect_pii:
             output_guardrails.append(
@@ -457,10 +452,7 @@ class AirlockGuardrails:
                 )
             )
 
-        for attr, additions in (
-            ("input_guardrails", input_guardrails),
-            ("output_guardrails", output_guardrails),
-        ):
+        for attr, additions in (("output_guardrails", output_guardrails),):
             if not additions:
                 continue
             if not hasattr(agent, attr):
@@ -472,23 +464,10 @@ class AirlockGuardrails:
 
         logger.info(
             "openai_agent_guardrails_attached",
-            input_guardrails=len(input_guardrails),
             output_guardrails=len(output_guardrails),
+            secured_tools=len(self._tools),
         )
         return agent
-
-
-def _input_guardrail_function(
-    guardrail: PolicyGuardrail, output_cls: Any
-) -> Callable[[Any, Any, Any], Any]:
-    """An SDK input-guardrail function ``(context, agent, input)`` running ``guardrail``."""
-
-    def airlock_policy_guardrail(context: Any, agent: Any, agent_input: Any) -> Any:
-        data = agent_input if isinstance(agent_input, dict) else {"input": agent_input}
-        result = guardrail.check(data)
-        return output_cls(output_info=result, tripwire_triggered=not result.passed)
-
-    return airlock_policy_guardrail
 
 
 def _output_guardrail_function(

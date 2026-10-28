@@ -34,11 +34,14 @@ import types
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
+from agent_airlock.config import AirlockConfig
 from agent_airlock.policy import SecurityPolicy
 
 _DENY_ALL = SecurityPolicy(denied_tools=["*"])
@@ -371,6 +374,29 @@ class TestLangChainAsyncEntryPointsAreGuarded:
         assert tool.invoke({"x": 1}) == "sync body"
         assert _blocked(tool.invoke({"x": 1})), "control: the second call spends the token"
 
+    def test_a_rewrap_asking_for_masking_is_applied(self, langchain_core: Any) -> None:
+        """The marker compared only the policy, so a second wrap under the same policy that
+        asked for masking (or a sandbox) was skipped without a word, and the result came
+        back unmasked (0.10.28 review). A wrap with other settings adds a layer."""
+        from agent_airlock.integrations.langchain import wrap_langchain_tool
+
+        def lookup(x: int) -> str:
+            return "SSN 123-45-6789"
+
+        policy = SecurityPolicy()
+        tool = wrap_langchain_tool(
+            _lc_tool(lookup), policy=policy, config=AirlockConfig(sanitize_output=False)
+        )
+        assert "123-45-6789" in str(tool.invoke({"x": 1}))  # control: no masking asked for
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            wrap_langchain_tool(tool, policy=policy, config=AirlockConfig(mask_pii=True))
+
+        assert "123-45-6789" not in str(tool.invoke({"x": 1}))
+        assert "123-45-6789" not in str(asyncio.run(tool.ainvoke({"x": 1})))
+        assert any("already guarded with other settings" in str(w.message) for w in caught)
+
     def test_secure_toolkit_guards_async_tools(self, langchain_core: Any) -> None:
         from agent_airlock.integrations.langchain import SecureToolkit
 
@@ -533,6 +559,88 @@ def _pai_wrap(agent: Any, policy: SecurityPolicy | None) -> Any:
     from agent_airlock.integrations.pydantic_ai import PydanticAIAdapter
 
     return PydanticAIAdapter(attach_output_validate=False).wrap_agent(agent, policy=policy)
+
+
+class _POutputProcessor:
+    """``ObjectOutputProcessor``: an output function runs through ``_function_schema``."""
+
+    def __init__(self, function: Callable[..., Any] | None) -> None:
+        self._function_schema = _PFunctionSchema(function) if function is not None else None
+
+    async def call(self, output: dict[str, Any]) -> Any:
+        if self._function_schema is None:
+            return output
+        return await self._function_schema.call(output, None)
+
+
+class OutputToolset:
+    """``pydantic_ai._output.OutputToolset``: ``processors`` by output tool name."""
+
+    def __init__(self, outputs: list[Any]) -> None:
+        self.processors = {
+            f"final_result_{getattr(o, '__name__', 'model')}": _POutputProcessor(
+                o if callable(o) and not isinstance(o, type) else None
+            )
+            for o in outputs
+        }
+
+
+OutputToolset.__module__ = "pydantic_ai._output"  # recognised as the SDK's own
+
+
+class _POutputAgent(_PAgent):
+    """``Agent(output_type=[...])``: the output toolset is kept apart from ``toolsets``."""
+
+    def __init__(self, outputs: list[Any]) -> None:
+        super().__init__()
+        self._output_toolset = OutputToolset(outputs)
+
+    def final_answer(self, args: dict[str, Any]) -> Any:
+        """The model's final answer, through the output tool it called."""
+        (processor,) = self._output_toolset.processors.values()
+        return asyncio.run(processor.call(args))
+
+
+class TestPydanticAIOutputFunctionsAreGuarded:
+    """0.10.28 review: with ``output_type=[fn]`` the model writes ``fn``'s arguments and
+    PydanticAI runs it. The walk skipped the output toolset, and with it the warning that
+    its functions ran unguarded (verified on pydantic-ai 2.63.0 under ``TestModel``)."""
+
+    def test_an_output_function_is_refused_under_deny_all(self) -> None:
+        ran: list[str] = []
+
+        def output_fn(path: str) -> str:
+            ran.append(path)
+            return f"deleted {path}"
+
+        agent = _pai_wrap(_POutputAgent([output_fn]), _DENY_ALL)
+
+        assert _blocked(agent.final_answer({"path": "a"}))
+        assert ran == []
+
+    def test_control_an_output_function_runs_under_an_allowing_policy(self) -> None:
+        def output_fn(path: str) -> str:
+            return f"deleted {path}"
+
+        agent = _pai_wrap(_POutputAgent([output_fn]), SecurityPolicy())
+
+        assert agent.final_answer({"path": "a"}) == "deleted a"
+
+    def test_an_output_function_gets_strict_validation(self) -> None:
+        def output_fn(count: int) -> int:
+            return count
+
+        agent = _pai_wrap(_POutputAgent([output_fn]), SecurityPolicy())
+
+        assert _blocked(agent.final_answer({"count": "five"}))
+
+    def test_an_output_model_calls_nothing_and_is_left_alone(self) -> None:
+        class Answer(BaseModel):
+            text: str
+
+        agent = _pai_wrap(_POutputAgent([Answer]), _DENY_ALL)
+
+        assert agent.final_answer({"text": "hi"}) == {"text": "hi"}
 
 
 class TestPydanticAIEveryToolsetShapeIsWalked:
@@ -763,7 +871,9 @@ class TestWalkersAreIdempotent:
         assert agent.run_tool("_add", {"a": 1, "b": 2}) == 3
         assert _blocked(agent.run_tool("_add", {"a": 1, "b": 2}))
 
-    def test_rewrapping_with_another_policy_warns(self) -> None:
+    def test_rewrapping_with_another_policy_adds_that_policy(self) -> None:
+        """Until the 0.10.28 review a tool guarded under one policy kept it, and the
+        policy a second wrap passed was not applied (it warned). Both apply now."""
         agent = _PAgent(functions=(_add,))
         _pai_wrap(agent, SecurityPolicy())
 
@@ -771,7 +881,8 @@ class TestWalkersAreIdempotent:
             warnings.simplefilter("always")
             _pai_wrap(agent, _DENY_ALL)
 
-        assert any("already guarded under another policy" in str(w.message) for w in caught)
+        assert any("already guarded with other settings" in str(w.message) for w in caught)
+        assert _blocked(agent.run_tool("_add", {"a": 1, "b": 2}))
 
 
 # ---------------------------------------------------------------------------------------
@@ -850,27 +961,62 @@ def _guarded_agent(policy: SecurityPolicy) -> Any:
 class TestOpenAIGuardrailsAreSdkObjects:
     """F-F4: wrap_agent appends guardrails the Agents SDK can run."""
 
-    def test_wrap_agent_appends_sdk_guardrail_objects(self, agents_sdk: Any) -> None:
+    def test_wrap_agent_appends_the_sdk_output_guardrail(self, agents_sdk: Any) -> None:
         agent = _guarded_agent(SecurityPolicy())
 
-        assert [type(g) for g in agent.input_guardrails] == [_SDKInputGuardrail]
         assert [type(g) for g in agent.output_guardrails] == [_SDKOutputGuardrail]
-        assert agent.input_guardrails[0].get_name() == "airlock_policy:lookup"
-        assert agent.input_guardrails[0].run_in_parallel is False
+        assert agent.output_guardrails[0].get_name() == "airlock_pii"
 
-    def test_a_denied_tool_trips_the_input_guardrail(self, agents_sdk: Any) -> None:
+    def test_the_policy_is_no_input_guardrail(self, agents_sdk: Any) -> None:
+        """An input guardrail runs once per run, before any tool is chosen. One per tool
+        (0.10.28 until its review) refused every run while any one tool was outside its
+        time window or had spent its rate budget. ``secure_tool`` applies the policy."""
         agent = _guarded_agent(_DENY_ALL)
 
-        result = asyncio.run(agent.input_guardrails[0].run(agent, "hello", None))
+        assert agent.input_guardrails == []
 
-        assert result.output.tripwire_triggered is True
+    def test_one_tools_window_and_budget_apply_to_that_tool_only(self, agents_sdk: Any) -> None:
+        from agent_airlock.integrations.openai_guardrails import AirlockGuardrails
 
-    def test_control_an_allowed_tool_passes_the_input_guardrail(self, agents_sdk: Any) -> None:
-        agent = _guarded_agent(SecurityPolicy())
+        later = [datetime.now() + timedelta(hours=h) for h in (3, 4)]
+        window = "-".join(t.strftime("%H:%M") for t in later)  # an hour that is not now
+        policy = SecurityPolicy(
+            time_restrictions={"deploy": window}, rate_limits={"report": "1/hour"}
+        )
+        guardrails = AirlockGuardrails(policy=policy, detect_pii=False)
 
-        result = asyncio.run(agent.input_guardrails[0].run(agent, "hello", None))
+        @guardrails.secure_tool
+        def search(q: str) -> str:
+            return "results"
 
-        assert result.output.tripwire_triggered is False
+        @guardrails.secure_tool
+        def deploy(env: str) -> str:
+            return "deployed"
+
+        @guardrails.secure_tool
+        def report(x: str) -> str:
+            return "report"
+
+        agent = guardrails.wrap_agent(_sdk_agent())
+
+        assert agent.input_guardrails == []
+        assert report(x="q") == "report"
+        assert _blocked(report(x="q")), "the second report spends no token it has"
+        assert _blocked(deploy(env="prod"))
+        assert search(q="cats") == "results"
+
+    def test_a_denied_tool_is_refused_when_called(self, agents_sdk: Any) -> None:
+        from agent_airlock.integrations.openai_guardrails import AirlockGuardrails
+
+        guardrails = AirlockGuardrails(policy=_DENY_ALL)
+
+        @guardrails.secure_tool
+        def lookup(q: str) -> str:
+            return "x"
+
+        guardrails.wrap_agent(_sdk_agent())
+
+        assert _blocked(lookup(q="a"))
 
     def test_pii_in_the_output_trips_the_output_guardrail(self, agents_sdk: Any) -> None:
         agent = _guarded_agent(SecurityPolicy())
@@ -888,7 +1034,7 @@ class TestOpenAIGuardrailsAreSdkObjects:
         def lookup(q: str) -> str:
             return "x"
 
-        with pytest.raises(TypeError, match="input_guardrails"):
+        with pytest.raises(TypeError, match="output_guardrails"):
             guardrails.wrap_agent(types.SimpleNamespace(name="no lists"))
 
 

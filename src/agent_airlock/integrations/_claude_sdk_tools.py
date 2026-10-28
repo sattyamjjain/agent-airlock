@@ -112,7 +112,7 @@ def guard_sdk_tool(tool: Any, *, policy: SecurityPolicy | None = None) -> Any:
         AirlockError: ``input_schema`` is not a form the SDK accepts, or declares a key
             that cannot be a Python parameter name, so no contract can be derived from it.
     """
-    if already_guarded(tool.handler, policy=policy, tool=tool.name):
+    if already_guarded(tool.handler, policy, tool=tool.name):
         return tool
     fields, open_ended = _schema_fields(tool.input_schema, name=tool.name)
     proxy = _spread_proxy(tool.handler, name=tool.name, fields=fields, open_ended=open_ended)

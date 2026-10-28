@@ -257,7 +257,7 @@ class CrewAIAdapter:
         original = getattr(owner, attr, None)
         if not callable(original):
             return False
-        if already_guarded(original, policy=policy, tool=f"{type(owner).__name__}.{attr}"):
+        if already_guarded(original, policy, tool=f"{type(owner).__name__}.{attr}"):
             return True
 
         @functools.wraps(original)
@@ -446,10 +446,13 @@ def _is_guarded(tool: Any) -> bool:
 
 
 def _already_guarded(tool: Any, *, policy: SecurityPolicy | None, name: str) -> bool:
-    """Whether a walk should leave ``tool`` alone, warning when its policy differs."""
+    """Whether a walk should leave ``tool`` alone: already guarded under ``policy``.
+
+    A tool guarded under another policy is wrapped again, with a warning, so both apply.
+    """
     for candidate in (tool, *(getattr(tool, attr, None) for attr in _CALLABLE_ATTRS)):
         if is_guarded(candidate):
-            return already_guarded(candidate, policy=policy, tool=name)
+            return already_guarded(candidate, policy, tool=name)
     return False
 
 
