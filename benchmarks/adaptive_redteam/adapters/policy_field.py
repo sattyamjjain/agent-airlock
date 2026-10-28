@@ -10,6 +10,11 @@ The stateful two are driven through ``CallSpec.sequence``: each prior step names
 tool (``kwargs["tool"]``) and its arguments, replayed under one
 ``AirlockContext(agent_id=...)`` so the guard accumulates per-run state, then the
 scored call is the top-level ``CallSpec``.
+
+Every ``@Airlock`` here is built with an ``AirlockConfig()`` made inside ``canary_env()``,
+so it reads the temp ``AIRLOCK_AUDIT_LOG_PATH`` that context sets. Until 0.10.28 they took
+the default config, built when ``agent_airlock`` was imported, so they wrote
+``airlock_audit.json`` into the working directory and ``read_audit`` read back nothing.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from agent_airlock.action_contradiction_gate import ActionContradictionGate
+from agent_airlock.config import AirlockConfig
 from agent_airlock.context import AirlockContext, reset_context, set_current_context
 from agent_airlock.core import Airlock
 from agent_airlock.policy import SecurityPolicy
@@ -93,7 +99,7 @@ class DeserializationAdapter:
                 reduce_canary.fire_if_admitted(True)
                 return "ok"
 
-            wrapped = Airlock(policy=self._policy(), return_dict=True)(load)
+            wrapped = Airlock(config=AirlockConfig(), policy=self._policy(), return_dict=True)(load)
             try:
                 response = wrapped(**dict(candidate.call.kwargs))
             except Exception as exc:  # noqa: BLE001
@@ -200,7 +206,7 @@ class SequenceGuardAdapter:
         recorder = SinkRecorder(sink="sequence")
         policy = self._policy()
         with canary_env() as audit_path:
-            tools = _named_tools(("read", "process", "write"), recorder, policy)
+            tools = _named_tools(("read", "process", "write"), recorder, policy, AirlockConfig())
             ctx = AirlockContext(agent_id=self.agent_id)
             token = set_current_context(ctx)
             try:
@@ -279,7 +285,7 @@ class ActionContradictionAdapter:
                 recorder.record("send_email")
                 return "sent"
 
-            wrapped = Airlock(policy=policy, return_dict=True)(send_email)
+            wrapped = Airlock(config=AirlockConfig(), policy=policy, return_dict=True)(send_email)
             signal = candidate.call.kwargs.get("signal", "")
             ctx = AirlockContext(agent_id=self.agent_id, metadata={"detector_signal": signal})
             token = set_current_context(ctx)
@@ -298,7 +304,10 @@ class ActionContradictionAdapter:
 
 
 def _named_tools(
-    names: tuple[str, ...], recorder: SinkRecorder, policy: SecurityPolicy
+    names: tuple[str, ...],
+    recorder: SinkRecorder,
+    policy: SecurityPolicy,
+    config: AirlockConfig,
 ) -> dict[str, Any]:
     tools: dict[str, Any] = {}
     for tool_name in names:
@@ -309,7 +318,7 @@ def _named_tools(
                 return "ok"
 
             body.__name__ = tn
-            return Airlock(policy=policy, return_dict=True)(body)
+            return Airlock(config=config, policy=policy, return_dict=True)(body)
 
         tools[tool_name] = make(tool_name)
     return tools

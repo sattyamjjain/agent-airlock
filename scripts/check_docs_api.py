@@ -22,6 +22,10 @@ Scope, deliberately narrow
   exists. A block that uses a name without importing it is not checked.
 * **A module that needs an extra that is not installed is skipped**, not failed, so the
   gate reports the same thing on a bare install as on ``[all]``, just less of it.
+* **A block that does not parse is skipped only when it never names ``agent_airlock``**:
+  pseudo-code about something else has nothing to check. One that names it and does not
+  parse is a finding, since none of it could be checked. Until 0.10.28 both were skipped,
+  so AGENTS.md's safety-posture example (``def your_function(...): ...``) was never read.
 * ``python`` and ``py`` fences only; ``console`` and shell blocks are not code.
 * **Every authored markdown file plus every script under ``examples/``**, except
   ``CHANGELOG.md`` (its entries quote APIs as they were) and ``.github/`` (issue templates
@@ -59,6 +63,8 @@ def _skipped(part: str) -> bool:
 
 _SKIP_FILES = {"CHANGELOG.md"}
 _FENCE = re.compile(r"^```(?:python|py)[ \t]*\n(.*?)^```", re.S | re.M)
+#: A block naming the package cannot be waved through as prose when it does not parse.
+_NAMES_PACKAGE = re.compile(r"\bagent_airlock\b")
 _SELF_ASSIGN = re.compile(r"\bself\.([A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=\n]*)?=(?!=)")
 _MISSING = object()
 _UNCHECKABLE = object()
@@ -177,11 +183,25 @@ def _instances(tree: ast.AST, names: dict[str, Any]) -> dict[str, type]:
 
 
 def check_source(source: str) -> list[tuple[int, str]]:
-    """Findings for one block, as ``(line within the block, message)``."""
+    """Findings for one block, as ``(line within the block, message)``.
+
+    A block that does not parse is a finding when it names ``agent_airlock`` (pointing at
+    the line that fails), and skipped as pseudo-code when it does not.
+    """
     try:
         tree = ast.parse(source)
-    except SyntaxError:
-        return []  # prose-shaped pseudo-code; nothing checkable
+    except (SyntaxError, ValueError) as exc:  # ValueError: a NUL byte, before 3.12
+        if not _NAMES_PACKAGE.search(source):
+            return []  # pseudo-code about something else; nothing of ours to check
+        detail = exc.msg if isinstance(exc, SyntaxError) else str(exc)
+        line = (exc.lineno if isinstance(exc, SyntaxError) else None) or 1
+        return [
+            (
+                line,
+                f"block names agent_airlock but is not valid Python ({detail}), so none of "
+                "it was checked; make it parse",
+            )
+        ]
     names, findings = _imported_names(tree)
     instances = _instances(tree, names)
 
@@ -246,7 +266,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{shown}:{line}: {message}")
     if total:
         print(
-            f"\n{total} docs reference(s) to agent_airlock API that does not exist", file=sys.stderr
+            f"\n{total} finding(s): agent_airlock API that does not exist, or a block naming "
+            "agent_airlock that does not parse",
+            file=sys.stderr,
         )
         return 1
     print(f"OK ({len(paths)} files, every checked agent_airlock reference resolves)")

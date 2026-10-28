@@ -36,12 +36,16 @@ and saying so is worth more than a number that looks complete.
 
 from __future__ import annotations
 
+import functools
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from agent_airlock import (
     Airlock,
+    AirlockConfig,
     HandleField,
     SafePath,
     SafeURL,
@@ -53,6 +57,28 @@ from .corpus import ToolCall, load_corpus
 
 _PROBE_ISSUER = "blockrate.probe"
 _PROBE_SCOPE = "workspace"
+
+
+@functools.cache
+def _temp_audit_dir() -> Path:
+    """One temp directory per process for the arm's audit records (the OS reaps it)."""
+    return Path(tempfile.mkdtemp(prefix="airlock-blockrate-"))
+
+
+def _arm_config() -> AirlockConfig:
+    """The config every ``@Airlock`` stub in this arm is built with.
+
+    The default one, except where it writes its audit records: ``AIRLOCK_AUDIT_LOG_PATH``
+    when that is set, and otherwise a file in a temp directory (the same move as
+    ``benchmarks/adaptive_redteam``'s ``canary_env``), never the working directory. Until
+    0.10.28 the stubs took the default config, whose ``airlock_audit.json`` is relative to
+    the working directory, so ``python -m benchmarks.blockrate``, run from the repo root,
+    wrote a log of every arm call into the checkout. ``DEFAULT_CONFIG`` reads the variable
+    once, when ``agent_airlock.config`` is imported; this reads it per run.
+    """
+    configured = os.environ.get("AIRLOCK_AUDIT_LOG_PATH")
+    path = Path(configured) if configured else _temp_audit_dir() / "airlock_audit.jsonl"
+    return AirlockConfig(audit_log_path=path)
 
 
 @dataclass(frozen=True)
@@ -116,13 +142,16 @@ def _contract_refusal(result: Any) -> bool:
     return "validation failed" in str(result.get("error", ""))
 
 
-def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
+def _run_probe(
+    probe: ContractProbe, *, sandbox: bool, config: AirlockConfig | None = None
+) -> tuple[bool, bool]:
     """Return ``(hostile_refused_by_contract, benign_passed_the_contract)``."""
+    config = config or _arm_config()
     # Each stub's parameter is the thing under test: @Airlock checks it, and the body
     # never reads it. Hence the ARG001 pragmas, the same exemption tests/** has.
     if probe.annotated_type == "SafePath":
 
-        @Airlock(sandbox=sandbox)
+        @Airlock(sandbox=sandbox, config=config)
         def tool_path(target: SafePath) -> str:  # noqa: ARG001
             return "RAN"
 
@@ -133,7 +162,7 @@ def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
 
     if probe.annotated_type == "SafeURL":
 
-        @Airlock(sandbox=sandbox)
+        @Airlock(sandbox=sandbox, config=config)
         def tool_url(endpoint: SafeURL) -> str:  # noqa: ARG001
             return "RAN"
 
@@ -145,7 +174,7 @@ def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
     if probe.annotated_type == "HandleField":
         from agent_airlock import issue_handle
 
-        @Airlock(sandbox=sandbox)
+        @Airlock(sandbox=sandbox, config=config)
         def tool_handle(
             session: HandleField(issuer=_PROBE_ISSUER, scope=_PROBE_SCOPE),  # noqa: ARG001
         ) -> str:
@@ -157,7 +186,7 @@ def _run_probe(probe: ContractProbe, *, sandbox: bool) -> tuple[bool, bool]:
             benign = not _contract_refusal(tool_handle(session=good))
         return hostile, benign
 
-    @Airlock(sandbox=sandbox)
+    @Airlock(sandbox=sandbox, config=config)
     def tool_int(count: int) -> str:  # noqa: ARG001
         return "RAN"
 
@@ -177,7 +206,7 @@ def _policy_refusal(result: Any) -> bool:
     return _blocked(result) and result.get("block_reason") == "policy_violation"
 
 
-def _policy_tool(call: ToolCall, *, sandbox: bool) -> Any:
+def _policy_tool(call: ToolCall, *, sandbox: bool, config: AirlockConfig | None = None) -> Any:
     """The decorator's least-privilege leg, exercised on one dispatch path.
 
     The policy decides on the tool's name, and ``@Airlock`` takes that name from the function
@@ -193,7 +222,8 @@ def _policy_tool(call: ToolCall, *, sandbox: bool) -> Any:
         return "RAN"
 
     invoke.__name__ = invoke.__qualname__ = call.tool_name
-    return Airlock(sandbox=sandbox, policy=policy)(invoke)(tool_name=call.tool_name)
+    wrapped = Airlock(sandbox=sandbox, policy=policy, config=config or _arm_config())(invoke)
+    return wrapped(tool_name=call.tool_name)
 
 
 @dataclass
@@ -279,11 +309,12 @@ def run_sandbox_arm() -> SandboxArmReport:
     """Run both legs and report them separately."""
     name, available, reason = _detect_backend()
     report = SandboxArmReport(backend_name=name, backend_available=available, backend_reason=reason)
+    config = _arm_config()
 
     # Leg 1: the annotated contract, on both paths.
     for probe in _probes():
-        local_hostile, local_benign = _run_probe(probe, sandbox=False)
-        sandbox_hostile, sandbox_benign = _run_probe(probe, sandbox=True)
+        local_hostile, local_benign = _run_probe(probe, sandbox=False, config=config)
+        sandbox_hostile, sandbox_benign = _run_probe(probe, sandbox=True, config=config)
         report.probe_rows.append(
             {
                 "name": probe.name,
@@ -304,11 +335,11 @@ def run_sandbox_arm() -> SandboxArmReport:
             report.undeclared_items += 1
             continue
         report.policy_items += 1
-        local = _policy_refusal(_policy_tool(call, sandbox=False))
+        local = _policy_refusal(_policy_tool(call, sandbox=False, config=config))
         # A policy denial is raised before dispatch, so it never reaches
         # _execute_in_sandbox; an admitted call that then fails there for want of a
         # backend is not a denial (_policy_refusal).
-        sandboxed_result = _policy_tool(call, sandbox=True)
+        sandboxed_result = _policy_tool(call, sandbox=True, config=config)
         sandboxed = _policy_refusal(sandboxed_result)
         if available and sandboxed_result == "RAN":
             # The body returned from the sandbox, so the backend executed it. Only counted

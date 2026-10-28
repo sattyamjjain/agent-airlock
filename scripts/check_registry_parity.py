@@ -31,7 +31,7 @@ the registry:
    rather than in flight.
 3. **Documented-but-never-tagged.** *Every* dated ``## [x.y.z] - YYYY-MM-DD`` heading in
    ``CHANGELOG.md`` must have a matching ``vX.Y.Z`` git tag, and ``pyproject.toml`` may run
-   ahead of the newest tag only while its own section is still ``## [Unreleased]``.
+   one release past the newest tag only while the version it declares has no dated heading.
 
 Why the third condition exists, and why its threshold is zero
 ------------------------------------------------------------
@@ -63,26 +63,36 @@ The threshold was measuring the wrong thing. **A dated heading is a claim that a
 shipped, and the check on a claim is whether the artifact backing it exists — not how far
 away it is.** Distance cannot separate a thirty-second publishing window from a release
 nobody cut, because both are exactly one ahead. Existence can. So the allowance moved to
-where the in-flight state actually lives: ``## [Unreleased]``, which carries no date and
-makes no claim, and under which ``pyproject.toml`` may sit :data:`MAX_UNRELEASED_AHEAD`
-release past the newest tag.
+the one state that makes no claim: a declared version with no dated heading, which may sit
+:data:`MAX_UNRELEASED_AHEAD` release past the newest tag. (``## [Unreleased]`` carries no
+date, so :func:`documented_versions` never counts it.)
 
 How to release without tripping this
 ------------------------------------
-The dated heading and the tag must reach ``main`` together, because ``version-tag-guard``
-runs on main pushes and this condition has no grace::
+Between releases ``## [Unreleased]`` holds only its placeholder: ``check_changelog.py``'s
+default mode, which the ``docs`` job runs on every PR, fails on any entry there while
+``pyproject.toml`` declares a plain ``X.Y.Z``, as every version since the 0.5.7.1 hotfix
+has. So feature work neither bumps the version, nor dates a section, nor writes a CHANGELOG
+entry. The release PR bumps the version surfaces and, in the same commit, writes its notes,
+with the lines the PRs since the last release owe, straight under the new dated heading
+(``## [X.Y.Z] - <date>``).
 
-    # release commit: bump pyproject, promote [Unreleased] -> ## [X.Y.Z] - <date>
+That heading reaches ``main`` in the release PR's squash merge, and its tag can only follow:
+the tag names the commit the merge creates. This condition has no grace, so the merge's own
+push run of ``version-tag-guard`` fails here until the tag exists. Tag the merge commit as
+soon as it lands, from an up-to-date ``main``, then re-run that job::
+
     git tag -a vX.Y.Z -m vX.Y.Z
     git push --atomic origin main vX.Y.Z
     gh release create vX.Y.Z --notes-file <the CHANGELOG section>
 
-Feature work does not bump the version and does not date a section: its entries go under
-``## [Unreleased]``, and both this condition and ``check_changelog_heading.py`` stay green.
-That split is what makes the two gates satisfiable at once. Before it, the only way to
-satisfy ``check_changelog_heading.py`` on a bumped ``main`` was to write a dated heading —
-which is precisely the state this condition now fails. Two gates that cannot both be
-green is how the state kept recurring.
+Keeping feature work and the release PR apart is what makes the gates satisfiable at once:
+on every PR between releases the declared version keeps its dated, tagged heading, so this
+condition and ``check_changelog_heading.py`` stay green, and ``[Unreleased]`` stays empty,
+so ``check_changelog.py`` does too. Before that split, the only way to satisfy
+``check_changelog_heading.py`` on a bumped ``main`` was to write a dated heading — which is
+precisely the state this condition now fails. Two gates that cannot both be green is how
+the state kept recurring.
 
 Three historical versions predate that discipline and are grandfathered by name in
 :data:`GRANDFATHERED_UNTAGGED`. Nothing may be added to that set: an untagged dated section
@@ -148,8 +158,8 @@ MAX_UNPUBLISHED_DAYS = 3
 #: backing it must exist. Was 1 for one day; see the module docstring for why that failed.
 MAX_DOCUMENTED_AHEAD = 0
 
-#: How far ``pyproject.toml`` may run past the newest tag *while its section is still
-#: ``[Unreleased]``* — one release in flight. A dated section gets no such allowance.
+#: How far ``pyproject.toml`` may run past the newest tag *while the version it declares has
+#: no dated heading* — one release in flight. A dated section gets no such allowance.
 MAX_UNRELEASED_AHEAD = 1
 
 #: Dated headings from before this repo tagged consistently (2026-01-31 / 2026-02-01).
@@ -298,7 +308,7 @@ def documented_versions(changelog_text: str) -> list[str]:
     """Every *dated* release heading in a CHANGELOG, newest first.
 
     ``## [Unreleased]`` is skipped on purpose: it carries no date and makes no claim to
-    have shipped, which is exactly the state this check wants people in before a tag exists.
+    have shipped.
 
     Args:
         changelog_text: Full contents of ``CHANGELOG.md``.
@@ -341,7 +351,7 @@ def newest_tagged_version(tag_output: str) -> str | None:
 
 
 def has_dated_heading(changelog_text: str, version: str) -> bool:
-    """Whether ``version`` carries a dated heading, rather than sitting in ``[Unreleased]``."""
+    """Whether ``version`` carries a dated ``## [x.y.z] - YYYY-MM-DD`` heading."""
     return version in set(documented_versions(changelog_text))
 
 
@@ -402,7 +412,9 @@ def evaluate_documented_vs_tagged(documented: Sequence[str], tagged: set[str]) -
         f"      git tag -a v{first} -m v{first}\n"
         f"      git push --atomic origin main v{first}\n"
         f"      gh release create v{first} --notes-file <the CHANGELOG section>\n"
-        f"    or, if it is not meant to ship, move that section back under [Unreleased]."
+        f"    or, if it is not meant to ship, delete that dated section and, if pyproject.toml "
+        f"declares it, revert the version bump. Do not move its notes under [Unreleased]: "
+        f"check_changelog.py fails any entry there while the version is a plain X.Y.Z."
     ]
 
 
@@ -412,12 +424,12 @@ def evaluate_declared_vs_tagged(
     *,
     declared_is_dated: bool,
 ) -> list[str]:
-    """Fail when ``pyproject.toml`` runs too far past the newest tag while unreleased.
+    """Fail when ``pyproject.toml`` runs too far past the newest tag while undated.
 
     The allowance is conditional on the declared version still being *in flight*: a version
-    whose entries sit under ``[Unreleased]`` may run :data:`MAX_UNRELEASED_AHEAD` release
-    past the newest tag. A version carrying a dated section is claiming to have shipped,
-    and :func:`evaluate_documented_vs_tagged` owns that case with no allowance at all.
+    with no dated heading may run :data:`MAX_UNRELEASED_AHEAD` release past the newest tag.
+    A version carrying a dated section is claiming to have shipped, and
+    :func:`evaluate_documented_vs_tagged` owns that case with no allowance at all.
 
     Args:
         declared: Version declared in ``pyproject.toml``.
@@ -441,9 +453,9 @@ def evaluate_declared_vs_tagged(
 
     gap = "several releases" if ahead is None else f"{ahead} releases"
     return [
-        f"pyproject.toml declares {declared} with its entries still under [Unreleased], but "
-        f"the newest git tag is v{newest} — {gap} ahead (max {MAX_UNRELEASED_AHEAD} while "
-        f"unreleased). A version in between was never cut; tag it before bumping again."
+        f"pyproject.toml declares {declared}, which has no dated CHANGELOG heading, but the "
+        f"newest git tag is v{newest} — {gap} ahead (max {MAX_UNRELEASED_AHEAD} for an "
+        f"undated version). A version in between was never cut; tag it before bumping again."
     ]
 
 

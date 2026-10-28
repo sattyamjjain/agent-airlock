@@ -28,7 +28,8 @@ def test_every_mcp_spec_guard_module_is_a_bypass_target() -> None:
     assert not missing, (
         "guard modules with no red-team adapter: "
         f"{missing}; add each to BYPASS_TARGETS and build_registry() in "
-        "benchmarks/adaptive_redteam/adapters/registry.py (see benchmarks/CLAUDE.md)"
+        "benchmarks/adaptive_redteam/adapters/registry.py (the recipe is in "
+        "src/agent_airlock/mcp_spec/CLAUDE.md)"
     )
 
 

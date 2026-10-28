@@ -26,13 +26,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        # `[redis]` is here so tests/test_redis_rate_limit.py and
-        # tests/kill_switch/test_kill_switch_wiring.py actually execute. Both
-        # modules open with `pytest.importorskip("fakeredis")`, and `[dev]`
-        # carries no redis, so for their whole life they were silently skipped
-        # in CI -- 30 tests that reported as neither passed nor failed. The
-        # redis ceiling lift in #182 therefore merged on a green run that had
-        # not imported redis once.
+        # `[redis]` is here so the fakeredis-backed tests actually execute.
+        # tests/test_redis_rate_limit.py opens with `pytest.importorskip("fakeredis")`,
+        # two tests in tests/kill_switch/test_kill_switch_wiring.py call it inside the
+        # test, and `[dev]` carries no redis, so for their whole life those 14 tests
+        # were silently skipped in CI, reported as neither passed nor failed. (This
+        # comment said both modules open with it and counted 30, the wiring module's
+        # other 16 included, until 0.10.28.) The redis ceiling lift in #182 therefore
+        # merged on a green run that had not imported redis once.
         # `[mcp]` is here for the same reason: without FastMCP the server-backed
         # tests in tests/test_mcp.py and tests/test_mcp_integration_0_10_18.py
         # skip, and until 0.10.18 no FastMCP test had run in CI. It resolves to
@@ -49,16 +50,28 @@ jobs:
 
       - name: Assert the extra-backed tests are not silently skipped
         # The failure mode this guards is invisible by construction: importorskip
-        # turns a missing dependency into a skip, and a skipped module looks
-        # exactly like a passing one in the summary line. Collect-only, so it
-        # costs nothing and fails loudly if an extra stops resolving.
+        # turns a missing dependency into a skip, and a skipped test looks exactly like
+        # a passing one in the summary line. The import lines fail when an extra stops
+        # resolving. The run below fails when any test in the five files does not pass:
+        # pytest's exit code fails the step on a failure or error, and the summary line
+        # must report passes only (deselected tests and warnings allowed), so a skip, an
+        # xfail or no test at all fails it too. Until 0.10.28 this ran --collect-only,
+        # which exits 0 on a module-level importorskip and never reaches one inside a
+        # test function (two in test_kill_switch_wiring.py), so it asserted nothing the
+        # import lines did not. The five files run in a few seconds.
         run: |
           python -c "import fakeredis, redis, lupa; print('redis', redis.__version__, '| fakeredis', fakeredis.__version__)"
           python -c "import fastmcp; print('fastmcp', fastmcp.__version__)"
           python -c "import cryptography; print('cryptography', cryptography.__version__)"
+          set -o pipefail
           pytest tests/test_redis_rate_limit.py tests/kill_switch/test_kill_switch_wiring.py \
             tests/test_mcp_integration_0_10_18.py tests/test_identity.py \
-            tests/test_attested_admission.py --collect-only -q --no-cov > /dev/null
+            tests/test_attested_admission.py -rs --no-cov | tee extra-backed-tests.log
+          sed -E 's/\x1b\[[0-9;]*m//g' extra-backed-tests.log > extra-backed-tests.plain.log
+          grep -qE '^=+ [0-9]+ passed(, [0-9]+ deselected)?(, [0-9]+ warnings?)? in ' extra-backed-tests.plain.log || {
+            echo "::error::a test in the extra-backed files did not pass (skipped, xfailed or none ran); see the short test summary above"
+            exit 1
+          }
 
       - name: Lint with ruff
         run: |
@@ -177,7 +190,7 @@ jobs:
     # The zero-core-dependency claim, enforced as an EXHAUSTIVE allowlist. A bare
     # `pip install agent-airlock` (no extras) must resolve to Pydantic + its transitive
     # runtime closure and NOTHING else, and still import + run through the stdlib logging
-    # shim in agent_airlock/_log.py. The `test` job installs `.[dev,redis,mcp]` ([dev]
+    # shim in agent_airlock/_log.py. The `test` job installs `.[dev,redis,mcp,crypto]` ([dev]
     # brings structlog), so this is the ONLY job that exercises the Pydantic-only core — added
     # in v0.8.59 when structlog moved to the [logging] extra. Through v0.8.67 the check
     # was a structlog-specific denylist, which would wave through any OTHER dependency
@@ -353,12 +366,15 @@ jobs:
       - name: Every benchmark row must carry a freshness marker
         run: python3 scripts/check_benchmark_freshness.py
 
-      # Post-release CHANGELOG drift: a released version must not still have
-      # entries sitting under [Unreleased]. Also previously unwired — it existed
-      # only as `make check-changelog`, i.e. it depended on a human remembering.
+      # CHANGELOG drift: the default mode fails on any entry under [Unreleased] once
+      # pyproject.toml declares a plain X.Y.Z, as every version since the 0.5.7.1 hotfix
+      # has. So between releases [Unreleased] holds only its placeholder, and the release
+      # PR writes its notes straight under the new dated heading. Also previously
+      # unwired: it existed only as `make check-changelog`, i.e. it depended on a human
+      # remembering.
       #
       # Note this is the default mode, not --release. The --release mode requires
-      # [Unreleased] to be NON-empty and is therefore red by design outside a
-      # release window; wiring that one here would fail every ordinary PR.
+      # [Unreleased] to be NON-empty, which this repo's release flow never satisfies;
+      # wiring that one here would fail every PR.
       - name: CHANGELOG must not strand entries under [Unreleased]
         run: python3 scripts/check_changelog.py

@@ -33,7 +33,7 @@ from ..._log import structlog
 if TYPE_CHECKING:  # pragma: no cover
     pass
 
-logger = structlog.get_logger("agent-airlock.kill_switch.redis")
+logger = structlog.get_logger("agent-airlock.kill_switch.transports.redis_stream")
 
 #: Default stream key. One stream per fleet; separate fleets need separate keys.
 DEFAULT_STREAM_KEY = "airlock:killswitch"

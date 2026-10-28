@@ -16,13 +16,16 @@ each ``*.pth`` file holding an executable line, and locates ``sitecustomize`` an
 ``usercustomize`` with :func:`importlib.util.find_spec`, which finds a module without
 running it. Each hook carries its path, its kind and the SHA-256 of its content, and an
 allowlist of ``{file name: sha256}`` drops the ones you know; a known name whose content
-differs stays a finding.
+differs stays a finding. For a ``.pth`` hook that hash covers the ``.pth`` file only, not
+the modules its import lines load: a module an allowlisted line imports can change and the
+hook stays allowlisted. Allowlist a ``.pth`` only when you trust what it imports, too.
 
 What it cannot do: these hooks have already run by the time this module is imported, so
 it cannot stop them running or undo what they did. It tells you the interpreter is not
-clean. ``AirlockConfig(startup_hook_check="deny")`` also keeps every ``@Airlock``-guarded
-tool, credential-bearing ones included, from running in that process. Scanning packages
-when they are installed is not this library's job.
+clean. ``AirlockConfig(startup_hook_check="deny")`` also refuses each call to a tool
+guarded by that config, credential-bearing ones included; a tool guarded by a config
+without it still runs, so set it on every config whose tools must not run beside an
+unknown hook. Scanning packages when they are installed is not this library's job.
 
 It reports a hook whether or not this interpreter's start-up ran it (``python -S``, a user
 site the interpreter does not load, a ``.pth`` file ``site`` skips because it is hidden):

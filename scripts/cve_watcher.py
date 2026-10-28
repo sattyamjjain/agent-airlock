@@ -24,14 +24,19 @@ learned in production. The *content* is this repo's own:
   LangChain integrations but its CVE catalog contains no LangChain
   advisory, so querying for them would file issues for CVEs this repo has
   no guard story for.
-* The ledger is ``docs/cves/index.md`` plus the ``tests/cves/`` filenames,
-  since a CVE here is only really "covered" once it has a regression test.
+* The ledger is ``docs/cves/index.md`` plus everything under ``tests/cves/``: the name of
+  every file there, fixtures included, and the text of every ``.md`` and ``.py`` file, so
+  an id in a test module's docstring (an umbrella module's included) or in the
+  out-of-scope table of ``tests/cves/README.md`` counts, if written out in full (of
+  ``CVE-2026-11111/22222`` only the first id counts). A CVE here is only really "covered"
+  once it has a regression test or a recorded refusal.
 * The issue checklist names this repo's artifacts (mcp_spec guard,
   ``@preset`` factory, ``tests/cves/`` regression, catalog regeneration).
 
 Dedup strategy (three layers, any one suppresses):
 
-1. The ledger — ``docs/cves/index.md`` and ``tests/cves/`` filenames.
+1. The ledger — ``docs/cves/index.md``, and under ``tests/cves/`` every file name and the
+   text of every ``.md`` and ``.py`` file.
 2. ``.airlock/cve-watcher-state.json`` — every CVE the watcher has filed,
    so an untriaged CVE is not re-opened on every cron run.
 3. CVE ids found in ``cve-response`` issues, open **and** closed, so a CVE

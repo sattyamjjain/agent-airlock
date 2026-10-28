@@ -59,7 +59,7 @@ from agent_airlock import Airlock
 from agent_airlock.policy import STRICT_POLICY
 
 @Airlock(policy=STRICT_POLICY, sandbox=True, sandbox_required=True)
-def your_function(...): ...
+def your_function(path: str) -> str: ...
 ```
 
 Anything weaker (PERMISSIVE_POLICY, `sandbox_required=False`) needs a

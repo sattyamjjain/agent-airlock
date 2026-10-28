@@ -6,6 +6,9 @@ Run with: pytest benchmarks/ -v --benchmark-only
 from __future__ import annotations
 
 import asyncio
+import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from pytest_benchmark.fixture import BenchmarkFixture
@@ -16,6 +19,19 @@ from agent_airlock import (
     AirlockConfig,
     SecurityPolicy,
 )
+
+#: Where every tool here writes its audit records: ``AIRLOCK_AUDIT_LOG_PATH`` when set, else
+#: a temp file. The default ``airlock_audit.json`` is relative to the working directory, the
+#: checkout for a run from the repo root, and a benchmark calls each tool thousands of times.
+_AUDIT_LOG = Path(
+    os.environ.get("AIRLOCK_AUDIT_LOG_PATH")
+    or Path(tempfile.mkdtemp(prefix="airlock-bench-")) / "airlock_audit.jsonl"
+)
+
+
+def _config(**overrides: Any) -> AirlockConfig:
+    """``AirlockConfig(**overrides)``, writing its audit log to ``_AUDIT_LOG``."""
+    return AirlockConfig(audit_log_path=_AUDIT_LOG, **overrides)
 
 
 # Baseline: undecorated function
@@ -34,7 +50,7 @@ class TestValidationOverhead:
 
     def test_airlock_minimal(self, benchmark: BenchmarkFixture) -> None:
         """Minimal Airlock with no sanitization."""
-        config = AirlockConfig(sanitize_output=False)
+        config = _config(sanitize_output=False)
 
         @Airlock(config=config)
         def simple_tool(x: int, y: str) -> str:
@@ -46,7 +62,7 @@ class TestValidationOverhead:
     def test_airlock_default(self, benchmark: BenchmarkFixture) -> None:
         """Default Airlock configuration."""
 
-        @Airlock()
+        @Airlock(config=_config())
         def simple_tool(x: int, y: str) -> str:
             return f"{x}-{y}"
 
@@ -57,7 +73,7 @@ class TestValidationOverhead:
         """Airlock with policy checking."""
         policy = SecurityPolicy(allowed_tools=["policy_tool"])
 
-        @Airlock(policy=policy)
+        @Airlock(config=_config(), policy=policy)
         def policy_tool(x: int) -> int:
             return x * 2
 
@@ -70,7 +86,7 @@ class TestPIIMaskingOverhead:
 
     def test_no_pii_in_output(self, benchmark: BenchmarkFixture) -> None:
         """Output without PII - should be fast."""
-        config = AirlockConfig(mask_pii=True, sanitize_output=True)
+        config = _config(mask_pii=True, sanitize_output=True)
 
         @Airlock(config=config)
         def clean_output() -> str:
@@ -81,7 +97,7 @@ class TestPIIMaskingOverhead:
 
     def test_with_pii_in_output(self, benchmark: BenchmarkFixture) -> None:
         """Output with PII - measures regex scanning overhead."""
-        config = AirlockConfig(mask_pii=True, sanitize_output=True)
+        config = _config(mask_pii=True, sanitize_output=True)
 
         @Airlock(config=config)
         def pii_output() -> str:
@@ -94,7 +110,7 @@ class TestPIIMaskingOverhead:
 
     def test_secret_masking(self, benchmark: BenchmarkFixture) -> None:
         """Output with secrets - measures secret detection."""
-        config = AirlockConfig(mask_secrets=True, sanitize_output=True)
+        config = _config(mask_secrets=True, sanitize_output=True)
 
         @Airlock(config=config)
         def secret_output() -> str:
@@ -110,7 +126,7 @@ class TestGhostArgumentOverhead:
     def test_no_ghost_args(self, benchmark: BenchmarkFixture) -> None:
         """No ghost arguments - minimal overhead."""
 
-        @Airlock()
+        @Airlock(config=_config())
         def no_ghost(a: int, b: str, c: float = 1.0) -> str:
             return f"{a}-{b}-{c}"
 
@@ -119,7 +135,7 @@ class TestGhostArgumentOverhead:
 
     def test_with_ghost_args_permissive(self, benchmark: BenchmarkFixture) -> None:
         """Ghost arguments stripped - permissive mode."""
-        config = AirlockConfig(strict_mode=False)
+        config = _config(strict_mode=False)
 
         @Airlock(config=config)
         def ghost_tool(a: int) -> int:
@@ -140,7 +156,7 @@ class TestOutputTruncation:
 
     def test_small_output(self, benchmark: BenchmarkFixture) -> None:
         """Small output - no truncation needed."""
-        config = AirlockConfig(max_output_chars=10000)
+        config = _config(max_output_chars=10000)
 
         @Airlock(config=config)
         def small_output() -> str:
@@ -151,7 +167,7 @@ class TestOutputTruncation:
 
     def test_large_output_truncated(self, benchmark: BenchmarkFixture) -> None:
         """Large output - truncation applied."""
-        config = AirlockConfig(max_output_chars=1000)
+        config = _config(max_output_chars=1000)
 
         @Airlock(config=config)
         def large_output() -> str:
@@ -184,7 +200,7 @@ class TestAsyncOverhead:
     def test_async_airlock(self, benchmark: BenchmarkFixture) -> None:
         """Async function with Airlock."""
 
-        @Airlock()
+        @Airlock(config=_config())
         async def async_tool(x: int) -> int:
             return x * 2
 
@@ -205,7 +221,7 @@ class TestComplexValidation:
     def test_simple_types(self, benchmark: BenchmarkFixture) -> None:
         """Simple primitive types."""
 
-        @Airlock()
+        @Airlock(config=_config())
         def simple_types(a: int, b: str, c: float, d: bool) -> str:
             return f"{a}-{b}-{c}-{d}"
 
@@ -215,7 +231,7 @@ class TestComplexValidation:
     def test_complex_types(self, benchmark: BenchmarkFixture) -> None:
         """Complex nested types."""
 
-        @Airlock()
+        @Airlock(config=_config())
         def complex_types(
             data: dict[str, Any],
             items: list[int],
@@ -236,7 +252,7 @@ class TestPolicyOverhead:
     def test_permissive_policy(self, benchmark: BenchmarkFixture) -> None:
         """Permissive policy - minimal checks."""
 
-        @Airlock(policy=PERMISSIVE_POLICY)
+        @Airlock(config=_config(), policy=PERMISSIVE_POLICY)
         def permissive_tool(x: int) -> int:
             return x
 
@@ -251,7 +267,7 @@ class TestPolicyOverhead:
             denied_tools=["delete_*", "drop_*"],
         )
 
-        @Airlock(policy=policy)
+        @Airlock(config=_config(), policy=policy)
         def strict_tool(x: int) -> int:
             return x
 
@@ -266,7 +282,7 @@ class TestPolicyOverhead:
             rate_limits={"rated_tool": "100000/second"},
         )
 
-        @Airlock(policy=policy)
+        @Airlock(config=_config(), policy=policy)
         def rated_tool(x: int) -> int:
             return x
 
@@ -279,7 +295,7 @@ class TestEndToEnd:
 
     def test_realistic_tool_call(self, benchmark: BenchmarkFixture) -> None:
         """Realistic tool call with all features enabled."""
-        config = AirlockConfig(
+        config = _config(
             strict_mode=False,
             sanitize_output=True,
             mask_pii=True,
@@ -301,7 +317,7 @@ class TestEndToEnd:
     def test_high_volume_scenario(self, benchmark: BenchmarkFixture) -> None:
         """Simulate high volume of calls."""
 
-        @Airlock()
+        @Airlock(config=_config())
         def quick_tool(x: int) -> int:
             return x * 2
 

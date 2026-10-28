@@ -5,9 +5,21 @@ Run with: pytest benchmarks/benchmark_airlock.py --benchmark-only
 
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
+
 from agent_airlock import Airlock
 from agent_airlock.config import AirlockConfig
 from agent_airlock.policy import STRICT_POLICY
+
+#: Where every tool here writes its audit records: ``AIRLOCK_AUDIT_LOG_PATH`` when set, else
+#: a temp file. The default ``airlock_audit.json`` is relative to the working directory, the
+#: checkout for a run from the repo root, and a benchmark calls each tool thousands of times.
+_AUDIT_LOG = Path(
+    os.environ.get("AIRLOCK_AUDIT_LOG_PATH")
+    or Path(tempfile.mkdtemp(prefix="airlock-bench-")) / "airlock_audit.jsonl"
+)
 
 
 # Simple function for baseline
@@ -17,8 +29,8 @@ def simple_function(x: int, y: int) -> int:
 
 
 # Airlocked versions
-config_minimal = AirlockConfig(strict_mode=False)
-config_strict = AirlockConfig(strict_mode=True)
+config_minimal = AirlockConfig(strict_mode=False, audit_log_path=_AUDIT_LOG)
+config_strict = AirlockConfig(strict_mode=True, audit_log_path=_AUDIT_LOG)
 
 
 @Airlock(config=config_minimal)

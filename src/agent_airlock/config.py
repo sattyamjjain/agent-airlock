@@ -98,7 +98,7 @@ class AirlockConfig:
             Returns fake data instead of errors to prevent agent exploitation.
         capability_policy: Capability gating policy for per-tool permissions (V0.4.0+).
         expected_token_audience: The canonical resource URI of this server (V0.10.27).
-            When set, every guarded call checks the ``aud`` claim of the OAuth access
+            When set, every call this config guards checks the ``aud`` claim of the OAuth access
             token the host verified and put on the call's ``AirlockContext`` metadata
             under ``access_token_claims`` (CVE-2026-115413). None (the default) checks
             nothing.
@@ -107,9 +107,11 @@ class AirlockConfig:
         startup_hook_check: ``off`` (default), ``warn`` or ``deny`` (V0.10.27). When on,
             the first guarded call walks the interpreter's executable ``.pth`` lines and
             ``sitecustomize`` / ``usercustomize`` once per process; ``warn`` logs each
-            hook found and ``deny`` refuses every guarded call while one is not
-            allowlisted. It cannot stop a hook that has already run.
-        startup_hook_allowlist: ``{file name: sha256}`` of the startup hooks you know.
+            hook found and ``deny`` refuses every call this config guards while one is
+            not allowlisted. A tool guarded by a config that leaves it ``off`` still runs
+            in the same process. It cannot stop a hook that has already run.
+        startup_hook_allowlist: ``{file name: sha256}`` of the startup hooks you know. A
+            ``.pth`` file's digest covers that file only, not the modules it imports.
     """
 
     # V0.4.0: New explicit unknown args handling
