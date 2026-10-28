@@ -51,11 +51,15 @@ class _Inner:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
 class _Wrapper:
-    """RunContextWrapper-style wrapper; the seam reads ``.context``."""
+    """RunContextWrapper-style wrapper; the seam reads ``.context``.
 
-    context: _Inner
+    A plain class: since 0.10.28 a first argument is read as the run wrapper only when
+    model JSON cannot have built it, and a dataclass wrapper only around an AirlockContext.
+    """
+
+    def __init__(self, context: _Inner) -> None:
+        self.context = context
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +409,7 @@ class TestSecurityPolicyIntegration:
         policy = SecurityPolicy(action_contradiction_gate=gate)
 
         @Airlock(policy=policy)
-        def send_email(_ctx: _Wrapper, to: str, body: str) -> str:
+        def send_email(_ctx: Any, to: str, body: str) -> str:
             return f"sent to {to}"
 
         wrapper = _Wrapper(
@@ -424,7 +428,7 @@ class TestSecurityPolicyIntegration:
         policy = SecurityPolicy(action_contradiction_gate=gate)
 
         @Airlock(policy=policy)
-        def read_kb(_ctx: _Wrapper, query: str) -> str:
+        def read_kb(_ctx: Any, query: str) -> str:
             return f"results: {query}"
 
         wrapper = _Wrapper(
@@ -442,7 +446,7 @@ class TestSecurityPolicyIntegration:
         policy = SecurityPolicy(action_contradiction_gate=gate)
 
         @Airlock(policy=policy)
-        def send_email(_ctx: _Wrapper, to: str, body: str) -> str:
+        def send_email(_ctx: Any, to: str, body: str) -> str:
             return f"sent to {to}"
 
         wrapper = _Wrapper(

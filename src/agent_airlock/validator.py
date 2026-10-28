@@ -11,6 +11,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import inspect
+import types
 from collections.abc import Callable, Mapping
 from typing import Any, TypeVar, get_args, get_type_hints
 
@@ -84,6 +85,8 @@ def strip_ghost_arguments(
     func: Callable[..., Any],
     kwargs: dict[str, Any],
     strict: bool = False,
+    *,
+    log: bool = True,
 ) -> tuple[dict[str, Any], set[str]]:
     """Remove ghost arguments from kwargs.
 
@@ -91,6 +94,9 @@ def strip_ghost_arguments(
         func: The function being called.
         kwargs: The keyword arguments passed to the function.
         strict: If True, raise GhostArgumentError instead of stripping.
+        log: Log a warning naming what was stripped. ``@Airlock`` passes False and logs
+            the strip as its ``unknown_args`` mode says (``handle_unknown_args``), so
+            ``STRIP_SILENT`` stays silent.
 
     Returns:
         Tuple of (cleaned kwargs, set of removed argument names).
@@ -106,12 +112,12 @@ def strip_ghost_arguments(
     if strict:
         raise GhostArgumentError(func.__name__, ghost_args)
 
-    # Log warning about stripped arguments
-    logger.warning(
-        "ghost_arguments_stripped",
-        function=func.__name__,
-        stripped_args=sorted(ghost_args),
-    )
+    if log:
+        logger.warning(
+            "ghost_arguments_stripped",
+            function=func.__name__,
+            stripped_args=sorted(ghost_args),
+        )
 
     # Return cleaned kwargs
     cleaned = {k: v for k, v in kwargs.items() if k not in ghost_args}
@@ -144,6 +150,10 @@ def _nested_strict_check(func: Callable[..., Any]) -> Callable[..., None] | None
     arguments are validated once more with ``strict=True``. Their error locations keep the
     parameter name (``user.age``), since they are checked as keys of one TypedDict.
 
+    ``*args`` and ``**kwargs`` annotated with such a type get each of their items checked
+    the same way (``people.0.age``, ``people.ann.age``). Until 0.10.28 they were left out,
+    so ``*people: Person`` still coerced ``{"age": "30"}``.
+
     Returns ``None`` when no parameter needs it, so ordinary tools pay nothing.
     """
     try:
@@ -151,12 +161,16 @@ def _nested_strict_check(func: Callable[..., Any]) -> Callable[..., None] | None
         signature = inspect.signature(func)
     except Exception:  # unresolvable annotations: validate_call reports them at build time
         return None
-    variadic = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-    fields = {
-        name: hints[name]
-        for name, param in signature.parameters.items()
-        if param.kind not in variadic and name in hints and _has_own_config(hints[name])
-    }
+    fields: dict[str, Any] = {}
+    for name, param in signature.parameters.items():
+        if name not in hints or not _has_own_config(hints[name]):
+            continue
+        if param.kind is inspect.Parameter.VAR_POSITIONAL:
+            fields[name] = types.GenericAlias(tuple, (hints[name], ...))
+        elif param.kind is inspect.Parameter.VAR_KEYWORD:
+            fields[name] = types.GenericAlias(dict, (str, hints[name]))
+        else:
+            fields[name] = hints[name]
     if not fields:
         return None
     typed_dict: Any = TypedDict  # a runtime-built TypedDict, which mypy cannot type

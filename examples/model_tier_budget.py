@@ -33,7 +33,7 @@ Run with: ``python -m examples.model_tier_budget``
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from agent_airlock import Airlock, AirlockContext, SecurityPolicy
@@ -105,15 +105,14 @@ def demo_tag_around_the_call() -> None:
 
 
 @dataclass
-class _RunState:
-    """What a framework hands a tool as ``ctx.context`` — here, carrying the tags."""
-
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
 class _RunContextWrapper:
-    context: _RunState
+    """What a framework hands a tool first, its ``context`` the host's ``AirlockContext``.
+
+    Model JSON can build a dataclass, so airlock reads a dataclass wrapper's tags only when
+    its ``context`` is an ``AirlockContext``, which pydantic never builds from JSON.
+    """
+
+    context: AirlockContext[None]
 
 
 def demo_context_object_tagging() -> None:
@@ -125,7 +124,8 @@ def demo_context_object_tagging() -> None:
     def translate(ctx: _RunContextWrapper, text: str) -> str:
         return f"TRANSLATED: {text}"
 
-    ctx = _RunContextWrapper(_RunState(metadata={"airlock_tier": "mid", "input_tokens": 100}))
+    tags = {"airlock_tier": "mid", "input_tokens": 100}
+    ctx = _RunContextWrapper(AirlockContext[None](metadata=tags))
     result = translate(ctx, text="Bonjour le monde.")
     print(f"\n[mid via ctx.context.metadata] → {json.dumps(result, indent=2)}")
 

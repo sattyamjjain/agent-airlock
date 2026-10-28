@@ -72,22 +72,16 @@ def _records(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in lines if line and not line.startswith("#")]
 
 
-@dataclass
 class _RunWrapper:
-    """A run wrapper a framework hands the tool first: it carries the context."""
+    """A run wrapper the host hands the tool first: it carries the context.
 
-    context: Any
-    workspace_dir: str
+    A plain class: since 0.10.28 a first argument is the run wrapper, left out of the value
+    gates, only when model JSON cannot have built it (a dataclass wrapper is walked).
+    """
 
-
-@dataclass
-class _FrameworkState:
-    """Stands in for a framework's own dataclass (a run context, a message)."""
-
-    workspace_dir: str
-
-
-_FrameworkState.__module__ = "pydantic_ai.tools"
+    def __init__(self, context: Any, workspace_dir: str) -> None:
+        self.context = context
+        self.workspace_dir = workspace_dir
 
 
 @dataclass
@@ -219,20 +213,23 @@ class TestThePathGateReadsEveryArgument:
         allowed, secret = roots
 
         @Airlock(config=AirlockConfig(filesystem_policy=FilesystemPolicy([allowed])))
-        def list_dir(ctx: _RunWrapper, path: str) -> str:
+        def list_dir(ctx: Any, path: str) -> str:
             return "listed"
 
         wrapper = _RunWrapper(context=AirlockContext(), workspace_dir=str(secret.parent))
         assert list_dir(wrapper, str(allowed)) == "listed"
 
     def test_a_framework_object_is_not_walked(self, roots: tuple[Path, Path]) -> None:
+        """agent-airlock's own object; a class merely named like a framework's is walked
+        since 0.10.28 (``tests/test_call_path_0_10_28.py``)."""
         allowed, secret = roots
 
         @Airlock(config=AirlockConfig(filesystem_policy=FilesystemPolicy([allowed])))
         def list_dir(state: Any, path: str) -> str:
             return "listed"
 
-        assert list_dir(_FrameworkState(str(secret.parent)), str(allowed)) == "listed"
+        state = AirlockContext(metadata={"workspace_dir": str(secret.parent)})
+        assert list_dir(state, str(allowed)) == "listed"
 
     def test_the_tool_authors_model_and_dataclass_are_walked(
         self, roots: tuple[Path, Path]
