@@ -218,7 +218,9 @@ class EvalRCEGuard:
         with ``bytes`` decoded (``eval`` and ``exec`` accept bytes source). Until v0.10.24
         only top-level string values were scanned, so ``{"code": ["eval(input())"]}`` and
         ``{"payload": {"code": "eval(...)"}}`` passed. Nesting deeper than the guard walks,
-        or a container that contains itself, is refused (``DENY_UNINSPECTABLE``).
+        a container that contains itself, and bytes that are not UTF-8 (v0.10.28: they were
+        decoded with replacement characters, which hid a sink split by an invalid byte) are
+        refused (``DENY_UNINSPECTABLE``).
 
         Args:
             args: Tool call argument dict. ``None`` = allow.
@@ -266,11 +268,20 @@ class EvalRCEGuard:
     def _scan_value(
         self, field: str, value: Any, *, depth: int, ancestors: frozenset[int]
     ) -> EvalRCEDecision | None:
-        """Scan a str or bytes value, or walk a container; ``None`` when nothing fires."""
+        """Scan a str or bytes value, or walk a container; ``None`` when nothing fires.
+
+        Bytes are decoded strictly (v0.10.28). Until then they were decoded with
+        ``errors="replace"``, so ``b"ev\\xffal("`` read as ``ev\\ufffdal(`` and passed,
+        while a consumer that drops the undecodable byte reads ``eval(``; bytes that are
+        not UTF-8 are now refused as ``DENY_UNINSPECTABLE``.
+        """
         if isinstance(value, str):
             return self._inspect_value(field=field, value=value)
-        if isinstance(value, (bytes, bytearray)):
-            text = bytes(value).decode("utf-8", errors="replace")
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            try:
+                text = bytes(value).decode("utf-8")
+            except UnicodeDecodeError:
+                return self._deny_uninspectable(field, "is bytes that are not valid UTF-8")
             return self._inspect_value(field=field, value=text)
         children: list[tuple[str, Any]]
         if isinstance(value, Mapping):
@@ -279,8 +290,10 @@ class EvalRCEGuard:
             children = [(f"{field}[{idx}]", item) for idx, item in enumerate(value)]
         else:
             return None  # numbers, booleans, None and other objects carry no source text
-        if depth >= _MAX_DEPTH or id(value) in ancestors:
-            return self._deny_uninspectable(field, depth >= _MAX_DEPTH)
+        if depth >= _MAX_DEPTH:
+            return self._deny_uninspectable(field, f"nests deeper than {_MAX_DEPTH} levels")
+        if id(value) in ancestors:
+            return self._deny_uninspectable(field, "contains itself")
         inner = ancestors | {id(value)}
         for child_field, child in children:
             decision = self._scan_value(child_field, child, depth=depth + 1, ancestors=inner)
@@ -288,8 +301,7 @@ class EvalRCEGuard:
                 return decision
         return None
 
-    def _deny_uninspectable(self, field: str, too_deep: bool) -> EvalRCEDecision:
-        why = f"nests deeper than {_MAX_DEPTH} levels" if too_deep else "contains itself"
+    def _deny_uninspectable(self, field: str, why: str) -> EvalRCEDecision:
         logger.warning("eval_rce_uninspectable", field=field, reason=why)
         return EvalRCEDecision(
             allowed=False,

@@ -33,6 +33,7 @@ Every attack case sits next to a control the same guard still admits.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,15 @@ import pytest
 from agent_airlock.mcp_spec.codegen_delimiter_guard import (
     CodegenDelimiterInjectionGuard,
     CodegenDelimiterVerdict,
+)
+from agent_airlock.mcp_spec.env_interpolation_guard import (
+    MCPEnvInterpolationVerdict,
+    MCPServerEnvInterpolationGuard,
+)
+from agent_airlock.mcp_spec.eval_rce_guard import EvalRCEGuard, EvalRCEVerdict
+from agent_airlock.mcp_spec.filter_eval_rce_guard import (
+    FilterEvalRCEGuard,
+    FilterEvalRCEVerdict,
 )
 from agent_airlock.mcp_spec.mcp_origin_host_guard import (
     McpOriginHostGuard,
@@ -82,9 +92,12 @@ from agent_airlock.mcp_spec.ws_origin_guard import (
 from agent_airlock.mcp_spec.zero_click_config_guard import (
     ConfigFileWatchPolicy,
     MCPCommandMutationDetected,
+    McpConfigPinSet,
+    McpConfigPinViolation,
     MCPConfigUnreadable,
     UnsignedMCPServerAdded,
     audit_config_diff,
+    fingerprint_mcp_server,
 )
 from agent_airlock.ssrf_egress_guard import SSRFEgressGuard
 
@@ -234,6 +247,83 @@ class TestCodegenGuardReadsEveryShape:
     )
     def test_controls_pass(self, guard: CodegenDelimiterInjectionGuard, args: Any) -> None:
         assert guard.evaluate(args).allowed is True
+
+
+# ---------------------------------------------------------------------------
+# Follow-up to E-F7 — the 0.10.24 eval guards decoded bytes with errors="replace"
+# ---------------------------------------------------------------------------
+
+
+class TestEvalGuardsDecodeArgumentBytesStrictly:
+    """Bytes that are not UTF-8 are refused, not decoded around.
+
+    With ``errors="replace"`` the invalid byte became U+FFFD *between* the letters of the
+    sink, so the guard saw ``ev\\ufffdal(`` and allowed it; a consumer that drops the
+    undecodable byte (``errors="ignore"``) reads ``eval(`` and runs it.
+    """
+
+    @pytest.mark.parametrize(
+        ("value", "verdict"),
+        [
+            (b"ev\xffal(input())", EvalRCEVerdict.DENY_UNINSPECTABLE),
+            (bytearray(b"__imp\xfeort__('os')"), EvalRCEVerdict.DENY_UNINSPECTABLE),
+            ([b"ex\x80ec('id')"], EvalRCEVerdict.DENY_UNINSPECTABLE),
+            (b"eval(input())", EvalRCEVerdict.DENY_EVAL_SINK),
+        ],
+        ids=["eval-split", "import-split", "nested-exec-split", "control-valid-utf8-sink"],
+    )
+    def test_the_eval_guard(self, value: object, verdict: EvalRCEVerdict) -> None:
+        decision = EvalRCEGuard().evaluate({"code": value})
+        assert decision.allowed is False
+        assert decision.verdict is verdict
+
+    def test_the_eval_guard_controls(self) -> None:
+        assert EvalRCEGuard().evaluate({"code": b"print('ok')"}).allowed is True
+        assert EvalRCEGuard().evaluate({"note": "café".encode()}).allowed is True
+
+    @pytest.mark.parametrize(
+        ("value", "verdict"),
+        [
+            (b"lam\xffbda x: x", FilterEvalRCEVerdict.DENY_UNINSPECTABLE),
+            ({"where": b"{{ ev\xffal(1) }}"}, FilterEvalRCEVerdict.DENY_UNINSPECTABLE),
+            (b"lambda x: x", FilterEvalRCEVerdict.DENY_PYTHON_LAMBDA),
+        ],
+        ids=["lambda-split", "nested-template-split", "control-valid-utf8-lambda"],
+    )
+    def test_the_filter_guard(self, value: object, verdict: FilterEvalRCEVerdict) -> None:
+        decision = FilterEvalRCEGuard().evaluate({"filter": value})
+        assert decision.allowed is False
+        assert decision.verdict is verdict
+
+    def test_the_filter_guard_controls(self) -> None:
+        guard = FilterEvalRCEGuard()
+        assert guard.evaluate({"filter": b"status == 'open'"}).allowed is True
+        # A field outside the suspect vocabulary is not read, bytes or not (unchanged).
+        assert guard.evaluate({"blob": b"\xff\xfe\x00"}).allowed is True
+
+    @pytest.mark.parametrize(
+        ("config", "verdict"),
+        [
+            (
+                {"url": b"https://h/?k=$\xff{JWT_SECRET}"},
+                MCPEnvInterpolationVerdict.DENY_UNINSPECTABLE,
+            ),
+            (b"https://h/?k=$\xff{JWT_SECRET}", MCPEnvInterpolationVerdict.DENY_UNINSPECTABLE),
+            ({"url": b"https://h/?k=${JWT_SECRET}"}, MCPEnvInterpolationVerdict.DENY_DOLLAR_BRACE),
+        ],
+        ids=["nested-split", "top-level-split", "control-valid-utf8-token"],
+    )
+    def test_the_env_interpolation_guard(
+        self, config: object, verdict: MCPEnvInterpolationVerdict
+    ) -> None:
+        decision = MCPServerEnvInterpolationGuard().evaluate(config)  # type: ignore[arg-type]
+        assert decision.allowed is False
+        assert decision.verdict is verdict
+
+    def test_the_env_interpolation_guard_controls(self) -> None:
+        guard = MCPServerEnvInterpolationGuard()
+        assert guard.evaluate({"url": b"https://example.com/mcp"}).allowed is True
+        assert guard.evaluate(b"https://example.com/mcp").allowed is True  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +477,151 @@ class TestConfigDiffReadsTheVSCodeServersKey:
         cfg = ConfigFileWatchPolicy(signer_allowlist=frozenset({"sre"}))
         report = audit_config_diff(tmp_path / "mcp.json", None, _b(new), cfg)
         assert report.added_servers == ("fs",)
+
+
+_TRUSTED_ENTRY: dict[str, Any] = {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@good/fs"],
+    "env": {"TOKEN": "a"},
+    "headers": {"Authorization": "Bearer a"},
+    "cwd": "/srv/app",
+    "sandboxEnabled": True,
+    "autoApprove": ["read_file", "list_dir"],
+    "alwaysAllow": ["read_file"],
+    "description": "file server",
+    "timeout": 60,
+    "disabled": False,
+}
+
+
+class TestConfigDiffComparesEverySecurityRelevantField:
+    """A change to what runs, where it connects, or what runs unconfirmed is a mutation."""
+
+    def _diff(self, tmp_path: Path, new_entry: dict[str, Any]) -> Any:
+        return audit_config_diff(
+            tmp_path / "mcp.json",
+            None,
+            _b({"mcpServers": {"fs": new_entry}}),
+            ConfigFileWatchPolicy(),
+            old_content=_b({"mcpServers": {"fs": _TRUSTED_ENTRY}}),
+        )
+
+    @pytest.mark.parametrize(
+        ("change", "field"),
+        [
+            ({"autoApprove": ["read_file", "list_dir", "write_file"]}, "autoApprove"),
+            ({"alwaysAllow": ["read_file", "exec"]}, "alwaysAllow"),
+            ({"cwd": "/tmp/attacker"}, "cwd"),
+            ({"envFile": "/tmp/attacker.env"}, "envFile"),
+            ({"sandboxEnabled": False}, "sandboxEnabled"),
+            ({"type": "sse"}, "type"),
+            ({"transport": "sse"}, "transport"),
+            ({"transportType": "sse"}, "transportType"),
+            ({"headers": {"Authorization": "Bearer a", "X-Forwarded-Host": "e"}}, "headers"),
+            ({"serverUrl": "https://evil.example/mcp"}, "serverUrl"),
+        ],
+        ids=[
+            "autoApprove",
+            "alwaysAllow",
+            "cwd",
+            "envFile",
+            "sandboxEnabled",
+            "type",
+            "transport",
+            "transportType",
+            "header-key-added",
+            "serverUrl",
+        ],
+    )
+    def test_a_security_relevant_change_is_a_mutation(
+        self, tmp_path: Path, change: dict[str, Any], field: str
+    ) -> None:
+        with pytest.raises(MCPCommandMutationDetected) as exc:
+            self._diff(tmp_path, {**_TRUSTED_ENTRY, **change})
+        assert exc.value.fields == (field,)
+
+    def test_a_dropped_security_field_is_a_mutation(self, tmp_path: Path) -> None:
+        entry = {k: v for k, v in _TRUSTED_ENTRY.items() if k != "sandboxEnabled"}
+        with pytest.raises(MCPCommandMutationDetected) as exc:
+            self._diff(tmp_path, entry)
+        assert exc.value.fields == ("sandboxEnabled",)
+
+    def test_headers_it_cannot_read_are_refused(self, tmp_path: Path) -> None:
+        with pytest.raises(MCPConfigUnreadable):
+            self._diff(tmp_path, {**_TRUSTED_ENTRY, "headers": ["Authorization: Bearer a"]})
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            {"description": "a different description"},
+            {"timeout": 300},
+            {"disabled": True},
+            {"env": {"TOKEN": "rotated"}},
+            {"headers": {"Authorization": "Bearer rotated"}},
+            {"headers": {"authorization": "Bearer a"}},
+            {"autoApprove": ["list_dir", "read_file"]},
+        ],
+        ids=[
+            "description",
+            "timeout",
+            "disabled",
+            "env-value-rotated",
+            "header-value-rotated",
+            "header-name-case",
+            "autoApprove-reordered",
+        ],
+    )
+    def test_controls_benign_changes_are_not_mutations(
+        self, tmp_path: Path, change: dict[str, Any]
+    ) -> None:
+        report = self._diff(tmp_path, {**_TRUSTED_ENTRY, **change})
+        assert report.mutated_command_servers == ()
+
+
+class TestThePinSetFingerprintsTheWorkingDirectory:
+    """``cwd`` is part of the spawn the pin fingerprints: ``npx`` resolves a local package
+    and ``python server.py`` a relative file from it, so the same argv in another
+    directory runs other code."""
+
+    _ENTRY: dict[str, Any] = {
+        "name": "fs",
+        "command": "npx",
+        "args": ["-y", "@good/fs"],
+        "cwd": "/srv/app",
+    }
+
+    def test_a_moved_working_directory_is_a_mutation(self) -> None:
+        pins = McpConfigPinSet.from_manifest([self._ENTRY])
+        with pytest.raises(McpConfigPinViolation) as exc:
+            pins.check({**self._ENTRY, "cwd": "/tmp/attacker"})
+        assert exc.value.reason == "mutated"
+
+    def test_a_working_directory_the_pin_never_had_is_a_mutation(self) -> None:
+        unpinned_cwd = {k: v for k, v in self._ENTRY.items() if k != "cwd"}
+        pins = McpConfigPinSet.from_manifest([unpinned_cwd])
+        with pytest.raises(McpConfigPinViolation) as exc:
+            pins.check(self._ENTRY)
+        assert exc.value.reason == "mutated"
+
+    def test_a_working_directory_it_cannot_read_is_refused(self) -> None:
+        pins = McpConfigPinSet.from_manifest([self._ENTRY])
+        with pytest.raises(McpConfigPinViolation) as exc:
+            pins.check({**self._ENTRY, "cwd": ["/srv/app"]})
+        assert exc.value.reason == "unreadable"
+
+    def test_controls(self) -> None:
+        McpConfigPinSet.from_manifest([self._ENTRY]).check(dict(self._ENTRY))
+        McpConfigPinSet.from_manifest([self._ENTRY]).check(
+            {**self._ENTRY, "cwd": PurePosixPath("/srv/app")}
+        )
+        # A config without cwd fingerprints exactly as it did before 0.10.28, so no
+        # stored pin of one changes.
+        legacy_payload = {"name": "fs", "command": "npx", "args": ["-y"], "env_keys": []}
+        legacy = hashlib.sha256(
+            json.dumps(legacy_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        assert fingerprint_mcp_server(name="fs", command="npx", args=["-y"]) == legacy
 
 
 # ---------------------------------------------------------------------------
