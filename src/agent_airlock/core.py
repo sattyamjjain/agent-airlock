@@ -52,6 +52,7 @@ import asyncio
 import contextlib
 import functools
 import inspect
+import numbers
 import os
 import re
 import time
@@ -367,17 +368,23 @@ def _looks_like_nested_path(key: str, value: str) -> bool:
 def _filesystem_path(item: ArgumentValue) -> str | None:
     """The filesystem path one argument value names, or None when it names none.
 
-    An ``os.PathLike`` always names one, and so does a ``file:`` URI. A top-level string
-    does when :func:`_looks_like_path` says so (unchanged); a nested string or a mapping
-    key when :func:`_looks_like_nested_path` does. Bytes count only under a path-named
-    key and only when they are shaped like a path (absolute or traversing, no NUL):
-    ``open(b"/etc/passwd")`` works, but most bytes arguments are content, and an upload's
-    bytes under ``file=`` are not a path.
+    An ``os.PathLike`` always names one, and so does a ``file:`` URI, as a string or as a
+    URL object (pydantic ``FileUrl`` / ``AnyUrl``, ``urllib.parse`` results); until
+    0.10.28 a URL object never did, so ``FileUrl("file:///etc/shadow")`` skipped this gate.
+    A URL object of any other scheme names no path; step 5 reads it as a URL. A top-level
+    string does when :func:`_looks_like_path` says so (unchanged); a nested string or a
+    mapping key when :func:`_looks_like_nested_path` does. Bytes count only under a
+    path-named key and only when they are shaped like a path (absolute or traversing, no
+    NUL): ``open(b"/etc/passwd")`` works, but most bytes arguments are content, and an
+    upload's bytes under ``file=`` are not a path.
     """
     value = item.value
     pathlike = path_text(value)
     if pathlike is not None:
         return pathlike
+    url = url_text(value)
+    if url is not None:
+        return _file_uri_path(url)
     if isinstance(value, (bytes, bytearray)):
         raw = bytes(value)
         if item.key.lower() not in PATH_PARAM_NAMES or b"\x00" in raw or len(raw) > 4096:
@@ -648,15 +655,20 @@ def _inherit_ambient_identity(context: AirlockContext[Any]) -> None:
 def _run_context(context: AirlockContext[Any]) -> AirlockContext[Any] | None:
     """The ``AirlockContext`` that outlives this call, or None when there is none.
 
-    That is an ``AirlockContext`` the call's first argument carries (a run wrapper's
-    ``context`` / ``ctx``), else the one set around the call with ``with AirlockContext(...)``
-    — unless that one names a different agent than the call does, so belongs to another run.
+    That is an ``AirlockContext`` the call's run wrapper carries (``context.user_context``,
+    a first argument ``ContextExtractor.run_wrapper`` accepted), else the one set around
+    the call with ``with AirlockContext(...)`` — unless that one names a different agent
+    than the call does, so belongs to another run. The wrapper is judged by the same
+    predicate that admitted it; until 0.10.28 any first argument with a ``context`` /
+    ``ctx`` attribute counted, in an order ``PYTHONHASHSEED`` decided.
     """
-    if context.user_context is not None:
-        for attr in ContextExtractor.CONTEXT_ATTRS:
-            inner = getattr(context.user_context, attr, None)
-            if isinstance(inner, AirlockContext):
-                return inner
+    wrapper = (
+        ContextExtractor.run_wrapper(context.user_context)
+        if context.user_context is not None
+        else None
+    )
+    if wrapper is not None and isinstance(wrapper.context, AirlockContext):
+        return wrapper.context
     ambient = get_current_context()
     if ambient is None or ambient is context:
         return None
@@ -693,13 +705,55 @@ def _call_metadata(context: AirlockContext[Any], key: str) -> Any:
     set around the call with ``with AirlockContext(metadata={...})``.
 
     The budget and amplification checks read ``airlock_tier``, ``input_tokens`` and
-    ``model_id`` here and nowhere else. The model cannot write either context.
+    ``model_id`` here and nowhere else, the token-audience check its claims and the
+    deserialization guard its transport declaration. The model cannot write either context:
+    the call's own comes only from a run wrapper model JSON cannot build
+    (``ContextExtractor.run_wrapper``); until 0.10.28 a tool's own model with a ``context``
+    field passed first supplied it.
     """
     value = context.metadata.get(key)
     if value is not None:
         return value
     ambient = get_current_context()
     return ambient.metadata.get(key) if ambient is not None else None
+
+
+def _token_count_tag(value: Any) -> int | None:
+    """The ``input_tokens`` tag as a count, or None when it is not one.
+
+    A count is an integer of zero or more: any ``numbers.Integral`` (numpy's included),
+    never a bool. Until 0.10.28 anything but an ``int`` (a float, a string, a numpy
+    integer) was priced as 0 tokens, and a negative ``int`` raised out of the call.
+    """
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
+        return None
+    count = int(value)
+    return count if count >= 0 else None
+
+
+def _text_tag(value: Any) -> str | None:
+    """A tag's text when it is a string, a str enum by its value; else None."""
+    return str.__str__(value) if isinstance(value, str) else None
+
+
+def _model_id_tag(value: Any) -> str | None:
+    """The ``model_id`` step 6 prices the call's worst case by, or None when untagged.
+
+    A string, a str enum by its value, is the model id. Any other value names no row of
+    the pricing table, so it is priced as an unlisted model is, at the table's dearest row.
+    Until 0.10.28 a bytes or enum ``model_id`` was priced at the tracker's own row.
+    """
+    if value is None:
+        return None
+    text = _text_tag(value)
+    return text if text is not None else f"<unreadable model_id: {type(value).__name__}>"
+
+
+#: What each step-6 tag must be, for the refusal that names an unreadable one.
+_BUDGET_TAG_SHAPES = {
+    "airlock_tier": "a string naming one of the budget's tiers",
+    "input_tokens": "an integer count of zero or more",
+}
 
 
 #: The ``AirlockContext`` metadata key the host puts an OAuth access token's claims under:
@@ -1005,7 +1059,8 @@ class Airlock:
 
             # Step 0.5: the startup-hook self-check (V0.10.27). A condition of the process,
             # so it comes before anything about the call. Off by default; when on, the walk
-            # runs once per process, on the first call admitted with it on.
+            # runs once per process, on the first call admitted with it on, and `deny`
+            # refuses the calls of tools guarded by this config, not every tool in the process.
             hook_error = self._check_startup_hooks(func_name)
             if hook_error is not None:
                 return kwargs, start_time, context, hook_error, None, None
@@ -1059,28 +1114,39 @@ class Airlock:
             # pathlib.Path or a URL object walked past all three. They now read every
             # argument the call passes (`_arg_walk`), bound once and only when one of them
             # is on. A refusal from them hands the honeypot the arguments by name.
+            # The run wrapper the context came from is left out when model JSON cannot have
+            # built it (`ContextExtractor.run_wrapper`, the predicate that admitted it); one
+            # only its AirlockContext vouches for (a dataclass or model wrapper) is walked,
+            # that AirlockContext aside. Until 0.10.28 any first argument with a `context` /
+            # `ctx` attribute was left out, the tool author's own model included.
+            # (Not named `wrapper`: step 4 reads the decorator's own `wrapper` below.)
+            run_wrapper = (
+                ContextExtractor.run_wrapper(context.user_context)
+                if context.user_context is not None
+                else None
+            )
             arguments = (
-                bind_arguments(call_signature, args, cleaned_kwargs)
+                bind_arguments(
+                    call_signature,
+                    args,
+                    cleaned_kwargs,
+                    skip_first=run_wrapper is not None and run_wrapper.host_object,
+                )
                 if self._reads_argument_values(func_name, resolved_policy)
                 else cleaned_kwargs
             )
-            if context.user_context is not None:
-                # The run wrapper the context came from is the host's, not the model's.
-                arguments = {
-                    name: value
-                    for name, value in arguments.items()
-                    if value is not context.user_context
-                }
 
             # Step 2.7: Unsafe-deserialization content guard (V0.8.19,
             # CVE-2026-25874). Inspects argument VALUES for pickle /
             # marshal / dill / jsonpickle payloads (and serialized-object
-            # args over an unauthenticated channel). Inert when
+            # args over an unauthenticated channel, as the host declares it
+            # on the call's context metadata). Inert when
             # policy.deserialization_guard is None.
             deser_error = self._check_deserialization_guard(
                 func_name=func_name,
                 resolved_policy=resolved_policy,
                 arguments=arguments,
+                context=context,
             )
             if deser_error is not None:
                 return arguments, start_time, context, deser_error, None, None
@@ -1093,12 +1159,11 @@ class Airlock:
             # been. Inert when
             # policy.amplification_budget is None; blocks when it is set but
             # carries no threshold.
-            tokens = _call_metadata(context, "input_tokens")
             amp_error = self._check_amplification(
                 func_name=func_name,
                 resolved_policy=resolved_policy,
                 context=context,
-                input_tokens=tokens if isinstance(tokens, int) else None,
+                input_tokens=_token_count_tag(_call_metadata(context, "input_tokens")),
             )
             if amp_error is not None:
                 return kwargs, start_time, context, amp_error, None, None
@@ -1558,6 +1623,11 @@ class Airlock:
         # Copy annotations for type-aware frameworks
         wrapper.__annotations__ = getattr(func, "__annotations__", {})
 
+        # Names this wrapper as the one the capability gate reads. A decorator stacked above
+        # copies the attribute (``functools.wraps``), so a ``@requires`` above both can find
+        # this wrapper and add its requirement here (``capabilities.requires``).
+        wrapper.__airlock_wrapper__ = wrapper  # type: ignore[union-attr]
+
         # Pydantic V2 pass-through: Copy validator attributes if they exist
         for attr in (
             "__pydantic_complete__",
@@ -1678,13 +1748,16 @@ class Airlock:
         return create_strict_validator(func)
 
     def _check_startup_hooks(self, func_name: str) -> AirlockResponse | None:
-        """Refuse every call in an interpreter running startup hooks no allowlist covers.
+        """Refuse this config's calls in an interpreter running startup hooks it does not allow.
 
-        Off unless ``AirlockConfig.startup_hook_check`` is ``warn`` or ``deny``. The walk
-        (``runtime.startup_hooks``) runs once per process, on the first call admitted with
-        the check on, and each hook it finds is logged once. ``deny`` then refuses every
-        guarded call in the process, naming the files. The hooks ran before this did; the
-        check reports them and keeps guarded tools from running beside them, nothing more.
+        Off unless this decorator's ``AirlockConfig.startup_hook_check`` is ``warn`` or
+        ``deny``. The walk (``runtime.startup_hooks``) runs once per process, on the first
+        call admitted with the check on, and each hook it finds is logged once; each config
+        judges that one walk against its own ``startup_hook_allowlist``. ``deny`` then
+        refuses every call to a tool guarded by this config, naming the files. A tool
+        guarded by a config that does not set ``deny`` still runs in the same process. The
+        hooks ran before this did; the check reports them and keeps the tools this config
+        guards from running beside them, nothing more.
 
         Args:
             func_name: Name of the tool being called.
@@ -1717,8 +1790,8 @@ class Airlock:
                 f"no allowlist covers ({', '.join(names)})"
             ),
             fix_hints=[
-                "The process this tool runs in started with code no allowlist covers, so "
-                "no guarded tool runs in it",
+                "The process this tool runs in started with code its allowlist does not "
+                "cover, so this tool, and every tool guarded the same way, does not run in it",
                 "This is not a per-call denial: retrying or changing arguments will not "
                 "help; tell the user the tool host needs attention",
             ],
@@ -1825,26 +1898,22 @@ class Airlock:
             Tuple of (cleaned_kwargs, stripped_args, error_response).
             If error_response is not None, validation failed.
         """
-        should_block = self.config.unknown_args == UnknownArgsMode.BLOCK
+        mode = self.config.unknown_args
         try:
             cleaned_kwargs, stripped = strip_ghost_arguments(
                 func,
                 dict(kwargs),
-                strict=should_block,
+                strict=mode == UnknownArgsMode.BLOCK,
+                log=False,
             )
 
             if stripped:
-                filtered_stripped = _filter_sensitive_keys(sorted(stripped))
-                logger.info(
-                    "ghost_arguments_handled",
-                    function=func_name,
-                    stripped=filtered_stripped,
-                    stripped_count=len(stripped),
-                    mode=self.config.unknown_args.value,
-                )
-
+                # The mode decides how a strip is logged (``handle_unknown_args``): one
+                # structured warning under STRIP_AND_LOG, a debug line under STRIP_SILENT.
+                # Until 0.10.28 the validator also warned and this method logged at info, so
+                # STRIP_SILENT was not silent and STRIP_AND_LOG logged each strip three times.
                 handle_unknown_args(
-                    mode=self.config.unknown_args,
+                    mode=mode,
                     func_name=func_name,
                     stripped_args=stripped,
                     audit_logger=None,
@@ -2217,12 +2286,21 @@ class Airlock:
         outcome: Literal["denied", "timeout"] = (
             "timeout" if oversight_response.verdict is OversightVerdict.TIMEOUT else "denied"
         )
-        logger.info(
-            f"escalation_{outcome}",
-            tool=func_name,
-            rule=escalation.rule,
-            approver=oversight_response.approver,
-        )
+        # Literal event names, so a search of the source finds the line that logs each.
+        if outcome == "timeout":
+            logger.info(
+                "escalation_timeout",
+                tool=func_name,
+                rule=escalation.rule,
+                approver=oversight_response.approver,
+            )
+        else:
+            logger.info(
+                "escalation_denied",
+                tool=func_name,
+                rule=escalation.rule,
+                approver=oversight_response.approver,
+            )
         response = handle_escalation(
             func_name,
             reason=escalation.reason,
@@ -2505,21 +2583,28 @@ class Airlock:
         func_name: str,
         resolved_policy: SecurityPolicy | None,
         arguments: dict[str, Any],
+        context: AirlockContext[Any],
     ) -> AirlockResponse | None:
         """Unsafe-deserialization content guard (V0.8.19, CVE-2026-25874).
 
-        Calls ``policy.deserialization_guard.evaluate(arguments)`` if
+        Calls ``policy.deserialization_guard.evaluate(arguments, transport=...)`` if
         configured. Inspects the call's argument values for serialized-
         object payloads (pickle magic bytes, base64-encoded pickle,
         serializer marker tokens) and, when the guard requires it,
         serialized-object args sent over an unauthenticated transport.
         See :class:`agent_airlock.safe_types.UnsafeDeserializationGuard`.
 
+        The transport declaration is the host's: the value under the guard's
+        ``transport_metadata_key`` on the call's context metadata (``_call_metadata``).
+        A tool argument of that name is the model's, so it is scanned as ordinary content
+        and declares nothing; until 0.10.28 the guard read it as the declaration.
+
         Args:
             func_name: Name of the function being called.
             resolved_policy: The resolved :class:`SecurityPolicy` (or None).
             arguments: Every argument of the call, by name, positional ones
                 included (``bind_arguments``); the guard reads nested values.
+            context: The call's context, read for the transport declaration.
 
         Returns:
             A blocked :class:`AirlockResponse` carrying the guard's
@@ -2529,7 +2614,10 @@ class Airlock:
         if resolved_policy is None or resolved_policy.deserialization_guard is None:
             return None
 
-        decision = resolved_policy.deserialization_guard.evaluate(arguments)
+        guard = resolved_policy.deserialization_guard
+        decision = guard.evaluate(
+            arguments, transport=_call_metadata(context, guard.transport_metadata_key)
+        )
         if decision.allowed:
             return None
 
@@ -2676,7 +2764,12 @@ class Airlock:
         ``block_reason=BUDGET_EXCEEDED``.
 
         The ``airlock_tier``, ``input_tokens`` and ``model_id`` tags are read
-        with :func:`_call_metadata`, never from the tool's arguments.
+        with :func:`_call_metadata`, never from the tool's arguments. A tier or token tag
+        the host set that cannot be read (a tier that is not a string; a token count that
+        is not an integer of zero or more) refuses the call: until 0.10.28 it was priced
+        as 0 tokens, or a negative count raised out of the call. A ``model_id`` that is
+        not a string is priced at the table's dearest row, as an unlisted model is; a str
+        enum is read by its value.
 
         Args:
             func_name: Tool being invoked (for telemetry).
@@ -2694,11 +2787,20 @@ class Airlock:
             return None, None
 
         tier_tag = _call_metadata(context, "airlock_tier")
-        explicit_tier = tier_tag if isinstance(tier_tag, str) else None
+        explicit_tier = _text_tag(tier_tag)
         tokens_tag = _call_metadata(context, "input_tokens")
-        input_tokens = tokens_tag if isinstance(tokens_tag, int) else 0
-        model_tag = _call_metadata(context, "model_id")
-        model_id = model_tag if isinstance(model_tag, str) else None
+        input_tokens = 0 if tokens_tag is None else _token_count_tag(tokens_tag)
+        unreadable = {
+            name: tag
+            for name, tag, read in (
+                ("airlock_tier", tier_tag, explicit_tier),
+                ("input_tokens", tokens_tag, input_tokens),
+            )
+            if tag is not None and read is None
+        }
+        if unreadable or input_tokens is None:
+            return None, self._refuse_unreadable_budget_tags(func_name, unreadable)
+        model_id = _model_id_tag(_call_metadata(context, "model_id"))
 
         cost_tracker = get_global_tracker()
         try:
@@ -2742,6 +2844,42 @@ class Airlock:
                 reason=str(exc),
             )
         return estimate, None
+
+    def _refuse_unreadable_budget_tags(
+        self, func_name: str, tags: dict[str, Any]
+    ) -> AirlockResponse:
+        """The ``budget_exceeded`` refusal for step-6 tags the host set but that cannot be read.
+
+        A budget that cannot read its inputs refuses, as every other gate does: pricing a
+        float or string token count as 0 let any call under the cap. The hints name the
+        tag and the type it had, never its value.
+
+        Args:
+            func_name: Tool being invoked.
+            tags: Each unreadable tag's name and the value the host set.
+
+        Returns:
+            The refusal.
+        """
+        shapes = {name: type(tag).__name__ for name, tag in tags.items()}
+        logger.warning("tier_budget_tags_unreadable", function=func_name, tags=shapes)
+        return AirlockResponse.blocked_response(
+            reason=BlockReason.BUDGET_EXCEEDED,
+            error=(
+                f"AIRLOCK_BLOCK: '{func_name}' refused: its budget cannot be checked, because "
+                f"the call's {', '.join(repr(name) for name in tags)} tag could not be read"
+            ),
+            fix_hints=[
+                *(
+                    f"The {name!r} tag on this call is a {shape}; it must be "
+                    f"{_BUDGET_TAG_SHAPES[name]}"
+                    for name, shape in shapes.items()
+                ),
+                "The host sets these tags on the call's AirlockContext metadata; retrying or "
+                "changing arguments will not help",
+            ],
+            metadata={"function": func_name, "unreadable_tags": shapes},
+        )
 
     def _reconcile_tier_budget(
         self,
@@ -2805,11 +2943,12 @@ class Airlock:
 
         Args:
             func: The callable whose requirement is read: the wrapper ``@Airlock``
-                returned, so a ``@requires`` applied above it (which sets the attribute on
-                that wrapper) counts as well as one applied below it, which
-                ``get_required_capabilities`` finds down the ``__wrapped__`` chain. Until
-                0.10.26 the undecorated tool was read and a ``@requires`` above
-                ``@Airlock`` enforced nothing.
+                returned, so a ``@requires`` applied above it (which adds its requirement
+                to that wrapper, through any decorators between them that keep
+                ``__wrapped__`` or copy its attributes) counts as well as one applied below
+                it, which ``get_required_capabilities`` finds down the ``__wrapped__`` chain.
+                Until 0.10.26 the undecorated tool was read and a ``@requires`` above
+                ``@Airlock`` enforced nothing; until 0.10.28 one counted only when adjacent.
             func_name: Name of the function.
             resolved_policy: The resolved security policy (may have capability_policy).
 

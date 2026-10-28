@@ -9,7 +9,9 @@ The "shadow-ban by default" problem:
     you to strip + continue quietly because it masks their probing.
 
 Recommendation:
-    Use UnknownArgsMode.BLOCK in production. This is the default in STRICT_POLICY.
+    Use UnknownArgsMode.BLOCK in production. It is not the default:
+    ``AirlockConfig.unknown_args`` defaults to STRIP_AND_LOG, and no
+    ``SecurityPolicy`` (``STRICT_POLICY`` included) sets it.
 """
 
 from __future__ import annotations
@@ -43,29 +45,31 @@ class UnknownArgsMode(str, Enum):
     """
 
     BLOCK = "block"
-    """Reject the call with a validation error.
+    """Refuse the call with a ``ghost_arguments`` response.
 
-    RECOMMENDED for production. This is the secure default.
+    RECOMMENDED for production. Not the default: ``AirlockConfig`` defaults to
+    STRIP_AND_LOG.
     - Unknown args are treated as a security event
     - The call fails with a self-healing error response
     - Attackers cannot probe for behavior by injecting flags
     """
 
     STRIP_AND_LOG = "strip_and_log"
-    """Strip unknown args but emit an audit event.
+    """Strip unknown args and log a structured warning naming them. The default.
 
     Use for staged rollouts or migration from permissive mode.
     - Unknown args are removed before the call proceeds
-    - An audit event is emitted with the stripped arg names
-    - Security teams can monitor for suspicious patterns
+    - One ``unknown_args_stripped`` warning names them (function, stripped_args, count)
+    - No audit record is written for the strip; the call's own record carries the
+      arguments it ran with
     """
 
     STRIP_SILENT = "strip_silent"
-    """Strip unknown args silently without logging.
+    """Strip unknown args with nothing logged above debug level.
 
     DANGEROUS - hides potential attack attempts. Development only.
     - Unknown args are silently discarded
-    - No audit trail of what was stripped
+    - No warning and no audit trail of what was stripped
     - Only use in isolated dev environments
     """
 
@@ -112,13 +116,16 @@ def handle_unknown_args(
 ) -> None:
     """Handle stripped unknown arguments based on mode.
 
-    Called after ghost argument stripping to apply the configured policy.
+    Called after ghost argument stripping to apply the configured policy, and the one
+    place ``@Airlock`` logs a strip: a structured ``unknown_args_stripped`` warning under
+    STRIP_AND_LOG, a debug line under STRIP_SILENT.
 
     Args:
         mode: The UnknownArgsMode policy
         func_name: Name of the function being called
         stripped_args: Set of argument names that were stripped
-        audit_logger: Optional audit logger for emitting events
+        audit_logger: Optional audit logger; under STRIP_AND_LOG a record of the strip is
+            written to it. ``@Airlock`` passes none, so it writes no strip record.
 
     Raises:
         ValueError: If mode is BLOCK and args were stripped (should be caught upstream)

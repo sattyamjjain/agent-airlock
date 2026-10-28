@@ -94,11 +94,15 @@ class _Session:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
 class _Wrapper:
-    """A `RunContextWrapper`-alike: airlock reads `session_id` through `.context`."""
+    """A `RunContextWrapper`-alike: airlock reads `session_id` through `.context`.
 
-    context: _Session
+    A plain class: since 0.10.28 a first argument is read as the run wrapper only when model
+    JSON cannot have built it, and a dataclass wrapper only around an `AirlockContext`.
+    """
+
+    def __init__(self, context: _Session) -> None:
+        self.context = context
 
 
 def _build_tools(audit_path: Path, policy: SecurityPolicy | None = None) -> dict[str, Any]:
@@ -113,7 +117,7 @@ def _build_tools(audit_path: Path, policy: SecurityPolicy | None = None) -> dict
         # `_wrapper` is unused by the body on purpose: airlock reads it positionally in
         # `ContextExtractor.extract_from_args` to recover the session, so the parameter is
         # load-bearing for the decorator even though the tool itself ignores it.
-        def _tool(_wrapper: _Wrapper) -> Any:
+        def _tool(_wrapper: Any) -> Any:
             return value
 
         _tool.__name__ = name
@@ -410,7 +414,7 @@ class TestResourceAmplificationIsRecordedAndDetected:
         )
 
         @Airlock(config=config, policy=policy)
-        def summarize_text(_wrapper: _Wrapper) -> str:
+        def summarize_text(_wrapper: Any) -> str:
             return EXPECTED_ANSWER
 
         for tokens in (1200, 800):
@@ -429,7 +433,7 @@ class TestResourceAmplificationIsRecordedAndDetected:
         )
 
         @Airlock(config=config, policy=policy)
-        def summarize_text(_wrapper: _Wrapper) -> str:
+        def summarize_text(_wrapper: Any) -> str:
             return EXPECTED_ANSWER
 
         summarize_text(_Wrapper(context=_Session(session_id="sess-model")), _airlock_input_tokens=5)

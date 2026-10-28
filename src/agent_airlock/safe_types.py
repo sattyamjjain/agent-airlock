@@ -905,6 +905,10 @@ _TEXT_PICKLE_GLOBAL = re.compile(r"(?:^|[\n(])[ci][A-Za-z_][\w.]*\n[A-Za-z_][\w.
 _TEXT_PICKLE_MEMO = re.compile(r"\np\d+\n")
 _TEXT_PICKLE_FIRST_OPCODES = frozenset("()]}cdgilpFILNSV")
 
+#: ``UnsafeDeserializationGuard.evaluate``'s default: read the transport declaration
+#: from the arguments, the guard's standalone use. ``@Airlock`` passes the host's instead.
+_DECLARED_IN_ARGS: Any = object()
+
 
 class UnsafeDeserializationVerdict(str, enum.Enum):
     """Stable reason codes for :class:`UnsafeDeserializationDecision`."""
@@ -975,13 +979,21 @@ class UnsafeDeserializationGuard:
     string tokens only. No ``pickle`` / ``marshal`` / ``dill`` import
     occurs (it carries no execution risk itself).
 
+    Under ``@Airlock`` the transport declaration is the host's: the value under
+    ``transport_metadata_key`` on the call's ``AirlockContext`` metadata
+    (``with AirlockContext(metadata={"transport": {"authenticated": True, "tls": True}})``).
+    A tool argument of that name is the model's, so it is scanned like every other
+    argument and declares nothing. Until 0.10.28 ``@Airlock`` read the declaration from
+    the tool's arguments, where the model could write it.
+
     Args:
         require_authenticated_transport: When True, a serialized-object
             (bytes) arg requires the call to declare an authenticated +
             TLS transport (see ``transport_metadata_key``).
-        transport_metadata_key: The argument name carrying transport
-            metadata. The value may be a mapping with truthy
-            ``authenticated`` (or ``auth``) AND ``tls`` (or ``encrypted``)
+        transport_metadata_key: The key the transport declaration is read under: on the
+            call's ``AirlockContext`` metadata under ``@Airlock``, in ``args`` when
+            :meth:`evaluate` is called without ``transport``. The value may be a mapping
+            with truthy ``authenticated`` (or ``auth``) AND ``tls`` (or ``encrypted``)
             keys, or an object exposing those attributes.
         extra_markers: Additional serializer marker substrings to flag,
             merged with :data:`DEFAULT_DESERIALIZATION_MARKERS`.
@@ -1018,12 +1030,26 @@ class UnsafeDeserializationGuard:
         self._advisory = advisory
         self._advisory_url = advisory_url
 
-    def evaluate(self, args: Mapping[str, Any] | None) -> UnsafeDeserializationDecision:
+    @property
+    def transport_metadata_key(self) -> str:
+        """The key the transport declaration is read under (see the class docstring)."""
+        return self._transport_key
+
+    def evaluate(
+        self, args: Mapping[str, Any] | None, *, transport: Any = _DECLARED_IN_ARGS
+    ) -> UnsafeDeserializationDecision:
         """Decide whether the call args carry an unsafe-deserialization shape.
 
         Args:
             args: The tool call's argument mapping. ``None`` = no payload
                 = allow.
+            transport: The call's transport declaration, from wherever the caller trusts
+                it; ``None`` declares none. ``@Airlock`` passes the one the host set on
+                the call's ``AirlockContext`` metadata, and then an argument named
+                ``transport_metadata_key`` is ordinary content: scanned, and held to the
+                unauthenticated-bytes rule like every other argument. Omitted, the
+                declaration is ``args[transport_metadata_key]``, for a caller that built
+                ``args`` itself.
 
         Returns:
             :class:`UnsafeDeserializationDecision`. Callers map
@@ -1033,16 +1059,19 @@ class UnsafeDeserializationGuard:
         if not args:
             return self._allow()
 
-        transport_ok = self._transport_authenticated(args)
+        from_args = transport is _DECLARED_IN_ARGS
+        declared = args.get(self._transport_key) if from_args else transport
+        transport_ok = self._declares_authenticated_transport(declared)
 
         # Every value, nested ones included (v0.10.24): until then only top-level values
-        # were read, so a pickle inside a list or a mapping walked past the guard. The
-        # transport declaration is read for content too; only the unauthenticated-bytes
-        # rule, which it is the authority for, does not apply to it.
+        # were read, so a pickle inside a list or a mapping walked past the guard. A
+        # declaration read from ``args`` is read for content too; only the
+        # unauthenticated-bytes rule, which it is the authority for, does not apply to it.
         try:
             for item in iter_argument_values(args):
-                is_transport = item.path == self._transport_key or item.path.startswith(
-                    (f"{self._transport_key}.", f"{self._transport_key}[")
+                is_transport = from_args and (
+                    item.path == self._transport_key
+                    or item.path.startswith((f"{self._transport_key}.", f"{self._transport_key}["))
                 )
                 decision = self._inspect_value(item.path, item.value, transport_ok or is_transport)
                 if decision is not None:
@@ -1232,13 +1261,17 @@ class UnsafeDeserializationGuard:
         return None
 
     def _transport_authenticated(self, args: Mapping[str, Any]) -> bool:
-        """True iff the call declares an authenticated + TLS transport.
+        """True iff ``args`` declare an authenticated + TLS transport (the standalone form)."""
+        return self._declares_authenticated_transport(args.get(self._transport_key))
+
+    @staticmethod
+    def _declares_authenticated_transport(meta: Any) -> bool:
+        """True iff the declaration ``meta`` asserts an authenticated + TLS transport.
 
         Accepts the transport metadata as a mapping (truthy
         ``authenticated``/``auth`` AND ``tls``/``encrypted`` keys) or as an
         object exposing the same as attributes.
         """
-        meta = args.get(self._transport_key)
         if meta is None:
             return False
 

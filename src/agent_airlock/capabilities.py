@@ -283,7 +283,15 @@ def requires(*capabilities: Capability) -> Callable[[F], F]:
 
     ``@Airlock`` reads the requirement from the wrapper it returns and from the chain
     beneath it, so ``@requires`` may sit above or below ``@Airlock``. Until 0.10.26 one
-    placed above it was never read and the tool ran unchecked.
+    placed above it was never read and the tool ran unchecked. A requirement is merged
+    into what the decorated callable already requires, never put in its place, and one
+    applied above ``@Airlock`` is also added to every ``@Airlock`` wrapper beneath:
+    through decorators between them that keep ``__wrapped__`` (``functools.wraps``) or
+    copy the wrapper's attributes. Until 0.10.28 it reached the wrapper only when the two
+    were adjacent, so a ``@requires`` above another, or above a logging decorator, was
+    never checked. A decorator that does neither hides the ``@Airlock`` wrapper beneath
+    it, and a requirement above it is then not enforced: put ``@requires`` below such a
+    decorator.
 
     Examples:
         @requires(Capability.FILESYSTEM_READ)
@@ -299,7 +307,9 @@ def requires(*capabilities: Capability) -> Callable[[F], F]:
         combined |= cap
 
     def decorator(func: F) -> F:
-        func.__airlock_capabilities__ = combined  # type: ignore[attr-defined]
+        merged = _add_requirement(func, combined)
+        for guarded in _airlock_wrappers_beneath(func):
+            _add_requirement(guarded, combined)
 
         # The wrapper must keep the function's kind. `@Airlock` picks its sync or async
         # wrapper with `asyncio.iscoroutinefunction`, so a plain `def` wrapper around an
@@ -330,10 +340,51 @@ def requires(*capabilities: Capability) -> Callable[[F], F]:
 
             wrapper = sync_wrapper
 
-        wrapper.__airlock_capabilities__ = combined
+        wrapper.__airlock_capabilities__ = merged
         return cast(F, wrapper)
 
     return decorator
+
+
+def _add_requirement(target: Callable[..., Any], capabilities: Capability) -> Capability:
+    """Merge ``capabilities`` into what ``target`` already requires; return the result."""
+    existing = getattr(target, "__airlock_capabilities__", None)
+    merged = existing | capabilities if isinstance(existing, Capability) else capabilities
+    target.__airlock_capabilities__ = merged  # type: ignore[attr-defined]
+    return merged
+
+
+def _airlock_wrappers_beneath(func: Callable[..., Any]) -> list[Callable[..., Any]]:
+    """The ``@Airlock`` wrappers under ``func``, ``func`` itself excepted.
+
+    ``@Airlock`` marks the wrapper it returns with ``__airlock_wrapper__`` pointing at
+    itself, and a decorator applied above that copies the wrapper's attributes copies the
+    mark. So the wrappers are found down the ``__wrapped__`` chain and through any mark a
+    decorator copied without setting ``__wrapped__``. The undecorated function at the
+    bottom of the chain is never marked, so a requirement added here does not leak to
+    another ``@Airlock`` wrapper of the same function.
+    """
+    found: list[Callable[..., Any]] = []
+    seen: set[int] = set()
+    current: Any = func
+    for _ in range(32):  # bounded, like get_required_capabilities
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        marked: Any = getattr(current, "__airlock_wrapper__", None)
+        if (
+            _is_airlock_wrapper(marked)
+            and marked is not func
+            and all(marked is not other for other in found)
+        ):
+            found.append(marked)
+        current = getattr(current, "__wrapped__", None)
+    return found
+
+
+def _is_airlock_wrapper(candidate: Any) -> bool:
+    """Whether ``candidate`` is an ``@Airlock`` wrapper: its mark points at itself."""
+    return callable(candidate) and getattr(candidate, "__airlock_wrapper__", None) is candidate
 
 
 def get_required_capabilities(func: Callable[..., Any]) -> Capability:

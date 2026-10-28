@@ -78,7 +78,7 @@ def _search_in_run() -> Any:
 
 def _search_in_foreign_run() -> Any:
     @Airlock(policy=_reauth_policy(), return_dict=True)
-    def search(_run: _ForeignRun, q: str) -> str:
+    def search(_run: Any, q: str) -> str:
         return q
 
     return search
@@ -98,9 +98,12 @@ class _Caller:
     agent_id: str
 
 
-@dataclass
 class _ForeignRun:
-    context: _Caller
+    """A host's run wrapper naming another agent. A plain class: since 0.10.28 a dataclass
+    wrapper is read only when its ``context`` is an ``AirlockContext``."""
+
+    def __init__(self, context: _Caller) -> None:
+        self.context = context
 
 
 class TestReauthFiresThroughTheDecorator:
