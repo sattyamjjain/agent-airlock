@@ -2684,15 +2684,19 @@ def npm_oidc_publish_window_guard_defaults(
     that fetches / runs just-mutated package versions should reject
     blast-list pairs". This preset wires
     :class:`agent_airlock.mcp_spec.oidc_publish_window_guard.OIDCPublishWindowGuard`
-    with the curated 2026-05-11 blast list (TanStack postmortem + Aikido
-    cross-ecosystem advisory).
+    with the incident's blast list: the 84 versions GHSA-g7cv-rxg3-hmpx
+    (CVE-2026-45321) lists, 42 npm packages at two exact versions each. Until
+    0.10.28 the shipped list was a placeholder snapshot whose versions no
+    install could match.
 
     The list is a frozenset of ``(ecosystem, name, version)`` tuples.
     Operators on a non-default vocabulary can pass their own list.
 
     Primary sources:
+      https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
       https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
       https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised
+      (the wider wave; its packages are not in the list)
     """
     from .mcp_spec.oidc_publish_window_guard import load_blast_list_from_2026_05_11
 
@@ -2701,6 +2705,7 @@ def npm_oidc_publish_window_guard_defaults(
         "severity": "critical",
         "default_action": "deny",
         "advisory_url": ("https://tanstack.com/blog/npm-supply-chain-compromise-postmortem"),
+        "ghsa_url": "https://github.com/advisories/GHSA-g7cv-rxg3-hmpx",
         "cross_ecosystem_url": (
             "https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised"
         ),

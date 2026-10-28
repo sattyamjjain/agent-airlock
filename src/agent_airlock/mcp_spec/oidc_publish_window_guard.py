@@ -17,10 +17,12 @@ pairs". This guard fails-closed on:
 2. A registry tarball URL (``https://registry.npmjs.org/<pkg>/-/...-<ver>.tgz``)
    targeting any pair in the blast list.
 
-The guard ships with a curated 2026-05-11 fixture
-(``data/oidc_publish_blast_2026_05_11.json``) loadable via
-:func:`load_blast_list_from_2026_05_11`. Operators regenerate when
-new entries are confirmed (see `docs/policies/...`).
+The guard ships with the incident's blast list as a dated snapshot
+(``data/oidc_publish_blast_2026_10_28.json``: the 84 versions
+GHSA-g7cv-rxg3-hmpx lists, 42 npm packages at two exact versions each)
+loadable via :func:`load_blast_list_from_2026_05_11`, which is named for the
+incident, not the snapshot. Operators regenerate when new entries are
+confirmed (see ``docs/policies/npm-oidc-publish-window-guard.md``).
 
 Why structural (no SDK import)
 ------------------------------
@@ -56,15 +58,21 @@ Honest scope
 - The fixture is a point-in-time snapshot. Operators must regenerate
   on new confirmed blast-list extensions; Sunday review surfaces
   this as a checklist item.
-- The shipped 2026-05-11 snapshot spells most versions with a
-  ``-compromised-2026-05-11`` suffix that no registry publishes (PyPI
-  cannot: it is not a PEP 440 version), so those rows match only an
-  argument that carries the same suffix, not an install of the real
-  release. Matching a real install needs a new dated snapshot of the
-  version strings as the registries published them.
+- Until 0.10.28 the shipped snapshot was
+  ``data/oidc_publish_blast_2026_05_11.json`` (kept, superseded). It spelled
+  90 of its 93 versions with a ``-compromised-2026-05-11`` suffix no
+  registry publishes, so those rows never matched a real install; it named
+  ``@tanstack/react-query``, which the postmortem lists as clean; and its
+  three PyPI rows appear in neither source it cited. The current snapshot
+  is copied from the GitHub advisory's affected-version table.
+- The wider Mini Shai-Hulud wave (Mistral, UiPath and other npm scopes,
+  per Aikido) is not in the list; pass those pairs as a caller-supplied
+  ``blast_list`` from their own advisories.
 
 Primary sources
 ---------------
+- GHSA-g7cv-rxg3-hmpx (CVE-2026-45321), the affected-version table:
+  https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
 - TanStack postmortem (2026-05-11):
   https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
 - Aikido — Mini Shai-Hulud Is Back (2026-05-11, cross-ecosystem):
@@ -88,7 +96,7 @@ logger = structlog.get_logger("agent-airlock.mcp_spec.oidc_publish_window_guard"
 
 
 _FIXTURE_PACKAGE = "agent_airlock.data"
-_FIXTURE_RESOURCE_NAME = "oidc_publish_blast_2026_05_11.json"
+_FIXTURE_RESOURCE_NAME = "oidc_publish_blast_2026_10_28.json"
 
 
 # Registry tarball path — ``/<pkg>/-/<tail>.tgz``. Captures the package name
@@ -217,7 +225,10 @@ class OIDCPublishWindowDecision:
 
 
 def load_blast_list_from_2026_05_11() -> frozenset[tuple[str, str, str]]:
-    """Load the 2026-05-11 TanStack/Aikido fixture as a frozenset.
+    """Load the blast list of the 2026-05-11 TanStack incident as a frozenset.
+
+    The data is the current dated snapshot (:data:`_FIXTURE_RESOURCE_NAME`), copied
+    from GHSA-g7cv-rxg3-hmpx; the name keeps the incident date.
 
     Uses :func:`importlib.resources.files` so the fixture path is
     correct whether the package is installed editable or via wheel.

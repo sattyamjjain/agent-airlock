@@ -43,7 +43,7 @@ from agent_airlock import (
 guard = OIDCPublishWindowGuard(blast_list=load_blast_list_from_2026_05_11())
 
 decision = guard.evaluate(
-    {"package": "@tanstack/react-router", "version": "1.146.0-compromised-2026-05-11"}
+    {"package": "@tanstack/react-router", "version": "1.169.5"}
 )
 # decision.allowed is False
 # decision.verdict == OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR
@@ -53,8 +53,8 @@ decision = guard.evaluate(
 
 `agent_airlock.policy_presets.npm_oidc_publish_window_guard_defaults()`
 returns the recommended config dict (preset_id, severity,
-default_action, advisory_url, blast_list pre-loaded from the
-2026-05-11 fixture).
+default_action, advisory_url, ghsa_url, blast_list pre-loaded from the
+current dated snapshot, `data/oidc_publish_blast_2026_10_28.json`).
 
 ## Decision shape
 
@@ -67,6 +67,7 @@ default_action, advisory_url, blast_list pre-loaded from the
 | `ALLOW` | no blast-list pattern matched |
 | `DENY_BLAST_LIST_PAIR` | `(package, version)` arg pair on the list |
 | `DENY_BLAST_LIST_TARBALL_URL` | npm-registry tarball URL targeting a blast pair |
+| `DENY_UNINSPECTABLE` | an argument shape the guard cannot read |
 
 ## Honest scope
 
@@ -75,11 +76,26 @@ default_action, advisory_url, blast_list pre-loaded from the
   per-publish-review feature request (see postmortem section
   "Remediation Guidance"); the runtime side is what Airlock can
   cover today.
-- The fixture is a **point-in-time snapshot** (2026-05-11). Operators
-  must regenerate the JSON when new blast-list extensions are
-  confirmed. Sunday weekly-review surfaces this as a checklist item.
+- It matches exact releases only. A range (`^1.169.0`) that could resolve to
+  a listed release is not resolved here.
+- The list is a **point-in-time copy** of the affected-version table of
+  [GHSA-g7cv-rxg3-hmpx][ghsa] (CVE-2026-45321), retrieved 2026-10-28: 42 npm
+  packages, two exact versions each. Operators must regenerate the JSON as a
+  new dated snapshot when new blast-list extensions are confirmed. Sunday
+  weekly-review surfaces this as a checklist item.
+- Until 0.10.28 the shipped snapshot (`data/oidc_publish_blast_2026_05_11.json`,
+  kept as superseded) could not match a real install: 90 of its 93 versions
+  carried a synthetic `-compromised-2026-05-11` suffix no registry publishes, it
+  named `@tanstack/react-query`, which the postmortem lists as clean, and its
+  three PyPI rows appear in neither source it cited.
+- The wider Mini Shai-Hulud wave (Mistral, UiPath and other npm scopes, per
+  Aikido) is not in the list. Pass those pairs as a caller-supplied
+  `blast_list` from their own advisories.
 
 ## Primary sources
 
 - [TanStack npm supply-chain compromise postmortem (2026-05-11)][postmortem] — 42 pkgs × 84 versions × 12M weekly DL blast radius
-- [Aikido — Mini Shai-Hulud Is Back (2026-05-11)](https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised) — cross-ecosystem reinforcement (Mistral SDKs, PyTorch Lightning 2.6.2/2.6.3, intercom-client)
+- [GHSA-g7cv-rxg3-hmpx (CVE-2026-45321)][ghsa] — the affected-version table the shipped list is copied from
+- [Aikido — Mini Shai-Hulud Is Back (2026-05-11)](https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised) — the wider npm wave (Mistral, UiPath and other scopes); its packages are not in the list
+
+[ghsa]: https://github.com/advisories/GHSA-g7cv-rxg3-hmpx

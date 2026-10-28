@@ -143,14 +143,22 @@ class TestFixtureLoadsFromPackagedData:
             assert isinstance(version, str)
             assert ecosystem in {"npm", "pypi"}
 
-    def test_fixture_contains_cross_ecosystem_entries(self) -> None:
-        """The Aikido 2026-05-11 cross-ecosystem entries must be present."""
+    def test_fixture_is_the_advisorys_affected_version_table(self) -> None:
+        """0.10.28: the list is GHSA-g7cv-rxg3-hmpx's table, as the registry published it.
+
+        The superseded 2026-05-11 snapshot spelled 90 of 93 versions with a synthetic
+        ``-compromised-2026-05-11`` suffix no install carries, named @tanstack/react-query
+        (the postmortem lists it clean) and held three PyPI rows neither cited source
+        names. This pinned that last claim; it now pins the advisory's shape instead.
+        """
         entries = load_blast_list_from_2026_05_11()
-        ecosystems = {eco for eco, _, _ in entries}
-        # PyPI cross-ecosystem (pytorch-lightning, etc.) confirmed in Aikido blog.
-        assert "pypi" in ecosystems, (
-            "cross-ecosystem PyPI entries from Aikido 2026-05-11 must be in fixture"
-        )
+        assert len(entries) == 84
+        assert {eco for eco, _, _ in entries} == {"npm"}
+        assert len({name for _, name, _ in entries}) == 42
+        assert not any("compromised" in version for _, _, version in entries)
+        assert ("npm", "@tanstack/react-router", "1.169.5") in entries
+        assert ("npm", "@tanstack/history", "1.161.9") in entries
+        assert not any(name.startswith("@tanstack/react-query") for _, name, _ in entries)
 
     def test_fixture_json_source_field_records_url(self) -> None:
         from importlib.resources import files
@@ -162,8 +170,10 @@ class TestFixtureLoadsFromPackagedData:
 
         raw = (files(_FIXTURE_PACKAGE) / _FIXTURE_RESOURCE_NAME).read_text(encoding="utf-8")
         payload = json.loads(raw)
-        assert "tanstack.com" in payload["source"]
-        assert payload["as_of"].startswith("2026-05-11")
+        assert payload["source"] == "https://github.com/advisories/GHSA-g7cv-rxg3-hmpx"
+        assert "tanstack.com" in payload["postmortem"]
+        assert payload["as_of"].startswith("2026-10-28")
+        assert payload["supersedes"] == "oidc_publish_blast_2026_05_11.json"
         assert "entries" in payload
         assert isinstance(payload["entries"], list)
 
@@ -200,3 +210,37 @@ class TestBadConstruction:
     def test_malformed_blast_list_entry_rejected(self) -> None:
         with pytest.raises(TypeError, match="tuple"):
             OIDCPublishWindowGuard(blast_list=frozenset({"not-a-tuple"}))  # type: ignore[arg-type]
+
+
+class TestTheShippedListMatchesRealInstalls:
+    """0.10.28: a compromised release is refused as the registry spells it."""
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            {"package": "@tanstack/react-router", "version": "1.169.5"},
+            {"package": "@tanstack/react-router@1.169.8"},
+            {"url": "https://registry.npmjs.org/@tanstack/history/-/history-1.161.9.tgz"},
+        ],
+    )
+    def test_a_compromised_release_is_refused(self, args: dict[str, str]) -> None:
+        guard = OIDCPublishWindowGuard(blast_list=load_blast_list_from_2026_05_11())
+        assert guard.evaluate(args).allowed is False
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            {"package": "@tanstack/react-router", "version": "1.169.9"},
+            {"package": "@tanstack/react-query", "version": "5.78.0"},
+        ],
+    )
+    def test_control_the_patched_release_and_a_clean_package_pass(
+        self, args: dict[str, str]
+    ) -> None:
+        guard = OIDCPublishWindowGuard(blast_list=load_blast_list_from_2026_05_11())
+        assert guard.evaluate(args).allowed is True
+
+    def test_the_superseded_snapshot_stays_in_data(self) -> None:
+        from importlib.resources import files
+
+        assert (files("agent_airlock.data") / "oidc_publish_blast_2026_05_11.json").is_file()
