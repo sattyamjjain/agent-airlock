@@ -52,7 +52,7 @@ from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
 from ._claude_sdk_tools import guard_sdk_tool, is_sdk_mcp_tool
-from ._tool_proxy import named_tool_proxy
+from ._tool_proxy import already_guarded, mark_guarded, named_tool_proxy
 from .claude_auto_memory import (
     AutoMemoryAccessPolicy,
     guarded_read,
@@ -259,6 +259,10 @@ class AnthropicClaudeAgentSDKAdapter:
     ) -> Any:
         """Replace ``tool.forward`` / ``tool`` with an Airlock-decorated shim.
 
+        Idempotent per tool: an entry already guarded by an earlier walk (or by
+        :func:`wrap_tools`) is returned as it is, so wrapping twice costs one audit
+        record and one rate-limit token per call, not two.
+
         Args:
             tool: The tool object or callable.
             name: The tool's name (used in logs and audit). An ``SdkMcpTool``
@@ -280,12 +284,15 @@ class AnthropicClaudeAgentSDKAdapter:
             raise AirlockError(
                 f"tool {name!r} exposes neither `forward` nor `__call__`; cannot wrap"
             )
+        if already_guarded(forward, policy=policy, tool=name):
+            return tool
 
         # Airlock uses ``func.__name__`` for policy checks, so the proxy carries the
         # tool's canonical name; it also carries the tool's signature, so Airlock
         # validates it, and is async when the tool is.
         airlock = Airlock(policy=policy) if policy is not None else Airlock()
         wrapped = airlock(named_tool_proxy(forward, name=name))
+        mark_guarded(wrapped, policy)
 
         if hasattr(tool, "forward"):
             # Tool object (non-function): mutate in place. Use setattr so
@@ -309,7 +316,9 @@ def wrap_tools(tools: Iterable[Any], *, policy: SecurityPolicy | None = None) ->
         policy: Optional :class:`SecurityPolicy`; its tool lists match each tool's name.
 
     Returns:
-        New ``SdkMcpTool`` objects in the same order. The originals are unchanged.
+        New ``SdkMcpTool`` objects in the same order. The originals are unchanged. A tool
+        that is already a guarded copy comes back as it is (idempotent), so wrapping twice
+        does not stack a second ``Airlock`` layer.
 
     Raises:
         AirlockError: An entry is not an ``SdkMcpTool``, or its ``input_schema`` declares

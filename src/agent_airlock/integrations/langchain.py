@@ -2,26 +2,38 @@
 
 Provides LangChain-specific decorators, tool wrappers, and
 callback handlers for seamless security integration.
+
+:func:`wrap_langchain_tool` guards every callable LangChain runs a tool through, with one
+``Airlock`` built for the tool: ``func`` and ``coroutine`` on a ``StructuredTool`` /
+``Tool``, whose ``_run`` / ``_arun`` hand off to them, and ``_run`` and an overridden
+``_arun`` on a ``BaseTool`` subclass. Until 0.10.28 only the sync callable was guarded, so
+``.ainvoke`` ran an ``async`` tool, a ``StructuredTool``'s ``coroutine`` and a subclass's
+``_arun`` with no check at all (verified on langchain-core 1.7.1 under a deny-all policy).
 """
 
 from __future__ import annotations
 
-import functools
+import inspect
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import Any, TypeVar
 
 from agent_airlock.config import AirlockConfig
 from agent_airlock.core import Airlock
 from agent_airlock.policy import SecurityPolicy
 
 from .._log import structlog
-
-if TYPE_CHECKING:
-    pass
+from ..exceptions import AirlockError
+from ._tool_proxy import already_guarded, mark_guarded, named_tool_proxy
 
 logger = structlog.get_logger("agent-airlock.integrations.langchain")
 
 T = TypeVar("T")
+
+#: The parameters LangChain fills itself and removes from a tool's argument schema
+#: (``langchain_core.tools.FILTERED_ARGS``). The model never supplies them; they carry
+#: callback managers, which have no Pydantic schema, so they are not strictly validated.
+#: LangChain finds them by name, so relaxing their annotation changes nothing it reads.
+_LANGCHAIN_FILLED_PARAMS: tuple[str, ...] = ("run_manager", "callbacks")
 
 
 def secure_tool(
@@ -133,7 +145,16 @@ def wrap_langchain_tool(
     policy: SecurityPolicy | None = None,
     sandbox: bool = False,
 ) -> Any:
-    """Wrap an existing LangChain tool with Airlock security.
+    """Wrap an existing LangChain tool with Airlock security, in place.
+
+    Every callable LangChain runs the tool through is replaced by a guarded one, all
+    built from one ``Airlock``: ``func`` and ``coroutine`` on a ``StructuredTool`` or
+    ``Tool``, ``_run`` and an overridden ``_arun`` on a ``BaseTool`` subclass. So
+    ``.invoke``, ``.ainvoke``, ``.run`` and ``.arun`` are all checked. Policy lists match
+    the tool's ``name`` (the name the model calls), not the callable's own name.
+
+    Wrapping is idempotent per callable: one already guarded is left alone, so wrapping a
+    tool twice still costs one audit record and one rate-limit token per call.
 
     Args:
         tool: LangChain BaseTool instance.
@@ -142,7 +163,11 @@ def wrap_langchain_tool(
         sandbox: Whether to use sandbox execution.
 
     Returns:
-        Wrapped tool with Airlock security.
+        The same tool, its callables guarded.
+
+    Raises:
+        TypeError: ``tool`` is not a LangChain ``BaseTool``.
+        AirlockError: The tool exposes no callable LangChain could run it through.
     """
     try:
         from langchain_core.tools import BaseTool
@@ -153,22 +178,109 @@ def wrap_langchain_tool(
     if not isinstance(tool, BaseTool):
         raise TypeError(f"Expected BaseTool, got {type(tool)}")
 
-    # Wrap the tool's function
+    name = str(getattr(tool, "name", "") or type(tool).__name__)
+    entry_points = _entry_points(tool)
+    if not entry_points:
+        raise AirlockError(
+            f"LangChain tool {name!r} has no func, coroutine or _run to guard; cannot wrap"
+        )
+
     airlock = Airlock(config=config, policy=policy, sandbox=sandbox)
+    guarded = 0
+    for attr, forward in entry_points:
+        if already_guarded(forward, policy=policy, tool=name):
+            continue
+        # setattr: the attribute is a pydantic field (func, coroutine) or a method shadowed
+        # on the instance (_run, _arun), which static analysis would otherwise flag.
+        setattr(tool, attr, _guard(forward, name=name, airlock=airlock, policy=policy))  # noqa: B010
+        guarded += 1
 
-    if hasattr(tool, "func") and tool.func is not None:
-        original_func = tool.func
-        tool.func = airlock(original_func)
-    elif hasattr(tool, "_run"):
-        original_run = tool._run
-
-        @functools.wraps(original_run)
-        def secured_run(*args: Any, **kwargs: Any) -> Any:
-            return airlock(original_run)(*args, **kwargs)
-
-        tool._run = secured_run
-
+    logger.debug(
+        "langchain_tool_wrapped",
+        tool=name,
+        entry_points=[attr for attr, _ in entry_points],
+        newly_guarded=guarded,
+    )
     return tool
+
+
+def _entry_points(tool: Any) -> list[tuple[str, Callable[..., Any]]]:
+    """The attributes holding the callables LangChain runs ``tool`` through.
+
+    ``BaseTool.run`` calls ``_run`` and ``BaseTool.arun`` calls ``_arun``. A
+    ``StructuredTool`` / ``Tool`` implements those by calling ``func`` and ``coroutine``
+    (``_arun`` falls back to ``_run`` when there is no ``coroutine``), so those two are
+    guarded; on any other class ``_run`` and, when the class overrides it, ``_arun`` are.
+    ``BaseTool._arun`` itself only hands ``_run`` to a thread, which is already guarded.
+    """
+    from langchain_core.tools import BaseTool
+
+    dispatchers = _dispatching_classes()
+    cls = type(tool)
+    points: list[tuple[str, Callable[..., Any]]] = []
+
+    if getattr(cls, "_run", None) in {getattr(each, "_run", None) for each in dispatchers}:
+        func = getattr(tool, "func", None)
+        if callable(func):
+            points.append(("func", func))
+    else:
+        points.append(("_run", tool._run))
+
+    class_arun = getattr(cls, "_arun", None)
+    if class_arun in {getattr(each, "_arun", None) for each in dispatchers}:
+        coroutine = getattr(tool, "coroutine", None)
+        if callable(coroutine):
+            points.append(("coroutine", coroutine))
+    elif class_arun is not getattr(BaseTool, "_arun", None):
+        points.append(("_arun", tool._arun))
+    return points
+
+
+def _dispatching_classes() -> tuple[type, ...]:
+    """LangChain's tool classes whose ``_run`` / ``_arun`` call ``func`` / ``coroutine``."""
+    import langchain_core.tools as lc_tools
+
+    return tuple(
+        cls
+        for cls in (getattr(lc_tools, "StructuredTool", None), getattr(lc_tools, "Tool", None))
+        if isinstance(cls, type)
+    )
+
+
+def _guard(
+    forward: Callable[..., Any],
+    *,
+    name: str,
+    airlock: Airlock,
+    policy: SecurityPolicy | None,
+) -> Callable[..., Any]:
+    """``forward`` behind ``airlock``, re-tagged with the tool's name and contract.
+
+    The proxy carries ``forward``'s signature, so ``Airlock`` validates the tool's own
+    parameters, and is async exactly when ``forward`` is, so an ``async`` tool gets the
+    async wrapper (awaited, then audited and sanitised). LangChain still finds what it
+    injects by name (``run_manager``, ``callbacks``) or by type (a ``RunnableConfig``
+    parameter keeps its annotation).
+    """
+    proxy = named_tool_proxy(forward, name=name, relaxed_params=_filled_params(forward))
+    guarded: Callable[..., Any] = airlock(proxy)
+    mark_guarded(guarded, policy)
+    return guarded
+
+
+def _filled_params(forward: Callable[..., Any]) -> frozenset[str]:
+    """``forward``'s parameters that LangChain fills itself (see ``FILTERED_ARGS``)."""
+    try:
+        from langchain_core.tools import FILTERED_ARGS
+
+        filled = tuple(FILTERED_ARGS)
+    except ImportError:  # an SDK without the constant: fall back to its 1.x value
+        filled = _LANGCHAIN_FILLED_PARAMS
+    try:
+        parameters = inspect.signature(forward).parameters
+    except (TypeError, ValueError):
+        return frozenset()  # named_tool_proxy refuses a callable with no readable signature
+    return frozenset(name for name in parameters if name in filled)
 
 
 def create_secure_tool(
@@ -180,6 +292,12 @@ def create_secure_tool(
     sandbox: bool = False,
 ) -> Any:
     """Create a LangChain tool with Airlock security built-in.
+
+    An ``async def`` function becomes the tool's ``coroutine``, so ``.ainvoke`` awaits the
+    guarded call and returns its result; a plain function becomes its ``func``. Until
+    0.10.28 an async function was passed as ``func``, and ``.ainvoke`` returned the
+    un-awaited coroutine. Policy lists match the tool's name (``name``, else the
+    function's name).
 
     Args:
         func: The function to convert to a tool.
@@ -197,13 +315,15 @@ def create_secure_tool(
     except ImportError as e:
         raise ImportError("langchain-core is required: pip install langchain-core") from e
 
-    # Wrap with Airlock first
-    secured_func = Airlock(config=config, policy=policy, sandbox=sandbox)(func)
+    tool_name = name or func.__name__
+    airlock = Airlock(config=config, policy=policy, sandbox=sandbox)
+    secured = _guard(func, name=tool_name, airlock=airlock, policy=policy)
+    callable_kind = "coroutine" if inspect.iscoroutinefunction(secured) else "func"
 
     return StructuredTool.from_function(
-        func=secured_func,
-        name=name or func.__name__,
+        name=tool_name,
         description=description or func.__doc__ or "No description",
+        **{callable_kind: secured},
     )
 
 

@@ -20,12 +20,18 @@ Annotations are resolved with ``get_type_hints(..., include_extras=True)`` for t
 :func:`agent_airlock.validator.create_argument_validator` gives: under
 ``from __future__ import annotations`` they are strings, and the proxy does not share the
 tool's module globals.
+
+It also holds the walkers' idempotency marker (:data:`GUARDED_MARKER`). Every shim a
+walker installs carries it, and a walker leaves a tool whose callable carries it alone, so
+wrapping an agent twice (or walking one tool list twice) stacks no second ``Airlock``
+layer: one audit record and one rate-limit charge per call.
 """
 
 from __future__ import annotations
 
 import functools
 import inspect
+import warnings
 from collections.abc import Callable, Collection
 from typing import Any, get_type_hints
 
@@ -33,6 +39,58 @@ from .._log import structlog
 from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.integrations._tool_proxy")
+
+#: Attribute every walker sets on the shim it installs. Until 0.10.28 only ``crewai`` had
+#: one; ``pydantic_ai``, ``google_adk`` and the Claude Agent SDK adapter stacked a second
+#: ``Airlock`` layer when an agent was wrapped twice, so each call wrote two audit records
+#: and spent two rate-limit tokens (a ``1/hour`` tool was refused on its first call).
+GUARDED_MARKER = "__airlock_guarded__"
+
+#: The policy a shim was installed with, read when a later walk finds it already guarded.
+_GUARDED_POLICY = "__airlock_guarded_policy__"
+
+
+def mark_guarded(shim: Any, policy: object) -> None:
+    """Mark ``shim`` as a walker-installed ``Airlock`` shim built with ``policy``."""
+    setattr(shim, GUARDED_MARKER, True)
+    setattr(shim, _GUARDED_POLICY, policy)
+
+
+def is_guarded(obj: Any) -> bool:
+    """Whether ``obj`` is a shim a walker installed.
+
+    Compared with ``is True`` so an object answering every attribute (a mock, a proxy)
+    is not taken for one.
+    """
+    return getattr(obj, GUARDED_MARKER, False) is True
+
+
+def already_guarded(obj: Any, *, policy: object, tool: str) -> bool:
+    """Whether a walk should leave ``obj`` alone because it is already guarded.
+
+    A tool keeps the policy it was first guarded with. When this walk carries another
+    policy object, that is said with a ``UserWarning`` rather than ignored, because a
+    policy that quietly does not apply reads as protection.
+
+    Args:
+        obj: The callable the framework invokes (or the tool itself).
+        policy: The policy this walk would apply.
+        tool: The tool's name, for the warning.
+
+    Returns:
+        ``True`` when ``obj`` is already a guarded shim.
+    """
+    if not is_guarded(obj):
+        return False
+    if getattr(obj, _GUARDED_POLICY, None) is not policy:
+        warnings.warn(
+            f"agent-airlock: tool {tool!r} is already guarded under another policy and keeps "
+            "it; the policy passed to this wrap is NOT applied to it. Wrap a fresh tool to "
+            "change its policy.",
+            UserWarning,
+            stacklevel=4,
+        )
+    return True
 
 
 def named_tool_proxy(

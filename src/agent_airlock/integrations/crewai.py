@@ -17,6 +17,24 @@ agent_airlock`` cleanly. Stub crews / agents (any object with a
 ``agents`` or ``tools`` attribute) bypass the SDK import — the test
 seam.
 
+Tools CrewAI adds at run time (0.10.28)
+---------------------------------------
+CrewAI builds more tools while a task runs than the agent was given:
+delegation tools (``allow_delegation``), MCP tools (``agent.mcps``),
+platform tools (``agent.apps``), code-execution, multimodal, memory and
+input-file tools, and a skill loader. None of them exists when
+``wrap_crew`` / ``wrap_agent`` walks the agent, and until 0.10.28 they ran
+outside Airlock: on crewai 1.15.22 a deny-all policy did not stop a
+delegation or an ``agent.mcps`` tool, in a crew or in ``Agent.kickoff``.
+The adapter now also wraps, on the objects it is given (only them), the
+methods that hand CrewAI the final tool list, and walks what they return:
+``Crew._prepare_tools`` (every injected tool of a crew task, the
+hierarchical manager's delegation tools included), ``Crew.copy`` (the
+copies ``kickoff_for_each`` runs) and ``Agent._add_skill_loader_tool``
+(the last step before a task or a ``kickoff`` parses its tools, in both
+paths). Where those methods are missing, an agent configured to receive
+such tools gets a ``UserWarning`` naming them instead of silence.
+
 Optional dep
 ------------
 ``pip install "agent-airlock[crewai]"`` pulls
@@ -43,6 +61,7 @@ Primary sources
 
 from __future__ import annotations
 
+import functools
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -52,9 +71,21 @@ from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
-from ._tool_proxy import named_tool_proxy
+from ._tool_proxy import GUARDED_MARKER, already_guarded, is_guarded, mark_guarded, named_tool_proxy
 
 logger = structlog.get_logger("agent-airlock.integrations.crewai")
+
+#: Agent settings that make CrewAI add tools at run time, and what each adds. Named in the
+#: warning when the adapter cannot reach the method that hands CrewAI those tools.
+_RUNTIME_TOOL_SOURCES: dict[str, str] = {
+    "allow_delegation": "delegation tools",
+    "mcps": "MCP server tools (agent.mcps)",
+    "apps": "platform tools (agent.apps)",
+    "allow_code_execution": "code-execution tools",
+    "multimodal": "multimodal tools",
+    "memory": "memory tools",
+    "skills": "a skill loader tool",
+}
 
 
 SUPPORTED_CREWAI_VERSIONS: tuple[str, ...] = ("1.14.4", "1.14.5a1", "1.14.5a2", "1.15.22")
@@ -132,9 +163,15 @@ class CrewAIAdapter:
         if agents is None:
             raise AirlockError("crew exposes no `agents` attribute; not a CrewAI Crew shape")
 
+        crew_hooked = self._hook_crew(crew, policy=policy)
         wrapped_count = 0
         for agent in agents:
             wrapped_count += self._wrap_agent_tools(agent, policy=policy)
+            self._hook_agent(agent, policy=policy, crew_hooked=crew_hooked)
+        manager = getattr(crew, "manager_agent", None)
+        if manager is not None:
+            wrapped_count += self._wrap_agent_tools(manager, policy=policy)
+            self._hook_agent(manager, policy=policy, crew_hooked=crew_hooked)
 
         # Task-level tool overrides: Task(tools=[...]) wins over Agent.tools at runtime.
         tasks = getattr(crew, "tasks", None)
@@ -148,6 +185,7 @@ class CrewAIAdapter:
             "crewai_crew_wrapped",
             agent_count=len(agents),
             tool_count=wrapped_count,
+            runtime_tools_hooked=crew_hooked,
             policy_set=policy is not None,
         )
         return crew
@@ -169,9 +207,11 @@ class CrewAIAdapter:
         """
         self._maybe_check_sdk(agent)
         wrapped_count = self._wrap_agent_tools(agent, policy=policy)
+        runtime_hooked = self._hook_agent(agent, policy=policy, crew_hooked=False)
         logger.info(
             "crewai_agent_wrapped",
             tool_count=wrapped_count,
+            runtime_tools_hooked=runtime_hooked,
             policy_set=policy is not None,
         )
         return agent
@@ -182,6 +222,121 @@ class CrewAIAdapter:
         if tools is None:
             return 0
         return self._wrap_tools_collection(tools, policy=policy)
+
+    def _guard_runtime_tools(self, tools: Any, *, policy: SecurityPolicy | None) -> Any:
+        """Guard the tools a CrewAI method just assembled, in place, and return them.
+
+        Raises:
+            AirlockError: The method returned something other than a tool list, so its
+                tools cannot be read: the run is refused rather than let through.
+        """
+        if not isinstance(tools, list | dict):
+            raise AirlockError(
+                f"CrewAI returned a {type(tools).__name__} where a tool list was expected; "
+                "agent-airlock cannot guard its tools, so the run is refused"
+            )
+        self._wrap_tools_collection(tools, policy=policy)
+        return tools
+
+    def _install_hook(
+        self,
+        owner: Any,
+        attr: str,
+        *,
+        policy: SecurityPolicy | None,
+        after: Callable[[Any], Any],
+    ) -> bool:
+        """Replace ``owner.attr`` (a method) by one that passes its result through ``after``.
+
+        Set on the instance only. Idempotent: a hook already installed is kept (with the
+        policy it was installed with). Returns whether ``owner`` now has the hook. The hook
+        calls ``owner``'s own method, so a ``copy.copy`` / ``deepcopy`` of ``owner`` would
+        share a hook running against ``owner``; CrewAI's own ``Crew.copy`` /
+        ``Agent.copy`` rebuild the object instead, and ``Crew.copy`` is re-wrapped.
+        """
+        original = getattr(owner, attr, None)
+        if not callable(original):
+            return False
+        if already_guarded(original, policy=policy, tool=f"{type(owner).__name__}.{attr}"):
+            return True
+
+        @functools.wraps(original)
+        def hooked(*args: Any, **kwargs: Any) -> Any:
+            return after(original(*args, **kwargs))
+
+        mark_guarded(hooked, policy)
+        try:
+            setattr(owner, attr, hooked)
+        except (AttributeError, TypeError, ValueError):
+            # A pydantic model (Crew, Agent) refuses to set a name that is not a field;
+            # the instance dict still shadows the class's method.
+            try:
+                object.__setattr__(owner, attr, hooked)
+            except (AttributeError, TypeError):  # a slotted object
+                return False
+        return True
+
+    def _hook_crew(self, crew: Any, *, policy: SecurityPolicy | None) -> bool:
+        """Guard the tools each crew task gets at run time, and the crews copied from it.
+
+        ``Crew._prepare_tools`` adds a task's delegation, code-execution, multimodal,
+        platform, MCP, memory and input-file tools (the hierarchical manager's included)
+        to the agent's or task's own; ``Crew.copy`` builds the crews ``kickoff_for_each``
+        and ``train`` run, which would otherwise start unwrapped.
+        """
+        hooked = self._install_hook(
+            crew,
+            "_prepare_tools",
+            policy=policy,
+            after=lambda tools: self._guard_runtime_tools(tools, policy=policy),
+        )
+        self._install_hook(
+            crew,
+            "copy",
+            policy=policy,
+            after=lambda clone: self.wrap_crew(clone, policy=policy),
+        )
+        return hooked
+
+    def _hook_agent(self, agent: Any, *, policy: SecurityPolicy | None, crew_hooked: bool) -> bool:
+        """Guard the final tool list an agent parses, in a crew task and in ``kickoff``.
+
+        ``Agent._add_skill_loader_tool`` receives every tool the agent will run (its own,
+        the task's, everything CrewAI added, the ``agent.mcps`` / ``agent.apps`` tools
+        ``kickoff`` appends) and adds the skill loader, right before ``parse_tools``. When
+        it is missing, an agent configured to receive run-time tools is reported.
+        """
+        hooked = self._install_hook(
+            agent,
+            "_add_skill_loader_tool",
+            policy=policy,
+            after=lambda tools: self._guard_runtime_tools(tools, policy=policy),
+        )
+        if not hooked:
+            self._warn_runtime_sources(agent, crew_hooked=crew_hooked)
+        return hooked
+
+    def _warn_runtime_sources(self, agent: Any, *, crew_hooked: bool) -> None:
+        """Name the run-time tools CrewAI may give ``agent`` that this walk cannot reach."""
+        sources = [
+            description
+            for setting, description in _RUNTIME_TOOL_SOURCES.items()
+            if getattr(agent, setting, None)
+        ]
+        if not sources:
+            return
+        where = (
+            "outside a crew task (Agent.kickoff) and in its skill loader"
+            if crew_hooked
+            else "while its tasks run"
+        )
+        warnings.warn(
+            f"agent-airlock cannot guard the tools CrewAI adds {where} for agent "
+            f"{getattr(agent, 'role', None) or type(agent).__name__!r}: {', '.join(sources)}. "
+            "Calls to them are NOT validated by agent-airlock on this CrewAI version.",
+            UserWarning,
+            stacklevel=4,
+        )
 
     def _wrap_tools_collection(self, tools: Any, *, policy: SecurityPolicy | None) -> int:
         """Replace every tool's callable with the Airlock-decorated version.
@@ -194,19 +349,16 @@ class CrewAIAdapter:
         count = 0
         if isinstance(tools, dict):
             for name, tool in tools.items():
-                if _is_guarded(tool):
+                if _already_guarded(tool, policy=policy, name=str(name)):
                     continue
                 tools[name] = self._wrap_one(tool, name=str(name), policy=policy)
                 count += 1
         elif isinstance(tools, list):
             for idx, tool in enumerate(tools):
-                if _is_guarded(tool):
+                tool_name = getattr(tool, "name", f"tool_{idx}")
+                if _already_guarded(tool, policy=policy, name=str(tool_name)):
                     continue
-                tools[idx] = self._wrap_one(
-                    tool,
-                    name=getattr(tool, "name", f"tool_{idx}"),
-                    policy=policy,
-                )
+                tools[idx] = self._wrap_one(tool, name=tool_name, policy=policy)
                 count += 1
         else:
             raise AirlockError(
@@ -246,7 +398,7 @@ class CrewAIAdapter:
         # rather than `_run` / `func`, and the tool's signature, so Airlock validates it.
         airlock = Airlock(policy=policy) if policy is not None else Airlock()
         wrapped = airlock(named_tool_proxy(forward, name=name))
-        setattr(wrapped, _GUARDED_MARKER, True)  # noqa: B010
+        mark_guarded(wrapped, policy)
 
         if target_attr is not None:
             setattr(tool, target_attr, wrapped)  # noqa: B010
@@ -280,17 +432,25 @@ class CrewAIAdapter:
             )
 
 
-_GUARDED_MARKER = "__airlock_crewai_guarded__"
+#: Kept under its 0.10.25 name; the marker is shared by every walker since 0.10.28.
+_GUARDED_MARKER = GUARDED_MARKER
+
+_CALLABLE_ATTRS = ("func", "_run")
 
 
 def _is_guarded(tool: Any) -> bool:
     """True when ``tool`` (or its ``func`` / ``_run``) is already an Airlock shim."""
-    if getattr(tool, _GUARDED_MARKER, False):
-        return True
-    return any(
-        getattr(getattr(tool, candidate, None), _GUARDED_MARKER, False)
-        for candidate in ("func", "_run")
+    return is_guarded(tool) or any(
+        is_guarded(getattr(tool, candidate, None)) for candidate in _CALLABLE_ATTRS
     )
+
+
+def _already_guarded(tool: Any, *, policy: SecurityPolicy | None, name: str) -> bool:
+    """Whether a walk should leave ``tool`` alone, warning when its policy differs."""
+    for candidate in (tool, *(getattr(tool, attr, None) for attr in _CALLABLE_ATTRS)):
+        if is_guarded(candidate):
+            return already_guarded(candidate, policy=policy, tool=name)
+    return False
 
 
 __all__ = [
