@@ -307,3 +307,43 @@ class TestTokenAudience:
     def test_aud_wrong_type_rejected(self) -> None:
         with pytest.raises(TokenAudienceError):
             validate_access_token_audience({"aud": 42}, expected_audience=self.SERVER)
+
+    # 0.10.27: three shapes the check now answers rather than skips or raises past.
+
+    def test_a_list_holding_a_non_string_is_rejected_whole(self) -> None:
+        """Until 0.10.27 the non-string was skipped and the matching item admitted it."""
+        for item in (42, None, {"aud": self.SERVER}, [self.SERVER]):
+            with pytest.raises(TokenAudienceError, match="not a string"):
+                validate_access_token_audience(
+                    {"aud": [item, self.SERVER]}, expected_audience=self.SERVER
+                )
+
+    def test_a_string_aud_that_is_not_a_uri_is_a_token_audience_error(self) -> None:
+        """Until 0.10.27 this escaped as a ResourceURIError a caller catching the
+        documented TokenAudienceError never saw."""
+        with pytest.raises(TokenAudienceError, match="not a resource URI"):
+            validate_access_token_audience(
+                {"aud": "placeholder-client-id"}, expected_audience=self.SERVER
+            )
+
+    def test_a_non_uri_audience_beside_this_server_in_a_list_is_accepted(self) -> None:
+        """Another audience may be a client id; it is not this server, and not an error."""
+        validate_access_token_audience(
+            {"aud": ["placeholder-client-id", self.SERVER]}, expected_audience=self.SERVER
+        )
+
+    def test_a_root_slash_is_the_same_resource_both_ways(self) -> None:
+        """RFC 3986 §6.2.3. Until 0.10.27 a token for `https://host/` was refused by a
+        server expecting `https://host`, and the other way round."""
+        validate_access_token_audience(
+            {"aud": ["https://mcp.example.com/"]}, expected_audience="https://mcp.example.com"
+        )
+        validate_access_token_audience(
+            {"aud": "https://mcp.example.com"}, expected_audience="https://mcp.example.com/"
+        )
+
+    def test_a_root_slash_does_not_widen_a_path(self) -> None:
+        with pytest.raises(TokenAudienceError):
+            validate_access_token_audience(
+                {"aud": "https://mcp.example.com/"}, expected_audience=self.SERVER
+            )

@@ -59,6 +59,13 @@ class BlockReason(str, Enum):
     HANDLE_WRONG_ISSUER = "handle_wrong_issuer"
     HANDLE_WRONG_SCOPE = "handle_wrong_scope"
     HANDLE_EXPIRED = "handle_expired"
+    # V0.10.27: the call's OAuth access token was issued for another audience, or the call
+    # carried no claims to check (CVE-2026-115413). The credential is wrong, not the call,
+    # so it is not a POLICY_VIOLATION.
+    TOKEN_AUDIENCE = "token_audience"  # nosec B105 - enum value name, not a credential
+    # V0.10.27: the interpreter runs startup hooks no allowlist covers. Like KILL_SWITCH, a
+    # condition of the process rather than of the call: no argument change helps.
+    STARTUP_HOOK = "startup_hook"
 
 
 @dataclass

@@ -345,6 +345,23 @@ class TokenAudienceError(ValueError):
     """Raised when an access token is not valid for this MCP server."""
 
 
+def _audience_key(uri: str) -> str:
+    """``canonicalize_resource_uri(uri)`` with a root path dropped, to compare audiences.
+
+    RFC 3986 §6.2.3: for http(s) an empty path and ``/`` name the same resource, and the
+    spec's canonical server URI has no trailing slash, so a token for
+    ``https://mcp.example.com/`` is a token for ``https://mcp.example.com``. Until 0.10.27
+    the two were compared as written and refused. The canonical form itself keeps the
+    root slash (``canonicalize_resource_uri``); only the comparison ignores it.
+    """
+    canonical = canonicalize_resource_uri(uri)
+    parsed = urlparse(canonical)
+    if parsed.path != "/":
+        return canonical
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{parsed.scheme}://{parsed.netloc}{query}"
+
+
 def validate_access_token_audience(
     token_claims: dict[str, Any],
     *,
@@ -354,8 +371,9 @@ def validate_access_token_audience(
 
     Accepts tokens where `aud` is either the expected audience string or a
     list that contains it. Canonicalises both sides via
-    `canonicalize_resource_uri` so superficial form differences
-    (trailing slash, uppercase scheme) do not reject legitimate tokens.
+    `canonicalize_resource_uri`, and reads a root path as no path, so
+    superficial form differences (trailing slash, uppercase scheme) do not
+    reject legitimate tokens.
 
     Args:
         token_claims: The decoded JWT claims dict (signature verification
@@ -366,27 +384,42 @@ def validate_access_token_audience(
 
     Raises:
         TokenAudienceError: If `aud` is missing, empty, or does not
-            contain the expected audience (after canonicalisation).
+            contain the expected audience (after canonicalisation). A string
+            `aud` that is not a URI, and a list `aud` holding anything but
+            strings, are refused with it too: until 0.10.27 the first escaped as
+            a `ResourceURIError` and the second's other items were skipped.
     """
     aud = token_claims.get("aud")
     if aud is None or aud == "":
         raise TokenAudienceError("access token has no 'aud' claim")
 
-    expected = canonicalize_resource_uri(expected_audience)
+    expected = _audience_key(expected_audience)
 
     if isinstance(aud, str):
-        if canonicalize_resource_uri(aud) != expected:
+        try:
+            canonical = _audience_key(aud)
+        except ResourceURIError as exc:
+            raise TokenAudienceError(
+                f"access token 'aud'={aud!r} is not a resource URI, so not MCP server "
+                f"{expected!r}: {exc}"
+            ) from exc
+        if canonical != expected:
             raise TokenAudienceError(
                 f"access token 'aud'={aud!r} does not match MCP server {expected!r}"
             )
         return
 
     if isinstance(aud, list):
+        # RFC 7519 §4.1.3: each audience is a string. A token whose list holds anything
+        # else is malformed, and is refused whole rather than read past.
+        if not all(isinstance(a, str) for a in aud):
+            raise TokenAudienceError(
+                f"access token 'aud'={aud!r} holds a value that is not a string"
+            )
         for a in aud:
-            if not isinstance(a, str):
-                continue
+            # A string that is not a URI names some other audience (a client id, say).
             try:
-                if canonicalize_resource_uri(a) == expected:
+                if _audience_key(a) == expected:
                     return
             except ResourceURIError:
                 continue

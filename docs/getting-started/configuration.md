@@ -51,6 +51,12 @@ config = AirlockConfig(
     # Capability gating (V0.4.0)
     capability_policy=None,   # CapabilityPolicy that @requires is checked against
 
+    # Call-time checks (V0.10.27)
+    expected_token_audience=None,  # this server's resource URI; checks each call's token aud
+    token_audience_mode="warn",    # off / warn / deny, once an audience is set
+    startup_hook_check="off",      # off / warn / deny: .pth import lines, *customize modules
+    startup_hook_allowlist={},     # {file name: sha256} of the startup hooks you know
+
     # Error Hooks
     on_validation_error=None, # Callback for validation errors
     on_blocked=None,          # Callback for blocked calls
@@ -125,6 +131,11 @@ mask_secrets = true
 max_output_chars = 10000
 sandbox_timeout = 30
 
+# V0.10.27 call-time checks; a mode that is not off / warn / deny raises
+expected_token_audience = "https://mcp.example.test"
+token_audience_mode = "deny"
+startup_hook_check = "warn"
+
 # V0.3.0 Filesystem
 [airlock.filesystem]
 allowed_roots = ["/app/data", "/tmp"]
@@ -141,7 +152,14 @@ allowed_ports = [443]
 [airlock.honeypot]
 strategy = "honeypot"
 fake_delay_ms = 100
+
+# V0.10.27 startup hooks you know, by file name
+[airlock.startup_hook_allowlist]
+"distutils-precedence.pth" = "<the file's sha256, 64 hex characters>"
 ```
+
+The token-audience and startup-hook keys are described in
+[Token audience and startup hooks](../guide/token-audience-and-startup-hooks.md).
 
 ## Per-Tool Configuration
 

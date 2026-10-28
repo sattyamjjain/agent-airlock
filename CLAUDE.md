@@ -30,6 +30,9 @@ The wedge is argument validation at the call boundary; every other layer wraps i
   Model Armor scanner
 - Fleet-wide kill switch, checked before any other gate: one signed broadcast freezes; a
   reset needs votes from an M-of-N quorum of signer keys (`kill_switch/broadcast.py`)
+- Two checks before the arguments, both inert until configured: the OAuth token audience
+  of each call (`expected_token_audience`, CVE-2026-115413) and a startup-hook self-check
+  of the interpreter (`startup_hook_check`, `runtime/startup_hooks.py`)
 - `airlock` CLI — one dispatcher fronting every `cli/<name>.py`; the `_COMMANDS` table in
   `cli/__main__.py` (or `airlock --help`) is the authoritative subcommand list
 
@@ -213,7 +216,8 @@ src/agent_airlock/
 │                capability_caps/, policy_compiler/, budget/
 ├── EXECUTION    sandbox.py, sandbox_backend.py, streaming.py, context.py,
 │                conversation.py, runtime/; circuit_breaker.py and retry.py are
-│                exported helpers, not part of the @Airlock call path
+│                exported helpers, not part of the @Airlock call path. In runtime/, only
+│                startup_hooks.py is on it (step 0.5)
 ├── SANITIZE     sanitizer.py, audit.py, audit_otel.py, observability.py,
 │                cost_tracking.py, trace_redaction.py
 ├── VACCINE      filesystem.py, network.py, honeypot.py, vaccine.py,
@@ -245,6 +249,13 @@ src/agent_airlock/
 
 0. Kill switch — a fleet freeze refuses before any gate looks at the arguments (the call's
    context is extracted and the call logged first; no gate runs)
+   - 0.5 startup-hook self-check (`startup_hook_check`, off by default): the walk
+     (`runtime/startup_hooks.py`) runs once per process, on the first call admitted with it
+     on; `deny` refuses every guarded call while a hook is not on `startup_hook_allowlist`
+   - 0.6 OAuth token audience (`expected_token_audience`, inert until set, `warn` by
+     default): the `aud` of the claims the host put on context metadata under
+     `access_token_claims` (`_call_metadata`), never a tool argument; `deny` also refuses a
+     call with no claims
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Resolve policy (static, or `Callable[[AirlockContext], SecurityPolicy | None]`; a
    resolver that returns None refuses the call) and check it against the caller's identity
@@ -313,6 +324,11 @@ raising: a plain dict (`success: False`, `block_reason`, `error`, `fix_hints` fo
 to retry against). With a honeypot configured, the caller may get fake success instead;
 its audit record still says `blocked: true` and `honeypot: true`.
 
+A new `BlockReason` (`self_heal.py`) fails `test_every_block_reason_is_covered` until
+`tests/test_fix_hints_0_10_25.py` has a `_REFUSALS` row whose call is refused with it
+(each row is checked for the `AIRLOCK_BLOCK` prefix and non-empty `fix_hints`), or lists
+it in `_NOT_ON_THE_CALL_PATH` with a reason.
+
 <!-- END AUTO-MANAGED -->
 
 <!-- AUTO-MANAGED: conventions -->
@@ -373,10 +389,11 @@ its audit record still says `blocked: true` and `honeypot: true`.
 
 - **Decorator entrypoint** — `@Airlock()` wraps a function with the full layer stack, and
   preserves `__signature__` / `__annotations__` so framework introspection still works.
-- **Defense-in-depth** — kill switch → ghost arguments → policy (and the 2.5–2.8 gates) →
-  filesystem → capability → network → budget → strict validation and sandbox at execute
-  (the `# Step N` order in `core.py`). Most guard layers trace to a named advisory; the
-  kill switch and the budgets are operational controls.
+- **Defense-in-depth** — kill switch → startup hooks → token audience → ghost arguments →
+  policy (and the 2.5–2.8 gates) → filesystem → capability → network → budget → strict
+  validation and sandbox at execute (the `# Step N` order in `core.py`). Most guard layers
+  trace to a named advisory; the kill switch, the startup-hook check and the budgets are
+  operational controls.
 - **Guard + preset pairs** — `mcp_spec/` guards come in three shapes (see
   `mcp_spec/CLAUDE.md`); a guard's preset factory, usually `*_defaults()`, lives in
   `policy_presets.py`. Register it with `@preset` **and** list it in

@@ -92,7 +92,12 @@ preset, and
   A guard that walks nested values refuses input deeper than 32 levels or containing
   itself, as `DENY_UNINSPECTABLE` where it has a verdict enum
   (`tests/test_spawn_guards_fail_closed_0_10_21.py`,
-  `tests/test_guard_shapes_fail_closed_0_10_24.py`). `McpSubprocessArgInjectionGuard` is
+  `tests/test_guard_shapes_fail_closed_0_10_24.py`). v0.10.27 applied the rule to
+  `oauth.validate_access_token_audience`, which `@Airlock` now calls (step 0.6 in
+  `core.py`): a list `aud` holding a non-string is refused whole instead of read past, and
+  a string `aud` that is not a URI is a `TokenAudienceError`, not an escaping
+  `ResourceURIError`. The comparison also reads a root `/` as no path (RFC 3986 §6.2.3);
+  `canonicalize_resource_uri` itself still keeps it. `McpSubprocessArgInjectionGuard` is
   not a walker: it reads `command` / `argv[0]` and env names only, so nested `args` never
   changes its verdict.
 - **A new guard also joins the red-team campaign by hand.** Add it to `BYPASS_TARGETS` and
