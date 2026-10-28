@@ -32,6 +32,7 @@ import hashlib
 import ipaddress
 import json
 import socket
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -61,13 +62,40 @@ class ToolDefinitionTamperedError(AirlockError):
         )
 
 
+class ToolManifestUnreadable(AirlockError):
+    """Raised when a tool manifest has no canonical JSON form to digest (fail-closed).
+
+    A manifest that is not a mapping, holds a value JSON cannot encode, keys of mixed
+    types (``sort_keys`` cannot order them) or itself has no digest, so it can be
+    neither registered nor verified. Until 0.10.28 these escaped as a bare
+    ``TypeError`` / ``ValueError`` from ``json.dumps``.
+    """
+
+    def __init__(self, *, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"tool manifest cannot be digested: {reason}")
+
+
 def _canonicalize_manifest(manifest: dict[str, Any]) -> bytes:
-    """Deterministic JSON serialization for stable digesting."""
-    return json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    """Deterministic JSON serialization for stable digesting.
+
+    Raises:
+        ToolManifestUnreadable: the manifest has no canonical JSON form.
+    """
+    if not isinstance(manifest, Mapping):
+        raise ToolManifestUnreadable(reason="manifest is not a mapping")
+    try:
+        return json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ToolManifestUnreadable(reason=str(exc)) from exc
 
 
 def compute_tool_manifest_digest(manifest: dict[str, Any]) -> str:
-    """Return the canonical SHA-256 hex digest of ``manifest``."""
+    """Return the canonical SHA-256 hex digest of ``manifest``.
+
+    Raises:
+        ToolManifestUnreadable: the manifest has no canonical JSON form.
+    """
     return hashlib.sha256(_canonicalize_manifest(manifest)).hexdigest()
 
 
@@ -357,6 +385,7 @@ __all__ = [
     "MCPBridgeSSRFBlocked",
     "ToolDefinitionRegistry",
     "ToolDefinitionTamperedError",
+    "ToolManifestUnreadable",
     "UnsafeDeserializationError",
     "check_mcp_bridge_target",
     "check_tool_response_content_type",

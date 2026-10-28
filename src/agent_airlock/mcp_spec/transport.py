@@ -29,6 +29,7 @@ matches what an MCP server SHOULD return in its JSON-RPC `error.message`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -81,7 +82,8 @@ def validate_streamable_http_request(
         method: HTTP method (e.g. "POST").
         url: Full request URL, used to check the query string for leaked
             tokens (explicitly forbidden by spec §"Access Token Usage").
-        headers: Request headers. Keys are case-insensitive.
+        headers: Request headers. Keys are case-insensitive; one name sent under two
+            spellings with different values is refused.
         body: Request body (for Content-Type enforcement heuristics).
         require_auth: When True, an `Authorization: Bearer <token>` header
             is required. Set False for public endpoints like
@@ -230,8 +232,44 @@ def validate_streamable_http_response(
 # =============================================================================
 
 
-def _case_insensitive(headers: dict[str, str]) -> dict[str, str]:
-    return {k.lower(): v for k, v in headers.items()}
+def _header_text(value: Any) -> str | None:
+    """Return a header name or value as text, or ``None`` when it is not text."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("latin-1")
+    return None
+
+
+def _case_insensitive(headers: Any) -> dict[str, str]:
+    """Fold header names to lower case, refusing what a fold would hide.
+
+    HTTP header names are case-insensitive, so ``MCP-Protocol-Version`` and
+    ``mcp-protocol-version`` name one header. A plain fold keeps whichever spelling
+    comes last, so a request carrying both, with different values, was judged on one
+    value while a server reading the other spelling acted on the other. That
+    disagreement is refused, as is a header map that is not text.
+
+    Raises:
+        MCPTransportError: ``headers`` is not a mapping, a name or value is not text
+            (``str`` or ``bytes``), or one name appears under two spellings with
+            values that disagree. The message names the header, never its value.
+    """
+    if not isinstance(headers, Mapping):
+        raise MCPTransportError("request headers must be a mapping of header name to value")
+    folded: dict[str, str] = {}
+    for key, raw in headers.items():
+        name = _header_text(key)
+        value = _header_text(raw)
+        if name is None or value is None:
+            raise MCPTransportError("request header names and values must be text")
+        lowered = name.lower()
+        if lowered in folded and folded[lowered] != value:
+            raise MCPTransportError(
+                f"header {lowered!r} appears more than once with different values"
+            )
+        folded[lowered] = value
+    return folded
 
 
 __all__ = [

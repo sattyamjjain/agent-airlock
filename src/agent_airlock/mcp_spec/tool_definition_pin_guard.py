@@ -78,6 +78,21 @@ class ToolDefinitionVerdict(str, enum.Enum):
     DENY_DESCRIPTION_DRIFT = "deny_description_drift"
     DENY_SCHEMA_DRIFT = "deny_schema_drift"
     DENY_MULTI_FIELD_DRIFT = "deny_multi_field_drift"
+    DENY_UNINSPECTABLE = "deny_uninspectable"
+
+
+class _NotCanonical(ValueError):
+    """A definition that has no canonical serialisation (mixed key types, a cycle)."""
+
+
+def _encode(value: Any) -> str:
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    except (TypeError, ValueError) as exc:
+        # sort_keys cannot order keys of mixed types (``{1: ..., "b": ...}``) and a
+        # container that holds itself has no serialisation at all; either way there
+        # is no digest to compare, so the definition cannot be judged as pinned.
+        raise _NotCanonical(f"tool definition has no canonical JSON form: {exc}") from exc
 
 
 def canonical_digest(definition: Mapping[str, Any]) -> str:
@@ -96,19 +111,20 @@ def canonical_digest(definition: Mapping[str, Any]) -> str:
         The hex digest.
 
     Raises:
-        ValueError: If ``definition`` has no ``name``.
+        ValueError: If ``definition`` is not a mapping, has no ``name``, or has no
+            canonical JSON form (keys of mixed types, a container that holds itself).
     """
+    if not isinstance(definition, Mapping):
+        raise ValueError("tool definition must be a mapping")
     name = definition.get("name")
     if not isinstance(name, str) or not name:
         raise ValueError("tool definition must carry a non-empty 'name'")
     payload = {k: definition.get(k) for k in PINNED_FIELDS}
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return hashlib.sha256(_encode(payload).encode("utf-8")).hexdigest()
 
 
 def _field_digest(definition: Mapping[str, Any], key: str) -> str:
-    encoded = json.dumps(definition.get(key), sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return hashlib.sha256(_encode(definition.get(key)).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -220,6 +236,21 @@ class ToolDefinitionPinGuard:
         self._pinned_defs.pop(tool_name, None)
         return self._pins.pop(tool_name, None) is not None
 
+    def _uninspectable(self, name: str, why: str) -> ToolDefinitionDecision:
+        return ToolDefinitionDecision(
+            tool_name=name,
+            verdict=ToolDefinitionVerdict.DENY_UNINSPECTABLE,
+            allowed=False,
+            detail=f"tool {name!r} cannot be compared with a pin: {why}",
+            observed_digest="",
+            pinned_digest=self._pins.get(name),
+            fix_hints=[
+                "A tool definition must be a JSON object whose keys are strings and that "
+                "does not contain itself; this one has no canonical form to digest.",
+                "Treat a server that serves such a definition as unreviewed, not as drift.",
+            ],
+        )
+
     def check(self, definition: Mapping[str, Any]) -> ToolDefinitionDecision:
         """Compare ``definition`` against its pin without raising.
 
@@ -227,12 +258,22 @@ class ToolDefinitionPinGuard:
             definition: The tool definition presented at call time.
 
         Returns:
-            The decision. ``allowed`` is ``True`` only on an exact match.
+            The decision. ``allowed`` is ``True`` only on an exact match. A definition
+            that is not a mapping, or has no canonical JSON form (keys of mixed types, a
+            container that holds itself), is ``DENY_UNINSPECTABLE``: it cannot be
+            compared with its pin, so it is refused rather than raising.
 
         Raises:
-            ValueError: If the definition has no ``name``.
+            ValueError: If the definition is a mapping with no ``name``.
         """
-        observed = canonical_digest(definition)
+        if not isinstance(definition, Mapping):
+            return self._uninspectable("<unreadable>", "tool definition is not a mapping")
+        try:
+            observed = canonical_digest(definition)
+        except _NotCanonical as exc:
+            raw_name = definition.get("name")
+            name = raw_name if isinstance(raw_name, str) and raw_name else "<unreadable>"
+            return self._uninspectable(name, str(exc))
         name = str(definition["name"])
         pinned = self._pins.get(name)
 

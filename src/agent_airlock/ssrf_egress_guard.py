@@ -327,7 +327,10 @@ class SSRFEgressGuard:
     def _decide_hostname(self, host: str) -> SSRFEgressDecision:
         try:
             addrs = self._resolver(host)
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
+            # ValueError covers UnicodeError, which the IDNA codec raises for an empty or
+            # over-long label (``a..b.example``): no resolver can answer for such a host,
+            # so it takes the unresolvable branch instead of escaping as an exception.
             if not self._deny_on_resolution_failure:
                 return SSRFEgressDecision(allowed=True, verdict=SSRFEgressVerdict.ALLOW, host=host)
             return SSRFEgressDecision(
