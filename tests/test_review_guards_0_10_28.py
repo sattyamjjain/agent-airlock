@@ -57,6 +57,7 @@ from agent_airlock.mcp_spec.zero_click_config_guard import (
     MCPCommandMutationDetected,
     McpConfigPinSet,
     McpConfigPinViolation,
+    MCPConfigUnreadable,
     McpServerPin,
     audit_config_diff,
     fingerprint_mcp_server,
@@ -468,6 +469,39 @@ def _legacy_fingerprint(env_keys: list[str]) -> str:
     payload = {"name": "docs", "command": "npx", "args": ["-y"], "env_keys": sorted(env_keys)}
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+class TestConfigTextThatIsNotUnicodeIsRefused:
+    """Config text holding a lone surrogate (``json.loads`` makes one from ``"\\udcff"``)
+    cannot be encoded to diff. It raised a bare ``UnicodeEncodeError``; a crash is not a
+    verdict, so it is refused as unreadable, either side of the diff."""
+
+    @pytest.mark.parametrize("side", ["new", "old"])
+    def test_a_lone_surrogate_is_refused_as_unreadable(self, side: str) -> None:
+        good = json.dumps({"mcpServers": {"docs": {"command": "npx"}}})
+        bad = '{"mcpServers": {"docs\udcff": {"command": "npx"}}}'
+        new, old = (bad, good) if side == "new" else (good, bad)
+
+        with pytest.raises(MCPConfigUnreadable) as caught:
+            audit_config_diff(
+                Path(".cursor/mcp.json"),
+                None,
+                new,  # type: ignore[arg-type]
+                ConfigFileWatchPolicy(require_signer_for_new_servers=False),
+                old_content=old,  # type: ignore[arg-type]
+            )
+        assert caught.value.which == side
+
+    def test_control_the_same_config_as_text_is_read(self) -> None:
+        good = json.dumps({"mcpServers": {"docs": {"command": "npx"}}})
+        report = audit_config_diff(
+            Path(".cursor/mcp.json"),
+            None,
+            good,  # type: ignore[arg-type]
+            ConfigFileWatchPolicy(require_signer_for_new_servers=False),
+            old_content=good,  # type: ignore[arg-type]
+        )
+        assert report.added_servers == ()
 
 
 class TestThePinComparesCodeLoadingValues:

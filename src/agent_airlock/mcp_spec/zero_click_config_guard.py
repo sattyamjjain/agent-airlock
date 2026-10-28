@@ -290,9 +290,16 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _as_bytes(content: object) -> bytes:
-    """The config blob as bytes; a ``str`` is encoded, any other type is unreadable."""
+    """The config blob as bytes; a ``str`` is encoded, any other type is unreadable.
+
+    Text holding a lone surrogate cannot be encoded: until 0.10.28 its
+    ``UnicodeEncodeError`` escaped the diff instead of a refusal.
+    """
     if isinstance(content, str):
-        return content.encode("utf-8")
+        try:
+            return content.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise _UnreadableConfig("content is text that is not valid Unicode") from exc
     if isinstance(content, (bytes, bytearray, memoryview)):
         return bytes(content)
     raise _UnreadableConfig(f"content is a {type(content).__name__}, not bytes")
