@@ -75,7 +75,10 @@ FastMCP-backed, Ed25519-identity and attested-admission modules skip without the
 transitively, through `mcp`'s `pyjwt[crypto]` and FastMCP's `authlib`. `[mcp]` resolves to
 the newest FastMCP the pin allows (`<5.0`), so a FastMCP release inside the pin that breaks
 the integration fails CI rather than a user; one past the pin, installed directly, is outside
-that net.
+that net. It resolves the newest `mcp` too, which a long-lived local environment may not
+have: `mcp` 2.x moved `mcp.types` into a separate `mcp-types` distribution
+(`mcp_types._types`), and framework verification broke in CI only. Check behaviour that
+depends on an SDK's module layout in a fresh venv.
 
 Several existing `importorskip`s break the rule above: the real-SDK tests for google-adk,
 crewai, smolagents, anthropic, llama_index, autogen, agentdojo and openai-agents import SDKs

@@ -166,7 +166,8 @@ had not listed (now under Changed), one was a test that could not fail, and one 
   are skipped, bytes are decoded, and the first 100,000 characters of a value are read.
 - A framework installed by symlink (uv's symlink link mode, Bazel runfiles, Nix) was never
   verified against its RECORD, so its run wrapper lost the call's identity and
-  `STRICT_POLICY` refused every call.
+  `STRICT_POLICY` refused every call. `mcp` 2.x defines its protocol types in a separate
+  `mcp-types` distribution (`mcp_types._types`); those are verified as `mcp`'s own.
 - `tests/test_crewai_double_wrap_0_10_25.py` counted Airlock layers along `__wrapped__`,
   which the tool proxy never sets, so it saw one layer on a tool wrapped twice; it counts
   them by their rate-limit charge now.

@@ -500,8 +500,9 @@ class TestAFrameworkModelIsWalkedWhereItsClassIsNamed:
             pass
 
         # Functional syntax keeps the annotation an object: class syntax would make it a
-        # string naming a local, which this module's `from __future__` import leaves unresolved.
-        state_type = typing.TypedDict(  # type: ignore[operator]  # noqa: UP013
+        # string naming a local, which this module's `from __future__` import leaves
+        # unresolved. typing_extensions' TypedDict, which pydantic needs before 3.12.
+        state_type = typing_extensions.TypedDict(  # noqa: UP013
             "State", {"messages": list[mcp_types.TextContent]}
         )
         history = {"messages": [mcp_types.TextContent(type="text", text="/etc/passwd")]}

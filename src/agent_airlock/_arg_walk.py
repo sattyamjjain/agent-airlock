@@ -81,6 +81,9 @@ _FRAMEWORK_DISTRIBUTIONS: dict[str, tuple[str, ...]] = {
     "langgraph": ("langgraph", "langgraph-*"),
     "llama_index": ("llama-index", "llama-index-*"),
     "mcp": ("mcp",),
+    # mcp 2.x moved its protocol types into their own distribution: ``mcp.types``
+    # re-exports classes defined in ``mcp_types._types``.
+    "mcp_types": ("mcp-types",),
     "openai": ("openai",),
     "pydantic": ("pydantic",),
     "pydantic_ai": ("pydantic-ai-slim", "pydantic-ai"),
