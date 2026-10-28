@@ -14,6 +14,9 @@ end-to-end:
   v0.8.6 strictest setting.
 - The factory is discoverable via ``policy_presets.list_active()``.
 - ``UnknownArgsMode.BLOCK`` is set on the returned :class:`AirlockConfig`.
+
+NVD:      https://nvd.nist.gov/vuln/detail/CVE-2026-21520
+CVSS:     7.5 (HIGH)
 """
 
 from __future__ import annotations

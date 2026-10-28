@@ -1,0 +1,76 @@
+# Module: tests
+
+<!-- AUTO-MANAGED: module-description -->
+## Purpose
+
+The pytest suite. It mostly mirrors the package's subpackages; `tests/cves/` is the signed
+CVE regression suite and has its own `CLAUDE.md`. Default `addopts` leave out three buckets,
+which `make test-badge` also counts as excluded: the docker-marked tests, `tests/live/` and
+`tests/benchmarks/` (the pytest-benchmark latency suite, `make bench`).
+
+<!-- END AUTO-MANAGED -->
+
+<!-- AUTO-MANAGED: architecture -->
+## Module Architecture
+
+- **`tests/fuzz/`** holds the Hypothesis property and differential suites;
+  `HYPOTHESIS_PROFILE` (`tests/fuzz/conftest.py`) picks `ci`, the derandomized default that
+  CI runs, or `deep` (5,000 examples, no deadline) for a manual run; nothing in the repo
+  invokes `deep`.
+- **`tests/live/`** calls the Anthropic API and spends credit, so default `addopts` ignores
+  it and each test also skips without `AIRLOCK_LIVE=1` and `ANTHROPIC_API_KEY`: no workflow
+  runs it, `make test-live` does (recipe in `tests/live/README.md`).
+- **Docker-marked tests** are opt-in (`-m 'not docker'` in default `addopts`; run them with
+  `pytest -m docker`). CI's `docker-sandbox` job builds the repo `Dockerfile`, runs
+  `pytest -m docker` over only the files that hold docker-marked tests (collecting all of
+  `tests/` adds collection-time skips of modules whose extras the job lacks), and matches
+  the log's pytest summary line, anchored, for an exact passed-count: adding or removing a
+  docker-marked test means editing that count and the cases in
+  `tests/test_tooling_honesty_0_10_24.py` that run it against real pytest output, and a
+  skipped one turns the job red.
+- **Release regression modules.** `fix(security):` and `fix(<area>):` commits close a path
+  where a check was skipped or a refusal failed open; since 0.10.16 most releases' fixes
+  land in regression modules named for the release
+  (`ls tests | grep -E '_[0-9]+_[0-9]+_[0-9]+\.py$'` lists them). 0.10.27 is the exception:
+  its tests are in `tests/mcp_spec/test_oauth.py` and `tests/test_token_audience_call_path.py`.
+
+<!-- END AUTO-MANAGED -->
+
+<!-- AUTO-MANAGED: conventions -->
+## Module-Specific Conventions
+
+- **Keep audit logs out of the checkout.** `tests/conftest.py` redirects the default
+  `airlock_audit.json` path to a temp file, but only inside that pytest process — a test that
+  runs an example or script in a subprocess must pass `cwd=tmp_path` (or set
+  `AIRLOCK_AUDIT_LOG_PATH` for the child) itself, or the child writes its audit log into the
+  checkout. The same variable keeps an ad-hoc snippet's log out of the checkout.
+- **An `importorskip` needs a CI job that installs its dependency**, added in the same PR: a
+  skipped module reads like a passing one in the summary line.
+
+<!-- END AUTO-MANAGED -->
+
+<!-- AUTO-MANAGED: dependencies -->
+## Key Dependencies
+
+CI's `test` job installs `.[dev,redis,mcp,crypto]`, because the redis-backed,
+FastMCP-backed, Ed25519-identity and attested-admission modules skip without them
+(`pytest.importorskip`). `[crypto]` joined in 0.10.26: `cryptography` had arrived only
+transitively, through `mcp`'s `pyjwt[crypto]` and FastMCP's `authlib`. `[mcp]` resolves to
+the newest FastMCP the pin allows (`<5.0`), so a FastMCP release inside the pin that breaks
+the integration fails CI rather than a user; one past the pin, installed directly, is outside
+that net.
+
+Several existing `importorskip`s break the rule above: the real-SDK tests for google-adk,
+crewai, smolagents, anthropic, llama_index, autogen and agentdojo import SDKs no CI job
+installs, so they skip in every run (`grep -rn importorskip tests/ --include='*.py'`). The
+E2B tests in `tests/test_remaining_coverage.py` skip in every run too, through an inline
+`pytest.skip` that grep misses: no job installs `[sandbox]`.
+
+<!-- END AUTO-MANAGED -->
+
+<!-- MANUAL -->
+## Notes
+
+Add module-specific notes here — this section is never auto-modified.
+
+<!-- END MANUAL -->

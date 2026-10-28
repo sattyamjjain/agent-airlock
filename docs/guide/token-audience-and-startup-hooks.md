@@ -112,8 +112,9 @@ drops a `.pth` file persists: its line runs before the program it rides in, ever
 
 **What this check cannot do.** These hooks run before any Python code of yours, this
 library included, so the check cannot stop them running and cannot undo what they did. It
-tells you the interpreter is not clean. Under `deny` it also keeps every guarded tool,
-credential-bearing ones included, from running in that interpreter. Scanning packages when
+tells you the interpreter is not clean. Under `deny` it also keeps every tool guarded by a
+config that sets it, credential-bearing ones included, from running in that interpreter;
+a tool whose config leaves the check off still runs. Scanning packages when
 they are installed is not this library's job; use your dependency scanner for that.
 
 ```python
@@ -142,7 +143,9 @@ has coverage's `a1_coverage.pth`; a long-lived interpreter adds setuptools'
 `distutils-precedence.pth` and the `-nspkg.pth` files of legacy namespace packages. List
 the ones you know by file name and SHA-256. A known name whose content has changed is a
 finding again, and a key that is a path or a value that is not a SHA-256 digest raises
-`ValueError` rather than never matching:
+`ValueError` rather than never matching. An entry pins the hook file's own bytes, not the
+modules its `import` lines load: `distutils-precedence.pth` imports `_distutils_hack`, and a
+change to that module is not a finding, because the check does not hash it:
 
 ```python
 from agent_airlock import Airlock, AirlockConfig
@@ -163,7 +166,7 @@ def read_secret() -> str:
 |---|---|
 | `"off"` (default) | nothing is walked |
 | `"warn"` | one structured `airlock_startup_hook_found` event per hook, then every call runs |
-| `"deny"` | every guarded call in the process is refused, naming the files |
+| `"deny"` | every call guarded by a config with `"deny"` is refused, naming the files |
 
 The walk runs once per process, the first time a guarded call is admitted with the check
 on; nothing is walked at import or when a function is decorated. Each hook is logged once,

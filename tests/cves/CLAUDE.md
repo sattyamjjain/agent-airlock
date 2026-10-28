@@ -83,11 +83,30 @@ what counts as in scope is in `docs/cve-triage.md`.
   the guard's own `resolver=` parameter instead (`grep -l 'resolver=' tests/cves/`), the
   pattern a new one copies. Everything else runs against real fixtures; a few allow-path
   tests resolve real public hosts and fail offline.
+- **Triage workflow.** `cve-watcher.yml` files triage issues for argument-shaped CVEs;
+  each gets a disposition from the vocabulary in `docs/cve-triage.md`
+  (`in-scope-and-scheduled`, `in-scope-and-deferred-until-<DATE>`,
+  `out-of-scope-because-<clause>`), and the queue closes with a fixture or a public,
+  reasoned refusal (#177). An in-scope CVE that an existing guard already refuses lands as
+  a second-defence fixture, not a new guard (#226); a new guard is the recurring guard
+  commit, `feat:` or `fix(...)` alike: one guard for one named advisory
+  (`mcp_spec/*_guard.py`), its preset defaults, and a regression test. A fixture PR is
+  titled `test(cves): ...`; a refusal is `docs(triage): ...` and adds only a row to the
+  out-of-scope table in `tests/cves/README.md` (#312). A CVE can be both, an out-of-scope
+  half whose primitive an existing guard already refuses (`docs/cve-triage.md`): that one
+  still gets a fixture (#289, #301). AGENTS.md asks for the primary-source URL in the
+  commit message, but history is uneven: the test module's docstring header is where to
+  look (an `Advisory:` / `NVD:` line in the canonical shape, a bare URL in older modules).
 - **A refusal needs no module**: one `docs/cve-triage.md` disposition on the triage issue
   and one row in the out-of-scope table in `tests/cves/README.md`.
+- **No CHANGELOG line in a triage or fixture PR.** Between releases `[Unreleased]` must stay
+  the placeholder (`check_changelog.py`'s default mode fails on an entry there), so the next
+  release PR writes the line under `### CVE triage` in its dated section.
 - **Any real CVE id written in a `.py` or `.md` here — this file included — or carried in
   a filename under this directory marks that CVE as tracked** for `scripts/cve_watcher.py`,
-  which then never files it. Use placeholders such as `CVE-YYYY-NNNNN` in examples.
+  which then never files it. Use placeholders such as `CVE-YYYY-NNNNN` in examples. The
+  watcher does not expand the `CVE-YYYY-N/M` shorthand the catalog reads, so a shorthand
+  second id counts as tracked only once the regenerated `docs/cves/index.md` lists it.
 
 <!-- END AUTO-MANAGED -->
 
@@ -104,9 +123,10 @@ what counts as in scope is in `docs/cve-triage.md`.
   count (the Metis corpus module's anchor CVE reaches the catalog that way). The marketplace's
   "the other N" (total minus CVE-numbered) and the README's split of distinct CVEs into
   rows and umbrella entries are pinned by the same gate, the umbrella count as a literal.
-  A strict `xfail`
-  is collected and counted but never passes, so the marketplace proof point says "N tests",
-  not "N tests passing", while any exist. `test_proof_point_test_count_matches_the_badge`
+  The marketplace
+  proof point says "N tests", not "N tests passing", because a strict `xfail` would be
+  collected and counted but never pass (none exists today:
+  `grep -rnE 'mark\.xfail|pytest\.xfail\(' tests` checks). `test_proof_point_test_count_matches_the_badge`
   pins only the number, so that wording is on whoever edits the proof point.
 - **Fixture gates.** CI runs the egress walker over the fixtures through
   `tests/cli/test_egress_bench_since.py`, `tests/test_numeric_claim_parity.py` and, via the

@@ -51,7 +51,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
 | [CVE-2026-19753](#cve-2026-19753) | mcp-rdf-explorer explore_url takes an attacker-supplied URL into SSRF | 7.3 (HIGH) — CWE-918 | Strong |
-| [CVE-2026-21520](#cve-2026-21520) | Capsule ShareLeak / PipeLeak | — | — |
+| [CVE-2026-21520](#cve-2026-21520) | Capsule ShareLeak / PipeLeak | 7.5 (HIGH) | — |
 | [CVE-2026-23744](#cve-2026-23744) | MCPJam Inspector unauthenticated public bind | 9.8 | — |
 | [CVE-2026-25874](#cve-2026-25874) | HuggingFace LeRobot pickle-deserialization RCE | 9.3 | — |
 | [CVE-2026-26118](#cve-2026-26118) | Microsoft Azure MCP Server SSRF (IMDS token theft) | 8.8 (High) | Strong |
@@ -785,6 +785,8 @@ IPv4-mapped-IPv6 targets while admitting a real SPARQL endpoint.
 
 **Capsule ShareLeak / PipeLeak**
 
+- **CVSS:** 7.5 (HIGH)
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-21520](https://nvd.nist.gov/vuln/detail/CVE-2026-21520)
 - **Regression test:** [`tests/cves/test_cve_2026_21520_capsule_indirect_injection.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_21520_capsule_indirect_injection.py)
 
 **Vulnerability**

@@ -113,7 +113,9 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   exists for callback-interface signatures;
   `ruff check --isolated --select ARG src/agent_airlock/integrations/` lists what it hides.
 - **Tests** live in `tests/integrations/test_<module>*.py`, with these exceptions:
-  `langchain` / `anthropic` / `openai_guardrails` in `tests/test_new_features.py`, Model
+  `langchain` / `anthropic` / `openai_guardrails` in `tests/test_new_features.py` (and
+  `tests/integrations/test_openai_guardrails.py`), `_claude_sdk_tools` in
+  `tests/integrations/test_anthropic_claude_agent_sdk_tools.py`, Model
   Armor in `tests/test_model_armor_integration.py`, `agent_commerce_caps` also in
   `tests/capability_caps/`, and the 0.10.25 contract pins in
   `tests/test_anthropic_contracts_0_10_25.py` (Messages adapter, SDK tools, auto-memory,
@@ -140,7 +142,7 @@ extra of their own (`opentelemetry-api` arrives transitively through `[mcp]`'s F
 The OpenAI Agents SDK, `anthropic`, `langgraph` and `smolagents` are never imported: those
 modules use duck typing, `importlib.util.find_spec` or `importlib.metadata` probes instead.
 The grep hits for `from anthropic import` and `from agents import` in this tree are
-`Usage::` docstrings; the one real lazy `import anthropic` in the package is
+`Usage:` docstrings; the one real lazy `import anthropic` in the package is
 `sandbox_backend.ManagedSandboxBackend.is_available`.
 
 **Internal:** `.._log` and `..exceptions` almost everywhere; `..core` / `..policy` wherever

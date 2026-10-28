@@ -27,7 +27,8 @@ direction in new branches.
   1. Class triples — `*Guard` + frozen-dataclass `*Decision` + `*Verdict(str, enum.Enum)`.
      The Guard's name stem does not always match (`CodegenDelimiterInjectionGuard`).
   2. Inspection style — a `*Guard` class returning an `*Inspection` dataclass, with
-     `Verdict = Literal[...]` (`config_path_guard`, `elicitation_guard`).
+     `Verdict = Literal[...]` (`config_path_guard`, `elicitation_guard`,
+     `oauth_state_entropy_guard`, `transcript_ingest_guard`).
   3. Function style, no `*Guard` class — `validate_*` / `audit_*` / `check_*` /
      `enforce_*` / `verify_*` / `admit_*`. This covers `transport`, `oauth` and the
      2026-07-28 spec validators (`meta_trust`, `statelessness`, `header_integrity`,
@@ -104,8 +105,11 @@ preset, and
   `build_registry` in `benchmarks/adaptive_redteam/adapters/registry.py` with a
   `known_blocked` shape its tests prove refused and a `benign_control` it admits, a row in
   `adapters_table.md`, and bump the count literals in
-  `tests/test_adaptive_redteam_adapters.py`. Nothing derives that list from this directory;
-  `tests/test_adaptive_redteam_registry_parity.py` fails until the module is registered.
+  `tests/test_adaptive_redteam_adapters.py`, then grep the old count repo-wide (the
+  campaign's `README.md`, `adapters_table.md` and `RESULTS.md` repeat it). Nothing derives
+  that list from this directory: `tests/test_adaptive_redteam_registry_parity.py` globs only
+  `*guard*.py`, so it fails until such a module is registered, and a guard named otherwise
+  (`header_integrity`, `meta_trust`, `supply_chain`, `handle_trust`, ...) is never checked.
 - `*Decision` is a frozen `@dataclass`; `*Verdict` is `class X(str, enum.Enum)` so it
   serializes as its own string value. Two `*Verdict`s that are frozen dataclasses and the
   inspection-style `Literal[...]` aliases are exceptions, not shapes to spread.

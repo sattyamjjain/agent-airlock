@@ -89,7 +89,7 @@ Two checks that run before any argument is read, both inert until you set them:
   [CVE-2026-115413](https://github.com/awslabs/mcp/security/advisories/GHSA-4prq-p2x5-w9fh).
 - **Startup hooks.** `startup_hook_check="warn"` (or `"deny"`) lists the executable `.pth`
   lines and `sitecustomize` / `usercustomize` of the running interpreter, once per process;
-  `deny` refuses every guarded call while one is not on `startup_hook_allowlist`. Those
+  `deny` refuses every call its config guards while one is not on `startup_hook_allowlist`. Those
   hooks ran before your code did, so this reports them; it cannot stop them.
 
 Details: [Token audience and startup hooks](docs/guide/token-audience-and-startup-hooks.md).

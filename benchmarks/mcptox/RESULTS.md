@@ -395,3 +395,12 @@ Requests that did not succeed, by requested model: none.
   It misses changes that carry no quoted literal, so its recall is bounded; its precision
   and recall against MCPTox's labels are published with every use.
 - Filesystem verdicts depend on the host; the canonical replay runs on Linux.
+- **Noted 2026-10-28 (UTC): the summaries behind the dated blocks above are not in the
+  repository.** The 2026-10-17 replay block was rendered from a `replay_summary.json`, and
+  the 2026-10-16 fresh blocks from a `fresh_summary.json`; neither file was ever committed.
+  The replay block records a Linux container host (`Linux 7.0.14-linuxkit`).
+  `tests/test_mcptox_published.py` recomputes the replay summary end to end only when that
+  file exists and the host's OS matches it, so the pin has skipped on every host and these
+  replay figures have not been re-derived since they were published; nothing recomputes
+  the fresh summary. The blocks stay as published. A run from here on commits its summary
+  beside its block.

@@ -163,6 +163,127 @@ on `studio` and `graph serve`.
 `scripts/check_links.py` prevents the 404s from coming back; writing the pages is what
 this item was actually for.
 
+## Shipped history
+
+Moved verbatim from the MANUAL section of `CLAUDE.md` on 2026-10-28 (UTC), where it had grown
+into a record of shipped work rather than instructions; "this line" and "the checklist
+below" inside it refer to that file's layout.
+
+### Phase 1: Core Validator
+- [x] Ghost argument stripping
+- [x] Pydantic strict validation
+- [x] Self-healing responses
+- [x] Configuration system
+
+### Phase 2: E2B Sandbox
+- [x] Warm sandbox pool (SandboxPool class)
+- [x] Function serialization (cloudpickle)
+- [x] E2B integration (execute_in_sandbox)
+- [x] File mounting (`sandbox.mount_files()`)
+
+### Phase 3: Policy Engine
+- [x] SecurityPolicy class with allow/deny lists
+- [x] Time-based restrictions (TimeWindow)
+- [x] Rate limiting (token bucket algorithm)
+- [x] Agent identity and role-based access control
+- [x] Predefined policies (PERMISSIVE, STRICT, READ_ONLY, BUSINESS_HOURS)
+
+### Phase 4: Output Sanitization
+- [x] PII detection and masking (email, phone, SSN, credit card, IP)
+- [x] Secret detection and masking (API keys, passwords, AWS keys, JWT, connection strings)
+- [x] Token/character truncation with configurable limits
+- [x] Masking strategies (FULL, PARTIAL, TYPE_ONLY, HASH)
+- [x] Audit logging (JSON Lines format, thread-safe)
+
+### Phase 5: FastMCP Integration
+- [x] MCPAirlock decorator for MCP-specific features
+- [x] secure_tool convenience decorator
+- [x] create_secure_mcp_server factory function
+- [x] MCP context extraction utilities
+- [x] Progress reporting support
+- [x] Comprehensive example (fastmcp_integration.py)
+
+### Phase 0: Production Readiness (Added 2026-01-31)
+- [x] Audit logging implementation (was config-only, now fully working)
+- [x] Async function support (proper async/await wrapper)
+- [x] Coverage verification (99%, enforced 80% in CI)
+- [x] 647 tests total (includes context, streaming, audit, async, edge cases)
+
+### Production Phase 1: Core Missing Features (Added 2026-01-31)
+- [x] P1.1: Streaming/generator support (StreamingAirlock class)
+  - Per-chunk PII/secret sanitization
+  - Cumulative output truncation
+  - Sync and async generator wrapping
+- [x] P1.2: RunContext preservation (AirlockContext)
+  - contextvars for request-scoped state
+  - ContextExtractor for RunContextWrapper pattern
+  - get_current_context() available inside tools
+- [x] P1.3: Dynamic policy resolution
+  - Policy can be SecurityPolicy or Callable[[AirlockContext], SecurityPolicy]
+  - Enables workspace/tenant-specific policies
+  - Context extracted from first arg with .context/.ctx attribute
+
+### Phase 6: Launch
+- [x] PyPI release v0.1.3, v0.1.4
+- [x] README with manifesto-style copy
+- [x] Security scan and fixes
+- [ ] Outreach
+
+### Framework Integrations (Tested 2026-02-01)
+All major AI frameworks tested and working:
+- [x] LangChain - `@tool` + `@Airlock()` pattern, `.invoke()` for tool calls
+- [x] LangGraph - ToolNode integration, state graphs with security
+- [x] PydanticAI - `output_type` param, RunContext preservation
+- [x] OpenAI Agents SDK - `@function_tool` + `@Airlock()`, Agent.run()
+- [x] Anthropic - `@Airlock()` with tool_use blocks, Messages API
+- [x] AutoGen - FunctionTool with airlocked functions
+- [x] CrewAI - `@tool` decorator pattern (Tool object wrapper)
+- [x] LlamaIndex - FunctionTool.from_defaults(), ToolOutput.raw_output
+- [x] smolagents - `@tool` + `@Airlock()` with proper Args docstrings
+
+### Enterprise Production Roadmap (Added 2026-02-01)
+
+The `PRODUCTION_ROADMAP.md` this line used to point at was deleted in v0.4.0 (8a3939e;
+`git show 4b5fe16:PRODUCTION_ROADMAP.md` recovers it). The live plan is
+[`ROADMAP.md`](ROADMAP.md); the checklist below is a record of what shipped, not a
+tracker.
+
+**Already Implemented (v0.1.5):**
+- [x] Async function support (proper async/await)
+- [x] Streaming support (StreamingAirlock)
+- [x] Context propagation (AirlockContext)
+- [x] Dynamic policy resolution (PolicyResolver callable)
+- [x] Audit logging (JSON Lines, thread-safe)
+- [x] Workspace PII config (per-tenant rules)
+- [x] Conversation tracking (multi-turn state)
+
+**V0.3.0 "Vaccine" Features (COMPLETED):**
+- [x] Filesystem path validation (CVE-resistant)
+- [x] Network egress control (socket monkeypatch)
+- [x] Honeypot deception protocol
+- [x] Framework vaccination (LangChain, OpenAI SDK auto-wrap)
+
+**V0.4.0 "Enterprise" Features (COMPLETED):**
+- [x] UnknownArgsMode (BLOCK/STRIP_AND_LOG/STRIP_SILENT)
+- [x] SafePath/SafeURL safe types
+- [x] Capability gating (@requires decorator)
+- [x] Pluggable sandbox backends (E2B/Docker/Local)
+- [x] OpenTelemetry observability
+- [x] Circuit breaker pattern
+- [x] Cost tracking with budget limits
+- [x] Retry policies with exponential backoff
+- [x] MCP Proxy Guard
+- [x] India-specific PII (Aadhaar, PAN, UPI, IFSC)
+
+**Future Roadmap:**
+- [x] Redis-backed distributed rate limiting (`redis_rate_limit.py`, `[redis]` extra)
+- [x] Performance benchmarks in CI (smoke run, not a latency gate — v0.8.80)
+- [ ] Additional framework integrations
+
+**Current Version:** see `pyproject.toml` / `agent_airlock.__version__` — this line is
+not gated, so it is a pointer rather than a number that can rot (it read v0.5.0 while
+the package was v0.8.79).
+
 ---
 
 Have a gap we should be honest about that is not on this list?
