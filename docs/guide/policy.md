@@ -159,6 +159,13 @@ any other argument. A keyword argument is never read as a run wrapper. Until 0.1
 first argument with one of those attributes was, so the model could write the call's
 identity and roles.
 
+One limit remains: a framework's own dataclass carrying a context (the OpenAI Agents SDK's
+`RunContextWrapper` is one) is trusted, although pydantic can build a dataclass from JSON
+and the result cannot be told from the framework's own. A framework that validated the
+model's JSON into a parameter typed as such a class, and passed it first and positionally,
+would let the model write the identity. No shipped framework does: each injects its own
+run context and leaves it out of the tool's schema.
+
 When a framework passes the tool no context object, set one around the call. `async with`
 works the same way, and a context object on the call itself comes first:
 

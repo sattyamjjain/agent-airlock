@@ -23,6 +23,14 @@ The guard fails-closed on a `(package, version)` pair appearing in
 the operator-supplied blast list, OR on a registry tarball URL
 targeting any pair in the list.
 
+It reads each spelling a package manager resolves to the same release:
+`name@1.2.3`, an alias (`alias@npm:name@1.2.3`), a `version` written
+`npm:1.2.3` or `npm:@scope/real@1.2.3` (Yarn, pnpm), a tarball URL given
+as the `package` or as `name@<url>`, and a URL as Node's `new URL()`
+reads it, with a backslash as a path separator and `.` / `..` segments
+(`%2e` spellings included) resolved. Until 0.10.28 each of those walked
+past it.
+
 [postmortem]: https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
 
 ## Install
@@ -77,7 +85,8 @@ current dated snapshot, `data/oidc_publish_blast_2026_10_28.json`).
   "Remediation Guidance"); the runtime side is what Airlock can
   cover today.
 - It matches exact releases only. A range (`^1.169.0`) that could resolve to
-  a listed release is not resolved here.
+  a listed release is not resolved here, and a git spec or a tarball on any host
+  but `registry.npmjs.org` and `registry.yarnpkg.com` is not read.
 - The list is a **point-in-time copy** of the affected-version table of
   [GHSA-g7cv-rxg3-hmpx][ghsa] (CVE-2026-45321), retrieved 2026-10-28: 42 npm
   packages, two exact versions each. Operators must regenerate the JSON as a

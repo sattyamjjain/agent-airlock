@@ -147,12 +147,20 @@ src/agent_airlock/
    a same-named positional-only or `*args` value), down through mappings (every key too,
    URL objects, tuples and frozensets included), sequences, sets and mapping views, and into
    pydantic models and dataclasses the tool's author defined; memoryview reads as bytes and
-   `UserString` as text. An accepted run wrapper is not walked (one accepted only for its
-   `AirlockContext` still is, apart from that context), nor is an agent-framework object:
-   one whose top-level package is in `_arg_walk.FRAMEWORK_PACKAGES` and whose defining file
-   that framework's installed distribution lists in its RECORD
+   `UserString` as text. A framework's own pydantic model is walked only where the tool's
+   annotations name its class (`_arg_walk.NamedModels`, which `bind_arguments` carries on
+   its `BoundArguments`; models are read with `BaseModel.__iter__`, never a subclass
+   override): pydantic builds one from JSON only there, and one under `Any` or `dict` is
+   host state (chat history, RAG documents). `_collect_models` reads through `NewType`,
+   type aliases, TypeVar bounds and nested fields; anything it cannot read, or a validator,
+   names every model (fail closed), and a LangChain `InjectedToolArg` marker names none. An accepted run wrapper is not walked (one accepted only for its `AirlockContext`
+   still is, apart from that context), nor is any other agent-framework object, its
+   dataclasses (run contexts) included: one whose top-level package is in
+   `_arg_walk.FRAMEWORK_PACKAGES` and whose defining file that framework's installed
+   distribution lists in its RECORD, each listed file resolved through symlinks
    (`_arg_walk.is_framework_object`), so a look-alike package named `agents` or `mcp` is
-   walked.
+   walked. A framework dataclass built from JSON is the one gap: pydantic builds them, and
+   no shipped framework does it for its own run context.
    Generator arguments are not walked: model JSON cannot produce one. A top-level string is
    a path by `_looks_like_path`: a path-named key, the absolute / drive-rooted / home-relative /
    traversing shape (`_is_absolute_or_escaping`, shared with the nested test), a separator,
@@ -180,7 +188,9 @@ src/agent_airlock/
    it starts itself, subprocesses and raw `_socket` sockets are outside it. It checks
    connect, `sendto` / `sendmsg`, `getaddrinfo` and the `gethostbyname*` / `gethostbyaddr` /
    `getnameinfo` lookups, asyncio's included; a host allowlist admits only the addresses
-   its own lookups returned in that call. Sandbox mode validates in
+   its own lookups of a listed host returned in that call, and refuses an empty host (this
+   machine); `block_dns` lets a forward lookup of an IP literal through (it asks no DNS
+   server); a Unix-domain socket meets only `allow_egress=False`. Sandbox mode validates in
    the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way, and a
    tool that raises in the sandbox gets the answer it gets locally; a sandbox that fails is
    refused as `sandbox_error`. E2B, Docker and Modal run one payload (`generate_execution_code`)
@@ -189,13 +199,20 @@ src/agent_airlock/
    `_sanitize_tool_output` (a string is masked and truncated; a dict, list, tuple, set or
    frozenset is masked value by value, keys included, and keeps its type, masked keys that
    collide getting a ` (2)` suffix; any other object, top-level or nested, is
-   returned as-is and its detections reported as not masked) → audit log (`result_preview`
-   masked like `args_preview`, whatever `sanitize_output` says) → mark untrusted output
+   returned as-is and its detections reported as not masked, numbers no detector matches
+   unread, bytes decoded and each value's first 100,000 characters read, a value whose
+   `str()` raises reported as unreadable; a result too deep to
+   rebuild is refused as `output_unreadable`, after the tool ran) → audit log (`result_preview`
+   masked like `args_preview`, whatever `sanitize_output` says; an argument whose `repr()` raises
+   (`audit._safe_repr`) or a result whose `str()` raises is previewed as `<TypeName>`, since an
+   exception there would escape a call that already ran) → mark untrusted output
    (when the resolved policy sets `reauth_on_untrusted_reinvocation`) → reconcile actual vs
    estimated cost against the resolved policy's budget (it records nothing on the
    `CostTracker`). A deferred result (a generator, a coroutine a sync tool returns, a lazy
-   iterator or async iterator that is not a context manager) is wrapped instead
-   (`_guard_stream` and its siblings): its body runs after the call returns, so each step
+   iterator or async iterator that is not a context manager, a database cursor included)
+   is wrapped instead (`_guard_result`, `_guard_stream` and its siblings), and so is one
+   inside a returned dict, list, tuple, set, pydantic model or dataclass
+   (`_guard_nested_deferred` rebuilds them around it: `model_copy`, a shallow copy): its body runs after the call returns, so each step
    re-enters the call's airgap and context and each value is sanitized as it is produced;
    the call's audit record, written at return, counts none of its items, and a refusal
    raised while it runs is audited as a block before it reaches the consumer

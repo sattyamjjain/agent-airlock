@@ -19,18 +19,25 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   which is not always the obvious attribute: PydanticAI runs
   `tool.function_schema.function`, and a CrewAI `@tool` runs `func`, not `_run`. Prove
   interception with a stub that mirrors the SDK's real call path. Every walker is idempotent
-  per tool: a shim carries `_tool_proxy.GUARDED_MARKER` (`mark_guarded`), and a walk skips a
-  tool whose call path carries it (`already_guarded`, which warns when the policy differs and
-  keeps the first). `crewai` double-wrapped until 0.10.25 (`Task(agent=a)` shares the
+  per tool: a shim carries `_tool_proxy.GUARDED_MARKER` with every setting its `Airlock` was
+  built from (`mark_guarded(shim, policy[, config, sandbox])`), and a walk skips a tool whose
+  call path carries the same settings (`already_guarded`; `guarded_with` asks without
+  warning). Other settings get a second layer and a `UserWarning`, so nothing either wrap
+  asked for is dropped: until the 0.10.28 review only the policy was compared, and a
+  LangChain re-wrap asking for a sandbox or masking was skipped. Pass a new walker's every
+  `Airlock` argument to both. `crewai` double-wrapped until 0.10.25 (`Task(agent=a)` shares the
   agent's `tools` list and `wrap_crew` walks it twice), the other walkers until 0.10.28; use
   the marker in a new walker. Tools that appear at run time are walked too: `pydantic_ai`
   follows wrapper, combined and dynamic toolsets and wraps the agent's `_get_toolset`, and
   `crewai` hooks `Crew._prepare_tools`, `Crew.copy` and `Agent._add_skill_loader_tool`. A
   PydanticAI MCP or external toolset has no local function to wrap and gets a warning
-  (`warn_on_unwrappable`), not a guard. The Claude SDK adapter's
+  (`warn_on_unwrappable`), not a guard; an output function (`output_type=[fn]`) is guarded
+  through its output processor's `_function_schema.function`. The Claude SDK adapter's
   `wrap_tools` returns guarded copies instead (only `wrap_agent` mutates in place), so wrap
   before `create_sdk_mcp_server`, which keeps its own references. `anthropic` and
-  `openai_guardrails` are the older decorator style; `langchain` rewrites a tool's `func` /
+  `openai_guardrails` are the older decorator style (`AirlockGuardrails.wrap_agent` adds only
+  the PII `OutputGuardrail`: the policy applies per call through `secure_tool`, since an SDK
+  input guardrail runs once per run, before any tool is chosen); `langchain` rewrites a tool's `func` /
   `coroutine` / `_run` / `_arun` through `named_tool_proxy`, so async calls are guarded too
   and policy lists match the tool's `name` (both since 0.10.28). `smolagents_wrapper` runs
   caller-supplied `PolicyBundle` guards and never builds an `Airlock`. The `gpt5_5_*` /

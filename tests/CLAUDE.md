@@ -47,6 +47,16 @@ which `make test-badge` also counts as excluded: the docker-marked tests, `tests
 - **An `importorskip` needs a CI job that installs its dependency**, added in the same PR,
   and an extra-backed file joins the `test` job's step that runs those files and fails on
   any skip: a skipped module reads like a passing one in the summary line.
+- **Test framework verification against a fake distribution, not an SDK.** The `framework`
+  fixture in `tests/test_review_runtime_0_10_28.py` lays out a `smolagents` distribution,
+  RECORD included, under `tmp_path` in a `file-symlink`, `package-symlink` or `copy` layout:
+  `framework(layout)` returns its `tools` module, so `_arg_walk.is_framework_object` and
+  run-wrapper identity need no SDK. It is local to that module and resets
+  `_arg_walk._distribution_files` (a `@cache`) on each install and at teardown: copy that too.
+- **Count Airlock layers by what they do**: a one-call-per-hour rate limit (a second layer
+  spends the only token) or audit records per call. Never walk `__wrapped__`:
+  `named_tool_proxy` sets none, so a helper that did reported one layer on a tool wrapped
+  twice (`tests/test_crewai_double_wrap_0_10_25.py` until the 0.10.28 review).
 - **A wall-clock p99 assertion is the best of five 100-sample batches** (the `min` across
   batches of each sorted batch's 99th value), not one batch's p99 and not the median of
   them: one batch's p99 is its second-worst sample, so a single scheduler hiccup set it, and

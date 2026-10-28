@@ -66,7 +66,16 @@ result = agent.run_sync("What's the weather in Bangalore?")
    a `CombinedToolset` to each of its members, and a `DynamicToolset`
    to each toolset its factory builds during a run. Policy lists match
    the name a tool is registered under, not a prefixed or renamed one.
-   Wrapping twice guards each tool once.
+   Wrapping twice under the same policy guards each tool once; a wrap
+   under another policy adds a layer, with a `UserWarning`, so both
+   apply.
+
+   **Output functions** (`Agent(output_type=[fn])`) are guarded like
+   tools: the model writes `fn`'s arguments and PydanticAI runs it, so
+   each output processor's `_function_schema.function` is replaced too,
+   named for the function. An output type that is a model or a scalar
+   calls nothing and is left alone. Until 0.10.28 output functions ran
+   unguarded, and skipping the output toolset hid the warning.
 
 2. **Guards the toolset of each run** on an agent that builds it in
    `_get_toolset` (pydantic-ai 2.x): that method is wrapped on this

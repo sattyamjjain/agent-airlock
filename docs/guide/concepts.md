@@ -215,10 +215,13 @@ of `socket.connect`, `connect_ex`, `sendto` and `sendmsg`, and the name looked u
 `getaddrinfo`, `gethostbyname`, `gethostbyname_ex`, `gethostbyaddr`, `getnameinfo` and
 asyncio's `loop.getaddrinfo` / `loop.getnameinfo` (a lookup of this machine's own name
 excepted). `allow_egress=False` refuses all of them; a policy that allows egress applies its
-`allowed_hosts`, `allowed_ports` and `block_dns`. A refusal raises `NetworkBlockedError` in
-the tool, and a call it escapes from is refused as `network_blocked`. Until 0.10.28
-`@Airlock` entered the airgap only for a policy that forbade egress, so allowlists and
-`block_dns` were ignored, and only `connect`, `connect_ex` and `getaddrinfo` were checked.
+`allowed_hosts`, `allowed_ports` and `block_dns`. `block_dns` refuses every lookup that can
+ask DNS: a forward lookup of an IP literal (`getaddrinfo("10.0.0.5", ...)`, which `urllib`
+makes even for an address) asks none and is checked against the allowlists only. A refusal
+raises `NetworkBlockedError` in the tool, and a call it escapes from is refused as
+`network_blocked`. Until 0.10.28 `@Airlock` entered the airgap only for a policy that
+forbade egress, so allowlists and `block_dns` were ignored, and only `connect`,
+`connect_ex` and `getaddrinfo` were checked.
 
 The airgap follows the call's context, which sets its limits:
 
@@ -236,7 +239,11 @@ The airgap follows the call's context, which sets its limits:
   still open in the process.
 - A name on `allowed_hosts` admits the addresses it resolves to, for that call, internal
   ones included: keeping a tool off internal addresses is the job of `EndpointPolicy` and
-  the SSRF egress guard.
+  the SSRF egress guard. A lookup the allowlist did not check admits nothing, and an empty
+  host, which reaches this machine, is refused under a host allowlist (`http://:8080/`
+  reached a local service until 0.10.28).
+- A Unix-domain socket has a path, not a host: `allow_egress=False` refuses it, and a host
+  or port allowlist does not apply to it.
 
 ## Unknown Arguments Mode (V0.4.0)
 

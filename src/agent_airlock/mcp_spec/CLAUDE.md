@@ -112,9 +112,32 @@ preset, and
   transport headers and tool-definition pins (`DENY_UNINSPECTABLE`); the 0.10.24 eval
   guards and the env-interpolation guard now decode bytes strictly
   (`tests/test_mcp_spec_guards_0_10_28.py`, `tests/test_guard_shapes_fail_closed_0_10_28.py`,
-  `tests/test_audit_followups_0_10_28.py`). `McpSubprocessArgInjectionGuard` is
+  `tests/test_audit_followups_0_10_28.py`). An independent review of those fixes then
+  closed what they still read past (`tests/test_review_guards_0_10_28.py`): every segment
+  of a JWT-shaped OAuth `state`, and RFC 6749's state syntax (printable ASCII), which
+  refuses look-alike text; every Origin in `WebSocketOriginGuard.wrap_handler`; the values
+  of code-loading env variables (`subprocess_arg_guard._DEFAULT_DANGEROUS_ENV_VARS`) in the
+  config diff and the spawn pin, never logged; httpx's `get_list` for a repeated `iss`;
+  strict bytes and control characters in elicitation text; and OIDC tarball URLs given as
+  `package`, `npm:` versions and dot-segment URL spellings. `McpSubprocessArgInjectionGuard` is
   not a walker: it reads `command` / `argv[0]` and env names only, so nested `args` never
   changes its verdict.
+- **Report a field, a variable name or a digest, never an `env` value.** `audit_config_diff`
+  compares the values of code-loading variables and `McpConfigPinSet` hashes them, yet a
+  diff refusal says only that `env` changed (`MCPCommandMutationDetected.fields`), a pin
+  refusal carries SHA-256 digests (`McpConfigPinViolation`, as do its log line and audit
+  record), and a value that cannot be hashed is reported by its variable
+  (`_unreadable_field`). `logged` in `tests/test_review_guards_0_10_28.py` swaps the
+  module's `logger` for a recorder, and the tests search it, the exception and the audit
+  file for each value: copy it for the next field that can hold a token.
+- **A pin fingerprint gains a field only when the spawn sets it.** `fingerprint_mcp_server`
+  always hashes `{name, command, args, env_keys}` and adds `cwd` and `code_loading_env` only
+  when the spawn sets them, so the stored digest of a spawn with neither still matches
+  (`_legacy_fingerprint` in `tests/test_review_guards_0_10_28.py` recomputes the old
+  payload); a field hashed for every spawn would change every stored digest. The
+  code-loading names are `subprocess_arg_guard._DEFAULT_DANGEROUS_ENV_VARS`, which
+  `stdio_meta_guard` reads too: widening it changes the digest of any spawn that sets the
+  new name, and an import from that module needs `# nosec B404` (bandit matches its name).
 - **A new guard also joins the red-team campaign by hand.** Add it to `BYPASS_TARGETS` and
   `build_registry` in `benchmarks/adaptive_redteam/adapters/registry.py` with a
   `known_blocked` shape its tests prove refused and a `benign_control` it admits, a row in
