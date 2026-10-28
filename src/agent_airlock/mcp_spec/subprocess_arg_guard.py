@@ -121,6 +121,28 @@ _DEFAULT_DANGEROUS_ENV_VARS: frozenset[str] = frozenset(
 )
 
 
+def _env_var_name(key: object) -> str | None:
+    """The variable name a spawner would export for env key ``key``, or ``None``.
+
+    A ``str`` is read as is; ``bytes`` and ``os.PathLike`` keys the way ``subprocess``
+    reads them (``os.fsencode``), decoded with ``surrogateescape`` so no byte is lost.
+    A spawner that writes ``KEY=VALUE`` strings (Node's ``child_process``, a C
+    ``envp``) exports the name only up to the first ``=`` or NUL, so the name is cut
+    there: ``"LD_PRELOAD=/tmp/x.so"`` as a key still sets ``LD_PRELOAD``. Any other
+    key type cannot be exported by name and returns ``None``.
+    """
+    if isinstance(key, os.PathLike):
+        try:
+            key = os.fspath(key)
+        except TypeError:
+            return None
+    if isinstance(key, bytes):
+        key = key.decode("utf-8", errors="surrogateescape")
+    if not isinstance(key, str):
+        return None
+    return key.split("=", 1)[0].split("\x00", 1)[0].strip()
+
+
 class McpSubprocessArgVerdict(str, enum.Enum):
     """Stable reason codes for :class:`McpSubprocessArgDecision`."""
 
@@ -289,8 +311,14 @@ class McpSubprocessArgInjectionGuard:
             return self._deny_env_unreadable(env)
         if isinstance(env, Mapping):
             for var in env:
-                if isinstance(var, str) and var.upper() in self._dangerous_env_vars:
-                    return self._deny_env(var)
+                # Every key a spawner would export is read (v0.10.28): until then a key
+                # that was not a str was skipped, and ``subprocess`` exports a bytes or
+                # os.PathLike key (``os.fsencode``) exactly like its str spelling.
+                name = _env_var_name(var)
+                if name is None:
+                    return self._deny_env_key_unreadable(var)
+                if name.upper() in self._dangerous_env_vars:
+                    return self._deny_env(name)
 
         return self._allow("allowlisted static command with clean env")
 
@@ -461,6 +489,34 @@ class McpSubprocessArgInjectionGuard:
             allowed=False,
             verdict=McpSubprocessArgVerdict.DENY_UNTRUSTED_ENV,
             detail=f"spawn config's env is a {kind}, not a mapping, so it cannot be checked",
+            matched_field="env",
+            matched_command=None,
+            fix_hints=hints,
+        )
+
+    def _deny_env_key_unreadable(self, key: object) -> McpSubprocessArgDecision:
+        kind = type(key).__name__
+        logger.warning(
+            "mcp_subprocess_arg_blocked",
+            verdict=McpSubprocessArgVerdict.DENY_UNTRUSTED_ENV.value,
+            field="env",
+            reason="env_key_unreadable",
+            key_type=kind,
+            advisory=self._advisory,
+        )
+        prefix = f"({self._advisory}) " if self._advisory else ""
+        hints = [
+            f"{prefix}The spawn config's env has a {kind} key, which is not a variable name "
+            "the guard can check for code-loading variables (LD_PRELOAD, NODE_OPTIONS, "
+            "PYTHONPATH, ...); a key it cannot read is refused, not skipped.",
+            "Send env as a mapping from variable-name strings to values.",
+        ]
+        if self._advisory_url:
+            hints.append(f"See: {self._advisory_url}")
+        return McpSubprocessArgDecision(
+            allowed=False,
+            verdict=McpSubprocessArgVerdict.DENY_UNTRUSTED_ENV,
+            detail=f"spawn config's env has a {kind} key, which cannot be checked",
             matched_field="env",
             matched_command=None,
             fix_hints=hints,

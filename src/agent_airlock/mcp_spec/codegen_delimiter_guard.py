@@ -38,6 +38,18 @@ operator-declared ``allowed_literal_fields`` allowlist — the explicit
 JSON-escaped or rendered through a sandboxed templating layer downstream).
 An empty allowlist (the default) scans every field.
 
+Every shape is read (v0.10.28): strings, ``bytes`` / ``bytearray`` /
+``memoryview`` (decoded as UTF-8), mappings (keys and values), lists,
+tuples, sets and frozensets at any depth, and any other object as the text
+an f-string or ``str.format`` would splice in (``str(obj)``). Numbers,
+booleans and ``None`` carry no delimiter. Input nested deeper than 32
+levels, a container that contains itself, bytes that are not UTF-8 and an
+object whose text cannot be read are refused (``DENY_UNINSPECTABLE``).
+Until v0.10.28 bytes and sets were allowed unread, deep or self-referencing
+input raised ``RecursionError``, a top-level list raised ``AttributeError``,
+and an allow-listed name also exempted a same-named key nested inside a
+scanned field.
+
 Why structural (no codegen)
 ---------------------------
 The guard never generates or executes code — it matches the break-out
@@ -52,6 +64,7 @@ Primary sources (retrieved 2026-06-09):
 from __future__ import annotations
 
 import enum
+import numbers
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -71,6 +84,13 @@ _TRIPLE_QUOTE_RE = re.compile(r'"""|\'\'\'')
 _QUOTE_BREAKOUT_RE = re.compile(r"""["'][ \t]*[);,\]}+]""")
 # Raw newline embedded in a value bound for a single-line code string.
 _NEWLINE_RE = re.compile(r"[\r\n]")
+
+#: Nesting deeper than this is refused rather than walked. A guard that stopped looking
+#: at some depth would fail open on the payload placed one level below it.
+_MAX_DEPTH = 32
+
+_BYTES_LIKE = (bytes, bytearray, memoryview)
+_SEQUENCES = (list, tuple, set, frozenset)
 
 
 def _bracket_depth(text: str, pos: int) -> int:
@@ -117,6 +137,9 @@ class CodegenDelimiterVerdict(str, enum.Enum):
     DENY_TRIPLE_QUOTE = "deny_triple_quote"  # \"\"\" or '''
     DENY_QUOTE_BREAKOUT = "deny_quote_breakout"  # "); ') " + ...
     DENY_NEWLINE_INTO_CODE = "deny_newline_into_code"  # raw \n / \r
+    # A value the guard cannot read: deeper than 32 levels, containing itself, bytes that
+    # are not UTF-8, or an object whose text cannot be read (0.10.28).
+    DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
 @dataclass(frozen=True)
@@ -135,7 +158,7 @@ class CodegenDelimiterDecision:
             ``"context.body"``) that tripped the guard, or ``None`` when
             allowed.
         matched_token: The literal offending token (e.g. ``'\"\"\"'``),
-            or ``None`` when allowed.
+            or ``None`` when allowed or refused as ``DENY_UNINSPECTABLE``.
         fix_hints: LLM-actionable remediation hints. Carries the advisory
             / CVE reference when the guard was constructed with one.
     """
@@ -178,11 +201,15 @@ class CodegenDelimiterInjectionGuard:
     delimiter neutralisation and executes.
 
     Args:
-        allowed_literal_fields: Field names whose values are an
+        allowed_literal_fields: Field paths whose values are an
             explicitly-declared safe literal context and are therefore
             NOT scanned (e.g. a value JSON-escaped or rendered through a
-            sandboxed templating layer downstream). Empty (default)
-            scans every field.
+            sandboxed templating layer downstream). A bare name is a
+            top-level argument; a nested position is named by its full
+            path as ``matched_field`` reports it (``"context.body"``,
+            ``"items[0]"``). An entry exempts only the value at its own
+            position, never a same-named key nested inside a field that
+            is scanned (v0.10.28). Empty (default) scans every field.
         check_newline: When True (default), a raw newline in a scanned
             value is a break-out token (``DENY_NEWLINE_INTO_CODE``). Set
             False for sinks where multi-line literals are safely escaped
@@ -214,13 +241,14 @@ class CodegenDelimiterInjectionGuard:
         self._advisory = advisory
         self._advisory_url = advisory_url
 
-    def evaluate(self, args: Mapping[str, Any] | str | None) -> CodegenDelimiterDecision:
+    def evaluate(self, args: object) -> CodegenDelimiterDecision:
         """Decide whether a codegen-bound argument carries a break-out token.
 
         Args:
-            args: A single candidate string, or a mapping of argument
-                name → value (values may nest dicts / lists). ``None`` =
-                nothing to inspect = allow.
+            args: A mapping of argument name → value (values may nest at
+                any depth), or a single candidate value of any shape (a
+                string, bytes, a list, ...) reported under the field name
+                ``"arg"``. ``None`` = nothing to inspect = allow.
 
         Returns:
             :class:`CodegenDelimiterDecision`. ``allowed=False`` maps to a
@@ -228,37 +256,83 @@ class CodegenDelimiterInjectionGuard:
         """
         if args is None:
             return self._allow()
-        if isinstance(args, str):
-            return self._scan_field("arg", args)
-        for key, value in args.items():
-            if key in self._allowed_fields:
-                continue
-            decision = self._scan_value(str(key), value)
-            if not decision.allowed:
-                return decision
-        return self._allow()
+        if not isinstance(args, Mapping):
+            # A bare value: until v0.10.28 a list or bytes here raised AttributeError.
+            found = self._scan_value("arg", args, depth=0, ancestors=frozenset())
+            return found or self._allow()
+        found = self._scan_mapping("", args, depth=0, ancestors=frozenset())
+        return found or self._allow()
 
     # -- internal helpers --------------------------------------------------
 
-    def _scan_value(self, field_name: str, value: Any) -> CodegenDelimiterDecision:
-        """Recursively scan a value (str / list / dict) for break-out tokens."""
+    def _scan_value(
+        self, field_name: str, value: Any, *, depth: int, ancestors: frozenset[int]
+    ) -> CodegenDelimiterDecision | None:
+        """Scan one value of any shape; return a deny decision, or ``None`` when clean."""
         if isinstance(value, str):
-            return self._scan_field(field_name, value)
-        if isinstance(value, Mapping):
-            for sub_key, sub_val in value.items():
-                if sub_key in self._allowed_fields:
-                    continue
-                decision = self._scan_value(f"{field_name}.{sub_key}", sub_val)
-                if not decision.allowed:
-                    return decision
-            return self._allow()
-        if isinstance(value, (list, tuple)):
+            return self._deny_or_none(self._scan_field(field_name, value))
+        if isinstance(value, _BYTES_LIKE):
+            try:
+                text = bytes(value).decode("utf-8")
+            except UnicodeDecodeError:
+                # A consumer that drops or replaces the bad bytes could rejoin a token
+                # the guard never saw, so bytes that are not UTF-8 are refused.
+                return self._deny_uninspectable(field_name, "is bytes that are not valid UTF-8")
+            return self._deny_or_none(self._scan_field(field_name, text))
+        if isinstance(value, numbers.Number):  # bool, int, float, Decimal ...: no delimiter
+            return None
+        if isinstance(value, (Mapping, *_SEQUENCES)):
+            if depth >= _MAX_DEPTH:
+                return self._deny_uninspectable(
+                    field_name, f"nests deeper than {_MAX_DEPTH} levels"
+                )
+            if id(value) in ancestors:
+                return self._deny_uninspectable(field_name, "contains itself")
+            if isinstance(value, Mapping):
+                return self._scan_mapping(field_name, value, depth=depth, ancestors=ancestors)
+            inner = ancestors | {id(value)}
             for idx, item in enumerate(value):
-                decision = self._scan_value(f"{field_name}[{idx}]", item)
-                if not decision.allowed:
-                    return decision
-            return self._allow()
-        return self._allow()
+                child = f"{field_name}[{idx}]"
+                if child in self._allowed_fields:
+                    continue
+                found = self._scan_value(child, item, depth=depth + 1, ancestors=inner)
+                if found is not None:
+                    return found
+            return None
+        # Any other object reaches a codegen sink through str() / format(): read that text.
+        try:
+            text = str(value)
+        except Exception:  # any failure to read the text is a refusal, never a skip
+            return self._deny_uninspectable(
+                field_name, f"is a {type(value).__name__} whose text could not be read"
+            )
+        return self._deny_or_none(self._scan_field(field_name, text))
+
+    def _scan_mapping(
+        self,
+        field_name: str,
+        mapping: Mapping[Any, Any],
+        *,
+        depth: int,
+        ancestors: frozenset[int],
+    ) -> CodegenDelimiterDecision | None:
+        """Scan a mapping's keys and values; an allow-listed path exempts its own value only."""
+        inner = ancestors | {id(mapping)}
+        for key, item in mapping.items():
+            child = f"{field_name}.{key}" if field_name else str(key)
+            if child in self._allowed_fields:
+                continue
+            # A key reaches generated source too whenever a mapping is spliced whole.
+            found = self._scan_value(f"{child} (key)", key, depth=depth + 1, ancestors=inner)
+            if found is None:
+                found = self._scan_value(child, item, depth=depth + 1, ancestors=inner)
+            if found is not None:
+                return found
+        return None
+
+    @staticmethod
+    def _deny_or_none(decision: CodegenDelimiterDecision) -> CodegenDelimiterDecision | None:
+        return None if decision.allowed else decision
 
     def _scan_field(self, field_name: str, text: str) -> CodegenDelimiterDecision:
         """Scan a single string for the three break-out forms (most-severe first)."""
@@ -296,6 +370,33 @@ class CodegenDelimiterInjectionGuard:
             allowed=True,
             verdict=CodegenDelimiterVerdict.ALLOW,
             detail="no codegen delimiter break-out token found",
+        )
+
+    def _deny_uninspectable(self, field_name: str, why: str) -> CodegenDelimiterDecision:
+        logger.warning(
+            "codegen_delimiter_blocked",
+            verdict=CodegenDelimiterVerdict.DENY_UNINSPECTABLE.value,
+            field=field_name,
+            reason=why,
+            advisory=self._advisory,
+        )
+        prefix = f"({self._advisory}) " if self._advisory else ""
+        hints: list[str] = [
+            f"{prefix}Argument {field_name!r} {why}, so the guard cannot read all of it; "
+            "a value it cannot read is refused, not skipped.",
+            "Send the value as plain text (or JSON-shaped data no deeper than "
+            f"{_MAX_DEPTH} levels) so it can be checked for string-delimiter break-out "
+            "tokens before it reaches generated source.",
+        ]
+        if self._advisory_url:
+            hints.append(f"See: {self._advisory_url}")
+        return CodegenDelimiterDecision(
+            allowed=False,
+            verdict=CodegenDelimiterVerdict.DENY_UNINSPECTABLE,
+            detail=f"argument {field_name!r} {why}; refused rather than skipped",
+            matched_field=field_name,
+            matched_token=None,
+            fix_hints=hints,
         )
 
     def _deny(

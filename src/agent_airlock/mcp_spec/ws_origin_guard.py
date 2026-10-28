@@ -32,7 +32,10 @@ Deny-by-default posture
 An upgrade with an ``Origin`` outside the allow-list is rejected; so is an
 upgrade carrying **no** ``Origin`` header at all (a browser always sends one,
 so its absence on a control surface is treated as untrusted). The allow-list
-is explicit — an empty allow-list rejects every cross-origin upgrade.
+is explicit — an empty allow-list rejects every cross-origin upgrade. The
+runtime gate reads an ``Origin`` given as ``str``, Latin-1 ``bytes`` or a list
+of the values it arrived with, and refuses one that is not text or that
+arrives with two different values (``DENY_UNINSPECTABLE``, v0.10.28).
 
 Why structural (no server)
 --------------------------
@@ -51,7 +54,7 @@ from __future__ import annotations
 import enum
 import functools
 import inspect
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
@@ -77,6 +80,9 @@ class WebSocketOriginVerdict(str, enum.Enum):
     DENY_FORBIDDEN_ORIGIN = "deny_forbidden_origin"
     # Runtime gate (surface b): the upgrade carries no Origin header at all.
     DENY_MISSING_ORIGIN_HEADER = "deny_missing_origin_header"
+    # Runtime gate (surface b): an Origin the guard cannot read — not text, or two
+    # different values for the one header (0.10.28).
+    DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
 @dataclass(frozen=True)
@@ -235,17 +241,38 @@ class WebSocketOriginGuard:
 
     # -- surface (b): runtime upgrade gate --------------------------------
 
-    def check_upgrade(self, origin: str | None) -> WebSocketOriginDecision:
+    def check_upgrade(
+        self, origin: str | bytes | Sequence[str | bytes] | None
+    ) -> WebSocketOriginDecision:
         """Decide a single WebSocket upgrade by its ``Origin`` header.
 
         Args:
             origin: The ``Origin`` request-header value, or ``None`` when the
-                upgrade carried no ``Origin`` header.
+                upgrade carried no ``Origin`` header. ``bytes`` are decoded as
+                Latin-1 (ASGI header bytes), and a list / tuple is every value
+                the header arrived with. A value that is not text, or two
+                different values, is refused as ``DENY_UNINSPECTABLE``: until
+                v0.10.28 a list or bytes value raised ``AttributeError`` /
+                ``TypeError`` instead of a verdict.
 
         Returns:
             :class:`WebSocketOriginDecision`. ``allowed=False`` maps to a
             refusal of the upgrade.
         """
+        read, why = _read_origin(origin)
+        if why is not None:
+            logger.warning("ws_origin_uninspectable", reason=why, advisory=self._advisory)
+            return WebSocketOriginDecision(
+                allowed=False,
+                verdict=WebSocketOriginVerdict.DENY_UNINSPECTABLE,
+                detail=f"{why}; refusing the upgrade rather than guessing which Origin counts",
+                matched_origin=None,
+                fix_hints=self._hints(
+                    "Pass the upgrade's Origin header as one text value (or None when the "
+                    "upgrade carried none).",
+                ),
+            )
+        origin = read
         if origin is None or not origin.strip():
             logger.warning("ws_origin_missing_header", advisory=self._advisory)
             return WebSocketOriginDecision(
@@ -291,7 +318,7 @@ class WebSocketOriginGuard:
             ),
         )
 
-    def enforce_upgrade(self, origin: str | None) -> None:
+    def enforce_upgrade(self, origin: str | bytes | Sequence[str | bytes] | None) -> None:
         """Raise :class:`WebSocketOriginHijackError` on a rejected upgrade."""
         decision = self.check_upgrade(origin)
         if not decision.allowed:
@@ -347,6 +374,30 @@ class WebSocketOriginGuard:
         if self._advisory_url:
             hints.append(f"See: {self._advisory_url}")
         return hints
+
+
+def _read_origin(origin: object) -> tuple[str | None, str | None]:
+    """``(origin, None)`` read from any accepted shape, or ``(None, why)`` when unreadable.
+
+    ``None`` is a missing header; ``str`` is read as is; ``bytes`` as Latin-1; a list /
+    tuple is every value the header arrived with — none is a missing header, values that
+    normalise alike are one Origin, and two different values are unreadable.
+    """
+    if origin is None:
+        return None, None
+    items = origin if isinstance(origin, (list, tuple)) else [origin]
+    values: list[str] = []
+    for item in items:
+        if isinstance(item, (bytes, bytearray)):
+            item = bytes(item).decode("latin-1")
+        if not isinstance(item, str):
+            return None, f"the Origin value is a {type(item).__name__}, not text"
+        values.append(item)
+    if not values:
+        return None, None
+    if len({_normalize_origin(v) for v in values}) > 1:
+        return None, "the upgrade carries more than one Origin value"
+    return values[0], None
 
 
 def extract_origin(*args: Any, **kwargs: Any) -> str | None:

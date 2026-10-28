@@ -23,6 +23,10 @@ module does **not** invent a new log.
 Failure model: **fail closed.** If ``enforcement_mode == ENFORCE`` and the
 clearance is absent, malformed, has an invalid signature, or is stale beyond
 ``max_clearance_age`` (or has a past ``exp``), the admission is denied.
+Malformed includes an ``iat`` / ``exp`` that is not a finite, representable
+number of seconds and an ``iat`` more than ``max_clock_skew`` in the future
+(v0.10.28: until then a non-numeric ``exp`` was ignored, a future ``iat``
+never aged, and ``NaN`` / ``Infinity`` raised out of :func:`verify_clearance`).
 ``WARN`` mode emits the same verdict tagged ``"warn"`` and admits.
 
 This module requires the ``[attested]`` extra
@@ -42,6 +46,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -64,6 +69,10 @@ clearance; ``WARN`` admits with a logged warning."""
 
 DEFAULT_WELL_KNOWN_PATH = "/.well-known/mcp-clearance"
 DEFAULT_MAX_AGE = timedelta(days=30)
+#: How far ahead of the host's clock a clearance ``iat`` may be (the kill switch's
+#: broadcast allows the same 300 s). Further ahead is refused: a future ``iat`` would
+#: otherwise stay "fresh" until ``max_clearance_age`` after that future time.
+DEFAULT_CLOCK_SKEW = timedelta(minutes=5)
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +98,13 @@ class ExpiredClearance(ClearanceVerificationError):
 
 
 class MalformedClearance(ClearanceVerificationError):
-    """The clearance document failed schema validation."""
+    """The clearance document failed schema validation.
+
+    Since v0.10.28 that includes an ``iat`` or ``exp`` that is not a finite number of
+    seconds a UTC datetime can hold (a string, ``null``, a boolean, ``NaN``,
+    ``Infinity``, an out-of-range value) and an ``iat`` further in the future than
+    ``max_clock_skew``.
+    """
 
 
 class ToolNotAdmitted(ClearanceVerificationError):
@@ -157,6 +172,9 @@ class AttestedAdmissionConfig:
             or ``WARN`` (log only, admit).
         max_clearance_age: Clearance is considered fresh iff
             ``now() - iat <= max_clearance_age``.
+        max_clock_skew: How far in the future ``iat`` may be before the
+            clearance is refused as malformed (default
+            :data:`DEFAULT_CLOCK_SKEW`). Must not be negative.
         fetcher: Optional callable ``(server_url, path) -> bytes`` that
             injects a custom transport — used by tests and air-gapped
             operators who load clearances from disk. Falls back to the
@@ -171,6 +189,7 @@ class AttestedAdmissionConfig:
     max_clearance_age: timedelta = DEFAULT_MAX_AGE
     fetcher: Callable[[str, str], bytes] | None = None
     clock: Callable[[], datetime] | None = None
+    max_clock_skew: timedelta = DEFAULT_CLOCK_SKEW
 
     def __post_init__(self) -> None:
         if self.enforcement_mode not in ("WARN", "ENFORCE"):
@@ -179,6 +198,8 @@ class AttestedAdmissionConfig:
             )
         if self.max_clearance_age <= timedelta(0):
             raise ValueError("max_clearance_age must be a positive timedelta")
+        if self.max_clock_skew < timedelta(0):
+            raise ValueError("max_clock_skew must not be a negative timedelta")
 
 
 @dataclass(frozen=True)
@@ -278,6 +299,30 @@ def _fingerprint(blob: bytes) -> str:
 
 def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
+
+
+def _claim_time(claim: str, value: object) -> datetime:
+    """A NumericDate claim as a UTC datetime, or :class:`MalformedClearance`.
+
+    A boolean is not a number here (``True`` would read as one second past the epoch),
+    and ``NaN``, ``Infinity`` (which ``json.loads`` accepts) and a value no datetime can
+    hold are refused instead of raising ``ValueError`` / ``OverflowError`` out of
+    :func:`verify_clearance` (until v0.10.28 they did).
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise MalformedClearance(
+            f"clearance {claim!r} must be a number of seconds since the epoch; "
+            f"got {type(value).__name__}"
+        )
+    try:
+        seconds = float(value)
+        if not math.isfinite(seconds):
+            raise ValueError(f"{seconds!r} is not finite")
+        return datetime.fromtimestamp(seconds, tz=timezone.utc)
+    except (ValueError, OverflowError, OSError) as exc:
+        raise MalformedClearance(
+            f"clearance {claim!r}={value!r} is not a representable time: {exc}"
+        ) from exc
 
 
 def _load_pubkey(trust_root: TrustRoot) -> Any:
@@ -420,30 +465,35 @@ def verify_clearance(
     # crafting unsigned payloads).
     sub = payload.get("sub")
     iss = payload.get("iss")
-    iat = payload.get("iat")
     tools = payload.get("tools")
     if not isinstance(sub, str) or not sub:
         raise MalformedClearance("clearance missing string 'sub'")
     if not isinstance(iss, str) or not iss:
         raise MalformedClearance("clearance missing string 'iss'")
-    if not isinstance(iat, (int, float)):
+    if "iat" not in payload:
         raise MalformedClearance("clearance missing numeric 'iat'")
     if not isinstance(tools, list) or not all(isinstance(t, str) for t in tools):
         raise MalformedClearance("clearance 'tools' must be a list of strings")
+    iat_dt = _claim_time("iat", payload["iat"])
+    # An ``exp`` that is present must be a time: until v0.10.28 a string, ``null`` or any
+    # other non-number was ignored, so the clearance never expired.
+    exp_dt = _claim_time("exp", payload["exp"]) if "exp" in payload else None
 
     now = (cfg.clock or _utcnow)()
-    iat_dt = datetime.fromtimestamp(float(iat), tz=timezone.utc)
+    if iat_dt > now + cfg.max_clock_skew:
+        # A future ``iat`` would never age past ``max_clearance_age`` until long after
+        # it was issued (v0.10.28; until then it was accepted).
+        raise MalformedClearance(
+            f"clearance issued at {iat_dt.isoformat()} is in the future by more than "
+            f"max_clock_skew={cfg.max_clock_skew}"
+        )
     if (now - iat_dt) > cfg.max_clearance_age:
         raise ExpiredClearance(
             f"clearance issued at {iat_dt.isoformat()} is older than "
             f"max_clearance_age={cfg.max_clearance_age}"
         )
-    exp_val = payload.get("exp")
-    exp_dt: datetime | None = None
-    if isinstance(exp_val, (int, float)):
-        exp_dt = datetime.fromtimestamp(float(exp_val), tz=timezone.utc)
-        if exp_dt < now:
-            raise ExpiredClearance(f"clearance expired at {exp_dt.isoformat()}")
+    if exp_dt is not None and exp_dt < now:
+        raise ExpiredClearance(f"clearance expired at {exp_dt.isoformat()}")
 
     return AdmittedClearance(
         server_id=sub,
@@ -653,6 +703,7 @@ def admit_server_tool(
 
 
 __all__ = [
+    "DEFAULT_CLOCK_SKEW",
     "DEFAULT_MAX_AGE",
     "DEFAULT_WELL_KNOWN_PATH",
     "AdmissionDecision",

@@ -198,7 +198,7 @@ class MCPServerEnvInterpolationGuard:
         if isinstance(config, str):
             return self._scan_field("url", config)
         if isinstance(config, (bytes, bytearray)):
-            return self._scan_field("url", bytes(config).decode("utf-8", "replace"))
+            return self._scan_bytes("url", config)
         if not isinstance(config, Mapping):
             return self._deny_uninspectable("config", f"a {type(config).__name__}, not a mapping")
 
@@ -228,7 +228,7 @@ class MCPServerEnvInterpolationGuard:
         if isinstance(value, str):
             return self._scan_field(field_name, value)
         if isinstance(value, (bytes, bytearray)):
-            return self._scan_field(field_name, bytes(value).decode("utf-8", "replace"))
+            return self._scan_bytes(field_name, value)
         if value is None or isinstance(value, (bool, int, float)):
             return self._allow()
         children: list[tuple[str, Any]]
@@ -248,6 +248,19 @@ class MCPServerEnvInterpolationGuard:
             if not decision.allowed:
                 return decision
         return self._allow()
+
+    def _scan_bytes(self, field_name: str, value: bytes | bytearray) -> MCPEnvInterpolationDecision:
+        """Scan bytes decoded strictly, or refuse bytes that are not UTF-8 (v0.10.28).
+
+        Until v0.10.28 they were decoded with ``errors="replace"``, so ``$\\xff{SECRET}``
+        read as ``$\\ufffd{SECRET}`` and passed, while a host that drops the undecodable
+        byte expands ``${SECRET}``.
+        """
+        try:
+            text = bytes(value).decode("utf-8")
+        except UnicodeDecodeError:
+            return self._deny_uninspectable(field_name, "bytes that are not valid UTF-8")
+        return self._scan_field(field_name, text)
 
     def _deny_uninspectable(self, field_name: str, what: str) -> MCPEnvInterpolationDecision:
         logger.warning(

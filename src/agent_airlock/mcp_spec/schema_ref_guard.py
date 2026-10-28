@@ -26,6 +26,15 @@ schema and **denies by default** any ref whose target is not a local
 - any other non-local scheme → deny (``DENY_NON_LOCAL``).
 - a within-document pointer (``#/$defs/Foo``) → allow (``ALLOW_LOCAL``).
 
+Every reference keyword is read, not only ``$ref``: JSON Schema 2020-12's
+``$dynamicRef`` and 2019-09's ``$recursiveRef`` dereference a URI the same
+way and get the same classification (v0.10.28; until then an external
+``$dynamicRef`` passed unseen). A reference keyword whose value is not text
+(other than a mapping or boolean, which is a property *named* ``$ref`` and is
+walked as a subschema), and a schema nested deeper than 32 levels or
+containing itself, are refused (``DENY_UNINSPECTABLE``) — until v0.10.28 a
+schema that contained itself raised ``RecursionError``.
+
 Composition note
 ----------------
 :mod:`agent_airlock.mcp_spec.mcp_origin_host_guard` validates *inbound* Origin /
@@ -69,6 +78,9 @@ class SchemaRefVerdict(str, enum.Enum):
     DENY_EXTERNAL_FILE = "deny_external_file"
     DENY_RELATIVE_ESCAPE = "deny_relative_escape"
     DENY_NON_LOCAL = "deny_non_local"
+    # A ref value or schema the guard cannot read: a ref keyword whose value is not text,
+    # or a schema deeper than 32 levels or containing itself (0.10.28).
+    DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
 @dataclass(frozen=True)
@@ -141,16 +153,28 @@ class SchemaRefGuard:
         self._advisory = advisory
         self._advisory_url = advisory_url
 
-    def check_ref(self, ref: str) -> SchemaRefDecision:
-        """Classify one ``$ref`` string.
+    def check_ref(self, ref: object) -> SchemaRefDecision:
+        """Classify one ``$ref`` / ``$dynamicRef`` / ``$recursiveRef`` value.
 
         Args:
-            ref: The ``$ref`` value from a tool schema.
+            ref: The reference value from a tool schema, normally a string.
+                ``bytes`` are decoded as UTF-8; any other value (or bytes that are
+                not UTF-8) is refused as ``DENY_UNINSPECTABLE`` (v0.10.28; a list
+                raised ``AttributeError`` before).
 
         Returns:
             A :class:`SchemaRefDecision`. ``allowed=False`` maps to a refusal of
             the tool registration.
         """
+        if isinstance(ref, (bytes, bytearray)):
+            try:
+                ref = bytes(ref).decode("utf-8")
+            except UnicodeDecodeError:
+                return self._deny_uninspectable(None, "a reference is bytes that are not UTF-8")
+        if not isinstance(ref, str):
+            return self._deny_uninspectable(
+                None, f"a reference is a {type(ref).__name__}, not a string"
+            )
         if is_local_ref(ref):
             return SchemaRefDecision(
                 allowed=True,
@@ -195,15 +219,25 @@ class SchemaRefGuard:
         )
 
     def scan_schema(self, schema: Mapping[str, object]) -> list[SchemaRefDecision]:
-        """Return a decision for every ``$ref`` found anywhere in ``schema``.
+        """Return a decision for every reference found anywhere in ``schema``.
 
         Walks the whole schema (including nested composition subschemas and
-        ``$defs``) so a ref buried inside a ``oneOf`` branch is caught.
+        ``$defs``) so a ref buried inside a ``oneOf`` branch is caught. Each
+        ``$ref``, ``$dynamicRef`` and ``$recursiveRef`` value gets a
+        :meth:`check_ref` decision; a part of the schema the walk cannot read
+        (deeper than 32 levels, or containing itself) gets a
+        ``DENY_UNINSPECTABLE`` decision in its place.
         """
-        return [self.check_ref(ref) for ref in _iter_refs(schema)]
+        decisions: list[SchemaRefDecision] = []
+        for found in _iter_refs(schema):
+            if isinstance(found, _Unwalkable):
+                decisions.append(self._deny_uninspectable(found.location, found.why))
+            else:
+                decisions.append(self.check_ref(found))
+        return decisions
 
     def validate(self, schema: Mapping[str, object]) -> None:
-        """Raise :class:`SchemaRefError` on the first external ``$ref`` in ``schema``."""
+        """Raise :class:`SchemaRefError` on the first refused reference in ``schema``."""
         for decision in self.scan_schema(schema):
             if not decision.allowed:
                 raise SchemaRefError(decision)
@@ -245,21 +279,85 @@ class SchemaRefGuard:
             hints.append(f"See: {self._advisory_url}")
         return hints
 
+    def _deny_uninspectable(self, where: str | None, why: str) -> SchemaRefDecision:
+        logger.warning(
+            "schema_external_ref_blocked",
+            verdict=SchemaRefVerdict.DENY_UNINSPECTABLE.value,
+            ref=None,
+            location=where,
+            reason=why,
+            advisory=self._advisory,
+        )
+        at = f" (at {where})" if where else ""
+        return SchemaRefDecision(
+            allowed=False,
+            verdict=SchemaRefVerdict.DENY_UNINSPECTABLE,
+            ref="",
+            detail=(
+                f"{why}{at}, so the guard cannot classify every reference in the schema; "
+                "refused rather than skipped"
+            ),
+            fix_hints=self._hints(
+                "Send a tool schema whose $ref / $dynamicRef / $recursiveRef values are "
+                f"strings, nested no deeper than {_MAX_DEPTH} levels and with no part that "
+                "contains itself, so every reference can be checked (SEP-2106).",
+            ),
+        )
 
-def _iter_refs(node: object) -> list[str]:
-    """Collect every ``$ref`` string value anywhere in a schema tree."""
-    out: list[str] = []
 
-    def _walk(n: object) -> None:
+#: Keywords that dereference a URI: ``$ref`` everywhere, JSON Schema 2020-12's
+#: ``$dynamicRef`` and 2019-09's ``$recursiveRef`` (collected since v0.10.28).
+_REF_KEYWORDS: tuple[str, ...] = ("$ref", "$dynamicRef", "$recursiveRef")
+
+#: Nesting deeper than this is refused rather than walked.
+_MAX_DEPTH = 32
+
+
+@dataclass(frozen=True)
+class _Unwalkable:
+    """A part of the schema the walk cannot read, and why."""
+
+    location: str
+    why: str
+
+
+def _iter_refs(node: object) -> list[object]:
+    """Collect every reference value anywhere in a schema tree.
+
+    A ``$ref`` / ``$dynamicRef`` / ``$recursiveRef`` value that is a mapping or a
+    boolean is a *property* or subschema of that name, not a reference, and is walked
+    like any other subschema; every other value is collected for :meth:`check_ref`,
+    which refuses one that is not text. A container nested deeper than
+    :data:`_MAX_DEPTH`, or one that contains itself, is collected as an
+    :class:`_Unwalkable` instead of being walked.
+    """
+    out: list[object] = []
+
+    def _walk(n: object, where: str, depth: int, ancestors: frozenset[int]) -> None:
+        refs: list[object] = []
         if isinstance(n, Mapping):
-            ref = n.get("$ref")
-            if isinstance(ref, str):
-                out.append(ref)
-            for value in n.values():
-                _walk(value)
-        elif isinstance(n, Sequence) and not isinstance(n, (str, bytes)):
-            for item in n:
-                _walk(item)
+            refs = [
+                n[keyword]
+                for keyword in _REF_KEYWORDS
+                if keyword in n and not isinstance(n[keyword], (Mapping, bool))
+            ]
+            children = [(f"{where}/{key}", value) for key, value in n.items()]
+        elif isinstance(n, Sequence) and not isinstance(n, (str, bytes, bytearray)):
+            children = [(f"{where}/{idx}", item) for idx, item in enumerate(n)]
+        else:
+            return
+        if depth >= _MAX_DEPTH:
+            out.append(
+                _Unwalkable(where or "/", f"the schema nests deeper than {_MAX_DEPTH} levels")
+            )
+            return
+        if id(n) in ancestors:
+            out.append(_Unwalkable(where or "/", "the schema contains itself"))
+            return
+        out.extend(refs)
+        inner = ancestors | {id(n)}
+        for child_where, child in children:
+            _walk(child, child_where, depth + 1, inner)
 
-    _walk(node)
+    _walk(node, "", 0, frozenset())
     return out

@@ -210,8 +210,10 @@ class FilterEvalRCEGuard:
         ``bytes`` decoded. A string is inspected when a key on its path is a suspect field
         (``{"condition": ["lambda ..."]}``, ``{"payload": {"condition": "lambda ..."}}``),
         or always under ``scan_all_fields``. Until v0.10.24 only top-level string values
-        were inspected, so both of those passed. Nesting deeper than the guard walks, or a
-        container that contains itself, is refused (``DENY_UNINSPECTABLE``).
+        were inspected, so both of those passed. Nesting deeper than the guard walks, a
+        container that contains itself, and bytes in an inspected field that are not UTF-8
+        (v0.10.28; they were decoded with replacement characters) are refused
+        (``DENY_UNINSPECTABLE``).
 
         Args:
             args: The tool call's argument dict. ``None`` (no args) is
@@ -247,11 +249,23 @@ class FilterEvalRCEGuard:
         depth: int,
         ancestors: frozenset[int],
     ) -> FilterEvalRCEDecision | None:
-        """Inspect a str or bytes value, or walk a container; ``None`` when nothing fires."""
-        if isinstance(value, (str, bytes, bytearray)):
+        """Inspect a str or bytes value, or walk a container; ``None`` when nothing fires.
+
+        Bytes in a field the guard reads are decoded strictly (v0.10.28): with
+        ``errors="replace"`` an invalid byte inside ``lambda`` or ``eval(`` hid the
+        expression from the patterns while a consumer that drops the byte still ran it,
+        so bytes that are not UTF-8 are refused as ``DENY_UNINSPECTABLE``.
+        """
+        if isinstance(value, (str, bytes, bytearray, memoryview)):
             if not (suspect or self._scan_all_fields):
                 return None
-            text = value if isinstance(value, str) else bytes(value).decode("utf-8", "replace")
+            if isinstance(value, str):
+                text = value
+            else:
+                try:
+                    text = bytes(value).decode("utf-8")
+                except UnicodeDecodeError:
+                    return self._deny_uninspectable(field, "is bytes that are not valid UTF-8")
             return self._inspect_value(field=field, value=text)
         children: list[tuple[str, Any, bool]]
         if isinstance(value, Mapping):
@@ -263,8 +277,10 @@ class FilterEvalRCEGuard:
             children = [(f"{field}[{idx}]", item, suspect) for idx, item in enumerate(value)]
         else:
             return None  # numbers, booleans, None and other objects carry no expression text
-        if depth >= _MAX_DEPTH or id(value) in ancestors:
-            return self._deny_uninspectable(field, depth >= _MAX_DEPTH)
+        if depth >= _MAX_DEPTH:
+            return self._deny_uninspectable(field, f"nests deeper than {_MAX_DEPTH} levels")
+        if id(value) in ancestors:
+            return self._deny_uninspectable(field, "contains itself")
         inner = ancestors | {id(value)}
         for child_field, child, child_suspect in children:
             decision = self._scan_value(
@@ -283,8 +299,7 @@ class FilterEvalRCEGuard:
             matched_pattern=None,
         )
 
-    def _deny_uninspectable(self, field: str, too_deep: bool) -> FilterEvalRCEDecision:
-        why = f"nests deeper than {_MAX_DEPTH} levels" if too_deep else "contains itself"
+    def _deny_uninspectable(self, field: str, why: str) -> FilterEvalRCEDecision:
         logger.warning("filter_eval_rce_uninspectable", matched_field=field, reason=why)
         return FilterEvalRCEDecision(
             allowed=False,
