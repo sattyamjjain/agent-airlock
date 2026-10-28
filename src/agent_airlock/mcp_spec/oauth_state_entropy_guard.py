@@ -17,24 +17,33 @@ Algorithm
    is out of scope, but the payload segment is decoded and scanned for the
    trigger phrases.
 2. Try url-safe base64, base64, hex, and JSON decoders, on the state as
-   written and percent-decoded; the first decoder whose output is printable
-   ASCII is used, and its output is scanned for the trigger phrases.
+   written and percent-decoded, and scan the output of every one that
+   decodes for the trigger phrases (not only the first printable one).
 3. Read the state as plain text too: the trigger-phrase scan runs on it as
    written, percent-decoded, and with ``-`` / ``_`` / ``+`` / ``.`` / ``~``
    read as spaces, and a state that reads as natural-language prose (three
-   or more words making up at least half its whitespace-separated tokens)
-   is refused unless it decoded as JSON. An opaque nonce has no whitespace,
-   so it is never prose.
+   or more words making up at least two thirds of its whitespace-separated
+   tokens, one of them four letters or longer) is refused unless it is a
+   JSON object or array. The prose check reads the state as given and with
+   %-escapes decoded, never with ``+`` as a space (a decoded standard-base64
+   nonce carries literal ``+``). An opaque nonce has no whitespace, so it is
+   never prose.
 4. Only then does Shannon entropy label an allowed state (a high-entropy
    nonce is >= 3.0 bits/byte).
 
+Every scan reads the text a lenient reader sees as well: NFKC-folded, with
+an undecodable byte (U+FFFD), a format character (zero-width, bidi) or a
+control character dropped, and read as a space. Bytes are decoded leniently,
+not strictly: a random-bytes nonce is not UTF-8 either.
+
 Until 0.10.28 the undecoded text was never scanned, so plain-text
 instructions passed as a "high-entropy nonce" (English runs ~4 bits/byte),
-two dots made any text a JWT, a ``list`` (``parse_qs`` output) or ``bytes``
-state was a warning, and a callback that was not a mapping crashed. Every
-element of a list state is read now and the worst verdict wins; ``bytes``
-are decoded; any other shape, and a callback that is not a mapping, is
-refused.
+two dots made any text a JWT, one undecodable byte or zero-width character
+inside a trigger phrase hid it, a ``list`` (``parse_qs`` output) or
+``bytes`` state was a warning, and a callback that was not a mapping
+crashed. Every element of a list state is read now and the worst verdict
+wins; ``bytes`` are decoded; any other shape, and a callback that is not a
+mapping, is refused.
 
 Reference
 ---------
@@ -50,10 +59,11 @@ import json
 import math
 import re
 import time
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
-from urllib.parse import unquote_plus
+from urllib.parse import unquote, unquote_plus
 
 from .._log import structlog
 from ..exceptions import AirlockError
@@ -77,14 +87,19 @@ _INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
 #: Characters a token-shaped state may join words with; read as spaces for the scan.
 _WORD_JOINERS = re.compile(r"[-_+.~]+")
 
-#: A word as prose writes it: lowercase, Capitalized or ALL-CAPS letters, two or more.
-_PROSE_WORD = re.compile(r"^(?:[A-Za-z][a-z]+|[A-Z]{2,})$")
+#: A word as prose writes it: two or more letters, lowercase or Capitalized, or three or
+#: more in ALL CAPS. A two-letter ALL-CAPS token (``KU``) is as common in random base64 as
+#: in prose, so it does not count.
+_PROSE_WORD = re.compile(r"^(?:[A-Za-z][a-z]+|[A-Z]{3,})$")
 
 #: Punctuation prose wraps a word in, stripped before :data:`_PROSE_WORD` is tried.
 _PROSE_PUNCTUATION = "\"'`.,;:!?()[]{}<>"
 
 #: The fewest words that make a state read as prose.
 _PROSE_MIN_WORDS = 3
+
+#: Prose has at least one word this long; a run of short random base64 segments does not.
+_PROSE_LONG_WORD = 4
 
 #: The base64url alphabet of a JWT segment.
 _BASE64URL = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -132,23 +147,93 @@ class _Finding:
     matches: tuple[str, ...] = ()
 
 
+#: ASCII control characters other than the whitespace ones a phrase may contain.
+_ASCII_CONTROLS = re.compile(r"[\x00-\x08\x0e-\x1f\x7f]")
+
+#: Whitespace control characters, which separate words rather than hide inside them.
+_WHITESPACE_CONTROLS = frozenset("\t\n\r\x0b\x0c")
+
+
+def _invisible(char: str) -> bool:
+    """An undecodable byte (U+FFFD), a format character, or a non-whitespace control."""
+    if char == "�":
+        return True
+    category = unicodedata.category(char)
+    return category == "Cf" or (category == "Cc" and char not in _WHITESPACE_CONTROLS)
+
+
+def _unique(texts: list[str]) -> list[str]:
+    return list(dict.fromkeys(texts))
+
+
+def _lenient_forms(text: str) -> list[str]:
+    """``text``, and what a lenient reader sees: NFKC-folded, invisibles dropped or spaced.
+
+    One undecodable byte or zero-width character inside "ignore" broke the trigger
+    pattern, while a consumer that drops it (or a model reading it) still sees the word.
+    """
+    if text.isascii():
+        if not _ASCII_CONTROLS.search(text):
+            return [text]
+        return _unique([text, _ASCII_CONTROLS.sub("", text), _ASCII_CONTROLS.sub(" ", text)])
+    folded = unicodedata.normalize("NFKC", text)
+    dropped = "".join(c for c in folded if not _invisible(c))
+    spaced = "".join(" " if _invisible(c) else c for c in folded)
+    return _unique([text, folded, dropped, spaced])
+
+
+def _visible(text: str) -> str:
+    """``text`` with its invisible characters dropped (the lenient reader's text)."""
+    if text.isascii():
+        return _ASCII_CONTROLS.sub("", text)
+    return "".join(c for c in unicodedata.normalize("NFKC", text) if not _invisible(c))
+
+
 def _scan(text: str) -> tuple[str, ...]:
-    """Every trigger phrase ``text`` contains, one per pattern."""
+    """Every trigger phrase ``text`` contains, read leniently, one per pattern."""
     found: list[str] = []
+    forms = _lenient_forms(text)
     for pat in _INJECTION_PATTERNS:
-        m = pat.search(text)
-        if m:
-            found.append(m.group(0))
+        for form in forms:
+            m = pat.search(form)
+            if m:
+                found.append(m.group(0))
+                break
     return tuple(found)
 
 
-def _reads_as_prose(text: str) -> bool:
-    """Whether ``text`` is natural language: enough words, and words are most of it."""
-    tokens = text.split()
-    if len(tokens) < _PROSE_MIN_WORDS:
+def _is_json_structure(text: str) -> bool:
+    """Whether ``text`` parses as a JSON object or array (structure, not prose)."""
+    try:
+        return isinstance(json.loads(text), (dict, list))
+    except (ValueError, RecursionError):
         return False
-    words = sum(1 for token in tokens if _PROSE_WORD.match(token.strip(_PROSE_PUNCTUATION)))
-    return words >= _PROSE_MIN_WORDS and words * 2 >= len(tokens)
+
+
+def _reads_as_prose(text: str) -> bool:
+    """Whether ``text``, read leniently, is natural language.
+
+    Three or more words, making up at least two thirds of the whitespace-separated tokens,
+    one of them four letters or longer. Measured against 400,000 random standard-base64
+    nonces with every ``+`` read as a space (the worst case for an opaque nonce), none
+    reads as prose.
+    """
+    for form in _lenient_forms(text):
+        tokens = form.split()
+        if len(tokens) < _PROSE_MIN_WORDS:
+            continue
+        words = [
+            word
+            for word in (token.strip(_PROSE_PUNCTUATION) for token in tokens)
+            if _PROSE_WORD.match(word)
+        ]
+        if (
+            len(words) >= _PROSE_MIN_WORDS
+            and len(words) * 3 >= len(tokens) * 2
+            and any(len(word) >= _PROSE_LONG_WORD for word in words)
+        ):
+            return True
+    return False
 
 
 def _state_values(state: Any) -> tuple[list[str], _Finding | None]:
@@ -268,10 +353,11 @@ class OAuthStateEntropyGuard:
         jwt = self._jwt_finding(state)
         if jwt is not None:
             return jwt
-        # Decoders first: random nonces have high raw-byte entropy too, but they don't
-        # decode into printable ASCII, whereas a base64-encoded injection payload does.
-        decoded, decoder = self._best_decode(state)
-        if decoded is not None:
+        # Every decoder's output is scanned, not only the first printable one: a decoder
+        # that turns the state into printable garbage first must not hide what a later
+        # one decodes it to (a JSON state also "decodes" as lenient base64).
+        decodings = _decodings(state)
+        for decoder, decoded in decodings:
             matches = _scan(decoded)
             if matches:
                 return _Finding(
@@ -281,13 +367,16 @@ class OAuthStateEntropyGuard:
                     decoded[:160],
                     matches,
                 )
-        plain = self._plain_text_finding(state, decoded_as_json=decoder == "json")
+        plain = self._plain_text_finding(state)
         if plain is not None:
             return plain
-        if decoded is not None:
-            return _Finding(
-                "allow", f"decoded via {decoder}; no injection trigger", decoder, decoded[:160]
-            )
+        for decoder, decoded in decodings:
+            # Random nonces have high raw-byte entropy too, but they don't decode into
+            # printable text, whereas an encoded payload does; JSON is text by definition.
+            if decoder.endswith("json") or self._is_printable(_visible(decoded)):
+                return _Finding(
+                    "allow", f"decoded via {decoder}; no injection trigger", decoder, decoded[:160]
+                )
         entropy_bps = self._shannon_entropy(state)
         if entropy_bps >= self.entropy_skip_threshold:
             return _Finding("allow", f"high-entropy nonce ({entropy_bps:.2f} bits/byte)")
@@ -310,7 +399,7 @@ class OAuthStateEntropyGuard:
         return _Finding("allow", "state matches JWT tri-segment shape")
 
     @staticmethod
-    def _plain_text_finding(state: str, *, decoded_as_json: bool) -> _Finding | None:
+    def _plain_text_finding(state: str) -> _Finding | None:
         """Refuse a state whose plain text carries a trigger phrase or reads as prose."""
         for variant in _plain_variants(state):
             matches = _scan(variant)
@@ -322,16 +411,21 @@ class OAuthStateEntropyGuard:
                     variant[:160],
                     matches,
                 )
-        if decoded_as_json:
-            return None  # a JSON state is structure, read through its decoded form
-        text = unquote_plus(state)
-        if _reads_as_prose(text):
-            return _Finding(
-                "block",
-                "plain-text state reads as natural-language prose, not an opaque nonce",
-                "plain-text",
-                text[:160],
-            )
+        if _is_json_structure(state) or _is_json_structure(unquote_plus(state)):
+            # A JSON object or array is structure, read through its decoded form; a JSON
+            # string literal is just quoted text, so it is read as prose like any other.
+            return None
+        # The state as given (``parse_qs`` has already decoded it) and with %-escapes
+        # decoded, but never with "+" read as a space: a decoded standard-base64 nonce
+        # carries literal "+" characters, and reading them as spaces split it into words.
+        for text in _unique([state, unquote(state)]):
+            if _reads_as_prose(text):
+                return _Finding(
+                    "block",
+                    "plain-text state reads as natural-language prose, not an opaque nonce",
+                    "plain-text",
+                    text[:160],
+                )
         return None
 
     @staticmethod
@@ -359,25 +453,6 @@ class OAuthStateEntropyGuard:
         n = len(data)
         ent = -sum((c / n) * math.log2(c / n) for c in freq.values())
         return ent
-
-    def _best_decode(self, state: str) -> tuple[str | None, str | None]:
-        # Try url-safe base64, then standard base64, then hex, then JSON — on the state as
-        # written, then percent-decoded (a caller may pass the raw query value).
-        unquoted = unquote_plus(state)
-        candidates = [(state, "")]
-        if unquoted != state:
-            candidates.append((unquoted, "percent-decoded-"))
-        for text, prefix in candidates:
-            for decoder, fn in (
-                ("url-safe-base64", _try_urlsafe_b64),
-                ("base64", _try_b64),
-                ("hex", _try_hex),
-                ("json", _try_json),
-            ):
-                decoded = fn(text)
-                if decoded and self._is_printable(decoded):
-                    return decoded, decoder if not prefix else f"{prefix}{decoder}"
-        return None, None
 
     @staticmethod
     def _is_printable(s: str) -> bool:
@@ -444,16 +519,42 @@ def _try_hex(s: str) -> str | None:
 
 def _try_json(s: str) -> str | None:
     # A RecursionError is how the json codec refuses deep nesting (a 2 KB state can
-    # hold a thousand brackets); until 0.10.28 it escaped evaluate().
+    # hold a thousand brackets); until 0.10.28 it escaped evaluate(). ensure_ascii=False
+    # keeps the characters a consumer reads: re-escaped as \uXXXX, a zero-width or
+    # fullwidth character inside a phrase was text no lenient form could fold back.
     try:
         parsed = json.loads(s)
-        if isinstance(parsed, dict):
-            return json.dumps(parsed)
+        if isinstance(parsed, (dict, list)):
+            return json.dumps(parsed, ensure_ascii=False)
     except (ValueError, RecursionError):
         return None
     if isinstance(parsed, str):
         return parsed
     return None
+
+
+def _decodings(state: str) -> list[tuple[str, str]]:
+    """Every ``(decoder, text)`` the state decodes to, as written and percent-decoded.
+
+    Bytes are decoded leniently (``errors="replace"``): a random-bytes nonce is not UTF-8,
+    so a strict decode would refuse it, and :func:`_scan` reads the lenient forms anyway.
+    """
+    unquoted = unquote_plus(state)
+    candidates = [(state, "")]
+    if unquoted != state:
+        candidates.append((unquoted, "percent-decoded-"))
+    found: list[tuple[str, str]] = []
+    for text, prefix in candidates:
+        for decoder, fn in (
+            ("url-safe-base64", _try_urlsafe_b64),
+            ("base64", _try_b64),
+            ("hex", _try_hex),
+            ("json", _try_json),
+        ):
+            decoded = fn(text)
+            if decoded:
+                found.append((f"{prefix}{decoder}", decoded))
+    return found
 
 
 __all__ = [

@@ -113,20 +113,34 @@ class TestEvaluateOrRaise:
 
 class TestPerformance:
     def test_p99_under_0_8ms(self, guard: OAuthStateEntropyGuard) -> None:
+        """p99 < 0.8 ms as the best of five 100-sample batches (0.10.28).
+
+        A single batch's p99 is its second-worst sample, so one scheduler hiccup set
+        the result: it failed 1 run in 5 on 2026-10-28 while its batches measured
+        0.034-0.045 ms. The best-of-five reasoning, and why a median is not enough,
+        is in ``tests/mcp_spec/test_elicitation_guard.py::TestPerformance``. A real
+        regression still fails: the ceiling is roughly 20x the measured p99.
+        """
         import sys
 
         ceiling_ms = 8.0 if sys.gettrace() is not None else 0.8
         # Warm up.
         for _ in range(5):
             guard.evaluate({"state": "ok"})
-        latencies: list[float] = []
-        for _ in range(100):
-            start = time.perf_counter()
-            guard.evaluate({"state": "ok-nonce-12345"})
-            latencies.append((time.perf_counter() - start) * 1000.0)
-        latencies.sort()
-        p99 = latencies[98]
-        assert p99 < ceiling_ms, f"p99 {p99:.3f}ms exceeds {ceiling_ms}ms"
+        batch_p99s: list[float] = []
+        for _ in range(5):
+            latencies: list[float] = []
+            for _ in range(100):
+                start = time.perf_counter()
+                guard.evaluate({"state": "ok-nonce-12345"})
+                latencies.append((time.perf_counter() - start) * 1000.0)
+            latencies.sort()
+            batch_p99s.append(latencies[98])
+        p99 = min(batch_p99s)  # best of five batches; see docstring
+        assert p99 < ceiling_ms, (
+            f"best batch p99 {p99:.3f}ms exceeds {ceiling_ms}ms "
+            f"(batches: {[round(v, 3) for v in sorted(batch_p99s)]})"
+        )
 
 
 class TestPresetWiring:
