@@ -101,9 +101,13 @@ def build_policy_resolver(approver: StubApprover | None) -> object:
         A resolver suitable for ``@Airlock(policy=...)``.
     """
 
-    def resolve(ctx: AirlockContext[RunContext]) -> SecurityPolicy:
+    def resolve(ctx: AirlockContext[RunContext]) -> SecurityPolicy | None:
         wrapper = ctx.user_context
-        amount = wrapper.context.amount_usd if wrapper else 0
+        if wrapper is None:
+            # No host-built request, so no amount to judge. Returning None refuses the
+            # call; reading a missing amount as $0 would auto-approve any transfer.
+            return None
+        amount = wrapper.context.amount_usd
 
         if amount <= THRESHOLD_USD:
             # Under the line: an ordinary allow. Nothing to escalate.

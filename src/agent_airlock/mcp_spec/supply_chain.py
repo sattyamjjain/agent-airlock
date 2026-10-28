@@ -14,7 +14,9 @@ by existing presets:
    manifest at first-register, re-verify before each call. Covers
    CVE-2026-30615/30617/30618/30623/30624/30625 (Claude Desktop).
 2. **MCP Bridge SSRF** — refuse tool ``target_url`` values that resolve
-   to RFC1918, link-local, loopback, or carrier-grade NAT ranges.
+   to RFC1918, link-local, loopback, or carrier-grade NAT ranges. The address
+   decision is ``SSRFEgressGuard``'s, so ``0.0.0.0`` and the IPv4-mapped and
+   NAT64 IPv6 spellings of those ranges are refused too.
    Covers CVE-2026-26015 (OpenAI MCP Bridge).
 3. **LlamaIndex deserialization guard** — reject tool responses whose
    ``Content-Type`` is a known-unsafe serialization format. Covers

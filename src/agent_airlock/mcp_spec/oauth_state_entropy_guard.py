@@ -60,6 +60,7 @@ import math
 import re
 import time
 import unicodedata
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
@@ -272,6 +273,10 @@ def _plain_variants(state: str) -> list[str]:
     return variants
 
 
+#: The constructor default; any other value warns (see ``OAuthStateEntropyGuard``).
+_DEFAULT_ENTROPY_SKIP_THRESHOLD = 3.0
+
+
 class OAuthStateEntropyGuard:
     """Detect prompt-injection payloads smuggled via OAuth ``state``."""
 
@@ -281,6 +286,23 @@ class OAuthStateEntropyGuard:
         max_state_bytes: int = 2048,
         entropy_skip_threshold: float = 3.0,
     ) -> None:
+        """Configure the guard.
+
+        Args:
+            max_state_bytes: A longer ``state`` is blocked before any decoding.
+            entropy_skip_threshold: Deprecated; removal in v1.0.0. It never changed a
+                verdict: every ``state`` is scanned whatever its entropy, and the value
+                only picks the wording of an ``allow`` detail. Setting it away from its
+                default emits a ``FutureWarning`` so it is not read as a security knob.
+        """
+        if entropy_skip_threshold != _DEFAULT_ENTROPY_SKIP_THRESHOLD:
+            warnings.warn(
+                "OAuthStateEntropyGuard(entropy_skip_threshold=...) has no effect on any "
+                "verdict: every state is scanned whatever its entropy. Deprecated; it "
+                "will be removed in v1.0.0.",
+                FutureWarning,
+                stacklevel=2,
+            )
         self.max_state_bytes = max_state_bytes
         self.entropy_skip_threshold = entropy_skip_threshold
 

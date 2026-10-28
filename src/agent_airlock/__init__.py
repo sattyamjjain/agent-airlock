@@ -455,6 +455,7 @@ from .mcp_spec.zero_click_config_guard import (
     MCPCommandMutationDetected,
     McpConfigPinSet,
     McpConfigPinViolation,
+    MCPConfigUnreadable,
     McpServerPin,
     UnsignedMCPServerAdded,
     fingerprint_mcp_server,
@@ -1020,6 +1021,7 @@ __all__ = [
     "HighValueActionBlocked",
     "LANUnauthMCPServerBlocked",
     "MCPCommandMutationDetected",
+    "MCPConfigUnreadable",
     # V0.8.23 — CVE-2026-30615 spawn-time MCP config pin
     "McpConfigPinSet",
     "McpConfigPinViolation",

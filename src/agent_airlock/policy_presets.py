@@ -846,7 +846,8 @@ def unit42_mcp_sampling_defaults() -> SamplingGuardConfig:
 
     - ``max_sampling_requests_per_session`` = 50 (hard cap)
     - ``max_tokens_per_sampling_request`` = 4096
-    - ``forbid_persistent_instructions`` = True (refuse system role)
+    - ``forbid_persistent_instructions`` = True (refuse a system role and a non-empty
+      ``systemPrompt``)
     - ``require_user_consent_per_request`` = True (no session-sticky OK)
 
     Usage::
@@ -1410,7 +1411,8 @@ def oauth_state_injection_guard(
     Injects prompt strings into the OAuth ``state`` parameter and the
     callback handler decodes + relays them into a system message. This
     preset wires :class:`OAuthStateEntropyGuard` with the recommended
-    defaults; high-entropy nonces and JWT tri-segments are ignored.
+    defaults. Every ``state`` is scanned: as written, read leniently, in each decoded
+    form (a JWT's payload included), and as plain text that reads as prose.
 
     Primary source:
       https://www.blackhat.com/asia-26/briefings/schedule/#oauth-state-injection
@@ -1639,13 +1641,14 @@ def mcp_config_pin(
     warns). It catches the zero-click pattern even when the injection never
     touched a watched file (env override, in-memory resolution, a launcher).
 
-    The fingerprint covers ``{name, command, args, env-keys}`` (env *values*
+    The fingerprint covers ``{name, command, args, env-keys}``, plus ``cwd`` when the
+    spawn sets one (env *values*
     are excluded — they rotate; the *keys* are what an injection adds). Two
     failure modes both raise :class:`McpConfigPinViolation` and emit an audit
     event on the existing structlog + JSON-Lines channels:
 
     - **injected** — a server name not in the pin set (``reason="unpinned"``);
-    - **mutated** — a pinned server whose ``command`` / ``args`` / ``env``-keys
+    - **mutated** — a pinned server whose ``command`` / ``args`` / ``env``-keys / ``cwd``
       changed between registration and spawn (``reason="mutated"``).
 
     Args:
@@ -3914,8 +3917,13 @@ def lerobot_cve_2026_25874_defaults() -> SecurityPolicy:
             from agent_airlock.policy_presets import lerobot_cve_2026_25874_defaults
 
             @Airlock(policy=lerobot_cve_2026_25874_defaults())
-            def send_observations(payload: bytes, transport: dict) -> bytes:
+            def send_observations(payload: bytes) -> bytes:
                 ...
+
+        Under ``@Airlock`` the transport declaration ``require_authenticated_transport``
+        reads comes from the host, ``with AirlockContext(metadata={"transport":
+        {"authenticated": True, "tls": True}})`` around the call, never from a tool
+        argument, which the model writes (0.10.28).
 
     Primary sources (retrieved 2026-06-07):
       https://www.sentinelone.com/vulnerability-database/cve-2026-25874/
