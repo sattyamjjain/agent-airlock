@@ -51,7 +51,7 @@ from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
 from ..self_heal import is_refusal, refusal_text
-from ._tool_proxy import _adopt_identity
+from ._tool_proxy import _adopt_identity, already_guarded, mark_guarded
 
 # Typed Any so a union built at runtime is not read by mypy as a type expression.
 _UNION: Any = Union
@@ -104,11 +104,16 @@ def guard_sdk_tool(tool: Any, *, policy: SecurityPolicy | None = None) -> Any:
 
     Returns:
         A shallow copy of ``tool`` with ``handler`` replaced. ``tool`` itself is unchanged.
+        A tool whose handler is already guarded is returned as it is: guarding it again
+        would stack a second ``Airlock`` layer (two audit records and two rate-limit
+        tokens per call), which until 0.10.28 wrapping twice did.
 
     Raises:
         AirlockError: ``input_schema`` is not a form the SDK accepts, or declares a key
             that cannot be a Python parameter name, so no contract can be derived from it.
     """
+    if already_guarded(tool.handler, policy=policy, tool=tool.name):
+        return tool
     fields, open_ended = _schema_fields(tool.input_schema, name=tool.name)
     proxy = _spread_proxy(tool.handler, name=tool.name, fields=fields, open_ended=open_ended)
     airlocked: Any = (Airlock(policy=policy) if policy is not None else Airlock())(proxy)
@@ -117,6 +122,7 @@ def guard_sdk_tool(tool: Any, *, policy: SecurityPolicy | None = None) -> Any:
         result = await airlocked(**dict(args or {}))
         return _sdk_error_result(result) if _is_refusal(result) else result
 
+    mark_guarded(handler, policy)
     guarded = copy.copy(tool)
     guarded.handler = handler
     return guarded

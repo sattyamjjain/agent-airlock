@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent_airlock.integrations._tool_proxy import GUARDED_MARKER
 from agent_airlock.integrations.crewai import CrewAIAdapter
 from agent_airlock.policy import SecurityPolicy
 
@@ -45,11 +46,15 @@ class _Crew:
 
 
 def _guard_layers(callable_: Any) -> int:
-    """Count Airlock layers on a tool callable by walking its ``__wrapped__`` chain."""
+    """Count Airlock layers on a tool callable by walking its ``__wrapped__`` chain.
+
+    The marker is shared by every walker since 0.10.28 (``_tool_proxy.GUARDED_MARKER``);
+    it was ``__airlock_crewai_guarded__``.
+    """
     layers = 0
     current = callable_
     for _ in range(32):
-        if getattr(current, "__airlock_crewai_guarded__", False):
+        if getattr(current, GUARDED_MARKER, False):
             layers += 1
         nxt = getattr(current, "__wrapped__", None)
         if nxt is None:
