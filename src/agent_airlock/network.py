@@ -1,39 +1,61 @@
 """Network egress control module for Agent-Airlock.
 
 Provides runtime network blocking to prevent data exfiltration during tool execution.
-Uses socket monkeypatching with thread-local storage to ensure thread safety.
+Uses socket monkeypatching, with the active policies held in a ContextVar so each call
+is checked against its own.
 
 SECURITY: This module is critical for preventing Moltbook-style attacks where
 malicious tool calls attempt to exfiltrate data to external servers.
 
-THREAD SAFETY:
-    This module is thread-safe through careful design:
+WHAT IS CHECKED:
+    While an airgap is open, ``socket.socket.connect`` / ``connect_ex`` / ``sendto`` /
+    ``sendmsg`` (the address), ``socket.getaddrinfo`` / ``gethostbyname`` /
+    ``gethostbyname_ex`` / ``gethostbyaddr`` / ``getnameinfo`` (the name looked up), and
+    asyncio's ``loop.getaddrinfo`` / ``loop.getnameinfo`` are checked against it. Until
+    0.10.28 only ``connect``, ``connect_ex`` and ``getaddrinfo`` were: a UDP datagram, or
+    a lookup through ``gethostbyname`` and the like, went out under ``NO_NETWORK_POLICY``.
 
-    1. Policy Storage: Uses thread-local storage (_thread_local) so each thread
-       has its own NetworkPolicy. This ensures policy enforcement doesn't leak
-       across threads.
+CONTEXT SAFETY:
+    1. Policy storage: the open airgaps live in a ContextVar (``_active_airgaps``), so
+       each thread and each asyncio task sees only the airgaps entered in its own
+       context. Until 0.10.28 they lived in a ``threading.local``: two airgapped tools
+       interleaved on one event loop thread could leave each other without the airgap
+       (egress allowed), and while one awaited inside its airgap, the host's own
+       coroutines were refused.
 
-    2. Socket Patching: Uses _patch_lock (threading.Lock) to protect the global
-       socket monkeypatch installation/uninstallation. Reference counting ensures
-       interceptors are only uninstalled when no contexts are using them.
+    2. Nested airgaps intersect: a call is admitted only when every open airgap admits
+       it, so an inner policy can never widen an outer one.
 
-    3. Lock Acquisition Order: _patch_lock is a single lock with no dependencies.
-       It should be acquired before any socket operations during install/uninstall.
+    3. Socket patching: ``_patch_lock`` protects the global monkeypatch; reference
+       counting uninstalls it only when the last airgap in the process closes. The
+       patched functions themselves run without the lock.
 
-    Note: The socket methods themselves are called without locks held to prevent
-    deadlocks during actual network operations.
+LIMITS:
+    The airgap follows the call's context. Code the tool runs itself, asyncio tasks it
+    creates and ``asyncio.to_thread`` (which copies the context) are airgapped. A thread
+    it starts with ``threading.Thread``, a ``ThreadPoolExecutor`` or
+    ``loop.run_in_executor`` starts without the call's context, so its socket calls are
+    not airgapped (unless the interpreter copies the context into new threads,
+    ``sys.flags.thread_inherit_context``). A subprocess the tool starts, a socket made
+    from the ``_socket`` module directly, and an event loop that does its own socket I/O
+    (uvloop, which connects and resolves through libuv) are not covered either. A task
+    or thread the tool leaves running keeps the call's policy in its context, but it is
+    enforced only while some airgap is open in the process: the patch is removed when the
+    last one closes.
 """
 
 from __future__ import annotations
 
+import asyncio.base_events
 import contextlib
 import ipaddress
 import re
 import socket
 import threading
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NoReturn
 
 from ._log import structlog
 
@@ -389,13 +411,30 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
         )
 
 
-# Thread-local storage for policy enforcement
-_thread_local = threading.local()
+@dataclass
+class _AirgapFrame:
+    """One open airgap: its policy, and the addresses the lookups it allowed returned.
 
-# Original socket methods (saved for restoration)
-_original_socket_connect: Any = None
-_original_socket_connect_ex: Any = None
-_original_getaddrinfo: Any = None
+    ``resolved`` is what a hostname allowlist admits at connect: the check there sees the
+    address a name resolved to, not the name, so without it a listed name would be
+    refused its own address. An airgap is opened once per guarded call (once per step of
+    a generator tool), so an admission never outlives the call or reaches another one.
+    """
+
+    policy: NetworkPolicy
+    resolved: set[str] = field(default_factory=set)
+
+
+# The airgaps open in the current context, outermost first. A ContextVar, so each thread
+# and each asyncio task has its own: until 0.10.28 this was a threading.local, which every
+# task on a thread shared.
+_active_airgaps: ContextVar[tuple[_AirgapFrame, ...]] = ContextVar(
+    "agent_airlock_network_airgaps", default=()
+)
+
+# The functions the interceptors replaced, by interceptor name, saved for restoration.
+# Kept after an uninstall, so a call already inside an interceptor still completes.
+_originals: dict[str, Any] = {}
 _socket_patched = False
 _patch_lock = threading.Lock()
 
@@ -405,8 +444,26 @@ _interceptor_ref_count = 0
 
 
 def _get_current_policy() -> NetworkPolicy | None:
-    """Get the current thread's network policy."""
-    return getattr(_thread_local, "network_policy", None)
+    """The policy of the innermost airgap open in the current context, or None."""
+    frames = _active_airgaps.get()
+    return frames[-1].policy if frames else None
+
+
+def _set_current_policy(policy: NetworkPolicy | None) -> None:
+    """Make ``policy`` the only airgap open in the current context (None: no airgap)."""
+    _active_airgaps.set((_AirgapFrame(policy),) if policy is not None else ())
+
+
+def _original(name: str) -> Any:
+    """The function the interceptor called ``name`` replaced.
+
+    Raises:
+        RuntimeError: If the interceptors were never installed.
+    """
+    original = _originals.get(name)
+    if original is None:
+        raise RuntimeError(f"Socket interceptors not properly installed: no original {name}")
+    return original
 
 
 def _ensure_original_socket_methods() -> None:
@@ -419,23 +476,8 @@ def _ensure_original_socket_methods() -> None:
         This replaces assert statements to ensure checks work even when
         Python is run with -O (optimize) flag which removes asserts.
     """
-    if _original_socket_connect is None:
-        raise RuntimeError(
-            "Socket interceptors not properly installed: _original_socket_connect is None"
-        )
-    if _original_socket_connect_ex is None:
-        raise RuntimeError(
-            "Socket interceptors not properly installed: _original_socket_connect_ex is None"
-        )
-    if _original_getaddrinfo is None:
-        raise RuntimeError(
-            "Socket interceptors not properly installed: _original_getaddrinfo is None"
-        )
-
-
-def _set_current_policy(policy: NetworkPolicy | None) -> None:
-    """Set the current thread's network policy."""
-    _thread_local.network_policy = policy
+    for name in ("socket.connect", "socket.connect_ex", "getaddrinfo"):
+        _original(name)
 
 
 def _is_host_allowed(host: str, policy: NetworkPolicy) -> bool:
@@ -468,191 +510,322 @@ def _extract_host_port(address: Any) -> tuple[str | None, int | None]:
     return None, None
 
 
+def _host_text(host: Any) -> str | None:
+    """A looked-up or resolved host as the text the allowlist is compared with."""
+    if host is None:
+        return None
+    if isinstance(host, bytes | bytearray):
+        return bytes(host).decode("ascii", "replace")
+    return str(host)
+
+
+def _blocked(
+    operation: str,
+    message: str,
+    *,
+    target: str,
+    details: dict[str, Any],
+    host: Any = None,
+    port: int | None = None,
+) -> NoReturn:
+    """Log a refused network operation and raise its ``NetworkBlockedError``."""
+    logger.warning(
+        "network_blocked",
+        operation=operation,
+        host=host,
+        port=port,
+        reason=details["reason"],
+    )
+    raise NetworkBlockedError(message, operation=operation, target=target, details=details)
+
+
+def _check_address(
+    frames: tuple[_AirgapFrame, ...], address: Any, operation: str, noun: str
+) -> None:
+    """Refuse opening ``address`` unless every open airgap admits it.
+
+    Nested airgaps intersect: an inner policy can only refuse more than an outer one.
+    ``noun`` names what is being opened ("connection", "datagram") in the message.
+    """
+    host, port = _extract_host_port(address)
+    for frame in frames:
+        policy = frame.policy
+        if not policy.allow_egress:
+            _blocked(
+                operation,
+                f"Network egress blocked: {noun} to {address} denied",
+                target=str(address),
+                details={"reason": "egress_disabled"},
+                host=host,
+                port=port,
+            )
+        if host and not (_is_host_allowed(host, policy) or host in frame.resolved):
+            _blocked(
+                operation,
+                f"Network egress blocked: host '{host}' not in allowed list",
+                target=str(address),
+                details={
+                    "reason": "host_not_allowed",
+                    "host": host,
+                    "allowed_hosts": policy.allowed_hosts,
+                },
+                host=host,
+                port=port,
+            )
+        if port and not _is_port_allowed(port, policy):
+            _blocked(
+                operation,
+                f"Network egress blocked: port {port} not in allowed list",
+                target=str(address),
+                details={
+                    "reason": "port_not_allowed",
+                    "port": port,
+                    "allowed_ports": policy.allowed_ports,
+                },
+                host=host,
+                port=port,
+            )
+
+
+def _check_lookup(frames: tuple[_AirgapFrame, ...], host: Any, operation: str) -> None:
+    """Refuse a name lookup of ``host`` unless every open airgap admits it."""
+    text = _host_text(host)
+    for frame in frames:
+        policy = frame.policy
+        if policy.block_dns:
+            _blocked(
+                operation,
+                f"DNS lookup blocked: resolution of '{host}' denied",
+                target=str(host),
+                details={"reason": "dns_blocked"},
+                host=host,
+            )
+        if not policy.allow_egress:
+            _blocked(
+                operation,
+                "DNS lookup blocked: egress disabled",
+                target=str(host),
+                details={"reason": "egress_disabled"},
+                host=host,
+            )
+        if text and not (_is_host_allowed(text, policy) or text in frame.resolved):
+            _blocked(
+                operation,
+                f"DNS lookup blocked: host '{host}' not in allowed list",
+                target=str(host),
+                details={"reason": "host_not_allowed", "host": text},
+                host=host,
+            )
+
+
+def _admit(frames: tuple[_AirgapFrame, ...], addresses: Iterable[Any]) -> None:
+    """Admit at connect the addresses returned by a lookup every open airgap allowed.
+
+    Only the open airgaps of the current call record them. A listed name that resolves
+    to an internal address (127.0.0.1, 169.254.169.254) gets that address admitted with
+    it: keeping a tool off internal addresses is the job of ``EndpointPolicy`` and the
+    SSRF egress guard (``ssrf_egress_guard``), not of this allowlist.
+    """
+    hosts = [text for address in addresses if (text := _host_text(address))]
+    for frame in frames:
+        if frame.policy.allowed_hosts:
+            frame.resolved.update(hosts)
+
+
+def _resolved_addresses(infos: Any) -> list[Any]:
+    """The addresses in ``getaddrinfo`` results."""
+    addresses: list[Any] = []
+    for info in infos or ():
+        with contextlib.suppress(IndexError, KeyError, TypeError):
+            addresses.append(info[4][0])
+    return addresses
+
+
+def _sockaddr_host(sockaddr: Any) -> Any:
+    """The host of a ``getnameinfo`` socket address, or None."""
+    if isinstance(sockaddr, tuple) and sockaddr:
+        return sockaddr[0]
+    return None
+
+
+def _numeric_host_only(flags: Any) -> bool:
+    """Whether ``getnameinfo`` was asked only to format the address, which looks up nothing."""
+    return isinstance(flags, int) and bool(flags & socket.NI_NUMERICHOST)
+
+
 def _blocked_connect(self: socket.socket, address: Any) -> None:
     """Intercepted socket.connect that enforces network policy."""
-    policy = _get_current_policy()
-
-    if policy is None:
-        # No policy active, use original
-        if _original_socket_connect is None:
-            raise RuntimeError("Socket interceptors not properly installed")
-        _original_socket_connect(self, address)
-        return None
-
-    if not policy.allow_egress:
-        host, port = _extract_host_port(address)
-        logger.warning(
-            "network_blocked",
-            operation="connect",
-            host=host,
-            port=port,
-            reason="egress_disabled",
-        )
-        raise NetworkBlockedError(
-            f"Network egress blocked: connection to {address} denied",
-            operation="connect",
-            target=str(address),
-            details={"reason": "egress_disabled"},
-        )
-
-    host, port = _extract_host_port(address)
-
-    if host and not _is_host_allowed(host, policy):
-        logger.warning(
-            "network_blocked",
-            operation="connect",
-            host=host,
-            port=port,
-            reason="host_not_allowed",
-        )
-        raise NetworkBlockedError(
-            f"Network egress blocked: host '{host}' not in allowed list",
-            operation="connect",
-            target=str(address),
-            details={
-                "reason": "host_not_allowed",
-                "host": host,
-                "allowed_hosts": policy.allowed_hosts,
-            },
-        )
-
-    if port and not _is_port_allowed(port, policy):
-        logger.warning(
-            "network_blocked",
-            operation="connect",
-            host=host,
-            port=port,
-            reason="port_not_allowed",
-        )
-        raise NetworkBlockedError(
-            f"Network egress blocked: port {port} not in allowed list",
-            operation="connect",
-            target=str(address),
-            details={
-                "reason": "port_not_allowed",
-                "port": port,
-                "allowed_ports": policy.allowed_ports,
-            },
-        )
-
-    # Connection allowed
-    if _original_socket_connect is None:
-        raise RuntimeError("Socket interceptors not properly installed")
-    _original_socket_connect(self, address)
-    return None
+    frames = _active_airgaps.get()
+    if frames:
+        _check_address(frames, address, "connect", "connection")
+    _original("socket.connect")(self, address)
 
 
 def _blocked_connect_ex(self: socket.socket, address: Any) -> int:
     """Intercepted socket.connect_ex that enforces network policy."""
-    policy = _get_current_policy()
+    frames = _active_airgaps.get()
+    if frames:
+        _check_address(frames, address, "connect_ex", "connection")
+    return int(_original("socket.connect_ex")(self, address))
 
-    if policy is None:
-        if _original_socket_connect_ex is None:
-            raise RuntimeError("Socket interceptors not properly installed")
-        return _original_socket_connect_ex(self, address)  # type: ignore[no-any-return]
 
-    # Apply same checks as connect
-    if not policy.allow_egress:
-        host, port = _extract_host_port(address)
-        logger.warning(
-            "network_blocked",
-            operation="connect_ex",
-            host=host,
-            port=port,
-            reason="egress_disabled",
-        )
-        raise NetworkBlockedError(
-            f"Network egress blocked: connection to {address} denied",
-            operation="connect_ex",
-            target=str(address),
-            details={"reason": "egress_disabled"},
-        )
+def _blocked_sendto(self: socket.socket, data: Any, *args: Any) -> int:
+    """Intercepted socket.sendto, ``sendto(data, address)`` or ``sendto(data, flags, address)``.
 
-    host, port = _extract_host_port(address)
+    A datagram needs no connect, so until 0.10.28 UDP went out under any airgap.
+    """
+    frames = _active_airgaps.get()
+    if frames and args:
+        _check_address(frames, args[-1], "sendto", "datagram")
+    return int(_original("socket.sendto")(self, data, *args))
 
-    if host and not _is_host_allowed(host, policy):
-        raise NetworkBlockedError(
-            f"Network egress blocked: host '{host}' not in allowed list",
-            operation="connect_ex",
-            target=str(address),
-            details={"reason": "host_not_allowed", "host": host},
-        )
 
-    if port and not _is_port_allowed(port, policy):
-        raise NetworkBlockedError(
-            f"Network egress blocked: port {port} not in allowed list",
-            operation="connect_ex",
-            target=str(address),
-            details={"reason": "port_not_allowed", "port": port},
-        )
+def _blocked_sendmsg(self: socket.socket, buffers: Any, *args: Any) -> int:
+    """Intercepted socket.sendmsg, ``sendmsg(buffers[, ancdata[, flags[, address]]])``."""
+    frames = _active_airgaps.get()
+    if frames and len(args) >= 3 and args[2] is not None:
+        _check_address(frames, args[2], "sendmsg", "datagram")
+    return int(_original("socket.sendmsg")(self, buffers, *args))
 
-    if _original_socket_connect_ex is None:
-        raise RuntimeError("Socket interceptors not properly installed")
-    return _original_socket_connect_ex(self, address)  # type: ignore[no-any-return]
+
+def _is_own_host_name(host: Any) -> bool:
+    """Whether ``host`` is this machine's own name, ``socket.gethostname()``.
+
+    Looking it up carries nothing from the call, and ``socket.getfqdn()`` (so ``smtplib``
+    and ``email.utils.make_msgid()``) and ``gethostbyname(gethostname())`` depend on it.
+    """
+    text = _host_text(host)
+    if not text:
+        return False
+    try:
+        own = socket.gethostname()
+    except OSError:
+        return False
+    return text.lower() == own.lower()
+
+
+def _checked_lookup(host: Any, operation: str) -> tuple[_AirgapFrame, ...]:
+    """Check a lookup of ``host`` against the open airgaps, and return the ones checked.
+
+    Raises ``NetworkBlockedError`` when one of them refuses it. Returns no airgaps when
+    none is open, or when ``host`` is this machine's own name, which is looked up
+    unchecked (``_is_own_host_name``) and admits nothing at connect.
+    """
+    frames = _active_airgaps.get()
+    if not frames or _is_own_host_name(host):
+        return ()
+    _check_lookup(frames, host, operation)
+    return frames
 
 
 def _blocked_getaddrinfo(
-    host: str | None,
-    port: int | str | None,
+    host: Any,
+    port: Any,
     family: int = 0,
-    type_: int = 0,
+    type: int = 0,
     proto: int = 0,
     flags: int = 0,
 ) -> list[Any]:
-    """Intercepted socket.getaddrinfo that enforces DNS blocking."""
-    policy = _get_current_policy()
+    """Intercepted socket.getaddrinfo that enforces DNS blocking.
 
-    if policy is None:
-        if _original_getaddrinfo is None:
-            raise RuntimeError("Socket interceptors not properly installed")
-        return _original_getaddrinfo(host, port, family, type_, proto, flags)  # type: ignore[no-any-return]
+    The parameters keep the standard library's names, so ``type=`` passed by keyword
+    works (until 0.10.28 it was ``type_`` here, and ``type=`` raised under an airgap).
+    """
+    frames = _checked_lookup(host, "dns_lookup")
+    infos = _original("getaddrinfo")(host, port, family, type, proto, flags)
+    _admit(frames, _resolved_addresses(infos))
+    return infos  # type: ignore[no-any-return]
 
-    if policy.block_dns:
-        logger.warning(
-            "network_blocked",
-            operation="dns_lookup",
-            host=host,
-            reason="dns_blocked",
-        )
-        raise NetworkBlockedError(
-            f"DNS lookup blocked: resolution of '{host}' denied",
-            operation="dns_lookup",
-            target=str(host),
-            details={"reason": "dns_blocked"},
-        )
 
-    if not policy.allow_egress:
-        logger.warning(
-            "network_blocked",
-            operation="dns_lookup",
-            host=host,
-            reason="egress_disabled",
-        )
-        raise NetworkBlockedError(
-            "DNS lookup blocked: egress disabled",
-            operation="dns_lookup",
-            target=str(host),
-            details={"reason": "egress_disabled"},
-        )
+def _blocked_gethostbyname(hostname: Any) -> Any:
+    """Intercepted socket.gethostbyname (a lookup the airgap did not see until 0.10.28)."""
+    frames = _checked_lookup(hostname, "dns_lookup")
+    address = _original("gethostbyname")(hostname)
+    _admit(frames, [address])
+    return address
 
-    # Check if the host is allowed
-    if host and not _is_host_allowed(host, policy):
-        logger.warning(
-            "network_blocked",
-            operation="dns_lookup",
-            host=host,
-            reason="host_not_allowed",
-        )
-        raise NetworkBlockedError(
-            f"DNS lookup blocked: host '{host}' not in allowed list",
-            operation="dns_lookup",
-            target=host,
-            details={"reason": "host_not_allowed", "host": host},
-        )
 
-    if _original_getaddrinfo is None:
-        raise RuntimeError("Socket interceptors not properly installed")
-    return _original_getaddrinfo(host, port, family, type_, proto, flags)  # type: ignore[no-any-return]
+def _blocked_gethostbyname_ex(hostname: Any) -> Any:
+    """Intercepted socket.gethostbyname_ex."""
+    frames = _checked_lookup(hostname, "dns_lookup")
+    result = _original("gethostbyname_ex")(hostname)
+    _admit(frames, result[2])
+    return result
+
+
+def _blocked_gethostbyaddr(ip_address: Any) -> Any:
+    """Intercepted socket.gethostbyaddr, which also resolves a name it is given."""
+    frames = _checked_lookup(ip_address, "reverse_dns_lookup")
+    result = _original("gethostbyaddr")(ip_address)
+    _admit(frames, result[2])
+    return result
+
+
+def _blocked_getnameinfo(sockaddr: Any, flags: Any) -> Any:
+    """Intercepted socket.getnameinfo. With ``NI_NUMERICHOST`` it only formats the address."""
+    if not _numeric_host_only(flags):
+        _checked_lookup(_sockaddr_host(sockaddr), "reverse_dns_lookup")
+    return _original("getnameinfo")(sockaddr, flags)
+
+
+async def _airgapped_loop_getaddrinfo(
+    self: Any,
+    host: Any,
+    port: Any,
+    *,
+    family: int = 0,
+    type: int = 0,
+    proto: int = 0,
+    flags: int = 0,
+) -> Any:
+    """asyncio's ``loop.getaddrinfo``, checked in the calling task's context.
+
+    The loop runs the lookup in its default executor, a thread the call's context does
+    not reach, so ``socket.getaddrinfo`` there sees no airgap. Checking here, before the
+    hand-off, refuses it in the task that asked (until 0.10.28 an async tool's lookup,
+    and every async HTTP client's, went out under any airgap).
+    """
+    frames = _checked_lookup(host, "dns_lookup")
+    infos = await _original("loop.getaddrinfo")(
+        self, host, port, family=family, type=type, proto=proto, flags=flags
+    )
+    _admit(frames, _resolved_addresses(infos))
+    return infos
+
+
+async def _airgapped_loop_getnameinfo(self: Any, sockaddr: Any, flags: int = 0) -> Any:
+    """asyncio's ``loop.getnameinfo``, checked in the calling task's context."""
+    if not _numeric_host_only(flags):
+        _checked_lookup(_sockaddr_host(sockaddr), "reverse_dns_lookup")
+    return await _original("loop.getnameinfo")(self, sockaddr, flags)
+
+
+def _patch_targets() -> list[tuple[str, Any, str, Any]]:
+    """``(name, owner, attribute, interceptor)`` for every function the airgap replaces."""
+    loop_class = asyncio.base_events.BaseEventLoop
+    targets: list[tuple[str, Any, str, Any]] = [
+        ("socket.connect", socket.socket, "connect", _blocked_connect),
+        ("socket.connect_ex", socket.socket, "connect_ex", _blocked_connect_ex),
+        ("socket.sendto", socket.socket, "sendto", _blocked_sendto),
+        ("getaddrinfo", socket, "getaddrinfo", _blocked_getaddrinfo),
+        ("gethostbyname", socket, "gethostbyname", _blocked_gethostbyname),
+        ("gethostbyname_ex", socket, "gethostbyname_ex", _blocked_gethostbyname_ex),
+        ("gethostbyaddr", socket, "gethostbyaddr", _blocked_gethostbyaddr),
+        ("getnameinfo", socket, "getnameinfo", _blocked_getnameinfo),
+        ("loop.getaddrinfo", loop_class, "getaddrinfo", _airgapped_loop_getaddrinfo),
+        ("loop.getnameinfo", loop_class, "getnameinfo", _airgapped_loop_getnameinfo),
+    ]
+    if hasattr(socket.socket, "sendmsg"):  # not on Windows
+        targets.append(("socket.sendmsg", socket.socket, "sendmsg", _blocked_sendmsg))
+    return targets
+
+
+def _restore_originals() -> None:
+    """Put back every function the interceptors replaced. Call with ``_patch_lock`` held."""
+    for name, owner, attribute, _interceptor in _patch_targets():
+        original = _originals.get(name)
+        if original is not None:
+            setattr(owner, attribute, original)
 
 
 def _install_socket_interceptors() -> None:
@@ -662,8 +835,7 @@ def _install_socket_interceptors() -> None:
     Interceptors are only installed on first reference and uninstalled when
     the last reference is released.
     """
-    global _socket_patched, _original_socket_connect, _original_socket_connect_ex
-    global _original_getaddrinfo, _interceptor_ref_count
+    global _socket_patched, _interceptor_ref_count
 
     with _patch_lock:
         _interceptor_ref_count += 1
@@ -676,15 +848,9 @@ def _install_socket_interceptors() -> None:
             )
             return
 
-        # Save original methods
-        _original_socket_connect = socket.socket.connect
-        _original_socket_connect_ex = socket.socket.connect_ex
-        _original_getaddrinfo = socket.getaddrinfo
-
-        # Install interceptors
-        socket.socket.connect = _blocked_connect  # type: ignore[assignment,method-assign]
-        socket.socket.connect_ex = _blocked_connect_ex  # type: ignore[assignment,method-assign]
-        socket.getaddrinfo = _blocked_getaddrinfo  # type: ignore[assignment]
+        for name, owner, attribute, interceptor in _patch_targets():
+            _originals[name] = getattr(owner, attribute)
+            setattr(owner, attribute, interceptor)
 
         _socket_patched = True
         logger.debug(
@@ -716,24 +882,33 @@ def _uninstall_socket_interceptors() -> None:
         if not _socket_patched:
             return
 
-        if _original_socket_connect is not None:
-            socket.socket.connect = _original_socket_connect  # type: ignore[method-assign]
-        if _original_socket_connect_ex is not None:
-            socket.socket.connect_ex = _original_socket_connect_ex  # type: ignore[method-assign]
-        if _original_getaddrinfo is not None:
-            socket.getaddrinfo = _original_getaddrinfo
-
+        _restore_originals()
         _socket_patched = False
         logger.debug("socket_interceptors_uninstalled")
+
+
+def _close_airgap(token: Token[tuple[_AirgapFrame, ...]]) -> None:
+    """Close the airgap ``token`` opened, in the context it was opened in.
+
+    An airgap held across a ``yield`` and closed from another context (a generator
+    resumed by another task or thread) cannot be reset there. The context it was opened
+    in keeps it, which can only refuse more; the current one is left as it is, since
+    resetting a context this airgap was never opened in could drop that context's own.
+    """
+    try:
+        _active_airgaps.reset(token)
+    except (ValueError, RuntimeError) as e:
+        logger.warning("network_airgap_closed_in_another_context", error=str(e))
 
 
 @contextlib.contextmanager
 def network_airgap(policy: NetworkPolicy | None = None) -> Generator[None, None, None]:
     """Context manager that enforces network policy during execution.
 
-    Thread-safe: Uses thread-local storage to ensure policy only applies
-    to the current thread. Uses reference counting to properly uninstall
-    socket interceptors when the last context exits.
+    The policy applies to the current context only: the thread or asyncio task that
+    entered it, and the tasks it creates. Nested airgaps intersect, so an operation must
+    be admitted by every open one. Uses reference counting to uninstall the socket
+    interceptors when the last airgap in the process exits.
 
     Example:
         # Block all network access
@@ -758,16 +933,12 @@ def network_airgap(policy: NetworkPolicy | None = None) -> Generator[None, None,
 
     # Ensure interceptors are installed (increments ref count)
     _install_socket_interceptors()
-
-    # Save any existing policy and set new one
-    previous_policy = _get_current_policy()
-    _set_current_policy(policy)
+    token = _active_airgaps.set((*_active_airgaps.get(), _AirgapFrame(policy)))
 
     try:
         yield
     finally:
-        # Restore previous policy (or None)
-        _set_current_policy(previous_policy)
+        _close_airgap(token)
         # Decrement ref count, uninstall if last context
         _uninstall_socket_interceptors()
 
@@ -810,15 +981,10 @@ def _reset_interceptors() -> None:
     with _patch_lock:
         # Force uninstall if patched
         if _socket_patched:
-            if _original_socket_connect is not None:
-                socket.socket.connect = _original_socket_connect  # type: ignore[method-assign]
-            if _original_socket_connect_ex is not None:
-                socket.socket.connect_ex = _original_socket_connect_ex  # type: ignore[method-assign]
-            if _original_getaddrinfo is not None:
-                socket.getaddrinfo = _original_getaddrinfo
+            _restore_originals()
             _socket_patched = False
 
         _interceptor_ref_count = 0
 
-    # Clear thread-local policy
+    # Close every airgap open in the current context
     _set_current_policy(None)
