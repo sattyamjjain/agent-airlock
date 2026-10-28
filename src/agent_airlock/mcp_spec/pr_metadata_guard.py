@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -119,15 +120,26 @@ _INVISIBLE_CODEPOINTS: frozenset[str] = frozenset(
 
 
 class PRMetadataInjectionRejected(AirlockError):
-    """Raised when a field's risk score crosses the strict threshold."""
+    """Raised when a field's risk score crosses the strict threshold, or it cannot be read.
 
-    def __init__(self, *, source: VCSField, risk_score: float, matches: int) -> None:
+    Attributes:
+        source: The VCS field the text came from.
+        risk_score: The field's risk score (``1.0`` for a field that could not be read).
+        matches: How many model-targeting phrases matched.
+        detail: Why the field was rejected when it is not a score, e.g. a value that
+            could not be read as text (v0.10.28); empty otherwise.
+    """
+
+    def __init__(
+        self, *, source: VCSField, risk_score: float, matches: int, detail: str = ""
+    ) -> None:
         self.source = source
         self.risk_score = risk_score
         self.matches = matches
+        self.detail = detail
+        why = detail or (f"risk={risk_score:.2f} with {matches} model-targeting match(es)")
         super().__init__(
-            f"PR-metadata field {source!r} rejected: risk={risk_score:.2f} "
-            f"with {matches} model-targeting match(es) "
+            f"PR-metadata field {source!r} rejected: {why} "
             "(Comment-and-Control class, Aonan Guan 2026-04-25)"
         )
 
@@ -148,7 +160,13 @@ class Match:
 
 @dataclass
 class SanitizedField:
-    """The four-stage pipeline's output for one field."""
+    """The four-stage pipeline's output for one field.
+
+    ``unreadable`` is True when the value could not be read as text (v0.10.28): the
+    field then carries ``risk_score=1.0``, no matches and an empty body, so
+    :meth:`PRMetadataGuard.sanitize_or_raise` rejects it and ``safe_for_prompt``
+    splices nothing from it.
+    """
 
     source: VCSField
     original_text: str
@@ -157,11 +175,44 @@ class SanitizedField:
     matches: tuple[Match, ...]
     risk_score: float
     invisible_codepoints_removed: int
+    unreadable: bool = False
 
     @property
     def safe_for_prompt(self) -> str:
         """The text the model should see — sentinel-wrapped + cleaned."""
         return self.sentinel_wrapped
+
+
+def _read_text(value: object) -> str | None:
+    """A text field in any shape it arrives in, or ``None`` when it cannot be read.
+
+    ``None`` is an empty field (GitHub sends ``"body": null`` for a PR with no
+    description); a ``str`` is read as is; ``bytes`` / ``bytearray`` must be UTF-8 (a
+    consumer that dropped or replaced undecodable bytes could rejoin a phrase the
+    guard never saw); a list or tuple (lines, several comments) is read item by item
+    and joined with newlines. Any other shape — a number, a mapping, a nested list —
+    returns ``None``.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            return bytes(value).decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    if isinstance(value, (list, tuple)):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, (list, tuple)):
+                return None
+            text = _read_text(item)
+            if text is None:
+                return None
+            parts.append(text)
+        return "\n".join(parts)
+    return None
 
 
 # -----------------------------------------------------------------------------
@@ -252,9 +303,35 @@ class PRMetadataGuard:
         """
         return f"<<<UNTRUSTED:{source}>>>{text}<<<END>>>"
 
-    def sanitize(self, text: str, source: VCSField) -> SanitizedField:
-        """Run the four-stage pipeline. Never raises."""
-        stripped, removed = self._strip_invisible(text)
+    def sanitize(
+        self, text: str | bytes | Sequence[str | bytes] | None, source: VCSField
+    ) -> SanitizedField:
+        """Run the four-stage pipeline. Never raises.
+
+        ``text`` may be a ``str``, UTF-8 ``bytes``, a list / tuple of those (joined
+        with newlines) or ``None`` (an empty field). A value in any other shape is
+        refused, not skipped: the result has ``unreadable=True`` and
+        ``risk_score=1.0``. Until v0.10.28 ``bytes`` or a list raised ``TypeError``.
+        """
+        read = _read_text(text)
+        if read is None:
+            logger.warning(
+                "pr_metadata_unreadable",
+                source=source,
+                value_type=type(text).__name__,
+                dry_run=self.dry_run,
+            )
+            return SanitizedField(
+                source=source,
+                original_text="",
+                stripped_text="",
+                sentinel_wrapped="" if self.dry_run else self.wrap_untrusted("", source),
+                matches=(),
+                risk_score=1.0,
+                invisible_codepoints_removed=0,
+                unreadable=True,
+            )
+        stripped, removed = self._strip_invisible(read)
         matches = self.detect_imperatives(stripped)
         risk = self._risk_score(matches, len(stripped))
 
@@ -267,7 +344,7 @@ class PRMetadataGuard:
 
         result = SanitizedField(
             source=source,
-            original_text=text,
+            original_text=read,
             stripped_text=stripped,
             sentinel_wrapped=wrapped,
             matches=tuple(matches),
@@ -284,19 +361,26 @@ class PRMetadataGuard:
             )
         return result
 
-    def sanitize_or_raise(self, text: str, source: VCSField) -> SanitizedField:
+    def sanitize_or_raise(
+        self, text: str | bytes | Sequence[str | bytes] | None, source: VCSField
+    ) -> SanitizedField:
         """Like :meth:`sanitize`, but raise on
-        ``risk_score >= reject_threshold``.
+        ``risk_score >= reject_threshold`` or on a value it cannot read.
 
         Suitable for production CI runners that want a hard refuse
         (the dry_run flag still suppresses the raise — log only).
         """
         result = self.sanitize(text, source)
-        if not self.dry_run and result.risk_score >= self.reject_threshold:
+        if not self.dry_run and (result.unreadable or result.risk_score >= self.reject_threshold):
             raise PRMetadataInjectionRejected(
                 source=source,
                 risk_score=result.risk_score,
                 matches=len(result.matches),
+                detail=(
+                    f"the value is a {type(text).__name__} that could not be read as text"
+                    if result.unreadable
+                    else ""
+                ),
             )
         return result
 

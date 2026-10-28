@@ -24,12 +24,13 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
 from .._log import structlog
-from .pr_metadata_guard import PRMetadataGuard, SanitizedField
+from .pr_metadata_guard import PRMetadataGuard, SanitizedField, _read_text
 
 # Transcript-specific imperative patterns. PRMetadataGuard's regex set
 # is conservative-scoped for PR bodies; the video-ingestion context
@@ -107,13 +108,17 @@ class TranscriptIngestGuard:
 
     def inspect(
         self,
-        text: str,
+        text: str | bytes | Sequence[str | bytes] | None,
         source_kind: SourceKind | str = SourceKind.TRANSCRIPT,
     ) -> TranscriptInspection:
         """Inspect a single text field from a video metadata payload.
 
         Args:
-            text: The raw text from the video field.
+            text: The raw text from the video field: a ``str``, UTF-8 ``bytes``, a
+                list / tuple of those (caption lines, joined with newlines) or
+                ``None`` (no text). A value in any other shape is refused with a
+                ``block`` verdict rather than skipped; until v0.10.28 ``bytes`` or a
+                list raised ``TypeError``.
             source_kind: Which field the text was sourced from.
                 Defaults to :attr:`SourceKind.TRANSCRIPT` since that
                 is the most common ingestion path.
@@ -124,10 +129,29 @@ class TranscriptIngestGuard:
             ``PRMetadataGuard`` uses for PR bodies.
         """
         kind = source_kind if isinstance(source_kind, SourceKind) else SourceKind(source_kind)
+        read = _read_text(text)
+        if read is None:
+            logger.warning(
+                "transcript_inspect",
+                source_kind=kind.value,
+                verdict="block",
+                risk_score=1.0,
+                unreadable=type(text).__name__,
+            )
+            return TranscriptInspection(
+                verdict="block",
+                source_kind=kind,
+                risk_score=1.0,
+                sanitized=self._guard.sanitize(text, source="pr_body"),
+                reason=(
+                    f"video {kind.value} is a {type(text).__name__} that could not be read as "
+                    "text; refused rather than skipped"
+                ),
+            )
         # Substitute invisible codepoints with spaces *before* the
         # PR-metadata sanitiser so its word-boundary regexes still fire
         # on payloads that hide overrides between zero-width chars.
-        normalised = _strip_invisible_codepoints(text)
+        normalised = _strip_invisible_codepoints(read)
         # ``PRMetadataGuard.sanitize`` accepts a ``VCSField`` literal
         # (pr_body / pr_title / commit_message / …). Video transcripts
         # don't fit any of those, but ``pr_body`` is the most permissive

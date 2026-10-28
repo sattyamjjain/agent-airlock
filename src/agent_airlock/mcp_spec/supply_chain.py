@@ -223,15 +223,44 @@ _UNSAFE_CONTENT_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _declared_content_types(content_type: object) -> list[str] | None:
+    """Every media type the response declares, or ``None`` when none can be read.
+
+    A ``str`` declares one; ``bytes`` are header octets and must be ASCII, as a media
+    type is (a non-ASCII byte that a client dropped while decoding could rejoin a
+    denied type the check never saw, and this is a deny-list); a list or tuple is
+    every ``Content-Type`` value the response carried, each a ``str`` or ``bytes``.
+    Anything else (``None``, a number, an empty list, an item of another type)
+    declares nothing the check can read.
+    """
+    items = content_type if isinstance(content_type, (list, tuple)) else [content_type]
+    declared: list[str] = []
+    for item in items:
+        if isinstance(item, (bytes, bytearray)):
+            try:
+                item = bytes(item).decode("ascii")
+            except UnicodeDecodeError:
+                return None
+        if not isinstance(item, str):
+            return None
+        declared.append(item)
+    return declared or None
+
+
 def check_tool_response_content_type(
-    content_type: str,
+    content_type: str | bytes | list[str | bytes] | tuple[str | bytes, ...],
     tool_name: str = "<unknown>",
     allowed_content_types: frozenset[str] = frozenset(),
 ) -> None:
     """Refuse responses whose ``Content-Type`` is a known-unsafe format.
 
     Args:
-        content_type: The ``Content-Type`` header from the MCP tool response.
+        content_type: The ``Content-Type`` header from the MCP tool response:
+            a ``str``, ASCII header ``bytes``, or a list / tuple of every value
+            the response carried, each of which must pass. A value it cannot
+            read (``None``, a number, an empty list, non-ASCII bytes) is
+            refused: until v0.10.28 a list raised ``AttributeError`` and
+            ``bytes`` a ``TypeError`` instead of the refusal.
         tool_name: The tool that returned it (for error context).
         allowed_content_types: Caller-supplied allow-list. A match
             here bypasses the unsafe-list check. Use when you have an
@@ -239,17 +268,25 @@ def check_tool_response_content_type(
 
     Raises:
         UnsafeDeserializationError: On a match against the unsafe
-            default list, absent an explicit allow-list override.
+            default list, absent an explicit allow-list override, or on a
+            ``content_type`` it cannot read.
     """
-    # Strip parameters: "application/x-python-pickle; charset=utf-8"
-    primary = content_type.split(";", 1)[0].strip().lower()
-    if primary in allowed_content_types:
-        return
-    if primary in _UNSAFE_CONTENT_TYPES:
+    declared = _declared_content_types(content_type)
+    if declared is None:
         raise UnsafeDeserializationError(
-            content_type=content_type,
+            content_type=f"<unreadable {type(content_type).__name__}>",
             tool_name=tool_name,
         )
+    for value in declared:
+        # Strip parameters: "application/x-python-pickle; charset=utf-8"
+        primary = value.split(";", 1)[0].strip().lower()
+        if primary in allowed_content_types:
+            continue
+        if primary in _UNSAFE_CONTENT_TYPES:
+            raise UnsafeDeserializationError(
+                content_type=value,
+                tool_name=tool_name,
+            )
 
 
 __all__ = [

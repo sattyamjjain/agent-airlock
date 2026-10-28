@@ -14,7 +14,12 @@ This module provides a synchronous "diff-on-demand" check: callers
 pass in the previous SHA-256 (which they stored from the last clean
 audit) plus the current file bytes, and get back a structured
 ``ConfigDiffReport``. New STDIO server entries that lack a trusted
-signer raise :class:`UnsignedMCPServerAdded`.
+signer raise :class:`UnsignedMCPServerAdded`; an existing entry whose
+``command``, ``args``, ``env`` key set or ``url`` changed raises
+:class:`MCPCommandMutationDetected`; and a config the guard cannot read
+as strict JSON (JSONC comments, a trailing comma, a repeated key, a
+doubled BOM) raises :class:`MCPConfigUnreadable` instead of reading as a
+config with no servers (v0.10.28).
 
 This is **not** a kernel watcher. The v0.5.8 roadmap covers the
 long-running daemon variant; for v0.5.7 we ship the synchronous API
@@ -90,18 +95,61 @@ class UnsignedMCPServerAdded(AirlockError):
 
 
 class MCPCommandMutationDetected(AirlockError):
-    """An existing ``mcpServers`` entry's ``command`` array changed shape.
+    """An existing ``mcpServers`` entry's spawn identity changed.
 
     The advisory pattern: an attacker doesn't add a new entry — they
     flip the argv on an existing one to point to a malicious binary.
+    Since v0.10.28 the identity is what :class:`McpConfigPinSet`
+    fingerprints — ``command``, ``args`` and the ``env`` key set — plus a
+    remote entry's ``url``; until then only ``command`` was compared, so
+    swapping ``args`` or adding ``LD_PRELOAD`` to ``env`` passed.
+
+    Attributes:
+        path: The config file the diff was taken on.
+        server_name: The name of the mutated entry.
+        fields: The identity fields that changed.
     """
 
-    def __init__(self, *, path: Path, server_name: str) -> None:
+    def __init__(
+        self,
+        *,
+        path: Path,
+        server_name: str,
+        fields: tuple[str, ...] = ("command",),
+    ) -> None:
         self.path = path
         self.server_name = server_name
+        self.fields = fields
         super().__init__(
             f"existing MCP server entry {server_name!r} in {path} had its "
-            "command array mutated — refusing (CVE-2026-30615 class)"
+            f"{', '.join(fields)} mutated — refusing (CVE-2026-30615 class)"
+        )
+
+
+class MCPConfigUnreadable(AirlockError):
+    """A config (or its trusted baseline) could not be read, so it cannot be diffed.
+
+    Raised instead of reading the config as one with no servers: until v0.10.28 a
+    JSONC comment or trailing comma, a duplicated key, a doubled BOM or an
+    ``mcpServers`` that was not an object all diffed as "no servers", so the new
+    entry they carried was never checked. IDE hosts parse ``mcp.json`` more
+    leniently than :func:`json.loads`, and a duplicated key is read first-wins by
+    some parsers and last-wins by others, so a config the guard cannot read
+    exactly is refused rather than guessed at.
+
+    Attributes:
+        path: The config file the diff was taken on.
+        which: ``"new"`` (the current content) or ``"old"`` (the trusted baseline).
+        reason: What could not be read.
+    """
+
+    def __init__(self, *, path: Path, which: str, reason: str) -> None:
+        self.path = path
+        self.which = which
+        self.reason = reason
+        super().__init__(
+            f"{which} MCP config {path} cannot be read ({reason}) — refusing rather "
+            "than diffing it as a config with no servers (CVE-2026-30615 class)"
         )
 
 
@@ -158,39 +206,101 @@ class ConfigDiffReport:
 # -----------------------------------------------------------------------------
 
 
-def _parse_servers(content: bytes) -> dict[str, Any]:
-    """Extract the ``mcpServers`` mapping from a config blob.
+#: Where a host keeps its server map: Claude Code, Cursor and Windsurf use
+#: ``mcpServers``; VS Code's ``mcp.json`` uses ``servers`` (read since v0.10.28 —
+#: until then a VS Code config always diffed as one with no servers).
+_SERVER_MAP_KEYS: tuple[str, ...] = ("mcpServers", "servers")
 
-    Returns ``{}`` if the file isn't valid JSON or the key is absent.
-    Strict-mode parsing is the caller's responsibility — the guard's
-    job is to detect the diff shape, not the file's overall validity.
+#: What an existing entry is compared on: the fields :class:`McpConfigPinSet`
+#: fingerprints (``command``, ``args``, the ``env`` key set) plus a remote
+#: entry's ``url``. Env *values* rotate legitimately and are not compared.
+_IDENTITY_FIELDS: tuple[str, ...] = ("command", "args", "env", "url")
+
+
+class _UnreadableConfig(ValueError):
+    """Internal: why a config blob could not be read (surfaced as MCPConfigUnreadable)."""
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """``object_pairs_hook``: a key twice in one object is read differently by different
+    parsers (first wins in some, last in others), so it is refused rather than guessed."""
+    out: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in out:
+            raise _UnreadableConfig(f"key {key!r} appears twice in one object")
+        out[key] = value
+    return out
+
+
+def _as_bytes(content: object) -> bytes:
+    """The config blob as bytes; a ``str`` is encoded, any other type is unreadable."""
+    if isinstance(content, str):
+        return content.encode("utf-8")
+    if isinstance(content, (bytes, bytearray, memoryview)):
+        return bytes(content)
+    raise _UnreadableConfig(f"content is a {type(content).__name__}, not bytes")
+
+
+def _parse_servers(content: bytes) -> dict[str, Any]:
+    """Extract the server map (``mcpServers`` and ``servers``) from a config blob.
+
+    A config with neither key has no servers. Anything that is not strict JSON (a JSONC
+    comment or trailing comma, a doubled BOM, bytes that are not UTF-8, nesting deeper
+    than the parser can follow), a key that appears twice in one object, a top level
+    that is not an object, a server map that is not an object and a server name under
+    both keys raise :class:`_UnreadableConfig`. Until v0.10.28 every one of them read as
+    ``{}``, so the entries they carried were never checked.
     """
     try:
-        data = json.loads(content)
-    except (ValueError, TypeError):
-        return {}
+        data = json.loads(content, object_pairs_hook=_reject_duplicate_keys)
+    except _UnreadableConfig:
+        raise
+    except (ValueError, RecursionError) as exc:  # JSONDecodeError, UnicodeDecodeError
+        raise _UnreadableConfig(f"not strict JSON: {exc}") from exc
     if not isinstance(data, dict):
-        return {}
-    servers = data.get("mcpServers")
-    if not isinstance(servers, dict):
-        return {}
+        raise _UnreadableConfig(f"the top level is a {type(data).__name__}, not an object")
+    servers: dict[str, Any] = {}
+    for key in _SERVER_MAP_KEYS:
+        if key not in data:
+            continue
+        block = data[key]
+        if not isinstance(block, dict):
+            raise _UnreadableConfig(f"{key!r} is a {type(block).__name__}, not an object")
+        for name, entry in block.items():
+            if name in servers:
+                raise _UnreadableConfig(f"server {name!r} is named under more than one key")
+            servers[name] = entry
     return servers
 
 
-def _server_signer(entry: dict[str, Any]) -> str:
+def _server_signer(entry: Mapping[str, Any]) -> str:
     """Best-effort signer extraction. Empty when missing / non-string."""
     signer = entry.get("signer", "")
     return signer if isinstance(signer, str) else ""
 
 
-def _command_array(entry: dict[str, Any]) -> tuple[str, ...]:
-    """Command array as a tuple of strings; empty if missing."""
-    cmd = entry.get("command")
-    if isinstance(cmd, list):
-        return tuple(str(x) for x in cmd)
-    if isinstance(cmd, str):
-        return (cmd,)
-    return ()
+def _canonical(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _entry_identity(entry: object) -> dict[str, str] | None:
+    """The comparable identity of one server entry, or ``None`` when it cannot be read.
+
+    ``env`` is read the way :class:`McpConfigPinSet` reads it (a mapping, or a sequence
+    of ``KEY=VALUE`` strings); an entry that is not an object, or whose ``env`` is any
+    other shape, cannot be compared and is refused by the caller.
+    """
+    if not isinstance(entry, Mapping):
+        return None
+    env_keys = _env_keys_of(entry)
+    if env_keys is None:
+        return None
+    return {
+        "command": _canonical(entry.get("command")),
+        "args": _canonical(entry.get("args")),
+        "env": _canonical(sorted(set(env_keys))),
+        "url": _canonical(entry.get("url")),
+    }
 
 
 def audit_config_diff(
@@ -203,31 +313,47 @@ def audit_config_diff(
 ) -> ConfigDiffReport:
     """Audit a config-file diff against the policy.
 
+    The server map is read from ``mcpServers`` and from VS Code's ``servers`` key, as
+    strict JSON. A config that cannot be read exactly is refused
+    (:class:`MCPConfigUnreadable`) rather than read as one with no servers.
+
     Args:
         path: The config file's path on disk (used for error messages
             and reports; not re-read).
         old_sha256: SHA-256 of the previously-trusted state, or
             ``None`` if this is the first audit.
-        new_content: The current file's bytes.
+        new_content: The current file's bytes (a ``str`` is encoded as UTF-8).
         cfg: Active :class:`ConfigFileWatchPolicy`.
         old_content: Optional — when supplied, the diff also detects
-            mutated ``command`` arrays on existing server entries.
-            Without it, the guard can only flag *new* entries.
+            mutated existing server entries: a changed ``command``,
+            ``args``, ``env`` key set or ``url``. Without it, the guard
+            can only flag *new* entries.
 
     Returns:
         :class:`ConfigDiffReport` summarising what changed.
 
     Raises:
+        MCPConfigUnreadable: ``new_content`` or ``old_content`` is not strict
+            JSON, repeats a key within one object, or has a server map or an
+            existing entry the diff cannot read.
         UnsignedMCPServerAdded: A new entry has no trusted signer and
             ``cfg.require_signer_for_new_servers`` is True.
-        MCPCommandMutationDetected: An existing entry's ``command``
-            array changed and ``old_content`` was supplied.
+        MCPCommandMutationDetected: An existing entry's ``command``,
+            ``args``, ``env`` key set or ``url`` changed and ``old_content``
+            was supplied.
     """
-    new_sha = hashlib.sha256(new_content).hexdigest()
-    new_servers = _parse_servers(new_content)
+    try:
+        new_bytes = _as_bytes(new_content)
+        new_servers = _parse_servers(new_bytes)
+    except _UnreadableConfig as exc:
+        raise MCPConfigUnreadable(path=path, which="new", reason=str(exc)) from exc
+    new_sha = hashlib.sha256(new_bytes).hexdigest()
     old_servers: dict[str, Any] = {}
     if old_content is not None:
-        old_servers = _parse_servers(old_content)
+        try:
+            old_servers = _parse_servers(_as_bytes(old_content))
+        except _UnreadableConfig as exc:
+            raise MCPConfigUnreadable(path=path, which="old", reason=str(exc)) from exc
 
     added: list[str] = []
     for name, entry in new_servers.items():
@@ -236,7 +362,7 @@ def audit_config_diff(
         added.append(name)
         if not cfg.require_signer_for_new_servers:
             continue
-        if not isinstance(entry, dict):
+        if not isinstance(entry, Mapping):
             raise UnsignedMCPServerAdded(path=path, server_name=name, signer="")
         signer = _server_signer(entry)
         if not signer:
@@ -248,11 +374,26 @@ def audit_config_diff(
     for name, entry in new_servers.items():
         if name not in old_servers:
             continue
-        if not isinstance(entry, dict) or not isinstance(old_servers[name], dict):
-            continue
-        if _command_array(entry) != _command_array(old_servers[name]):
+        new_identity = _entry_identity(entry)
+        if new_identity is None:
+            # Until v0.10.28 an entry that was not an object was skipped here.
+            raise MCPConfigUnreadable(
+                path=path,
+                which="new",
+                reason=(
+                    f"server {name!r} is not an object with an env mapping or "
+                    "KEY=VALUE list, so it cannot be compared with the trusted entry"
+                ),
+            )
+        old_identity = _entry_identity(old_servers[name])
+        changed = tuple(
+            f
+            for f in _IDENTITY_FIELDS
+            if old_identity is None or old_identity[f] != new_identity[f]
+        )
+        if changed:
             mutated.append(name)
-            raise MCPCommandMutationDetected(path=path, server_name=name)
+            raise MCPCommandMutationDetected(path=path, server_name=name, fields=changed)
 
     _emit_otel_span(path=path, old_sha256=old_sha256 or "<none>", new_sha256=new_sha)
     logger.debug(
@@ -632,6 +773,7 @@ __all__ = [
     "ConfigDiffReport",
     "ConfigFileWatchPolicy",
     "MCPCommandMutationDetected",
+    "MCPConfigUnreadable",
     "McpConfigPinSet",
     "McpConfigPinViolation",
     "McpServerPin",
