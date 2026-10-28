@@ -19,7 +19,8 @@ Subtree conventions for the adaptive red-team campaign. These extend
   executes and scores the JSON they produce.
 - **Audit logs stay out of the checkout.** Every canary run sets its own
   `AIRLOCK_AUDIT_LOG_PATH` under a temp dir (`canaries.canary_env`). Never let a
-  run write `airlock_audit.json` into the tree.
+  run write `airlock_audit.json` into the tree. Build each `AirlockConfig` inside
+  `canary_env()`: the default config reads the variable once, at import.
 
 ## Reporting conventions
 

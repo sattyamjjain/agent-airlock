@@ -15,8 +15,9 @@ Two modes:
    ``0.5.4.dev3``) OR the ``[Unreleased]`` section contains only
    the placeholder (``(no entries yet)`` / blank lines). Fail if
    the project is stamped with a released version but
-   ``[Unreleased]`` still has meaningful entries — they should have
-   been moved to a versioned section at tag time.
+   ``[Unreleased]`` still has meaningful entries. In this repo's flow
+   that is every non-release PR too: entries belong under the
+   release PR's dated heading, never under ``[Unreleased]``.
 
 2. **--release (pre-tag gate).** Pass iff ``[Unreleased]`` has
    meaningful entries. Used right before ``git tag`` to ensure you
@@ -151,8 +152,9 @@ def run(
     if has_entries:
         return 1, (
             f"DRIFT: pyproject version is {version!r} (a released tag) but "
-            f"{changelog_path.name} [Unreleased] still has entries. Move "
-            f"them into a versioned section before committing the tag."
+            f"{changelog_path.name} [Unreleased] still has entries. In a release "
+            f"PR, write them under its dated heading; in any other PR, drop them: "
+            f"the release PR writes them."
         )
     return 0, (f"OK (version {version!r}, [Unreleased] placeholder only)")
 

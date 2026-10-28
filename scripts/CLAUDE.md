@@ -37,11 +37,12 @@ make check-registry-parity-distance     # release-only: refuse to skip a version
 
 What CI runs — `ci.yml` jobs, on PRs and pushes to `main`:
 
-- `test` (full Python matrix) — installs `.[dev,redis,mcp,crypto]` and asserts the redis,
-  FastMCP and cryptography extras import (a `--collect-only` step); ruff check, mypy, pytest
-  with the coverage floor; on 3.11 only, `generate_benchmark.py --check` and a
-  pytest-benchmark smoke run that asserts the suite executes (deliberately not a latency
-  threshold). Why those extras: `tests/CLAUDE.md`.
+- `test` (full Python matrix) — installs `.[dev,redis,mcp,crypto]`, imports the redis,
+  FastMCP and cryptography extras, then runs the five extra-backed test files and fails
+  unless their summary is passes only (a skip, xfail, error or failure fails it); ruff
+  check, mypy, pytest with the coverage floor; on 3.11 only, `generate_benchmark.py
+  --check` and a pytest-benchmark smoke run that asserts the suite executes (deliberately
+  not a latency threshold). Why those extras: `tests/CLAUDE.md`.
 - `lint` — `ruff format --check` only.
 - `docs` — `mkdocs build --strict`, `check_links.py`, `gen_cve_catalog.py --check`, and the
   **default** modes of `check_benchmark_freshness.py` and `check_changelog.py`.
@@ -94,7 +95,8 @@ absolute-link rule is an authoring rule.
   installed, rather than in `docs`, which installs the package with only `[docs]`. It checks
   names imported from `agent_airlock` in each Python fence of every authored markdown file
   (README included; `CHANGELOG.md` and `.github/` excepted) and in each `examples/` script:
-  the import resolves, keywords match the signature, attributes exist.
+  the import resolves, keywords match the signature, attributes exist. A fence that names
+  `agent_airlock` but does not parse is a failure, not a skip.
 - **Release checklist (version bumps).** Move every surface a test pins —
   `pyproject.toml` + `__version__`, `.claude-plugin/plugin.json`, `CITATION.cff` (the newest
   *published* version and its CHANGELOG date: a patch bump leaves it one behind, the most

@@ -44,8 +44,9 @@ which `make test-badge` also counts as excluded: the docker-marked tests, `tests
   runs an example or script in a subprocess must pass `cwd=tmp_path` (or set
   `AIRLOCK_AUDIT_LOG_PATH` for the child) itself, or the child writes its audit log into the
   checkout. The same variable keeps an ad-hoc snippet's log out of the checkout.
-- **An `importorskip` needs a CI job that installs its dependency**, added in the same PR: a
-  skipped module reads like a passing one in the summary line.
+- **An `importorskip` needs a CI job that installs its dependency**, added in the same PR,
+  and an extra-backed file joins the `test` job's step that runs those files and fails on
+  any skip: a skipped module reads like a passing one in the summary line.
 
 <!-- END AUTO-MANAGED -->
 

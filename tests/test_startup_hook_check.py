@@ -4,8 +4,8 @@
 ``sitecustomize`` / ``usercustomize``, while the interpreter starts: before any code of the
 program's own, and so before this library. ``runtime.startup_hooks.check_startup_hooks``
 lists them; ``AirlockConfig(startup_hook_check=...)`` runs that walk once per process on
-the first guarded call and, under ``deny``, refuses every guarded call while a hook is not
-allowlisted. Nothing here can stop a hook that already ran.
+the first guarded call and, under ``deny``, refuses every call that config guards while a
+hook is not allowlisted. Nothing here can stop a hook that already ran.
 
 Every hook in these tests lives in a temporary site directory and does nothing: the one
 executable line imports a module name that exists nowhere, and the customize modules are

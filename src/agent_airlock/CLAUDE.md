@@ -232,7 +232,8 @@ kill switch, the startup-hook check and the budgets are operational controls.
   `except AirlockError` does not catch `PolicyViolation`, `PathValidationError` and the
   like; do not rebase any of them in a patch release.
 - **Logger names.** `from .._log import structlog` one package down; `core.py` alone uses the
-  bare root name. In `src/` the shim is the only module that imports `structlog`.
+  bare root name (`tests/test_tooling_honesty_0_10_28.py` checks every `get_logger` call). In
+  `src/` the shim is the only module that imports `structlog`.
 - **Forbidden-pattern greps.** `mcp_spec/manifest_only_mode.py` is the only `subprocess`
   importer in `src/` and does not use `shell=True`; the `shell=True` grep hits in
   `capabilities.py` (a docstring) and `cli/doctor.py` (a detection regex) are text, not
