@@ -809,6 +809,36 @@ def _kill_switch(env: _Env) -> Any:
     return tool()
 
 
+def _token_audience(env: _Env) -> Any:
+    @Airlock(
+        config=AirlockConfig(
+            expected_token_audience="https://mcp.example.test", token_audience_mode="deny"
+        )
+    )
+    def tool() -> str:
+        return "ran"
+
+    with AirlockContext(metadata={"access_token_claims": {"aud": "https://other-app.example"}}):
+        return tool()
+
+
+def _startup_hook(env: _Env) -> Any:
+    from agent_airlock.runtime import startup_hooks
+
+    hook = startup_hooks.StartupHookFinding(
+        path=str(env.tmp_path / "x.pth"), kind=startup_hooks.StartupHookKind.PTH, sha256="0" * 64
+    )
+    # The walk this process already did, standing in for one that found a hook.
+    env.monkeypatch.setattr(startup_hooks, "_process_walk", ((hook,), (str(env.tmp_path),)))
+    env.monkeypatch.setattr(startup_hooks, "_announced", set())
+
+    @Airlock(config=AirlockConfig(startup_hook_check="deny"))
+    def tool() -> str:
+        return "ran"
+
+    return tool()
+
+
 def _amplification_unconfigured(env: _Env) -> Any:
     @Airlock(policy=SecurityPolicy(amplification_budget=AmplificationBudget()))
     def tool() -> str:
@@ -870,6 +900,8 @@ _REFUSALS: list[tuple[str, Callable[[_Env], Any], BlockReason]] = [
         BlockReason.ESCALATION_TIMEOUT,
     ),
     ("kill-switch", _kill_switch, BlockReason.KILL_SWITCH),
+    ("token-audience", _token_audience, BlockReason.TOKEN_AUDIENCE),
+    ("startup-hook", _startup_hook, BlockReason.STARTUP_HOOK),
     ("amplification", _amplification_unconfigured, BlockReason.AMPLIFICATION_EXCEEDED),
     ("handle-not-issued", _handle_not_issued, BlockReason.HANDLE_NOT_ISSUED),
     ("handle-wrong-issuer", _handle_wrong_issuer, BlockReason.HANDLE_WRONG_ISSUER),

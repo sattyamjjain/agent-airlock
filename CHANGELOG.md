@@ -11,6 +11,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.27] - 2026-10-28
+
+`validate_access_token_audience` shipped but nothing called it. Guarded calls now check the
+OAuth token audience when an expected audience is set (CVE-2026-115413), and an opt-in
+check reports the startup hooks of the running interpreter. Both run before any argument
+is read, after the kill switch, and change nothing for a config that does not set them.
+
+### Added
+
+- `expected_token_audience` checks the OAuth `aud` claim before a guarded call runs (warn by default, deny opt-in). CVE-2026-115413 is this bug in a shipped MCP server.
+- `startup_hook_check` lists executable .pth files and sitecustomize/usercustomize in the running interpreter and can refuse guarded calls (off by default).
+- New preset `token_audience_defaults`.
+- The claims are the host's: `AirlockContext` metadata under `access_token_claims`
+  (`agent_airlock.core.ACCESS_TOKEN_CLAIMS_KEY`), read through `_call_metadata` like the
+  budget tags, never a tool argument. `deny` also refuses a call that carries no claims,
+  and claims that are not a mapping. A refusal reports `metadata.violation`
+  (`no_claims`, `claims_unreadable`, `audience_mismatch`); the audience the token named
+  goes to `on_blocked` and the log, not into the text the model reads.
+- The startup-hook walk (`agent_airlock.runtime.check_startup_hooks`, returning a
+  `StartupHookReport` of `StartupHookFinding`s with a path, a `StartupHookKind` and a
+  SHA-256) runs once per process, on the first call admitted with the check on; nothing is
+  walked at import. `startup_hook_allowlist` is `{file name: sha256}`, and a known name
+  with other content stays a finding. These hooks run before any Python code, so the
+  check cannot stop them; it reports them, and `deny` keeps guarded tools from running
+  beside them.
+- `BlockReason.TOKEN_AUDIENCE` and `BlockReason.STARTUP_HOOK`;
+  `agent_airlock.testing.reset_startup_hook_check`, which `reset_all` calls.
+- `AirlockConfig` raises `ValueError` for a mode outside `off` / `warn` / `deny`, an
+  `expected_token_audience` that is not a resource URI, and an allowlist entry that is not
+  a file name and a SHA-256 digest; `from_toml` reads the four keys from `[airlock]` and
+  raises on the same values instead of falling back to a default.
+
+### Security
+
+- **`validate_access_token_audience` read past a non-string in a list `aud`.** A token
+  whose `aud` list held a number, a null or a nested value beside this server's URI was
+  accepted on the matching item. RFC 7519 makes each audience a string, and a list holding
+  anything else is now refused whole.
+
+### Fixed
+
+- `validate_access_token_audience` let a string `aud` that is not a URI (a client id, say)
+  escape as `ResourceURIError`, which a caller catching the documented
+  `TokenAudienceError` never saw. It is now a `TokenAudienceError`.
+- `validate_access_token_audience` refused a token for `https://host/` at a server
+  expecting `https://host`, and the other way round. RFC 3986 §6.2.3 makes an empty
+  http(s) path and `/` the same resource, so the comparison now reads a root path as no
+  path; `canonicalize_resource_uri` still keeps the root slash in its output.
+
+### CI
+
+- `[dev]` pins `pytest<9.2`. pytest 9.2.0 (2026-10-27) dropped `Node._nodeid`, which
+  pytest-benchmark 5.3.0, its newest release, reads in its fixture, so the `test` job's
+  benchmark smoke step (Python 3.11) errored on every benchmark. Lift the pin once
+  pytest-benchmark reads the public `nodeid`.
+
+### Docs
+
+- `docs/guide/token-audience-and-startup-hooks.md`, in the nav; a README section; the new
+  fields in the `AirlockConfig` reference and the TOML guide. `CLAUDE.md` gains steps 0.5
+  and 0.6 (overview, package tree, call-flow list, defense-in-depth line) and the rule that
+  a new `BlockReason` needs a refusal in `tests/test_fix_hints_0_10_25.py`;
+  `mcp_spec/CLAUDE.md` gains the audience-check shape fix.
+
+### CVE triage
+
+- **CVE-2026-55376** (Heym custom Python tool, #348): out of scope with no test, a stored tool body and a blacklist escape that no eval-family sink reaches; a row in the out-of-scope table (#355).
+- **CVE-2026-55786** (flyto-core unauthenticated POST /mcp, #349): out of scope with no test, a missing route auth whose fix changes no argument; a row in the out-of-scope table (#355).
+- **CVE-2026-111451** (Wheels CLI MCP tool arguments, #362): in scope, partial; the deploy value in the argv LuCLI builds, a traversal name and a CFML delimiter in a declared name are each refused by an existing primitive (`StdioCommandInjectionGuard`, `SafePathValidator`, strict validation). A second-defence fixture that pins where it stops; the complete fix is upstream in 4.1.2 (#369).
+- **CVE-2026-114612** (LiteLLM proxy, #365): out of scope, the forged credential is minted and trusted inside the proxy, not passed through a guarded tool call; the stdio spawn it unlocks is the CVE-2026-42271 primitive, already pinned. A row in the out-of-scope table (#369).
+- **CVE-2026-88755** (Z.ai ZCode workspace MCP auto-connect, #367): out of scope, the auto-connect decision lives in ZCode's own workspace-config loader, a desktop client agent-airlock is not embedded in; the repository-declared stdio server it spawns is the CVE-2026-30615 primitive, already pinned. A row in the out-of-scope table (#373).
+- The catalog counts 58 regression modules and 58 distinct CVEs (50 with a row of their
+  own, 8 in umbrella modules) (#369).
+
 ## [0.10.26] - 2026-10-21
 
 A `/init` drift audit of every `CLAUDE.md` against the tree after 0.10.25. Each code change

@@ -56,7 +56,7 @@ import os
 import re
 import time
 import uuid
-from collections.abc import AsyncGenerator, Callable, Generator, Iterator
+from collections.abc import AsyncGenerator, Callable, Generator, Iterator, Mapping
 from datetime import datetime, timezone
 from typing import Any, Literal, ParamSpec, TypeVar, overload
 from urllib.parse import urlparse
@@ -702,6 +702,46 @@ def _call_metadata(context: AirlockContext[Any], key: str) -> Any:
     return ambient.metadata.get(key) if ambient is not None else None
 
 
+#: The ``AirlockContext`` metadata key the host puts an OAuth access token's claims under:
+#: the decoded claims of a token whose signature, expiry and issuer the host has verified.
+#: ``AirlockConfig.expected_token_audience`` checks their ``aud``. Like every key
+#: ``_call_metadata`` reads, it is the host's to set; a tool argument of the same name is
+#: the model's, and is never read for it.
+ACCESS_TOKEN_CLAIMS_KEY = "access_token_claims"  # nosec B105 - a metadata key, not a secret
+
+
+def _token_audience_problem(claims: Any, expected_audience: str) -> tuple[str, str] | None:
+    """Why ``claims`` do not show a token issued for ``expected_audience``, or None.
+
+    Returns:
+        ``(code, detail)``: ``no_claims`` when the host attached none, ``claims_unreadable``
+        when they are not a mapping, ``audience_mismatch`` when
+        ``validate_access_token_audience`` refuses them; ``detail`` is for the operator.
+    """
+    from .mcp_spec.oauth import (
+        ResourceURIError,
+        TokenAudienceError,
+        validate_access_token_audience,
+    )
+
+    if claims is None:
+        return (
+            "no_claims",
+            f"the call carries no access token claims (AirlockContext metadata "
+            f"{ACCESS_TOKEN_CLAIMS_KEY!r})",
+        )
+    if not isinstance(claims, Mapping):
+        return (
+            "claims_unreadable",
+            f"the access token claims are a {type(claims).__name__}, not a mapping",
+        )
+    try:
+        validate_access_token_audience(dict(claims), expected_audience=expected_audience)
+    except (TokenAudienceError, ResourceURIError) as exc:
+        return "audience_mismatch", str(exc)
+    return None
+
+
 def _warn_on_retired_control_arguments(func_name: str, kwargs: dict[str, Any]) -> None:
     """Point a router still passing ``_airlock_tier`` / ``_airlock_input_tokens`` at metadata.
 
@@ -893,7 +933,8 @@ class Airlock:
             """Shared pre-execution logic for sync and async wrappers.
 
             Runs the gates in the order the ``# Step N`` comments below number them: the
-            kill switch (0), ghost arguments (1), policy resolution and check (2), the
+            kill switch (0), the startup-hook self-check (0.5), the OAuth token audience
+            (0.6), ghost arguments (1), policy resolution and check (2), the
             sequence guard (2.5), the action-contradiction gate (2.6), the deserialization
             guard (2.7), the amplification budget (2.8), filesystem paths (3), capabilities
             (4), endpoint policies (5) and the per-model-tier budget (6). The first gate that
@@ -961,6 +1002,20 @@ class Airlock:
                     {"violation_type": "kill_switch", "operator_reason": reason},
                 )
                 return kwargs, start_time, context, frozen_error, None, None
+
+            # Step 0.5: the startup-hook self-check (V0.10.27). A condition of the process,
+            # so it comes before anything about the call. Off by default; when on, the walk
+            # runs once per process, on the first call admitted with it on.
+            hook_error = self._check_startup_hooks(func_name)
+            if hook_error is not None:
+                return kwargs, start_time, context, hook_error, None, None
+
+            # Step 0.6: the OAuth token audience (V0.10.27, CVE-2026-115413). The
+            # credential before the arguments, as a server checks who calls before what is
+            # asked. Inert until expected_token_audience is set.
+            audience_error = self._check_token_audience(func_name, context)
+            if audience_error is not None:
+                return kwargs, start_time, context, audience_error, None, None
 
             # Step 1: Validate and handle ghost arguments
             cleaned_kwargs, _, ghost_error = self._validate_ghost_arguments(func, func_name, kwargs)
@@ -1621,6 +1676,137 @@ class Airlock:
             ),
         )
         return create_strict_validator(func)
+
+    def _check_startup_hooks(self, func_name: str) -> AirlockResponse | None:
+        """Refuse every call in an interpreter running startup hooks no allowlist covers.
+
+        Off unless ``AirlockConfig.startup_hook_check`` is ``warn`` or ``deny``. The walk
+        (``runtime.startup_hooks``) runs once per process, on the first call admitted with
+        the check on, and each hook it finds is logged once. ``deny`` then refuses every
+        guarded call in the process, naming the files. The hooks ran before this did; the
+        check reports them and keeps guarded tools from running beside them, nothing more.
+
+        Args:
+            func_name: Name of the tool being called.
+
+        Returns:
+            A ``startup_hook`` refusal under ``deny`` while a hook is not allowlisted,
+            otherwise ``None``.
+        """
+        mode = self.config.startup_hook_check
+        if mode == "off":
+            return None
+        from .runtime.startup_hooks import (
+            announce_startup_hook_findings,
+            process_startup_hook_report,
+        )
+
+        report = process_startup_hook_report(self.config.startup_hook_allowlist)
+        if report.clean:
+            return None
+        announce_startup_hook_findings(report, mode=mode)
+        if mode == "warn":
+            return None
+
+        names = list(dict.fromkeys(finding.name for finding in report.findings))
+        hooks = [finding.to_dict() for finding in report.findings]
+        response = AirlockResponse.blocked_response(
+            reason=BlockReason.STARTUP_HOOK,
+            error=(
+                f"AIRLOCK_BLOCK: '{func_name}' refused: this interpreter runs startup hooks "
+                f"no allowlist covers ({', '.join(names)})"
+            ),
+            fix_hints=[
+                "The process this tool runs in started with code no allowlist covers, so "
+                "no guarded tool runs in it",
+                "This is not a per-call denial: retrying or changing arguments will not "
+                "help; tell the user the tool host needs attention",
+            ],
+            metadata={"function": func_name, "startup_hooks": hooks},
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            "startup hooks not allowlisted: "
+            + ", ".join(finding.path for finding in report.findings),
+            {"violation_type": "startup_hook", "startup_hooks": hooks},
+        )
+        return response
+
+    def _check_token_audience(
+        self, func_name: str, context: AirlockContext[Any]
+    ) -> AirlockResponse | None:
+        """Check the call's OAuth access token was issued for this server (CVE-2026-115413).
+
+        Inert until ``AirlockConfig.expected_token_audience`` is set. The claims are the
+        ones the host verified and put on the call's context metadata under
+        ``access_token_claims`` (``_call_metadata``), never a tool argument. Under
+        ``token_audience_mode="warn"``, the default, a wrong or missing audience is logged
+        and the call runs; under ``"deny"`` it is refused, and so is a call that carries
+        no claims at all.
+
+        Args:
+            func_name: Name of the tool being called.
+            context: The call's context, read for the claims and the run identity.
+
+        Returns:
+            A ``token_audience`` refusal under ``deny``, otherwise ``None``.
+        """
+        expected = self.config.expected_token_audience
+        mode = self.config.token_audience_mode
+        if expected is None or mode == "off":
+            return None
+        problem = _token_audience_problem(
+            _call_metadata(context, ACCESS_TOKEN_CLAIMS_KEY), expected
+        )
+        if problem is None:
+            return None
+        code, detail = problem
+        if mode == "warn":
+            logger.warning(
+                "airlock_token_audience_warn_only",
+                function=func_name,
+                violation=code,
+                reason=detail,
+                expected_audience=expected,
+                agent_id=context.agent_id,
+                session_id=context.session_id,
+            )
+            return None
+
+        logger.warning(
+            "airlock_token_audience_block",
+            function=func_name,
+            violation=code,
+            reason=detail,
+            expected_audience=expected,
+            agent_id=context.agent_id,
+            session_id=context.session_id,
+        )
+        refused = (
+            "the access token on this call was not issued for this server"
+            if code == "audience_mismatch"
+            else "the call carries no access token claims this server can check"
+        )
+        response = AirlockResponse.blocked_response(
+            reason=BlockReason.TOKEN_AUDIENCE,
+            error=f"AIRLOCK_BLOCK: '{func_name}' refused: {refused}",
+            fix_hints=[
+                "The credential behind this call is not valid for this tool server; "
+                "retrying or changing arguments will not help",
+                "Tell the user the tool server refused the credential, so they can sign in to it",
+            ],
+            metadata={"function": func_name, "violation": code, "expected_audience": expected},
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            detail,
+            {"violation_type": "token_audience", "violation": code, "expected_audience": expected},
+        )
+        return response
 
     def _validate_ghost_arguments(
         self,

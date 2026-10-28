@@ -6,6 +6,10 @@ Supports configuration from:
    ``E2B_API_KEY`` and ``AIRLOCK_AUDIT_LOG_PATH`` are used only when no value is given
 2. Constructor arguments
 3. TOML config files, read only by ``AirlockConfig.from_toml()``
+
+A security setting given a value it cannot apply (a check mode that is not ``off`` /
+``warn`` / ``deny``, an audience that is not a URI, an allowlist digest that is not a
+SHA-256) raises ``ValueError`` at construction; it is never read as its default.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from ._log import structlog
 
@@ -39,6 +43,11 @@ else:
 
 logger = structlog.get_logger("agent-airlock.config")
 
+
+#: How a call-time check acts on what it finds: ``off`` skips it, ``warn`` logs and runs
+#: the call, ``deny`` refuses the call.
+CheckMode = Literal["off", "warn", "deny"]
+_CHECK_MODES: tuple[str, ...] = ("off", "warn", "deny")
 
 # The default audit log location. The field's default is this very object, which is how
 # __post_init__ tells "not given" (AIRLOCK_AUDIT_LOG_PATH may replace it) from a path that
@@ -88,6 +97,19 @@ class AirlockConfig:
         honeypot_config: Honeypot configuration for deception-based security.
             Returns fake data instead of errors to prevent agent exploitation.
         capability_policy: Capability gating policy for per-tool permissions (V0.4.0+).
+        expected_token_audience: The canonical resource URI of this server (V0.10.27).
+            When set, every guarded call checks the ``aud`` claim of the OAuth access
+            token the host verified and put on the call's ``AirlockContext`` metadata
+            under ``access_token_claims`` (CVE-2026-115413). None (the default) checks
+            nothing.
+        token_audience_mode: ``warn`` (default) logs a wrong or missing audience and runs
+            the call, ``deny`` refuses it, ``off`` skips the check.
+        startup_hook_check: ``off`` (default), ``warn`` or ``deny`` (V0.10.27). When on,
+            the first guarded call walks the interpreter's executable ``.pth`` lines and
+            ``sitecustomize`` / ``usercustomize`` once per process; ``warn`` logs each
+            hook found and ``deny`` refuses every guarded call while one is not
+            allowlisted. It cannot stop a hook that has already run.
+        startup_hook_allowlist: ``{file name: sha256}`` of the startup hooks you know.
     """
 
     # V0.4.0: New explicit unknown args handling
@@ -153,6 +175,15 @@ class AirlockConfig:
     # Until 0.10.19 ``from_toml`` passed them to the constructor under a name it does
     # not take, so any file with that section failed to load.
     credential_scopes: dict[str, CredentialScope] = field(default_factory=dict)
+
+    # V0.10.27 the OAuth token audience, checked on the call path (CVE-2026-115413). The
+    # claims are the host's, read from AirlockContext metadata, never a tool argument.
+    expected_token_audience: str | None = None
+    token_audience_mode: CheckMode = "warn"
+
+    # V0.10.27 the startup-hook self-check (runtime/startup_hooks.py); off by default.
+    startup_hook_check: CheckMode = "off"
+    startup_hook_allowlist: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Apply environment variable overrides after initialization."""
@@ -222,7 +253,41 @@ class AirlockConfig:
         ):
             self.audit_log_path = Path(os.environ["AIRLOCK_AUDIT_LOG_PATH"])
 
+        self._validate_call_time_checks()
         self._warn_on_settings_not_applied()
+
+    def _validate_call_time_checks(self) -> None:
+        """Refuse a token-audience or startup-hook setting that could not apply as written.
+
+        A typo must not weaken a check without a word: ``token_audience_mode="dney"`` is a
+        ValueError, not the default ``warn``, and so is an expected audience that is not a
+        resource URI (no token could ever match it) or an allowlist entry no hook could
+        ever match.
+        """
+        for name in ("token_audience_mode", "startup_hook_check"):
+            value = getattr(self, name)
+            if value not in _CHECK_MODES:
+                raise ValueError(
+                    f"AirlockConfig.{name} must be one of {', '.join(_CHECK_MODES)}; got {value!r}"
+                )
+        if self.expected_token_audience is not None:
+            from .mcp_spec.oauth import ResourceURIError, canonicalize_resource_uri
+
+            if not isinstance(self.expected_token_audience, str):
+                raise ValueError(
+                    "AirlockConfig.expected_token_audience must be a resource URI string; "
+                    f"got a {type(self.expected_token_audience).__name__}"
+                )
+            try:
+                canonicalize_resource_uri(self.expected_token_audience)
+            except ResourceURIError as exc:
+                raise ValueError(
+                    f"AirlockConfig.expected_token_audience is not a resource URI: {exc}"
+                ) from exc
+        if self.startup_hook_allowlist:
+            from .runtime.startup_hooks import normalize_allowlist
+
+            self.startup_hook_allowlist = normalize_allowlist(self.startup_hook_allowlist)
 
     def _warn_on_settings_not_applied(self) -> None:
         """Warn about each deprecated setting that nothing has ever applied.
@@ -316,6 +381,11 @@ class AirlockConfig:
             "pii_locales",
             # V0.8.25 opt-in fail-closed terminal-claim guard
             "require_done_receipt",
+            # V0.10.27 token audience and startup-hook checks
+            "expected_token_audience",
+            "token_audience_mode",
+            "startup_hook_check",
+            "startup_hook_allowlist",
         }
 
         # SECURITY: Warn about unknown keys (likely typos)
@@ -387,6 +457,27 @@ class AirlockConfig:
                     type=type(raw_locales).__name__,
                     hint="pii_locales must be a list of strings or comma-separated string.",
                 )
+
+        # V0.10.27 token audience and startup-hook checks. A mode is lowercased here and
+        # validated by __post_init__, so a typo raises instead of falling back to a default.
+        for key in ("token_audience_mode", "startup_hook_check"):
+            if key in data:
+                result[key] = str(data[key]).lower()
+        if "expected_token_audience" in data:
+            audience = data["expected_token_audience"]
+            if not isinstance(audience, str):
+                raise ValueError(
+                    "expected_token_audience must be a string, the resource URI of this server"
+                )
+            result["expected_token_audience"] = audience
+        if "startup_hook_allowlist" in data:
+            allowlist = data["startup_hook_allowlist"]
+            if not isinstance(allowlist, dict):
+                raise ValueError(
+                    "[airlock.startup_hook_allowlist] must be a table of "
+                    '"file name" = "sha256" entries'
+                )
+            result["startup_hook_allowlist"] = dict(allowlist)
 
         # V0.3.0 nested config sections
         if "filesystem" in data:

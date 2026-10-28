@@ -51,6 +51,12 @@ class AirlockConfig:
     anomaly_config: AnomalyDetectorConfig | None = None
     require_done_receipt: bool = False
     credential_scopes: dict[str, CredentialScope] = field(default_factory=dict)
+
+    # Call-time checks (V0.10.27)
+    expected_token_audience: str | None = None
+    token_audience_mode: Literal["off", "warn", "deny"] = "warn"
+    startup_hook_check: Literal["off", "warn", "deny"] = "off"
+    startup_hook_allowlist: dict[str, str] = field(default_factory=dict)
 ```
 
 ### Attributes
@@ -110,6 +116,19 @@ or for picking individual types.
 | `capability_policy` | `CapabilityPolicy \| None` | `None` | Checked against `@requires`; a `SecurityPolicy`'s own `capability_policy` takes precedence |
 | `endpoint_policies` | `dict[str, EndpointPolicy]` | `{}` | Per-tool URL rules |
 | `credential_scopes` | `dict[str, CredentialScope]` | `{}` | Per-tool scopes from `[airlock.credentials]`. Not applied by `@Airlock`: pass them to `MCPProxyConfig(tool_scopes=config.credential_scopes)` |
+
+#### Call-time checks
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `expected_token_audience` | `str \| None` | `None` | This server's canonical resource URI. When set, every guarded call checks the `aud` claim of the claims the host put on its `AirlockContext` metadata under `access_token_claims` (CVE-2026-115413) |
+| `token_audience_mode` | `"off" \| "warn" \| "deny"` | `"warn"` | `warn` logs a wrong or missing audience and runs the call; `deny` refuses it |
+| `startup_hook_check` | `"off" \| "warn" \| "deny"` | `"off"` | Walks the interpreter's executable `.pth` lines and `sitecustomize` / `usercustomize` once per process; `deny` refuses every guarded call while one is not allowlisted |
+| `startup_hook_allowlist` | `dict[str, str]` | `{}` | `{file name: sha256}` of the startup hooks you know |
+
+A mode outside `off` / `warn` / `deny`, an audience that is not a resource URI and an
+allowlist entry that is not a file name and a SHA-256 digest each raise `ValueError` when
+the config is built. See [Token audience and startup hooks](../guide/token-audience-and-startup-hooks.md).
 
 `audit_otel_enabled`, `audit_otel_endpoint`, `audit_include_args_hash`, `anomaly_config` and
 `require_done_receipt` are accepted and stored, but nothing has ever read them. They are

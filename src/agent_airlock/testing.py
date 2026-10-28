@@ -48,6 +48,7 @@ def reset_all() -> None:
         - Network interceptors
         - Context state
         - Circuit breaker registry
+        - The startup-hook walk and the hooks already logged (V0.10.27)
     """
     reset_audit_logger()
     reset_sandbox_pool()
@@ -57,6 +58,7 @@ def reset_all() -> None:
     reset_network_interceptors()
     reset_context()
     reset_circuit_breakers()
+    reset_startup_hook_check()
 
     logger.debug("testing_reset_all_complete")
 
@@ -143,3 +145,14 @@ def reset_circuit_breakers() -> None:
     from .circuit_breaker import _reset_circuit_breaker_registry
 
     _reset_circuit_breaker_registry()
+
+
+def reset_startup_hook_check() -> None:
+    """Forget this process's startup-hook walk, so the next guarded call walks again.
+
+    ``startup_hook_check`` walks once per process; a test that changes ``site`` or
+    ``sys.path`` and expects a fresh walk resets first.
+    """
+    from .runtime.startup_hooks import _reset_process_state
+
+    _reset_process_state()

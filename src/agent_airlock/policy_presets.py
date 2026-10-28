@@ -4303,6 +4303,94 @@ def ssrf_egress_guard_defaults(
 
 
 @preset
+def token_audience_defaults(*, expected_audience: str) -> dict[str, Any]:
+    """Deny-by-default OAuth token audience check on guarded calls (v0.10.27+).
+
+    CVE-2026-115413 (AWS API MCP Server before 1.6.0, CWE-346, CVSS 3.1 7.8): in OAuth
+    mode the server did not validate the access token's audience, so a token the same
+    identity provider issued to another application ran AWS operations with the
+    server's own credentials. Fixed in 1.6.0, which also has the operator configure the
+    expected audience. The library-side equivalent is
+    ``AirlockConfig(expected_token_audience=...)``: every guarded call checks the
+    ``aud`` claim of the token behind it, read from the claims the host verified and put
+    on the call's ``AirlockContext`` metadata under ``access_token_claims``, never from a
+    tool argument. This preset turns that check on in ``deny`` mode.
+
+    The audience is all it checks. The token's signature, expiry and issuer are the
+    host's to verify before it hands the claims over.
+
+    OWASP mapping: **MCP07 Insufficient Authentication & Authorization** (a credential
+    minted for another application is accepted); CWE-346 (Origin Validation Error).
+
+    Args:
+        expected_audience: The canonical resource URI of this server, as its Protected
+            Resource Metadata names it.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — :func:`agent_airlock.mcp_spec.oauth.validate_access_token_audience`,
+          the function-style guard ``check`` calls.
+        - ``check`` — ``check(claims)`` raises :class:`TokenAudienceError` unless the
+          claims are a mapping whose ``aud`` names ``expected_audience``, and returns
+          ``None`` when it does.
+        - ``airlock_config`` — an :class:`AirlockConfig` with the expected audience set
+          and ``token_audience_mode="deny"``, for ``@Airlock(config=...)``.
+        - ``owasp`` — ``"MCP07"``; ``cwe`` — ``("CWE-346",)``.
+
+    Raises:
+        ValueError: If ``expected_audience`` is not a resource URI.
+
+    Usage::
+
+        from agent_airlock import Airlock, AirlockContext
+        from agent_airlock.policy_presets import token_audience_defaults
+
+        preset = token_audience_defaults(expected_audience="https://mcp.example.test")
+
+        @Airlock(config=preset["airlock_config"])
+        def list_buckets() -> list[str]:
+            return []
+
+        with AirlockContext(metadata={"access_token_claims": verified_claims}):
+            list_buckets()  # refused unless verified_claims["aud"] names this server
+
+    Primary source:
+      https://github.com/awslabs/mcp/security/advisories/GHSA-4prq-p2x5-w9fh
+    """
+    from .config import AirlockConfig
+    from .mcp_spec.oauth import TokenAudienceError, validate_access_token_audience
+
+    # Built first: AirlockConfig refuses an expected audience that is not a resource URI.
+    airlock_config = AirlockConfig(
+        expected_token_audience=expected_audience,
+        token_audience_mode="deny",  # nosec B106 - a check mode, not a credential
+    )
+
+    def _check(claims: Mapping[str, Any]) -> None:
+        """Raise :class:`TokenAudienceError` unless ``claims`` name this server in ``aud``."""
+        if not isinstance(claims, Mapping):
+            raise TokenAudienceError(
+                f"access token claims are a {type(claims).__name__}, not a mapping"
+            )
+        validate_access_token_audience(dict(claims), expected_audience=expected_audience)
+
+    return {
+        "preset_id": "token_audience",
+        "severity": "high",
+        "default_action": "deny",
+        "guard": validate_access_token_audience,
+        "check": _check,
+        "airlock_config": airlock_config,
+        "owasp": "MCP07",
+        "cwe": ("CWE-346",),
+        "cves": ("CVE-2026-115413",),
+        "advisory_url": "https://github.com/awslabs/mcp/security/advisories/GHSA-4prq-p2x5-w9fh",
+    }
+
+
+@preset
 def dns_rebinding_safe_url_defaults(
     *,
     allowed_hosts: list[str] | None = None,
@@ -5930,6 +6018,7 @@ __all__ = [
     "cline_cve_2026_44211_defaults",
     # V0.8.29 CVE-2026-47390 (SSRF-protection bypass via alt-encoding / rebinding; CWE-918)
     "ssrf_egress_guard_defaults",
+    "token_audience_defaults",
     # V0.8.34 GHSA-mrvx-jmjw-vggc (SafeURL DNS-rebinding: resolve + re-validate at call time)
     "dns_rebinding_safe_url_defaults",
     # V0.8.30 CVE-2026-11624 (MCP HTTP-transport Origin/Host DNS-rebinding; CWE-346)
