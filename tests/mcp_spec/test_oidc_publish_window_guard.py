@@ -244,3 +244,39 @@ class TestTheShippedListMatchesRealInstalls:
         from importlib.resources import files
 
         assert (files("agent_airlock.data") / "oidc_publish_blast_2026_05_11.json").is_file()
+
+
+class TestEveryInstallSpellingIsRead:
+    """0.10.28 review: every spelling npm, Yarn and Node resolve to a listed tarball.
+
+    npm reads a bare tarball URL, or ``name@<url>``, as a remote spec (npm-package-arg,
+    https://github.com/npm/npm-package-arg). Node's ``new URL()`` turns a backslash into a
+    path separator and resolves ``.`` / ``..`` segments, percent-encoded ones included
+    (https://url.spec.whatwg.org/#double-dot-path-segment). Yarn and pnpm write a
+    registry version, or an alias, in the version field as ``npm:...``.
+    """
+
+    @staticmethod
+    def _spellings(version: str) -> list[dict[str, str]]:
+        tarball = f"history-{version}.tgz"
+        url = f"https://registry.npmjs.org/@tanstack/history/-/{tarball}"
+        return [
+            {"package": url},
+            {"package": f"@tanstack/history@{url}"},
+            {"url": f"https://registry.npmjs.org/@tanstack/x/../history/-/{tarball}"},
+            {"url": f"https://registry.npmjs.org/@tanstack/x/%2E%2e/history/-/{tarball}"},
+            {"url": f"https://registry.npmjs.org/@tanstack/history/-/./{tarball}"},
+            {"url": f"https://registry.npmjs.org\\@tanstack/history/-/{tarball}"},
+            {"package": "@tanstack/history", "version": f"npm:{version}"},
+            {"package": "history", "version": f"npm:@tanstack/history@{version}"},
+        ]
+
+    def test_a_listed_release_is_refused_in_every_spelling(self) -> None:
+        guard = OIDCPublishWindowGuard(blast_list=load_blast_list_from_2026_05_11())
+        for args in self._spellings("1.161.9"):
+            assert guard.evaluate(args).allowed is False, args
+
+    def test_control_an_unlisted_release_passes_in_every_spelling(self) -> None:
+        guard = OIDCPublishWindowGuard(blast_list=load_blast_list_from_2026_05_11())
+        for args in self._spellings("1.0.0"):
+            assert guard.evaluate(args).allowed is True, args

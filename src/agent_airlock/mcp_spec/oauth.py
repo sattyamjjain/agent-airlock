@@ -530,15 +530,26 @@ def _unreadable_params(params: Any) -> IssuerMismatchError:
     )
 
 
+#: The multi-value accessor a framework's query-params multi-dict reads every value of a
+#: name through: Starlette, Werkzeug, Django and Bottle spell it ``getlist``, httpx
+#: ``get_list``, multidict (aiohttp, yarl) and WebOb ``getall``.
+_MULTI_VALUE_ACCESSORS: tuple[str, ...] = ("getlist", "get_list", "getall")
+
+
 def _iss_values(params: Any) -> list[Any]:
     """Every ``iss`` value an authorization response carries, repeats included.
 
     Reads a query string (``str`` / ``bytes``), a mapping whose value may be a list (or a
-    framework multi-dict, through its ``getlist`` / ``getall``), and a list of
-    ``(key, value)`` pairs (``parse_qsl`` output).
+    framework multi-dict, through its multi-value accessor), and a list of
+    ``(key, value)`` pairs (``parse_qsl`` output). The accessor is called with the name
+    alone, and a ``KeyError`` from it means no value (multidict's ``getall`` raises one).
+    Until 0.10.28 httpx's ``get_list`` was not among them, and a ``getall`` that takes no
+    default (WebOb's) or any accessor that could not be called fell back to ``get``, so
+    each read one value and a second ``iss`` passed.
 
     Raises:
-        IssuerMismatchError: ``params`` is of no readable shape.
+        IssuerMismatchError: ``params`` is of no readable shape, or is a multi-dict whose
+            multi-value accessor cannot be called with a name alone.
     """
     if isinstance(params, (bytes, bytearray)):
         try:
@@ -548,13 +559,16 @@ def _iss_values(params: Any) -> list[Any]:
     if isinstance(params, str):
         return list(parse_qs(params, keep_blank_values=True).get("iss", []))
     if isinstance(params, Mapping):
-        for accessor in ("getlist", "getall"):
+        for accessor in _MULTI_VALUE_ACCESSORS:
             getter = getattr(params, accessor, None)
-            if callable(getter):
-                try:
-                    return list(getter("iss", []) if accessor == "getall" else getter("iss"))
-                except (TypeError, KeyError):
-                    break
+            if not callable(getter):
+                continue
+            try:
+                return list(getter("iss"))
+            except KeyError:
+                return []
+            except TypeError:
+                raise _unreadable_params(params) from None
         raw = params.get("iss")
         if isinstance(raw, (list, tuple)):
             return list(raw)
@@ -587,9 +601,9 @@ def validate_authorization_response_iss(
     Args:
         params: The authorization-response parameters — a mapping (e.g. parsed query
             params, where a value may be a ``str`` or a ``list[str]``; a framework
-            multi-dict is read through its ``getlist`` / ``getall``), a list of
-            ``(key, value)`` pairs, or a raw query string (``"code=…&state=…&iss=…"``,
-            ``str`` or ``bytes``).
+            multi-dict is read through its ``getlist`` / ``get_list`` / ``getall``), a
+            list of ``(key, value)`` pairs, or a raw query string
+            (``"code=…&state=…&iss=…"``, ``str`` or ``bytes``).
         expected_issuer: The issuer identifier of the authorization server the
             client initiated the flow with (e.g. from the discovered
             :class:`AuthorizationServerMetadata.issuer`).

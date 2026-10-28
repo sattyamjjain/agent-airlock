@@ -35,7 +35,10 @@ so its absence on a control surface is treated as untrusted). The allow-list
 is explicit — an empty allow-list rejects every cross-origin upgrade. The
 runtime gate reads an ``Origin`` given as ``str``, Latin-1 ``bytes`` or a list
 of the values it arrived with, and refuses one that is not text or that
-arrives with two different values (``DENY_UNINSPECTABLE``, v0.10.28).
+arrives with two different values (``DENY_UNINSPECTABLE``, v0.10.28). The
+handler wrapper's default getter, :func:`extract_origin`, hands it every
+``Origin`` value the call carries; until 0.10.28 it took the first one it
+found, so the wrapper ran a handler whose upgrade also carried a forged one.
 
 Why structural (no server)
 --------------------------
@@ -328,22 +331,23 @@ class WebSocketOriginGuard:
         self,
         handler: Callable[..., _T],
         *,
-        origin_getter: Callable[..., str | None] | None = None,
+        origin_getter: Callable[..., str | bytes | Sequence[str | bytes] | None] | None = None,
     ) -> Callable[..., _T]:
         """Wrap a WebSocket-upgrade handler with a fail-closed Origin gate.
 
         The returned callable extracts the upgrade ``Origin`` (via
         ``origin_getter``, defaulting to :func:`extract_origin` over the
         handler's call arguments), rejects a missing / non-allow-listed
-        Origin by raising :class:`WebSocketOriginHijackError`, and otherwise
-        delegates to ``handler`` unchanged. Both sync and ``async`` handlers
-        are supported.
+        Origin, and two different Origin values, by raising
+        :class:`WebSocketOriginHijackError`, and otherwise delegates to
+        ``handler`` unchanged. Both sync and ``async`` handlers are supported.
 
         Args:
             handler: The upgrade handler to protect (e.g. an ASGI app, a
                 ``websockets`` handler, or any callable invoked per upgrade).
             origin_getter: Optional callable that returns the ``Origin`` from
-                the handler's call args. Defaults to :func:`extract_origin`.
+                the handler's call args, in any shape :meth:`check_upgrade`
+                reads. Defaults to :func:`extract_origin`.
 
         Returns:
             A handler with the same call signature, gated on the Origin.
@@ -376,18 +380,28 @@ class WebSocketOriginGuard:
         return hints
 
 
+@dataclass(frozen=True)
+class _UnreadableHeaders:
+    """A header container :func:`extract_origin` could not read whole; refused as such."""
+
+    why: str
+
+
 def _read_origin(origin: object) -> tuple[str | None, str | None]:
     """``(origin, None)`` read from any accepted shape, or ``(None, why)`` when unreadable.
 
     ``None`` is a missing header; ``str`` is read as is; ``bytes`` as Latin-1; a list /
     tuple is every value the header arrived with — none is a missing header, values that
-    normalise alike are one Origin, and two different values are unreadable.
+    normalise alike are one Origin, and two different values are unreadable, as is a
+    header container :func:`extract_origin` could not read whole.
     """
     if origin is None:
         return None, None
     items = origin if isinstance(origin, (list, tuple)) else [origin]
     values: list[str] = []
     for item in items:
+        if isinstance(item, _UnreadableHeaders):
+            return None, item.why
         if isinstance(item, (bytes, bytearray)):
             item = bytes(item).decode("latin-1")
         if not isinstance(item, str):
@@ -400,8 +414,8 @@ def _read_origin(origin: object) -> tuple[str | None, str | None]:
     return values[0], None
 
 
-def extract_origin(*args: Any, **kwargs: Any) -> str | None:
-    """Best-effort extraction of an ``Origin`` from handler call arguments.
+def extract_origin(*args: Any, **kwargs: Any) -> str | list[Any] | None:
+    """Every ``Origin`` a handler call carries, read from its arguments.
 
     Handles the common upgrade-handler shapes without taking a web-framework
     dependency:
@@ -413,53 +427,80 @@ def extract_origin(*args: Any, **kwargs: Any) -> str | None:
       pairs;
     - a plain headers ``Mapping`` passed positionally.
 
-    Returns the first ``Origin`` found, or ``None``.
+    Every argument and every header entry is read: a header name may be ``str``
+    or ``bytes``, and a value ``str``, ``bytes`` or a list of them.
+
+    Returns:
+        ``None`` when the call carries no ``Origin``; the ``Origin`` as text when
+        every value found names the same one; otherwise the list of every value
+        found, which :meth:`WebSocketOriginGuard.check_upgrade` refuses as
+        ``DENY_UNINSPECTABLE`` (two different Origins, a value that is not text,
+        or an ASGI header list holding an entry that is not a ``(name, value)``
+        pair). Until 0.10.28 the first ``Origin`` found was returned, so an
+        allow-listed ``origin`` header ahead of a forged one, or a mapping with
+        both ``Origin`` and ``origin``, ran the wrapped handler.
     """
-    if "origin" in kwargs and isinstance(kwargs["origin"], str):
-        return kwargs["origin"]
+    values: list[Any] = []
+    if kwargs.get("origin") is not None:
+        _add_header_values(values, kwargs["origin"])
+    for obj in (*args, *(value for key, value in kwargs.items() if key != "origin")):
+        values.extend(_origins_in_obj(obj))
+    if not values:
+        return None
+    if all(isinstance(v, str) for v in values) and len({_normalize_origin(v) for v in values}) == 1:
+        return str(values[0])
+    return values
 
-    candidates: list[Any] = [*args, *kwargs.values()]
-    for obj in candidates:
-        found = _origin_from_obj(obj)
-        if found is not None:
-            return found
-    return None
 
-
-def _origin_from_obj(obj: Any) -> str | None:
-    """Pull an Origin from a headers mapping, an ASGI scope, or a request."""
-    # ASGI scope: {"headers": [(b"origin", b"https://evil.com"), ...]}
+def _origins_in_obj(obj: Any) -> list[Any]:
+    """Every Origin value in a headers mapping, an ASGI scope, or a request's ``headers``."""
+    found: list[Any] = []
+    # ASGI scope: {"headers": [(b"origin", b"https://evil.com"), ...]}, or a headers mapping.
     if isinstance(obj, Mapping):
-        headers = obj.get("headers", obj)
-        origin = _origin_from_headers(headers)
-        if origin is not None:
-            return origin
-    # Request-like object exposing `.headers`.
+        found += _origins_in_headers(obj.get("headers", obj))
+    # Request-like object exposing `.headers` (a Starlette connection is a mapping too).
     headers_attr = getattr(obj, "headers", None)
     if headers_attr is not None:
-        return _origin_from_headers(headers_attr)
-    return None
+        found += _origins_in_headers(headers_attr)
+    return found
 
 
-def _origin_from_headers(headers: Any) -> str | None:
-    """Case-insensitive ``origin`` lookup over mapping or ASGI header list."""
+def _origins_in_headers(headers: Any) -> list[Any]:
+    """Every ``origin`` value (name compared case-insensitively) in a mapping or ASGI list."""
     if isinstance(headers, Mapping):
-        for key, value in headers.items():
-            if isinstance(key, str) and key.lower() == "origin":
-                return value if isinstance(value, str) else None
-        return None
-    # ASGI header list: [(b"origin", b"https://evil.com"), ...]
-    if isinstance(headers, (list, tuple)):
+        pairs: list[tuple[Any, Any]] = list(headers.items())
+    elif isinstance(headers, (list, tuple)):
+        # ASGI header list: [(b"origin", b"https://evil.com"), ...]
+        pairs = []
         for item in headers:
             if not isinstance(item, (list, tuple)) or len(item) != 2:
-                continue
-            key, value = item
-            key_s = key.decode("latin-1") if isinstance(key, bytes) else key
-            if isinstance(key_s, str) and key_s.lower() == "origin":
-                if isinstance(value, bytes):
-                    return value.decode("latin-1")
-                return value if isinstance(value, str) else None
-    return None
+                return [_UnreadableHeaders("an ASGI header entry is not a (name, value) pair")]
+            pairs.append((item[0], item[1]))
+    else:
+        return []
+    found: list[Any] = []
+    for key, value in pairs:
+        name = _latin1(key)
+        if isinstance(name, str) and name.lower() == "origin":
+            _add_header_values(found, value)
+    return found
+
+
+def _add_header_values(found: list[Any], value: Any) -> None:
+    """Add one header's value: ``bytes`` as Latin-1, a list / tuple item by item.
+
+    Anything else is kept as it is, for :meth:`WebSocketOriginGuard.check_upgrade` to
+    refuse as not text.
+    """
+    for item in value if isinstance(value, (list, tuple)) else (value,):
+        found.append(_latin1(item))
+
+
+def _latin1(value: Any) -> Any:
+    """``bytes`` decoded as Latin-1 (how ASGI carries header bytes); anything else as is."""
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return bytes(value).decode("latin-1")
+    return value
 
 
 __all__ = [

@@ -12,10 +12,16 @@ plugs that gap.
 Algorithm
 ---------
 
+0. Hold the state to the RFC 6749 syntax (Appendix A.5: ``state = 1*VSCHAR``,
+   ``VSCHAR = %x20-7E``), as written and percent-decoded. A character outside
+   it (a look-alike letter, a control character, an undecodable byte) is
+   refused before anything is decoded: no client sends one, and the trigger
+   phrases below are ASCII, so a look-alike letter would read past them.
 1. Detect the JWT tri-segment shape (``head.payload.sig``: three base64url
    segments whose header decodes to a JSON object). The JWT signing layer
-   is out of scope, but the payload segment is decoded and scanned for the
-   trigger phrases.
+   is out of scope, but every segment is decoded and scanned for the
+   trigger phrases, as text and, where it parses, as JSON. The shape is
+   then read by every step below like any other state.
 2. Try url-safe base64, base64, hex, and JSON decoders, on the state as
    written and percent-decoded, and scan the output of every one that
    decodes for the trigger phrases (not only the first printable one).
@@ -31,10 +37,12 @@ Algorithm
 4. Only then does Shannon entropy label an allowed state (a high-entropy
    nonce is >= 3.0 bits/byte).
 
-Every scan reads the text a lenient reader sees as well: NFKC-folded, with
-an undecodable byte (U+FFFD), a format character (zero-width, bidi) or a
-control character dropped, and read as a space. Bytes are decoded leniently,
-not strictly: a random-bytes nonce is not UTF-8 either.
+Every scan of a decoded form reads the text a lenient reader sees as well:
+NFKC-folded, with an undecodable byte (U+FFFD), a format character
+(zero-width, bidi) or a control character dropped, and read as a space.
+Decoded bytes are read leniently, not strictly: a random-bytes nonce does not
+decode to UTF-8 either. A ``bytes`` state is decoded the same way, and step 0
+refuses any byte outside VSCHAR it held.
 
 Until 0.10.28 the undecoded text was never scanned, so plain-text
 instructions passed as a "high-entropy nonce" (English runs ~4 bits/byte),
@@ -43,7 +51,13 @@ inside a trigger phrase hid it, a ``list`` (``parse_qs`` output) or
 ``bytes`` state was a warning, and a callback that was not a mapping
 crashed. Every element of a list state is read now and the worst verdict
 wins; ``bytes`` are decoded; any other shape, and a callback that is not a
-mapping, is refused.
+mapping, is refused. Until 0.10.28 too, a JWT-shaped state had only its
+payload scanned, as text, and was then allowed with no other read, so a
+trigger in its header (a ``kid``), carried as its signature, JSON-escaped,
+or split across segments where a whole-state decode joins them passed; and
+a state outside the RFC 6749 syntax was read as text, so look-alike letters
+passed as a high-entropy nonce and a lone surrogate raised
+``UnicodeEncodeError`` instead of a verdict.
 
 Reference
 ---------
@@ -104,6 +118,12 @@ _PROSE_LONG_WORD = 4
 
 #: The base64url alphabet of a JWT segment.
 _BASE64URL = re.compile(r"^[A-Za-z0-9_-]+$")
+
+#: A JWT-shaped state's segments, in order, by the decoder name a refusal reports.
+_JWT_SEGMENTS: tuple[str, ...] = ("jwt-header", "jwt-payload", "jwt-signature")
+
+#: A character outside RFC 6749's ``VSCHAR`` (``%x20-7E``), which a state is made of.
+_NOT_VSCHAR = re.compile(r"[^\x20-\x7e]")
 
 _SEVERITY: dict[str, int] = {"allow": 0, "warn": 1, "block": 2}
 
@@ -263,6 +283,31 @@ def _state_values(state: Any) -> tuple[list[str], _Finding | None]:
     return values, None
 
 
+def _syntax_finding(state: str) -> _Finding | None:
+    """Refuse a state with a character outside the RFC 6749 syntax, as given or decoded.
+
+    RFC 6749 Appendix A.5 makes a state ``1*VSCHAR`` (``%x20-7E``). The guard cannot tell
+    whether a caller passed the state percent-decoded or as it sat in the query string,
+    so both readings are held to the syntax. The excerpt escapes what it refuses, so a
+    look-alike letter is visible in it and a lone surrogate cannot break a log line.
+    """
+    label, text = "state", state
+    bad = _NOT_VSCHAR.search(text)
+    if bad is None:
+        label, text = "percent-decoded state", unquote_plus(state)
+        bad = _NOT_VSCHAR.search(text)
+    if bad is None:
+        return None
+    char = bad.group(0)
+    return _Finding(
+        "block",
+        f"{label} carries {char!r} (U+{ord(char):04X}), outside the RFC 6749 state syntax "
+        "(1*VSCHAR, %x20-7E); no client sends one",
+        "syntax",
+        text[:80].encode("ascii", "backslashreplace").decode("ascii"),
+    )
+
+
 def _plain_variants(state: str) -> list[str]:
     """``state`` as written, percent-decoded, and with word joiners read as spaces."""
     variants: list[str] = []
@@ -318,9 +363,10 @@ class OAuthStateEntropyGuard:
                 be a ``str``, ``bytes``, or a list of them, as ``parse_qs`` returns).
 
         Returns:
-            The inspection. A callback that is not a mapping, and a ``state`` of no
-            readable shape, are ``block``; an absent or empty ``state`` is ``warn``. For
-            a list ``state`` the worst element's verdict is returned.
+            The inspection. A callback that is not a mapping, a ``state`` of no readable
+            shape, and one with a character outside the RFC 6749 syntax (``1*VSCHAR``) are
+            ``block``; an absent or empty ``state`` is ``warn``. For a list ``state`` the
+            worst element's verdict is returned.
         """
         started = time.perf_counter()
         if not isinstance(oauth_callback, Mapping):
@@ -368,16 +414,25 @@ class OAuthStateEntropyGuard:
         """The verdict on one ``state`` string."""
         if state == "":
             return _Finding("warn", "state is empty")
-        if len(state.encode("utf-8")) > self.max_state_bytes:
+        # "surrogatepass": a lone surrogate (json.loads gives one for "\udcff") is counted,
+        # and refused just below, instead of raising UnicodeEncodeError.
+        if len(state.encode("utf-8", "surrogatepass")) > self.max_state_bytes:
             return _Finding(
                 "block", f"state exceeds {self.max_state_bytes} byte cap", "size_cap", state[:80]
             )
-        jwt = self._jwt_finding(state)
-        if jwt is not None:
-            return jwt
+        syntax = _syntax_finding(state)
+        if syntax is not None:
+            return syntax
+        jwt_shaped = self._looks_like_jwt(state)
+        if jwt_shaped:
+            segment = self._jwt_finding(state)
+            if segment is not None:
+                return segment
         # Every decoder's output is scanned, not only the first printable one: a decoder
         # that turns the state into printable garbage first must not hide what a later
-        # one decodes it to (a JSON state also "decodes" as lenient base64).
+        # one decodes it to (a JSON state also "decodes" as lenient base64). A JWT-shaped
+        # state is decoded whole too: with its dots dropped, segments whose lengths are
+        # whole 3-byte groups decode joined, and a phrase split between them reads whole.
         decodings = _decodings(state)
         for decoder, decoded in decodings:
             matches = _scan(decoded)
@@ -392,6 +447,8 @@ class OAuthStateEntropyGuard:
         plain = self._plain_text_finding(state)
         if plain is not None:
             return plain
+        if jwt_shaped:
+            return _Finding("allow", "state matches JWT tri-segment shape")
         for decoder, decoded in decodings:
             # Random nonces have high raw-byte entropy too, but they don't decode into
             # printable text, whereas an encoded payload does; JSON is text by definition.
@@ -404,21 +461,31 @@ class OAuthStateEntropyGuard:
             return _Finding("allow", f"high-entropy nonce ({entropy_bps:.2f} bits/byte)")
         return _Finding("allow", "no decoder produced printable ASCII")
 
-    def _jwt_finding(self, state: str) -> _Finding | None:
-        """A JWT-shaped state's verdict (its payload scanned), or None if it is not one."""
-        if not self._looks_like_jwt(state):
-            return None
-        payload = _b64url_text(state.split(".")[1]) or ""
-        matches = _scan(payload)
-        if matches:
-            return _Finding(
-                "block",
-                "JWT-shaped state carries an injection trigger in its payload",
-                "jwt-payload",
-                payload[:160],
-                matches,
-            )
-        return _Finding("allow", "state matches JWT tri-segment shape")
+    @staticmethod
+    def _jwt_finding(state: str) -> _Finding | None:
+        """Refuse a JWT-shaped state any of whose segments carries a trigger phrase.
+
+        Each segment is read as text and, where it parses, as JSON: a header or payload is
+        JSON, and a JSON reader turns ``\\u0069gnore`` into ``ignore``. The signature is
+        read as well; it is opaque bytes only to a verifier. ``None`` lets the state go on
+        to the guard's other reads.
+        """
+        for decoder, segment in zip(_JWT_SEGMENTS, state.split("."), strict=True):
+            text = _b64url_text(segment)
+            if not text:
+                continue
+            for form in _unique([text, _try_json(text) or text]):
+                matches = _scan(form)
+                if matches:
+                    return _Finding(
+                        "block",
+                        "JWT-shaped state carries an injection trigger in its "
+                        + decoder.removeprefix("jwt-"),
+                        decoder,
+                        form[:160],
+                        matches,
+                    )
+        return None
 
     @staticmethod
     def _plain_text_finding(state: str) -> _Finding | None:

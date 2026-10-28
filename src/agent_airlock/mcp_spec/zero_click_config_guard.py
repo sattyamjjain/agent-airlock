@@ -26,8 +26,10 @@ Mutation identity (v0.10.28)
 An existing entry is compared on exactly these fields, and a change to
 any of them (added, removed or altered) is a mutation:
 
-- what runs: ``command``, ``args``, the set of ``env`` names, ``cwd``,
-  ``envFile``;
+- what runs: ``command``, ``args``, the set of ``env`` names and the values
+  ``env`` gives code-loading variables (``LD_PRELOAD``, ``NODE_OPTIONS``,
+  ``PATH``, ``PYTHONPATH``, ...: the set ``subprocess_arg_guard`` refuses,
+  names compared case-insensitively), ``cwd``, ``envFile``;
 - where it connects and how: ``url``, ``serverUrl`` (Windsurf's
   spelling), the set of ``headers`` names (case-folded), and the
   transport in each host's spelling: ``type``, ``transport``,
@@ -36,10 +38,14 @@ any of them (added, removed or altered) is a mutation:
   and ``alwaysAllow`` (each compared as a set of tool names) and
   ``sandboxEnabled``.
 
-``env`` and ``headers`` *values* rotate legitimately (tokens, secrets)
-and are not compared, and neither is any other field (``description``,
-``timeout``, ``disabled``, ``signer``, ...). Until v0.10.28 only
-``command`` was compared.
+Every other ``env`` value and every ``headers`` value rotates
+legitimately (tokens, secrets): none is compared, logged or named in a
+refusal, and neither is any other field (``description``, ``timeout``,
+``disabled``, ``signer``, ...). Until v0.10.28 only ``command`` was
+compared; the code-loading values joined in the same release, after a
+review found an existing ``NODE_OPTIONS`` changed to ``--require`` a
+payload, and an attacker directory put first in ``PATH``, accepted
+because only ``env`` names were compared.
 
 This is **not** a kernel watcher. The v0.5.8 roadmap covers the
 long-running daemon variant; for v0.5.7 we ship the synchronous API
@@ -65,6 +71,10 @@ from typing import Any
 
 from .._log import structlog
 from ..exceptions import AirlockError
+from .subprocess_arg_guard import (
+    _DEFAULT_DANGEROUS_ENV_VARS,  # nosec B404 - a constant and a pure helper, not subprocess
+    _env_var_name,
+)
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.zero_click_config_guard")
 
@@ -123,7 +133,9 @@ class MCPCommandMutationDetected(AirlockError):
     Since v0.10.28 the identity is the field list in the module docstring
     (what runs, where it connects, what the host lets it do unconfirmed);
     until then only ``command`` was compared, so swapping ``args``, adding
-    ``LD_PRELOAD`` to ``env`` or ``"autoApprove": ["*"]`` passed.
+    ``LD_PRELOAD`` to ``env``, pointing an existing ``NODE_OPTIONS`` at a
+    payload or ``"autoApprove": ["*"]`` passed. A changed code-loading value
+    is reported as ``env``; the value itself is never in the message.
 
     Attributes:
         path: The config file the diff was taken on.
@@ -233,8 +245,9 @@ class ConfigDiffReport:
 _SERVER_MAP_KEYS: tuple[str, ...] = ("mcpServers", "servers")
 
 #: What an existing entry is compared on, in report order (the module docstring says
-#: why each is here). ``env`` and ``headers`` contribute their names only — their
-#: values rotate legitimately — and every field not listed is out of the comparison.
+#: why each is here). ``env`` contributes its names and the values of its code-loading
+#: variables, ``headers`` its names only — other values rotate legitimately — and every
+#: field not listed is out of the comparison.
 _IDENTITY_FIELDS: tuple[str, ...] = (
     "command",
     "args",
@@ -345,15 +358,67 @@ def _name_set(value: object) -> object:
     return value
 
 
+def _env_value(value: Any) -> Any:
+    """An env value as a spawner exports it: ``bytes`` (and a path) read as text.
+
+    ``subprocess`` takes ``bytes`` and path values; they are decoded with
+    ``surrogateescape``, as ``subprocess_arg_guard`` reads a ``bytes`` name, so
+    ``b"/usr/bin"`` and ``"/usr/bin"`` are one value and no byte is lost.
+    """
+    if isinstance(value, os.PathLike):
+        try:
+            value = os.fspath(value)
+        except TypeError:
+            return value
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8", errors="surrogateescape")
+    return value
+
+
+def _code_loading_values(entry: Mapping[str, Any]) -> dict[str, list[Any]]:
+    """The values ``entry``'s ``env`` gives code-loading variables, by exported name.
+
+    A code-loading variable is one ``subprocess_arg_guard`` refuses outright
+    (``_DEFAULT_DANGEROUS_ENV_VARS``, names compared upper-cased as there): its value
+    decides what code the server loads (``NODE_OPTIONS=--require``, ``PATH``,
+    ``LD_PRELOAD``). A name is read as that guard reads it (``_env_var_name``: ``bytes``
+    decoded, cut at ``=`` or NUL) and a value as a spawner exports it
+    (:func:`_env_value`). A ``KEY=VALUE`` list keeps every value of a repeated name, in
+    order, and a bare ``KEY`` reads as ``None``. Called only on an ``env``
+    :func:`_env_keys_of` read. No other value is returned: it may be a secret, and it
+    rotates.
+    """
+    env = entry.get("env")
+    pairs: list[tuple[object, Any]]
+    if isinstance(env, Mapping):
+        pairs = list(env.items())
+    elif isinstance(env, (list, tuple, set, frozenset)):
+        items = sorted(env) if isinstance(env, (set, frozenset)) else env
+        pairs = []
+        for item in items:
+            assigned, sep, assignment = str(item).partition("=")
+            pairs.append((assigned, assignment if sep else None))
+    else:
+        return {}
+    values: dict[str, list[Any]] = {}
+    for key, value in pairs:
+        name = _env_var_name(key)
+        if name is not None and name.upper() in _DEFAULT_DANGEROUS_ENV_VARS:
+            values.setdefault(name, []).append(_env_value(value))
+    return values
+
+
 def _entry_identity(entry: object) -> dict[str, str] | None:
     """The comparable identity of one server entry, or ``None`` when it cannot be read.
 
     One canonical string per field of :data:`_IDENTITY_FIELDS`. ``env`` is read the way
     :class:`McpConfigPinSet` reads it (a mapping, or a sequence of ``KEY=VALUE``
-    strings) and contributes its names only, ``headers`` its case-folded names only,
-    and ``autoApprove`` / ``alwaysAllow`` their tool names as a set. An entry that is
-    not an object, or whose ``env`` or ``headers`` is any other shape, cannot be
-    compared and is refused by the caller.
+    strings) and contributes its names and the values it gives code-loading variables
+    (:func:`_code_loading_values`), ``headers`` its case-folded names only, and
+    ``autoApprove`` / ``alwaysAllow`` their tool names as a set. An entry that is not an
+    object, or whose ``env`` or ``headers`` is any other shape, cannot be compared and is
+    refused by the caller. The identity never leaves :func:`audit_config_diff`: only the
+    names of the fields that differ do.
     """
     if not isinstance(entry, Mapping):
         return None
@@ -362,7 +427,7 @@ def _entry_identity(entry: object) -> dict[str, str] | None:
     if env_keys is None or header_names is None:
         return None
     identity = {name: _canonical(entry.get(name)) for name in _EXACT_IDENTITY_FIELDS}
-    identity["env"] = _canonical(sorted(set(env_keys)))
+    identity["env"] = _canonical([sorted(set(env_keys)), _code_loading_values(entry)])
     identity["headers"] = _canonical(sorted(set(header_names)))
     for name in _NAME_SET_FIELDS:
         identity[name] = _canonical(_name_set(entry.get(name)))
@@ -508,10 +573,17 @@ def _emit_otel_span(*, path: Path, old_sha256: str, new_sha256: str) -> None:
 # the spawn sets one (v0.10.28: the same argv in another directory runs other
 # code — ``npx`` resolves a local package and ``python server.py`` a relative
 # file from it; a spawn without ``cwd`` fingerprints exactly as before, so no
-# existing pin of one changes). Env *values* are deliberately excluded — they
-# legitimately rotate (tokens, secrets) and pinning them would force a re-pin
-# on every rotation; the *keys* are what an injection adds (e.g. a new
-# ``LD_PRELOAD``), so the key set is pinned. The config-file diff compares more
+# existing pin of one changes). Env *values* are excluded — they legitimately
+# rotate (tokens, secrets) and pinning them would force a re-pin on every
+# rotation; the *keys* are what an injection adds (e.g. a new ``LD_PRELOAD``),
+# so the key set is pinned. The exception is a code-loading variable (the set
+# :func:`_code_loading_values` reads, ``NODE_OPTIONS``, ``PATH``,
+# ``LD_PRELOAD``, ...): its value decides what code runs, so since v0.10.28 the
+# values of those the spawn sets are hashed into the fingerprint too, the way
+# ``cwd`` is (a spawn that sets none fingerprints exactly as before). Until
+# then ``NODE_OPTIONS`` changed to ``--require`` a payload, or an attacker
+# directory put first in ``PATH``, matched the pin. No value is logged or put
+# in a refusal: only the digest is. The config-file diff compares more
 # than this (``url``, ``headers``, the transport, ``autoApprove`` /
 # ``alwaysAllow``, ``sandboxEnabled``, ``envFile``): those describe a remote
 # endpoint or the host's policy around the server, not the STDIO process a
@@ -524,10 +596,11 @@ class McpConfigPinViolation(AirlockError):
     Raised **fail-closed** (never warned) by :meth:`McpConfigPinSet.check`
     for the CVE-2026-30615 zero-click class — either the server name is not
     in the pin set at all (an injected entry), a previously-pinned server's
-    ``command`` / ``args`` / ``env``-keys / ``cwd`` changed between
-    registration and spawn (a mutated entry), or the spawn config's ``env`` /
-    ``args`` / ``cwd`` has a shape the pin cannot read (v0.10.24; ``cwd``
-    since v0.10.28).
+    ``command`` / ``args`` / ``env``-keys / code-loading ``env`` values /
+    ``cwd`` changed between registration and spawn (a mutated entry), or the
+    spawn config's ``env`` / ``args`` / ``cwd`` has a shape the pin cannot
+    read (v0.10.24; ``cwd`` and code-loading values since v0.10.28). No env
+    value is ever in the message: a changed one shows as a digest mismatch.
 
     Attributes:
         server_name: The offending STDIO server name.
@@ -584,7 +657,7 @@ class McpServerPin:
         name: The MCP server name (the join key).
         fingerprint: SHA-256 hex of the canonical
             ``{name, command, args, env-keys}`` payload, plus ``cwd`` when the
-            spawn sets one.
+            spawn sets one and the values of the code-loading variables it sets.
     """
 
     name: str
@@ -598,6 +671,7 @@ def fingerprint_mcp_server(
     args: Iterable[str] = (),
     env_keys: Iterable[str] = (),
     cwd: str | None = None,
+    env: Mapping[str, Any] | Iterable[str] | None = None,
 ) -> str:
     """Compute the canonical fingerprint of a STDIO MCP server spawn config.
 
@@ -611,13 +685,24 @@ def fingerprint_mcp_server(
         command: The program/launcher (e.g. ``"uvx"``).
         args: The argument vector (order significant).
         env_keys: The environment variable **names** the server is allowed
-            to receive (values are intentionally not pinned).
+            to receive (their values are not pinned, but for those ``env``
+            gives code-loading variables).
         cwd: The working directory the server is spawned in, or ``None`` when
             the spawn sets none. Joins the payload only when set (v0.10.28),
             so a fingerprint without one is unchanged from earlier releases.
+        env: The spawn's environment (a mapping, or ``KEY=VALUE`` strings), read
+            only for the values it gives code-loading variables (``LD_PRELOAD``,
+            ``NODE_OPTIONS``, ``PATH``, ...): those are hashed into the payload
+            (v0.10.28), every other value is ignored, and the names still come
+            from ``env_keys``. A spawn that sets no code-loading variable
+            fingerprints exactly as before, so no existing pin of one changes.
 
     Returns:
         SHA-256 hex digest string.
+
+    Raises:
+        TypeError: ``env`` is not a mapping or a sequence of ``KEY=VALUE``
+            strings, or a code-loading value is one JSON cannot encode.
     """
     fields: dict[str, object] = {
         "name": name,
@@ -627,6 +712,12 @@ def fingerprint_mcp_server(
     }
     if cwd is not None:
         fields["cwd"] = cwd
+    if env is not None:
+        if _env_keys_of({"env": env}) is None:
+            raise TypeError("env must be a mapping or a sequence of KEY=VALUE strings")
+        code_loading = _code_loading_values({"env": env})
+        if code_loading:
+            fields["code_loading_env"] = code_loading
     payload = json.dumps(fields, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -679,8 +770,8 @@ def _string_keys(value: object, *, split_assignment: bool) -> list[str] | None:
 
 
 def _spawn_fingerprint(entry: Mapping[str, Any], name: str) -> str | None:
-    """Fingerprint a spawn config, or ``None`` when its env keys, ``args`` or ``cwd``
-    cannot be read."""
+    """Fingerprint a spawn config, or ``None`` when its env keys, a code-loading value,
+    ``args`` or ``cwd`` cannot be read."""
     env_keys = _env_keys_of(entry)
     if env_keys is None:
         return None
@@ -695,19 +786,29 @@ def _spawn_fingerprint(entry: Mapping[str, Any], name: str) -> str | None:
             args=() if args is None else args,
             env_keys=env_keys,
             cwd=cwd,
+            env=entry.get("env"),
         )
     except (TypeError, ValueError, RecursionError):
-        # A non-iterable args, an item json cannot encode (bytes, objects), or an args
-        # that contains itself (json: "Circular reference detected", 0.10.26).
+        # A non-iterable args, an item json cannot encode (bytes, objects), an args
+        # that contains itself (json: "Circular reference detected", 0.10.26), or a
+        # code-loading env value json cannot encode (0.10.28).
         return None
 
 
 def _unreadable_field(entry: Mapping[str, Any]) -> str:
-    """Name what :func:`_spawn_fingerprint` could not read, for the refusal message."""
+    """Name what :func:`_spawn_fingerprint` could not read, for the refusal message.
+
+    A code-loading variable is named, never its value: the value may be a secret.
+    """
     if _env_keys_of(entry) is None:
         return "env must be a mapping or a sequence of KEY=VALUE strings (env_keys: key strings)"
     if not _cwd_of(entry)[0]:
         return "cwd must be a path string"
+    for variable, values in _code_loading_values(entry).items():
+        try:
+            json.dumps(values)
+        except (TypeError, ValueError, RecursionError):
+            return f"the value of code-loading env variable {variable!r} must be a string"
     return "args must be a sequence of JSON values"
 
 
@@ -716,7 +817,8 @@ class McpConfigPinSet:
 
     Built from an operator-supplied known-good manifest, this rejects any
     STDIO server whose resolved spawn config does not match a pinned
-    ``{name, command, args, env-keys}`` (+ ``cwd`` when set) fingerprint — covering both the
+    ``{name, command, args, env-keys}`` (+ ``cwd`` when set, + the values of
+    code-loading env variables it sets) fingerprint — covering both the
     *injected* (unpinned name) and *mutated* (fingerprint changed) cases of
     the CVE-2026-30615 zero-click pattern. :meth:`check` raises
     :class:`McpConfigPinViolation` (it never warns) and emits an audit event
@@ -758,16 +860,20 @@ class McpConfigPinSet:
         Args:
             manifest: Iterable of entries, each with ``name`` + ``command``
                 and optional ``args``, ``env`` (dict) / ``env_keys`` (list) and
-                ``cwd``. Env values are ignored; only the key set is pinned.
+                ``cwd``. The key set is pinned, and of the values only those
+                ``env`` gives code-loading variables (``NODE_OPTIONS``, ``PATH``,
+                ...). ``env_keys`` carries no value, so a code-loading variable
+                named only there matches a spawn that gives it none.
             audit_path: Forwarded to the constructor.
 
         Returns:
             A :class:`McpConfigPinSet`.
 
         Raises:
-            ValueError: An entry's ``env`` / ``env_keys``, ``args`` or ``cwd`` cannot
-                be read (see :meth:`check`); a pin over a shape the guard cannot read
-                would silently pin less than the operator wrote.
+            ValueError: An entry's ``env`` / ``env_keys``, a code-loading value,
+                ``args`` or ``cwd`` cannot be read (see :meth:`check`); a pin over a
+                shape the guard cannot read would silently pin less than the
+                operator wrote.
         """
         pins: list[McpServerPin] = []
         for entry in manifest:
@@ -791,7 +897,10 @@ class McpConfigPinSet:
                 ``command`` and optional ``args``, ``env`` / ``env_keys`` and
                 ``cwd``. ``env`` is read as a mapping or a sequence of
                 ``KEY=VALUE`` strings; any other shape is refused, never read as
-                "no keys". ``cwd`` is a path string (or ``os.PathLike``).
+                "no keys". The value it gives a code-loading variable must match
+                the pinned one (``bytes`` and paths read as text); a value that
+                is not text JSON can carry is unreadable. ``cwd`` is a path
+                string (or ``os.PathLike``).
 
         Raises:
             McpConfigPinViolation: The server is unpinned (injected), its

@@ -43,8 +43,12 @@ names compare by PEP 503; ``package`` / ``version`` / ``url`` may each be a
 string, UTF-8 ``bytes`` or a list of them. A tarball URL matches on an exact
 ``-<version>.tgz`` boundary, with its query, fragment, port, userinfo and
 percent-escapes (``@scope%2fname``) set aside, on ``registry.npmjs.org`` and
-its Yarn alias. Arguments that are not a mapping, and a field of any other
-shape, are refused (``DENY_UNINSPECTABLE``). Until v0.10.28 the guard
+its Yarn alias, read as Node's ``new URL()`` reads it (a backslash is a path
+separator; ``.`` / ``..`` segments, ``%2e`` spellings included, are resolved).
+A ``package`` that is a tarball URL, or ``name@<url>``, is read as that URL, and
+a ``version`` written ``npm:1.2.3`` or ``npm:@scope/real@1.2.3`` (Yarn, pnpm) as
+the release it installs. Arguments that are not a mapping, and a field of any
+other shape, are refused (``DENY_UNINSPECTABLE``). Until v0.10.28 the guard
 compared exact strings only, so each of those spellings walked past it, and
 a top-level list raised ``AttributeError``.
 
@@ -54,7 +58,9 @@ Honest scope
   anomaly detector. The architectural fix is in npm's per-publish-
   review feature request (see postmortem "Remediation Guidance").
 - It matches exact releases only. A range (``^1.146.0``, ``>=2.6.2``)
-  that could resolve to a listed release is not resolved here.
+  that could resolve to a listed release is not resolved here, and a git
+  spec (``github:TanStack/router#v1.161.9``) or a tarball on any host but the
+  two registries is not read.
 - The fixture is a point-in-time snapshot. Operators must regenerate
   on new confirmed blast-list extensions; Sunday review surfaces
   this as a checklist item.
@@ -161,6 +167,60 @@ def _split_spec(spec: str) -> tuple[str, str | None]:
     if at > 0:
         return text[:at].strip(), text[at + 1 :].strip()
     return text.split("[", 1)[0].strip(), None
+
+
+#: Where a package spec names a URL to install from: npm reads a bare URL, and
+#: ``name@<url>`` / ``alias@<url>``, as a remote tarball (npm-package-arg ``type: remote``).
+_SPEC_URL_RE = re.compile(r"https?://", re.IGNORECASE)
+
+#: Path segments the WHATWG URL parser (Node's ``new URL()``, which npm uses) reads as
+#: ``.`` and ``..``, percent-encoded dots included.
+_SINGLE_DOT_SEGMENTS = frozenset({".", "%2e"})
+_DOUBLE_DOT_SEGMENTS = frozenset({"..", ".%2e", "%2e.", "%2e%2e"})
+
+
+def _spec_url(spec: str) -> str | None:
+    """The URL a package spec installs from (``<url>``, ``name@<url>``), or None."""
+    match = _SPEC_URL_RE.search(spec)
+    return spec[match.start() :].strip() if match is not None else None
+
+
+def _version_target(name: str, version: str) -> tuple[str, str]:
+    """The package and version a ``version`` field installs, beside package ``name``.
+
+    Yarn and pnpm write a registry version as ``npm:1.2.3``, and an alias in the version
+    field as ``npm:@scope/real@1.2.3``, which installs ``@scope/real``. Until 0.10.28 both
+    were compared as written, and matched nothing.
+    """
+    text = version.strip()
+    if not text.lower().startswith("npm:"):
+        return name, text
+    target = text[4:].strip()
+    if "@" in target[1:]:
+        aliased, aliased_version = _split_spec(target)
+        if aliased_version:
+            return aliased, aliased_version
+    return name, target
+
+
+def _normalised_path(path: str) -> str:
+    """A URL path with its dot segments resolved and empty segments dropped.
+
+    Node's ``new URL()`` resolves ``.`` and ``..`` (and their percent-encoded spellings)
+    before the registry sees the path, so ``/@tanstack/x/../history/-/...`` fetches
+    ``@tanstack/history``. Empty segments are dropped as well, which can only refuse more.
+    """
+    segments: list[str] = []
+    for segment in path.split("/"):
+        folded = segment.lower()
+        if not segment or folded in _SINGLE_DOT_SEGMENTS:
+            continue
+        if folded in _DOUBLE_DOT_SEGMENTS:
+            if segments:
+                segments.pop()
+            continue
+        segments.append(segment)
+    return "/" + "/".join(segments)
 
 
 def _texts(value: object) -> list[str] | None:
@@ -336,10 +396,19 @@ class OIDCPublishWindowGuard:
         if versions is None:
             return self._deny_uninspectable("version", self._shape(args.get("version")))
         for spec in packages:
+            # A package spec that is (or ends in) a registry tarball URL installs that
+            # tarball: until 0.10.28 it was read as a name and matched nothing.
+            remote = _spec_url(spec)
+            if remote is not None:
+                decision = self._inspect_tarball_url(remote)
+                if decision is not None:
+                    return decision
+                continue
             name, embedded = _split_spec(spec)
             candidates = ([embedded] if embedded else []) + versions
             for version in candidates:
-                entry = self._lookup(name, version)
+                target, target_version = _version_target(name, version)
+                entry = self._lookup(target, target_version)
                 if entry is not None:
                     return self._deny_pair(entry, spec, version)
 
@@ -366,21 +435,27 @@ class OIDCPublishWindowGuard:
     def _inspect_tarball_url(self, url: str) -> OIDCPublishWindowDecision | None:
         """Return a deny decision if the URL targets a blast-list pair.
 
-        The URL's query, fragment, port and userinfo are set aside and its path is
-        percent-decoded (``@scope%2fname``) before the tarball path is matched; the
-        file name must then end in exactly ``-<version>.tgz`` for a listed version, so
-        ``1.4.0`` does not match ``lib-11.4.0.tgz`` or ``lib-1.4.0-rc.1.tgz``. Until
-        v0.10.28 any listed version appearing as a substring of the file name matched,
-        which only stayed precise while every listed version carried a unique suffix.
+        The URL is read as Node's ``new URL()`` reads it: a backslash is a path separator
+        and ``.`` / ``..`` segments (``%2e`` spellings included) are resolved. Its query,
+        fragment, port and userinfo are set aside and its path is percent-decoded
+        (``@scope%2fname``) before the tarball path is matched; the file name must then
+        end in exactly ``-<version>.tgz`` for a listed version, so ``1.4.0`` does not
+        match ``lib-11.4.0.tgz`` or ``lib-1.4.0-rc.1.tgz``. Until v0.10.28 any listed
+        version appearing as a substring of the file name matched, which only stayed
+        precise while every listed version carried a unique suffix, and a backslash or a
+        dot segment hid the package from the path match.
         """
+        text = url.strip()
+        if text.lower().startswith(("http://", "https://")):
+            text = text.replace("\\", "/")
         try:
-            parts = urlsplit(url.strip())
+            parts = urlsplit(text)
             host = (parts.hostname or "").rstrip(".")
         except ValueError:
             return None  # not a URL any client could fetch from the registry
         if parts.scheme.lower() not in ("http", "https") or host not in _NPM_REGISTRY_HOSTS:
             return None
-        match = _NPM_TARBALL_PATH_RE.match(unquote(parts.path))
+        match = _NPM_TARBALL_PATH_RE.match(unquote(_normalised_path(parts.path)))
         if match is None:
             return None
         pkg = match.group("pkg")

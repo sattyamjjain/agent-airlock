@@ -1412,7 +1412,9 @@ def oauth_state_injection_guard(
     callback handler decodes + relays them into a system message. This
     preset wires :class:`OAuthStateEntropyGuard` with the recommended
     defaults. Every ``state`` is scanned: as written, read leniently, in each decoded
-    form (a JWT's payload included), and as plain text that reads as prose.
+    form (every segment of a JWT-shaped state, and the whole state decoded at once), and
+    as plain text that reads as prose; a state outside RFC 6749's syntax (printable
+    ASCII) is refused.
 
     Primary source:
       https://www.blackhat.com/asia-26/briefings/schedule/#oauth-state-injection
@@ -1642,14 +1644,20 @@ def mcp_config_pin(
     touched a watched file (env override, in-memory resolution, a launcher).
 
     The fingerprint covers ``{name, command, args, env-keys}``, plus ``cwd`` when the
-    spawn sets one (env *values*
-    are excluded — they rotate; the *keys* are what an injection adds). Two
-    failure modes both raise :class:`McpConfigPinViolation` and emit an audit
-    event on the existing structlog + JSON-Lines channels:
+    spawn sets one, and since 0.10.28 the values of the code-loading env variables it
+    sets (``PATH``, ``NODE_OPTIONS``, ``LD_PRELOAD``, ...: the set
+    ``McpSubprocessArgInjectionGuard`` refuses), which decide what runs. Every other
+    env *value* is excluded: it rotates, and the *keys* are what an injection adds. No
+    value is logged or put in a refusal. Two failure modes both raise
+    :class:`McpConfigPinViolation` and emit an audit event on the existing structlog +
+    JSON-Lines channels:
 
     - **injected** — a server name not in the pin set (``reason="unpinned"``);
     - **mutated** — a pinned server whose ``command`` / ``args`` / ``env``-keys / ``cwd``
-      changed between registration and spawn (``reason="mutated"``).
+      / code-loading env value changed between registration and spawn
+      (``reason="mutated"``). A manifest that names a code-loading variable only in
+      ``env_keys`` pins no value for it, so a spawn that sets one does not match: give
+      its value in ``env``.
 
     Args:
         manifest: Known-good entries, each with ``name`` + ``command`` and

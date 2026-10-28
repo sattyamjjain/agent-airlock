@@ -29,6 +29,16 @@ was cut at ``max_payload_bytes`` before it was classified. Input nested deeper t
 levels, containing itself, or holding a value of no JSON shape is
 :attr:`ElicitationClass.UNINSPECTABLE` (``block`` by default).
 
+Text is classified as a host may show it: ``bytes`` are decoded as UTF-8 strictly, and
+bytes that are not UTF-8, or a string holding a lone surrogate (what ``json.loads``
+gives for ``"\\udcff"``), are uninspectable too. A format character, or a control
+character other than tab, newline and carriage return, is read both as nothing
+(``"pass\\x00word"`` is "password") and as a gap (``"enter\\x00your password"``), and
+the worse class wins. Until 0.10.28 bytes were decoded with ``errors="replace"`` and
+control characters were kept, so ``b"Please enter your pass\\xffword"`` and
+``"pass\\x00word"`` were relayed as benign, and a lone surrogate raised
+``UnicodeEncodeError`` instead of a verdict.
+
 Reference
 ---------
 * MCP spec PR #1487 (2026-04-28):
@@ -64,8 +74,9 @@ class ElicitationClass(str, Enum):
     CREDENTIAL_REQUEST = "credential_request"
     POLICY_OVERRIDE = "policy_override"
     DESTRUCTIVE_CONFIRMATION = "destructive_confirmation"
-    #: The payload could not be read whole (deeper than 32 levels, containing itself, or
-    #: holding a value of no JSON shape), so nothing about it was classified.
+    #: The payload could not be read whole (deeper than 32 levels, containing itself,
+    #: holding a value of no JSON shape, bytes that are not UTF-8 or a string with a lone
+    #: surrogate), so nothing about it was classified.
     UNINSPECTABLE = "uninspectable"
 
 
@@ -77,12 +88,30 @@ _MAX_DEPTH = 32
 _DISPLAY_KEYS: tuple[str, ...] = ("prompt", "message", "title", "description")
 
 
+#: A lone surrogate: a ``str`` can hold one, but it is no character and encodes to nothing.
+_SURROGATE = re.compile("[\ud800-\udfff]")
+
+#: The ASCII control characters a host shows as nothing or as a gap: all but tab, newline
+#: and carriage return.
+_ASCII_HIDDEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
 class _Uninspectable(Exception):
     """Internal: the walk met input it cannot read whole."""
 
 
 def _decode(value: bytes | bytearray | memoryview) -> str:
-    return bytes(value).decode("utf-8", errors="replace")
+    """UTF-8, strictly: a replaced byte inside a phrase hid it from every pattern."""
+    try:
+        return bytes(value).decode("utf-8")
+    except UnicodeDecodeError:
+        raise _Uninspectable("a bytes value is not valid UTF-8") from None
+
+
+def _hidden(char: str) -> bool:
+    """A format character, or a control character other than tab, newline and CR."""
+    category = unicodedata.category(char)
+    return category == "Cf" or (category == "Cc" and char not in "\t\n\r")
 
 
 class _TextWalk:
@@ -100,6 +129,8 @@ class _TextWalk:
         if isinstance(value, (bytes, bytearray, memoryview)):
             value = _decode(value)
         if isinstance(value, str):
+            if _SURROGATE.search(value):
+                raise _Uninspectable("a string holds a lone surrogate, which is not text")
             self.scanned.append(value)
             if display:
                 self.displayed.append(value)
@@ -228,30 +259,37 @@ class ElicitationGuard:
     # Classification
     # ------------------------------------------------------------------
 
-    def _normalise(self, text: str) -> str:
-        """NFKC + strip Unicode-format codepoints to defeat confusables."""
+    def _readings(self, text: str) -> list[str]:
+        """``text`` NFKC-folded (confusables), with its hidden characters dropped, and spaced.
+
+        A host may show a format character, or a control character other than tab,
+        newline and CR, as nothing (``"pass\\x00word"`` reads "password") or as a gap
+        (``"enter\\x00your password"``), so text holding one has both readings.
+        """
         nfkc = unicodedata.normalize("NFKC", text)
-        return "".join(c for c in nfkc if unicodedata.category(c) != "Cf")
+        if nfkc.isascii():
+            if not _ASCII_HIDDEN.search(nfkc):
+                return [nfkc]
+            return [_ASCII_HIDDEN.sub("", nfkc), _ASCII_HIDDEN.sub(" ", nfkc)]
+        dropped = "".join(c for c in nfkc if not _hidden(c))
+        if len(dropped) == len(nfkc):
+            return [nfkc]
+        return [dropped, "".join(" " if _hidden(c) else c for c in nfkc)]
 
     def _classify_payload(self, text: str) -> tuple[ElicitationClass, list[str]]:
-        normalised = self._normalise(text)
-        matches: list[str] = []
-        for pat in _CREDENTIAL_PATTERNS:
-            m = pat.search(normalised)
-            if m:
-                matches.append(m.group(0))
-                return ElicitationClass.CREDENTIAL_REQUEST, matches
-        for pat in _POLICY_OVERRIDE_PATTERNS:
-            m = pat.search(normalised)
-            if m:
-                matches.append(m.group(0))
-                return ElicitationClass.POLICY_OVERRIDE, matches
-        for pat in _DESTRUCTIVE_CONFIRMATION_PATTERNS:
-            m = pat.search(normalised)
-            if m:
-                matches.append(m.group(0))
-                return ElicitationClass.DESTRUCTIVE_CONFIRMATION, matches
-        return ElicitationClass.BENIGN, matches
+        """The most severe class any reading of ``text`` matches, and the matched phrase."""
+        readings = self._readings(text)
+        for classification, patterns in (
+            (ElicitationClass.CREDENTIAL_REQUEST, _CREDENTIAL_PATTERNS),
+            (ElicitationClass.POLICY_OVERRIDE, _POLICY_OVERRIDE_PATTERNS),
+            (ElicitationClass.DESTRUCTIVE_CONFIRMATION, _DESTRUCTIVE_CONFIRMATION_PATTERNS),
+        ):
+            for pat in patterns:
+                for reading in readings:
+                    m = pat.search(reading)
+                    if m:
+                        return classification, [m.group(0)]
+        return ElicitationClass.BENIGN, []
 
     # ------------------------------------------------------------------
     # Evaluation

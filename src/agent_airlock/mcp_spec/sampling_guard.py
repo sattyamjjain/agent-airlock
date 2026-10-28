@@ -75,7 +75,10 @@ class SamplingGuardConfig:
             ``maxTokens`` exceeds this. Default 4096 — quota-exhaustion
             tell is usually a very large single request.
         forbid_persistent_instructions: If True, any message role of
-            ``"system"`` inside a sampling request is rejected. Unit 42
+            ``"system"`` inside a sampling request is rejected, and so is a
+            non-empty ``systemPrompt``, the protocol's own channel for the
+            same instruction: a server that sends even a benign system prompt
+            is refused (until 0.10.28 the field was not read). Unit 42
             recommends treating only ``"user"`` / ``"assistant"`` /
             ``"tool"`` as legitimate sampling content.
         require_user_consent_per_request: If True, the caller must pass
