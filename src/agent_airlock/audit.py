@@ -129,6 +129,18 @@ def _masked(text: str) -> str:
     return sanitize_output(text[:_PREVIEW_SCAN_CHARS], max_chars=None).content
 
 
+def _safe_repr(value: Any) -> str:
+    """``repr(value)``, or the value's type name when its ``repr`` raises.
+
+    The audit record is written after the tool ran: until 0.10.28 an argument whose
+    ``repr`` raised escaped the call there, and the call left no record.
+    """
+    try:
+        return repr(value)
+    except Exception:  # noqa: BLE001 - an argument with no repr is named by its type
+        return f"<{type(value).__name__}>"
+
+
 class AuditLogger:
     """Thread-safe JSON Lines audit logger.
 
@@ -306,7 +318,7 @@ class AuditLogger:
                 result[key] = _masked(value)[:100] + "..."
             else:
                 # Convert to string representation
-                result[key] = _masked(repr(value))[:200]
+                result[key] = _masked(_safe_repr(value))[:200]
 
         return result
 

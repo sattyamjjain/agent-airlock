@@ -8,14 +8,19 @@ names positional arguments by their parameter and walks what a call's arguments 
 so each gate sees every value.
 
 It descends into mappings (every key included, as a value of its own), sequences, sets
-and mapping views, and into pydantic models and dataclasses the tool's author defined: a
-model-typed parameter is the model's JSON once a framework has validated it. It does not
-descend into an object an agent framework or agent-airlock itself defines (a run context
-carries the chat history, which no gate should read as tool arguments), into any other
-object, or into an iterator or generator, which walking would consume (model JSON cannot
-produce one). A framework's object is one whose class is defined in a file its installed
-distribution lists (:func:`is_framework_object`), not merely one whose module bears the
-framework's name. A ``memoryview`` is read as its bytes and a ``UserString`` as its text.
+and mapping views, into pydantic models, and into dataclasses the tool's author defined:
+a model-typed parameter is the model's JSON once a framework has validated it. An agent
+framework's own pydantic model is walked where the tool's annotations name its class
+(``link: mcp.types.ResourceLink``; until 0.10.28 none was), since pydantic builds one
+from JSON only there; one found under ``Any`` or ``dict``, a LangGraph state's messages
+or a RAG document, was put there by the host or the framework (:class:`NamedModels`). It
+does not descend into a dataclass or other object an agent framework or agent-airlock
+itself defines (a run context carries the chat history and the host's state, which no
+gate should read as tool arguments), into any other object, or into an iterator or
+generator, which walking would consume (model JSON cannot produce one). A framework's object is one whose class is defined in a file its
+installed distribution lists (:func:`is_framework_object`), not merely one whose module
+bears the framework's name. A ``memoryview`` is read as its bytes and a ``UserString``
+as its text.
 A value nested deeper than :data:`MAX_DEPTH`, or a container that contains itself, raises
 :class:`ArgumentNestingError`, so the gate refuses the call instead of skipping what it
 could not read.
@@ -31,6 +36,7 @@ import inspect
 import os
 import sys
 import threading
+import typing
 import urllib.parse
 import weakref
 from collections import UserString
@@ -81,11 +87,12 @@ _FRAMEWORK_DISTRIBUTIONS: dict[str, tuple[str, ...]] = {
     "smolagents": ("smolagents",),
 }
 
-#: Top-level packages whose objects are framework or library state, never the model's
-#: JSON: their models and dataclasses (run contexts, messages, SDK responses) are not
-#: walked. A tool author's own models and dataclasses are, and so is any class only named
-#: as if it came from one of these: since 0.10.28 a class counts only when its installed
-#: distribution defines it (:func:`is_framework_object`).
+#: Top-level packages whose objects are framework or library state: their dataclasses
+#: (run contexts, messages) and other objects are not walked, and their pydantic models
+#: only where the tool's annotations name them (:class:`NamedModels`). A tool author's own
+#: models and dataclasses are walked, and so is any class only named as if it came from
+#: one of these: since 0.10.28 a class counts only when its installed distribution defines
+#: it (:func:`is_framework_object`).
 FRAMEWORK_PACKAGES = frozenset({"agent_airlock", *_FRAMEWORK_DISTRIBUTIONS})
 
 #: agent-airlock's own package directory: its classes are verified by location, since an
@@ -152,6 +159,181 @@ class ArgumentValue:
     is_key: bool = False
 
 
+@dataclass(frozen=True)
+class NamedModels:
+    """The pydantic model classes a tool's parameter annotations name.
+
+    Model JSON becomes a pydantic model only where an annotation names its class: under
+    ``Any``, ``dict`` or ``list`` pydantic builds plain dicts and lists. So an agent
+    framework's own model found where no annotation names its class was put there by the
+    host or the framework, not written by the model, and the walk leaves it alone.
+
+    Attributes:
+        by_parameter: The model classes each parameter's annotation names, through
+            containers, unions and ``Annotated``, and through the fields of the models,
+            dataclasses, TypedDicts and named tuples it names. ``(BaseModel,)`` stands
+            for "any model" where an annotation could not be read.
+        others: Every class any parameter names, for a value bound under no parameter's
+            name (a ``**kwargs`` item, a call that did not bind).
+    """
+
+    by_parameter: Mapping[str, tuple[type, ...]]
+    others: tuple[type, ...]
+
+    def for_argument(self, name: str) -> tuple[type, ...]:
+        """The model classes the annotation of the argument bound as ``name`` names."""
+        return self.by_parameter.get(name, self.others)
+
+
+class BoundArguments(dict[str, Any]):
+    """:func:`bind_arguments`'s result: every argument by name, and the model classes
+    their annotations name, which :func:`iter_argument_values` reads."""
+
+    named_models: NamedModels | None = None
+
+
+#: Annotations that could not be read name every model: the walk then reads them all.
+_ANY_MODEL: tuple[type, ...] = (BaseModel,)
+
+_named_models_cache: weakref.WeakKeyDictionary[Any, NamedModels | None] = (
+    weakref.WeakKeyDictionary()
+)
+_named_models_lock = threading.Lock()
+
+
+def named_models(func: Any) -> NamedModels | None:
+    """The model classes ``func``'s parameter annotations name, or None when unreadable.
+
+    None (annotations that do not resolve) makes the walk read every model, as it did
+    before annotations were consulted. The answer is cached per function.
+    """
+    try:
+        with _named_models_lock:
+            if func in _named_models_cache:
+                return _named_models_cache[func]
+    except TypeError:  # takes no weak reference: answered, not cached
+        return _read_named_models(func)
+    found = _read_named_models(func)
+    with _named_models_lock, contextlib.suppress(TypeError):
+        _named_models_cache[func] = found
+    return found
+
+
+def _read_named_models(func: Any) -> NamedModels | None:
+    signature = signature_of(func)
+    try:
+        hints = typing.get_type_hints(func, include_extras=True)
+    except Exception:  # noqa: BLE001 - unresolvable annotations: every model is walked
+        return None
+    names = list(signature.parameters) if signature is not None else []
+    by_parameter: dict[str, tuple[type, ...]] = {}
+    for name in names:
+        classes: set[type] = set()
+        try:
+            _collect_models(hints.get(name, Any), classes, set())
+        except Exception:  # noqa: BLE001 - a nested annotation that does not resolve
+            by_parameter[name] = _ANY_MODEL
+            continue
+        by_parameter[name] = tuple(classes)
+    others = tuple({cls for classes in by_parameter.values() for cls in classes})
+    return NamedModels(by_parameter, others)
+
+
+class _UnreadableAnnotation(Exception):  # noqa: N818 - private control flow
+    """Part of an annotation names no class this walk can read, or may build any model."""
+
+
+def _collect_models(annotation: Any, found: set[type], seen: set[int]) -> None:
+    """Add to ``found`` every pydantic model class ``annotation`` names, fields included.
+
+    Reads through unions, containers, ``Annotated``, ``NewType``, ``TypeVar`` bounds and
+    type aliases (PEP 695, ``TypeAliasType``), and into the fields of the models,
+    dataclasses, TypedDicts and named tuples it names. A parameter a framework injects
+    (``Annotated[..., InjectedState]``, LangChain's ``InjectedToolArg`` family) names
+    nothing: the framework fills it, never the model.
+
+    Raises:
+        _UnreadableAnnotation: Part of ``annotation`` is something this cannot read, or an
+            ``Annotated`` holds a validator or schema hook, which may build any model.
+        Exception: A nested annotation does not resolve.
+    """
+    if id(annotation) in seen:
+        return
+    seen.add(id(annotation))
+    if annotation is Any or annotation is Ellipsis or annotation is type(None):
+        return
+    if isinstance(annotation, list | tuple):  # a Callable's parameter list
+        for item in annotation:
+            _collect_models(item, found, seen)
+        return
+    if isinstance(annotation, typing.TypeVar):
+        for bound in (annotation.__bound__, *annotation.__constraints__):
+            if bound is not None:
+                _collect_models(bound, found, seen)
+        return
+    if isinstance(annotation, typing.ParamSpec | type(typing.NoReturn)):
+        return  # a callable's parameters, NoReturn, Never: build no value
+    supertype = getattr(annotation, "__supertype__", None)  # typing.NewType
+    if supertype is not None:
+        _collect_models(supertype, found, seen)
+        return
+    if not isinstance(annotation, type) and hasattr(annotation, "__value__"):
+        _collect_models(annotation.__value__, found, seen)  # a type alias
+        return
+    origin = typing.get_origin(annotation)
+    if origin is typing.Annotated:
+        inner, *metadata = typing.get_args(annotation)
+        if any(_is_injection_marker(item) for item in metadata):
+            return
+        if any(hasattr(item, "__get_pydantic_core_schema__") for item in metadata):
+            raise _UnreadableAnnotation(annotation)  # a validator may build any model
+        _collect_models(inner, found, seen)
+        return
+    if origin is typing.Literal:
+        return
+    if origin is not None:
+        if not isinstance(origin, type) and hasattr(origin, "__value__"):
+            _collect_models(origin.__value__, found, seen)  # a generic type alias
+        for argument in typing.get_args(annotation):
+            _collect_models(argument, found, seen)
+        return
+    if not isinstance(annotation, type):
+        raise _UnreadableAnnotation(annotation)
+    if issubclass(annotation, BaseModel):
+        found.add(annotation)
+        decorators = getattr(annotation, "__pydantic_decorators__", None)
+        if getattr(decorators, "field_validators", None) or getattr(
+            decorators, "model_validators", None
+        ):
+            raise _UnreadableAnnotation(annotation)  # a validator may build any model
+        for model_field in annotation.model_fields.values():
+            _collect_models(model_field.annotation, found, seen)
+            for item in model_field.metadata:
+                if hasattr(item, "__get_pydantic_core_schema__"):
+                    raise _UnreadableAnnotation(annotation)
+        return
+    if (
+        dataclasses.is_dataclass(annotation)
+        or _is_typeddict(annotation)
+        or (issubclass(annotation, tuple) and hasattr(annotation, "_fields"))
+    ):
+        for hint in typing.get_type_hints(annotation, include_extras=True).values():
+            _collect_models(hint, found, seen)
+
+
+def _is_typeddict(cls: type) -> bool:
+    """A TypedDict class, from ``typing`` or ``typing_extensions`` (pydantic needs the
+    latter's on Python 3.10 and 3.11, and ``typing.is_typeddict`` does not know it)."""
+    return issubclass(cls, dict) and hasattr(cls, "__required_keys__")
+
+
+def _is_injection_marker(item: Any) -> bool:
+    """LangChain's ``InjectedToolArg`` or a subclass (``InjectedState``, ``InjectedStore``,
+    ``InjectedToolCallId``), as a class or an instance."""
+    cls = item if isinstance(item, type) else type(item)
+    return any(base.__name__ == "InjectedToolArg" for base in cls.__mro__)
+
+
 def signature_of(func: Any) -> inspect.Signature | None:
     """The signature positional arguments are bound against, or None when there is none."""
     try:
@@ -166,7 +348,8 @@ def bind_arguments(
     kwargs: Mapping[str, Any],
     *,
     skip_first: bool = False,
-) -> dict[str, Any]:
+    named: NamedModels | None = None,
+) -> BoundArguments:
     """Name every argument a call passes, positional ones by their parameter.
 
     ``*args`` items stay together under the parameter's own name, as a tuple, so they are
@@ -183,6 +366,8 @@ def bind_arguments(
         kwargs: The call's keyword arguments, after ghost-argument handling.
         skip_first: Leave out the first positional argument: the host's run wrapper,
             which model JSON cannot have built (``ContextExtractor.run_wrapper``).
+        named: The model classes the tool's annotations name (:func:`named_models`),
+            carried on the result for :func:`iter_argument_values`.
 
     Returns:
         A mapping from name to value covering every argument.
@@ -194,22 +379,24 @@ def bind_arguments(
             pass
         else:
             first = _first_positional(signature) if skip_first and args else None
-            named: dict[str, Any] = {}
+            arguments = BoundArguments()
+            arguments.named_models = named
             for name, value in bound.arguments.items():
                 kind = signature.parameters[name].kind
                 if kind is inspect.Parameter.VAR_POSITIONAL:
                     items = tuple(value)
-                    named[name] = items[1:] if name == first else items
+                    arguments[name] = items[1:] if name == first else items
                 elif kind is inspect.Parameter.VAR_KEYWORD:
                     for item_key, item in value.items():
-                        named[_unshadowed(named, str(item_key), name)] = item
+                        arguments[_unshadowed(arguments, str(item_key), name)] = item
                 elif name != first:
-                    named[name] = value
-            return named
+                    arguments[name] = value
+            return arguments
     start = 1 if skip_first else 0
-    fallback: dict[str, Any] = {
-        f"arg[{index}]": item for index, item in enumerate(args) if index >= start
-    }
+    fallback = BoundArguments(
+        (f"arg[{index}]", item) for index, item in enumerate(args) if index >= start
+    )
+    fallback.named_models = named
     for item_key, item in kwargs.items():
         fallback[_unshadowed(fallback, str(item_key), "kwargs")] = item
     return fallback
@@ -307,12 +494,9 @@ def _defined_by_framework(cls: type) -> bool:
     filename = getattr(module, "__file__", None)
     if not isinstance(filename, str):
         return False
-    path = os.path.realpath(filename)
     if top == "agent_airlock":
-        return _is_within(path, _OWN_PACKAGE)
-    return any(
-        path in _distribution_files(name) for name in _candidate_distributions(top, module_name)
-    )
+        return _is_within(os.path.realpath(filename), _OWN_PACKAGE)
+    return any(_listed_in(filename, name) for name in _candidate_distributions(top, module_name))
 
 
 def _resolves_to(module: Any, qualname: str, cls: type) -> bool:
@@ -346,16 +530,37 @@ def _candidate_distributions(top: str, module_name: str) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _listed_in(filename: str, name: str) -> bool:
+    """Whether the module file ``filename`` is one the distribution ``name`` lists.
+
+    A listed path that names the file as installed matches at once. Otherwise each listed
+    file of the same name is resolved, as the module file is, so an install that links its
+    files or its package directory into place (uv's symlink link mode, Bazel runfiles, Nix)
+    is verified too. Until 0.10.28 only the directory holding the distribution was
+    resolved, so no class of such an install was a framework's and its run wrapper lost
+    the call's identity.
+    """
+    listed = _distribution_files(name).get(os.path.basename(filename), ())
+    if os.path.normpath(os.path.abspath(filename)) in listed:
+        return True
+    real = os.path.realpath(filename)
+    return any(os.path.realpath(entry) == real for entry in listed)
+
+
 @cache
-def _distribution_files(name: str) -> frozenset[str]:
-    """The paths of the files the installed distribution ``name`` lists in its RECORD."""
+def _distribution_files(name: str) -> dict[str, tuple[str, ...]]:
+    """The files the installed distribution ``name`` lists in its RECORD, by file name."""
     try:
         distribution = importlib.metadata.distribution(name)
-        base = os.path.realpath(str(distribution.locate_file("")))
+        base = str(distribution.locate_file(""))
         files = distribution.files or []
     except Exception:  # noqa: BLE001 - not installed, or unreadable metadata: verifies nothing
-        return frozenset()
-    return frozenset(os.path.normpath(os.path.join(base, str(file))) for file in files)
+        return {}
+    by_name: dict[str, list[str]] = {}
+    for file in files:
+        path = os.path.normpath(os.path.join(base, str(file)))
+        by_name.setdefault(os.path.basename(path), []).append(path)
+    return {file_name: tuple(paths) for file_name, paths in by_name.items()}
 
 
 def iter_argument_values(arguments: Mapping[str, Any]) -> Iterator[ArgumentValue]:
@@ -372,14 +577,25 @@ def iter_argument_values(arguments: Mapping[str, Any]) -> Iterator[ArgumentValue
         ArgumentNestingError: A value is nested deeper than :data:`MAX_DEPTH` or a
             container contains itself.
     """
+    named = getattr(arguments, "named_models", None)
     for name, value in arguments.items():
         path = str(name)
         key = name.key if isinstance(name, ArgumentName) else path
-        yield from _walk(key, path, value, 0, ())
+        models: tuple[type, ...] | None = None
+        if isinstance(named, NamedModels):
+            # A shadowed **kwargs value is under no parameter's own annotation.
+            models = named.others if isinstance(name, ArgumentName) else named.for_argument(path)
+        yield from _walk(key, path, value, 0, (), models=models)
 
 
-def _children(value: Any, key: str, path: str) -> Iterator[tuple[str, str, Any, bool]] | None:
-    """``(key, path, child, is_key)`` for each child of a walkable value, else None."""
+def _children(
+    value: Any, key: str, path: str, models: tuple[type, ...] | None = None
+) -> Iterator[tuple[str, str, Any, bool]] | None:
+    """``(key, path, child, is_key)`` for each child of a walkable value, else None.
+
+    ``models`` are the model classes the argument's annotation names (None: every one);
+    an agent framework's model of no such class is a leaf.
+    """
     if isinstance(value, (*_URL_RESULT_TYPES, *_TEXT_TYPES)):
         return None
     if isinstance(value, Mapping):
@@ -391,10 +607,13 @@ def _children(value: Any, key: str, path: str) -> Iterator[tuple[str, str, Any, 
         )
     if isinstance(value, (Sequence, Set, ValuesView)):
         return ((key, f"{path}[{i}]", item, False) for i, item in enumerate(value))
+    if isinstance(value, BaseModel):
+        if models is not None and not isinstance(value, models) and is_framework_object(value):
+            return None  # a framework's model the host or framework put there
+        # BaseModel's own __iter__: a model may override it (a RootModel over a list).
+        return ((str(n), f"{path}.{n}", item, False) for n, item in BaseModel.__iter__(value))
     if is_framework_object(value):
         return None
-    if isinstance(value, BaseModel):
-        return ((str(n), f"{path}.{n}", item, False) for n, item in value)
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         return (
             (f.name, f"{path}.{f.name}", getattr(value, f.name), False)
@@ -438,8 +657,9 @@ def _walk(
     depth: int,
     ancestors: tuple[int, ...],
     is_key: bool = False,
+    models: tuple[type, ...] | None = None,
 ) -> Iterator[ArgumentValue]:
-    children = _children(value, key, path)
+    children = _children(value, key, path, models)
     if children is None:
         yield ArgumentValue(key=key, path=path, value=_as_read(value), depth=depth, is_key=is_key)
         return
@@ -449,4 +669,6 @@ def _walk(
         raise ArgumentNestingError(path, "the container contains itself")
     inner = (*ancestors, id(value))
     for child_key, child_path, child, child_is_key in children:
-        yield from _walk(child_key, child_path, child, depth + 1, inner, is_key or child_is_key)
+        yield from _walk(
+            child_key, child_path, child, depth + 1, inner, is_key or child_is_key, models
+        )

@@ -794,14 +794,29 @@ class TestFrameworkObjectsAreVerified:
         result = self._list_dir(allowed)(State(str(secret.parent)), str(allowed))
         assert _refusal(result) == "path_violation"
 
-    def test_control_a_genuine_framework_object_is_not_walked(
+    def test_a_genuine_framework_model_is_walked_where_its_class_is_named(
         self, roots: tuple[Path, Path]
     ) -> None:
+        """Pydantic builds a framework's model from the model's JSON only where the tool's
+        annotation names its class, so it is walked there. Under ``Any`` one is the host's
+        (a LangGraph state's messages): walking it, as this release first did, read chat
+        history as arguments (0.10.28 review). Other framework objects are never walked
+        (``tests/test_review_runtime_0_10_28.py``)."""
         mcp_types = pytest.importorskip("mcp.types")
         allowed, secret = roots
         state = mcp_types.TextContent(type="text", text=str(secret.parent))
         assert is_framework_object(state)
-        assert self._list_dir(allowed)(state, str(allowed)) == "listed"
+        assert self._list_dir(allowed)(state, str(allowed)) == "listed"  # under Any
+
+        def list_dir(state: Any, path: str) -> str:
+            return "listed"
+
+        list_dir.__annotations__["state"] = mcp_types.TextContent
+        config = AirlockConfig(
+            filesystem_policy=FilesystemPolicy(allowed_roots=[allowed]), enable_audit_log=False
+        )
+        named = Airlock(config=config)(list_dir)
+        assert _refusal(named(state, str(allowed))) == "path_violation"
 
     def test_control_genuine_objects_are_recognised(self) -> None:
         from pydantic.fields import FieldInfo

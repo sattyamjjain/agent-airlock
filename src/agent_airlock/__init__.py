@@ -139,7 +139,13 @@ from .conversation import (
     get_conversation_tracker,
     reset_conversation_tracker,
 )
-from .core import Airlock, SandboxExecutionError, SandboxUnavailableError, airlock
+from .core import (
+    Airlock,
+    OutputUnreadableError,
+    SandboxExecutionError,
+    SandboxUnavailableError,
+    airlock,
+)
 
 # V0.4.0 Cost Tracking + V0.8.7 Per-model-tier budgets
 from .cost_tracking import (
@@ -753,6 +759,7 @@ __all__ = [
     # Core
     "Airlock",
     "airlock",
+    "OutputUnreadableError",
     # Config
     "AirlockConfig",
     "DEFAULT_CONFIG",

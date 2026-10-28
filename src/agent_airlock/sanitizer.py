@@ -1072,6 +1072,52 @@ _LEAF_SEPARATOR = "\n\x00\n"
 #: a list of records, and their repeated values, are the same few strings.
 _CACHED_TEXT_CHARS = 256
 
+#: The fewest digits a detector matches with nothing around them: a US social security
+#: number's nine. The text of an integer with fewer digits matches no detector.
+_FEWEST_DIGITS_MATCHED = 9
+
+#: The smallest integer with :data:`_FEWEST_DIGITS_MATCHED` digits.
+_SMALLEST_MATCHABLE_INT: int = 10 ** (_FEWEST_DIGITS_MATCHED - 1)
+
+#: Leaf types whose text no detector reads (:func:`_may_hold_detection`), by exact type.
+_UNREAD_LEAF_TYPES = frozenset({bool, complex, type(None)})
+
+#: The most of one leaf's text the walk reads for its report: the start of a large
+#: ``bytes`` value (an image, a PDF) is read, not all of it.
+_LEAF_SCAN_CHARS = 100_000
+
+
+def _may_hold_detection(leaf: Any) -> bool:
+    """Whether the text of a leaf the walk cannot rebuild could hold a detection.
+
+    ``None`` and booleans are fixed words, and a complex number is never a stored
+    identifier. A number shorter than :data:`_FEWEST_DIGITS_MATCHED` digits matches no
+    detector, and neither does a float with a fractional part (a measurement, a
+    timestamp). An integral float of nine digits or more is read: a float holds every
+    integer up to 2**53 exactly, a 16-digit card number in a float64 column included.
+    Until 0.10.28 every number was turned into text and scanned: 200,000 of them made
+    the walk ten times slower.
+    """
+    if leaf is None or isinstance(leaf, bool | complex):
+        return False
+    if isinstance(leaf, float):  # the float's own methods, whatever a subclass overrides
+        return float.is_integer(leaf) and float.__abs__(leaf) >= _SMALLEST_MATCHABLE_INT
+    if isinstance(leaf, int):
+        magnitude: int = int.__abs__(leaf)
+        return magnitude >= _SMALLEST_MATCHABLE_INT
+    return True
+
+
+def _leaf_text(leaf: Any) -> str:
+    """The text a leaf is scanned as, cut to :data:`_LEAF_SCAN_CHARS`.
+
+    Bytes are decoded, not written out as their ``repr``: until 0.10.28 a 5 MB image in a
+    returned dict was escaped into some 20 MB of text and scanned whole (2.4 seconds).
+    """
+    if isinstance(leaf, bytes | bytearray | memoryview):
+        return bytes(leaf[:_LEAF_SCAN_CHARS]).decode("utf-8", "replace")
+    return str(leaf)[:_LEAF_SCAN_CHARS]
+
 
 @dataclass(frozen=True)
 class StructuredSanitization:
@@ -1084,11 +1130,15 @@ class StructuredSanitization:
         unmasked: Values found in leaves the walk cannot rebuild (bytes, models,
             dataclasses, deques...), by the leaf's type name. Those leaves are returned
             as they are, so their values were *not* masked.
+        unreadable: Leaves whose text could not be read (their ``str()`` raised), by type
+            name: returned as they are and not checked. Until 0.10.28 the exception
+            escaped the walk.
     """
 
     value: Any
     masked_count: int
     unmasked: dict[str, int] = field(default_factory=dict)
+    unreadable: dict[str, int] = field(default_factory=dict)
 
 
 def sanitize_structured(
@@ -1133,6 +1183,8 @@ def sanitize_structured(
     )
     if report.unmasked:
         logger.warning("structured_sensitive_data_unmasked", detections=report.unmasked)
+    if report.unreadable:
+        logger.warning("structured_values_unreadable", values=report.unreadable)
     return report.value, report.masked_count
 
 
@@ -1175,7 +1227,7 @@ def sanitize_structured_report(
     masked, count = walker.walk(value)
     if walker.cyclic and count:
         masked, count = walker.rebuild_cyclic(value)
-    return StructuredSanitization(masked, count, walker.unmasked())
+    return StructuredSanitization(masked, count, walker.unmasked(), walker.unreadable())
 
 
 class _StructureMasker:
@@ -1190,6 +1242,8 @@ class _StructureMasker:
         self._active: set[int] = set()
         # The text of every leaf that is neither a string nor a walked container.
         self._leaf_texts: dict[str, list[str]] = {}
+        # Leaves whose text could not be read, counted by type name.
+        self._unreadable: dict[str, int] = {}
         # Short strings already masked in this walk, with their outcome.
         self._texts: dict[str, tuple[str, int]] = {}
         #: Whether a container was reached again from inside itself.
@@ -1197,6 +1251,16 @@ class _StructureMasker:
 
     def walk(self, node: Any) -> tuple[Any, int]:
         """``node`` with its strings masked, and how many values were masked."""
+        kind = type(node)
+        if (
+            kind in _UNREAD_LEAF_TYPES
+            or (
+                (kind is int or kind is float)
+                and -_SMALLEST_MATCHABLE_INT < node < _SMALLEST_MATCHABLE_INT
+            )
+            or (kind is float and not node.is_integer())
+        ):
+            return node, 0  # the common numbers, answered without a call per leaf
         if isinstance(node, str):
             return self._mask_text(node)
         if not isinstance(node, _WALKED_CONTAINERS):
@@ -1230,9 +1294,15 @@ class _StructureMasker:
         return outcome
 
     def _note_leaf(self, leaf: Any) -> None:
-        if leaf is None or isinstance(leaf, bool):
-            return  # their text is a fixed word no detector matches
-        self._leaf_texts.setdefault(type(leaf).__name__, []).append(str(leaf))
+        if not _may_hold_detection(leaf):
+            return
+        try:
+            text = _leaf_text(leaf)
+        except Exception:  # noqa: BLE001 - a leaf with no text is reported, never raised
+            name = type(leaf).__name__
+            self._unreadable[name] = self._unreadable.get(name, 0) + 1
+            return
+        self._leaf_texts.setdefault(type(leaf).__name__, []).append(text)
 
     def _walk_items(self, node: Any) -> tuple[Any, int]:
         walked = [self.walk(item) for item in node]
@@ -1252,6 +1322,10 @@ class _StructureMasker:
         if not total:
             return node, 0
         return _refill_mapping(copy.copy(node), entries), total
+
+    def unreadable(self) -> dict[str, int]:
+        """How many leaves noted so far had no readable text, by type name."""
+        return dict(self._unreadable)
 
     def unmasked(self) -> dict[str, int]:
         """What was found in the leaves noted so far, by type name."""

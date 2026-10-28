@@ -38,10 +38,11 @@ LIMITS:
     not airgapped (unless the interpreter copies the context into new threads,
     ``sys.flags.thread_inherit_context``). A subprocess the tool starts, a socket made
     from the ``_socket`` module directly, and an event loop that does its own socket I/O
-    (uvloop, which connects and resolves through libuv) are not covered either. A task
-    or thread the tool leaves running keeps the call's policy in its context, but it is
-    enforced only while some airgap is open in the process: the patch is removed when the
-    last one closes.
+    (uvloop, which connects and resolves through libuv) are not covered either. A
+    Unix-domain socket has a path, not a host: ``allow_egress=False`` refuses it, and a
+    host or port allowlist does not apply to it. A task or thread the tool leaves running
+    keeps the call's policy in its context, but it is enforced only while some airgap is
+    open in the process: the patch is removed when the last one closes.
 """
 
 from __future__ import annotations
@@ -101,7 +102,9 @@ class NetworkPolicy:
                       Empty list means all hosts allowed.
         allowed_ports: List of allowed ports. Only applies if allow_egress=True.
                       Empty list means all ports allowed.
-        block_dns: If True, also block DNS lookups. Prevents DNS-based exfiltration.
+        block_dns: If True, also block DNS lookups. Prevents DNS-based exfiltration. A
+                  forward lookup of an IP literal asks no DNS server and is allowed (the
+                  allowlists still apply); a reverse lookup is refused.
     """
 
     allow_egress: bool = True
@@ -519,6 +522,17 @@ def _host_text(host: Any) -> str | None:
     return str(host)
 
 
+def _is_ip_literal(text: str | None) -> bool:
+    """Whether ``text`` is an IPv4 or IPv6 address, which a forward lookup answers unasked."""
+    if not text:
+        return False
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    return True
+
+
 def _blocked(
     operation: str,
     message: str,
@@ -546,6 +560,12 @@ def _check_address(
 
     Nested airgaps intersect: an inner policy can only refuse more than an outer one.
     ``noun`` names what is being opened ("connection", "datagram") in the message.
+
+    An empty host is this machine (the wildcard address), and no allowlist entry names it:
+    a host allowlist refuses it. Until 0.10.28 an empty host skipped the host check, so
+    ``connect(("", port))`` and ``http://:port/`` reached a local service through
+    ``allowed_hosts=["api.example.com"]``. An address with no host at all, a Unix-domain
+    socket's path, is refused only by ``allow_egress=False``.
     """
     host, port = _extract_host_port(address)
     for frame in frames:
@@ -559,7 +579,7 @@ def _check_address(
                 host=host,
                 port=port,
             )
-        if host and not (_is_host_allowed(host, policy) or host in frame.resolved):
+        if host is not None and not (_is_host_allowed(host, policy) or host in frame.resolved):
             _blocked(
                 operation,
                 f"Network egress blocked: host '{host}' not in allowed list",
@@ -588,11 +608,19 @@ def _check_address(
 
 
 def _check_lookup(frames: tuple[_AirgapFrame, ...], host: Any, operation: str) -> None:
-    """Refuse a name lookup of ``host`` unless every open airgap admits it."""
+    """Refuse a name lookup of ``host`` unless every open airgap admits it.
+
+    ``block_dns`` refuses every lookup that can ask DNS. A forward lookup of an IP literal
+    asks nothing, so it is checked against the allowlists only: until 0.10.28 it was
+    refused, and a numeric host allowlist with ``block_dns`` could not connect through
+    ``urllib`` or ``http.client``, which look up even an address. An empty or missing host
+    is looked up on this machine; it is not checked against a host allowlist here, since
+    nothing it returns is admitted at connect (:func:`_checked_lookup`).
+    """
     text = _host_text(host)
     for frame in frames:
         policy = frame.policy
-        if policy.block_dns:
+        if policy.block_dns and not (operation == "dns_lookup" and _is_ip_literal(text)):
             _blocked(
                 operation,
                 f"DNS lookup blocked: resolution of '{host}' denied",
@@ -709,13 +737,16 @@ def _checked_lookup(host: Any, operation: str) -> tuple[_AirgapFrame, ...]:
 
     Raises ``NetworkBlockedError`` when one of them refuses it. Returns no airgaps when
     none is open, or when ``host`` is this machine's own name, which is looked up
-    unchecked (``_is_own_host_name``) and admits nothing at connect.
+    unchecked (``_is_own_host_name``) and admits nothing at connect. Nor does a lookup of
+    an empty or missing host: it answers with this machine's loopback or wildcard
+    address, which no allowlist entry named. Until 0.10.28 that answer was admitted, so
+    ``create_connection(("", port))`` reached a local service through a host allowlist.
     """
     frames = _active_airgaps.get()
     if not frames or _is_own_host_name(host):
         return ()
     _check_lookup(frames, host, operation)
-    return frames
+    return frames if _host_text(host) else ()
 
 
 def _blocked_getaddrinfo(

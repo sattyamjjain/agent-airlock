@@ -50,6 +50,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
+import dataclasses
 import functools
 import inspect
 import numbers
@@ -63,6 +65,7 @@ from collections.abc import (
     Callable,
     Coroutine,
     Generator,
+    Iterable,
     Iterator,
     Mapping,
 )
@@ -71,7 +74,7 @@ from typing import Any, Literal, ParamSpec, TypeVar, overload
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from ._arg_walk import (
     MAX_DEPTH,
@@ -79,6 +82,7 @@ from ._arg_walk import (
     ArgumentValue,
     bind_arguments,
     iter_argument_values,
+    named_models,
     path_text,
     signature_of,
     url_text,
@@ -109,6 +113,7 @@ from .cost_tracking import (
     UnknownTierError,
     get_global_tracker,
 )
+from .exceptions import AirlockError
 from .filesystem import PathValidationError, validate_path
 from .honeypot import (
     create_honeypot_response,
@@ -127,7 +132,7 @@ from .policy import (
     SecurityPolicy,
     ViolationType,
 )
-from .sanitizer import sanitize_output, sanitize_structured_report
+from .sanitizer import _rebuild_like, sanitize_output, sanitize_structured_report
 from .self_heal import (
     AirlockResponse,
     BlockReason,
@@ -514,7 +519,14 @@ def _sanitize_tool_output(
             sanitization.was_truncated,
         )
     if isinstance(result, dict | list | tuple | set | frozenset):
-        report = sanitize_structured_report(result, **options)
+        try:
+            report = sanitize_structured_report(result, **options)
+        except RecursionError as error:
+            raise OutputUnreadableError(func_name, "nested too deeply to mask") from error
+        except Exception as error:  # noqa: BLE001 - a container that cannot be read is refused
+            raise OutputUnreadableError(
+                func_name, f"{type(error).__name__} while masking"
+            ) from error
         warnings = _masked_warnings(report.masked_count, func_name)
         output_type = type(result).__name__
         for leaf_type, found in report.unmasked.items():
@@ -529,11 +541,16 @@ def _sanitize_tool_output(
                 f"Detected {found} sensitive value(s) in {leaf_type} inside "
                 f"{output_type} output; not masked"
             )
+        for leaf_type, count in report.unreadable.items():
+            warnings.append(_unreadable_warning(func_name, leaf_type, count, output_type))
         return report.value, warnings, report.masked_count, False
-    detected = sanitize_output(result, **options).detection_count
+    output_type = type(result).__name__
+    try:
+        detected = sanitize_output(result, **options).detection_count
+    except Exception:  # noqa: BLE001 - an object with no text is reported, never raised
+        return result, [_unreadable_warning(func_name, output_type)], 0, False
     if not detected:
         return result, [], 0, False
-    output_type = type(result).__name__
     logger.warning(
         "output_sensitive_data_unmasked",
         function=func_name,
@@ -546,6 +563,55 @@ def _sanitize_tool_output(
         0,
         False,
     )
+
+
+def _unreadable_warning(
+    func_name: str, value_type: str, count: int = 1, output_type: str | None = None
+) -> str:
+    """Log, and word as a warning, output values whose text could not be read.
+
+    Until 0.10.28 the exception their ``str()`` raised escaped the call after the tool
+    ran, before its audit record was written. They are returned as they are, unchecked.
+    """
+    logger.warning(
+        "output_value_unreadable",
+        function=func_name,
+        values=count,
+        value_type=value_type,
+        output_type=output_type or value_type,
+    )
+    if output_type is None:
+        return f"{value_type} output could not be read; not checked"
+    return (
+        f"{count} {value_type} value(s) inside {output_type} output could not be read; not checked"
+    )
+
+
+class OutputUnreadableError(AirlockError):
+    """A tool's result could not be read to be masked, so the call is refused.
+
+    It stands in for a result nested too deeply for the output walk to rebuild: returning
+    it would hand back unmasked every string the walk would have masked. A deferred result
+    raises it to its consumer for a value it produced that cannot be read. Until 0.10.28 a
+    ``RecursionError`` escaped the call instead, after the tool ran and with no audit record.
+
+    Attributes:
+        function: The tool's name.
+        reason: Why its result could not be read.
+    """
+
+    def __init__(self, function: str, reason: str) -> None:
+        self.function = function
+        self.reason = reason
+        super().__init__(f"the result of '{function}' could not be read: {reason}")
+
+
+class _ResultRefused(Exception):  # noqa: N818 - private control flow, not an error
+    """Carries the refusal ``_post_execution`` made of a result back to the wrapper."""
+
+    def __init__(self, response: dict[str, Any]) -> None:
+        self.response = response
+        super().__init__(response.get("error"))
 
 
 @contextlib.contextmanager
@@ -596,6 +662,8 @@ def _refusal_reason(error: BaseException) -> BlockReason | None:
         if error.violation_type == ViolationType.RATE_LIMITED.value:
             return BlockReason.RATE_LIMIT
         return BlockReason.POLICY_VIOLATION
+    if isinstance(error, OutputUnreadableError):
+        return BlockReason.OUTPUT_UNREADABLE
     return None
 
 
@@ -651,6 +719,155 @@ def _guard_deferred(
     return None
 
 
+#: The containers a result is walked through for deferred values, as output masking walks
+#: it (``sanitizer.sanitize_structured``).
+_RESULT_CONTAINERS = (dict, list, tuple, set, frozenset)
+
+#: Leaf types that are never deferred, checked first so a large result is scanned quickly.
+_PLAIN_TYPES = frozenset({str, bytes, bytearray, int, float, complex, bool, type(None)})
+
+
+def _is_deferred(value: Any) -> bool:
+    """Whether ``value`` computes its values after the call: what ``_guard_deferred`` guards."""
+    if inspect.isgenerator(value) or inspect.isasyncgen(value) or inspect.iscoroutine(value):
+        return True
+    if _is_resource_handle(value):
+        return False
+    return isinstance(value, Iterator | AsyncIterator)
+
+
+def _is_rebuilt_shape(value: Any) -> bool:
+    """A dict, list, tuple, set, pydantic model or dataclass instance: what the guard rebuilds."""
+    return isinstance(value, (*_RESULT_CONTAINERS, BaseModel)) or (
+        dataclasses.is_dataclass(value) and not isinstance(value, type)
+    )
+
+
+def _items_inside(node: Any) -> Iterable[Any]:
+    """The values inside a dict (its keys too), list, tuple, set, model or dataclass."""
+    if isinstance(node, dict):
+        return [*node.keys(), *node.values()]
+    if isinstance(node, BaseModel):  # BaseModel's own __iter__, whatever a model overrides
+        return [value for _name, value in BaseModel.__iter__(node)]
+    if isinstance(node, _RESULT_CONTAINERS):
+        return node
+    return [getattr(node, item.name, None) for item in dataclasses.fields(node)]
+
+
+def _holds_deferred(result: Any) -> bool:
+    """Whether a deferred value is anywhere in ``result``'s containers, models and dataclasses."""
+    pending = [result]
+    seen: set[int] = set()
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        for item in _items_inside(node):
+            if type(item) in _PLAIN_TYPES:
+                continue
+            if _is_rebuilt_shape(item):
+                pending.append(item)
+            elif _is_deferred(item):
+                return True
+    return False
+
+
+def _guard_nested_deferred(
+    result: Any,
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Any:
+    """``result`` with every deferred value inside it guarded.
+
+    A generator, coroutine or lazy iterator held in a returned dict, list, tuple, set,
+    pydantic model or dataclass runs when the caller reaches it, after the call. Until
+    0.10.28 only one returned at the top level was guarded: ``{"rows": map(fetch, urls)}``
+    ran outside the airgap, without the call's context, and unmasked. ``result`` itself
+    comes back when it holds none; otherwise every container in it is rebuilt with each
+    deferred value guarded (dict keys included; a model through ``model_copy``, a
+    dataclass as a shallow copy, so neither runs its validation or ``__init__`` again), a
+    container referenced twice or from inside itself once.
+
+    Raises:
+        OutputUnreadableError: ``result`` is nested too deeply to rebuild, or one of its
+            containers raised while it was read or rebuilt.
+    """
+    if not _is_rebuilt_shape(result):
+        return result
+    memo: dict[int, Any] = {}
+
+    def rebuild(node: Any) -> Any:
+        if type(node) in _PLAIN_TYPES:
+            return node
+        if id(node) in memo:
+            return memo[id(node)]
+        if isinstance(node, dict):
+            mapping = copy.copy(node)
+            memo[id(node)] = mapping  # registered first, so a back-reference reaches the copy
+            entries = [(rebuild(key), rebuild(item)) for key, item in node.items()]
+            mapping.clear()
+            for key, item in entries:  # one by one: Counter.update would add, not set
+                mapping[key] = item
+            return mapping
+        if isinstance(node, list):
+            items = copy.copy(node)
+            memo[id(node)] = items
+            items[:] = [rebuild(item) for item in node]
+            return items
+        if isinstance(node, _RESULT_CONTAINERS):
+            rebuilt: Any = _rebuild_like(node, [rebuild(item) for item in node])
+        elif isinstance(node, BaseModel):
+            fields = BaseModel.__iter__(node)
+            rebuilt = node.model_copy(update={name: rebuild(value) for name, value in fields})
+        elif dataclasses.is_dataclass(node) and not isinstance(node, type):
+            rebuilt = copy.copy(node)
+            memo[id(node)] = rebuilt
+            for item in dataclasses.fields(node):
+                if hasattr(node, item.name):  # set as the dataclass's own __init__ sets it
+                    object.__setattr__(rebuilt, item.name, rebuild(getattr(node, item.name)))
+            return rebuilt
+        else:
+            guarded = _guard_deferred(node, config, func_name, context, on_refusal)
+            rebuilt = node if guarded is None else guarded
+        memo[id(node)] = rebuilt
+        return rebuilt
+
+    try:
+        return rebuild(result) if _holds_deferred(result) else result
+    except RecursionError as error:
+        raise OutputUnreadableError(func_name, "nested too deeply to guard") from error
+    except Exception as error:  # noqa: BLE001 - a container that cannot be rebuilt is refused
+        raise OutputUnreadableError(func_name, f"{type(error).__name__} while guarding") from error
+
+
+def _guard_result(
+    result: Any,
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> tuple[Any, list[str], int, bool]:
+    """A result as its caller gets it: deferred values guarded, everything else masked.
+
+    Returns ``(result, warnings, masked_count, was_truncated)``. A deferred result is
+    returned guarded and masked value by value as it produces them, so nothing is counted
+    here.
+
+    Raises:
+        OutputUnreadableError: The result cannot be read to be masked.
+    """
+    guarded = _guard_deferred(result, config, func_name, context, on_refusal)
+    if guarded is not None:
+        return guarded, [], 0, False
+    result = _guard_nested_deferred(result, config, func_name, context, on_refusal)
+    if not config.sanitize_output or result is None:
+        return result, [], 0, False
+    return _sanitize_tool_output(result, config, func_name)
+
+
 def _sanitize_stream_item(
     item: Any,
     config: AirlockConfig,
@@ -658,13 +875,16 @@ def _sanitize_stream_item(
     context: AirlockContext[Any] | None = None,
     on_refusal: _RefusalReporter | None = None,
 ) -> Any:
-    """One value a deferred result produced, guarded and sanitized as a returned value."""
-    guarded = _guard_deferred(item, config, func_name, context, on_refusal)
-    if guarded is not None:
-        return guarded
-    if not config.sanitize_output or item is None:
-        return item
-    return _sanitize_tool_output(item, config, func_name)[0]
+    """One value a deferred result produced, guarded and sanitized as a returned value.
+
+    A value that cannot be read is refused: ``OutputUnreadableError`` reaches the consumer
+    after ``on_refusal`` has audited it.
+    """
+    try:
+        return _guard_result(item, config, func_name, context, on_refusal)[0]
+    except OutputUnreadableError as error:
+        _report_refusal(on_refusal, error)
+        raise
 
 
 def _guard_stream(
@@ -1334,12 +1554,16 @@ class Airlock:
                 if context.user_context is not None
                 else None
             )
+            # An agent framework's own model is walked where the tool's annotations name
+            # its class, the only place pydantic builds one from the model's JSON
+            # (`_arg_walk.NamedModels`); one in host-injected state is left alone.
             arguments = (
                 bind_arguments(
                     call_signature,
                     args,
                     cleaned_kwargs,
                     skip_first=run_wrapper is not None and run_wrapper.host_object,
+                    named=named_models(func),
                 )
                 if self._reads_argument_values(func_name, resolved_policy)
                 else cleaned_kwargs
@@ -1422,25 +1646,25 @@ class Airlock:
             Returns:
                 Tuple of (processed_result, warnings, sanitized_count, was_truncated)
             """
-            warnings: list[str] = []
-            sanitized_count = 0
-            was_truncated = False
 
-            def _audit_deferred_refusal(error: Exception) -> None:
-                """Record a refusal a deferred result raised after the call returned.
-
-                It reaches the consumer as the exception, mid-stream; until 0.10.28 it left
-                no audit record of the block, only the call's own (not blocked) one.
-                """
-                reason = _refusal_reason(error)
-                if reason is None:
-                    return
+            def _refuse_after_run(error: Exception, reason: BlockReason) -> AirlockResponse:
+                """Log and audit a refusal made after the tool ran, and return it."""
                 if isinstance(error, NetworkBlockedError):
                     response = handle_network_blocked(
                         func_name,
                         operation=error.operation,
                         target=error.target,
                         details=error.details,
+                    )
+                elif isinstance(error, OutputUnreadableError):
+                    response = AirlockResponse.blocked_response(
+                        reason=reason,
+                        error=f"AIRLOCK_BLOCK: {error}",
+                        fix_hints=[
+                            "The tool ran, but its result could not be checked for sensitive "
+                            "data, so it was withheld. Arguments that return a smaller or "
+                            "flatter result may succeed."
+                        ],
                     )
                 else:
                     response = AirlockResponse.blocked_response(
@@ -1462,19 +1686,29 @@ class Airlock:
                     session_id=context.session_id if context else None,
                     amplification=context._amplification if context else None,
                 )
+                return response
 
-            # A deferred result (a generator, a coroutine, a lazy iterator) runs after this
-            # call returns, so its values are guarded and sanitized as they are produced,
-            # and this call's audit record counts none of them.
-            guarded = _guard_deferred(
-                result, self.config, func_name, context, _audit_deferred_refusal
-            )
-            if guarded is not None:
-                result = guarded
-            elif self.config.sanitize_output and result is not None:
-                result, warnings, sanitized_count, was_truncated = _sanitize_tool_output(
-                    result, self.config, func_name
+            def _audit_deferred_refusal(error: Exception) -> None:
+                """Record a refusal a deferred result raised after the call returned.
+
+                It reaches the consumer as the exception, mid-stream; until 0.10.28 it left
+                no audit record of the block, only the call's own (not blocked) one.
+                """
+                reason = _refusal_reason(error)
+                if reason is not None:
+                    _refuse_after_run(error, reason)
+
+            # A deferred result (a generator, a coroutine, a lazy iterator), or one held in
+            # a returned container, runs after this call returns, so its values are guarded
+            # and sanitized as they are produced, and this call's audit record counts none
+            # of them. A result that cannot be read to be masked is refused, not returned.
+            try:
+                result, warnings, sanitized_count, was_truncated = _guard_result(
+                    result, self.config, func_name, context, _audit_deferred_refusal
                 )
+            except OutputUnreadableError as error:
+                refusal = _refuse_after_run(error, BlockReason.OUTPUT_UNREADABLE)
+                raise _ResultRefused(refusal.to_dict()) from error
 
             elapsed = time.time() - start_time
             logger.info(
@@ -1714,15 +1948,18 @@ class Airlock:
                 finally:
                     reset_context(token)
 
-                result, warnings, _, _ = _post_execution(
-                    func_name,
-                    result,
-                    start_time,
-                    cleaned_kwargs,
-                    context,
-                    budget_estimate,
-                    resolved_policy,
-                )
+                try:
+                    result, warnings, _, _ = _post_execution(
+                        func_name,
+                        result,
+                        start_time,
+                        cleaned_kwargs,
+                        context,
+                        budget_estimate,
+                        resolved_policy,
+                    )
+                except _ResultRefused as refused:
+                    return refused.response
 
                 if self.return_dict:
                     return AirlockResponse.success_response(
@@ -1851,15 +2088,18 @@ class Airlock:
                 finally:
                     reset_context(token)
 
-                result, warnings, _, _ = _post_execution(
-                    func_name,
-                    result,
-                    start_time,
-                    cleaned_kwargs,
-                    context,
-                    budget_estimate,
-                    resolved_policy,
-                )
+                try:
+                    result, warnings, _, _ = _post_execution(
+                        func_name,
+                        result,
+                        start_time,
+                        cleaned_kwargs,
+                        context,
+                        budget_estimate,
+                        resolved_policy,
+                    )
+                except _ResultRefused as refused:
+                    return refused.response
 
                 if self.return_dict:
                     return AirlockResponse.success_response(

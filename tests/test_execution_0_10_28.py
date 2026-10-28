@@ -73,6 +73,19 @@ def _lookup(host: str = ELSEWHERE) -> str:
     return "allowed"
 
 
+def _lookup_name(host: str = "localhost") -> str:
+    """Look a name up, which ``block_dns`` refuses: "allowed" or "refused".
+
+    ``localhost`` is answered from the hosts file, so no DNS query leaves this machine. A
+    numeric lookup asks no DNS server, so ``block_dns`` allows it (``_lookup``).
+    """
+    try:
+        socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except NetworkBlockedError:
+        return "refused"
+    return "allowed"
+
+
 def _connect(port: int, host: str = "127.0.0.1") -> str:
     """Open a TCP connection on this machine: "refused" by the airgap, else "admitted"."""
     sock = socket.socket()
@@ -438,7 +451,7 @@ class TestAllowEgressPoliciesAreEnforced:
         [
             pytest.param(INTERNAL_ONLY_POLICY, lambda: _lookup(ELSEWHERE), id="internal-only"),
             pytest.param(HTTPS_ONLY_POLICY, lambda: _connect(9), id="https-only"),
-            pytest.param(NetworkPolicy(block_dns=True), lambda: _lookup("127.0.0.1"), id="no-dns"),
+            pytest.param(NetworkPolicy(block_dns=True), _lookup_name, id="no-dns"),
         ],
     )
     async def test_a_restricting_policy_refuses(
