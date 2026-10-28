@@ -79,22 +79,20 @@ if TYPE_CHECKING:
     from .mcp_spec.tasks_lifecycle_guard import TaskAdmission, TaskRegistry
 
 
-def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy | None:
-    """Build a CapabilityPolicy, returning None if the module isn't importable.
+def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy:
+    """Build the CapabilityPolicy a preset carries.
 
-    Mirrors the private helpers in `policy.py` so capability gating remains
-    optional.
+    ``capabilities`` is a core module, so its import is not guarded: until 0.10.28 an
+    ``ImportError`` here, and in each preset below, returned None and left the preset
+    with no capability gate.
     """
-    try:
-        from .capabilities import Capability, CapabilityPolicy
+    from .capabilities import Capability, CapabilityPolicy
 
-        return CapabilityPolicy(
-            granted=Capability(granted) if granted is not None else Capability.NONE,
-            denied=Capability(denied) if denied is not None else Capability.NONE,
-            require_sandbox_for=Capability.DANGEROUS,
-        )
-    except ImportError:
-        return None
+    return CapabilityPolicy(
+        granted=Capability(granted) if granted is not None else Capability.NONE,
+        denied=Capability(denied) if denied is not None else Capability.NONE,
+        require_sandbox_for=Capability.DANGEROUS,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -196,20 +194,17 @@ def gtg_1002_defense_policy() -> SecurityPolicy:
     Reference: Anthropic threat-intelligence disclosure (2025).
     Retrieved 2026-04-18.
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS).value,
-            denied=(
-                Capability.PROCESS_SHELL
-                | Capability.PROCESS_EXEC
-                | Capability.FILESYSTEM_DELETE
-                | Capability.NETWORK_ARBITRARY
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS).value,
+        denied=(
+            Capability.PROCESS_SHELL
+            | Capability.PROCESS_EXEC
+            | Capability.FILESYSTEM_DELETE
+            | Capability.NETWORK_ARBITRARY
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -257,21 +252,18 @@ def mex_gov_2026_policy() -> SecurityPolicy:
 
     Reference: public press coverage, Feb 2026. Retrieved 2026-04-18.
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(Capability.FILESYSTEM_READ | Capability.DATABASE_READ).value,
-            denied=(
-                Capability.FILESYSTEM_WRITE
-                | Capability.FILESYSTEM_DELETE
-                | Capability.DATABASE_WRITE
-                | Capability.NETWORK_ARBITRARY
-                | Capability.PROCESS_SHELL
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(Capability.FILESYSTEM_READ | Capability.DATABASE_READ).value,
+        denied=(
+            Capability.FILESYSTEM_WRITE
+            | Capability.FILESYSTEM_DELETE
+            | Capability.DATABASE_WRITE
+            | Capability.NETWORK_ARBITRARY
+            | Capability.PROCESS_SHELL
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -337,21 +329,16 @@ def owasp_mcp_top_10_2026_policy() -> SecurityPolicy:
 
     Reference: https://owasp.org/www-project-mcp-top-10/ (retrieved 2026-04-18).
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(
-                Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
-            ).value,
-            denied=(
-                Capability.PROCESS_SHELL
-                | Capability.FILESYSTEM_DELETE
-                | Capability.NETWORK_ARBITRARY
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(
+            Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
+        ).value,
+        denied=(
+            Capability.PROCESS_SHELL | Capability.FILESYSTEM_DELETE | Capability.NETWORK_ARBITRARY
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -417,21 +404,16 @@ def eu_ai_act_article_15_policy() -> SecurityPolicy:
     Reference: https://artificialintelligenceact.eu/article/15/
     (retrieved 2026-04-18).
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(
-                Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
-            ).value,
-            denied=(
-                Capability.NETWORK_ARBITRARY
-                | Capability.FILESYSTEM_DELETE
-                | Capability.PROCESS_SHELL
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(
+            Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
+        ).value,
+        denied=(
+            Capability.NETWORK_ARBITRARY | Capability.FILESYSTEM_DELETE | Capability.PROCESS_SHELL
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -480,23 +462,20 @@ def india_dpdp_2023_policy() -> SecurityPolicy:
     https://www.meity.gov.in/static/uploads/2024/06/2bf1f0e9f04e6fb4f8fef35e82c42aa5.pdf
     (retrieved 2026-04-18).
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(
-                Capability.FILESYSTEM_READ | Capability.DATABASE_READ | Capability.NETWORK_HTTPS
-            ).value,
-            denied=(
-                Capability.DATA_PII
-                | Capability.DATA_SECRETS
-                | Capability.FILESYSTEM_DELETE
-                | Capability.DATABASE_WRITE
-                | Capability.NETWORK_ARBITRARY
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(
+            Capability.FILESYSTEM_READ | Capability.DATABASE_READ | Capability.NETWORK_HTTPS
+        ).value,
+        denied=(
+            Capability.DATA_PII
+            | Capability.DATA_SECRETS
+            | Capability.FILESYSTEM_DELETE
+            | Capability.DATABASE_WRITE
+            | Capability.NETWORK_ARBITRARY
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,

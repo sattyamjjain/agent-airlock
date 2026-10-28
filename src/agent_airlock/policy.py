@@ -1000,38 +1000,32 @@ PERMISSIVE_POLICY = SecurityPolicy()
 """Allows all tools with no restrictions."""
 
 
-def _get_strict_capability_policy() -> CapabilityPolicy | None:
-    """Lazy import capability policy for STRICT_POLICY."""
-    try:
-        from .capabilities import Capability, CapabilityPolicy
+def _get_strict_capability_policy() -> CapabilityPolicy:
+    """The capability policy STRICT_POLICY carries.
 
-        return CapabilityPolicy(
-            granted=Capability.FILESYSTEM_READ
-            | Capability.NETWORK_HTTPS
-            | Capability.DATABASE_READ,
-            denied=Capability.PROCESS_SHELL | Capability.FILESYSTEM_DELETE,
-            require_sandbox_for=Capability.DANGEROUS,
-        )
-    except ImportError:
-        return None
+    ``capabilities`` is a core module, so its import is not guarded: until 0.10.28 an
+    ``ImportError`` here returned None and left STRICT_POLICY with no capability gate.
+    """
+    from .capabilities import Capability, CapabilityPolicy
+
+    return CapabilityPolicy(
+        granted=Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ,
+        denied=Capability.PROCESS_SHELL | Capability.FILESYSTEM_DELETE,
+        require_sandbox_for=Capability.DANGEROUS,
+    )
 
 
-def _get_read_only_capability_policy() -> CapabilityPolicy | None:
-    """Lazy import capability policy for READ_ONLY_POLICY."""
-    try:
-        from .capabilities import Capability, CapabilityPolicy
+def _get_read_only_capability_policy() -> CapabilityPolicy:
+    """The capability policy READ_ONLY_POLICY carries (its import unguarded, as above)."""
+    from .capabilities import Capability, CapabilityPolicy
 
-        return CapabilityPolicy(
-            granted=Capability.FILESYSTEM_READ
-            | Capability.DATABASE_READ
-            | Capability.NETWORK_HTTPS,
-            denied=Capability.FILESYSTEM_WRITE
-            | Capability.FILESYSTEM_DELETE
-            | Capability.DATABASE_WRITE,
-            require_sandbox_for=Capability.PROCESS_EXEC | Capability.PROCESS_SHELL,
-        )
-    except ImportError:
-        return None
+    return CapabilityPolicy(
+        granted=Capability.FILESYSTEM_READ | Capability.DATABASE_READ | Capability.NETWORK_HTTPS,
+        denied=Capability.FILESYSTEM_WRITE
+        | Capability.FILESYSTEM_DELETE
+        | Capability.DATABASE_WRITE,
+        require_sandbox_for=Capability.PROCESS_EXEC | Capability.PROCESS_SHELL,
+    )
 
 
 def _get_strict_trace_redaction() -> TraceRedactionPolicy:
@@ -1084,25 +1078,22 @@ BUSINESS_HOURS_POLICY = SecurityPolicy(
 """Restricts dangerous operations to business hours."""
 
 
-def _get_camouflage_resistant_capability_policy() -> CapabilityPolicy | None:
-    """Lazy capability policy for CAMOUFLAGE_RESISTANT_POLICY.
+def _get_camouflage_resistant_capability_policy() -> CapabilityPolicy:
+    """The capability policy CAMOUFLAGE_RESISTANT_POLICY carries (its import unguarded).
 
     Denies the long tail of dangerous capabilities outright; granted set
     is empty so the caller must opt in per deployment.
     """
-    try:
-        from .capabilities import Capability, CapabilityPolicy
+    from .capabilities import Capability, CapabilityPolicy
 
-        return CapabilityPolicy(
-            granted=Capability(0),
-            denied=Capability.PROCESS_SHELL
-            | Capability.PROCESS_EXEC
-            | Capability.FILESYSTEM_DELETE
-            | Capability.FILESYSTEM_WRITE,
-            require_sandbox_for=Capability.DANGEROUS,
-        )
-    except ImportError:
-        return None
+    return CapabilityPolicy(
+        granted=Capability(0),
+        denied=Capability.PROCESS_SHELL
+        | Capability.PROCESS_EXEC
+        | Capability.FILESYSTEM_DELETE
+        | Capability.FILESYSTEM_WRITE,
+        require_sandbox_for=Capability.DANGEROUS,
+    )
 
 
 CAMOUFLAGE_RESISTANT_POLICY = SecurityPolicy(
