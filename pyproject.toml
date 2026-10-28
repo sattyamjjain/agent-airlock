@@ -192,7 +192,10 @@ all = [
     "agent-airlock[logging,sandbox,mcp,claude-agent,model-armor,console,redis,crypto,pydantic-ai,crewai,google-adk]",
 ]
 dev = [
-    "pytest>=8.0",
+    # <9.2 until pytest-benchmark reads the public `nodeid`: pytest 9.2.0 (2026-10-27)
+    # dropped Node._nodeid, which pytest-benchmark 5.3.0, its newest release, reads in its
+    # fixture, so the benchmark smoke step errored on every benchmark.
+    "pytest>=8.0,<9.2",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",
     "pytest-benchmark>=4.0",

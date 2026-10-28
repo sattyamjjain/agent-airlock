@@ -60,6 +60,13 @@ is read, after the kill switch, and change nothing for a config that does not se
   http(s) path and `/` the same resource, so the comparison now reads a root path as no
   path; `canonicalize_resource_uri` still keeps the root slash in its output.
 
+### CI
+
+- `[dev]` pins `pytest<9.2`. pytest 9.2.0 (2026-10-27) dropped `Node._nodeid`, which
+  pytest-benchmark 5.3.0, its newest release, reads in its fixture, so the `test` job's
+  benchmark smoke step (Python 3.11) errored on every benchmark. Lift the pin once
+  pytest-benchmark reads the public `nodeid`.
+
 ### Docs
 
 - `docs/guide/token-audience-and-startup-hooks.md`, in the nav; a README section; the new
