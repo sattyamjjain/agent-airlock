@@ -20,6 +20,15 @@ preset's per-class action map. The default safe posture is:
 The spec PR's own example payloads must round-trip clean; the guard's
 classifier is conservative-scoped to that constraint.
 
+Every string the user is shown or asked for is classified: the whole payload is
+walked, so a ``prompt`` / ``message`` / ``title`` / ``description`` at any depth, a
+``requestedSchema`` property's name, title, description and choice labels, and a
+JSON-RPC envelope's ``params.message`` are all read, as is a value that is a list or
+``bytes``. Until 0.10.28 only those four keys at the top level were read, and the text
+was cut at ``max_payload_bytes`` before it was classified. Input nested deeper than 32
+levels, containing itself, or holding a value of no JSON shape is
+:attr:`ElicitationClass.UNINSPECTABLE` (``block`` by default).
+
 Reference
 ---------
 * MCP spec PR #1487 (2026-04-28):
@@ -31,6 +40,7 @@ from __future__ import annotations
 import re
 import time
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
@@ -42,6 +52,10 @@ logger = structlog.get_logger("agent-airlock.mcp_spec.elicitation_guard")
 
 Verdict = Literal["allow", "relay_with_origin_badge", "relay_with_warning", "block"]
 
+#: What :meth:`ElicitationGuard.evaluate` reads: a prompt string (or its bytes), the
+#: mapping shape of an elicitation (or its JSON-RPC envelope), or a list of either.
+ElicitationPayload = Mapping[str, Any] | str | bytes | list[Any] | tuple[Any, ...]
+
 
 class ElicitationClass(str, Enum):
     """Coarse classification of an elicitation payload."""
@@ -50,6 +64,70 @@ class ElicitationClass(str, Enum):
     CREDENTIAL_REQUEST = "credential_request"
     POLICY_OVERRIDE = "policy_override"
     DESTRUCTIVE_CONFIRMATION = "destructive_confirmation"
+    #: The payload could not be read whole (deeper than 32 levels, containing itself, or
+    #: holding a value of no JSON shape), so nothing about it was classified.
+    UNINSPECTABLE = "uninspectable"
+
+
+#: Nesting depth past which a payload is refused as uninspectable rather than walked.
+_MAX_DEPTH = 32
+
+#: Keys whose text the host renders as the elicitation's prompt. Read first at every
+#: level, in this order, so the rendered payload reads as it did before 0.10.28.
+_DISPLAY_KEYS: tuple[str, ...] = ("prompt", "message", "title", "description")
+
+
+class _Uninspectable(Exception):
+    """Internal: the walk met input it cannot read whole."""
+
+
+def _decode(value: bytes | bytearray | memoryview) -> str:
+    return bytes(value).decode("utf-8", errors="replace")
+
+
+class _TextWalk:
+    """Collects every string in an elicitation payload, and the subset a host displays.
+
+    Keys are text too: a ``requestedSchema`` property's name is the label of the field
+    the user is asked to fill when it has no ``title``.
+    """
+
+    def __init__(self) -> None:
+        self.scanned: list[str] = []
+        self.displayed: list[str] = []
+
+    def walk(self, value: Any, *, display: bool, depth: int, ancestors: frozenset[int]) -> None:
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            value = _decode(value)
+        if isinstance(value, str):
+            self.scanned.append(value)
+            if display:
+                self.displayed.append(value)
+            return
+        if value is None or isinstance(value, (bool, int, float)):
+            return  # carries no text a pattern could match
+        if not isinstance(value, (Mapping, list, tuple, set, frozenset)):
+            raise _Uninspectable(f"a {type(value).__name__} value has no JSON shape")
+        if depth >= _MAX_DEPTH:
+            raise _Uninspectable(f"the payload nests deeper than {_MAX_DEPTH} levels")
+        if id(value) in ancestors:
+            raise _Uninspectable("the payload contains itself")
+        inner = ancestors | {id(value)}
+        if isinstance(value, Mapping):
+            self._walk_mapping(value, display=display, depth=depth, ancestors=inner)
+            return
+        for item in value:
+            self.walk(item, display=display, depth=depth + 1, ancestors=inner)
+
+    def _walk_mapping(
+        self, value: Mapping[Any, Any], *, display: bool, depth: int, ancestors: frozenset[int]
+    ) -> None:
+        keys = [key for key in _DISPLAY_KEYS if key in value]
+        keys += [key for key in value if key not in _DISPLAY_KEYS]
+        for key in keys:
+            self.walk(key, display=False, depth=depth + 1, ancestors=ancestors)
+            shown = display or (isinstance(key, str) and key in _DISPLAY_KEYS)
+            self.walk(value[key], display=shown, depth=depth + 1, ancestors=ancestors)
 
 
 # Patterns are conservative on purpose. Each list captures the smallest
@@ -130,6 +208,7 @@ class ElicitationGuard:
         ElicitationClass.CREDENTIAL_REQUEST: "block",
         ElicitationClass.POLICY_OVERRIDE: "block",
         ElicitationClass.DESTRUCTIVE_CONFIRMATION: "relay_with_warning",
+        ElicitationClass.UNINSPECTABLE: "block",
     }
 
     def __init__(
@@ -180,45 +259,63 @@ class ElicitationGuard:
 
     def evaluate(
         self,
-        elicitation_msg: dict[str, Any] | str,
+        elicitation_msg: ElicitationPayload,
         *,
         server_origin: str,
         session_ctx: dict[str, Any] | None = None,  # noqa: ARG002 — reserved
     ) -> ElicitationInspection:
         """Inspect an elicitation payload from ``server_origin``.
 
+        Every string in the payload is classified, keys included; the text is not cut
+        at ``max_payload_bytes`` first (that cap bounds only the rendered payload).
+
         Args:
-            elicitation_msg: Either a string prompt or the dict shape
-                from MCP spec PR #1487 (``{"prompt": str, "schema": ...}``).
-                Extra keys are tolerated.
+            elicitation_msg: A string prompt (or ``bytes``), the mapping shape from MCP
+                spec PR #1487 (``{"prompt": str, "schema": ...}``, or a full
+                ``elicitation/create`` JSON-RPC message), or a list of either. Extra
+                keys are read too.
             server_origin: A short id for the originating server (e.g.
                 ``"github"`` / ``"jira-mcp"``). Recorded in audit logs;
                 used to gate the ``allowlist_origins`` short-circuit.
             session_ctx: Optional session metadata. Currently
                 unused; reserved for future "in-flight tool name"
                 checks.
+
+        Raises:
+            TypeError: ``elicitation_msg`` is not a string, ``bytes``, mapping, list or
+                tuple. A value of another shape nested inside one is
+                :attr:`ElicitationClass.UNINSPECTABLE` instead.
         """
         started = time.perf_counter()
 
-        if isinstance(elicitation_msg, str):
-            text = elicitation_msg
-        elif isinstance(elicitation_msg, dict):
-            parts: list[str] = []
-            for key in ("prompt", "message", "title", "description"):
-                value = elicitation_msg.get(key)
-                if isinstance(value, str):
-                    parts.append(value)
-            text = "\n".join(parts) if parts else ""
-        else:
+        if not isinstance(
+            elicitation_msg, (str, bytes, bytearray, memoryview, Mapping, list, tuple)
+        ):
             raise TypeError(
-                f"elicitation_msg must be str or dict, got {type(elicitation_msg).__name__}"
+                "elicitation_msg must be str, bytes, a mapping or a list, got "
+                f"{type(elicitation_msg).__name__}"
             )
+        walk = _TextWalk()
+        classification: ElicitationClass
+        raw_matches: list[str]
+        try:
+            walk.walk(
+                elicitation_msg,
+                display=not isinstance(elicitation_msg, (Mapping, list, tuple)),
+                depth=0,
+                ancestors=frozenset(),
+            )
+        except _Uninspectable as exc:
+            logger.warning(
+                "elicitation_uninspectable", server_origin=server_origin, reason=str(exc)
+            )
+            classification, raw_matches = ElicitationClass.UNINSPECTABLE, []
+        else:
+            classification, raw_matches = self._classify_payload("\n".join(walk.scanned))
+        verdict = self.actions.get(classification, "block")
 
-        encoded = text.encode("utf-8")[: self.max_payload_bytes]
+        encoded = "\n".join(walk.displayed).encode("utf-8")[: self.max_payload_bytes]
         text = encoded.decode("utf-8", errors="replace")
-
-        classification, raw_matches = self._classify_payload(text)
-        verdict = self.actions[classification]
 
         if classification == ElicitationClass.BENIGN and server_origin in self.allowlist_origins:
             verdict = "allow"
@@ -255,7 +352,7 @@ class ElicitationGuard:
 
     def evaluate_or_raise(
         self,
-        elicitation_msg: dict[str, Any] | str,
+        elicitation_msg: ElicitationPayload,
         *,
         server_origin: str,
         session_ctx: dict[str, Any] | None = None,
@@ -278,5 +375,6 @@ __all__ = [
     "ElicitationGuard",
     "ElicitationGuardError",
     "ElicitationInspection",
+    "ElicitationPayload",
     "Verdict",
 ]

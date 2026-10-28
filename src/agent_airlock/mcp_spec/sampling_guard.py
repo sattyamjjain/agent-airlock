@@ -51,6 +51,9 @@ Primary source
 
 from __future__ import annotations
 
+import math
+import numbers
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -152,8 +155,108 @@ class SamplingConsentMissingError(AirlockError):
 _LEGITIMATE_ROLES: frozenset[str] = frozenset({"user", "assistant", "tool"})
 
 
+def _request_bodies(request: Any, session_id: str) -> list[Mapping[str, Any]]:
+    """The mappings a sampling request's fields live in: the request and its ``params``.
+
+    A ``sampling/createMessage`` JSON-RPC envelope carries ``messages`` /
+    ``systemPrompt`` / ``maxTokens`` under ``params``; the bare body carries them at the
+    top level. Both are read, so neither can hide the other.
+
+    Raises:
+        ValueError: ``request``, or a ``params`` it carries, is not a mapping.
+    """
+    if not isinstance(request, Mapping):
+        raise ValueError(
+            f"MCP sampling request for session {session_id!r} is a "
+            f"{type(request).__name__}, not a mapping; refusing rather than skipping it"
+        )
+    bodies: list[Mapping[str, Any]] = [request]
+    params = request.get("params")
+    if isinstance(params, Mapping):
+        bodies.append(params)
+    elif params is not None:
+        raise ValueError(
+            f"MCP sampling request for session {session_id!r} carries params of type "
+            f"{type(params).__name__}, not a mapping; refusing rather than skipping it"
+        )
+    return bodies
+
+
+def _check_max_tokens(value: Any, session_id: str, cap: int) -> None:
+    """Refuse a ``maxTokens`` over ``cap``, below 1, or of no readable numeric shape.
+
+    An ``int``, a finite ``float`` and a numeric string are compared with the cap (the
+    cap applied only to an ``int`` until 0.10.28, so ``1e7`` or ``"10000000"`` passed).
+    A count below 1 is refused too: some model runtimes read ``-1`` as "no limit".
+
+    Raises:
+        ValueError: The value is unreadable, not positive, or exceeds ``cap``.
+    """
+    number: float | None = None
+    try:
+        if isinstance(value, numbers.Real) and not isinstance(value, bool):
+            number = float(value)
+        elif isinstance(value, str):
+            number = float(value.strip())
+    except OverflowError:
+        number = math.inf  # an int too large for a float is over any cap
+    except ValueError:
+        number = None
+    if number is None or math.isnan(number):
+        raise ValueError(
+            f"MCP sampling request for session {session_id!r} carries maxTokens={value!r}, "
+            "which is not a token count; refusing rather than skipping the cap"
+        )
+    if number < 1:
+        raise ValueError(
+            f"MCP sampling request for session {session_id!r} asked for "
+            f"maxTokens={value}, below 1 (a runtime may read it as no limit)"
+        )
+    if number > cap:
+        raise ValueError(
+            f"MCP sampling request for session "
+            f"{session_id!r} asked for "
+            f"maxTokens={value}, exceeds cap "
+            f"{cap}"
+        )
+
+
+def _check_persistent_instructions(body: Mapping[str, Any], session_id: str) -> None:
+    """Refuse a ``systemPrompt``, a non-user/assistant/tool role, or messages it cannot read.
+
+    ``systemPrompt`` is the protocol's own persistent-instruction channel, so it is read
+    like a ``system``-role message; an empty one carries no instruction and passes.
+
+    Raises:
+        SamplingInstructionPersistenceError: On any of the above.
+    """
+    prompt = body.get("systemPrompt")
+    if prompt is not None and not (isinstance(prompt, str) and not prompt.strip()):
+        raise SamplingInstructionPersistenceError(
+            session_id=session_id, offending_role="systemPrompt"
+        )
+    messages = body.get("messages")
+    if messages is None:
+        return
+    if not isinstance(messages, (list, tuple)):
+        raise SamplingInstructionPersistenceError(
+            session_id=session_id,
+            offending_role=f"<unreadable messages: {type(messages).__name__}>",
+        )
+    for msg in messages:
+        if not isinstance(msg, Mapping):
+            offending = f"<unreadable message: {type(msg).__name__}>"
+        else:
+            role = msg.get("role")
+            if isinstance(role, str) and role in _LEGITIMATE_ROLES:
+                continue
+            # A missing or non-string role was skipped until 0.10.28.
+            offending = role if isinstance(role, str) else f"<unreadable role: {role!r}>"
+        raise SamplingInstructionPersistenceError(session_id=session_id, offending_role=offending)
+
+
 def audit_sampling_request(
-    request: dict[str, Any],
+    request: Mapping[str, Any],
     session_state: SamplingSessionState,
     cfg: SamplingGuardConfig,
     *,
@@ -165,7 +268,9 @@ def audit_sampling_request(
 
     Args:
         request: The MCP sampling request body (``messages``,
-            ``maxTokens``, etc.). Shape per MCP spec 2025-11-25.
+            ``maxTokens``, ``systemPrompt``, etc.), or the whole
+            ``sampling/createMessage`` JSON-RPC message, whose ``params`` is read
+            too. Shape per MCP spec 2025-11-25.
         session_state: Mutable per-session counter — callers are
             responsible for scoping this to a single MCP session.
         cfg: Active :class:`SamplingGuardConfig`. Typically from
@@ -177,14 +282,16 @@ def audit_sampling_request(
     Raises:
         SamplingQuotaExceeded: Session has hit
             ``cfg.max_sampling_requests_per_session``.
-        SamplingInstructionPersistenceError: Request contains a
-            ``system``-role message and
-            ``cfg.forbid_persistent_instructions`` is True.
+        SamplingInstructionPersistenceError: Request carries a non-empty
+            ``systemPrompt``, a message whose role is not user / assistant /
+            tool (a missing role included), or messages of a shape the guard
+            cannot read, and ``cfg.forbid_persistent_instructions`` is True.
         SamplingConsentMissingError: Per-request consent missing.
-        ValueError: ``request.maxTokens`` exceeds
-            ``cfg.max_tokens_per_sampling_request``. (ValueError, not
-            AirlockError, because the client sending an out-of-spec
-            budget is a caller mistake, not an attack signal.)
+        ValueError: ``request`` (or its ``params``) is not a mapping, or
+            ``maxTokens`` exceeds ``cfg.max_tokens_per_sampling_request``, is
+            below 1, or is not a number. (ValueError, not AirlockError, because
+            the client sending an out-of-spec budget is a caller mistake, not an
+            attack signal.)
     """
     # 1. Consent — checked first so failure isn't muddled by quota math.
     if cfg.require_user_consent_per_request and not user_consented:
@@ -199,32 +306,27 @@ def audit_sampling_request(
             cap=cfg.max_sampling_requests_per_session,
         )
 
+    bodies = _request_bodies(request, session_state.session_id)
+
     # 3. Per-request max-tokens sanity — callers that ask for 1M tokens
     #    in a single sampling call are almost certainly the
     #    quota-exhaustion tell Unit 42 calls out. ValueError, not
     #    AirlockError, because this is a misshapen request, not a
-    #    security event.
-    requested_max = request.get("maxTokens")
-    if isinstance(requested_max, int) and requested_max > cfg.max_tokens_per_sampling_request:
-        raise ValueError(
-            f"MCP sampling request for session "
-            f"{session_state.session_id!r} asked for "
-            f"maxTokens={requested_max}, exceeds cap "
-            f"{cfg.max_tokens_per_sampling_request}"
-        )
+    #    security event. Absent maxTokens is not checked (the client's
+    #    own default applies); any value present is read or refused.
+    for body in bodies:
+        if body.get("maxTokens") is not None:
+            _check_max_tokens(
+                body["maxTokens"],
+                session_state.session_id,
+                cfg.max_tokens_per_sampling_request,
+            )
 
-    # 4. Persistent-instruction injection — refuse system-role messages.
+    # 4. Persistent-instruction injection — refuse systemPrompt and
+    #    system-role (or unreadable) messages.
     if cfg.forbid_persistent_instructions:
-        messages = request.get("messages") or []
-        for msg in messages:
-            role = msg.get("role") if isinstance(msg, dict) else None
-            if role is None:
-                continue
-            if role not in _LEGITIMATE_ROLES:
-                raise SamplingInstructionPersistenceError(
-                    session_id=session_state.session_id,
-                    offending_role=str(role),
-                )
+        for body in bodies:
+            _check_persistent_instructions(body, session_state.session_id)
 
     session_state.requests_made += 1
     logger.debug(

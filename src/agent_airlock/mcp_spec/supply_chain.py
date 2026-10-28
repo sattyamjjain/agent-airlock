@@ -120,19 +120,78 @@ class MCPBridgeSSRFBlocked(AirlockError):
         super().__init__(f"MCP bridge SSRF blocked: {target_url!r} → {resolved} ({reason})")
 
 
-_PRIVATE_BLOCK_REASONS: tuple[tuple[str, str], ...] = (
-    ("127.0.0.0/8", "loopback"),
-    ("10.0.0.0/8", "RFC1918 private (10/8)"),
-    ("172.16.0.0/12", "RFC1918 private (172.16/12)"),
-    ("192.168.0.0/16", "RFC1918 private (192.168/16)"),
-    ("169.254.0.0/16", "link-local / AWS IMDS"),
-    ("100.64.0.0/10", "carrier-grade NAT"),
-    ("::1/128", "IPv6 loopback"),
-    ("fc00::/7", "IPv6 unique-local"),
-    ("fe80::/10", "IPv6 link-local"),
-)
+#: Advisory the delegated SSRF guard names in its deny hints.
+_BRIDGE_ADVISORY = "CVE-2026-26015"
 
-_PRIVATE_NETS = [(ipaddress.ip_network(n), r) for n, r in _PRIVATE_BLOCK_REASONS]
+#: Cloud-metadata host names refused outright, before any DNS lookup.
+_METADATA_HOSTNAMES = frozenset({"metadata", "metadata.google.internal", "169.254.169.254"})
+
+#: Carrier-grade NAT (RFC 6598). Python's ``ipaddress`` calls it neither private nor
+#: reserved, so ``SSRFEgressGuard`` admits it; the bridge has refused it since v0.5.3 and
+#: still does, on top of the guard's own ranges.
+_CARRIER_GRADE_NAT = ipaddress.ip_network("100.64.0.0/10")
+
+
+class _RecordingResolver:
+    """An ``SSRFEgressGuard`` resolver that keeps every address it resolved.
+
+    Every failure is an ``OSError``, which the guard turns into a fail-closed
+    ``deny_unresolvable``: a host name the IDNA codec cannot encode raises
+    ``UnicodeError`` (a ``ValueError``) out of ``getaddrinfo``, and a lookup that
+    returns no address is no answer at all.
+    """
+
+    def __init__(self) -> None:
+        self.addresses: list[str] = []
+
+    def __call__(self, host: str) -> list[str]:
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except ValueError as exc:
+            raise OSError(f"host {host!r} cannot be resolved: {exc}") from exc
+        addresses = [str(info[4][0]).split("%", 1)[0] for info in infos]
+        if not addresses:
+            raise OSError(f"host {host!r} resolved to no address")
+        self.addresses.extend(addresses)
+        return addresses
+
+
+def _in_carrier_grade_nat(address: str) -> bool:
+    """Whether ``address`` (or the IPv4 address an IPv6 form maps) is in 100.64.0.0/10."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return ip.ipv4_mapped in _CARRIER_GRADE_NAT
+    return ip in _CARRIER_GRADE_NAT
+
+
+def _bridge_host(target_url: object) -> str:
+    """The host ``target_url`` names, or the bridge's refusal when it names none.
+
+    Raises:
+        MCPBridgeSSRFBlocked: The URL is not a ``str``, cannot be parsed, or has no host.
+    """
+    if not isinstance(target_url, str):
+        raise MCPBridgeSSRFBlocked(
+            target_url=repr(target_url),
+            resolved="<unreadable>",
+            reason=f"target_url is a {type(target_url).__name__}, not a str",
+        )
+    try:
+        host = urlparse(target_url).hostname
+    except ValueError as exc:
+        raise MCPBridgeSSRFBlocked(
+            target_url=target_url, resolved="<unparseable>", reason=f"malformed URL: {exc}"
+        ) from exc
+    if not host:
+        raise MCPBridgeSSRFBlocked(
+            target_url=target_url,
+            resolved="<unparseable>",
+            reason="no hostname in URL",
+        )
+    return host
 
 
 def check_mcp_bridge_target(
@@ -141,57 +200,62 @@ def check_mcp_bridge_target(
 ) -> None:
     """Refuse ``target_url`` if it resolves to a private / internal range.
 
+    The address decision is
+    :meth:`agent_airlock.ssrf_egress_guard.SSRFEgressGuard.check_url`: it refuses a
+    parser-differential authority, decodes every spelling of an IP literal (``0.0.0.0``,
+    ``[::]``, IPv4-mapped and NAT64 IPv6, hex / decimal / octal / short IPv4) and checks
+    every address a host name resolves to. Until 0.10.28 a hand-rolled range list here
+    admitted ``0.0.0.0``, ``[::ffff:127.0.0.1]``, ``[::]`` and NAT64. The bridge adds two
+    refusals of its own: the cloud-metadata host names, before any lookup, and
+    carrier-grade NAT (100.64.0.0/10), which the guard admits.
+
     Args:
-        target_url: The URL a tool wants to fetch.
-        allowed_hosts: Explicit allow-list (hostnames). A match on
-            hostname bypasses IP-range checks — use sparingly.
+        target_url: The URL a tool wants to fetch. Anything but a ``str`` is refused.
+        allowed_hosts: Explicit allow-list (host names or IPs, case-insensitive). A
+            match on the written host, or on an address it resolves to, bypasses the
+            range checks — use sparingly. A parser-differential authority is refused
+            even for an allow-listed host.
 
     Raises:
-        MCPBridgeSSRFBlocked: If the URL's hostname resolves to any
-            forbidden IP range and is not on ``allowed_hosts``.
+        MCPBridgeSSRFBlocked: If the URL is not a string or cannot be parsed, has no
+            host, names a cloud-metadata host, or resolves to any forbidden range and
+            is not on ``allowed_hosts``.
+        TypeError: ``allowed_hosts`` is a bare ``str`` / ``bytes`` or holds a non-string.
     """
-    parsed = urlparse(target_url)
-    host = parsed.hostname
-    if not host:
-        raise MCPBridgeSSRFBlocked(
-            target_url=target_url,
-            resolved="<unparseable>",
-            reason="no hostname in URL",
-        )
-    if host in allowed_hosts:
-        return
+    from ..ssrf_egress_guard import SSRFEgressGuard, SSRFEgressVerdict
 
-    # Refuse bare metadata hostnames outright — no DNS needed.
-    if host.lower() in {"metadata", "metadata.google.internal", "169.254.169.254"}:
+    if isinstance(allowed_hosts, (str, bytes)) or not all(
+        isinstance(name, str) for name in allowed_hosts
+    ):
+        raise TypeError(f"allowed_hosts must be a collection of host strings: {allowed_hosts!r}")
+    host = _bridge_host(target_url).lower()
+    allowed = {name.strip().lower() for name in allowed_hosts}
+    if host in _METADATA_HOSTNAMES and host not in allowed:
         raise MCPBridgeSSRFBlocked(
             target_url=target_url,
             resolved=host,
             reason="cloud metadata endpoint (canonical SSRF target)",
         )
 
-    # Resolve every A/AAAA record; any one hitting a private range = reject.
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror as exc:
+    resolver = _RecordingResolver()
+    decision = SSRFEgressGuard(
+        allow_internal_hosts=allowed, resolver=resolver, advisory=_BRIDGE_ADVISORY
+    ).check_url(target_url)
+    if not decision.allowed:
         raise MCPBridgeSSRFBlocked(
             target_url=target_url,
-            resolved=host,
-            reason=f"DNS resolution failed: {exc}",
-        ) from exc
-
-    for info in infos:
-        ip_str = str(info[4][0])
-        try:
-            ip = ipaddress.ip_address(ip_str)
-        except ValueError:
-            continue
-        for net, reason in _PRIVATE_NETS:
-            if ip in net:
-                raise MCPBridgeSSRFBlocked(
-                    target_url=target_url,
-                    resolved=ip_str,
-                    reason=reason,
-                )
+            resolved=decision.resolved_ip or decision.host or "<unparseable>",
+            reason=decision.explain[0] if decision.explain else decision.verdict.value,
+        )
+    if decision.verdict is SSRFEgressVerdict.ALLOW_HOST_ALLOWLISTED:
+        return
+    for address in [decision.resolved_ip] if decision.resolved_ip else resolver.addresses:
+        if address.lower() not in allowed and _in_carrier_grade_nat(address):
+            raise MCPBridgeSSRFBlocked(
+                target_url=target_url,
+                resolved=address,
+                reason="carrier-grade NAT (100.64.0.0/10)",
+            )
 
 
 # -----------------------------------------------------------------------------
