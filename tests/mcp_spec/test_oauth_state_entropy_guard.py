@@ -84,9 +84,15 @@ class TestEmptyState:
         result = guard.evaluate({"state": ""})
         assert result.verdict == "warn"
 
-    def test_non_string_warns(self, guard: OAuthStateEntropyGuard) -> None:
+    def test_non_string_is_refused(self, guard: OAuthStateEntropyGuard) -> None:
+        """A state of no readable shape is refused (0.10.28).
+
+        Until 0.10.28 this pinned ``warn``: a non-string state was never read, so the same
+        branch passed a ``[payload]`` list (``parse_qs`` output) or ``bytes`` payload with a
+        warning. A list or ``bytes`` state is read now; any other shape is ``block``.
+        """
         result = guard.evaluate({"state": 42})
-        assert result.verdict == "warn"
+        assert result.verdict == "block"
 
 
 class TestEvaluateOrRaise:

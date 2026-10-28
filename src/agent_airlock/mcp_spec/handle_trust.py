@@ -89,6 +89,21 @@ def _reject(reason: str, message: str, **fields: Any) -> HandleTrustError:
     )
 
 
+def _reserved_names(reserved: Iterable[str]) -> frozenset[str]:
+    """The reserved decision-header set, lower-cased.
+
+    Raises:
+        TypeError: ``reserved`` is a bare ``str`` / ``bytes`` (it would be read as its
+            characters, so no real header would ever match) or holds a non-string.
+    """
+    if isinstance(reserved, (str, bytes, bytearray)):
+        raise TypeError(f"reserved must be a collection of header names, not {reserved!r}")
+    names = list(reserved)
+    if not all(isinstance(name, str) for name in names):
+        raise TypeError(f"reserved must hold header-name strings: {names!r}")
+    return frozenset(name.strip().lower() for name in names)
+
+
 def validate_no_reserved_header_override(
     candidate_headers: Iterable[str],
     *,
@@ -101,6 +116,10 @@ def validate_no_reserved_header_override(
     of the reserved decision headers would let the argument channel set or override a value
     the policy trusts, and is a confused-deputy vector.
 
+    Every candidate is read: a bare string is refused rather than walked as its characters,
+    and a candidate that is not a string (``bytes``, a nested list) is refused rather than
+    skipped, as it was until 0.10.28. Surrounding whitespace is ignored when comparing.
+
     Args:
         candidate_headers: the header names the tool's ``x-mcp-header`` annotations would
             set (as they appear on the wire, e.g. ``Mcp-Param-Region``), or the raw
@@ -108,11 +127,30 @@ def validate_no_reserved_header_override(
         reserved: the decision-header set (default :data:`RESERVED_DECISION_HEADERS`).
 
     Raises:
-        HandleTrustError: if any candidate resolves (case-insensitively) to a reserved header.
+        HandleTrustError: if any candidate resolves (case-insensitively) to a reserved header,
+            or the candidates (or one of them) are not header-name strings.
+        TypeError: ``reserved`` is a bare string or holds a non-string.
     """
-    reserved_set = {r.lower() for r in reserved}
+    reserved_set = _reserved_names(reserved)
+    if isinstance(candidate_headers, (str, bytes, bytearray)) or not isinstance(
+        candidate_headers, Iterable
+    ):
+        raise _reject(
+            "unreadable_candidate_headers",
+            f"candidate headers must be a collection of header names, got "
+            f"{type(candidate_headers).__name__} {candidate_headers!r}; refusing rather "
+            "than reading it as something else (SEP-2243)",
+            header=repr(candidate_headers),
+        )
     for name in candidate_headers:
-        if isinstance(name, str) and name.lower() in reserved_set:
+        if not isinstance(name, str):
+            raise _reject(
+                "unreadable_candidate_header",
+                f"candidate header {name!r} is a {type(name).__name__}, not a header-name "
+                "string; refusing rather than skipping it (SEP-2243)",
+                header=repr(name),
+            )
+        if name.strip().lower() in reserved_set:
             raise _reject(
                 "reserved_header_override",
                 f"x-mcp-header would set/override the policy-decision header {name!r}; "
@@ -122,18 +160,50 @@ def validate_no_reserved_header_override(
             )
 
 
+def _minted_pool(minted: Any, handle: Any) -> Iterable[Any]:
+    """The handles a scope minted, as a container ``handle`` can be looked up in.
+
+    ``None`` is a scope that minted nothing. A ``str`` / ``bytes`` is one token, never its
+    characters (until 0.10.28 ``minted="h1x"`` admitted ``"h"``). Any other iterable is
+    its items; anything else is refused.
+
+    Raises:
+        HandleTrustError: ``minted`` is not iterable.
+    """
+    if minted is None:
+        return ()
+    if isinstance(minted, (str, bytes, bytearray)):
+        return (minted,)
+    if isinstance(minted, (set, frozenset)):
+        return minted
+    if not isinstance(minted, Iterable):
+        raise _reject(
+            "unreadable_minted_scope",
+            f"the minted scope is a {type(minted).__name__}, not a collection of handles; "
+            "refusing every handle against it (SEP-2567)",
+            handle=handle,
+        )
+    return tuple(minted)
+
+
 def validate_handle_minted(handle: Any, *, minted: Iterable[Any]) -> None:
     """Deny a server-minted handle that was not minted within the current policy scope.
 
     Deny-by-default: if the scope has minted nothing, or the presented handle is not among
     the minted values, the call is rejected. ``minted`` is whatever the policy scope tracks
-    as the handles it issued (a set/frozenset, or any container/iterable of values).
+    as the handles it issued (a set/frozenset, or any container/iterable of values); a
+    ``str`` scope is one token, and ``None`` is a scope that minted nothing.
 
     Raises:
-        HandleTrustError: if ``handle`` was not minted within the scope.
+        HandleTrustError: if ``handle`` was not minted within the scope, cannot be looked
+            up in it (an unhashable handle against a set), or the scope is not iterable.
     """
-    minted_set = set(minted) if not isinstance(minted, (set, frozenset)) else minted
-    if handle not in minted_set:
+    pool = _minted_pool(minted, handle)
+    try:
+        found = handle in pool
+    except (TypeError, ValueError):  # unhashable, or an uncomparable value
+        found = False
+    if not found:
         raise _reject(
             "unminted_handle",
             f"handle {handle!r} was not minted within the current policy scope; a "
