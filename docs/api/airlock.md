@@ -121,10 +121,13 @@ A resolver that returns `None` refuses the call. Until 0.10.24 it ran the call w
 policy at all, so a tenant the resolver did not know was allowed everything. Return
 `PERMISSIVE_POLICY` to allow a call on purpose.
 
-The resolver receives the context read from the tool's first argument (an object with a
-`context`, `ctx`, `request_context` or `session_context` attribute, such as an agent
-framework's run context). When that carries no agent id, the identity, roles and workspace
-of a context set around the call (`with AirlockContext(...)`) are used. For a tool with
+The resolver receives the context read from the tool's first positional argument when that
+is a run wrapper: an object with a `context`, `ctx`, `request_context` or `session_context`
+attribute that model JSON cannot have built, such as an agent framework's run context (the
+tool's own model or dataclass with a `context` field is not one; see
+[Agent Identity](../guide/policy.md#agent-identity)). When the call has none, or its
+context carries no agent id, the identity, roles and workspace of a context set around the
+call (`with AirlockContext(...)`) are used. For a tool with
 neither, like `my_tool` here, the context is empty (`workspace_id` is `None`), so
 `resolve_policy` returns the 100/hour policy.
 
@@ -238,9 +241,13 @@ async def async_tool(x: int) -> int:
 
 `@Airlock` on a generator function masks each item the generator yields, as it would a
 returned value, and runs each step under the call's network airgap and context (until
-0.10.20 it did neither). `StreamingAirlock` is not a decorator. For a cap on the stream as a
-whole, decorate the generator function with `create_streaming_wrapper`, which masks each
-string chunk and applies `max_output_chars` across the chunks:
+0.10.20 it did neither). Since 0.10.28 the same holds for a coroutine or a lazy iterator a
+tool returns (`map`, `filter`, an iterator or async iterator class that is not a context
+manager), and an Airlock refusal raised while any of these runs is written to the audit log
+as a block before the consumer gets the exception. `StreamingAirlock` is not a decorator.
+For a cap on the stream as a whole, decorate the generator function with
+`create_streaming_wrapper`, which masks each string chunk and applies `max_output_chars`
+across the chunks:
 
 ```python
 from agent_airlock import create_streaming_wrapper

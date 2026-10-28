@@ -18,8 +18,8 @@ signer raise :class:`UnsignedMCPServerAdded`; an existing entry whose
 mutation identity (below) changed raises
 :class:`MCPCommandMutationDetected`; and a config the guard cannot read
 as strict JSON (JSONC comments, a trailing comma, a repeated key, a
-doubled BOM) raises :class:`MCPConfigUnreadable` instead of reading as a
-config with no servers (v0.10.28).
+doubled BOM) raises :class:`MCPConfigUnreadable` instead of being read
+leniently (v0.10.28).
 
 Mutation identity (v0.10.28)
 ----------------------------
@@ -150,10 +150,10 @@ class MCPCommandMutationDetected(AirlockError):
 class MCPConfigUnreadable(AirlockError):
     """A config (or its trusted baseline) could not be read, so it cannot be diffed.
 
-    Raised instead of reading the config as one with no servers: until v0.10.28 a
-    JSONC comment or trailing comma, a duplicated key, a doubled BOM or an
-    ``mcpServers`` that was not an object all diffed as "no servers", so the new
-    entry they carried was never checked. IDE hosts parse ``mcp.json`` more
+    Raised instead of reading the config leniently: until v0.10.28 a JSONC comment or
+    trailing comma, a doubled BOM or an ``mcpServers`` that was not an object diffed as
+    "no servers", and a duplicated key kept its last copy, so a later empty copy hid
+    the entries before it; either way the new entry they carried went unchecked. IDE hosts parse ``mcp.json`` more
     leniently than :func:`json.loads`, and a duplicated key is read first-wins by
     some parsers and last-wins by others, so a config the guard cannot read
     exactly is refused rather than guessed at.
@@ -292,8 +292,9 @@ def _parse_servers(content: bytes) -> dict[str, Any]:
     comment or trailing comma, a doubled BOM, bytes that are not UTF-8, nesting deeper
     than the parser can follow), a key that appears twice in one object, a top level
     that is not an object, a server map that is not an object and a server name under
-    both keys raise :class:`_UnreadableConfig`. Until v0.10.28 every one of them read as
-    ``{}``, so the entries they carried were never checked.
+    both keys raise :class:`_UnreadableConfig`. Until v0.10.28 an unparseable config read
+    as ``{}`` and a repeated key kept its last copy, so the entries they carried could go
+    unchecked.
     """
     try:
         data = json.loads(content, object_pairs_hook=_reject_duplicate_keys)

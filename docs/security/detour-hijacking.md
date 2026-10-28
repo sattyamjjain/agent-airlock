@@ -70,17 +70,21 @@ declared baseline, and `AuditRecord` carries `run_call_count`, `run_baseline_cal
 `run_amplification_ratio` and `run_input_tokens`. The unit is **calls**, deliberately: the
 paper's token and wall-time figures are not universally observable at this seam, so
 `run_input_tokens` is populated only from the `input_tokens` tag the harness sets on the
-call's context (`with AirlockContext(metadata={"input_tokens": ...})`, or the context
-object passed as the tool's first argument) and is **never estimated**. Until 0.10.14 it
-also read an `_airlock_input_tokens` tool argument, which the model could write.
+call's context (`with AirlockContext(metadata={"input_tokens": ...})`, or the context of a
+run wrapper passed as the tool's first argument, an object model JSON cannot have built)
+and is **never estimated**. Until 0.10.14 it also read an `_airlock_input_tokens` tool
+argument, which the model could write, and until 0.10.28 a tool's own model with a
+`context` field, passed first, counted as a run wrapper.
 
 What still does not reconstruct is the paper's own quantity. `duration_ms` is tool execution
 time, not the agent's end-to-end wall time, and summing it does not reproduce the 92.45%
 figure because it excludes model latency — which is where a detour spends most of what it
 wastes. A call-count ratio is a proxy for that, not a measurement of it.
 
-**No run identity without a harness context.** `session_id` is populated from a context
-object passed as the first positional argument. A harness that does not supply one still
+**No run identity without a harness context.** `session_id` is populated from the context
+of a run wrapper passed as the first positional argument (an object model JSON cannot have
+built; see [Agent Identity](../guide/policy.md#agent-identity)), or from one set around the
+call with `with AirlockContext(session_id=...)`. A harness that does not supply one still
 gets every call logged, but the records are anonymous and cannot be assembled into a run at
 all. Run-level analysis needs grouping before it needs anything else.
 

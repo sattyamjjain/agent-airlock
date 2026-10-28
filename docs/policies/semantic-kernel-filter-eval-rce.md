@@ -91,7 +91,7 @@ single short-circuit predicate.
 | `DENY_PYTHON_LAMBDA` | `lambda x:` syntax detected (CVE-2026-25592) |
 | `DENY_CSHARP_EXPRESSION` | `Expression.Lambda` / `Func<` / `Predicate<` detected (CVE-2026-26030) |
 | `DENY_TEMPLATE_EVAL` | `{{ eval(...) }}` or `${ eval(...) }` detected |
-| `DENY_UNINSPECTABLE` | an argument nested more than 32 levels deep, or a container that contains itself (since 0.10.24) |
+| `DENY_UNINSPECTABLE` | an argument nested more than 32 levels deep, or a container that contains itself (since 0.10.24); bytes in an inspected field that are not valid UTF-8 (since 0.10.28; they were decoded with replacement characters, which could hide a match from the patterns) |
 
 ## Companion preset
 

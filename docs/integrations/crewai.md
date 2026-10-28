@@ -67,12 +67,26 @@ result = crew.kickoff()
    overrides — these win over `Agent.tools` at runtime, so they
    need wrapping too.
 
-3. **Pins `SUPPORTED_CREWAI_VERSIONS`** (listed in the module) —
+3. **Guards the tools CrewAI adds at run time**: delegation tools
+   (`allow_delegation`), MCP tools (`agent.mcps`), platform tools
+   (`agent.apps`), code-execution, multimodal, memory and input-file
+   tools, and the skill loader. None exists when the crew is walked.
+   On the crew and agents it is given (only them), the adapter wraps
+   the methods that hand CrewAI the final tool list and walks what they
+   return: `Crew._prepare_tools` (every crew task, the hierarchical
+   manager's delegation tools included), `Crew.copy` (the copies
+   `kickoff_for_each` and `train` run) and
+   `Agent._add_skill_loader_tool` (the last step before a task or
+   `Agent.kickoff` parses its tools). Where those methods are missing,
+   an agent configured to receive such tools gets a `UserWarning`
+   naming them. Until 0.10.28 these tools ran outside Airlock.
+
+4. **Pins `SUPPORTED_CREWAI_VERSIONS`** (listed in the module) —
    running a version outside this set emits a `UserWarning` (no hard
    fail). Update the tuple once a new release has been smoke-tested
    against the adapter.
 
-4. **`wrap_agent(agent, policy=...)`** is also exposed as a
+5. **`wrap_agent(agent, policy=...)`** is also exposed as a
    single-agent shortcut for the standalone-researcher pattern
    where you don't have a `Crew` yet.
 

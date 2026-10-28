@@ -111,7 +111,7 @@ or for picking individual types.
 | Attribute | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `filesystem_policy` | `FilesystemPolicy \| None` | `None` | Validates path-like arguments |
-| `network_policy` | `NetworkPolicy \| None` | `None` | Egress control while the tool runs |
+| `network_policy` | `NetworkPolicy \| None` | `None` | Egress control while the tool runs; what it covers is in [The Network Airgap](../guide/concepts.md#the-network-airgap) |
 | `honeypot_config` | `HoneypotConfig \| None` | `None` | Deception for blocked calls, e.g. fake success |
 | `capability_policy` | `CapabilityPolicy \| None` | `None` | Checked against `@requires`; a `SecurityPolicy`'s own `capability_policy` takes precedence |
 | `endpoint_policies` | `dict[str, EndpointPolicy]` | `{}` | Per-tool URL rules |

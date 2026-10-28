@@ -43,16 +43,26 @@ result = get_customer(customer_id=123)
 ## What Gets Masked
 
 - **A string result** is masked and, past `max_output_chars`, truncated.
-- **A dict, list, tuple or set** is masked value by value and keeps its type and its
-  keys. It is never truncated, because truncating its serialized form would hand back a
-  different type.
+- **A dict, list, tuple or set** is masked value by value and keeps its type.
+  Dictionary keys are masked too; when two keys mask to the same string, the later ones
+  get a ` (2)`, ` (3)` suffix, so no value is dropped. It is never truncated, because
+  truncating its serialized form would hand back a different type.
 - **Any other object** (a Pydantic model, a dataclass) is returned as it is, since
   rebuilding it with masked fields could break its own invariants. What was detected in
   it is logged as `output_sensitive_data_unmasked` and returned as a warning that says it
-  was *not* masked. Return a dict or a string to have it masked.
+  was *not* masked. The same goes for a value inside a dict, list, tuple or set that the
+  walk cannot rebuild (bytes, a model, a dataclass, a deque...): it is left as it is, and
+  what was found in it is reported as not masked. Return a dict or a string to have it
+  masked.
+
+The audit record's `result_preview` is masked like its `args_preview`, whatever
+`sanitize_output` is set to.
 
 Until 0.10.11 only string results were masked. Every other result was reported as
-masked, in the log, the warnings and the audit record, and returned raw.
+masked, in the log, the warnings and the audit record, and returned raw. Until 0.10.28
+dictionary keys were left alone, a value the walk could not rebuild was skipped without a
+warning, and `result_preview` held the raw text when output masking was off or the result
+was returned unmasked.
 
 ## Sensitive Data Types
 
@@ -238,8 +248,14 @@ When truncated, a notice is appended, inside the limit:
 
 `@Airlock` masks each item a generator tool yields as it would a returned value, and runs
 each step of the generator under the call's network airgap and context. Until 0.10.20 it
-did neither. What `StreamingAirlock` adds is a cap on the whole stream: `max_output_chars`
-counted across chunks, ending the stream once it is reached. Wrap the generator for that:
+did neither. A coroutine or a lazy iterator a tool returns (`map`, `filter`, an iterator or
+async iterator class that is not a context manager) is guarded the same way since 0.10.28:
+each step runs under the call's airgap and context, and each value is masked. An Airlock
+refusal raised while one of these runs (a `NetworkBlockedError`, say) is written to the
+audit log as a block before the consumer gets the exception; the call's own record, written
+when it returned, counts none of the values. What `StreamingAirlock` adds is a cap on the
+whole stream: `max_output_chars` counted across chunks, ending the stream once it is
+reached. Wrap the generator for that:
 
 ```python
 from agent_airlock import StreamingAirlock, AirlockConfig

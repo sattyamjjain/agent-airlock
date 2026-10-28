@@ -95,8 +95,8 @@ each attack. Behaviour a caller can notice is listed under Changed.
   `audit_sampling_request` (`systemPrompt`, non-int `maxTokens`), `OAuthStateEntropyGuard`
   (plain-text and list or bytes `state`, decoys a lenient read now sees),
   `CodegenDelimiterInjectionGuard` (bytes and set shapes, nesting, allow-listed names),
-  `audit_config_diff` (JSONC and duplicate keys read as no servers; `args`, env names,
-  `cwd`, `autoApprove` and other security-relevant fields not diffed), bytes env keys in
+  `audit_config_diff` (JSONC read as no servers, a duplicated key read as its last copy;
+  `args`, env names, `cwd`, `autoApprove` and other security-relevant fields not diffed), bytes env keys in
   `McpSubprocessArgInjectionGuard`, `$dynamicRef` / `$recursiveRef` in `SchemaRefGuard`,
   OIDC version spellings, `handle_trust`, a repeated `iss`, origin / WebSocket /
   transcript / PR-metadata / content-type shapes, attested-admission `iat` / `exp`, a
@@ -135,7 +135,8 @@ each attack. Behaviour a caller can notice is listed under Changed.
 
 - A first positional argument is a run wrapper only when model JSON cannot have built it
   (see Security). A tool's own model, dataclass, mapping or named tuple is an ordinary
-  argument; pass identity with `with AirlockContext(...)` or a framework wrapper. Nothing is
+  argument unless its context is an `AirlockContext` the host put there (then it is read and
+  still walked); pass identity with `with AirlockContext(...)` or a framework wrapper. Nothing is
   read from a wrapper whose context is empty, and `AirlockContext[X]` is `AirlockContext` at
   run time.
 - Step 6 refuses (`budget_exceeded`) an `airlock_tier` that is not a string or an
@@ -216,7 +217,9 @@ each attack. Behaviour a caller can notice is listed under Changed.
   airgap; an allowlisted startup hook's hash does not cover the modules it imports;
   PydanticAI MCP and external toolsets are warned about, not validated; a custom pydantic
   validator that builds a plain object with a `.context` from JSON would still pass as a run
-  wrapper.
+  wrapper. With `sandbox=True` the airgap wraps the E2B dispatch, not the VM: a network
+  policy that does not admit E2B's own API refuses the call as `network_blocked`, as
+  `allow_egress=False` already did, and since 0.10.28 an allowlist policy does too.
 
 ## [0.10.27] - 2026-10-28
 

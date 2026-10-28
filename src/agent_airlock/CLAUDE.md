@@ -116,8 +116,9 @@ src/agent_airlock/
    `ContextExtractor.run_wrapper` accepts is a run wrapper: a verified agent-framework object
    that is not a pydantic model, an object whose context is an `AirlockContext` (pydantic
    cannot build one from JSON), or a plain host class. The tool's own model, dataclass,
-   mapping or named tuple never is, since the model writes those, and nothing is read from
-   a wrapper whose context is empty. Every call gets a fresh `AirlockContext`: it takes the
+   mapping or named tuple counts only through its `AirlockContext` (and is still walked),
+   since the model writes the rest, and nothing is read from a wrapper whose context is
+   empty. Every call gets a fresh `AirlockContext`: it takes the
    agent id and roles of the context set around the call when it has none of its own, and
    that context's session, workspace and user ids whenever it lacks them, unless that
    context names a different agent (`_inherit_ambient_identity`). `_share_run_state` points
@@ -186,8 +187,8 @@ src/agent_airlock/
    whose outcome comes back as JSON: never unpickle anything a sandbox printed
 8. `_post_execution` — when `sanitize_output` is on, sanitize output via
    `_sanitize_tool_output` (a string is masked and truncated; a dict, list, tuple, set or
-   frozenset is masked value by value, string keys included, and keeps its type, masked
-   keys that collide getting a ` (2)` suffix; any other object, top-level or nested, is
+   frozenset is masked value by value, keys included, and keeps its type, masked keys that
+   collide getting a ` (2)` suffix; any other object, top-level or nested, is
    returned as-is and its detections reported as not masked) → audit log (`result_preview`
    masked like `args_preview`, whatever `sanitize_output` says) → mark untrusted output
    (when the resolved policy sets `reauth_on_untrusted_reinvocation`) → reconcile actual vs

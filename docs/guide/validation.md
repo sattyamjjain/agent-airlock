@@ -34,7 +34,7 @@ def delete_user_strict(user_id: int) -> dict:
     return {"deleted": user_id}
 ```
 
-`STRIP_SILENT` strips them without logging.
+`STRIP_SILENT` strips them with nothing logged above debug level.
 
 ### Stripping (Default)
 
@@ -42,9 +42,13 @@ Ghost arguments are stripped and logged:
 
 ```python
 result = delete_user(user_id=123, force=True)
-# Logs a warning: ghost_arguments_stripped  stripped_args=['force']
+# Logs one warning: unknown_args_stripped  stripped_args=['force']
 # Returns: {"deleted": 123}
 ```
+
+No audit record is written for the strip; the call's own record shows the arguments it
+ran with. Until 0.10.28 each strip was logged three times (`ghost_arguments_stripped`
+among them), and `STRIP_SILENT` still logged a warning.
 
 ### Blocking
 

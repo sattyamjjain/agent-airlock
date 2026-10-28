@@ -340,11 +340,14 @@ Automatically detects and masks:
 - Connection Strings (`postgres://`, `mongodb://`)
 - Generic Passwords (8+ characters after `password=`, `pwd=`, `secret=`, `token=`, etc.)
 
-A string, dict, list, tuple or set result is masked. What a generator tool yields is
-masked item by item the same way, and each step of it runs under the call's network airgap
-(until 0.10.20 it did neither). Any other object (a Pydantic model, a dataclass) is returned
-as it is, and what was found in it is logged as not masked. See
-[PII & Secret Masking](guide/sanitization.md).
+A string, dict, list, tuple or set result is masked, dictionary keys included. What a
+generator tool yields is masked item by item the same way, and each step of it runs under
+the call's network airgap (until 0.10.20 it did neither). Since 0.10.28 a coroutine or a
+lazy iterator a tool returns (`map`, `filter`, an iterator class that is not a context
+manager) is guarded the same way, and an Airlock refusal raised while one of them runs is
+audited as a block before the consumer gets the exception. Any other object (a Pydantic
+model, a dataclass), returned or inside a container, is returned as it is, and what was
+found in it is logged as not masked. See [PII & Secret Masking](guide/sanitization.md).
 
 ### Masking Strategies
 
@@ -402,12 +405,16 @@ A call to `delete_records` refused by a `denied_tools=["delete_*"]` policy:
 }
 ```
 
-Fields with no value are left out. `agent_id` and `session_id` come from a context carried
-by the tool's first argument, or, when the call has none, from one set around it with
-`with AirlockContext(...)`. Argument values whose names look sensitive (`password`, `token`,
-`api_key`, ...) are written as `[REDACTED]`, and every other argument preview is passed
-through the PII and secret masker before it is cut to length, so an email address or key
-given in any argument is not written as-is. Until 0.10.20 only the names were checked.
+Fields with no value are left out. `agent_id` and `session_id` come from the context a run
+wrapper carries as the tool's first argument (an object model JSON cannot have built, such
+as a framework's run context; see [Agent Identity](guide/policy.md#agent-identity)), or,
+when the call has none, from one set around it with `with AirlockContext(...)`. Argument
+values whose names look sensitive (`password`, `token`, `api_key`, ...) are written as
+`[REDACTED]`, and every other argument preview is passed through the PII and secret masker
+before it is cut to length, so an email address or key given in any argument is not
+written as-is. Until 0.10.20 only the names were checked. `result_preview` is masked the
+same way, whatever `sanitize_output` is set to; until 0.10.28 it held the raw text with
+`sanitize_output=False`, or for a result returned unmasked (a model, a dataclass).
 
 ### Log Destinations
 

@@ -203,9 +203,40 @@ On each call, in this order, this single decorator:
 5. Verifies declared capabilities, when a `CapabilityPolicy` is set
 6. Checks endpoint policies and the per-model-tier budget, when configured
 7. Validates types strictly, then runs the function: in the sandbox with `sandbox=True`,
-   inside the network airgap when a `NetworkPolicy` forbids egress
+   inside the network airgap whenever a `NetworkPolicy` is set
 8. Sanitizes the output
 9. Writes the audit record and returns the result, or a blocked response
+
+## The Network Airgap
+
+With `AirlockConfig(network_policy=NetworkPolicy(...))`, the tool runs inside
+`network_airgap`, which patches this process's sockets for the call. It checks the address
+of `socket.connect`, `connect_ex`, `sendto` and `sendmsg`, and the name looked up by
+`getaddrinfo`, `gethostbyname`, `gethostbyname_ex`, `gethostbyaddr`, `getnameinfo` and
+asyncio's `loop.getaddrinfo` / `loop.getnameinfo` (a lookup of this machine's own name
+excepted). `allow_egress=False` refuses all of them; a policy that allows egress applies its
+`allowed_hosts`, `allowed_ports` and `block_dns`. A refusal raises `NetworkBlockedError` in
+the tool, and a call it escapes from is refused as `network_blocked`. Until 0.10.28
+`@Airlock` entered the airgap only for a policy that forbade egress, so allowlists and
+`block_dns` were ignored, and only `connect`, `connect_ex` and `getaddrinfo` were checked.
+
+The airgap follows the call's context, which sets its limits:
+
+- The tool's own code, the asyncio tasks it creates and `asyncio.to_thread` run inside it.
+  A thread the tool starts itself (`threading.Thread`, a `ThreadPoolExecutor`,
+  `loop.run_in_executor`) does not, unless the interpreter copies the context into new
+  threads (`sys.flags.thread_inherit_context`).
+- A subprocess, a socket made from the `_socket` module directly, an event loop that does
+  its own socket I/O (uvloop) and, with `sandbox=True`, the tool's code in the E2B
+  micro-VM (see [Network Access](sandbox.md#network-access)) are not covered.
+- Nested airgaps intersect, so an inner policy cannot widen an outer one. Airgapped tools
+  running concurrently on one event loop each keep their own, and the host's other
+  coroutines are not airgapped while a tool awaits.
+- A task the tool leaves running after it returns is checked only while some airgap is
+  still open in the process.
+- A name on `allowed_hosts` admits the addresses it resolves to, for that call, internal
+  ones included: keeping a tool off internal addresses is the job of `EndpointPolicy` and
+  the SSRF egress guard.
 
 ## Unknown Arguments Mode (V0.4.0)
 

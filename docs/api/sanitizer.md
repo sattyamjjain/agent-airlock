@@ -37,7 +37,8 @@ def sanitize_output(
 ```
 
 `@Airlock` does not go through this conversion for a dict, list, tuple or set result: it masks
-the values and keeps the type. See [What Gets Masked](../guide/sanitization.md#what-gets-masked).
+the values and dictionary keys and keeps the type. See
+[What Gets Masked](../guide/sanitization.md#what-gets-masked).
 
 ### Example
 

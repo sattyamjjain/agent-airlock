@@ -142,9 +142,10 @@ allowed_roots = ["/app/data", "/tmp"]
 deny_patterns = ["*.env", "**/.git/**"]
 allow_symlinks = false
 
-# V0.3.0 Network
+# V0.3.0 Network: only api.company.com, on port 443. allow_egress = false would refuse
+# every connection and lookup, and the allowlists would then do nothing
 [airlock.network]
-allow_egress = false
+allow_egress = true
 allowed_hosts = ["api.company.com"]
 allowed_ports = [443]
 
