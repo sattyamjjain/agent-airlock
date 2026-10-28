@@ -68,7 +68,8 @@ class ToolManifestUnreadable(AirlockError):
     """Raised when a tool manifest has no canonical JSON form to digest (fail-closed).
 
     A manifest that is not a mapping, holds a value JSON cannot encode, keys of mixed
-    types (``sort_keys`` cannot order them) or itself has no digest, so it can be
+    types (``sort_keys`` cannot order them), itself, or nesting past the interpreter's
+    recursion guard has no digest, so it can be
     neither registered nor verified. Until 0.10.28 these escaped as a bare
     ``TypeError`` / ``ValueError`` from ``json.dumps``.
     """
@@ -88,8 +89,8 @@ def _canonicalize_manifest(manifest: dict[str, Any]) -> bytes:
         raise ToolManifestUnreadable(reason="manifest is not a mapping")
     try:
         return json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    except (TypeError, ValueError) as exc:
-        raise ToolManifestUnreadable(reason=str(exc)) from exc
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise ToolManifestUnreadable(reason=str(exc) or type(exc).__name__) from exc
 
 
 def compute_tool_manifest_digest(manifest: dict[str, Any]) -> str:

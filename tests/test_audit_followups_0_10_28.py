@@ -232,3 +232,28 @@ class TestEntropySkipThresholdIsDeclaredANoOp:
                 for t in (0.0, 3.0, 8.0)
             }
         assert len(verdicts) == 1
+
+
+def _nested(depth: int) -> list[Any]:
+    root: list[Any] = []
+    current = root
+    for _ in range(depth):
+        child: list[Any] = []
+        current.append(child)
+        current = child
+    return root
+
+
+class TestNestingTooDeepToEncodeIsRefused:
+    """Past the interpreter's recursion guard ``json.dumps`` raises RecursionError."""
+
+    def test_the_pin_guard_returns_a_verdict(self) -> None:
+        decision = ToolDefinitionPinGuard().check({"name": "t", "inputSchema": _nested(100_000)})
+        assert decision.verdict == ToolDefinitionVerdict.DENY_UNINSPECTABLE
+
+    def test_the_manifest_digest_raises_its_own_error(self) -> None:
+        with pytest.raises(ToolManifestUnreadable):
+            compute_tool_manifest_digest({"params": _nested(100_000)})
+
+    def test_control_moderate_nesting_still_digests(self) -> None:
+        assert len(compute_tool_manifest_digest({"params": _nested(100)})) == 64

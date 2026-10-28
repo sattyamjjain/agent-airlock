@@ -128,7 +128,7 @@ preset, and
   serializes as its own string value. Two `*Verdict`s that are frozen dataclasses and the
   inspection-style `Literal[...]` aliases are exceptions, not shapes to spread.
 - Logger names are `agent-airlock.mcp_spec.<module>`. Pure validators may have no logger
-  (`tool_definition_pin_guard` hands back `Decision.audit_event()` instead).
+  (`tool_definition_pin_guard` hands back the `Decision.audit_event` property instead).
 - Exceptions subclass `..exceptions.AirlockError`, except the `ValueError` subclasses in
   `oauth`, `transport` and the 2026-07-28 spec validators, and
   `openapi_drift_guard.OpenAPIDriftViolation`, which subclasses bare `Exception`.

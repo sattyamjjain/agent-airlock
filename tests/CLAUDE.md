@@ -47,6 +47,12 @@ which `make test-badge` also counts as excluded: the docker-marked tests, `tests
 - **An `importorskip` needs a CI job that installs its dependency**, added in the same PR,
   and an extra-backed file joins the `test` job's step that runs those files and fails on
   any skip: a skipped module reads like a passing one in the summary line.
+- **A wall-clock p99 assertion is the best of five 100-sample batches** (the `min` across
+  batches of each sorted batch's 99th value), not one batch's p99 and not the median of
+  them: one batch's p99 is its second-worst sample, so a single scheduler hiccup set it, and
+  a median tracked the host's load rather than the code. The ceiling widens under
+  `sys.gettrace()`, since coverage inflates per-call cost several-fold in CI.
+  `grep -rln batch_p99s tests --include='*.py'` lists the tests that do this; copy one.
 
 <!-- END AUTO-MANAGED -->
 

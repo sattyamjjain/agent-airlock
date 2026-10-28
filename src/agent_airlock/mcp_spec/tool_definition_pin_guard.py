@@ -88,10 +88,11 @@ class _NotCanonical(ValueError):
 def _encode(value: Any) -> str:
     try:
         return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
-    except (TypeError, ValueError) as exc:
-        # sort_keys cannot order keys of mixed types (``{1: ..., "b": ...}``) and a
-        # container that holds itself has no serialisation at all; either way there
-        # is no digest to compare, so the definition cannot be judged as pinned.
+    except (TypeError, ValueError, RecursionError) as exc:
+        # sort_keys cannot order keys of mixed types (``{1: ..., "b": ...}``), a
+        # container that holds itself has no serialisation at all, and one nested past
+        # the interpreter's recursion guard cannot be encoded; either way there is no
+        # digest to compare, so the definition cannot be judged as pinned.
         raise _NotCanonical(f"tool definition has no canonical JSON form: {exc}") from exc
 
 
