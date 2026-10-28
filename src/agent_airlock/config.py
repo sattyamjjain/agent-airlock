@@ -93,7 +93,10 @@ class AirlockConfig:
         filesystem_policy: Filesystem security policy for path validation.
             Validates paths against allowed roots, deny patterns, and symlink rules.
         network_policy: Network egress policy for blocking data exfiltration.
-            Controls which hosts/ports can be accessed during tool execution.
+            Controls which hosts/ports can be accessed during tool execution. Applied
+            to every guarded call when set, a host/port allowlist and ``block_dns`` on a
+            policy that allows egress included (until 0.10.28 only
+            ``allow_egress=False`` was applied).
         honeypot_config: Honeypot configuration for deception-based security.
             Returns fake data instead of errors to prevent agent exploitation.
         capability_policy: Capability gating policy for per-tool permissions (V0.4.0+).

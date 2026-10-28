@@ -18,7 +18,8 @@ The installed package: `@Airlock` (`core.py`, sync and async) and every layer it
   beta, opt-in Anthropic Managed Agents backend runs nothing: its `execute()` returns a
   failed `SandboxResult` by design
 - `mcp_spec/` guards mapped to specific named CVEs and MCP spec clauses — stdio injection,
-  OAuth, DNS rebinding, SSRF (`$ref` dereference, through `ssrf_egress_guard`), eval-RCE,
+  OAuth, DNS rebinding, SSRF (`$ref` / `$dynamicRef` / `$recursiveRef` dereference, through
+  `ssrf_egress_guard`), eval-RCE,
   WebSocket origin hijack, task lifecycle, handle trust
 - Framework adapters (the README's gated list, `_ADAPTER_SHIPPED_MODULES` in
   `tests/test_readme_framework_claims.py`): FastMCP, LangChain/LangGraph, Anthropic Messages
@@ -51,8 +52,9 @@ src/agent_airlock/
 ├── exceptions.py      AirlockError base only; exception classes live where they're raised
 ├── testing.py         state-reset helpers for test isolation
 ├── _log.py            structlog-or-stdlib logging shim
-├── _sandbox_errors.py sandbox exception classes shared by core.py and sandbox.py, so
-│                      core.py can raise them without importing agent_airlock.sandbox
+├── _sandbox_errors.py sandbox exception classes shared by core.py, sandbox.py and
+│                      sandbox_backend.py, so core.py can raise them without importing
+│                      agent_airlock.sandbox
 ├── _arg_walk.py       names positional arguments by parameter and walks what they hold
 │                      (containers, the tool's own models) for the value gates (2.7, 3, 5)
 │
@@ -103,23 +105,31 @@ src/agent_airlock/
    - 0.6 OAuth token audience (`expected_token_audience`, inert until set, `warn` by
      default): the `aud` of the claims the host put on context metadata under
      `access_token_claims` (`_call_metadata`), never a tool argument; `deny` also refuses a
-     call with no claims
+     call with no claims, and a malformed `aud` (port out of range, unclosed bracket) is
+     refused under `deny` and logged under `warn`. The comparison reads a scheme's default
+     port and a root `/` as absent
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Resolve policy (static, or `Callable[[AirlockContext], SecurityPolicy | None]`; a
    resolver that returns None refuses the call) and check it against the caller's identity
-   (one a first argument carries at a `ContextExtractor.CONTEXT_ATTRS` name such as
-   `.context` / `.ctx`, else the one set around the call). Every call gets a fresh
-   `AirlockContext`: it takes the agent id and roles of the context set around the call when
-   it has none of its own, and that context's session, workspace and user ids whenever it
-   lacks them, unless that context names a different agent (`_inherit_ambient_identity`).
-   `_share_run_state` points its untrusted-output counts and `authorize_once` grants at the
-   run's context (an `AirlockContext` the first argument carries, else the one set around
-   the call unless it names a different agent than the call does) and merges that context's
-   metadata under its own, so a policy with `reauth_on_untrusted_reinvocation` refuses a
-   call that belongs to no run
+   (the context a run wrapper carries at a `ContextExtractor.CONTEXT_ATTRS` name such as
+   `.context` / `.ctx`, else the one set around the call). Only a first positional argument
+   `ContextExtractor.run_wrapper` accepts is a run wrapper: a verified agent-framework object
+   that is not a pydantic model, an object whose context is an `AirlockContext` (pydantic
+   cannot build one from JSON), or a plain host class. The tool's own model, dataclass,
+   mapping or named tuple never is, since the model writes those, and nothing is read from
+   a wrapper whose context is empty. Every call gets a fresh `AirlockContext`: it takes the
+   agent id and roles of the context set around the call when it has none of its own, and
+   that context's session, workspace and user ids whenever it lacks them, unless that
+   context names a different agent (`_inherit_ambient_identity`). `_share_run_state` points
+   its untrusted-output counts and `authorize_once` grants at the run's context (an
+   `AirlockContext` an accepted run wrapper carries, else the one set around the call unless
+   it names a different agent than the call does) and merges that context's metadata under
+   its own, so a policy with `reauth_on_untrusted_reinvocation` refuses a call that belongs
+   to no run
    - 2.5 behavioral tool-call sequence guard
    - 2.6 action-time contradiction gate
-   - 2.7 unsafe-deserialization content guard
+   - 2.7 unsafe-deserialization content guard; its `require_authenticated_transport` reads
+     the transport declaration from context metadata, never from an argument
    - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one
      anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)
@@ -127,45 +137,67 @@ src/agent_airlock/
    (the wrapper then answers with honeypot data); only `SOFT_BLOCK` logs and proceeds
 4. Capability requirements, read from the wrapper `@Airlock` returned and the
    `__wrapped__` chain beneath it and combined, so `@requires` counts above or below
-   `@Airlock`
+   `@Airlock`, through any decorator that keeps `__wrapped__` or copies attributes (one
+   that does neither hides the wrapper)
 5. Endpoint policy validation
 
    Steps 2.7, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
-   by parameter name (`*args` under the parameter's own name), down through mappings (keys
-   included), sequences, sets and mapping views, and into pydantic models and dataclasses
-   the tool's author defined. The run wrapper the context came from and objects from agent
-   frameworks (`_arg_walk.FRAMEWORK_PACKAGES`) are not walked. A top-level string is a path
-   by `_looks_like_path`: a path-named key, the absolute / drive-rooted / home-relative /
+   by parameter name (`*args` under the parameter's own name; a `**kwargs` key never hides
+   a same-named positional-only or `*args` value), down through mappings (every key too,
+   URL objects, tuples and frozensets included), sequences, sets and mapping views, and into
+   pydantic models and dataclasses the tool's author defined; memoryview reads as bytes and
+   `UserString` as text. An accepted run wrapper is not walked (one accepted only for its
+   `AirlockContext` still is, apart from that context), nor is an agent-framework object:
+   one whose top-level package is in `_arg_walk.FRAMEWORK_PACKAGES` and whose defining file
+   that framework's installed distribution lists in its RECORD
+   (`_arg_walk.is_framework_object`), so a look-alike package named `agents` or `mcp` is
+   walked.
+   Generator arguments are not walked: model JSON cannot produce one. A top-level string is
+   a path by `_looks_like_path`: a path-named key, the absolute / drive-rooted / home-relative /
    traversing shape (`_is_absolute_or_escaping`, shared with the nested test), a separator,
    or a file extension; a nested one (`_looks_like_nested_path`) only by that shape or by a
    separator and a file extension, either one being enough under a path-named key, so a
    MIME type is not; bytes only under a path-named key and shaped like a path; a `file:`
-   URI always. A URL is any `scheme://` in any case, or a value under a URL-named key.
+   URI always, as a string or a URL object. A URL is any `scheme://` in any case, or a value
+   under a URL-named key.
    Input nested deeper than 32 levels, or a container that contains itself, is refused by
    whichever of the three gates reads it, in words that say so
 6. Per-model-tier budget check — the tier, token count and model id come from context
    metadata (`_call_metadata`), never from the tool's arguments, which the model writes.
    The worst case is priced at `model_id`'s row (a dated snapshot, `<key>-YYYYMMDD`, at
-   its model's), an unlisted model at the table's dearest row, and no `model_id` at the
-   tracker's own model
+   its model's), an unlisted or non-string model id at the table's dearest row, and no
+   `model_id` at the tracker's own model. A tag that cannot be read (a tier that is not a
+   string, a token count that is not an integer of at least 0) refuses as
+   `budget_exceeded`
 7. Execute (unnumbered in code) — Pydantic strict validation, reaching inside model,
-   dataclass and TypedDict arguments passed as dicts (`validator._nested_strict_check`; an
-   instance the caller already built is accepted as-is), then run locally or
-   in the sandbox, inside the network airgap when one is configured. Sandbox mode validates in
+   dataclass and TypedDict arguments passed as dicts, `*args` / `**kwargs` items annotated
+   with one included (`validator._nested_strict_check`; an instance the caller already built
+   is accepted as-is), then run locally or in the sandbox, inside the network airgap
+   whenever a `NetworkPolicy` is set (until 0.10.28 only `allow_egress=False` was applied).
+   The airgap is a per-call `ContextVar`: concurrent tasks each keep their own, nested
+   airgaps intersect, and tasks the tool creates and `asyncio.to_thread` inherit it; threads
+   it starts itself, subprocesses and raw `_socket` sockets are outside it. It checks
+   connect, `sendto` / `sendmsg`, `getaddrinfo` and the `gethostbyname*` / `gethostbyaddr` /
+   `getnameinfo` lookups, asyncio's included; a host allowlist admits only the addresses
+   its own lookups returned in that call. Sandbox mode validates in
    the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way, and a
    tool that raises in the sandbox gets the answer it gets locally; a sandbox that fails is
    refused as `sandbox_error`. E2B, Docker and Modal run one payload (`generate_execution_code`)
    whose outcome comes back as JSON: never unpickle anything a sandbox printed
 8. `_post_execution` — when `sanitize_output` is on, sanitize output via
    `_sanitize_tool_output` (a string is masked and truncated; a dict, list, tuple, set or
-   frozenset is masked value by value and keeps its type; any other object is returned
-   as-is and its detections reported as not masked) → audit log → mark untrusted output
+   frozenset is masked value by value, string keys included, and keeps its type, masked
+   keys that collide getting a ` (2)` suffix; any other object, top-level or nested, is
+   returned as-is and its detections reported as not masked) → audit log (`result_preview`
+   masked like `args_preview`, whatever `sanitize_output` says) → mark untrusted output
    (when the resolved policy sets `reauth_on_untrusted_reinvocation`) → reconcile actual vs
    estimated cost against the resolved policy's budget (it records nothing on the
-   `CostTracker`). A generator result is wrapped instead (`_guard_stream`): its body runs
-   when iterated, after the call returns, so each step re-enters the call's airgap and
-   context and each item is sanitized as it is yielded; the call's audit record, written
-   at return, counts none of its items
+   `CostTracker`). A deferred result (a generator, a coroutine a sync tool returns, a lazy
+   iterator or async iterator that is not a context manager) is wrapped instead
+   (`_guard_stream` and its siblings): its body runs after the call returns, so each step
+   re-enters the call's airgap and context and each value is sanitized as it is produced;
+   the call's audit record, written at return, counts none of its items, and a refusal
+   raised while it runs is audited as a block before it reaches the consumer
 
 The order is defense-in-depth — kill switch → startup hooks → token audience → ghost
 arguments → policy (and the 2.5–2.8 gates) → filesystem → capability → network → budget →
@@ -179,10 +211,11 @@ kill switch, the startup-hook check and the budgets are operational controls.
 
 - **Decorator entrypoint.** `@Airlock()` wraps a function with the full layer stack and
   preserves `__signature__` / `__annotations__` so framework introspection still works.
-- **Caller identity.** `STRICT_POLICY` requires an agent identity: a first argument that
-  carries one at `.context` / `.ctx` (`ContextExtractor.CONTEXT_ATTRS` lists what is read; a
-  bare `AirlockContext` passed as the first argument is not read), or
-  `with AirlockContext(agent_id=...)` around the call (`_caller_identity` in `core.py`).
+- **Caller identity.** `STRICT_POLICY` requires an agent identity: a run wrapper passed as
+  the first positional argument (`ContextExtractor.run_wrapper` decides; the tool's own
+  model or dataclass never counts, and a bare `AirlockContext` passed as the first argument
+  is not read), or `with AirlockContext(agent_id=...)` around the call (`_caller_identity`
+  in `core.py`).
 - **Context propagation.** `contextvars`-backed `AirlockContext`; `get_current_context()` is
   available inside the wrapped tool, and a policy may be a callable over that context for
   per-tenant / per-workspace rules.
@@ -221,16 +254,21 @@ kill switch, the startup-hook check and the budgets are operational controls.
   edit to the old one, plus a repoint of the one constant naming the current file
   (`grep -rnE '_20[0-9]{2}_[0-9]{2}[^"]*\.(json|txt)"' src/agent_airlock`; the grep also
   lists the kept June pricing loader and one preset's provenance path). Superseded
-  snapshots stay in `data/`, the 2026-06 pricing one with a loader, the 2026-09 one without.
+  snapshots stay in `data/`: the 2026-06 pricing one with a loader, the 2026-09 one without,
+  and the 2026-05-11 OIDC blast list, superseded in 0.10.28 by a snapshot copied from
+  GHSA-g7cv-rxg3-hmpx.
   `cost_tracking.DEFAULT_PRICING` is the undated in-process fallback, so a price refresh
   edits it too; `tests/test_budget_pricing_0_10_24.py` fails when it lacks a model the
   current snapshot prices.
 - **Exceptions with other bases on purpose.** Pre-v0.5.1 exceptions keep their `Exception` /
-  `ValueError` bases (`exceptions.py` docstring), two later ones do too
-  (`OversightDeniedError`, `OpenAPIDriftViolation`), and `SequenceViolation` /
-  `ActionContradictionViolation` subclass `PolicyViolation` by design, so
+  `ValueError` bases (`exceptions.py` docstring), and so do later families:
+  `OversightDeniedError` / `OversightTimeoutError`, `OpenAPIDriftViolation`,
+  `HandleRejection`, `PolicyEscalation` and the `mcp_spec` `ValueError` family (`oauth`,
+  `transport` and the 2026-07-28 spec validators); `SequenceViolation` /
+  `ActionContradictionViolation` subclass `PolicyViolation` by design. So
   `except AirlockError` does not catch `PolicyViolation`, `PathValidationError` and the
-  like; do not rebase any of them in a patch release.
+  like (`grep -rnE 'class \w+\((ValueError|TypeError|RuntimeError|TimeoutError|Exception|PolicyViolation)\)' src/agent_airlock`
+  lists the candidates); do not rebase any of them in a patch release.
 - **Logger names.** `from .._log import structlog` one package down; `core.py` alone uses the
   bare root name (`tests/test_tooling_honesty_0_10_28.py` checks every `get_logger` call). In
   `src/` the shim is the only module that imports `structlog`.
@@ -252,7 +290,8 @@ kill switch, the startup-hook check and the budgets are operational controls.
 
 **External: Pydantic only** (plus `tomli` on Python 3.10; root `CLAUDE.md`). Anything from an
 extra (`e2b`, `redis`, `cryptography`, framework SDKs) is imported inside the function that
-needs it, behind `try/except ImportError`, raising an error that names the extra to install —
+needs it, behind `try/except ImportError`: an entry point raises an error that names the
+extra to install, and an availability probe returns False so its caller refuses —
 `pip install -e ".[sandbox]"` for E2B Firecracker micro-VM execution, `pip install -e
 ".[redis]"` for the distributed rate limiter. `structlog` is the exception: `_log.py` tries it
 once at import and falls back to the stdlib shim instead of raising.

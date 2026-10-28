@@ -62,8 +62,10 @@ the integration fails CI rather than a user; one past the pin, installed directl
 that net.
 
 Several existing `importorskip`s break the rule above: the real-SDK tests for google-adk,
-crewai, smolagents, anthropic, llama_index, autogen and agentdojo import SDKs no CI job
-installs, so they skip in every run (`grep -rn importorskip tests/ --include='*.py'`). The
+crewai, smolagents, anthropic, llama_index, autogen, agentdojo and openai-agents import SDKs
+no CI job installs, so they skip in every run (`grep -rn importorskip tests/ --include='*.py'`).
+The openai-agents one (`TestTheOpenAIAgentsSDK` in `tests/test_call_path_0_10_28.py`) has a
+CI-run twin: the same module calls each tool positionally, which is what that SDK does. The
 E2B tests in `tests/test_remaining_coverage.py` skip in every run too, through an inline
 `pytest.skip` that grep misses: no job installs `[sandbox]`.
 

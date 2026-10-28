@@ -97,8 +97,22 @@ preset, and
   `oauth.validate_access_token_audience`, which `@Airlock` now calls (step 0.6 in
   `core.py`): a list `aud` holding a non-string is refused whole instead of read past, and
   a string `aud` that is not a URI is a `TokenAudienceError`, not an escaping
-  `ResourceURIError`. The comparison also reads a root `/` as no path (RFC 3986 §6.2.3);
-  `canonicalize_resource_uri` itself still keeps it. `McpSubprocessArgInjectionGuard` is
+  `ResourceURIError`. The comparison also reads a root `/` as no path and, since 0.10.28, a
+  scheme's default port as no port (RFC 3986 §6.2.3); `canonicalize_resource_uri` itself
+  keeps both, keeps IPv6 brackets and an explicit `:0`, and raises `ResourceURIError`, never
+  a bare `ValueError`. v0.10.28 closed what a full audit still found reading past a shape or
+  crashing: a body key shadowing a routing header (`header_integrity`), a decoy `_meta`
+  (`meta_trust`), the bridge SSRF check (now `SSRFEgressGuard`'s decision), elicitation
+  text outside four fields or past a truncation cut (`ElicitationClass.UNINSPECTABLE`),
+  sampling's `systemPrompt` and non-int `maxTokens`, plain-text and list or bytes OAuth
+  `state`, `handle_trust` and repeated-`iss` shapes, codegen delimiters, the zero-click
+  config diff (`MCPConfigUnreadable`, and every security-relevant entry field), bytes env
+  keys, `$dynamicRef` / `$recursiveRef`, OIDC publish-window spellings, origin / WebSocket /
+  transcript / PR-metadata / content-type shapes, attested-admission claims, duplicate
+  transport headers and tool-definition pins (`DENY_UNINSPECTABLE`); the 0.10.24 eval
+  guards and the env-interpolation guard now decode bytes strictly
+  (`tests/test_mcp_spec_guards_0_10_28.py`, `tests/test_guard_shapes_fail_closed_0_10_28.py`,
+  `tests/test_audit_followups_0_10_28.py`). `McpSubprocessArgInjectionGuard` is
   not a walker: it reads `command` / `argv[0]` and env names only, so nested `args` never
   changes its verdict.
 - **A new guard also joins the red-team campaign by hand.** Add it to `BYPASS_TARGETS` and
