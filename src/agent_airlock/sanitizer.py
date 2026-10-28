@@ -791,6 +791,61 @@ def truncate_output(
     return truncated, True
 
 
+def _types_to_mask(
+    mask_pii: bool, mask_secrets: bool, pii_locales: list[str] | None
+) -> list[SensitiveDataType]:
+    """The detectors :func:`sanitize_output` runs for these options."""
+    types_to_mask: list[SensitiveDataType] = []
+
+    if mask_pii:
+        types_to_mask.extend(
+            [
+                SensitiveDataType.EMAIL,
+                SensitiveDataType.PHONE,
+                SensitiveDataType.SSN,
+                SensitiveDataType.CREDIT_CARD,
+                SensitiveDataType.IP_ADDRESS,
+            ]
+        )
+        # V0.8.9: India locale opt-in. ``pii_locales=["in"]`` extends
+        # the default PII set with Aadhaar / PAN / UPI / IFSC and the
+        # new Devanagari name detector. Aadhaar matches are then
+        # Verhoeff-gated inside ``detect_sensitive_data``.
+        if "in" in _normalize_pii_locales(pii_locales):
+            types_to_mask.extend(_INDIA_LOCALE_PII_TYPES)
+
+    if mask_secrets:
+        types_to_mask.extend(
+            [
+                SensitiveDataType.API_KEY,
+                SensitiveDataType.PASSWORD,
+                SensitiveDataType.AWS_KEY,
+                SensitiveDataType.PRIVATE_KEY,
+                SensitiveDataType.JWT,
+                SensitiveDataType.CONNECTION_STRING,
+            ]
+        )
+    return types_to_mask
+
+
+def _count_detections(text: str, options: dict[str, Any]) -> int:
+    """How many values :func:`sanitize_output` would mask in ``text``, masking nothing.
+
+    ``options`` are :func:`sanitize_output`'s keyword arguments; ``mask_config`` among
+    them does not change what is found, only how it would be masked.
+    """
+    pii_locales = options.get("pii_locales")
+    types = _types_to_mask(
+        bool(options.get("mask_pii", True)), bool(options.get("mask_secrets", True)), pii_locales
+    )
+    if not types or not text:
+        return 0
+    detections = detect_sensitive_data(text, types, pii_locales=pii_locales)
+    if not detections:
+        return 0
+    return len(merge_overlapping_detections(text, detections))
+
+
 def sanitize_output(
     content: Any,
     mask_pii: bool = True,
@@ -836,36 +891,7 @@ def sanitize_output(
     detections: list[dict[str, Any]] = []
 
     # Determine which types to mask
-    types_to_mask: list[SensitiveDataType] = []
-
-    if mask_pii:
-        types_to_mask.extend(
-            [
-                SensitiveDataType.EMAIL,
-                SensitiveDataType.PHONE,
-                SensitiveDataType.SSN,
-                SensitiveDataType.CREDIT_CARD,
-                SensitiveDataType.IP_ADDRESS,
-            ]
-        )
-        # V0.8.9: India locale opt-in. ``pii_locales=["in"]`` extends
-        # the default PII set with Aadhaar / PAN / UPI / IFSC and the
-        # new Devanagari name detector. Aadhaar matches are then
-        # Verhoeff-gated inside ``detect_sensitive_data``.
-        if "in" in _normalize_pii_locales(pii_locales):
-            types_to_mask.extend(_INDIA_LOCALE_PII_TYPES)
-
-    if mask_secrets:
-        types_to_mask.extend(
-            [
-                SensitiveDataType.API_KEY,
-                SensitiveDataType.PASSWORD,
-                SensitiveDataType.AWS_KEY,
-                SensitiveDataType.PRIVATE_KEY,
-                SensitiveDataType.JWT,
-                SensitiveDataType.CONNECTION_STRING,
-            ]
-        )
+    types_to_mask = _types_to_mask(mask_pii, mask_secrets, pii_locales)
 
     # Mask sensitive data
     if types_to_mask:
@@ -1038,6 +1064,32 @@ class WorkspacePIIConfig:
 #: Containers :func:`sanitize_structured` walks into; anything else is a leaf.
 _WALKED_CONTAINERS = (dict, list, tuple, set, frozenset)
 
+#: Joins the text of the leaves of one type so that one scan reads them all. No detector
+#: matches across a NUL between two line breaks, so no detection spans two leaves.
+_LEAF_SEPARATOR = "\n\x00\n"
+
+#: Strings up to this long are masked once per walk and the outcome reused: the keys of
+#: a list of records, and their repeated values, are the same few strings.
+_CACHED_TEXT_CHARS = 256
+
+
+@dataclass(frozen=True)
+class StructuredSanitization:
+    """What :func:`sanitize_structured_report` did to a structure.
+
+    Attributes:
+        value: The structure with every string in it masked, dictionary keys included.
+            The structure itself when nothing was masked.
+        masked_count: How many sensitive values were masked.
+        unmasked: Values found in leaves the walk cannot rebuild (bytes, models,
+            dataclasses, deques...), by the leaf's type name. Those leaves are returned
+            as they are, so their values were *not* masked.
+    """
+
+    value: Any
+    masked_count: int
+    unmasked: dict[str, int] = field(default_factory=dict)
+
 
 def sanitize_structured(
     value: Any,
@@ -1051,12 +1103,15 @@ def sanitize_structured(
 
     :func:`sanitize_output` turns a container into JSON text: the right input for
     detection and length accounting, but not something a tool can hand back, because its
-    caller needs the same type. This walks the structure instead, masks each string value
-    with the same detectors, and rebuilds only the containers that changed, so a tool
-    returning ``{"content": [{"type": "text", "text": ...}]}`` still returns that shape.
+    caller needs the same type. This walks the structure instead, masks each string with
+    the same detectors (dictionary keys included), and rebuilds only the containers that
+    changed, so a tool returning ``{"content": [{"type": "text", "text": ...}]}`` still
+    returns that shape. A container referenced twice is masked at both references, and
+    a cycle is rebuilt with the masked copy at its back-reference.
 
-    Dictionary keys and non-string leaves are left alone. A container reached a second
-    time (a cycle) is returned as it is.
+    A leaf the walk cannot rebuild (bytes, a model, a dataclass, a deque...) is returned
+    as it is; what was found in it is logged as not masked.
+    :func:`sanitize_structured_report` returns that count as well.
 
     Args:
         value: A string, a container of them, or any other leaf.
@@ -1069,37 +1124,212 @@ def sanitize_structured(
         ``(sanitized, detection_count)``. ``value`` itself comes back when nothing was
         masked, so an untouched result keeps its identity.
     """
+    report = sanitize_structured_report(
+        value,
+        mask_pii=mask_pii,
+        mask_secrets=mask_secrets,
+        mask_config=mask_config,
+        pii_locales=pii_locales,
+    )
+    if report.unmasked:
+        logger.warning("structured_sensitive_data_unmasked", detections=report.unmasked)
+    return report.value, report.masked_count
+
+
+def sanitize_structured_report(
+    value: Any,
+    *,
+    mask_pii: bool = True,
+    mask_secrets: bool = True,
+    mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
+    pii_locales: list[str] | None = None,
+) -> StructuredSanitization:
+    """:func:`sanitize_structured`, also reporting what it found and could not mask.
+
+    Until 0.10.28 the walk left dictionary keys alone and skipped every leaf that was
+    not a string, without a word: a key holding an email, or a ``bytes`` value holding
+    a key, was returned raw while a top-level object of the same kind was at least
+    reported as not masked. A container referenced a second time was returned raw at
+    that reference. Keys are now masked; when two masked keys come out the same, the
+    later ones get a `` (2)``, `` (3)``... suffix, in insertion order, and no value is
+    dropped. Leaves are scanned and reported in ``unmasked``.
+
+    Args:
+        value: A string, a container of them, or any other leaf.
+        mask_pii: As for :func:`sanitize_output`.
+        mask_secrets: As for :func:`sanitize_output`.
+        mask_config: As for :func:`sanitize_output`.
+        pii_locales: As for :func:`sanitize_output`.
+
+    Returns:
+        The masked structure, the number of values masked, and the values found in
+        leaves that could not be rebuilt, by type name.
+    """
     options: dict[str, Any] = {
         "mask_pii": mask_pii,
         "mask_secrets": mask_secrets,
         "mask_config": mask_config,
         "pii_locales": pii_locales,
     }
-    return _walk_and_mask(value, options, set())
+    walker = _StructureMasker(options)
+    masked, count = walker.walk(value)
+    if walker.cyclic and count:
+        masked, count = walker.rebuild_cyclic(value)
+    return StructuredSanitization(masked, count, walker.unmasked())
 
 
-def _walk_and_mask(node: Any, options: dict[str, Any], seen: set[int]) -> tuple[Any, int]:
-    if isinstance(node, str):
-        result = sanitize_output(node, **options)
-        return (result.content, result.detection_count) if result.detection_count else (node, 0)
-    if not isinstance(node, _WALKED_CONTAINERS) or id(node) in seen:
-        return node, 0
-    seen.add(id(node))
-    if isinstance(node, dict):
-        pairs = [(key, _walk_and_mask(item, options, seen)) for key, item in node.items()]
-        total = sum(count for _key, (_new, count) in pairs)
+class _StructureMasker:
+    """One walk of :func:`sanitize_structured_report` over a structure."""
+
+    def __init__(self, options: dict[str, Any]) -> None:
+        self._options = options
+        # Containers already walked, by id: their masked form and count, so a container
+        # referenced twice is masked at both references and rebuilt once.
+        self._done: dict[int, tuple[Any, int]] = {}
+        # Containers on the path from the root to the current node.
+        self._active: set[int] = set()
+        # The text of every leaf that is neither a string nor a walked container.
+        self._leaf_texts: dict[str, list[str]] = {}
+        # Short strings already masked in this walk, with their outcome.
+        self._texts: dict[str, tuple[str, int]] = {}
+        #: Whether a container was reached again from inside itself.
+        self.cyclic = False
+
+    def walk(self, node: Any) -> tuple[Any, int]:
+        """``node`` with its strings masked, and how many values were masked."""
+        if isinstance(node, str):
+            return self._mask_text(node)
+        if not isinstance(node, _WALKED_CONTAINERS):
+            self._note_leaf(node)
+            return node, 0
+        done = self._done.get(id(node))
+        if done is not None:
+            return done
+        if id(node) in self._active:
+            # A cycle: finished by rebuild_cyclic() when anything in it is masked.
+            self.cyclic = True
+            return node, 0
+        self._active.add(id(node))
+        try:
+            walk_node = self._walk_mapping if isinstance(node, dict) else self._walk_items
+            outcome = walk_node(node)
+        finally:
+            self._active.discard(id(node))
+        self._done[id(node)] = outcome
+        return outcome
+
+    def _mask_text(self, text: str) -> tuple[str, int]:
+        cacheable = len(text) <= _CACHED_TEXT_CHARS
+        if cacheable and text in self._texts:
+            masked, count = self._texts[text]
+            return (masked, count) if count else (text, 0)  # keep this object if unmasked
+        result = sanitize_output(text, **self._options)
+        outcome = (result.content, result.detection_count) if result.detection_count else (text, 0)
+        if cacheable:
+            self._texts[text] = outcome
+        return outcome
+
+    def _note_leaf(self, leaf: Any) -> None:
+        if leaf is None or isinstance(leaf, bool):
+            return  # their text is a fixed word no detector matches
+        self._leaf_texts.setdefault(type(leaf).__name__, []).append(str(leaf))
+
+    def _walk_items(self, node: Any) -> tuple[Any, int]:
+        walked = [self.walk(item) for item in node]
+        total = sum(count for _new, count in walked)
         if not total:
             return node, 0
-        rebuilt = copy.copy(node)
-        for key, (new, count) in pairs:
-            if count:
-                rebuilt[key] = new
-        return rebuilt, total
-    walked = [_walk_and_mask(item, options, seen) for item in node]
-    total = sum(count for _new, count in walked)
-    if not total:
-        return node, 0
-    return _rebuild_like(node, [new for new, _count in walked]), total
+        return _rebuild_like(node, [new for new, _count in walked]), total
+
+    def _walk_mapping(self, node: Any) -> tuple[Any, int]:
+        entries: list[tuple[Any, bool, Any]] = []
+        total = 0
+        for key, item in node.items():
+            new_key, key_count = self.walk(key)
+            new_item, item_count = self.walk(item)
+            total += key_count + item_count
+            entries.append((new_key, key_count > 0, new_item))
+        if not total:
+            return node, 0
+        return _refill_mapping(copy.copy(node), entries), total
+
+    def unmasked(self) -> dict[str, int]:
+        """What was found in the leaves noted so far, by type name."""
+        counts: dict[str, int] = {}
+        for type_name, texts in self._leaf_texts.items():
+            found = _count_detections(_LEAF_SEPARATOR.join(texts), self._options)
+            if found:
+                counts[type_name] = found
+        return counts
+
+    def rebuild_cyclic(self, root: Any) -> tuple[Any, int]:
+        """Rebuild every container reachable from ``root``, cycles included.
+
+        :meth:`walk` returns a cycle's back-reference as it is, which would leave the
+        unmasked original reachable from the masked copy. A list or dict is registered
+        before its items are rebuilt, so a back-reference reaches the copy instead.
+        """
+        memo: dict[int, Any] = {}
+        total = 0
+
+        def rebuild(node: Any) -> Any:
+            nonlocal total
+            if isinstance(node, str):
+                masked, count = self._mask_text(node)
+                total += count
+                return masked
+            if not isinstance(node, _WALKED_CONTAINERS):
+                return node
+            if id(node) in memo:
+                return memo[id(node)]
+            if isinstance(node, dict):
+                shell: Any = copy.copy(node)
+                memo[id(node)] = shell
+                entries = []
+                for key, item in node.items():
+                    new_key = rebuild(key)
+                    entries.append((new_key, new_key is not key, rebuild(item)))
+                return _refill_mapping(shell, entries)
+            if isinstance(node, list):
+                shell = copy.copy(node)
+                memo[id(node)] = shell
+                shell[:] = [rebuild(item) for item in node]
+                return shell
+            rebuilt = _rebuild_like(node, [rebuild(item) for item in node])
+            memo[id(node)] = rebuilt
+            return rebuilt
+
+        return rebuild(root), total
+
+
+def _refill_mapping(rebuilt: Any, entries: list[tuple[Any, bool, Any]]) -> Any:
+    """Empty ``rebuilt`` (a copy of the original mapping) and fill it with ``entries``.
+
+    ``entries`` are ``(key, key_was_masked, value)`` in the original order. A key that
+    was not masked keeps its spelling. A masked key that comes out equal to another key
+    gets a `` (2)``, `` (3)``... suffix (a non-string key, ``(key, n)``), so no value
+    is dropped and the result depends only on the order of the entries.
+    """
+    reserved = {key for key, masked, _value in entries if not masked}
+    placed: set[Any] = set()
+    rebuilt.clear()
+    for key, masked, value in entries:
+        final = key
+        if masked and (final in reserved or final in placed):
+            final = _distinct_key(key, reserved, placed)
+        placed.add(final)
+        rebuilt[final] = value
+    return rebuilt
+
+
+def _distinct_key(base: Any, reserved: set[Any], placed: set[Any]) -> Any:
+    """The first of ``base (2)``, ``base (3)``... that no other key of the mapping uses."""
+    number = 2
+    while True:
+        candidate = f"{base} ({number})" if isinstance(base, str) else (base, number)
+        if candidate not in reserved and candidate not in placed:
+            return candidate
+        number += 1
 
 
 def _rebuild_like(node: Any, items: list[Any]) -> Any:

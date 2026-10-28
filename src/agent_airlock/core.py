@@ -35,7 +35,7 @@ Thread Safety:
     This module is thread-safe. The Airlock class can be used as a decorator
     from multiple threads concurrently. State is managed through:
     - contextvars for request-scoped context (AirlockContext)
-    - Thread-local storage for network policy (in network.py)
+    - contextvars for the network airgap (in network.py), one per thread and asyncio task
     - Locks in sandbox pool and audit logger
 
     Lock Acquisition Order (to prevent deadlocks):
@@ -57,7 +57,15 @@ import os
 import re
 import time
 import uuid
-from collections.abc import AsyncGenerator, Callable, Generator, Iterator, Mapping
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Callable,
+    Coroutine,
+    Generator,
+    Iterator,
+    Mapping,
+)
 from datetime import datetime, timezone
 from typing import Any, Literal, ParamSpec, TypeVar, overload
 from urllib.parse import urlparse
@@ -119,7 +127,7 @@ from .policy import (
     SecurityPolicy,
     ViolationType,
 )
-from .sanitizer import sanitize_output, sanitize_structured
+from .sanitizer import sanitize_output, sanitize_structured_report
 from .self_heal import (
     AirlockResponse,
     BlockReason,
@@ -472,11 +480,13 @@ def _sanitize_tool_output(
     """Mask sensitive data in a tool's result without changing its type.
 
     Returns ``(result, warnings, masked_count, was_truncated)``. A string is masked and
-    truncated as it always was. A dict, list, tuple or set is masked value by value and
-    keeps its shape; ``max_output_chars`` does not apply to it, because truncating its
-    serialized form would hand back a different type. Anything else is returned as it
-    is, since rebuilding an arbitrary object with masked fields could break its own
-    invariants, and what was detected in it is reported as *not* masked.
+    truncated as it always was. A dict, list, tuple or set is masked value by value,
+    keys included, and keeps its shape; ``max_output_chars`` does not apply to it,
+    because truncating its serialized form would hand back a different type. Anything
+    else is returned as it is, since rebuilding an arbitrary object with masked fields
+    could break its own invariants, and what was detected in it is reported as *not*
+    masked. So is what was detected in such an object inside a container (until 0.10.28
+    those were skipped without a word).
 
     This replaced a defect as old as the sanitizer: every non-string result was
     serialized to JSON, masked, and the masked text discarded, while the log said
@@ -504,8 +514,22 @@ def _sanitize_tool_output(
             sanitization.was_truncated,
         )
     if isinstance(result, dict | list | tuple | set | frozenset):
-        masked, count = sanitize_structured(result, **options)
-        return masked, _masked_warnings(count, func_name), count, False
+        report = sanitize_structured_report(result, **options)
+        warnings = _masked_warnings(report.masked_count, func_name)
+        output_type = type(result).__name__
+        for leaf_type, found in report.unmasked.items():
+            logger.warning(
+                "output_sensitive_data_unmasked",
+                function=func_name,
+                detections=found,
+                output_type=output_type,
+                value_type=leaf_type,
+            )
+            warnings.append(
+                f"Detected {found} sensitive value(s) in {leaf_type} inside "
+                f"{output_type} output; not masked"
+            )
+        return report.value, warnings, report.masked_count, False
     detected = sanitize_output(result, **options).detection_count
     if not detected:
         return result, [], 0, False
@@ -526,10 +550,15 @@ def _sanitize_tool_output(
 
 @contextlib.contextmanager
 def _call_scope(config: AirlockConfig, context: AirlockContext[Any] | None) -> Iterator[None]:
-    """The call's context and network airgap, which the tool's body runs inside."""
+    """The call's context and network airgap, which the tool's body runs inside.
+
+    The airgap is entered whenever ``network_policy`` is set. Until 0.10.28 it was entered
+    only when the policy disallowed egress, so a host or port allowlist, or ``block_dns``,
+    on a policy that allowed egress was never applied.
+    """
     token = set_current_context(context) if context is not None else None
     try:
-        if config.network_policy is not None and not config.network_policy.allow_egress:
+        if config.network_policy is not None:
             with network_airgap(config.network_policy):
                 yield
         else:
@@ -539,8 +568,100 @@ def _call_scope(config: AirlockConfig, context: AirlockContext[Any] | None) -> I
             reset_context(token)
 
 
-def _sanitize_stream_item(item: Any, config: AirlockConfig, func_name: str) -> Any:
-    """One item a generator tool yielded, sanitized as a returned value would be."""
+#: Told about an exception a deferred result raised while producing a value, before it
+#: reaches the consumer, so the call's refusal is audited (``_post_execution``).
+_RefusalReporter = Callable[[Exception], None]
+
+
+def _refusal_reason(error: BaseException) -> BlockReason | None:
+    """The block reason of an Airlock refusal raised while a deferred result ran, or None.
+
+    In the middle of a stream a refusal reaches the consumer as the exception itself, not
+    as a refusal response; this names it for the audit record. Anything else is the
+    tool's own error.
+    """
+    if isinstance(error, NetworkBlockedError):
+        return BlockReason.NETWORK_BLOCKED
+    if isinstance(error, PathValidationError):
+        return BlockReason.PATH_VIOLATION
+    if isinstance(error, CapabilityDeniedError):
+        return BlockReason.CAPABILITY_DENIED
+    if isinstance(error, AirlockBudgetExceeded):
+        return BlockReason.BUDGET_EXCEEDED
+    if isinstance(error, GhostArgumentError):
+        return BlockReason.GHOST_ARGUMENTS
+    if isinstance(error, PolicyEscalation):
+        return BlockReason.ESCALATION_REQUIRED
+    if isinstance(error, PolicyViolation):
+        if error.violation_type == ViolationType.RATE_LIMITED.value:
+            return BlockReason.RATE_LIMIT
+        return BlockReason.POLICY_VIOLATION
+    return None
+
+
+def _report_refusal(on_refusal: _RefusalReporter | None, error: Exception) -> None:
+    """Hand ``error`` to ``on_refusal``. Never raises, so the error itself propagates."""
+    if on_refusal is None:
+        return
+    try:
+        on_refusal(error)
+    except Exception as e:  # the refusal still reaches the consumer
+        logger.error("deferred_refusal_audit_failed", error=str(e))
+
+
+def _is_resource_handle(value: Any) -> bool:
+    """A context manager (an open file, ``os.scandir``, a mock): its lifecycle is the caller's."""
+    kind = type(value)
+    return hasattr(kind, "__enter__") or hasattr(kind, "__aenter__")
+
+
+def _guard_deferred(
+    result: Any,
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Any | None:
+    """The guarded form of a result whose body runs after the call returns, or None.
+
+    A generator, an async generator, a coroutine, and a lazy iterator or async iterator
+    (``map``, ``filter``, ``zip``, a class with ``__next__`` / ``__anext__``) compute their
+    values when the caller asks for them, after ``@Airlock`` has returned. Each is wrapped
+    so every step runs inside the call's airgap and context and every value it produces is
+    sanitized as a returned value would be. Until 0.10.28 only generators were: a sync
+    tool returning a coroutine or a ``map`` ran its body outside the airgap, without the
+    call's context, and unmasked.
+
+    Concrete values (strings, containers, models) are not deferred. Neither is an
+    iterator that is also a context manager, whose lifecycle stays the caller's, nor an
+    asyncio Task or Future, which runs on the loop whether or not it is awaited.
+    """
+    if inspect.isgenerator(result):
+        return _guard_stream(result, config, func_name, context, on_refusal)
+    if inspect.isasyncgen(result):
+        return _guard_async_stream(result, config, func_name, context, on_refusal)
+    if inspect.iscoroutine(result):
+        return _guard_coroutine(result, config, func_name, context, on_refusal)
+    if _is_resource_handle(result):
+        return None
+    if isinstance(result, Iterator):
+        return _guard_iterator(result, config, func_name, context, on_refusal)
+    if isinstance(result, AsyncIterator):
+        return _guard_async_iterator(result, config, func_name, context, on_refusal)
+    return None
+
+
+def _sanitize_stream_item(
+    item: Any,
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None = None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Any:
+    """One value a deferred result produced, guarded and sanitized as a returned value."""
+    guarded = _guard_deferred(item, config, func_name, context, on_refusal)
+    if guarded is not None:
+        return guarded
     if not config.sanitize_output or item is None:
         return item
     return _sanitize_tool_output(item, config, func_name)[0]
@@ -551,6 +672,7 @@ def _guard_stream(
     config: AirlockConfig,
     func_name: str,
     context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
 ) -> Generator[Any, Any, Any]:
     """Run a generator tool's body under the call's guards, one step at a time.
 
@@ -560,17 +682,23 @@ def _guard_stream(
     the network under ``allow_egress=False`` and stream PII unmasked. Each step, and the
     cleanup when the stream is closed early, now runs inside both, and each item is
     sanitized as a returned value would be. Values sent in pass through and the return
-    value is kept.
+    value is kept. A refusal a step raises (the airgap's ``NetworkBlockedError``, or any
+    Airlock refusal the body raised) goes to ``on_refusal`` before it reaches the
+    consumer; until 0.10.28 the stream's audit record was the only one.
     """
     try:
         sent: Any = None
         while True:
-            with _call_scope(config, context):
-                try:
-                    item = stream.send(sent)
-                except StopIteration as stop:
-                    return stop.value
-            sent = yield _sanitize_stream_item(item, config, func_name)
+            try:
+                with _call_scope(config, context):
+                    try:
+                        item = stream.send(sent)
+                    except StopIteration as stop:
+                        return stop.value
+            except Exception as error:
+                _report_refusal(on_refusal, error)
+                raise
+            sent = yield _sanitize_stream_item(item, config, func_name, context, on_refusal)
     finally:
         with _call_scope(config, context):
             stream.close()
@@ -581,20 +709,101 @@ async def _guard_async_stream(
     config: AirlockConfig,
     func_name: str,
     context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
 ) -> AsyncGenerator[Any, Any]:
     """The async-generator form of ``_guard_stream``."""
     try:
         sent: Any = None
         while True:
-            with _call_scope(config, context):
-                try:
-                    item = await stream.asend(sent)
-                except StopAsyncIteration:
-                    return
-            sent = yield _sanitize_stream_item(item, config, func_name)
+            try:
+                with _call_scope(config, context):
+                    try:
+                        item = await stream.asend(sent)
+                    except StopAsyncIteration:
+                        return
+            except Exception as error:
+                _report_refusal(on_refusal, error)
+                raise
+            sent = yield _sanitize_stream_item(item, config, func_name, context, on_refusal)
     finally:
         with _call_scope(config, context):
             await stream.aclose()
+
+
+async def _guard_coroutine(
+    coroutine: Coroutine[Any, Any, Any],
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Any:
+    """Await a coroutine a tool returned under the call's guards, and sanitize its value."""
+    try:
+        with _call_scope(config, context):
+            value = await coroutine
+    except Exception as error:
+        _report_refusal(on_refusal, error)
+        raise
+    return _sanitize_stream_item(value, config, func_name, context, on_refusal)
+
+
+def _guard_iterator(
+    iterator: Iterator[Any],
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Generator[Any, None, None]:
+    """Step a lazy iterator a tool returned under the call's guards, one item at a time.
+
+    The iterator is closed inside the airgap when the guard is (if it has ``close``).
+    """
+    try:
+        while True:
+            try:
+                with _call_scope(config, context):
+                    try:
+                        item = next(iterator)
+                    except StopIteration:
+                        return
+            except Exception as error:
+                _report_refusal(on_refusal, error)
+                raise
+            yield _sanitize_stream_item(item, config, func_name, context, on_refusal)
+    finally:
+        close = getattr(iterator, "close", None)
+        if callable(close):
+            with _call_scope(config, context):
+                close()
+
+
+async def _guard_async_iterator(
+    iterator: AsyncIterator[Any],
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> AsyncGenerator[Any, None]:
+    """The async form of ``_guard_iterator``; ``aclose`` is called when the guard closes."""
+    try:
+        while True:
+            try:
+                with _call_scope(config, context):
+                    try:
+                        item = await iterator.__anext__()
+                    except StopAsyncIteration:
+                        return
+            except Exception as error:
+                _report_refusal(on_refusal, error)
+                raise
+            yield _sanitize_stream_item(item, config, func_name, context, on_refusal)
+    finally:
+        aclose = getattr(iterator, "aclose", None)
+        if callable(aclose):
+            with _call_scope(config, context):
+                closing = aclose()
+                if inspect.isawaitable(closing):
+                    await closing
 
 
 def _masked_warnings(count: int, func_name: str) -> list[str]:
@@ -1217,12 +1426,51 @@ class Airlock:
             sanitized_count = 0
             was_truncated = False
 
-            # A generator's items are sanitized as they are yielded, so this call's audit
-            # record counts none of them.
-            if inspect.isgenerator(result):
-                result = _guard_stream(result, self.config, func_name, context)
-            elif inspect.isasyncgen(result):
-                result = _guard_async_stream(result, self.config, func_name, context)
+            def _audit_deferred_refusal(error: Exception) -> None:
+                """Record a refusal a deferred result raised after the call returned.
+
+                It reaches the consumer as the exception, mid-stream; until 0.10.28 it left
+                no audit record of the block, only the call's own (not blocked) one.
+                """
+                reason = _refusal_reason(error)
+                if reason is None:
+                    return
+                if isinstance(error, NetworkBlockedError):
+                    response = handle_network_blocked(
+                        func_name,
+                        operation=error.operation,
+                        target=error.target,
+                        details=error.details,
+                    )
+                else:
+                    response = AirlockResponse.blocked_response(
+                        reason=reason,
+                        error=(
+                            f"AIRLOCK_BLOCK: '{func_name}' was refused ({reason.value}) "
+                            "while producing its result"
+                        ),
+                    )
+                self._log_blocked(func_name, response, start_time)
+                audit_logger.log(
+                    tool_name=func_name,
+                    blocked=True,
+                    block_reason=reason.value,
+                    duration_ms=(time.time() - start_time) * 1000,
+                    args=kwargs,
+                    error=response.error,
+                    agent_id=context.agent_id if context else None,
+                    session_id=context.session_id if context else None,
+                    amplification=context._amplification if context else None,
+                )
+
+            # A deferred result (a generator, a coroutine, a lazy iterator) runs after this
+            # call returns, so its values are guarded and sanitized as they are produced,
+            # and this call's audit record counts none of them.
+            guarded = _guard_deferred(
+                result, self.config, func_name, context, _audit_deferred_refusal
+            )
+            if guarded is not None:
+                result = guarded
             elif self.config.sanitize_output and result is not None:
                 result, warnings, sanitized_count, was_truncated = _sanitize_tool_output(
                     result, self.config, func_name
@@ -1394,11 +1642,11 @@ class Airlock:
                 try:
                     # V0.3.0: Apply network airgap if configured
                     # Note: For async, we still use the sync context manager
-                    # as socket operations are fundamentally sync
-                    if (
-                        self.config.network_policy is not None
-                        and not self.config.network_policy.allow_egress
-                    ):
+                    # as socket operations are fundamentally sync. The airgap is per task
+                    # (a ContextVar), so it holds across awaits without touching the
+                    # host's other coroutines. Any NetworkPolicy is applied: until 0.10.28
+                    # only one with allow_egress=False was, so allowlists were ignored.
+                    if self.config.network_policy is not None:
                         with network_airgap(self.config.network_policy):
                             if self.sandbox:
                                 # V0.10.6: validate in the parent before dispatching. On failure the
@@ -1447,6 +1695,8 @@ class Airlock:
                         details=e.details,
                     )
                     self._log_blocked(func_name, response, start_time)
+                    # The caller's identity, as every other refusal records it (until
+                    # 0.10.28 a network refusal's record named no agent or session).
                     audit_logger.log(
                         tool_name=func_name,
                         blocked=True,
@@ -1454,6 +1704,9 @@ class Airlock:
                         duration_ms=(time.time() - start_time) * 1000,
                         args=cleaned_kwargs,
                         error=response.error,
+                        agent_id=context.agent_id,
+                        session_id=context.session_id,
+                        amplification=context._amplification,
                     )
                     return response.to_dict()
                 except Exception as e:
@@ -1532,11 +1785,10 @@ class Airlock:
                 # Set context as current for the duration of execution
                 token = set_current_context(context)
                 try:
-                    # V0.3.0: Apply network airgap if configured
-                    if (
-                        self.config.network_policy is not None
-                        and not self.config.network_policy.allow_egress
-                    ):
+                    # V0.3.0: Apply network airgap if configured. Any NetworkPolicy is
+                    # applied: until 0.10.28 only one with allow_egress=False was, so
+                    # allowlists were ignored.
+                    if self.config.network_policy is not None:
                         with network_airgap(self.config.network_policy):
                             if self.sandbox:
                                 # V0.10.6: validate in the parent before dispatching. On failure the
@@ -1580,6 +1832,8 @@ class Airlock:
                         details=e.details,
                     )
                     self._log_blocked(func_name, response, start_time)
+                    # The caller's identity, as every other refusal records it (until
+                    # 0.10.28 a network refusal's record named no agent or session).
                     audit_logger.log(
                         tool_name=func_name,
                         blocked=True,
@@ -1587,6 +1841,9 @@ class Airlock:
                         duration_ms=(time.time() - start_time) * 1000,
                         args=cleaned_kwargs,
                         error=response.error,
+                        agent_id=context.agent_id,
+                        session_id=context.session_id,
+                        amplification=context._amplification,
                     )
                     return response.to_dict()
                 except Exception as e:
