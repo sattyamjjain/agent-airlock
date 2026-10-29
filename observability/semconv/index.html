@@ -3146,7 +3146,7 @@ creates a child span.</p>
 <tr>
 <td><code>airlock.egress_domains</code></td>
 <td>string</td>
-<td>Comma-separated list of domains the tool reached during this span. Populated when <code>NetworkPolicy</code> is attached.</td>
+<td>Comma-separated list of the <code>egress_domains</code> on the <code>EnhancedAuditRecord</code> you export. Nothing in agent-airlock fills that field, the network airgap included, so the attribute is set only when your own code records the domains.</td>
 </tr>
 </tbody>
 </table>
@@ -3239,9 +3239,9 @@ metric pipeline.</p>
   <code>airlock.*</code>.</li>
 <li><strong>OTel HTTP</strong> (<code>http.*</code>, <code>server.*</code>, <code>url.*</code>) — when a wrapped tool
   hits an HTTP endpoint, the HTTP instrumentation sets those attributes
-  on a child span. Airlock's <code>airlock.egress_domains</code> is a coarse
-  summary for the parent span; the fine-grained request attributes live
-  on the child.</li>
+  on a child span. Airlock's <code>airlock.egress_domains</code>, when you fill
+  it, is a coarse summary for the parent span; the fine-grained request
+  attributes live on the child.</li>
 </ul>
 <h2 id="stability">Stability<a class="headerlink" href="#stability" title="Permanent link">&para;</a></h2>
 <p>Names above are stable across the v0.5.0 minor series. Breaking changes

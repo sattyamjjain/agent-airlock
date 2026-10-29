@@ -2843,8 +2843,13 @@ URI and every guarded call checks the token behind it:</p>
 <p>The host puts the decoded claims on the call's <code>AirlockContext</code> metadata under
 <code>access_token_claims</code> (<code>agent_airlock.core.ACCESS_TOKEN_CLAIMS_KEY</code>): with
 <code>with AirlockContext(metadata=...)</code> around the call, or on the context of the run wrapper
-a framework passes as the tool's first argument. That is the channel the per-model-tier
-budget reads its tags from, and the model cannot write it. A tool argument named
+a framework passes as the tool's first positional argument. A run wrapper is an object
+model JSON cannot have built: a framework's own object that is not a pydantic model, an
+object whose context is an <code>AirlockContext</code>, or an instance of a plain host class (see
+<a href="../policy/#agent-identity">Agent Identity</a>). That is the channel the per-model-tier
+budget reads its tags from, and the model cannot write it. Until 0.10.28 a tool's own
+model or dataclass with a <code>context</code> field, passed first, was read as a run wrapper, so its
+JSON could supply the claims. A tool argument named
 <code>access_token_claims</code> is the model's, and is never read for this check: the call is judged
 on the host's claims or, with none, refused under <code>deny</code> as carrying no claims.</p>
 <p>The check reads the audience and nothing else. Verifying the token's signature, expiry and
@@ -2853,14 +2858,19 @@ mapping it is given.</p>
 <h3 id="what-matches">What matches<a class="headerlink" href="#what-matches" title="Permanent link">&para;</a></h3>
 <p><code>aud</code> may be a string or a list of strings, and both sides are canonicalised
 (<code>canonicalize_resource_uri</code>): scheme and host lowercased, a trailing slash dropped, and a
-bare host with or without its root <code>/</code> treated as one resource (RFC 3986 §6.2.3). So a
-token for <code>["https://mcp.example.test/"]</code> matches <code>https://mcp.example.test</code>. A list may
-name other audiences beside this server, a client id among them. Refused, under <code>deny</code>:</p>
+bare host with or without its root <code>/</code> treated as one resource (RFC 3986 §6.2.3). The
+comparison also reads a scheme's default port (<code>:443</code> for https, <code>:80</code> for http) as no
+port. An IPv6 literal keeps its brackets, so <code>https://[::1]:80</code> and <code>https://[::1:80]</code>
+stay two resources. So a token for <code>["https://mcp.example.test/"]</code> or for
+<code>https://mcp.example.test:443</code> matches <code>https://mcp.example.test</code>. A list may name other
+audiences beside this server, a client id among them. Refused, under <code>deny</code>:</p>
 <ul>
 <li>an <code>aud</code> naming another resource, or a path this server does not have;</li>
 <li>a missing or empty <code>aud</code>;</li>
 <li>a list that holds anything but strings, even beside a matching one (RFC 7519 §4.1.3);</li>
-<li>a string <code>aud</code> that is not a URI;</li>
+<li>a string <code>aud</code> that is not a URI, or is malformed (a port out of range, an unclosed
+  IPv6 bracket); until 0.10.28 a malformed one raised out of the call under <code>warn</code> and
+  <code>deny</code> alike;</li>
 <li>claims that are not a mapping, and no claims at all.</li>
 </ul>
 <h3 id="modes">Modes<a class="headerlink" href="#modes" title="Permanent link">&para;</a></h3>
@@ -2908,8 +2918,9 @@ first line of your program and before <code>import agent_airlock</code>:</p>
 drops a <code>.pth</code> file persists: its line runs before the program it rides in, every time.</p>
 <p><strong>What this check cannot do.</strong> These hooks run before any Python code of yours, this
 library included, so the check cannot stop them running and cannot undo what they did. It
-tells you the interpreter is not clean. Under <code>deny</code> it also keeps every guarded tool,
-credential-bearing ones included, from running in that interpreter. Scanning packages when
+tells you the interpreter is not clean. Under <code>deny</code> it also keeps every tool guarded by a
+config that sets it, credential-bearing ones included, from running in that interpreter;
+a tool whose config leaves the check off still runs. Scanning packages when
 they are installed is not this library's job; use your dependency scanner for that.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_startup_hooks</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
@@ -2932,7 +2943,9 @@ has coverage's <code>a1_coverage.pth</code>; a long-lived interpreter adds setup
 <code>distutils-precedence.pth</code> and the <code>-nspkg.pth</code> files of legacy namespace packages. List
 the ones you know by file name and SHA-256. A known name whose content has changed is a
 finding again, and a key that is a path or a value that is not a SHA-256 digest raises
-<code>ValueError</code> rather than never matching:</p>
+<code>ValueError</code> rather than never matching. An entry pins the hook file's own bytes, not the
+modules its <code>import</code> lines load: <code>distutils-precedence.pth</code> imports <code>_distutils_hack</code>, and a
+change to that module is not a finding, because the check does not hash it:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_startup_hooks</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
@@ -2964,7 +2977,7 @@ finding again, and a key that is a path or a value that is not a SHA-256 digest 
 </tr>
 <tr>
 <td><code>"deny"</code></td>
-<td>every guarded call in the process is refused, naming the files</td>
+<td>every call guarded by a config with <code>"deny"</code> is refused, naming the files</td>
 </tr>
 </tbody>
 </table>

@@ -3455,10 +3455,13 @@ below.</p>
 <p>A resolver that returns <code>None</code> refuses the call. Until 0.10.24 it ran the call with no
 policy at all, so a tenant the resolver did not know was allowed everything. Return
 <code>PERMISSIVE_POLICY</code> to allow a call on purpose.</p>
-<p>The resolver receives the context read from the tool's first argument (an object with a
-<code>context</code>, <code>ctx</code>, <code>request_context</code> or <code>session_context</code> attribute, such as an agent
-framework's run context). When that carries no agent id, the identity, roles and workspace
-of a context set around the call (<code>with AirlockContext(...)</code>) are used. For a tool with
+<p>The resolver receives the context read from the tool's first positional argument when that
+is a run wrapper: an object with a <code>context</code>, <code>ctx</code>, <code>request_context</code> or <code>session_context</code>
+attribute that model JSON cannot have built, such as an agent framework's run context (the
+tool's own model or dataclass with a <code>context</code> field is not one; see
+<a href="../../guide/policy/#agent-identity">Agent Identity</a>). When the call has none, or its
+context carries no agent id, the identity, roles and workspace of a context set around the
+call (<code>with AirlockContext(...)</code>) are used. For a tool with
 neither, like <code>my_tool</code> here, the context is empty (<code>workspace_id</code> is <code>None</code>), so
 <code>resolve_policy</code> returns the 100/hour policy.</p>
 <h3 id="with-sandbox">With Sandbox<a class="headerlink" href="#with-sandbox" title="Permanent link">&para;</a></h3>
@@ -3547,9 +3550,13 @@ raised and Airlock returns it as a blocked response.</p>
 <h3 id="streaming-support-v015">Streaming Support (V0.1.5+)<a class="headerlink" href="#streaming-support-v015" title="Permanent link">&para;</a></h3>
 <p><code>@Airlock</code> on a generator function masks each item the generator yields, as it would a
 returned value, and runs each step under the call's network airgap and context (until
-0.10.20 it did neither). <code>StreamingAirlock</code> is not a decorator. For a cap on the stream as a
-whole, decorate the generator function with <code>create_streaming_wrapper</code>, which masks each
-string chunk and applies <code>max_output_chars</code> across the chunks:</p>
+0.10.20 it did neither). Since 0.10.28 the same holds for a coroutine or a lazy iterator a
+tool returns (<code>map</code>, <code>filter</code>, an iterator or async iterator class that is not a context
+manager), and an Airlock refusal raised while any of these runs is written to the audit log
+as a block before the consumer gets the exception. <code>StreamingAirlock</code> is not a decorator.
+For a cap on the stream as a whole, decorate the generator function with
+<code>create_streaming_wrapper</code>, which masks each string chunk and applies <code>max_output_chars</code>
+across the chunks:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_streaming_wrapper</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
 <a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nd">@create_streaming_wrapper</span>

@@ -2677,15 +2677,19 @@ declared baseline, and <code>AuditRecord</code> carries <code>run_call_count</co
 <code>run_amplification_ratio</code> and <code>run_input_tokens</code>. The unit is <strong>calls</strong>, deliberately: the
 paper's token and wall-time figures are not universally observable at this seam, so
 <code>run_input_tokens</code> is populated only from the <code>input_tokens</code> tag the harness sets on the
-call's context (<code>with AirlockContext(metadata={"input_tokens": ...})</code>, or the context
-object passed as the tool's first argument) and is <strong>never estimated</strong>. Until 0.10.14 it
-also read an <code>_airlock_input_tokens</code> tool argument, which the model could write.</p>
+call's context (<code>with AirlockContext(metadata={"input_tokens": ...})</code>, or the context of a
+run wrapper passed as the tool's first argument, an object model JSON cannot have built)
+and is <strong>never estimated</strong>. Until 0.10.14 it also read an <code>_airlock_input_tokens</code> tool
+argument, which the model could write, and until 0.10.28 a tool's own model with a
+<code>context</code> field, passed first, counted as a run wrapper.</p>
 <p>What still does not reconstruct is the paper's own quantity. <code>duration_ms</code> is tool execution
 time, not the agent's end-to-end wall time, and summing it does not reproduce the 92.45%
 figure because it excludes model latency — which is where a detour spends most of what it
 wastes. A call-count ratio is a proxy for that, not a measurement of it.</p>
-<p><strong>No run identity without a harness context.</strong> <code>session_id</code> is populated from a context
-object passed as the first positional argument. A harness that does not supply one still
+<p><strong>No run identity without a harness context.</strong> <code>session_id</code> is populated from the context
+of a run wrapper passed as the first positional argument (an object model JSON cannot have
+built; see <a href="../../guide/policy/#agent-identity">Agent Identity</a>), or from one set around the
+call with <code>with AirlockContext(session_id=...)</code>. A harness that does not supply one still
 gets every call logged, but the records are anonymous and cannot be assembled into a run at
 all. Run-level analysis needs grouping before it needs anything else.</p>
 <p><strong>No detector fires.</strong> <code>AnomalyDetector</code> watches call rate, endpoint diversity, error rate,

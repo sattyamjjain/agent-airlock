@@ -2809,6 +2809,21 @@ floor; operators on the alpha track should pin manually.</p>
    need wrapping too.</p>
 </li>
 <li>
+<p><strong>Guards the tools CrewAI adds at run time</strong>: delegation tools
+   (<code>allow_delegation</code>), MCP tools (<code>agent.mcps</code>), platform tools
+   (<code>agent.apps</code>), code-execution, multimodal, memory and input-file
+   tools, and the skill loader. None exists when the crew is walked.
+   On the crew and agents it is given (only them), the adapter wraps
+   the methods that hand CrewAI the final tool list and walks what they
+   return: <code>Crew._prepare_tools</code> (every crew task, the hierarchical
+   manager's delegation tools included), <code>Crew.copy</code> (the copies
+   <code>kickoff_for_each</code> and <code>train</code> run) and
+   <code>Agent._add_skill_loader_tool</code> (the last step before a task or
+   <code>Agent.kickoff</code> parses its tools). Where those methods are missing,
+   an agent configured to receive such tools gets a <code>UserWarning</code>
+   naming them. Until 0.10.28 these tools ran outside Airlock.</p>
+</li>
+<li>
 <p><strong>Pins <code>SUPPORTED_CREWAI_VERSIONS</code></strong> (listed in the module) —
    running a version outside this set emits a <code>UserWarning</code> (no hard
    fail). Update the tuple once a new release has been smoke-tested

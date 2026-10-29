@@ -3093,7 +3093,8 @@
 <a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="sd">    """</span>
 </code></pre></div>
 <p><code>@Airlock</code> does not go through this conversion for a dict, list, tuple or set result: it masks
-the values and keeps the type. See <a href="../../guide/sanitization/#what-gets-masked">What Gets Masked</a>.</p>
+the values and dictionary keys and keeps the type. See
+<a href="../../guide/sanitization/#what-gets-masked">What Gets Masked</a>.</p>
 <h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">sanitize_output</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>

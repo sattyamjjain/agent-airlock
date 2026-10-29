@@ -1023,6 +1023,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-network-airgap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Network Airgap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#unknown-arguments-mode-v040" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2957,6 +2968,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-network-airgap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Network Airgap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#unknown-arguments-mode-v040" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3194,10 +3216,46 @@
 <li>Verifies declared capabilities, when a <code>CapabilityPolicy</code> is set</li>
 <li>Checks endpoint policies and the per-model-tier budget, when configured</li>
 <li>Validates types strictly, then runs the function: in the sandbox with <code>sandbox=True</code>,
-   inside the network airgap when a <code>NetworkPolicy</code> forbids egress</li>
+   inside the network airgap whenever a <code>NetworkPolicy</code> is set</li>
 <li>Sanitizes the output</li>
 <li>Writes the audit record and returns the result, or a blocked response</li>
 </ol>
+<h2 id="the-network-airgap">The Network Airgap<a class="headerlink" href="#the-network-airgap" title="Permanent link">&para;</a></h2>
+<p>With <code>AirlockConfig(network_policy=NetworkPolicy(...))</code>, the tool runs inside
+<code>network_airgap</code>, which patches this process's sockets for the call. It checks the address
+of <code>socket.connect</code>, <code>connect_ex</code>, <code>sendto</code> and <code>sendmsg</code>, and the name looked up by
+<code>getaddrinfo</code>, <code>gethostbyname</code>, <code>gethostbyname_ex</code>, <code>gethostbyaddr</code>, <code>getnameinfo</code> and
+asyncio's <code>loop.getaddrinfo</code> / <code>loop.getnameinfo</code> (a lookup of this machine's own name
+excepted). <code>allow_egress=False</code> refuses all of them; a policy that allows egress applies its
+<code>allowed_hosts</code>, <code>allowed_ports</code> and <code>block_dns</code>. <code>block_dns</code> refuses every lookup that can
+ask DNS: a forward lookup of an IP literal (<code>getaddrinfo("10.0.0.5", ...)</code>, which <code>urllib</code>
+makes even for an address) asks none and is checked against the allowlists only. A refusal
+raises <code>NetworkBlockedError</code> in the tool, and a call it escapes from is refused as
+<code>network_blocked</code>. Until 0.10.28 <code>@Airlock</code> entered the airgap only for a policy that
+forbade egress, so allowlists and <code>block_dns</code> were ignored, and only <code>connect</code>,
+<code>connect_ex</code> and <code>getaddrinfo</code> were checked.</p>
+<p>The airgap follows the call's context, which sets its limits:</p>
+<ul>
+<li>The tool's own code, the asyncio tasks it creates and <code>asyncio.to_thread</code> run inside it.
+  A thread the tool starts itself (<code>threading.Thread</code>, a <code>ThreadPoolExecutor</code>,
+  <code>loop.run_in_executor</code>) does not, unless the interpreter copies the context into new
+  threads (<code>sys.flags.thread_inherit_context</code>).</li>
+<li>A subprocess, a socket made from the <code>_socket</code> module directly, an event loop that does
+  its own socket I/O (uvloop) and, with <code>sandbox=True</code>, the tool's code in the E2B
+  micro-VM (see <a href="../sandbox/#network-access">Network Access</a>) are not covered.</li>
+<li>Nested airgaps intersect, so an inner policy cannot widen an outer one. Airgapped tools
+  running concurrently on one event loop each keep their own, and the host's other
+  coroutines are not airgapped while a tool awaits.</li>
+<li>A task the tool leaves running after it returns is checked only while some airgap is
+  still open in the process.</li>
+<li>A name on <code>allowed_hosts</code> admits the addresses it resolves to, for that call, internal
+  ones included: keeping a tool off internal addresses is the job of <code>EndpointPolicy</code> and
+  the SSRF egress guard. A lookup the allowlist did not check admits nothing, and an empty
+  host, which reaches this machine, is refused under a host allowlist (<code>http://:8080/</code>
+  reached a local service until 0.10.28).</li>
+<li>A Unix-domain socket has a path, not a host: <code>allow_egress=False</code> refuses it, and a host
+  or port allowlist does not apply to it.</li>
+</ul>
 <h2 id="unknown-arguments-mode-v040">Unknown Arguments Mode (V0.4.0)<a class="headerlink" href="#unknown-arguments-mode-v040" title="Permanent link">&para;</a></h2>
 <p>The <code>UnknownArgsMode</code> enum replaces the boolean <code>strict_mode</code>:</p>
 <table>

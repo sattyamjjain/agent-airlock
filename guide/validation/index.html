@@ -2929,13 +2929,16 @@
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_user_strict</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">"deleted"</span><span class="p">:</span> <span class="n">user_id</span><span class="p">}</span>
 </code></pre></div>
-<p><code>STRIP_SILENT</code> strips them without logging.</p>
+<p><code>STRIP_SILENT</code> strips them with nothing logged above debug level.</p>
 <h3 id="stripping-default">Stripping (Default)<a class="headerlink" href="#stripping-default" title="Permanent link">&para;</a></h3>
 <p>Ghost arguments are stripped and logged:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">delete_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="mi">123</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># Logs a warning: ghost_arguments_stripped  stripped_args=['force']</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># Logs one warning: unknown_args_stripped  stripped_args=['force']</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Returns: {"deleted": 123}</span>
 </code></pre></div>
+<p>No audit record is written for the strip; the call's own record shows the arguments it
+ran with. Until 0.10.28 each strip was logged three times (<code>ghost_arguments_stripped</code>
+among them), and <code>STRIP_SILENT</code> still logged a warning.</p>
 <h3 id="blocking">Blocking<a class="headerlink" href="#blocking" title="Permanent link">&para;</a></h3>
 <p>Ghost arguments cause rejection:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">delete_user_strict</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="mi">123</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>

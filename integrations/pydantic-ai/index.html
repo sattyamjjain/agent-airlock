@@ -2735,8 +2735,10 @@ the previously example-only PydanticAI integration to <strong>adapter-shipped</s
 hooks — <code>output_validate</code>, <code>output_process</code>, <code>prepare_output_tools</code>. The
 adapter binds to those hooks so users don't have to remember the
 <code>@framework_decorator</code> over <code>@Airlock()</code> rule themselves; one
-<code>wrap_agent(agent, policy=...)</code> call walks every toolset and wires
-the hooks.</p>
+<code>wrap_agent(agent, policy=...)</code> call walks every toolset, on
+pydantic-ai 2.x the ones a run is given included, and wires the
+hooks. A toolset with no local function to wrap (an MCP server, an
+external toolset) is named in a warning, not guarded.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"agent-airlock[pydantic-ai]"</span>
 </code></pre></div>
@@ -2767,8 +2769,7 @@ adapter binds to (PR pydantic/pydantic-ai#4859).</p>
 </code></pre></div>
 <h2 id="what-the-adapter-does">What the adapter does<a class="headerlink" href="#what-the-adapter-does" title="Permanent link">&para;</a></h2>
 <ol>
-<li>
-<p><strong>Walks <code>agent.toolsets</code></strong> (PydanticAI v1.88+ public surface) and
+<li><strong>Walks <code>agent.toolsets</code></strong> (PydanticAI v1.88+ public surface) and
    replaces each function-tool's callable with the
    <code>Airlock(policy=...)</code>-wrapped version — both <code>tool.function</code> and
    <code>tool.function_schema.function</code>, which is the one an agent run
@@ -2777,7 +2778,34 @@ adapter binds to (PR pydantic/pydantic-ai#4859).</p>
    tool rather than its method, and the tool's signature, so strict
    validation and ghost-argument stripping have parameters to check.
    A <code>RunContext</code> first parameter is passed through unvalidated; the
-   model never supplies it.</p>
+   model never supplies it. The walk follows wrapper toolsets
+   (<code>prefixed</code>, <code>filtered</code>, <code>renamed</code>, ...) to the toolset they wrap,
+   a <code>CombinedToolset</code> to each of its members, and a <code>DynamicToolset</code>
+   to each toolset its factory builds during a run. Policy lists match
+   the name a tool is registered under, not a prefixed or renamed one.
+   Wrapping twice under the same policy guards each tool once; a wrap
+   under another policy adds a layer, with a <code>UserWarning</code>, so both
+   apply.</li>
+</ol>
+<p><strong>Output functions</strong> (<code>Agent(output_type=[fn])</code>) are guarded like
+   tools: the model writes <code>fn</code>'s arguments and PydanticAI runs it, so
+   each output processor's <code>_function_schema.function</code> is replaced too,
+   named for the function. An output type that is a model or a scalar
+   calls nothing and is left alone. Until 0.10.28 output functions ran
+   unguarded, and skipping the output toolset hid the warning.</p>
+<ol>
+<li>
+<p><strong>Guards the toolset of each run</strong> on an agent that builds it in
+   <code>_get_toolset</code> (pydantic-ai 2.x): that method is wrapped on this
+   agent, so toolsets passed to <code>run(..., toolsets=[...])</code>, ones from
+   <code>agent.override(...)</code> and tools registered after the wrap are walked
+   before the run uses them. On a PydanticAI agent with no
+   <code>_get_toolset</code>, a <code>UserWarning</code> says run-time toolsets are not
+   guarded. A toolset with no local function to wrap (an MCP server,
+   an external or deferred toolset) gets a <code>UserWarning</code> naming it, at
+   wrap time or when a run first meets it; calls through it are not
+   validated by agent-airlock. <code>PydanticAIAdapter(warn_on_unwrappable=False)</code>
+   turns that warning off.</p>
 </li>
 <li>
 <p><strong>Attaches <code>output_validate</code></strong> (default <code>attach_output_validate=True</code>).

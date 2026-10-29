@@ -3158,11 +3158,26 @@ holds no role, so it is refused too:</p>
 <a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_records</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="o">...</span>
 </code></pre></div>
-<p>Airlock reads the identity from the call's context object, the tool's first argument, in
-the shape frameworks pass one: an attribute named <code>context</code>, <code>ctx</code>, <code>request_context</code> or
-<code>session_context</code> whose object has an <code>agent_id</code> (or <code>agent</code>, <code>assistant_id</code>) and <code>roles</code>
-(or <code>permissions</code>, <code>scopes</code>). An OpenAI Agents SDK <code>RunContextWrapper</code> fits when the
-<code>context</code> object you give it carries those fields.</p>
+<p>Airlock reads the identity from the call's run wrapper, the tool's first positional
+argument, in the shape frameworks pass one: an attribute named <code>context</code>, <code>ctx</code>,
+<code>request_context</code> or <code>session_context</code> whose object has an <code>agent_id</code> (or <code>agent</code>,
+<code>assistant_id</code>) and <code>roles</code> (or <code>permissions</code>, <code>scopes</code>). An OpenAI Agents SDK
+<code>RunContextWrapper</code> fits when the <code>context</code> object you give it carries those fields.</p>
+<p>The first argument counts as a run wrapper only when model JSON cannot have built it: an
+agent framework's own object (checked against the framework's installed package) that is
+not a pydantic model, an object whose context is an <code>AirlockContext</code> (pydantic never builds
+one from JSON or a dict), or an instance of a plain class of your own. Anything else, a
+tool's own pydantic model, dataclass, mapping or named tuple with a <code>context</code> field
+included, is an ordinary argument: it is never read for identity, and it is checked like
+any other argument. A keyword argument is never read as a run wrapper. Until 0.10.28 any
+first argument with one of those attributes was, so the model could write the call's
+identity and roles.</p>
+<p>One limit remains: a framework's own dataclass carrying a context (the OpenAI Agents SDK's
+<code>RunContextWrapper</code> is one) is trusted, although pydantic can build a dataclass from JSON
+and the result cannot be told from the framework's own. A framework that validated the
+model's JSON into a parameter typed as such a class, and passed it first and positionally,
+would let the model write the identity. No shipped framework does: each injects its own
+run context and leaves it out of the tool's schema.</p>
 <p>When a framework passes the tool no context object, set one around the call. <code>async with</code>
 works the same way, and a context object on the call itself comes first:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockContext</span>

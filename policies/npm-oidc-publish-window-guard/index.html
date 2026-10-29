@@ -2635,6 +2635,13 @@ reject blast-list pairs before tool execution.</p>
 <p>The guard fails-closed on a <code>(package, version)</code> pair appearing in
 the operator-supplied blast list, OR on a registry tarball URL
 targeting any pair in the list.</p>
+<p>It reads each spelling a package manager resolves to the same release:
+<code>name@1.2.3</code>, an alias (<code>alias@npm:name@1.2.3</code>), a <code>version</code> written
+<code>npm:1.2.3</code> or <code>npm:@scope/real@1.2.3</code> (Yarn, pnpm), a tarball URL given
+as the <code>package</code> or as <code>name@&lt;url&gt;</code>, and a URL as Node's <code>new URL()</code>
+reads it, with a backslash as a path separator and <code>.</code> / <code>..</code> segments
+(<code>%2e</code> spellings included) resolved. Until 0.10.28 each of those walked
+past it.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <p>Core. No optional extra. The <code>npm</code> / <code>pypi</code> package metadata clients
 are <strong>not</strong> loaded — the guard is a frozenset lookup + a compiled
@@ -2649,7 +2656,7 @@ regex.</p>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">OIDCPublishWindowGuard</span><span class="p">(</span><span class="n">blast_list</span><span class="o">=</span><span class="n">load_blast_list_from_2026_05_11</span><span class="p">())</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">decision</span> <span class="o">=</span> <span class="n">guard</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="p">{</span><span class="s2">"package"</span><span class="p">:</span> <span class="s2">"@tanstack/react-router"</span><span class="p">,</span> <span class="s2">"version"</span><span class="p">:</span> <span class="s2">"1.146.0-compromised-2026-05-11"</span><span class="p">}</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="p">{</span><span class="s2">"package"</span><span class="p">:</span> <span class="s2">"@tanstack/react-router"</span><span class="p">,</span> <span class="s2">"version"</span><span class="p">:</span> <span class="s2">"1.169.5"</span><span class="p">}</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># decision.allowed is False</span>
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="c1"># decision.verdict == OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR</span>
@@ -2657,8 +2664,8 @@ regex.</p>
 <h2 id="companion-preset">Companion preset<a class="headerlink" href="#companion-preset" title="Permanent link">&para;</a></h2>
 <p><code>agent_airlock.policy_presets.npm_oidc_publish_window_guard_defaults()</code>
 returns the recommended config dict (preset_id, severity,
-default_action, advisory_url, blast_list pre-loaded from the
-2026-05-11 fixture).</p>
+default_action, advisory_url, ghsa_url, blast_list pre-loaded from the
+current dated snapshot, <code>data/oidc_publish_blast_2026_10_28.json</code>).</p>
 <h2 id="decision-shape">Decision shape<a class="headerlink" href="#decision-shape" title="Permanent link">&para;</a></h2>
 <p><code>evaluate(args)</code> returns <code>OIDCPublishWindowDecision</code> mirroring
 <code>AllowlistVerdict</code> / <code>OutcomesRubricDecision</code> / <code>FilterEvalRCEDecision</code>
@@ -2683,6 +2690,10 @@ default_action, advisory_url, blast_list pre-loaded from the
 <td><code>DENY_BLAST_LIST_TARBALL_URL</code></td>
 <td>npm-registry tarball URL targeting a blast pair</td>
 </tr>
+<tr>
+<td><code>DENY_UNINSPECTABLE</code></td>
+<td>an argument shape the guard cannot read</td>
+</tr>
 </tbody>
 </table>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
@@ -2692,14 +2703,28 @@ default_action, advisory_url, blast_list pre-loaded from the
   per-publish-review feature request (see postmortem section
   "Remediation Guidance"); the runtime side is what Airlock can
   cover today.</li>
-<li>The fixture is a <strong>point-in-time snapshot</strong> (2026-05-11). Operators
-  must regenerate the JSON when new blast-list extensions are
-  confirmed. Sunday weekly-review surfaces this as a checklist item.</li>
+<li>It matches exact releases only. A range (<code>^1.169.0</code>) that could resolve to
+  a listed release is not resolved here, and a git spec or a tarball on any host
+  but <code>registry.npmjs.org</code> and <code>registry.yarnpkg.com</code> is not read.</li>
+<li>The list is a <strong>point-in-time copy</strong> of the affected-version table of
+  <a href="https://github.com/advisories/GHSA-g7cv-rxg3-hmpx">GHSA-g7cv-rxg3-hmpx</a> (CVE-2026-45321), retrieved 2026-10-28: 42 npm
+  packages, two exact versions each. Operators must regenerate the JSON as a
+  new dated snapshot when new blast-list extensions are confirmed. Sunday
+  weekly-review surfaces this as a checklist item.</li>
+<li>Until 0.10.28 the shipped snapshot (<code>data/oidc_publish_blast_2026_05_11.json</code>,
+  kept as superseded) could not match a real install: 90 of its 93 versions
+  carried a synthetic <code>-compromised-2026-05-11</code> suffix no registry publishes, it
+  named <code>@tanstack/react-query</code>, which the postmortem lists as clean, and its
+  three PyPI rows appear in neither source it cited.</li>
+<li>The wider Mini Shai-Hulud wave (Mistral, UiPath and other npm scopes, per
+  Aikido) is not in the list. Pass those pairs as a caller-supplied
+  <code>blast_list</code> from their own advisories.</li>
 </ul>
 <h2 id="primary-sources">Primary sources<a class="headerlink" href="#primary-sources" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="https://tanstack.com/blog/npm-supply-chain-compromise-postmortem">TanStack npm supply-chain compromise postmortem (2026-05-11)</a> — 42 pkgs × 84 versions × 12M weekly DL blast radius</li>
-<li><a href="https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised">Aikido — Mini Shai-Hulud Is Back (2026-05-11)</a> — cross-ecosystem reinforcement (Mistral SDKs, PyTorch Lightning 2.6.2/2.6.3, intercom-client)</li>
+<li><a href="https://github.com/advisories/GHSA-g7cv-rxg3-hmpx">GHSA-g7cv-rxg3-hmpx (CVE-2026-45321)</a> — the affected-version table the shipped list is copied from</li>
+<li><a href="https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised">Aikido — Mini Shai-Hulud Is Back (2026-05-11)</a> — the wider npm wave (Mistral, UiPath and other scopes); its packages are not in the list</li>
 </ul>
 
 

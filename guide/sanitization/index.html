@@ -2929,16 +2929,32 @@
 <h2 id="what-gets-masked">What Gets Masked<a class="headerlink" href="#what-gets-masked" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>A string result</strong> is masked and, past <code>max_output_chars</code>, truncated.</li>
-<li><strong>A dict, list, tuple or set</strong> is masked value by value and keeps its type and its
-  keys. It is never truncated, because truncating its serialized form would hand back a
-  different type.</li>
+<li><strong>A dict, list, tuple or set</strong> is masked value by value and keeps its type.
+  Dictionary keys are masked too; when two keys mask to the same string, the later ones
+  get a <code>(2)</code>, <code>(3)</code> suffix, so no value is dropped. It is never truncated, because
+  truncating its serialized form would hand back a different type.</li>
 <li><strong>Any other object</strong> (a Pydantic model, a dataclass) is returned as it is, since
   rebuilding it with masked fields could break its own invariants. What was detected in
   it is logged as <code>output_sensitive_data_unmasked</code> and returned as a warning that says it
-  was <em>not</em> masked. Return a dict or a string to have it masked.</li>
+  was <em>not</em> masked. The same goes for a value inside a dict, list, tuple or set that the
+  walk cannot rebuild (bytes, a model, a dataclass, a deque...): it is left as it is, and
+  what was found in it is reported as not masked. Return a dict or a string to have it
+  masked. Numbers no detector can match (under nine digits, or a float with a fractional
+  part) are not read, so a result full of numbers stays fast; <code>bytes</code> are decoded, and the
+  first 100,000 characters of a value are read.</li>
+<li><strong>A value whose text cannot be read</strong> (its <code>str()</code> raises, as an ORM row bound to a closed
+  session does) is returned as it is, unchecked, with a warning that says so.</li>
+<li><strong>A result nested too deeply to rebuild</strong> is refused as <code>output_unreadable</code> rather than
+  returned unmasked.</li>
 </ul>
+<p>The audit record's <code>result_preview</code> is masked like its <code>args_preview</code>, whatever
+<code>sanitize_output</code> is set to.</p>
 <p>Until 0.10.11 only string results were masked. Every other result was reported as
-masked, in the log, the warnings and the audit record, and returned raw.</p>
+masked, in the log, the warnings and the audit record, and returned raw. Until 0.10.28
+dictionary keys were left alone, a value the walk could not rebuild was skipped without a
+warning, and <code>result_preview</code> held the raw text when output masking was off or the result
+was returned unmasked; an unreadable value, or a result too deep to walk, escaped the call
+as an exception after the tool had run.</p>
 <h2 id="sensitive-data-types">Sensitive Data Types<a class="headerlink" href="#sensitive-data-types" title="Permanent link">&para;</a></h2>
 <p>"Masked As" is what <code>@Airlock</code> returns, using each type's default strategy.</p>
 <h3 id="pii-personally-identifiable-information">PII (Personally Identifiable Information)<a class="headerlink" href="#pii-personally-identifiable-information" title="Permanent link">&para;</a></h3>
@@ -3149,8 +3165,19 @@ warns.</p>
 <h2 id="streaming-support">Streaming Support<a class="headerlink" href="#streaming-support" title="Permanent link">&para;</a></h2>
 <p><code>@Airlock</code> masks each item a generator tool yields as it would a returned value, and runs
 each step of the generator under the call's network airgap and context. Until 0.10.20 it
-did neither. What <code>StreamingAirlock</code> adds is a cap on the whole stream: <code>max_output_chars</code>
-counted across chunks, ending the stream once it is reached. Wrap the generator for that:</p>
+did neither. A coroutine or a lazy iterator a tool returns (<code>map</code>, <code>filter</code>, an iterator or
+async iterator class that is not a context manager) is guarded the same way since 0.10.28,
+returned on its own or inside a returned dict, list, tuple, set, pydantic model or
+dataclass: each step runs under
+the call's airgap and context, and each value is masked. It comes back as a coroutine,
+generator or async generator, so an iterator's other attributes are gone: a database
+cursor loses <code>fetchall()</code> and a <code>csv.reader</code> its <code>line_num</code> (return <code>cursor.fetchall()</code> to
+hand back a list). An Airlock
+refusal raised while one of these runs (a <code>NetworkBlockedError</code>, say) is written to the
+audit log as a block before the consumer gets the exception; the call's own record, written
+when it returned, counts none of the values. What <code>StreamingAirlock</code> adds is a cap on the
+whole stream: <code>max_output_chars</code> counted across chunks, ending the stream once it is
+reached. Wrap the generator for that:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">StreamingAirlock</span><span class="p">,</span> <span class="n">AirlockConfig</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>

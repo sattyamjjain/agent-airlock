@@ -2678,8 +2678,9 @@ walking the YAML.</p>
 <p>Anything outside this grammar raises <code>PresetParseError</code>. This is
 <strong>not</strong> a full YAML implementation — by design.</p>
 <h2 id="why-no-pyyaml">Why no PyYAML?<a class="headerlink" href="#why-no-pyyaml" title="Permanent link">&para;</a></h2>
-<p>agent-airlock has 3 runtime deps (<code>pydantic</code>, <code>structlog</code>,
-<code>tomli</code>-on-3.10). Adding PyYAML for a 50-line config grammar
+<p>agent-airlock's installed core depends on <code>pydantic</code> alone (plus
+<code>tomli</code> on Python 3.10; <code>structlog</code> is the optional <code>[logging]</code>
+extra). Adding PyYAML for a 50-line config grammar
 hurts the install footprint and the security-supply-chain story.
 The restricted parser is ~200 LOC of stdlib code with full test
 coverage.</p>
