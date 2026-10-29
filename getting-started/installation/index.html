@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="A deny-by-default contract layer for AI agent tool calls - strict argument validation, ghost-argument stripping and self-healing retries, in-process and Pydantic-only">
+        <meta name="description" content="An in-process contract layer for AI agent tool calls - strict argument validation, ghost-argument stripping and self-healing retries, Pydantic-only">
       
       
       
@@ -2954,7 +2954,7 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pip<span class="w"> </span>install<span class="w"> </span>agent-airlock<span class="o">[</span>mcp<span class="o">]</span>
 </code></pre></div>
 <p>This installs:
-- <code>mcp&gt;=1.0</code> - MCP SDK
+- <code>mcp&gt;=1.30.0,!=2.0.*,!=2.1.*</code> - MCP SDK (the floor is CVE-2026-116684: 1.10.0 to 1.29.x and 2.0 to 2.1 accept a bearer token issued for another resource server)
 - <code>fastmcp&gt;=2.0,&lt;5.0</code> - FastMCP framework</p>
 <h3 id="full-installation">Full Installation<a class="headerlink" href="#full-installation" title="Permanent link">&para;</a></h3>
 <p>Install every runtime extra except <code>modal</code>, <code>bench</code> and <code>attested</code>, which are installed by
