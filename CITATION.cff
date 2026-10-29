@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "Agent-Airlock: a deny-by-default contract layer for AI agent tool calls"
+title: "Agent-Airlock: an in-process contract layer for AI agent tool calls"
 message: "If you use this software, please cite it as below."
 type: software
 authors:
@@ -9,8 +9,8 @@ authors:
 repository-code: "https://github.com/sattyamjjain/agent-airlock"
 url: "https://sattyamjjain.github.io/agent-airlock/"
 license: Apache-2.0
-version: 0.10.27
-date-released: "2026-10-28"
+version: 0.10.28
+date-released: "2026-10-29"
 keywords:
   - ai-security
   - agent-security
@@ -19,7 +19,7 @@ keywords:
   - least-privilege
   - llm-safety
 abstract: >-
-  An in-process, deny-by-default contract layer and type-checker for AI agent
+  An in-process contract layer and type-checker for AI agent
   tool calls. It intercepts calls into MCP servers and agent frameworks,
   validates arguments under Pydantic V2 strict mode with no coercion, strips
   parameters the model invented, applies policy (RBAC, rate limits, cost
