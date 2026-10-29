@@ -69,6 +69,10 @@ class BlockReason(str, Enum):
     # V0.10.28: the tool ran, but its result could not be read to be masked (nested too
     # deeply to rebuild), so it was withheld rather than returned unmasked.
     OUTPUT_UNREADABLE = "output_unreadable"
+    # V0.10.28: a string argument carried shell syntax, or an installer argument was not a
+    # bare version (ToolArgSinkGuard). Unlike a POLICY_VIOLATION the tool is allowed; the
+    # value is not, so the caller can retry with a plain one.
+    TOOL_ARG_SINK = "tool_arg_sink"
 
 
 @dataclass

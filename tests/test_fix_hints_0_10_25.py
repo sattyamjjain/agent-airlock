@@ -53,6 +53,7 @@ from agent_airlock import (
     NetworkPolicy,
     SafePath,
     SecurityPolicy,
+    ToolArgSinkGuard,
     UnknownArgsMode,
     handle_run,
     issue_handle,
@@ -850,6 +851,14 @@ def _startup_hook(env: _Env) -> Any:
     return tool()
 
 
+def _tool_arg_sink(env: _Env) -> Any:
+    @Airlock(policy=SecurityPolicy(tool_arg_sink_guard=ToolArgSinkGuard(shell_args={"repo"})))
+    def tool(repo: str) -> str:
+        return "ran"
+
+    return tool(repo="x; id")
+
+
 def _amplification_unconfigured(env: _Env) -> Any:
     @Airlock(policy=SecurityPolicy(amplification_budget=AmplificationBudget()))
     def tool() -> str:
@@ -914,6 +923,7 @@ _REFUSALS: list[tuple[str, Callable[[_Env], Any], BlockReason]] = [
     ("token-audience", _token_audience, BlockReason.TOKEN_AUDIENCE),
     ("startup-hook", _startup_hook, BlockReason.STARTUP_HOOK),
     ("output-unreadable", _output_unreadable, BlockReason.OUTPUT_UNREADABLE),
+    ("tool-arg-sink", _tool_arg_sink, BlockReason.TOOL_ARG_SINK),
     ("amplification", _amplification_unconfigured, BlockReason.AMPLIFICATION_EXCEEDED),
     ("handle-not-issued", _handle_not_issued, BlockReason.HANDLE_NOT_ISSUED),
     ("handle-wrong-issuer", _handle_wrong_issuer, BlockReason.HANDLE_WRONG_ISSUER),

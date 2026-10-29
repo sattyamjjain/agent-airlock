@@ -1538,11 +1538,11 @@ class Airlock:
             if acg_error is not None:
                 return kwargs, start_time, context, acg_error, None, None
 
-            # Steps 2.7, 3 and 5 read argument values. Until 0.10.24 they read only keyword
-            # arguments, and only str values, so a positional argument, a list of paths, a
-            # pathlib.Path or a URL object walked past all three. They now read every
-            # argument the call passes (`_arg_walk`), bound once and only when one of them
-            # is on. A refusal from them hands the honeypot the arguments by name.
+            # Steps 2.7, 2.75, 3 and 5 read argument values. Until 0.10.24 they read only
+            # keyword arguments, and only str values, so a positional argument, a list of
+            # paths, a pathlib.Path or a URL object walked past all three. They now read
+            # every argument the call passes (`_arg_walk`), bound once and only when one of
+            # them is on. A refusal from them hands the honeypot the arguments by name.
             # The run wrapper the context came from is left out when model JSON cannot have
             # built it (`ContextExtractor.run_wrapper`, the predicate that admitted it); one
             # only its AirlockContext vouches for (a dataclass or model wrapper) is walked,
@@ -1583,6 +1583,19 @@ class Airlock:
             )
             if deser_error is not None:
                 return arguments, start_time, context, deser_error, None, None
+
+            # Step 2.75: Shell syntax and package specs in string arguments (V0.10.28).
+            # Nine MCP server CVEs of 27-28 Oct 2026 spliced an ordinary string argument
+            # (`repo`, `target`, `args`, `version`) into a shell or `pnpm add` on the
+            # server; nothing on the call path read it for that. Inert when
+            # policy.tool_arg_sink_guard is None.
+            sink_error = self._check_tool_arg_sinks(
+                func_name=func_name,
+                resolved_policy=resolved_policy,
+                arguments=arguments,
+            )
+            if sink_error is not None:
+                return arguments, start_time, context, sink_error, None, None
 
             # Step 2.8: Per-run resource-amplification budget (V0.8.74,
             # issue #142, arXiv:2608.12273). Counts calls against the run and
@@ -2816,11 +2829,12 @@ class Airlock:
         return response
 
     def _reads_argument_values(self, func_name: str, resolved_policy: Any) -> bool:
-        """Whether a gate that reads argument values (steps 2.7, 3, 5) is on for this call."""
+        """Whether a gate that reads argument values (steps 2.7, 2.75, 3, 5) is on."""
         return (
             self.config.filesystem_policy is not None
             or func_name in self.config.endpoint_policies
             or getattr(resolved_policy, "deserialization_guard", None) is not None
+            or getattr(resolved_policy, "tool_arg_sink_guard", None) is not None
         )
 
     def _validate_filesystem_paths(
@@ -3152,6 +3166,86 @@ class Airlock:
                 "verdict": decision.verdict.value,
                 "matched_field": decision.matched_field,
                 "matched_pattern": decision.matched_pattern,
+            },
+        )
+        return response
+
+    def _check_tool_arg_sinks(
+        self,
+        *,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        arguments: dict[str, Any],
+    ) -> AirlockResponse | None:
+        """Shell syntax and package specs in string arguments (Step 2.75, V0.10.28).
+
+        Calls ``policy.tool_arg_sink_guard.evaluate(arguments)`` if configured: named (or
+        all) string arguments may carry no shell metacharacters, and installer arguments
+        must be a bare version. See
+        :class:`agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
+
+        The refusal names the argument and the token that tripped it, never the whole
+        value: the token is text the caller sent, so naming it tells a retry what to drop.
+
+        Args:
+            func_name: Name of the function being called.
+            resolved_policy: The resolved :class:`SecurityPolicy` (or None).
+            arguments: Every argument of the call, by name, positional ones included
+                (``bind_arguments``); the guard reads nested values.
+
+        Returns:
+            A blocked :class:`AirlockResponse` (block reason ``tool_arg_sink``) when the
+            guard finds something in ``deny`` mode, else None. In ``warn`` mode a finding
+            is logged and the call runs.
+        """
+        guard = getattr(resolved_policy, "tool_arg_sink_guard", None)
+        if guard is None:
+            return None
+
+        decision = guard.evaluate(arguments)
+        if decision.allowed:
+            return None
+
+        if guard.mode == "warn":
+            logger.warning(
+                "airlock_tool_arg_sink_warn_only",
+                function=func_name,
+                verdict=decision.verdict.value,
+                argument=decision.argument,
+                token=decision.token,
+            )
+            return None
+
+        logger.warning(
+            "airlock_tool_arg_sink_block",
+            function=func_name,
+            verdict=decision.verdict.value,
+            argument=decision.argument,
+            token=decision.token,
+        )
+        response = AirlockResponse.blocked_response(
+            reason=BlockReason.TOOL_ARG_SINK,
+            error=f"AIRLOCK_BLOCK: Tool '{func_name}' blocked by ToolArgSinkGuard: "
+            + decision.detail,
+            fix_hints=list(decision.fix_hints),
+            metadata={
+                "function": func_name,
+                "policy": "ToolArgSinkGuard",
+                "verdict": decision.verdict.value,
+                "argument": decision.argument,
+                "token": decision.token,
+            },
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            decision.detail,
+            {
+                "violation_type": "tool_arg_sink",
+                "verdict": decision.verdict.value,
+                "argument": decision.argument,
+                "token": decision.token,
             },
         )
         return response

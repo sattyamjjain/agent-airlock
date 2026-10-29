@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .oversight import Approver
     from .safe_types import UnsafeDeserializationGuard
     from .sequence_guard import SequenceGuard
+    from .tool_arg_sink_guard import ToolArgSinkGuard
     from .trace_redaction import TraceRedactionPolicy
 
 logger = structlog.get_logger("agent-airlock.policy")
@@ -460,6 +461,13 @@ class SecurityPolicy:
     # never deserialize network payloads pay no cost. See
     # :class:`agent_airlock.safe_types.UnsafeDeserializationGuard`.
     deserialization_guard: UnsafeDeserializationGuard | None = None
+    # V0.10.28 shell syntax and package specs in string arguments. When set, the @Airlock
+    # seam runs the guard as Step 2.75, right after the deserialization guard: named (or
+    # all) string arguments may carry no shell metacharacters, and installer arguments
+    # must be a bare version. Nine MCP server CVEs of 27-28 Oct 2026 spliced such an
+    # argument into a shell or `pnpm add`. OFF by default (None preserves prior behavior
+    # exactly). See :class:`agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
+    tool_arg_sink_guard: ToolArgSinkGuard | None = None
     # V0.8.24 trace-redaction + per-tenant watermark policy (RedAct-style).
     # When set and ``enabled``, traces/receipts emitted to a NON-LOCAL sink
     # are redacted (protected fields localized + rewritten to keep

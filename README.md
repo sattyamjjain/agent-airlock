@@ -94,6 +94,39 @@ Two checks that run before any argument is read, both inert until you set them:
 
 Details: [Token audience and startup hooks](docs/guide/token-audience-and-startup-hooks.md).
 
+### Shell and installer arguments
+
+Nine MCP server CVEs published on 27 and 28 October 2026 share one shape: a string argument
+of an ordinary tool reaches a shell or a package installer on the server.
+[CVE-2026-117558](https://nvd.nist.gov/vuln/detail/CVE-2026-117558) (ai-sdlc, `repo`),
+[CVE-2026-117559](https://nvd.nist.gov/vuln/detail/CVE-2026-117559) (DroidMind),
+[CVE-2026-117560](https://nvd.nist.gov/vuln/detail/CVE-2026-117560) (ATXP),
+[CVE-2026-117561](https://nvd.nist.gov/vuln/detail/CVE-2026-117561) (sf-mcp),
+[CVE-2026-117567](https://nvd.nist.gov/vuln/detail/CVE-2026-117567) (esp-mcp, `target`, `port`, `project_path`),
+[CVE-2026-117568](https://nvd.nist.gov/vuln/detail/CVE-2026-117568) (mcp-ffmpeg),
+[CVE-2026-117569](https://nvd.nist.gov/vuln/detail/CVE-2026-117569) (Kali-GPT),
+[CVE-2026-117573](https://nvd.nist.gov/vuln/detail/CVE-2026-117573) (hagent, `args`) and
+[CVE-2026-59176](https://nvd.nist.gov/vuln/detail/CVE-2026-59176) (functype-mcp-server,
+`version` into `pnpm add`). `ToolArgSinkGuard`, off by default, reads those arguments on
+the call path, before the call reaches a server that builds a command line:
+
+```python
+from agent_airlock import Airlock, SecurityPolicy, ToolArgSinkGuard
+
+guard = ToolArgSinkGuard(shell_args={"repo"}, installer_args={"version"})
+
+
+@Airlock(policy=SecurityPolicy(tool_arg_sink_guard=guard))
+def check_issue(repo: str, version: str = "1.4.4") -> str:
+    return f"checked {repo}"
+```
+
+`repo="x; id"` is refused (`block_reason` `"tool_arg_sink"`), and so is a `version` that is
+not a bare PEP 440 or npm semver version: a URL, a path, `file:` or `npm:`, `pkg[extra]`.
+`screen_all_str_args=True` screens every argument except `free_text_args`;
+`policy_presets.tool_arg_sink_defaults()` does that in warn mode first. Details:
+[Shell and installer arguments](docs/guide/shell-and-installer-arguments.md).
+
 Full reference on the [documentation site](https://sattyamjjain.github.io/agent-airlock/).
 
 ## Benchmarks
