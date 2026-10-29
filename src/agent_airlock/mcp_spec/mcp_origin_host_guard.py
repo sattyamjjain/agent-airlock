@@ -27,6 +27,13 @@ allow-lists, deny-by-default:
   match; with none configured it must be a loopback origin. A request with no
   ``Origin`` (a non-browser MCP client) is judged on ``Host`` alone.
 
+Every header shape is read or refused (v0.10.28): a mapping or an ASGI list of
+``(name, value)`` pairs, ``str`` or Latin-1 ``bytes`` names and values, and a
+list of values per header. Headers in any other shape, a value that is not text,
+and a ``Host`` or ``Origin`` that arrives twice with different values (two
+spellings of the name, two pairs, two list items) are refused as
+``DENY_UNINSPECTABLE`` — the guard cannot know which copy the transport acts on.
+
 Wildcard / unset = warn (mirrors the upstream fix)
 --------------------------------------------------
 Setting ``allowed_origins`` or ``allowed_hosts`` to ``["*"]`` allows everything
@@ -52,6 +59,7 @@ import enum
 import ipaddress
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import urlsplit
 
 from .._log import structlog
@@ -71,6 +79,9 @@ class McpOriginHostVerdict(str, enum.Enum):
     ALLOW_WILDCARD = "allow_wildcard"
     DENY_FORBIDDEN_ORIGIN = "deny_forbidden_origin"
     DENY_FORBIDDEN_HOST = "deny_forbidden_host"
+    # Headers the guard cannot read: not a mapping or a list of pairs, a value that is
+    # not text, or one header sent twice with two different values (0.10.28).
+    DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
 @dataclass(frozen=True)
@@ -230,18 +241,34 @@ class McpOriginHostGuard:
         """Whether ``allowed_hosts`` was set to ``*`` (protection disabled)."""
         return self._host_wildcard
 
-    def check_headers(self, headers: Mapping[str, str]) -> McpOriginHostDecision:
+    def check_headers(self, headers: Mapping[Any, Any] | object) -> McpOriginHostDecision:
         """Validate an inbound request's ``Origin`` and ``Host`` headers.
 
         Args:
-            headers: The request headers (case-insensitive lookup).
+            headers: The request headers: a mapping (case-insensitive lookup) or an
+                ASGI-style list of ``(name, value)`` pairs. Names and values may be
+                ``str`` or ``bytes`` (decoded as Latin-1, as ASGI header bytes are),
+                and a value may be a list of them. A ``None`` value is an absent
+                header. Headers in any other shape, a value that is not text, and
+                one header sent twice (two spellings, two list items, two pairs)
+                with two different values are refused as ``DENY_UNINSPECTABLE``:
+                until v0.10.28 a list or bytes value raised ``AttributeError`` /
+                ``TypeError``, and the first spelling won, whichever the transport
+                acted on.
 
         Returns:
             :class:`McpOriginHostDecision`. ``allowed=False`` maps to a refusal
             of the request at the transport boundary.
         """
-        origin = _header(headers, "origin")
-        host = _header(headers, "host")
+        found = _header_values(headers)
+        if isinstance(found, str):
+            return self._deny_uninspectable(found)
+        host, why = _single_value("Host", found["host"])
+        if why is not None:
+            return self._deny_uninspectable(why)
+        origin, why = _single_value("Origin", found["origin"])
+        if why is not None:
+            return self._deny_uninspectable(why)
 
         # Host is always present on HTTP/1.1; validate it first.
         host_decision = self._check_host(host, origin)
@@ -261,7 +288,7 @@ class McpOriginHostGuard:
             matched_host=host,
         )
 
-    def validate(self, headers: Mapping[str, str]) -> None:
+    def validate(self, headers: Mapping[Any, Any] | object) -> None:
         """Raise :class:`McpOriginHostRebindingError` on a refused request."""
         decision = self.check_headers(headers)
         if not decision.allowed:
@@ -360,6 +387,23 @@ class McpOriginHostGuard:
             ),
         )
 
+    def _deny_uninspectable(self, why: str) -> McpOriginHostDecision:
+        logger.warning("mcp_origin_host_uninspectable", reason=why, advisory=self._advisory)
+        return McpOriginHostDecision(
+            allowed=False,
+            verdict=McpOriginHostVerdict.DENY_UNINSPECTABLE,
+            detail=(
+                f"{why}, so the guard cannot tell which Origin / Host the transport will "
+                "act on — refusing rather than guessing"
+            ),
+            matched_origin=None,
+            matched_host=None,
+            fix_hints=self._hints(
+                "Pass the request headers as a mapping or a list of (name, value) pairs, "
+                "with one text value for Host and at most one for Origin.",
+            ),
+        )
+
     def _hints(self, *extra: str) -> list[str]:
         prefix = f"({self._advisory}) " if self._advisory else ""
         hints = [f"{prefix}{extra[0]}", *extra[1:]] if extra else []
@@ -368,12 +412,61 @@ class McpOriginHostGuard:
         return hints
 
 
-def _header(headers: Mapping[str, str], name: str) -> str | None:
-    """Case-insensitive header lookup."""
-    for key, value in headers.items():
-        if isinstance(key, str) and key.lower() == name:
-            return value
-    return None
+_READ_HEADERS = ("host", "origin")
+
+
+def _as_text(value: object) -> str | None:
+    """A header name or value as text: ``str`` as is, ``bytes`` as Latin-1 (ASGI)."""
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("latin-1")
+    return value if isinstance(value, str) else None
+
+
+def _header_values(headers: object) -> dict[str, list[str]] | str:
+    """Every ``Host`` and ``Origin`` value, by lower-cased name; a ``str`` says why not.
+
+    Reads anything with an ``items()`` method (a mapping, a multi-dict, Werkzeug's
+    ``Headers``, an ``email.message.Message`` — every pair, duplicates included) or a
+    list / tuple of ``(name, value)`` pairs. A name that is not text cannot be
+    ``Host`` or ``Origin`` and is passed over; a ``None`` value is an absent header; a
+    list / tuple value contributes each item.
+    """
+    items = getattr(headers, "items", None)
+    if callable(items):
+        try:
+            raw_pairs: list[object] = list(items())
+        except Exception:  # an items() that fails is headers the guard cannot read
+            return "the headers' items() could not be read"
+    elif isinstance(headers, (list, tuple)):
+        raw_pairs = list(headers)
+    else:
+        return f"the headers are a {type(headers).__name__}, not a mapping or a list of pairs"
+    pairs: list[tuple[object, object]] = []
+    for item in raw_pairs:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            return "a header item is not a (name, value) pair"
+        pairs.append((item[0], item[1]))
+    found: dict[str, list[str]] = {name: [] for name in _READ_HEADERS}
+    for raw_name, raw_value in pairs:
+        name = _as_text(raw_name)
+        if name is None or name.strip().lower() not in found or raw_value is None:
+            continue
+        items = raw_value if isinstance(raw_value, (list, tuple)) else [raw_value]
+        for item in items:
+            text = _as_text(item)
+            if text is None:
+                return f"a {name.strip()} header value is a {type(item).__name__}, not text"
+            found[name.strip().lower()].append(text)
+    return found
+
+
+def _single_value(label: str, values: list[str]) -> tuple[str | None, str | None]:
+    """``(value, None)`` for zero or agreeing values; ``(None, why)`` when two disagree."""
+    if not values:
+        return None, None
+    if len({_normalize(v) for v in values}) > 1:
+        return None, f"the {label} header arrives more than once with different values"
+    return values[0], None
 
 
 __all__ = [

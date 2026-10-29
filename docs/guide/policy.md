@@ -143,11 +143,28 @@ def delete_records(ctx, table: str) -> str:
     ...
 ```
 
-Airlock reads the identity from the call's context object, the tool's first argument, in
-the shape frameworks pass one: an attribute named `context`, `ctx`, `request_context` or
-`session_context` whose object has an `agent_id` (or `agent`, `assistant_id`) and `roles`
-(or `permissions`, `scopes`). An OpenAI Agents SDK `RunContextWrapper` fits when the
-`context` object you give it carries those fields.
+Airlock reads the identity from the call's run wrapper, the tool's first positional
+argument, in the shape frameworks pass one: an attribute named `context`, `ctx`,
+`request_context` or `session_context` whose object has an `agent_id` (or `agent`,
+`assistant_id`) and `roles` (or `permissions`, `scopes`). An OpenAI Agents SDK
+`RunContextWrapper` fits when the `context` object you give it carries those fields.
+
+The first argument counts as a run wrapper only when model JSON cannot have built it: an
+agent framework's own object (checked against the framework's installed package) that is
+not a pydantic model, an object whose context is an `AirlockContext` (pydantic never builds
+one from JSON or a dict), or an instance of a plain class of your own. Anything else, a
+tool's own pydantic model, dataclass, mapping or named tuple with a `context` field
+included, is an ordinary argument: it is never read for identity, and it is checked like
+any other argument. A keyword argument is never read as a run wrapper. Until 0.10.28 any
+first argument with one of those attributes was, so the model could write the call's
+identity and roles.
+
+One limit remains: a framework's own dataclass carrying a context (the OpenAI Agents SDK's
+`RunContextWrapper` is one) is trusted, although pydantic can build a dataclass from JSON
+and the result cannot be told from the framework's own. A framework that validated the
+model's JSON into a parameter typed as such a class, and passed it first and positionally,
+would let the model write the identity. No shipped framework does: each injects its own
+run context and leaves it out of the tool's schema.
 
 When a framework passes the tool no context object, set one around the call. `async with`
 works the same way, and a context object on the call itself comes first:

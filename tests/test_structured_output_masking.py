@@ -42,13 +42,21 @@ class TestSanitizeStructured:
         assert masked["content"][0]["type"] == "text"
         assert masked["is_error"] is False
 
-    def test_keys_and_non_string_leaves_are_left_alone(self) -> None:
-        value = {EMAIL: 1, "n": 3, "ok": True, "none": None}
+    def test_non_string_leaves_with_nothing_in_them_are_left_alone(self) -> None:
+        value = {"n": 3, "ok": True, "none": None, "blob": b"plain"}
 
         masked, count = sanitize_structured(value)
 
         assert count == 0
         assert masked is value
+
+    def test_a_key_is_masked_like_a_value(self) -> None:
+        # Until 0.10.28 keys were left alone, and this dict came back with the address.
+        masked, count = sanitize_structured({EMAIL: 1, "n": 3})
+
+        assert count == 1
+        assert EMAIL not in json.dumps(list(masked))
+        assert list(masked.values()) == [1, 3]
 
     @pytest.mark.parametrize(
         "value",

@@ -54,8 +54,13 @@ with AirlockContext(metadata={"access_token_claims": claims}):
 The host puts the decoded claims on the call's `AirlockContext` metadata under
 `access_token_claims` (`agent_airlock.core.ACCESS_TOKEN_CLAIMS_KEY`): with
 `with AirlockContext(metadata=...)` around the call, or on the context of the run wrapper
-a framework passes as the tool's first argument. That is the channel the per-model-tier
-budget reads its tags from, and the model cannot write it. A tool argument named
+a framework passes as the tool's first positional argument. A run wrapper is an object
+model JSON cannot have built: a framework's own object that is not a pydantic model, an
+object whose context is an `AirlockContext`, or an instance of a plain host class (see
+[Agent Identity](policy.md#agent-identity)). That is the channel the per-model-tier
+budget reads its tags from, and the model cannot write it. Until 0.10.28 a tool's own
+model or dataclass with a `context` field, passed first, was read as a run wrapper, so its
+JSON could supply the claims. A tool argument named
 `access_token_claims` is the model's, and is never read for this check: the call is judged
 on the host's claims or, with none, refused under `deny` as carrying no claims.
 
@@ -67,14 +72,19 @@ mapping it is given.
 
 `aud` may be a string or a list of strings, and both sides are canonicalised
 (`canonicalize_resource_uri`): scheme and host lowercased, a trailing slash dropped, and a
-bare host with or without its root `/` treated as one resource (RFC 3986 §6.2.3). So a
-token for `["https://mcp.example.test/"]` matches `https://mcp.example.test`. A list may
-name other audiences beside this server, a client id among them. Refused, under `deny`:
+bare host with or without its root `/` treated as one resource (RFC 3986 §6.2.3). The
+comparison also reads a scheme's default port (`:443` for https, `:80` for http) as no
+port. An IPv6 literal keeps its brackets, so `https://[::1]:80` and `https://[::1:80]`
+stay two resources. So a token for `["https://mcp.example.test/"]` or for
+`https://mcp.example.test:443` matches `https://mcp.example.test`. A list may name other
+audiences beside this server, a client id among them. Refused, under `deny`:
 
 - an `aud` naming another resource, or a path this server does not have;
 - a missing or empty `aud`;
 - a list that holds anything but strings, even beside a matching one (RFC 7519 §4.1.3);
-- a string `aud` that is not a URI;
+- a string `aud` that is not a URI, or is malformed (a port out of range, an unclosed
+  IPv6 bracket); until 0.10.28 a malformed one raised out of the call under `warn` and
+  `deny` alike;
 - claims that are not a mapping, and no claims at all.
 
 ### Modes
@@ -112,8 +122,9 @@ drops a `.pth` file persists: its line runs before the program it rides in, ever
 
 **What this check cannot do.** These hooks run before any Python code of yours, this
 library included, so the check cannot stop them running and cannot undo what they did. It
-tells you the interpreter is not clean. Under `deny` it also keeps every guarded tool,
-credential-bearing ones included, from running in that interpreter. Scanning packages when
+tells you the interpreter is not clean. Under `deny` it also keeps every tool guarded by a
+config that sets it, credential-bearing ones included, from running in that interpreter;
+a tool whose config leaves the check off still runs. Scanning packages when
 they are installed is not this library's job; use your dependency scanner for that.
 
 ```python
@@ -142,7 +153,9 @@ has coverage's `a1_coverage.pth`; a long-lived interpreter adds setuptools'
 `distutils-precedence.pth` and the `-nspkg.pth` files of legacy namespace packages. List
 the ones you know by file name and SHA-256. A known name whose content has changed is a
 finding again, and a key that is a path or a value that is not a SHA-256 digest raises
-`ValueError` rather than never matching:
+`ValueError` rather than never matching. An entry pins the hook file's own bytes, not the
+modules its `import` lines load: `distutils-precedence.pth` imports `_distutils_hack`, and a
+change to that module is not a finding, because the check does not hash it:
 
 ```python
 from agent_airlock import Airlock, AirlockConfig
@@ -163,7 +176,7 @@ def read_secret() -> str:
 |---|---|
 | `"off"` (default) | nothing is walked |
 | `"warn"` | one structured `airlock_startup_hook_found` event per hook, then every call runs |
-| `"deny"` | every guarded call in the process is refused, naming the files |
+| `"deny"` | every call guarded by a config with `"deny"` is refused, naming the files |
 
 The walk runs once per process, the first time a guarded call is admitted with the check
 on; nothing is walked at import or when a function is decorated. Each hook is logged once,

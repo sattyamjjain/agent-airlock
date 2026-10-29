@@ -97,6 +97,7 @@ from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
+from ._tool_proxy import already_guarded, mark_guarded
 
 logger = structlog.get_logger("agent-airlock.integrations.google_adk")
 
@@ -219,9 +220,16 @@ def _adopt_identity(
 def _airlock_guard(
     func: Callable[..., Any], *, policy: SecurityPolicy | None
 ) -> Callable[..., Any]:
-    """Airlock-decorate one ADK tool callable."""
+    """Airlock-decorate one ADK tool callable, marked so a second walk leaves it alone."""
     airlock = Airlock(policy=policy) if policy is not None else Airlock()
-    return airlock(_relax_injected_params(func))
+    guarded: Callable[..., Any] = airlock(_relax_injected_params(func))
+    mark_guarded(guarded, policy)
+    return guarded
+
+
+def _tool_name(tool: Any) -> str:
+    """The tool's name for messages: ``name``, else the callable's ``__name__``."""
+    return str(getattr(tool, "name", None) or getattr(tool, "__name__", None) or "tool")
 
 
 @dataclass
@@ -303,14 +311,17 @@ class GoogleADKAdapter:
         """Guard one ``agent.tools`` entry.
 
         Returns ``(replacement, None)`` when guarded, or ``(tool, reason)``
-        when the entry has no local callable to wrap.
+        when the entry has no local callable to wrap. Idempotent per tool: an entry
+        already guarded by an earlier walk is returned as it is, so wrapping an agent
+        twice costs one audit record and one rate-limit token per call, not two.
         """
         # 1. BaseTool carrying the user callable (FunctionTool and friends).
         #    Mutating ``.func`` in place keeps the name/description ADK
         #    computed at tool construction.
         func = getattr(tool, "func", None)
         if callable(func):
-            tool.func = _airlock_guard(func, policy=policy)
+            if not already_guarded(func, policy, tool=_tool_name(tool)):
+                tool.func = _airlock_guard(func, policy=policy)
             return tool, None
 
         # 2. Toolsets build their tools per call, via an async ``get_tools``.
@@ -320,6 +331,8 @@ class GoogleADKAdapter:
 
         # 3. Bare callable — ADK keeps these as-is in ``tools``.
         if callable(tool):
+            if already_guarded(tool, policy, tool=_tool_name(tool)):
+                return tool, None
             return _airlock_guard(tool, policy=policy), None
 
         # 4. Built-in model-side tools (e.g. GoogleSearchTool) expose no

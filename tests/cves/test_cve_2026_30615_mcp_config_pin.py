@@ -10,7 +10,9 @@ pattern even when the mutation never touched a watched config file.
 The CVE-2026-30615 pattern: a prompt-injected page rewrites the MCP client
 config so the IDE auto-launches an attacker ``command`` / ``args`` / ``env``.
 The pin refuses any STDIO server whose ``{name, command, args, env-keys}``
-fingerprint is not the operator-pinned known-good value.
+fingerprint (with ``cwd`` and the values of code-loading env variables such as
+``PATH`` and ``NODE_OPTIONS``, since 0.10.28) is not the operator-pinned known-good
+value; those values are pinned in ``tests/test_review_guards_0_10_28.py``.
 
 Primary source (cited per the v0.5.1+ convention):
 - NVD: https://nvd.nist.gov/vuln/detail/CVE-2026-30615
@@ -70,7 +72,8 @@ class TestCleanSpawn:
         )
 
     def test_env_value_rotation_is_allowed(self) -> None:
-        # Only env *keys* are pinned — a rotated secret/value must still pass.
+        # A rotated secret must still pass: only the values of code-loading variables
+        # (PATH, NODE_OPTIONS, ...) are pinned, and MCP_MODE is not one.
         _pin().check(
             {
                 "name": "filesystem",

@@ -822,6 +822,17 @@ def _token_audience(env: _Env) -> Any:
         return tool()
 
 
+def _output_unreadable(env: _Env) -> Any:
+    @Airlock()
+    def tool() -> list[Any]:
+        nested: list[Any] = ["leaf"]
+        for _ in range(5000):  # deeper than the output walk can rebuild
+            nested = [nested]
+        return nested
+
+    return tool()
+
+
 def _startup_hook(env: _Env) -> Any:
     from agent_airlock.runtime import startup_hooks
 
@@ -902,6 +913,7 @@ _REFUSALS: list[tuple[str, Callable[[_Env], Any], BlockReason]] = [
     ("kill-switch", _kill_switch, BlockReason.KILL_SWITCH),
     ("token-audience", _token_audience, BlockReason.TOKEN_AUDIENCE),
     ("startup-hook", _startup_hook, BlockReason.STARTUP_HOOK),
+    ("output-unreadable", _output_unreadable, BlockReason.OUTPUT_UNREADABLE),
     ("amplification", _amplification_unconfigured, BlockReason.AMPLIFICATION_EXCEEDED),
     ("handle-not-issued", _handle_not_issued, BlockReason.HANDLE_NOT_ISSUED),
     ("handle-wrong-issuer", _handle_wrong_issuer, BlockReason.HANDLE_WRONG_ISSUER),

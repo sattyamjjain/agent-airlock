@@ -139,7 +139,13 @@ from .conversation import (
     get_conversation_tracker,
     reset_conversation_tracker,
 )
-from .core import Airlock, SandboxExecutionError, SandboxUnavailableError, airlock
+from .core import (
+    Airlock,
+    OutputUnreadableError,
+    SandboxExecutionError,
+    SandboxUnavailableError,
+    airlock,
+)
 
 # V0.4.0 Cost Tracking + V0.8.7 Per-model-tier budgets
 from .cost_tracking import (
@@ -455,6 +461,7 @@ from .mcp_spec.zero_click_config_guard import (
     MCPCommandMutationDetected,
     McpConfigPinSet,
     McpConfigPinViolation,
+    MCPConfigUnreadable,
     McpServerPin,
     UnsignedMCPServerAdded,
     fingerprint_mcp_server,
@@ -746,12 +753,13 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.10.27"
+__version__ = "0.10.28"
 
 __all__ = [
     # Core
     "Airlock",
     "airlock",
+    "OutputUnreadableError",
     # Config
     "AirlockConfig",
     "DEFAULT_CONFIG",
@@ -1020,6 +1028,7 @@ __all__ = [
     "HighValueActionBlocked",
     "LANUnauthMCPServerBlocked",
     "MCPCommandMutationDetected",
+    "MCPConfigUnreadable",
     # V0.8.23 — CVE-2026-30615 spawn-time MCP config pin
     "McpConfigPinSet",
     "McpConfigPinViolation",

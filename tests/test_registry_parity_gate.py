@@ -318,7 +318,7 @@ class TestChangelogAheadOfTags:
         assert "git tag -a v0.8.85" in message
         assert "git push --atomic" in message, "the atomic push is how you avoid tripping it"
         assert "gh release create" in message
-        assert "[Unreleased]" in message, "the roll-back path must be offered too"
+        assert "delete that dated section" in message, "the roll-back path must be offered too"
 
     def test_main_exits_1_on_that_pair(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """End-to-end through main: the wiring, not only the arithmetic."""

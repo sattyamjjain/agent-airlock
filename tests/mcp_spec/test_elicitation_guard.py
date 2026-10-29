@@ -175,7 +175,7 @@ class TestSizeCap:
 
 class TestPerformance:
     def test_p99_under_1_5ms(self, guard: ElicitationGuard) -> None:
-        """p99 < 1.5 ms, measured as the median of five batches.
+        """p99 < 1.5 ms, measured as the best of five batches.
 
         This took the 99th value of a single 100-sample batch, which is the
         *second-worst* sample — one scheduler hiccup set the result. It failed

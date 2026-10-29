@@ -37,8 +37,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -85,6 +85,8 @@ def generate_pkce_challenge(verifier: str) -> str:
     `code_challenge = BASE64URL-ENCODE(SHA256(ASCII(code_verifier)))` with
     the `=` padding stripped, which matches the exact normative transform.
     """
+    if not isinstance(verifier, str):
+        raise PKCEError(f"PKCE verifier must be a str, got {type(verifier).__name__}")
     if not verifier:
         raise PKCEError("PKCE verifier must be non-empty")
     if not all(c in _PKCE_ALPHABET for c in verifier):
@@ -97,8 +99,11 @@ def validate_pkce_pair(verifier: str, challenge: str) -> bool:
     """Return True iff the challenge is a valid S256 transform of the verifier.
 
     Constant-time comparison via `secrets.compare_digest` to avoid timing
-    side-channels during token redemption.
+    side-channels during token redemption. A challenge that is not an ASCII string
+    is not a valid one: False, not the ``TypeError`` ``compare_digest`` raises.
     """
+    if not isinstance(challenge, str) or not challenge.isascii():
+        return False
     try:
         expected = generate_pkce_challenge(verifier)
     except PKCEError:
@@ -122,6 +127,8 @@ def validate_redirect_uri(uri: str) -> None:
     We accept 127.0.0.1 and [::1] as equivalents; we reject `http://` for
     any other host.
     """
+    if not isinstance(uri, str):
+        raise RedirectURIError(f"redirect_uri must be a str, got {type(uri).__name__}")
     if not uri:
         raise RedirectURIError("redirect_uri must be non-empty")
 
@@ -165,6 +172,8 @@ def parse_authorization_header(value: str) -> BearerToken:
     Rejects every other scheme per spec §"Access Token Usage": "MCP client
     MUST use the Authorization request header field... Bearer <access-token>".
     """
+    if not isinstance(value, str):
+        raise BearerHeaderError(f"Authorization header must be a str, got {type(value).__name__}")
     if not value:
         raise BearerHeaderError("Authorization header is empty")
 
@@ -211,6 +220,10 @@ def parse_www_authenticate_header(value: str) -> WWWAuthenticateChallenge:
     to handle every exotic case from RFC 7235 — the set used in RFC 6750
     and MCP 2025-11-25 is enough.
     """
+    if not isinstance(value, str):
+        raise BearerHeaderError(
+            f"WWW-Authenticate header must be a str, got {type(value).__name__}"
+        )
     if not value:
         raise BearerHeaderError("WWW-Authenticate header is empty")
 
@@ -258,35 +271,81 @@ class ResourceURIError(ValueError):
     """Raised when a resource URI can't be canonicalised."""
 
 
-def canonicalize_resource_uri(uri: str) -> str:
-    """Canonicalise an MCP server resource URI per spec §"Canonical Server URI".
+#: Each scheme's default port (RFC 3986 §6.2.3: an explicit default port names the same
+#: resource as none). Read only by the audience comparison key, never the canonical form.
+_DEFAULT_PORTS: dict[str, int] = {"http": 80, "https": 443}
 
-    - scheme and host are lowercased
-    - fragment is rejected
-    - trailing slash stripped unless the path is purely "/"
-    - scheme must be present (rejects bare hostnames)
+
+@dataclass(frozen=True)
+class _ResourceParts:
+    """A resource URI split into the parts its canonical form is built from."""
+
+    scheme: str
+    host: str  # an IPv6 literal keeps its brackets
+    port: int | None
+    path: str
+    query: str
+
+    def render(self, *, port: int | None) -> str:
+        port_part = f":{port}" if port is not None else ""
+        query = f"?{self.query}" if self.query else ""
+        return f"{self.scheme}://{self.host}{port_part}{self.path}{query}"
+
+
+def _resource_parts(uri: str) -> _ResourceParts:
+    """Split ``uri`` for canonicalisation, refusing what cannot be read.
+
+    Raises:
+        ResourceURIError: ``uri`` is not a non-empty string, cannot be parsed (an unclosed
+            IPv6 bracket, a port that is not a number or is out of range), or has no
+            scheme, has a fragment, or has no host.
     """
+    if not isinstance(uri, str):
+        raise ResourceURIError(f"resource URI must be a str, got {type(uri).__name__}")
     if not uri:
         raise ResourceURIError("resource URI must be non-empty")
-
-    parsed = urlparse(uri)
+    try:
+        parsed = urlparse(uri)
+        port = parsed.port
+    except ValueError as exc:
+        # urllib raises a bare ValueError for these; until 0.10.28 it escaped the
+        # documented error, and @Airlock step 0.6, in warn and deny mode alike.
+        raise ResourceURIError(f"resource URI is malformed: {uri!r}: {exc}") from exc
     if not parsed.scheme:
         raise ResourceURIError(f"resource URI missing scheme: {uri!r}")
     if parsed.fragment:
         raise ResourceURIError(f"resource URI must not contain a fragment: {uri!r}")
 
-    scheme = parsed.scheme.lower()
     host = (parsed.hostname or "").lower()
     if not host:
         raise ResourceURIError(f"resource URI missing host: {uri!r}")
+    if "[" in parsed.netloc.rpartition("@")[2]:
+        # urllib strips an IPv6 literal's brackets; without them [::1]:80 and [::1:80]
+        # (no port) both read "::1:80". Until 0.10.28 the two shared one canonical form.
+        host = f"[{host}]"
 
-    port = f":{parsed.port}" if parsed.port else ""
     path = parsed.path or ""
     if path.endswith("/") and path != "/":
         path = path.rstrip("/")
-    query = f"?{parsed.query}" if parsed.query else ""
+    return _ResourceParts(parsed.scheme.lower(), host, port, path, parsed.query)
 
-    return f"{scheme}://{host}{port}{path}{query}"
+
+def canonicalize_resource_uri(uri: str) -> str:
+    """Canonicalise an MCP server resource URI per spec §"Canonical Server URI".
+
+    - scheme and host are lowercased; an IPv6 literal keeps its brackets
+    - an explicit port is kept, ``:0`` and the scheme's default port included
+    - fragment is rejected
+    - trailing slash stripped unless the path is purely "/"
+    - scheme must be present (rejects bare hostnames)
+
+    Raises:
+        ResourceURIError: ``uri`` is not a string, is empty or malformed (an unclosed
+            IPv6 bracket, a port out of range or not a number), or has no scheme, a
+            fragment, or no host.
+    """
+    parts = _resource_parts(uri)
+    return parts.render(port=parts.port)
 
 
 # =============================================================================
@@ -346,24 +405,28 @@ class TokenAudienceError(ValueError):
 
 
 def _audience_key(uri: str) -> str:
-    """``canonicalize_resource_uri(uri)`` with a root path dropped, to compare audiences.
+    """``canonicalize_resource_uri(uri)`` with a root path and a default port dropped.
 
-    RFC 3986 §6.2.3: for http(s) an empty path and ``/`` name the same resource, and the
-    spec's canonical server URI has no trailing slash, so a token for
-    ``https://mcp.example.com/`` is a token for ``https://mcp.example.com``. Until 0.10.27
-    the two were compared as written and refused. The canonical form itself keeps the
-    root slash (``canonicalize_resource_uri``); only the comparison ignores it.
+    RFC 3986 §6.2.3: for http(s) an empty path and ``/`` name the same resource, and so do
+    no port and the scheme's default port, and the spec's canonical server URI has no
+    trailing slash, so a token for ``https://mcp.example.com:443/`` is a token for
+    ``https://mcp.example.com``. Until 0.10.27 a root slash, and until 0.10.28 a default
+    port, was compared as written and refused. The canonical form itself keeps both
+    (``canonicalize_resource_uri``); only the comparison ignores them. ``:0`` is not a
+    default port and stays.
+
+    Raises:
+        ResourceURIError: ``uri`` cannot be canonicalised.
     """
-    canonical = canonicalize_resource_uri(uri)
-    parsed = urlparse(canonical)
-    if parsed.path != "/":
-        return canonical
-    query = f"?{parsed.query}" if parsed.query else ""
-    return f"{parsed.scheme}://{parsed.netloc}{query}"
+    parts = _resource_parts(uri)
+    if parts.path == "/":
+        parts = replace(parts, path="")
+    port = None if parts.port == _DEFAULT_PORTS.get(parts.scheme) else parts.port
+    return parts.render(port=port)
 
 
 def validate_access_token_audience(
-    token_claims: dict[str, Any],
+    token_claims: Mapping[str, Any],
     *,
     expected_audience: str,
 ) -> None:
@@ -387,8 +450,15 @@ def validate_access_token_audience(
             contain the expected audience (after canonicalisation). A string
             `aud` that is not a URI, and a list `aud` holding anything but
             strings, are refused with it too: until 0.10.27 the first escaped as
-            a `ResourceURIError` and the second's other items were skipped.
+            a `ResourceURIError` and the second's other items were skipped. So
+            are a malformed `aud` (an unclosed IPv6 bracket, a port out of range;
+            until 0.10.28 a bare `ValueError`) and claims that are not a mapping.
+        ResourceURIError: ``expected_audience`` itself is not a resource URI.
     """
+    if not isinstance(token_claims, Mapping):
+        raise TokenAudienceError(
+            f"access token claims are a {type(token_claims).__name__}, not a mapping"
+        )
     aud = token_claims.get("aud")
     if aud is None or aud == "":
         raise TokenAudienceError("access token has no 'aud' claim")
@@ -453,8 +523,69 @@ def _normalize_issuer(value: str) -> str:
     return value.strip().rstrip("/")
 
 
+def _unreadable_params(params: Any) -> IssuerMismatchError:
+    return IssuerMismatchError(
+        f"authorization response parameters are a {type(params).__name__} the issuer check "
+        "cannot read; refusing rather than skipping the mix-up defence"
+    )
+
+
+#: The multi-value accessor a framework's query-params multi-dict reads every value of a
+#: name through: Starlette, Werkzeug, Django and Bottle spell it ``getlist``, httpx
+#: ``get_list``, multidict (aiohttp, yarl) and WebOb ``getall``.
+_MULTI_VALUE_ACCESSORS: tuple[str, ...] = ("getlist", "get_list", "getall")
+
+
+def _iss_values(params: Any) -> list[Any]:
+    """Every ``iss`` value an authorization response carries, repeats included.
+
+    Reads a query string (``str`` / ``bytes``), a mapping whose value may be a list (or a
+    framework multi-dict, through its multi-value accessor), and a list of
+    ``(key, value)`` pairs (``parse_qsl`` output). The accessor is called with the name
+    alone, and a ``KeyError`` from it means no value (multidict's ``getall`` raises one).
+    Until 0.10.28 httpx's ``get_list`` was not among them, and a ``getall`` that takes no
+    default (WebOb's) or any accessor that could not be called fell back to ``get``, so
+    each read one value and a second ``iss`` passed.
+
+    Raises:
+        IssuerMismatchError: ``params`` is of no readable shape, or is a multi-dict whose
+            multi-value accessor cannot be called with a name alone.
+    """
+    if isinstance(params, (bytes, bytearray)):
+        try:
+            params = bytes(params).decode("utf-8")
+        except UnicodeDecodeError:
+            raise _unreadable_params(params) from None
+    if isinstance(params, str):
+        return list(parse_qs(params, keep_blank_values=True).get("iss", []))
+    if isinstance(params, Mapping):
+        for accessor in _MULTI_VALUE_ACCESSORS:
+            getter = getattr(params, accessor, None)
+            if not callable(getter):
+                continue
+            try:
+                return list(getter("iss"))
+            except KeyError:
+                return []
+            except TypeError:
+                raise _unreadable_params(params) from None
+        raw = params.get("iss")
+        if isinstance(raw, (list, tuple)):
+            return list(raw)
+        return [] if raw is None else [raw]
+    if isinstance(params, (list, tuple)):
+        values: list[Any] = []
+        for item in params:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                raise _unreadable_params(params)
+            if item[0] == "iss":
+                values.append(item[1])
+        return values
+    raise _unreadable_params(params)
+
+
 def validate_authorization_response_iss(
-    params: Mapping[str, Any] | str,
+    params: Mapping[str, Any] | str | bytes | Sequence[tuple[str, Any]],
     *,
     expected_issuer: str,
     require_iss: bool = True,
@@ -468,10 +599,11 @@ def validate_authorization_response_iss(
     issuer identifiers are compared as strings, not resolved).
 
     Args:
-        params: The authorization-response parameters — either a mapping (e.g.
-            parsed query params, where a value may be a ``str`` or a
-            single-element ``list[str]``) or a raw query string
-            (``"code=…&state=…&iss=…"``).
+        params: The authorization-response parameters — a mapping (e.g. parsed query
+            params, where a value may be a ``str`` or a ``list[str]``; a framework
+            multi-dict is read through its ``getlist`` / ``get_list`` / ``getall``), a
+            list of ``(key, value)`` pairs, or a raw query string
+            (``"code=…&state=…&iss=…"``, ``str`` or ``bytes``).
         expected_issuer: The issuer identifier of the authorization server the
             client initiated the flow with (e.g. from the discovered
             :class:`AuthorizationServerMetadata.issuer`).
@@ -481,22 +613,17 @@ def validate_authorization_response_iss(
             cannot emit `iss` yet.
 
     Raises:
-        IssuerMismatchError: `iss` is missing (and required) or does not match
-            ``expected_issuer``.
+        IssuerMismatchError: `iss` is missing (and required), any `iss` value does
+            not match ``expected_issuer`` (a repeated `iss` is accepted only when
+            every value matches; until 0.10.28 the first was read and the rest
+            ignored), or ``params`` is of no readable shape.
         ValueError: ``expected_issuer`` is empty.
     """
     if not expected_issuer or not expected_issuer.strip():
         raise ValueError("expected_issuer must be a non-empty issuer identifier")
 
-    if isinstance(params, str):
-        parsed = parse_qs(params, keep_blank_values=True)
-        iss_raw: Any = parsed.get("iss", [None])[0]
-    else:
-        iss_raw = params.get("iss")
-        if isinstance(iss_raw, (list, tuple)):
-            iss_raw = iss_raw[0] if iss_raw else None
-
-    if iss_raw is None or (isinstance(iss_raw, str) and iss_raw.strip() == ""):
+    values = _iss_values(params)
+    if all(v is None or (isinstance(v, str) and v.strip() == "") for v in values):
         if require_iss:
             raise IssuerMismatchError(
                 "authorization response has no 'iss' parameter; RFC 9207 / SEP-2468 "
@@ -504,16 +631,18 @@ def validate_authorization_response_iss(
             )
         return
 
-    if not isinstance(iss_raw, str):
-        raise IssuerMismatchError(
-            f"authorization response 'iss' has unsupported type: {type(iss_raw).__name__}"
-        )
-
-    if _normalize_issuer(iss_raw) != _normalize_issuer(expected_issuer):
-        raise IssuerMismatchError(
-            f"authorization response 'iss'={iss_raw!r} does not match the expected "
-            f"authorization server {expected_issuer!r} (possible mix-up attack)"
-        )
+    expected = _normalize_issuer(expected_issuer)
+    for iss_raw in values:
+        if not isinstance(iss_raw, str):
+            raise IssuerMismatchError(
+                f"authorization response 'iss' has unsupported type: {type(iss_raw).__name__}"
+            )
+        if _normalize_issuer(iss_raw) != expected:
+            repeated = f" (one of {len(values)} 'iss' values)" if len(values) > 1 else ""
+            raise IssuerMismatchError(
+                f"authorization response 'iss'={iss_raw!r}{repeated} does not match the "
+                f"expected authorization server {expected_issuer!r} (possible mix-up attack)"
+            )
 
 
 __all__ = [

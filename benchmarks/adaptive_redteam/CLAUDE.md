@@ -19,7 +19,8 @@ Subtree conventions for the adaptive red-team campaign. These extend
   executes and scores the JSON they produce.
 - **Audit logs stay out of the checkout.** Every canary run sets its own
   `AIRLOCK_AUDIT_LOG_PATH` under a temp dir (`canaries.canary_env`). Never let a
-  run write `airlock_audit.json` into the tree.
+  run write `airlock_audit.json` into the tree. Build each `AirlockConfig` inside
+  `canary_env()`: the default config reads the variable once, at import.
 
 ## Reporting conventions
 
@@ -49,7 +50,9 @@ Subtree conventions for the adaptive red-team campaign. These extend
   aggregates (`RESULTS.md` and any summary JSON) are committed.
 - Adapter control shapes (`known_blocked` / `benign_control`) must come from the
   guard's own behaviour — a shape its tests prove refused, and a benign shape it
-  admits. `tests/test_adaptive_redteam_adapters.py` enforces this for all 41.
+  admits. `tests/test_adaptive_redteam_adapters.py` enforces this for every registered
+  adapter (`PYTHONPATH=. python3 -c "from benchmarks.adaptive_redteam.adapters.registry
+  import all_adapter_names as a; print(len(a()))"` counts them).
 
 ## Layout
 
@@ -57,7 +60,7 @@ Subtree conventions for the adaptive red-team campaign. These extend
   `Canary`, `Attempt`, `classify`.
 - `canaries.py` — the five sentinel sinks + `canary_env` / `read_audit`.
 - `adapters/` — `base.py` (protocol), `standalone.py` (C), `config_gate.py` (B),
-  `policy_field.py` (A), `registry.py` (all 41), `adapters_table.md` is the map.
+  `policy_field.py` (A), `registry.py` (every adapter), `adapters_table.md` is the map.
 - `run_session.py` / `__main__.py` — the resumable CLI.
 - `ledger.py` — schema-1 append-only ledger.
 - `stats.py` — rule-of-three, histograms, plateau.

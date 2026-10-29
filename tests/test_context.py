@@ -17,6 +17,18 @@ from agent_airlock.context import (
 )
 
 
+class _HostWrapper:
+    """A host's run wrapper: a plain class, which model JSON cannot build.
+
+    Since 0.10.28 a first argument is read as the run wrapper only when model JSON cannot
+    have built it; a dataclass or pydantic wrapper counts only when its context is an
+    ``AirlockContext`` (``tests/test_call_path_0_10_28.py``).
+    """
+
+    def __init__(self, **attributes: Any) -> None:
+        self.__dict__.update(attributes)
+
+
 class TestAirlockContext:
     """Tests for AirlockContext dataclass."""
 
@@ -174,18 +186,33 @@ class TestContextExtractor:
             session_id: str
             workspace_id: str = "default-ws"
 
-        @dataclass
-        class ContextWrapper:
-            context: InnerContext
-
         inner = InnerContext(agent_id="agent-1", session_id="session-1")
-        wrapper = ContextWrapper(context=inner)
+        wrapper = _HostWrapper(context=inner)
 
         ctx = ContextExtractor.extract_from_args((wrapper,), {})
         assert ctx.agent_id == "agent-1"
         assert ctx.session_id == "session-1"
         assert ctx.workspace_id == "default-ws"
         assert ctx.user_context is wrapper
+
+    def test_a_dataclass_wrapper_is_an_ordinary_argument(self) -> None:
+        """Model JSON can build a dataclass, so one is read only around an AirlockContext."""
+
+        @dataclass
+        class InnerContext:
+            agent_id: str
+
+        @dataclass
+        class ContextWrapper:
+            context: Any
+
+        ordinary = ContextWrapper(context=InnerContext(agent_id="agent-1"))
+        ctx = ContextExtractor.extract_from_args((ordinary,), {})
+        assert (ctx.agent_id, ctx.user_context) == (None, None)
+
+        carrier = ContextWrapper(context=AirlockContext(agent_id="agent-1"))
+        ctx = ContextExtractor.extract_from_args((carrier,), {})
+        assert (ctx.agent_id, ctx.user_context) == ("agent-1", carrier)
 
     def test_extract_from_object_with_ids(self) -> None:
         """Test extraction from object with ID fields directly."""
@@ -217,12 +244,8 @@ class TestContextExtractor:
             agent_id: str
             workspace_id: str
 
-        @dataclass
-        class CtxWrapper:
-            ctx: InnerData
-
         inner = InnerData(agent_id="ctx-agent", workspace_id="ws-123")
-        wrapper = CtxWrapper(ctx=inner)
+        wrapper = _HostWrapper(ctx=inner)
 
         ctx = ContextExtractor.extract_from_args((wrapper,), {})
         assert ctx.agent_id == "ctx-agent"
@@ -236,12 +259,8 @@ class TestContextExtractor:
         class Inner:
             roles: list[str]
 
-        @dataclass
-        class Wrapper:
-            context: Inner
-
         inner = Inner(roles=["admin", "user"])
-        wrapper = Wrapper(context=inner)
+        wrapper = _HostWrapper(context=inner)
 
         ctx = ContextExtractor.extract_from_args((wrapper,), {})
         assert ctx.roles == ["admin", "user"]
@@ -253,12 +272,8 @@ class TestContextExtractor:
         class Inner:
             permissions: tuple[str, ...]
 
-        @dataclass
-        class Wrapper:
-            context: Inner
-
         inner = Inner(permissions=("read", "write"))
-        wrapper = Wrapper(context=inner)
+        wrapper = _HostWrapper(context=inner)
 
         ctx = ContextExtractor.extract_from_args((wrapper,), {})
         assert ctx.roles == ["read", "write"]
@@ -270,12 +285,8 @@ class TestContextExtractor:
         class Inner:
             metadata: dict[str, Any]
 
-        @dataclass
-        class Wrapper:
-            context: Inner
-
         inner = Inner(metadata={"request_id": "req-123", "trace_id": "tr-456"})
-        wrapper = Wrapper(context=inner)
+        wrapper = _HostWrapper(context=inner)
 
         ctx = ContextExtractor.extract_from_args((wrapper,), {})
         assert ctx.metadata == {"request_id": "req-123", "trace_id": "tr-456"}
@@ -290,17 +301,13 @@ class TestContextExtractor:
             tenant_id: str  # Alternative for workspace_id
             end_user_id: str  # Alternative for user_id
 
-        @dataclass
-        class Wrapper:
-            context: Inner
-
         inner = Inner(
             assistant_id="asst-1",
             conversation_id="conv-1",
             tenant_id="tenant-1",
             end_user_id="enduser-1",
         )
-        wrapper = Wrapper(context=inner)
+        wrapper = _HostWrapper(context=inner)
 
         ctx = ContextExtractor.extract_from_args((wrapper,), {})
         assert ctx.agent_id == "asst-1"
@@ -325,12 +332,8 @@ class TestCreateContextFromArgs:
         class Inner:
             agent_id: str
 
-        @dataclass
-        class Wrapper:
-            context: Inner
-
         inner = Inner(agent_id="test-agent")
-        wrapper = Wrapper(context=inner)
+        wrapper = _HostWrapper(context=inner)
 
         ctx = create_context_from_args((wrapper,), {})
         assert ctx.agent_id == "test-agent"
@@ -345,18 +348,18 @@ class MockUserContext:
     session_id: str = ""
 
 
-@dataclass
 class MockRunContextWrapper:
-    """Mock wrapper for integration tests."""
+    """Mock wrapper for integration tests: a plain host class, so it is read (0.10.28)."""
 
-    context: MockUserContext
+    def __init__(self, context: MockUserContext) -> None:
+        self.context = context
 
 
-@dataclass
 class MockCtxWrapper:
-    """Mock wrapper with ctx attribute."""
+    """Mock wrapper with ctx attribute: a plain host class, so it is read (0.10.28)."""
 
-    ctx: MockUserContext
+    def __init__(self, ctx: MockUserContext) -> None:
+        self.ctx = ctx
 
 
 class TestContextIntegrationWithAirlock:
@@ -369,7 +372,7 @@ class TestContextIntegrationWithAirlock:
         captured_context: list[AirlockContext[Any] | None] = []
 
         @Airlock()
-        def my_tool(_ctx: MockRunContextWrapper, query: str) -> str:
+        def my_tool(_ctx: Any, query: str) -> str:
             captured_context.append(get_current_context())
             return f"Query: {query}"
 
@@ -392,7 +395,7 @@ class TestContextIntegrationWithAirlock:
         captured_context: list[AirlockContext[Any] | None] = []
 
         @Airlock()
-        async def async_tool(_ctx: MockCtxWrapper, data: str) -> str:
+        async def async_tool(_ctx: Any, data: str) -> str:
             captured_context.append(get_current_context())
             return data.upper()
 
@@ -431,11 +434,11 @@ class PolicyMockInner:
     agent_id: str
 
 
-@dataclass
 class PolicyMockWrapper:
-    """Wrapper for policy tests."""
+    """Wrapper for policy tests: a plain host class, so it is read (0.10.28)."""
 
-    context: PolicyMockInner
+    def __init__(self, context: PolicyMockInner) -> None:
+        self.context = context
 
 
 class TestDynamicPolicyResolution:
@@ -452,7 +455,7 @@ class TestDynamicPolicyResolution:
             return SecurityPolicy(allowed_tools=["resolver_test_tool"])
 
         @Airlock(policy=policy_resolver)
-        def resolver_test_tool(_ctx: PolicyMockWrapper, x: int) -> int:
+        def resolver_test_tool(_ctx: Any, x: int) -> int:
             return x
 
         wrapper = PolicyMockWrapper(context=PolicyMockInner(agent_id="policy-agent"))

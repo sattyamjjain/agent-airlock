@@ -63,7 +63,7 @@ Primary references
 - @desiorac comment (Merkle-chained attestation interop) —
   https://github.com/sattyamjjain/agent-airlock/issues/33#issuecomment-4306659626
 - OWASP Agentic 2026 Top 10 (ASI03) —
-  https://owasp.org/www-project-agentic-ai/
+  https://genai.owasp.org/initiatives/agentic-security-initiative/
 - ed25519 — RFC 8032: https://www.rfc-editor.org/rfc/rfc8032
 """
 

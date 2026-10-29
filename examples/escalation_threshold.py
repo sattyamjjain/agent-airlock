@@ -31,6 +31,7 @@ Four scenarios run below, and scenario 4 is the one that matters most.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from agent_airlock import Airlock, AirlockContext, SecurityPolicy
 from agent_airlock.oversight import OversightRequest, OversightResponse, OversightVerdict
@@ -52,11 +53,17 @@ class TransferRequest:
     agent_id: str = "payments-agent"
 
 
-@dataclass
 class RunContext:
-    """A ``RunContextWrapper``-alike. airlock reads the inner object through ``.context``."""
+    """A ``RunContextWrapper``-alike. airlock reads the inner object through ``.context``.
 
-    context: TransferRequest
+    A plain class on purpose: airlock reads a first argument as the host's run wrapper only
+    when model JSON cannot have built it, so a dataclass or pydantic wrapper is read only
+    when its ``context`` is an ``AirlockContext``. The tool below takes it as ``Any``,
+    since pydantic validates no plain class.
+    """
+
+    def __init__(self, context: TransferRequest) -> None:
+        self.context = context
 
 
 @dataclass
@@ -94,9 +101,13 @@ def build_policy_resolver(approver: StubApprover | None) -> object:
         A resolver suitable for ``@Airlock(policy=...)``.
     """
 
-    def resolve(ctx: AirlockContext[RunContext]) -> SecurityPolicy:
+    def resolve(ctx: AirlockContext[RunContext]) -> SecurityPolicy | None:
         wrapper = ctx.user_context
-        amount = wrapper.context.amount_usd if wrapper else 0
+        if wrapper is None:
+            # No host-built request, so no amount to judge. Returning None refuses the
+            # call; reading a missing amount as $0 would auto-approve any transfer.
+            return None
+        amount = wrapper.context.amount_usd
 
         if amount <= THRESHOLD_USD:
             # Under the line: an ordinary allow. Nothing to escalate.
@@ -118,7 +129,7 @@ def make_tool(approver: StubApprover | None):
     """Build the airlocked tool against one approver configuration."""
 
     @Airlock(policy=build_policy_resolver(approver))
-    def transfer_funds(request: RunContext, amount_usd: int) -> str:
+    def transfer_funds(request: Any, amount_usd: int) -> str:  # request: RunContext
         # Reached only when the policy allowed the call, or a human granted it.
         return f"TRANSFERRED ${amount_usd:,}"
 

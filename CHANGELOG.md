@@ -11,6 +11,310 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.28] - 2026-10-28
+
+A fourth drift audit checked every `CLAUDE.md` claim against the code and turned up ten
+fail-opens: one on the call path, three in the network airgap, three in framework adapters
+and three in MCP guards, plus checks that read less than they claimed. Every fix has a
+regression test, written to fail first, with a passing control beside each attack: most in
+`tests/test_*_0_10_28.py` modules, the OIDC guard's beside its other tests in
+`tests/mcp_spec/`. Behaviour a caller can notice is listed under Changed.
+
+An independent review of those fixes before release found nineteen more problems. Four
+were regressions the fixes had introduced: an empty host reached this machine through a
+host allowlist, a returned value whose text could not be read crashed the call after the
+tool ran, a symlinked framework install lost the call's identity, and a LangChain re-wrap
+asking for a sandbox or masking was skipped. Nine were fail-opens of the kinds above, two
+were checks refusing traffic they had no reason to, two were behaviour changes these notes
+had not listed (now under Changed), one was a test that could not fail, and one is a limit
+(under Known limits). All are addressed in this release
+(`tests/test_review_runtime_0_10_28.py`, `tests/test_review_guards_0_10_28.py`).
+
+### Security
+
+- **A tool's own first argument could pose as the host's run context.** `@Airlock` treated
+  any first positional argument with a `context`, `ctx`, `request_context` or
+  `session_context` attribute as the framework's run wrapper: it read agent id, roles,
+  token claims, budget tags and the run's session from it, and skipped it in the path,
+  endpoint and deserialization checks. A pydantic model the tool declares, which the model
+  writes and the OpenAI Agents SDK passes positionally, qualified. A forged
+  `metadata.access_token_claims` passed step 0.6 in deny mode, the CVE-2026-115413 shape the
+  check exists for; model-written roles passed RBAC; a `context` field let `/etc/passwd`
+  through the path gate. `ContextExtractor.run_wrapper` now decides once for every reader:
+  a verified agent-framework object that is not a pydantic model, an object whose context is
+  an `AirlockContext`, or a plain host class. Pydantic can no longer build an
+  `AirlockContext` from JSON (`tests/test_call_path_0_10_28.py`).
+- **The network airgap leaked between concurrent tasks.** Its policy lived in a
+  `threading.local`, so two airgapped tools awaiting on one event loop could unset each
+  other's airgap (egress allowed) while the host's own coroutines were refused. The airgap
+  is now a per-call `ContextVar`; nested airgaps intersect, so an inner policy cannot widen
+  an outer one (`tests/test_execution_0_10_28.py`).
+- **An allow-egress `NetworkPolicy` on `AirlockConfig` was never applied.** `@Airlock`
+  entered the airgap only for `allow_egress=False`, so host and port allowlists and
+  `block_dns` (`INTERNAL_ONLY_POLICY`, `HTTPS_ONLY_POLICY`) enforced nothing through the
+  decorator since v0.4.0. Any configured policy is now applied.
+- **An empty host got past a host allowlist to this machine.** The connect check skipped
+  an empty host, and a lookup of an empty or missing host admitted the loopback or wildcard
+  address it returned, so `http://:PORT/`, `connect(("", port))` and
+  `asyncio.open_connection("", port)` reached a local service through
+  `allowed_hosts=["api.example.com"]`. An empty host is refused under a host allowlist, and
+  a lookup the allowlist did not check admits nothing (`tests/test_review_runtime_0_10_28.py`).
+- **The airgap missed datagrams and most lookups.** Under `NO_NETWORK_POLICY`, UDP
+  `sendto` / `sendmsg` and `gethostbyname`, `gethostbyname_ex`, `gethostbyaddr` and
+  `getnameinfo` went through. They are intercepted now, and so are asyncio's
+  `loop.getaddrinfo` / `loop.getnameinfo`.
+- **A coroutine or lazy iterator a tool returned ran outside the airgap, unmasked.** Only
+  generators were guarded; a sync tool returning a coroutine, or a `map`, ran later with
+  egress allowed and secrets raw. Coroutines and lazy (async) iterators are guarded now,
+  returned on their own or inside a returned dict, list, tuple, set, pydantic model or
+  dataclass field (`{"rows": map(fetch, urls)}` still ran unguarded until the review); a
+  model's private attributes, and any other object's, are not read.
+- **LangChain async tools were never guarded.** `wrap_langchain_tool` wrapped `func` / `_run`
+  only, so `.ainvoke` on an async `@tool`, a `StructuredTool(coroutine=...)` or a `_arun`
+  ran the body under a deny-all policy. Policy lists also matched `_run` instead of the
+  tool's name, so a denied tool name missed a `BaseTool` subclass
+  (`tests/test_adapters_0_10_28.py`).
+- **PydanticAI wrapped toolsets were skipped silently.** `prefixed`, `filtered`, `renamed`,
+  `CombinedToolset` and toolsets passed at run time ran unguarded; so did tools added after
+  the wrap. The walker follows every toolset shape and re-walks each run's toolset. Output
+  functions (`output_type=[fn]`), whose arguments the model writes, ran unguarded too, and
+  skipping the output toolset hid the warning; they are guarded like tools (verified on
+  pydantic-ai 2.63.0).
+- **CrewAI tools added at run time were never wrapped.** Delegation tools, `agent.mcps` tools
+  and the other run-time tools ran under deny-all (confirmed on crewai 1.15.22). Hooks on
+  `Crew._prepare_tools`, `Crew.copy` and `Agent._add_skill_loader_tool` guard them.
+- **`validate_header_body_integrity` compared the body with itself.** A top-level body key
+  spelled like `Mcp-Name` / `Mcp-Method` was read before the real header; it now only agrees
+  with the header or is refused (`tests/test_mcp_spec_guards_0_10_28.py`).
+- **A decoy `_meta` hid an escalating one.** `validate_meta_trust` read the first `_meta` it
+  found; an empty or null top-level copy hid `params._meta`. Every copy is checked.
+- **The MCP bridge SSRF check accepted alternate spellings.** `0.0.0.0`,
+  `[::ffff:127.0.0.1]`, `[::]` and NAT64 metadata addresses passed a hand-rolled list; the
+  decision is now `SSRFEgressGuard`'s.
+- **The OIDC publish-window blast list could not match a real install.** 90 of its 93
+  versions carried a synthetic `-compromised-2026-05-11` suffix, it named
+  `@tanstack/react-query` (the postmortem lists it clean) and its three PyPI rows appear in
+  neither source it cited. A new dated snapshot copies the 84 versions
+  [GHSA-g7cv-rxg3-hmpx](https://github.com/advisories/GHSA-g7cv-rxg3-hmpx) lists; the
+  guard now refuses `@tanstack/react-router` 1.169.5 and admits the patched 1.169.9.
+- **Value gates (steps 2.7, 3, 5):** a user package named `agents`, `mcp` or `google` was
+  skipped as framework code (framework objects are now verified against the installed
+  distribution's RECORD), and so was a framework's own pydantic model where the tool's
+  annotation names its class, the one place a framework builds it from the model's JSON
+  (`mcp.types.ResourceLink(uri="file:///...")` ran);
+  `file:` URL objects skipped the path check; URL-object, tuple and
+  frozenset mapping keys were not walked; a `**kwargs` key hid a same-named positional-only
+  or `*args` value; memoryview and `UserString` were read by no gate.
+- **Step 2.7's authenticated-transport rule read the declaration from the tool's
+  arguments**, which the model writes; it reads context metadata now.
+- **Step 6 priced an unreadable tag at its cheapest reading.** A float or string token
+  count was priced as 0 and a non-string model id at the tracker's own row; a negative count
+  raised out of the call. Unreadable tags refuse now.
+- **`@requires` above `@Airlock` counted only when adjacent**: a second `@requires` or a
+  `functools.wraps` decorator in between hid it.
+- **`*args` / `**kwargs` annotated with a model skipped strict validation.**
+- **The audit `result_preview` was never masked**, and secrets in dict keys or in nested
+  values the walk cannot rebuild (bytes, models, dataclasses) came back unmasked and
+  unreported.
+- **MCP guards that read past a shape or crashed:** `ElicitationGuard` (credential text
+  outside four fields, past its truncation cut, or in list or bytes form),
+  `audit_sampling_request` (`systemPrompt`, non-int `maxTokens`), `OAuthStateEntropyGuard`
+  (plain-text and list or bytes `state`, decoys a lenient read now sees),
+  `CodegenDelimiterInjectionGuard` (bytes and set shapes, nesting, allow-listed names),
+  `audit_config_diff` (JSONC read as no servers, a duplicated key read as its last copy;
+  `args`, env names, `cwd`, `autoApprove` and other security-relevant fields not diffed), bytes env keys in
+  `McpSubprocessArgInjectionGuard`, `$dynamicRef` / `$recursiveRef` in `SchemaRefGuard`,
+  OIDC version spellings, `handle_trust`, a repeated `iss`, origin / WebSocket /
+  transcript / PR-metadata / content-type shapes, attested-admission `iat` / `exp`, a
+  duplicate `MCP-Protocol-Version` under two spellings, and tool-definition pins with no
+  canonical JSON form. The 0.10.24 eval guards and the env-interpolation guard decode bytes
+  strictly (`tests/test_guard_shapes_fail_closed_0_10_28.py`,
+  `tests/test_audit_followups_0_10_28.py`).
+- **Guard gaps the review found:** a JWT-shaped OAuth `state` had only its payload scanned
+  (a trigger in the header's `kid` or as the signature passed), and look-alike or CJK text
+  passed as a high-entropy nonce; `WebSocketOriginGuard.wrap_handler` took the first of two
+  `Origin` headers; the zero-click config diff and the spawn-time pin ignored a changed
+  value of a code-loading `env` variable (`NODE_OPTIONS` set to `--require payload.js`,
+  an attacker directory first in `PATH`); a repeated `iss` passed through `httpx.QueryParams`, which spells its
+  multi-value read `get_list`; `ElicitationGuard` decoded bytes leniently and let a control
+  character split a phrase (`pass\x00word`); `audit_config_diff` raised a bare
+  `UnicodeEncodeError` on config text holding a lone surrogate, now `MCPConfigUnreadable`
+  (`tests/test_review_guards_0_10_28.py`).
+- **Token audience:** a malformed `aud` (port out of range, unclosed bracket) raised out of
+  the call in warn and deny mode; IPv6 brackets were dropped, so `[::1]:80` and `[::1:80]`
+  compared equal, and an explicit `:0` matched no port.
+- **`PolicyGuardrail` (OpenAI Agents SDK) ignored rate limits, glob deny lists and
+  `default_deny`, and admitted a malformed time window.**
+
+### Fixed
+
+- `AirlockGuardrails.wrap_agent` appended plain functions, which crashed every real
+  openai-agents run; it appends an SDK `OutputGuardrail` for PII. The policy applies on each
+  call of a tool `secure_tool` wrapped, not as an input guardrail: one per tool, as the fix
+  first had it, refused every run while any one tool was outside its time window or had
+  spent its rate budget.
+- Every framework walker is idempotent per tool (only CrewAI was): wrapping twice wrote two
+  audit records and charged rate limits twice per call. A re-wrap with other settings
+  (policy, config, sandbox) adds a layer, with a warning, so nothing either wrap asked for
+  is dropped.
+- A returned value whose `str()` raised (an ORM row bound to a closed session), or an
+  argument whose `repr()` raised, escaped the call after the tool ran, before its audit
+  record. Output masking also turned every number inside a returned container into text
+  and scanned it, so 200,000 numbers made a call about ten times slower, and wrote a
+  `bytes` value out as its repr and scanned all of it (a 5 MB image took 2.4 seconds).
+  Numbers no detector can match (under nine digits, or a float with a fractional part)
+  are skipped, bytes are decoded, and the first 100,000 characters of a value are read.
+- A framework installed by symlink (uv's symlink link mode, Bazel runfiles, Nix) was never
+  verified against its RECORD, so its run wrapper lost the call's identity and
+  `STRICT_POLICY` refused every call. `mcp` 2.x defines its protocol types in a separate
+  `mcp-types` distribution (`mcp_types._types`); those are verified as `mcp`'s own.
+- `tests/test_crewai_double_wrap_0_10_25.py` counted Airlock layers along `__wrapped__`,
+  which the tool proxy never sets, so it saw one layer on a tool wrapped twice; it counts
+  them by their rate-limit charge now.
+- `create_secure_tool(async_fn)` returned an un-awaited coroutine from `.ainvoke`; LangChain
+  tools taking `run_manager` / `callbacks` raised on every call.
+- `network_blocked` audit records carry `agent_id` and `session_id`; a refusal raised while
+  a deferred result runs is audited as a block.
+- `ContextExtractor.CONTEXT_ATTRS` is an ordered tuple: which wrapper attribute won depended
+  on `PYTHONHASHSEED`.
+- `SSRFEgressGuard.check_url` raised `UnicodeError` for a host the IDNA codec rejects; the
+  supply-chain manifest registry raised `TypeError` for a manifest with no canonical JSON
+  form (now `ToolManifestUnreadable`).
+- Dead `except ImportError` fallbacks that would have dropped the capability policy of
+  `STRICT_POLICY`, `READ_ONLY_POLICY` and five presets are gone.
+- `examples/escalation_threshold.py` read a missing request as $0 and auto-approved it.
+- `ModelArmorNotInstalled` names the `[model-armor]` extra; the kill-switch Redis stream
+  logger is named for its module.
+
+### Changed
+
+- A first positional argument is a run wrapper only when model JSON cannot have built it
+  (see Security). A tool's own model, dataclass, mapping or named tuple is an ordinary
+  argument unless its context is an `AirlockContext` the host put there (then it is read and
+  still walked); pass identity with `with AirlockContext(...)` or a framework wrapper. Nothing is
+  read from a wrapper whose context is empty, and `AirlockContext[X]` is `AirlockContext` at
+  run time.
+- Step 6 refuses (`budget_exceeded`) an `airlock_tier` that is not a string or an
+  `input_tokens` that is not an integer of at least 0; a non-string `model_id` is priced at
+  the dearest row. Under `@Airlock`, `require_authenticated_transport` reads
+  `AirlockContext(metadata={"transport": ...})`, never a `transport` argument.
+- A dataclass-typed `*args` / `**kwargs` needs an instance, as a named parameter already did.
+- `STRIP_AND_LOG` logs one `unknown_args_stripped` warning (no audit record); `STRIP_SILENT`
+  logs nothing above debug.
+- Network: an allowlist policy on `AirlockConfig` is now enforced; a host allowlist admits
+  the addresses its own lookups returned in that call, and refuses an empty host; lookups of
+  the machine's own hostname and numeric-only `getnameinfo` stay allowed under the airgap.
+  `block_dns` allows a forward lookup of an IP literal, which asks no DNS server (it refused
+  one, so `urllib` could not reach an allowlisted address); a reverse lookup stays refused.
+- A coroutine or lazy iterator a tool returns comes back as a coroutine, generator or async
+  generator (attributes beyond iteration are gone), and the audit `result_type` says so. A
+  database cursor and a `csv.reader` are lazy iterators too: `fetchall()` and `line_num`
+  are gone (return `cursor.fetchall()` to hand back a list). One inside a returned
+  container comes back with that container rebuilt around its guarded form.
+- A result nested too deeply for output masking to rebuild, or holding a container that
+  raises while it is read, is refused, `BlockReason.OUTPUT_UNREADABLE`
+  (`OutputUnreadableError` when a deferred result yields one), with an audit record; the
+  exception escaped the call after the tool ran. A value whose text cannot be read is
+  returned unchecked, with a warning.
+- Steps 2.7, 3 and 5 walk a framework's own pydantic model where the tool's annotations
+  name its class (through containers, unions, `NewType`, type aliases, TypeVar bounds and
+  the fields of the models, dataclasses and TypedDicts they name). An annotation the walk
+  cannot read, or one carrying a validator, names every model; a parameter LangChain
+  injects (`Annotated[..., InjectedState]`) names none. A framework model anywhere else (a
+  LangGraph state's messages, a RAG document, a parameter annotated `Any`) is the host's
+  and is not walked, nor are a framework's dataclasses (run contexts) and other objects.
+- `OAuthStateEntropyGuard` refuses a `state` outside RFC 6749's syntax (printable ASCII),
+  percent-encoded non-ASCII included. `ws_origin_guard.extract_origin` returns a list when
+  an upgrade's Origin values disagree. `ElicitationGuard` classifies bytes that are not
+  UTF-8 as `UNINSPECTABLE`.
+- `audit_sampling_request` under `forbid_persistent_instructions=True`, the default, refuses
+  a non-empty `systemPrompt`, as it refuses a `system`-role message: a server that sends
+  even a benign system prompt is refused. Until 0.10.28 the field was not read.
+- Structured output: dict keys are masked (colliding masked keys get ` (2)`, ` (3)`
+  suffixes); nested values the walk cannot rebuild are reported as not masked, ten-digit
+  integers such as Unix timestamps included; the audit `result_preview` is masked whatever
+  `sanitize_output` says.
+- MCP guards: new refusal verdicts `DENY_UNINSPECTABLE` (codegen, schema refs, OIDC, origin,
+  WebSocket, tool-definition pin) and `ElicitationClass.UNINSPECTABLE`; new exceptions
+  `MCPConfigUnreadable` and `ToolManifestUnreadable`; `MCPCommandMutationDetected.fields`;
+  `AttestedAdmissionConfig.max_clock_skew`. The OAuth state guard blocks a non-string
+  `state` (was `warn`).
+- `McpConfigPinSet` pins `cwd` when the spawn sets one. **Upgrade note:** a raw stored
+  fingerprint for such a server must be re-pinned; pins built with `from_manifest` re-derive.
+- `McpConfigPinSet` and `audit_config_diff` compare the values of code-loading env
+  variables (`LD_PRELOAD`, `NODE_OPTIONS`, `PATH`, `PYTHONPATH`, ...: the set
+  `McpSubprocessArgInjectionGuard` refuses) when the spawn or entry sets one; no value is
+  logged or put in a refusal, and every other env value still rotates unread. **Upgrade
+  note:** a raw stored fingerprint for such a server must be re-pinned
+  (`fingerprint_mcp_server(..., env=...)`); pins built with `from_manifest` re-derive. A
+  manifest that names such a variable only in `env_keys` pins no value for it, so it no
+  longer matches a spawn whose `env` sets one: give the variable's value in its `env`.
+- Integrations: the walker marker attribute is `__airlock_guarded__` (was
+  `__airlock_crewai_guarded__`); a re-wrap with other settings warns and adds a layer.
+  `create_secure_tool(async_fn)` returns an async-only tool. PydanticAI warns on MCP and
+  external toolsets (`warn_on_unwrappable`) and guards output functions.
+  `AirlockGuardrails.wrap_agent` adds no input guardrail and raises `TypeError` on an object
+  without an `output_guardrails` list. `PolicyGuardrail` gains keyword-only
+  `consume_rate_limit`.
+- `npm_oidc_publish_window_guard_defaults()` adds `ghsa_url`; the blast list comes from
+  `data/oidc_publish_blast_2026_10_28.json` (the 2026-05-11 snapshot stays, superseded).
+
+### Deprecated
+
+- `OAuthStateEntropyGuard(entropy_skip_threshold=...)` never changed a verdict; setting it
+  away from its default emits a `FutureWarning` (removal in v1.0.0).
+
+### CI
+
+- The `test` job's extra-backed step runs its five test files and fails on any skip; it was
+  `--collect-only`, which passes a module-level skip and cannot see an in-function one.
+- `scripts/check_docs_api.py` fails on a Python fence that names `agent_airlock` and does not
+  parse; `AGENTS.md`'s default-posture example was such a fence and now parses.
+- `check_registry_parity.py`, `check_changelog.py` and `check_changelog_heading.py` describe
+  this repo's flow: `[Unreleased]` stays the placeholder between releases. Their old advice
+  turned the `docs` job red; pass and fail are unchanged.
+
+### Docs
+
+- `CLAUDE.md` is 199 lines (685 before): subsystem detail moved into new subtree files,
+  `src/agent_airlock/CLAUDE.md`, `tests/CLAUDE.md` and `scripts/CLAUDE.md`, which load when
+  you work in those trees; its shipped-phase history moved verbatim to `ROADMAP.md`. A check
+  confirmed every identifier of the old file still appears in the new set; the few it does
+  not are corrections.
+- Corrected claims: startup-hook `deny` applies per config, not process-wide, and an
+  allowlisted `.pth` hash covers that file only (README, guide, docstrings); `main` has one
+  disabled ruleset; `AGENTS.md`'s every-layer-is-a-CVE, catalog and CHANGELOG-URL claims and
+  its dead OWASP link; the token-audience, airgap, sanitization, validation, integration and
+  CVE-2026-30615 pages.
+- `tests/cves/test_cve_2026_21520_capsule_indirect_injection.py` gains the NVD link and CVSS
+  its preset already cited; `docs/cves/index.md` regenerated.
+
+### Benchmarks
+
+- MCPTox: the summaries behind the 2026-10-17 replay block and the 2026-10-16 fresh blocks
+  were never committed, so `tests/test_mcptox_published.py`'s recompute pin never ran
+  against them. Recorded in `RESULTS.md`; a run from here on commits its summary.
+- The blockrate sandbox arm, the red-team mode-A adapters and the top-level pytest-benchmark
+  modules no longer write `airlock_audit.json` into the working directory, and mode-A runs
+  read their own audit records back (they read none; the published wave-1 numbers do not
+  depend on them).
+
+### Known limits
+
+- Threads a tool starts itself, subprocesses and raw `_socket` sockets are outside the
+  airgap; an allowlisted startup hook's hash does not cover the modules it imports;
+  PydanticAI MCP and external toolsets are warned about, not validated; a custom pydantic
+  validator that builds a plain object with a `.context` from JSON would still pass as a run
+  wrapper. With `sandbox=True` the airgap wraps the E2B dispatch, not the VM: a network
+  policy that does not admit E2B's own API refuses the call as `network_blocked`, as
+  `allow_egress=False` already did, and since 0.10.28 an allowlist policy does too.
+- A Unix-domain socket has no host, so a host allowlist does not apply to it
+  (`allow_egress=False` refuses it). A framework's own dataclass declared as a tool
+  parameter (pydantic-ai's `ImageUrl`, say) is not walked, and one a framework built from
+  the model's JSON and passed first and positionally would be trusted as a run wrapper:
+  pydantic builds standard-library dataclasses, and the result is indistinguishable from
+  the framework's own. No shipped framework builds its own run context from model JSON.
+
 ## [0.10.27] - 2026-10-28
 
 `validate_access_token_audience` shipped but nothing called it. Guarded calls now check the

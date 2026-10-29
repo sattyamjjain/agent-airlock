@@ -5,9 +5,11 @@ Mintlify) and human contributors who want the safety primitives this
 repo treats as load-bearing.
 
 > **Philosophy:** when in doubt, prefer `STRICT_POLICY` and
-> `sandbox_required=True`. Every layer in `src/agent_airlock/` exists
-> because a pre-existing layer was insufficient for some real CVE.
-> Don't remove a check unless you can name the CVE that motivated it.
+> `sandbox_required=True`. Most layers in `src/agent_airlock/` exist
+> because a pre-existing layer was insufficient for some real CVE; the kill
+> switch, the startup-hook check and the budgets are operational controls.
+> Don't remove a check unless you can name the CVE, or the operational
+> need, that motivated it.
 
 ## Build & Test
 
@@ -59,7 +61,7 @@ from agent_airlock import Airlock
 from agent_airlock.policy import STRICT_POLICY
 
 @Airlock(policy=STRICT_POLICY, sandbox=True, sandbox_required=True)
-def your_function(...): ...
+def your_function(path: str) -> str: ...
 ```
 
 Anything weaker (PERMISSIVE_POLICY, `sandbox_required=False`) needs a
@@ -68,10 +70,11 @@ Anything weaker (PERMISSIVE_POLICY, `sandbox_required=False`) needs a
 ## Where to start as a new contributor
 
 - `README.md` — public-facing positioning and the 30-second quickstart
-- `docs/cves/index.md` — every shipped CVE mitigation, primary source linked
+- `docs/cves/index.md` — the CVE regression suite (`tests/cves/`), primary source linked
+  where the module names one; guards and presets cite more CVEs than it lists
 - `src/agent_airlock/core.py` — the `@Airlock` decorator entrypoint
 - `tests/test_*.py` — every test class is `Test<Feature>` and runs in `<5s`
-- `CHANGELOG.md` — every release ships with primary-source URLs for each row
+- `CHANGELOG.md` — what each release changed; CVE triage rows cite their triage issue
 
 ## Conventions
 
@@ -87,5 +90,5 @@ Anything weaker (PERMISSIVE_POLICY, `sandbox_required=False`) needs a
 
 - Anthropic Agent Skills — https://docs.claude.com/en/agents-and-tools/agent-skills
 - MCP specification — https://github.com/modelcontextprotocol/specification
-- OWASP Agentic-AI 2026 Q1 — https://owasp.org/www-project-agentic-ai/
+- OWASP Agentic Security Initiative — https://genai.owasp.org/initiatives/agentic-security-initiative/
 - This repo — https://github.com/sattyamjjain/agent-airlock

@@ -18,14 +18,28 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   agent, find its tools, and replace in place the callable the framework actually invokes,
   which is not always the obvious attribute: PydanticAI runs
   `tool.function_schema.function`, and a CrewAI `@tool` runs `func`, not `_run`. Prove
-  interception with a stub that mirrors the SDK's real call path. A walker is idempotent
-  per tool: `crewai` marks each shim with `_GUARDED_MARKER` and skips a tool that carries it
-  on itself or its `func` / `_run`, because `Task(agent=a)` shares the agent's `tools` list
-  and `wrap_crew` walks it twice (until 0.10.25 every allowed call wrote two audit
-  records); copy that check into a new walker. The Claude SDK adapter's
+  interception with a stub that mirrors the SDK's real call path. Every walker is idempotent
+  per tool: a shim carries `_tool_proxy.GUARDED_MARKER` with every setting its `Airlock` was
+  built from (`mark_guarded(shim, policy[, config, sandbox])`), and a walk skips a tool whose
+  call path carries the same settings (`already_guarded`; `guarded_with` asks without
+  warning). Other settings get a second layer and a `UserWarning`, so nothing either wrap
+  asked for is dropped: until the 0.10.28 review only the policy was compared, and a
+  LangChain re-wrap asking for a sandbox or masking was skipped. Pass a new walker's every
+  `Airlock` argument to both. `crewai` double-wrapped until 0.10.25 (`Task(agent=a)` shares the
+  agent's `tools` list and `wrap_crew` walks it twice), the other walkers until 0.10.28; use
+  the marker in a new walker. Tools that appear at run time are walked too: `pydantic_ai`
+  follows wrapper, combined and dynamic toolsets and wraps the agent's `_get_toolset`, and
+  `crewai` hooks `Crew._prepare_tools`, `Crew.copy` and `Agent._add_skill_loader_tool`. A
+  PydanticAI MCP or external toolset has no local function to wrap and gets a warning
+  (`warn_on_unwrappable`), not a guard; an output function (`output_type=[fn]`) is guarded
+  through its output processor's `_function_schema.function`. The Claude SDK adapter's
   `wrap_tools` returns guarded copies instead (only `wrap_agent` mutates in place), so wrap
-  before `create_sdk_mcp_server`, which keeps its own references. `langchain`, `anthropic`
-  and `openai_guardrails` are the older decorator style. `smolagents_wrapper` runs
+  before `create_sdk_mcp_server`, which keeps its own references. `anthropic` and
+  `openai_guardrails` are the older decorator style (`AirlockGuardrails.wrap_agent` adds only
+  the PII `OutputGuardrail`: the policy applies per call through `secure_tool`, since an SDK
+  input guardrail runs once per run, before any tool is chosen); `langchain` rewrites a tool's `func` /
+  `coroutine` / `_run` / `_arun` through `named_tool_proxy`, so async calls are guarded too
+  and policy lists match the tool's `name` (both since 0.10.28). `smolagents_wrapper` runs
   caller-supplied `PolicyBundle` guards and never builds an `Airlock`. The `gpt5_5_*` /
   `gemini3_*` shape adapters normalise vendor payloads. `langgraph_toolnode_compat` only
   unwraps ToolNode output, and `model_armor`'s `ModelArmorScanner` is called by the user,
@@ -113,7 +127,10 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   exists for callback-interface signatures;
   `ruff check --isolated --select ARG src/agent_airlock/integrations/` lists what it hides.
 - **Tests** live in `tests/integrations/test_<module>*.py`, with these exceptions:
-  `langchain` / `anthropic` / `openai_guardrails` in `tests/test_new_features.py`, Model
+  `langchain` / `anthropic` / `openai_guardrails` in `tests/test_new_features.py` (and
+  `tests/integrations/test_openai_guardrails.py`), `_claude_sdk_tools` in
+  `tests/integrations/test_anthropic_claude_agent_sdk_tools.py`, the 0.10.28 adapter pins in
+  `tests/test_adapters_0_10_28.py`, Model
   Armor in `tests/test_model_armor_integration.py`, `agent_commerce_caps` also in
   `tests/capability_caps/`, and the 0.10.25 contract pins in
   `tests/test_anthropic_contracts_0_10_25.py` (Messages adapter, SDK tools, auto-memory,
@@ -137,10 +154,12 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
 **External:** `claude_agent_sdk`, `crewai`, `pydantic_ai`, `google.adk` and `google.cloud`
 (Model Armor) each have a pyproject extra; `langchain_core` and `opentelemetry` have no
 extra of their own (`opentelemetry-api` arrives transitively through `[mcp]`'s FastMCP).
-The OpenAI Agents SDK, `anthropic`, `langgraph` and `smolagents` are never imported: those
-modules use duck typing, `importlib.util.find_spec` or `importlib.metadata` probes instead.
+`anthropic`, `langgraph` and `smolagents` are never imported: those modules use duck typing,
+`importlib.util.find_spec` or `importlib.metadata` probes instead. The OpenAI Agents SDK is
+imported only inside `AirlockGuardrails.wrap_agent`, through `importlib.import_module`, to
+build real `InputGuardrail` / `OutputGuardrail` objects.
 The grep hits for `from anthropic import` and `from agents import` in this tree are
-`Usage::` docstrings; the one real lazy `import anthropic` in the package is
+`Usage:` docstrings; the one real lazy `import anthropic` in the package is
 `sandbox_backend.ManagedSandboxBackend.is_available`.
 
 **Internal:** `.._log` and `..exceptions` almost everywhere; `..core` / `..policy` wherever

@@ -290,7 +290,27 @@ class TestAgentRunsGoThroughAirlock:
         assert calls == []
         assert tool.function_schema.function is tool.function
 
-    def test_a_schema_holding_some_other_function_is_left_alone(self) -> None:
+    def test_a_schema_holding_some_other_function_is_guarded_too(self) -> None:
+        # Until 0.10.28 such a schema was left alone, and the function a run calls ran
+        # unguarded; the run path is guarded whatever it holds (0.10.28, F-F2 sibling).
+        calls: list[int] = []
+
+        def lookup(n: int) -> int:
+            return n
+
+        def other(n: int) -> int:
+            calls.append(n)
+            return -n
+
+        tool = _ToolShape("lookup", lookup)
+        tool.function_schema.function = other
+        _wrap(tool, policy=SecurityPolicy(denied_tools=["*"]))
+
+        assert tool.function_schema.function is not other
+        assert _blocked(tool.function_schema.call({"n": 5}, ctx=None))
+        assert calls == []
+
+    def test_control_a_schema_holding_another_function_still_runs_it(self) -> None:
         def lookup(n: int) -> int:
             return n
 
@@ -301,7 +321,7 @@ class TestAgentRunsGoThroughAirlock:
         tool.function_schema.function = other
         _wrap(tool)
 
-        assert tool.function_schema.function is other
+        assert tool.function_schema.call({"n": 5}, ctx=None) == -5
 
 
 class TestToolArgumentsAreValidated:

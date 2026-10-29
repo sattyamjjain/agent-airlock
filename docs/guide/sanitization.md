@@ -43,16 +43,33 @@ result = get_customer(customer_id=123)
 ## What Gets Masked
 
 - **A string result** is masked and, past `max_output_chars`, truncated.
-- **A dict, list, tuple or set** is masked value by value and keeps its type and its
-  keys. It is never truncated, because truncating its serialized form would hand back a
-  different type.
+- **A dict, list, tuple or set** is masked value by value and keeps its type.
+  Dictionary keys are masked too; when two keys mask to the same string, the later ones
+  get a ` (2)`, ` (3)` suffix, so no value is dropped. It is never truncated, because
+  truncating its serialized form would hand back a different type.
 - **Any other object** (a Pydantic model, a dataclass) is returned as it is, since
   rebuilding it with masked fields could break its own invariants. What was detected in
   it is logged as `output_sensitive_data_unmasked` and returned as a warning that says it
-  was *not* masked. Return a dict or a string to have it masked.
+  was *not* masked. The same goes for a value inside a dict, list, tuple or set that the
+  walk cannot rebuild (bytes, a model, a dataclass, a deque...): it is left as it is, and
+  what was found in it is reported as not masked. Return a dict or a string to have it
+  masked. Numbers no detector can match (under nine digits, or a float with a fractional
+  part) are not read, so a result full of numbers stays fast; `bytes` are decoded, and the
+  first 100,000 characters of a value are read.
+- **A value whose text cannot be read** (its `str()` raises, as an ORM row bound to a closed
+  session does) is returned as it is, unchecked, with a warning that says so.
+- **A result nested too deeply to rebuild** is refused as `output_unreadable` rather than
+  returned unmasked.
+
+The audit record's `result_preview` is masked like its `args_preview`, whatever
+`sanitize_output` is set to.
 
 Until 0.10.11 only string results were masked. Every other result was reported as
-masked, in the log, the warnings and the audit record, and returned raw.
+masked, in the log, the warnings and the audit record, and returned raw. Until 0.10.28
+dictionary keys were left alone, a value the walk could not rebuild was skipped without a
+warning, and `result_preview` held the raw text when output masking was off or the result
+was returned unmasked; an unreadable value, or a result too deep to walk, escaped the call
+as an exception after the tool had run.
 
 ## Sensitive Data Types
 
@@ -238,8 +255,19 @@ When truncated, a notice is appended, inside the limit:
 
 `@Airlock` masks each item a generator tool yields as it would a returned value, and runs
 each step of the generator under the call's network airgap and context. Until 0.10.20 it
-did neither. What `StreamingAirlock` adds is a cap on the whole stream: `max_output_chars`
-counted across chunks, ending the stream once it is reached. Wrap the generator for that:
+did neither. A coroutine or a lazy iterator a tool returns (`map`, `filter`, an iterator or
+async iterator class that is not a context manager) is guarded the same way since 0.10.28,
+returned on its own or inside a returned dict, list, tuple, set, pydantic model or
+dataclass: each step runs under
+the call's airgap and context, and each value is masked. It comes back as a coroutine,
+generator or async generator, so an iterator's other attributes are gone: a database
+cursor loses `fetchall()` and a `csv.reader` its `line_num` (return `cursor.fetchall()` to
+hand back a list). An Airlock
+refusal raised while one of these runs (a `NetworkBlockedError`, say) is written to the
+audit log as a block before the consumer gets the exception; the call's own record, written
+when it returned, counts none of the values. What `StreamingAirlock` adds is a cap on the
+whole stream: `max_output_chars` counted across chunks, ending the stream once it is
+reached. Wrap the generator for that:
 
 ```python
 from agent_airlock import StreamingAirlock, AirlockConfig

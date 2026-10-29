@@ -83,7 +83,7 @@ Set when the relevant feature produced data for this call.
 
 | Attribute | Type | Notes |
 | --- | --- | --- |
-| `airlock.egress_domains` | string | Comma-separated list of domains the tool reached during this span. Populated when `NetworkPolicy` is attached. |
+| `airlock.egress_domains` | string | Comma-separated list of the `egress_domains` on the `EnhancedAuditRecord` you export. Nothing in agent-airlock fills that field, the network airgap included, so the attribute is set only when your own code records the domains. |
 
 ### Cost
 
@@ -122,9 +122,9 @@ metric pipeline.
   `airlock.*`.
 - **OTel HTTP** (`http.*`, `server.*`, `url.*`) — when a wrapped tool
   hits an HTTP endpoint, the HTTP instrumentation sets those attributes
-  on a child span. Airlock's `airlock.egress_domains` is a coarse
-  summary for the parent span; the fine-grained request attributes live
-  on the child.
+  on a child span. Airlock's `airlock.egress_domains`, when you fill
+  it, is a coarse summary for the parent span; the fine-grained request
+  attributes live on the child.
 
 ## Stability
 

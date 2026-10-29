@@ -27,7 +27,8 @@ direction in new branches.
   1. Class triples — `*Guard` + frozen-dataclass `*Decision` + `*Verdict(str, enum.Enum)`.
      The Guard's name stem does not always match (`CodegenDelimiterInjectionGuard`).
   2. Inspection style — a `*Guard` class returning an `*Inspection` dataclass, with
-     `Verdict = Literal[...]` (`config_path_guard`, `elicitation_guard`).
+     `Verdict = Literal[...]` (`config_path_guard`, `elicitation_guard`,
+     `oauth_state_entropy_guard`, `transcript_ingest_guard`).
   3. Function style, no `*Guard` class — `validate_*` / `audit_*` / `check_*` /
      `enforce_*` / `verify_*` / `admit_*`. This covers `transport`, `oauth` and the
      2026-07-28 spec validators (`meta_trust`, `statelessness`, `header_integrity`,
@@ -96,21 +97,61 @@ preset, and
   `oauth.validate_access_token_audience`, which `@Airlock` now calls (step 0.6 in
   `core.py`): a list `aud` holding a non-string is refused whole instead of read past, and
   a string `aud` that is not a URI is a `TokenAudienceError`, not an escaping
-  `ResourceURIError`. The comparison also reads a root `/` as no path (RFC 3986 §6.2.3);
-  `canonicalize_resource_uri` itself still keeps it. `McpSubprocessArgInjectionGuard` is
+  `ResourceURIError`. The comparison also reads a root `/` as no path and, since 0.10.28, a
+  scheme's default port as no port (RFC 3986 §6.2.3); `canonicalize_resource_uri` itself
+  keeps both, keeps IPv6 brackets and an explicit `:0`, and raises `ResourceURIError`, never
+  a bare `ValueError`. v0.10.28 closed what a full audit still found reading past a shape or
+  crashing: a body key shadowing a routing header (`header_integrity`), a decoy `_meta`
+  (`meta_trust`), the bridge SSRF check (now `SSRFEgressGuard`'s decision), elicitation
+  text outside four fields or past a truncation cut (`ElicitationClass.UNINSPECTABLE`),
+  sampling's `systemPrompt` and non-int `maxTokens`, plain-text and list or bytes OAuth
+  `state`, `handle_trust` and repeated-`iss` shapes, codegen delimiters, the zero-click
+  config diff (`MCPConfigUnreadable`, and every security-relevant entry field), bytes env
+  keys, `$dynamicRef` / `$recursiveRef`, OIDC publish-window spellings, origin / WebSocket /
+  transcript / PR-metadata / content-type shapes, attested-admission claims, duplicate
+  transport headers and tool-definition pins (`DENY_UNINSPECTABLE`); the 0.10.24 eval
+  guards and the env-interpolation guard now decode bytes strictly
+  (`tests/test_mcp_spec_guards_0_10_28.py`, `tests/test_guard_shapes_fail_closed_0_10_28.py`,
+  `tests/test_audit_followups_0_10_28.py`). An independent review of those fixes then
+  closed what they still read past (`tests/test_review_guards_0_10_28.py`): every segment
+  of a JWT-shaped OAuth `state`, and RFC 6749's state syntax (printable ASCII), which
+  refuses look-alike text; every Origin in `WebSocketOriginGuard.wrap_handler`; the values
+  of code-loading env variables (`subprocess_arg_guard._DEFAULT_DANGEROUS_ENV_VARS`) in the
+  config diff and the spawn pin, never logged; httpx's `get_list` for a repeated `iss`;
+  strict bytes and control characters in elicitation text; and OIDC tarball URLs given as
+  `package`, `npm:` versions and dot-segment URL spellings. `McpSubprocessArgInjectionGuard` is
   not a walker: it reads `command` / `argv[0]` and env names only, so nested `args` never
   changes its verdict.
+- **Report a field, a variable name or a digest, never an `env` value.** `audit_config_diff`
+  compares the values of code-loading variables and `McpConfigPinSet` hashes them, yet a
+  diff refusal says only that `env` changed (`MCPCommandMutationDetected.fields`), a pin
+  refusal carries SHA-256 digests (`McpConfigPinViolation`, as do its log line and audit
+  record), and a value that cannot be hashed is reported by its variable
+  (`_unreadable_field`). `logged` in `tests/test_review_guards_0_10_28.py` swaps the
+  module's `logger` for a recorder, and the tests search it, the exception and the audit
+  file for each value: copy it for the next field that can hold a token.
+- **A pin fingerprint gains a field only when the spawn sets it.** `fingerprint_mcp_server`
+  always hashes `{name, command, args, env_keys}` and adds `cwd` and `code_loading_env` only
+  when the spawn sets them, so the stored digest of a spawn with neither still matches
+  (`_legacy_fingerprint` in `tests/test_review_guards_0_10_28.py` recomputes the old
+  payload); a field hashed for every spawn would change every stored digest. The
+  code-loading names are `subprocess_arg_guard._DEFAULT_DANGEROUS_ENV_VARS`, which
+  `stdio_meta_guard` reads too: widening it changes the digest of any spawn that sets the
+  new name, and an import from that module needs `# nosec B404` (bandit matches its name).
 - **A new guard also joins the red-team campaign by hand.** Add it to `BYPASS_TARGETS` and
   `build_registry` in `benchmarks/adaptive_redteam/adapters/registry.py` with a
   `known_blocked` shape its tests prove refused and a `benign_control` it admits, a row in
   `adapters_table.md`, and bump the count literals in
-  `tests/test_adaptive_redteam_adapters.py`. Nothing derives that list from this directory;
-  `tests/test_adaptive_redteam_registry_parity.py` fails until the module is registered.
+  `tests/test_adaptive_redteam_adapters.py`, then grep the old count repo-wide (the
+  campaign's `README.md`, `adapters_table.md` and `RESULTS.md` repeat it). Nothing derives
+  that list from this directory: `tests/test_adaptive_redteam_registry_parity.py` globs only
+  `*guard*.py`, so it fails until such a module is registered, and a guard named otherwise
+  (`header_integrity`, `meta_trust`, `supply_chain`, `handle_trust`, ...) is never checked.
 - `*Decision` is a frozen `@dataclass`; `*Verdict` is `class X(str, enum.Enum)` so it
   serializes as its own string value. Two `*Verdict`s that are frozen dataclasses and the
   inspection-style `Literal[...]` aliases are exceptions, not shapes to spread.
 - Logger names are `agent-airlock.mcp_spec.<module>`. Pure validators may have no logger
-  (`tool_definition_pin_guard` hands back `Decision.audit_event()` instead).
+  (`tool_definition_pin_guard` hands back the `Decision.audit_event` property instead).
 - Exceptions subclass `..exceptions.AirlockError`, except the `ValueError` subclasses in
   `oauth`, `transport` and the 2026-07-28 spec validators, and
   `openapi_drift_guard.OpenAPIDriftViolation`, which subclasses bare `Exception`.

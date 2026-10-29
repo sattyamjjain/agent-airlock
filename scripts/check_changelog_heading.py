@@ -6,7 +6,8 @@ their entries sat under ``## [Unreleased]``, so the newest *dated* heading (``0.
 lagged the shipped version by three releases and a reader could not tell from the changelog
 what any of those three releases changed. This gate fails a release whose
 ``pyproject.toml`` version has no ``## [x.y.z] - YYYY-MM-DD`` heading in ``CHANGELOG.md``,
-so a version can never be cut without its entry being promoted out of ``[Unreleased]`` first.
+so a version can never be cut without a dated entry. In this repo's flow the release PR
+writes its notes straight under that heading; ``[Unreleased]`` holds only its placeholder.
 
 Companion to ``check_version_tagged.py`` (which fails an untagged version bump); this one
 fails an unpromoted one. Both run in the ``version-tag-guard`` CI job.
@@ -46,8 +47,8 @@ def main() -> int:
             return 0
     print(
         f"check_changelog_heading: FAIL — pyproject declares {version} but CHANGELOG.md has "
-        f"no conformant '## [{version}] - YYYY-MM-DD' heading. Promote the [Unreleased] "
-        f"entry to a dated heading before cutting the release.",
+        f"no conformant '## [{version}] - YYYY-MM-DD' heading. Write the release notes "
+        f"under that dated heading in the bump commit.",
         file=sys.stderr,
     )
     return 1

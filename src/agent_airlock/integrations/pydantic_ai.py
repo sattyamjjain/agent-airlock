@@ -15,10 +15,33 @@ without the ``[pydantic-ai]`` extra installed still ``import
 agent_airlock`` cleanly. Stub agents (any object with a ``toolsets``
 attribute) bypass the SDK import — the test seam.
 
+Toolset shapes walked (0.10.28)
+-------------------------------
+Until 0.10.28 only a toolset with its own ``tools`` was walked; every
+other one was skipped without a word, and its tools ran under a deny-all
+policy (verified on pydantic-ai 2.63.0). The walk now reaches:
+
+* a function toolset (``tools``), whose ``Tool`` callables are guarded;
+* a wrapper toolset (``prefixed``, ``filtered``, ``renamed``,
+  ``prepared``, approval-required, durable...) through its ``wrapped``;
+* a ``CombinedToolset`` through each of its ``toolsets``;
+* a ``DynamicToolset``, whose factory is re-pointed so each toolset it
+  builds during a run is walked before use;
+* toolsets passed at run time (``agent.run(..., toolsets=[...])``),
+  ``agent.override(...)`` ones, and tools registered after the wrap: the
+  agent's ``_get_toolset``, through which every run builds its toolset,
+  is wrapped so the run's toolset is walked first.
+
+A toolset with no local callable to wrap (an MCP server, an external or
+deferred toolset) is reported with a ``UserWarning``, never skipped in
+silence; calls through it are not validated by agent-airlock. Policy
+lists match the name a tool is registered under, not a prefixed or
+renamed one.
+
 Optional dep
 ------------
 ``pip install "agent-airlock[pydantic-ai]"`` pulls
-``pydantic-ai>=1.88.0,<2.0``. v1.88.0 introduced the
+``pydantic-ai>=1.88.0,<3.0``. v1.88.0 introduced the
 ``output_validate`` / ``output_process`` hooks the adapter binds to;
 older versions raise :class:`PydanticAIMissingError` with a "needs
 >=1.88.0" hint rather than silently mis-wiring.
@@ -35,9 +58,10 @@ Primary sources
 
 from __future__ import annotations
 
+import functools
 import inspect
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -45,7 +69,7 @@ from .._log import structlog
 from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
-from ._tool_proxy import named_tool_proxy
+from ._tool_proxy import already_guarded, guarded_with, mark_guarded, named_tool_proxy
 
 logger = structlog.get_logger("agent-airlock.integrations.pydantic_ai")
 
@@ -56,6 +80,7 @@ SUPPORTED_PYDANTIC_AI_VERSIONS: tuple[str, ...] = (
     "1.89.1",
     "2.31.1",
     "2.43.0",
+    "2.63.0",
 )
 """PydanticAI versions this adapter has been smoke-tested against.
 
@@ -77,6 +102,13 @@ only a real run showed that the replaced ``tool.function`` is never called
 (fixed in 0.10.9 by re-pointing ``function_schema.function``). 2.31.1 was
 verified by a real ``Agent`` run under ``TestModel``: with a deny-all policy,
 no tool body ran.
+
+**2.63.0 and 2.43.0 were verified by real ``TestModel`` runs for 0.10.28**,
+under a deny-all policy with an allow-policy control: tools in prefixed,
+filtered and renamed toolsets, a ``CombinedToolset``, a ``DynamicToolset``
+(``@agent.toolset``), ``run(toolsets=...)``, ``override(tools=...)`` and a
+tool registered after ``wrap_agent`` were all refused, and wrapping twice
+wrote one audit record per call.
 """
 
 _INSTALL_HINT = (
@@ -110,19 +142,61 @@ def _run_context_params(tool: Any, forward: Callable[..., Any]) -> frozenset[str
     return frozenset(list(parameters)[:1])
 
 
-def _repoint_function_schema(
-    tool: Any, *, original: Callable[..., Any], wrapped: Callable[..., Any]
-) -> None:
-    """Point ``tool.function_schema.function`` at the guarded callable.
+def _guard_callable(
+    tool: Any,
+    forward: Callable[..., Any],
+    *,
+    name: str,
+    policy: SecurityPolicy | None,
+) -> Callable[..., Any]:
+    """``forward`` behind a new ``Airlock``, re-tagged with the tool's name and contract."""
+    # The proxy carries the tool's name, so SecurityPolicy lists match the tool rather
+    # than `function`, and the tool's signature, so Airlock validates it.
+    proxy = named_tool_proxy(forward, name=name, relaxed_params=_run_context_params(tool, forward))
+    airlock = Airlock(policy=policy) if policy is not None else Airlock()
+    wrapped: Callable[..., Any] = airlock(proxy)
+    mark_guarded(wrapped, policy)
+    return wrapped
 
-    PydanticAI runs a tool through ``tool.function_schema.call``, which invokes the
-    function captured when the ``Tool`` was built, not ``tool.function``. Replacing only
-    ``tool.function`` left real agent runs outside Airlock entirely: on pydantic-ai
-    2.31.1, both a plain and a ``RunContext`` tool ran under a deny-all policy.
+
+def _call_path(tool: Any) -> Any:
+    """The callable a run invokes for ``tool``: ``function_schema.function`` when it has one.
+
+    PydanticAI runs a tool through ``tool.function_schema.call``, which invokes the function
+    captured when the ``Tool`` was built, not ``tool.function``. Replacing only
+    ``tool.function`` left real agent runs outside Airlock entirely: on pydantic-ai 2.31.1,
+    both a plain and a ``RunContext`` tool ran under a deny-all policy (fixed in 0.10.9).
     """
-    schema = getattr(tool, "function_schema", None)
-    if schema is not None and getattr(schema, "function", None) is original:
-        schema.function = wrapped
+    schema_function = getattr(getattr(tool, "function_schema", None), "function", None)
+    if callable(schema_function):
+        return schema_function
+    for candidate in ("function", "run"):
+        attr = getattr(tool, candidate, None)
+        if callable(attr):
+            return attr
+    return tool
+
+
+def _describe_toolset(toolset: Any) -> str:
+    """How a toolset the walk cannot see into is named in the warning."""
+    label = getattr(toolset, "label", None) or getattr(toolset, "id", None)
+    kind = type(toolset).__name__
+    if isinstance(label, str) and label and label != kind:
+        return f"toolset {kind} ({label})"
+    return f"toolset {kind}"
+
+
+def _is_output_toolset(toolset: Any, skip: set[int]) -> bool:
+    """Whether ``toolset`` is the run's output toolset, the model's final-answer schema.
+
+    It holds no agent tools (``agent.toolsets`` leaves it out), but an output *function*
+    in it (``output_type=[fn]``) runs with arguments the model wrote, so the walk guards
+    those (:meth:`PydanticAIAdapter._guard_output_functions`).
+    """
+    return id(toolset) in skip or (
+        type(toolset).__name__ == "OutputToolset"
+        and type(toolset).__module__.startswith("pydantic_ai")
+    )
 
 
 @dataclass
@@ -134,14 +208,27 @@ class PydanticAIAdapter:
             attaches an ``output_validate`` hook that runs the
             existing :func:`agent_airlock.sanitizer.sanitize_output`
             over structured output before it leaves the model
-            boundary. Hook is a v1.88.0+ surface; older PydanticAI
-            versions silently skip this step.
+            boundary. Hook is a v1.88.0+ surface; PydanticAI 2.x
+            removed it, and the adapter then warns.
+        warn_on_unwrappable: When ``True`` (default), emit a
+            :class:`UserWarning` naming every toolset the walk cannot
+            see into (an MCP server, an external or deferred toolset),
+            at wrap time and, for one first met during a run, then.
+            Calls through such a toolset are not validated by
+            agent-airlock; silence would read as protection.
     """
 
     attach_output_validate: bool = True
+    warn_on_unwrappable: bool = True
 
     def wrap_agent(self, agent: Any, *, policy: SecurityPolicy | None = None) -> Any:
         """Wrap a PydanticAI ``Agent`` so every tool routes through Airlock.
+
+        Walks every toolset shape (function, wrapper, combined, dynamic; see the module
+        docstring) and, on an agent that builds its run toolset through
+        ``_get_toolset`` (pydantic-ai 2.x), re-walks each run's toolset first, so
+        toolsets passed to ``run(toolsets=...)`` are guarded too. Idempotent per tool:
+        wrapping twice costs one audit record and one rate-limit token per call.
 
         Args:
             agent: A :class:`pydantic_ai.Agent`-shaped object. The
@@ -167,23 +254,33 @@ class PydanticAIAdapter:
                 ``tools``, so it's not a recognised PydanticAI shape.
         """
         self._maybe_check_sdk(agent)
-        wrapped_count = self._wrap_toolsets_or_tools(agent, policy=policy)
+        unwrappable: list[tuple[int, str]] = []
+        wrapped_count = self._wrap_toolsets_or_tools(agent, policy=policy, report=unwrappable)
+        output_toolset = getattr(agent, "_output_toolset", None)
+        if output_toolset is not None:
+            wrapped_count += self._guard_output_functions(output_toolset, policy=policy)
+        run_toolsets_hooked = self._hook_run_toolsets(agent, policy=policy)
         if self.attach_output_validate:
             self._maybe_attach_output_validate(agent)
 
         logger.info(
             "pydantic_ai_agent_wrapped",
             tool_count=wrapped_count,
+            unwrapped_count=len(unwrappable),
+            run_toolsets_hooked=run_toolsets_hooked,
             policy_set=policy is not None,
             output_validate_attached=self.attach_output_validate,
         )
+        self._warn_unwrappable([description for _, description in unwrappable])
         return agent
 
-    def _wrap_toolsets_or_tools(self, agent: Any, *, policy: SecurityPolicy | None) -> int:
+    def _wrap_toolsets_or_tools(
+        self, agent: Any, *, policy: SecurityPolicy | None, report: list[tuple[int, str]]
+    ) -> int:
         """Walk the agent's tool surface and replace callables. Returns count."""
         toolsets = getattr(agent, "toolsets", None)
         if toolsets is not None:
-            return self._wrap_toolsets(toolsets, policy=policy)
+            return self._wrap_toolsets(toolsets, policy=policy, report=report)
 
         tools = getattr(agent, "tools", None)
         if tools is None:
@@ -192,15 +289,187 @@ class PydanticAIAdapter:
             )
         return self._wrap_tools_collection(tools, policy=policy)
 
-    def _wrap_toolsets(self, toolsets: Any, *, policy: SecurityPolicy | None) -> int:
-        """Walk a list/iterable of toolsets, each with its own ``tools``."""
+    def _wrap_toolsets(
+        self, toolsets: Any, *, policy: SecurityPolicy | None, report: list[tuple[int, str]]
+    ) -> int:
+        """Walk a list/iterable of toolsets, each down to its function toolsets."""
+        seen: set[int] = set()
+        return sum(
+            self._walk_toolset(toolset, policy=policy, report=report, seen=seen, skip=set())
+            for toolset in toolsets
+        )
+
+    def _walk_toolset(
+        self,
+        toolset: Any,
+        *,
+        policy: SecurityPolicy | None,
+        report: list[tuple[int, str]],
+        seen: set[int],
+        skip: set[int],
+    ) -> int:
+        """Guard every function tool under ``toolset``; report what has none to guard.
+
+        Recognised by attribute, as ``FunctionToolset.tools``,
+        ``WrapperToolset.wrapped``, ``CombinedToolset.toolsets`` and
+        ``DynamicToolset.toolset_func`` are named in pydantic-ai 1.88 to 2.63, so test
+        stubs of the same shape walk the same way.
+        """
+        if toolset is None or id(toolset) in seen:
+            return 0
+        seen.add(id(toolset))
+        if _is_output_toolset(toolset, skip):
+            return self._guard_output_functions(toolset, policy=policy)
+
+        tools = getattr(toolset, "tools", None)
+        if tools is not None:
+            return self._wrap_tools_collection(tools, policy=policy)
+
+        wrapped = getattr(toolset, "wrapped", None)
+        if wrapped is not None:
+            return self._walk_toolset(wrapped, policy=policy, report=report, seen=seen, skip=skip)
+
+        members = getattr(toolset, "toolsets", None)
+        if members is not None and not isinstance(members, str | bytes):
+            return sum(
+                self._walk_toolset(member, policy=policy, report=report, seen=seen, skip=skip)
+                for member in members
+            )
+
+        factory = getattr(toolset, "toolset_func", None)
+        if callable(factory):
+            self._guard_factory(toolset, factory, policy=policy)
+            built = getattr(toolset, "_toolset", None)  # a per-run copy already evaluated
+            return self._walk_toolset(built, policy=policy, report=report, seen=seen, skip=skip)
+
+        report.append((id(toolset), _describe_toolset(toolset)))
+        return 0
+
+    def _guard_output_functions(self, toolset: Any, *, policy: SecurityPolicy | None) -> int:
+        """Guard the functions an output toolset calls with the model's final answer.
+
+        With ``output_type=[fn]`` the model writes ``fn``'s arguments and PydanticAI runs
+        it, through ``processor._function_schema.function``: a tool call by another name.
+        That callable is re-pointed to a guarded shim named for the function, so policy
+        lists match the function's name. An output type that is a model or a scalar calls
+        nothing and is left alone. Until the 0.10.28 review the output toolset was skipped
+        whole, and so was the warning that its functions ran unguarded.
+        """
+        processors = getattr(toolset, "processors", None)
+        if not isinstance(processors, Mapping):
+            return 0
         count = 0
-        for toolset in toolsets:
-            inner = getattr(toolset, "tools", None)
-            if inner is None:
+        for key, processor in processors.items():
+            schema = getattr(processor, "_function_schema", None)
+            function = getattr(schema, "function", None)
+            if schema is None or not callable(function):
                 continue
-            count += self._wrap_tools_collection(inner, policy=policy)
+            name = str(getattr(function, "__name__", key))
+            if already_guarded(function, policy, tool=name):
+                continue
+            schema.function = _guard_callable(schema, function, name=name, policy=policy)
+            count += 1
         return count
+
+    def _guard_factory(
+        self, toolset: Any, factory: Callable[..., Any], *, policy: SecurityPolicy | None
+    ) -> None:
+        """Re-point a ``DynamicToolset``'s factory so each toolset it builds is walked first.
+
+        A dynamic toolset is built per run (or per run step) by calling its factory with
+        the run context; there is nothing static to wrap. Its per-run copies are made from
+        the same ``toolset_func`` attribute, so they inherit the re-pointed factory.
+        """
+        if already_guarded(factory, policy, tool=_describe_toolset(toolset)):
+            return
+        adapter = self
+
+        def walk_built(built: Any) -> Any:
+            report: list[tuple[int, str]] = []
+            adapter._walk_toolset(built, policy=policy, report=report, seen=set(), skip=set())
+            adapter._warn_unwrappable([description for _, description in report])
+            return built
+
+        @functools.wraps(factory)
+        def guarded_factory(*args: Any, **kwargs: Any) -> Any:
+            built = factory(*args, **kwargs)
+            if inspect.isawaitable(built):
+
+                async def walk_when_built() -> Any:
+                    return walk_built(await built)
+
+                return walk_when_built()
+            return walk_built(built)
+
+        mark_guarded(guarded_factory, policy)
+        toolset.toolset_func = guarded_factory
+
+    def _hook_run_toolsets(self, agent: Any, *, policy: SecurityPolicy | None) -> bool:
+        """Walk each run's toolset before the run uses it. Returns whether it is hooked.
+
+        pydantic-ai 2.x builds every run's toolset in ``Agent._get_toolset`` (``iter``, so
+        ``run`` / ``run_sync`` / ``run_stream``, and realtime sessions), from the agent's
+        toolsets, any ``override(tools=..., toolsets=...)`` and the toolsets passed to the
+        run. Wrapping that method on this agent instance (only it) walks the run's toolset
+        first, so a toolset first seen at run time is guarded before any of its tools can
+        be called. A copy of the agent made after the wrap shares the hook, which builds
+        the original agent's toolset; wrap the copy itself instead.
+        """
+        original = getattr(agent, "_get_toolset", None)
+        if not callable(original):
+            if type(agent).__module__.startswith("pydantic_ai"):
+                warnings.warn(
+                    "agent-airlock cannot guard toolsets passed at run time on this "
+                    "PydanticAI version (the agent has no _get_toolset): tools in "
+                    "run(toolsets=...) and override(...) are NOT validated. Register them "
+                    "on the agent before wrap_agent.",
+                    UserWarning,
+                    stacklevel=4,
+                )
+            return False
+        if already_guarded(original, policy, tool="the agent's run toolsets"):
+            return True
+
+        adapter = self
+        warned: set[int] = set()
+
+        @functools.wraps(original)
+        def guarded_get_toolset(*args: Any, **kwargs: Any) -> Any:
+            toolset = original(*args, **kwargs)
+            skip = {
+                id(candidate)
+                for candidate in (
+                    kwargs.get("output_toolset"),
+                    getattr(agent, "_output_toolset", None),
+                )
+                if candidate is not None
+            }
+            report: list[tuple[int, str]] = []
+            for output in (kwargs.get("output_toolset"), getattr(agent, "_output_toolset", None)):
+                if output is not None:
+                    adapter._guard_output_functions(output, policy=policy)
+            adapter._walk_toolset(toolset, policy=policy, report=report, seen=set(), skip=skip)
+            fresh = [(key, description) for key, description in report if key not in warned]
+            warned.update(key for key, _ in fresh)
+            adapter._warn_unwrappable([description for _, description in fresh])
+            return toolset
+
+        mark_guarded(guarded_get_toolset, policy)
+        agent._get_toolset = guarded_get_toolset
+        return True
+
+    def _warn_unwrappable(self, descriptions: list[str]) -> None:
+        """Name every toolset the walk could not see into, unless warnings are off."""
+        if not descriptions or not self.warn_on_unwrappable:
+            return
+        warnings.warn(
+            f"agent-airlock did not guard {len(descriptions)} PydanticAI toolset(s): "
+            f"{', '.join(descriptions)}. These run tools that have no local Python callable "
+            "to wrap (an MCP server, an external or deferred toolset); calls through them "
+            "are NOT validated by agent-airlock.",
+            UserWarning,
+            stacklevel=4,
+        )
 
     def _wrap_tools_collection(self, tools: Any, *, policy: SecurityPolicy | None) -> int:
         """Replace every tool's callable with the Airlock-decorated version."""
@@ -224,7 +493,15 @@ class PydanticAIAdapter:
         return count
 
     def _wrap_one(self, tool: Any, *, name: str, policy: SecurityPolicy | None) -> Any:
-        """Replace ``tool.function`` / ``tool.run`` / ``tool`` with a guarded shim."""
+        """Replace ``tool.function`` / ``tool.run`` / ``tool`` with a guarded shim.
+
+        The callable a run invokes, ``tool.function_schema.function``, is guarded too,
+        whether or not it is the same object as ``tool.function``. A tool whose call path
+        is already guarded is left alone (idempotent per tool).
+        """
+        if already_guarded(_call_path(tool), policy, tool=name):
+            return tool
+
         target_attr: str | None = None
         forward: Callable[..., Any] | None = None
         # PydanticAI v1.88+ Tool objects use ``.function`` for the user
@@ -243,17 +520,24 @@ class PydanticAIAdapter:
                 f"tool {name!r} has no callable attribute (`function`/`run`/__call__); cannot wrap"
             )
 
-        # The proxy carries the tool's name, so SecurityPolicy lists match the tool
-        # rather than `function`, and the tool's signature, so Airlock validates it.
-        proxy = named_tool_proxy(
-            forward, name=name, relaxed_params=_run_context_params(tool, forward)
+        wrapped = (
+            forward
+            if guarded_with(forward, policy)
+            else _guard_callable(tool, forward, name=name, policy=policy)
         )
-        airlock = Airlock(policy=policy) if policy is not None else Airlock()
-        wrapped = airlock(proxy)
+        schema: Any = getattr(tool, "function_schema", None)
+        schema_function = getattr(schema, "function", None)
+        if schema is not None and callable(schema_function):
+            # The run path. Re-pointed to the same shim when it holds the tool's function,
+            # and guarded on its own when it holds another callable, which is what runs.
+            schema.function = (
+                wrapped
+                if schema_function is forward
+                else _guard_callable(tool, schema_function, name=name, policy=policy)
+            )
 
         if target_attr is not None:
             setattr(tool, target_attr, wrapped)  # noqa: B010
-            _repoint_function_schema(tool, original=forward, wrapped=wrapped)
             return tool
         return wrapped
 

@@ -12,14 +12,52 @@ plugs that gap.
 Algorithm
 ---------
 
-1. Detect JWT tri-segment shape (``head.payload.sig``); if matched,
-   skip prompt-injection scan on the body — JWT signing layer is out
-   of scope.
-2. Compute Shannon entropy of the raw bytes. High-entropy nonces
-   (>= 3.0 bits/byte) skip the decode + scan.
-3. Try base64, url-safe base64, hex, and JSON decoders; the first
-   decoder whose output is printable ASCII is used.
-4. Run the prompt-injection trigger-phrase scan on the decoded text.
+0. Hold the state to the RFC 6749 syntax (Appendix A.5: ``state = 1*VSCHAR``,
+   ``VSCHAR = %x20-7E``), as written and percent-decoded. A character outside
+   it (a look-alike letter, a control character, an undecodable byte) is
+   refused before anything is decoded: no client sends one, and the trigger
+   phrases below are ASCII, so a look-alike letter would read past them.
+1. Detect the JWT tri-segment shape (``head.payload.sig``: three base64url
+   segments whose header decodes to a JSON object). The JWT signing layer
+   is out of scope, but every segment is decoded and scanned for the
+   trigger phrases, as text and, where it parses, as JSON. The shape is
+   then read by every step below like any other state.
+2. Try url-safe base64, base64, hex, and JSON decoders, on the state as
+   written and percent-decoded, and scan the output of every one that
+   decodes for the trigger phrases (not only the first printable one).
+3. Read the state as plain text too: the trigger-phrase scan runs on it as
+   written, percent-decoded, and with ``-`` / ``_`` / ``+`` / ``.`` / ``~``
+   read as spaces, and a state that reads as natural-language prose (three
+   or more words making up at least two thirds of its whitespace-separated
+   tokens, one of them four letters or longer) is refused unless it is a
+   JSON object or array. The prose check reads the state as given and with
+   %-escapes decoded, never with ``+`` as a space (a decoded standard-base64
+   nonce carries literal ``+``). An opaque nonce has no whitespace, so it is
+   never prose.
+4. Only then does Shannon entropy label an allowed state (a high-entropy
+   nonce is >= 3.0 bits/byte).
+
+Every scan of a decoded form reads the text a lenient reader sees as well:
+NFKC-folded, with an undecodable byte (U+FFFD), a format character
+(zero-width, bidi) or a control character dropped, and read as a space.
+Decoded bytes are read leniently, not strictly: a random-bytes nonce does not
+decode to UTF-8 either. A ``bytes`` state is decoded the same way, and step 0
+refuses any byte outside VSCHAR it held.
+
+Until 0.10.28 the undecoded text was never scanned, so plain-text
+instructions passed as a "high-entropy nonce" (English runs ~4 bits/byte),
+two dots made any text a JWT, one undecodable byte or zero-width character
+inside a trigger phrase hid it, a ``list`` (``parse_qs`` output) or
+``bytes`` state was a warning, and a callback that was not a mapping
+crashed. Every element of a list state is read now and the worst verdict
+wins; ``bytes`` are decoded; any other shape, and a callback that is not a
+mapping, is refused. Until 0.10.28 too, a JWT-shaped state had only its
+payload scanned, as text, and was then allowed with no other read, so a
+trigger in its header (a ``kid``), carried as its signature, JSON-escaped,
+or split across segments where a whole-state decode joins them passed; and
+a state outside the RFC 6749 syntax was read as text, so look-alike letters
+passed as a high-entropy nonce and a lone surrogate raised
+``UnicodeEncodeError`` instead of a verdict.
 
 Reference
 ---------
@@ -35,8 +73,12 @@ import json
 import math
 import re
 import time
-from dataclasses import dataclass, field
+import unicodedata
+import warnings
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
+from urllib.parse import unquote, unquote_plus
 
 from .._log import structlog
 from ..exceptions import AirlockError
@@ -56,6 +98,34 @@ _INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)\bexecute\s+the\s+following\b"),
     re.compile(r"(?i)\bexfiltrat\w*\b"),
 )
+
+#: Characters a token-shaped state may join words with; read as spaces for the scan.
+_WORD_JOINERS = re.compile(r"[-_+.~]+")
+
+#: A word as prose writes it: two or more letters, lowercase or Capitalized, or three or
+#: more in ALL CAPS. A two-letter ALL-CAPS token (``KU``) is as common in random base64 as
+#: in prose, so it does not count.
+_PROSE_WORD = re.compile(r"^(?:[A-Za-z][a-z]+|[A-Z]{3,})$")
+
+#: Punctuation prose wraps a word in, stripped before :data:`_PROSE_WORD` is tried.
+_PROSE_PUNCTUATION = "\"'`.,;:!?()[]{}<>"
+
+#: The fewest words that make a state read as prose.
+_PROSE_MIN_WORDS = 3
+
+#: Prose has at least one word this long; a run of short random base64 segments does not.
+_PROSE_LONG_WORD = 4
+
+#: The base64url alphabet of a JWT segment.
+_BASE64URL = re.compile(r"^[A-Za-z0-9_-]+$")
+
+#: A JWT-shaped state's segments, in order, by the decoder name a refusal reports.
+_JWT_SEGMENTS: tuple[str, ...] = ("jwt-header", "jwt-payload", "jwt-signature")
+
+#: A character outside RFC 6749's ``VSCHAR`` (``%x20-7E``), which a state is made of.
+_NOT_VSCHAR = re.compile(r"[^\x20-\x7e]")
+
+_SEVERITY: dict[str, int] = {"allow": 0, "warn": 1, "block": 2}
 
 
 class OAuthStateInjectionError(AirlockError):
@@ -87,6 +157,171 @@ class OAuthStateInspection:
     duration_ms: float = 0.0
 
 
+@dataclass(frozen=True)
+class _Finding:
+    """One state value's verdict, before timing and logging."""
+
+    verdict: Verdict
+    detail: str
+    decoder: str | None = None
+    excerpt: str | None = None
+    matches: tuple[str, ...] = ()
+
+
+#: ASCII control characters other than the whitespace ones a phrase may contain.
+_ASCII_CONTROLS = re.compile(r"[\x00-\x08\x0e-\x1f\x7f]")
+
+#: Whitespace control characters, which separate words rather than hide inside them.
+_WHITESPACE_CONTROLS = frozenset("\t\n\r\x0b\x0c")
+
+
+def _invisible(char: str) -> bool:
+    """An undecodable byte (U+FFFD), a format character, or a non-whitespace control."""
+    if char == "�":
+        return True
+    category = unicodedata.category(char)
+    return category == "Cf" or (category == "Cc" and char not in _WHITESPACE_CONTROLS)
+
+
+def _unique(texts: list[str]) -> list[str]:
+    return list(dict.fromkeys(texts))
+
+
+def _lenient_forms(text: str) -> list[str]:
+    """``text``, and what a lenient reader sees: NFKC-folded, invisibles dropped or spaced.
+
+    One undecodable byte or zero-width character inside "ignore" broke the trigger
+    pattern, while a consumer that drops it (or a model reading it) still sees the word.
+    """
+    if text.isascii():
+        if not _ASCII_CONTROLS.search(text):
+            return [text]
+        return _unique([text, _ASCII_CONTROLS.sub("", text), _ASCII_CONTROLS.sub(" ", text)])
+    folded = unicodedata.normalize("NFKC", text)
+    dropped = "".join(c for c in folded if not _invisible(c))
+    spaced = "".join(" " if _invisible(c) else c for c in folded)
+    return _unique([text, folded, dropped, spaced])
+
+
+def _visible(text: str) -> str:
+    """``text`` with its invisible characters dropped (the lenient reader's text)."""
+    if text.isascii():
+        return _ASCII_CONTROLS.sub("", text)
+    return "".join(c for c in unicodedata.normalize("NFKC", text) if not _invisible(c))
+
+
+def _scan(text: str) -> tuple[str, ...]:
+    """Every trigger phrase ``text`` contains, read leniently, one per pattern."""
+    found: list[str] = []
+    forms = _lenient_forms(text)
+    for pat in _INJECTION_PATTERNS:
+        for form in forms:
+            m = pat.search(form)
+            if m:
+                found.append(m.group(0))
+                break
+    return tuple(found)
+
+
+def _is_json_structure(text: str) -> bool:
+    """Whether ``text`` parses as a JSON object or array (structure, not prose)."""
+    try:
+        return isinstance(json.loads(text), (dict, list))
+    except (ValueError, RecursionError):
+        return False
+
+
+def _reads_as_prose(text: str) -> bool:
+    """Whether ``text``, read leniently, is natural language.
+
+    Three or more words, making up at least two thirds of the whitespace-separated tokens,
+    one of them four letters or longer. Measured against 400,000 random standard-base64
+    nonces with every ``+`` read as a space (the worst case for an opaque nonce), none
+    reads as prose.
+    """
+    for form in _lenient_forms(text):
+        tokens = form.split()
+        if len(tokens) < _PROSE_MIN_WORDS:
+            continue
+        words = [
+            word
+            for word in (token.strip(_PROSE_PUNCTUATION) for token in tokens)
+            if _PROSE_WORD.match(word)
+        ]
+        if (
+            len(words) >= _PROSE_MIN_WORDS
+            and len(words) * 3 >= len(tokens) * 2
+            and any(len(word) >= _PROSE_LONG_WORD for word in words)
+        ):
+            return True
+    return False
+
+
+def _state_values(state: Any) -> tuple[list[str], _Finding | None]:
+    """The text values a ``state`` parameter carries, or the refusal of its shape.
+
+    ``None`` is an absent state. A ``str`` is one value and ``bytes`` are decoded to one;
+    a ``list`` / ``tuple`` (``parse_qs`` gives a list) is every element, each of which
+    must be a ``str`` or ``bytes``. Any other shape is refused rather than warned about.
+    """
+    if state is None:
+        return [], None
+    items = list(state) if isinstance(state, (list, tuple)) else [state]
+    values: list[str] = []
+    for index, item in enumerate(items):
+        if isinstance(item, (bytes, bytearray, memoryview)):
+            item = bytes(item).decode("utf-8", errors="replace")
+        if not isinstance(item, str):
+            where = f"state[{index}]" if isinstance(state, (list, tuple)) else "state"
+            return [], _Finding(
+                "block",
+                f"{where} is a {type(item).__name__}, not a string; refusing a shape the "
+                "guard cannot read",
+                "shape",
+            )
+        values.append(item)
+    return values, None
+
+
+def _syntax_finding(state: str) -> _Finding | None:
+    """Refuse a state with a character outside the RFC 6749 syntax, as given or decoded.
+
+    RFC 6749 Appendix A.5 makes a state ``1*VSCHAR`` (``%x20-7E``). The guard cannot tell
+    whether a caller passed the state percent-decoded or as it sat in the query string,
+    so both readings are held to the syntax. The excerpt escapes what it refuses, so a
+    look-alike letter is visible in it and a lone surrogate cannot break a log line.
+    """
+    label, text = "state", state
+    bad = _NOT_VSCHAR.search(text)
+    if bad is None:
+        label, text = "percent-decoded state", unquote_plus(state)
+        bad = _NOT_VSCHAR.search(text)
+    if bad is None:
+        return None
+    char = bad.group(0)
+    return _Finding(
+        "block",
+        f"{label} carries {char!r} (U+{ord(char):04X}), outside the RFC 6749 state syntax "
+        "(1*VSCHAR, %x20-7E); no client sends one",
+        "syntax",
+        text[:80].encode("ascii", "backslashreplace").decode("ascii"),
+    )
+
+
+def _plain_variants(state: str) -> list[str]:
+    """``state`` as written, percent-decoded, and with word joiners read as spaces."""
+    variants: list[str] = []
+    for text in (state, unquote_plus(state)):
+        for variant in (text, _WORD_JOINERS.sub(" ", text)):
+            if variant not in variants:
+                variants.append(variant)
+    return variants
+
+
+#: The constructor default; any other value warns (see ``OAuthStateEntropyGuard``).
+_DEFAULT_ENTROPY_SKIP_THRESHOLD = 3.0
+
+
 class OAuthStateEntropyGuard:
     """Detect prompt-injection payloads smuggled via OAuth ``state``."""
 
@@ -96,6 +331,23 @@ class OAuthStateEntropyGuard:
         max_state_bytes: int = 2048,
         entropy_skip_threshold: float = 3.0,
     ) -> None:
+        """Configure the guard.
+
+        Args:
+            max_state_bytes: A longer ``state`` is blocked before any decoding.
+            entropy_skip_threshold: Deprecated; removal in v1.0.0. It never changed a
+                verdict: every ``state`` is scanned whatever its entropy, and the value
+                only picks the wording of an ``allow`` detail. Setting it away from its
+                default emits a ``FutureWarning`` so it is not read as a security knob.
+        """
+        if entropy_skip_threshold != _DEFAULT_ENTROPY_SKIP_THRESHOLD:
+            warnings.warn(
+                "OAuthStateEntropyGuard(entropy_skip_threshold=...) has no effect on any "
+                "verdict: every state is scanned whatever its entropy. Deprecated; it "
+                "will be removed in v1.0.0.",
+                FutureWarning,
+                stacklevel=2,
+            )
         self.max_state_bytes = max_state_bytes
         self.entropy_skip_threshold = entropy_skip_threshold
 
@@ -103,79 +355,47 @@ class OAuthStateEntropyGuard:
     # Public API
     # ------------------------------------------------------------------
 
-    def evaluate(self, oauth_callback: dict[str, Any]) -> OAuthStateInspection:
+    def evaluate(self, oauth_callback: Mapping[str, Any]) -> OAuthStateInspection:
+        """Inspect the ``state`` parameter of an OAuth callback.
+
+        Args:
+            oauth_callback: The callback's parameters as a mapping (a ``state`` value may
+                be a ``str``, ``bytes``, or a list of them, as ``parse_qs`` returns).
+
+        Returns:
+            The inspection. A callback that is not a mapping, a ``state`` of no readable
+            shape, and one with a character outside the RFC 6749 syntax (``1*VSCHAR``) are
+            ``block``; an absent or empty ``state`` is ``warn``. For a list ``state`` the
+            worst element's verdict is returned.
+        """
         started = time.perf_counter()
-        state = oauth_callback.get("state", "")
-        if not isinstance(state, str):
-            return self._finalise(started, "warn", "state is not a string", None, None, ())
-        if state == "":
-            return self._finalise(started, "warn", "state is empty", None, None, ())
-        if len(state.encode("utf-8")) > self.max_state_bytes:
+        if not isinstance(oauth_callback, Mapping):
             return self._finalise(
                 started,
-                "block",
-                f"state exceeds {self.max_state_bytes} byte cap",
-                "size_cap",
-                state[:80],
-                (),
+                _Finding(
+                    "block",
+                    f"callback is a {type(oauth_callback).__name__}, not a mapping of "
+                    "callback parameters; refusing rather than guessing where state is",
+                    "shape",
+                ),
             )
+        values, refusal = _state_values(oauth_callback.get("state"))
+        if refusal is not None:
+            return self._finalise(started, refusal)
+        if not values:
+            return self._finalise(started, _Finding("warn", "state is empty"))
+        worst_index, worst = 0, self._inspect(values[0])
+        for index in range(1, len(values)):
+            if worst.verdict == "block":
+                break
+            finding = self._inspect(values[index])
+            if _SEVERITY[finding.verdict] > _SEVERITY[worst.verdict]:
+                worst_index, worst = index, finding
+        if len(values) > 1:
+            worst = replace(worst, detail=f"state[{worst_index}]: {worst.detail}")
+        return self._finalise(started, worst)
 
-        if self._looks_like_jwt(state):
-            return self._finalise(
-                started, "allow", "state matches JWT tri-segment shape", None, None, ()
-            )
-
-        # Try the decoders FIRST. Random nonces have high raw-byte
-        # entropy too, but they don't decode into printable ASCII —
-        # whereas a base64-encoded injection payload does. So entropy
-        # is only a useful short-circuit when no decoder hit, otherwise
-        # the encoded form's high entropy would let injection through.
-        decoded, decoder = self._best_decode(state)
-        if decoded is None:
-            entropy_bps = self._shannon_entropy(state)
-            if entropy_bps >= self.entropy_skip_threshold:
-                return self._finalise(
-                    started,
-                    "allow",
-                    f"high-entropy nonce ({entropy_bps:.2f} bits/byte)",
-                    None,
-                    None,
-                    (),
-                )
-            return self._finalise(
-                started,
-                "allow",
-                "no decoder produced printable ASCII",
-                None,
-                None,
-                (),
-            )
-
-        matches: list[str] = []
-        for pat in _INJECTION_PATTERNS:
-            m = pat.search(decoded)
-            if m:
-                matches.append(m.group(0))
-
-        if matches:
-            return self._finalise(
-                started,
-                "block",
-                f"decoded state contains injection trigger via {decoder}",
-                decoder,
-                decoded[:160],
-                tuple(matches),
-            )
-        return self._finalise(
-            started,
-            "allow",
-            f"decoded via {decoder}; no injection trigger",
-            decoder,
-            decoded[:160],
-            (),
-        )
-
-    def evaluate_or_raise(self, oauth_callback: dict[str, Any]) -> OAuthStateInspection:
+    def evaluate_or_raise(self, oauth_callback: Mapping[str, Any]) -> OAuthStateInspection:
         result = self.evaluate(oauth_callback)
         if result.verdict == "block":
             raise OAuthStateInjectionError(
@@ -190,10 +410,126 @@ class OAuthStateEntropyGuard:
     # Internals
     # ------------------------------------------------------------------
 
+    def _inspect(self, state: str) -> _Finding:
+        """The verdict on one ``state`` string."""
+        if state == "":
+            return _Finding("warn", "state is empty")
+        # "surrogatepass": a lone surrogate (json.loads gives one for "\udcff") is counted,
+        # and refused just below, instead of raising UnicodeEncodeError.
+        if len(state.encode("utf-8", "surrogatepass")) > self.max_state_bytes:
+            return _Finding(
+                "block", f"state exceeds {self.max_state_bytes} byte cap", "size_cap", state[:80]
+            )
+        syntax = _syntax_finding(state)
+        if syntax is not None:
+            return syntax
+        jwt_shaped = self._looks_like_jwt(state)
+        if jwt_shaped:
+            segment = self._jwt_finding(state)
+            if segment is not None:
+                return segment
+        # Every decoder's output is scanned, not only the first printable one: a decoder
+        # that turns the state into printable garbage first must not hide what a later
+        # one decodes it to (a JSON state also "decodes" as lenient base64). A JWT-shaped
+        # state is decoded whole too: with its dots dropped, segments whose lengths are
+        # whole 3-byte groups decode joined, and a phrase split between them reads whole.
+        decodings = _decodings(state)
+        for decoder, decoded in decodings:
+            matches = _scan(decoded)
+            if matches:
+                return _Finding(
+                    "block",
+                    f"decoded state contains injection trigger via {decoder}",
+                    decoder,
+                    decoded[:160],
+                    matches,
+                )
+        plain = self._plain_text_finding(state)
+        if plain is not None:
+            return plain
+        if jwt_shaped:
+            return _Finding("allow", "state matches JWT tri-segment shape")
+        for decoder, decoded in decodings:
+            # Random nonces have high raw-byte entropy too, but they don't decode into
+            # printable text, whereas an encoded payload does; JSON is text by definition.
+            if decoder.endswith("json") or self._is_printable(_visible(decoded)):
+                return _Finding(
+                    "allow", f"decoded via {decoder}; no injection trigger", decoder, decoded[:160]
+                )
+        entropy_bps = self._shannon_entropy(state)
+        if entropy_bps >= self.entropy_skip_threshold:
+            return _Finding("allow", f"high-entropy nonce ({entropy_bps:.2f} bits/byte)")
+        return _Finding("allow", "no decoder produced printable ASCII")
+
+    @staticmethod
+    def _jwt_finding(state: str) -> _Finding | None:
+        """Refuse a JWT-shaped state any of whose segments carries a trigger phrase.
+
+        Each segment is read as text and, where it parses, as JSON: a header or payload is
+        JSON, and a JSON reader turns ``\\u0069gnore`` into ``ignore``. The signature is
+        read as well; it is opaque bytes only to a verifier. ``None`` lets the state go on
+        to the guard's other reads.
+        """
+        for decoder, segment in zip(_JWT_SEGMENTS, state.split("."), strict=True):
+            text = _b64url_text(segment)
+            if not text:
+                continue
+            for form in _unique([text, _try_json(text) or text]):
+                matches = _scan(form)
+                if matches:
+                    return _Finding(
+                        "block",
+                        "JWT-shaped state carries an injection trigger in its "
+                        + decoder.removeprefix("jwt-"),
+                        decoder,
+                        form[:160],
+                        matches,
+                    )
+        return None
+
+    @staticmethod
+    def _plain_text_finding(state: str) -> _Finding | None:
+        """Refuse a state whose plain text carries a trigger phrase or reads as prose."""
+        for variant in _plain_variants(state):
+            matches = _scan(variant)
+            if matches:
+                return _Finding(
+                    "block",
+                    "plain-text state contains injection trigger",
+                    "plain-text",
+                    variant[:160],
+                    matches,
+                )
+        if _is_json_structure(state) or _is_json_structure(unquote_plus(state)):
+            # A JSON object or array is structure, read through its decoded form; a JSON
+            # string literal is just quoted text, so it is read as prose like any other.
+            return None
+        # The state as given (``parse_qs`` has already decoded it) and with %-escapes
+        # decoded, but never with "+" read as a space: a decoded standard-base64 nonce
+        # carries literal "+" characters, and reading them as spaces split it into words.
+        for text in _unique([state, unquote(state)]):
+            if _reads_as_prose(text):
+                return _Finding(
+                    "block",
+                    "plain-text state reads as natural-language prose, not an opaque nonce",
+                    "plain-text",
+                    text[:160],
+                )
+        return None
+
     @staticmethod
     def _looks_like_jwt(s: str) -> bool:
+        """Three base64url segments whose header decodes to a JSON object."""
         parts = s.split(".")
-        return len(parts) == 3 and all(p for p in parts)
+        if len(parts) != 3 or not all(_BASE64URL.match(part) for part in parts):
+            return False
+        header = _b64url_text(parts[0])
+        if header is None:
+            return False
+        try:
+            return isinstance(json.loads(header), dict)
+        except (ValueError, RecursionError):
+            return False
 
     @staticmethod
     def _shannon_entropy(s: str) -> float:
@@ -207,19 +543,6 @@ class OAuthStateEntropyGuard:
         ent = -sum((c / n) * math.log2(c / n) for c in freq.values())
         return ent
 
-    def _best_decode(self, state: str) -> tuple[str | None, str | None]:
-        # Try url-safe base64, then standard base64, then hex, then JSON.
-        for decoder, fn in (
-            ("url-safe-base64", _try_urlsafe_b64),
-            ("base64", _try_b64),
-            ("hex", _try_hex),
-            ("json", _try_json),
-        ):
-            decoded = fn(state)
-            if decoded and self._is_printable(decoded):
-                return decoded, decoder
-        return None, None
-
     @staticmethod
     def _is_printable(s: str) -> bool:
         if not s:
@@ -227,31 +550,32 @@ class OAuthStateEntropyGuard:
         printable = sum(1 for c in s if 32 <= ord(c) < 127 or c in ("\n", "\t"))
         return (printable / max(len(s), 1)) > 0.85
 
-    def _finalise(
-        self,
-        started: float,
-        verdict: Verdict,
-        detail: str,
-        decoder: str | None,
-        decoded_excerpt: str | None,
-        matches: tuple[str, ...],
-    ) -> OAuthStateInspection:
+    def _finalise(self, started: float, finding: _Finding) -> OAuthStateInspection:
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         logger.info(
             "oauth_state_inspect",
-            verdict=verdict,
-            decoder=decoder,
+            verdict=finding.verdict,
+            decoder=finding.decoder,
             duration_ms=round(elapsed_ms, 3),
-            matches=len(matches),
+            matches=len(finding.matches),
         )
         return OAuthStateInspection(
-            verdict=verdict,
-            detail=detail,
-            decoder=decoder,
-            decoded_excerpt=decoded_excerpt,
-            matches=matches,
+            verdict=finding.verdict,
+            detail=finding.detail,
+            decoder=finding.decoder,
+            decoded_excerpt=finding.excerpt,
+            matches=finding.matches,
             duration_ms=elapsed_ms,
         )
+
+
+def _b64url_text(segment: str) -> str | None:
+    """A base64url segment decoded to text, or None if it does not decode."""
+    pad = "=" * (-len(segment) % 4)
+    try:
+        return base64.urlsafe_b64decode(segment + pad).decode("utf-8", errors="replace")
+    except (binascii.Error, ValueError):
+        return None
 
 
 def _try_urlsafe_b64(s: str) -> str | None:
@@ -283,15 +607,43 @@ def _try_hex(s: str) -> str | None:
 
 
 def _try_json(s: str) -> str | None:
+    # A RecursionError is how the json codec refuses deep nesting (a 2 KB state can
+    # hold a thousand brackets); until 0.10.28 it escaped evaluate(). ensure_ascii=False
+    # keeps the characters a consumer reads: re-escaped as \uXXXX, a zero-width or
+    # fullwidth character inside a phrase was text no lenient form could fold back.
     try:
         parsed = json.loads(s)
-    except json.JSONDecodeError:
+        if isinstance(parsed, (dict, list)):
+            return json.dumps(parsed, ensure_ascii=False)
+    except (ValueError, RecursionError):
         return None
     if isinstance(parsed, str):
         return parsed
-    if isinstance(parsed, dict):
-        return json.dumps(parsed)
     return None
+
+
+def _decodings(state: str) -> list[tuple[str, str]]:
+    """Every ``(decoder, text)`` the state decodes to, as written and percent-decoded.
+
+    Bytes are decoded leniently (``errors="replace"``): a random-bytes nonce is not UTF-8,
+    so a strict decode would refuse it, and :func:`_scan` reads the lenient forms anyway.
+    """
+    unquoted = unquote_plus(state)
+    candidates = [(state, "")]
+    if unquoted != state:
+        candidates.append((unquoted, "percent-decoded-"))
+    found: list[tuple[str, str]] = []
+    for text, prefix in candidates:
+        for decoder, fn in (
+            ("url-safe-base64", _try_urlsafe_b64),
+            ("base64", _try_b64),
+            ("hex", _try_hex),
+            ("json", _try_json),
+        ):
+            decoded = fn(text)
+            if decoded:
+                found.append((f"{prefix}{decoder}", decoded))
+    return found
 
 
 __all__ = [

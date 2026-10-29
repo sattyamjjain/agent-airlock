@@ -66,6 +66,9 @@ class BlockReason(str, Enum):
     # V0.10.27: the interpreter runs startup hooks no allowlist covers. Like KILL_SWITCH, a
     # condition of the process rather than of the call: no argument change helps.
     STARTUP_HOOK = "startup_hook"
+    # V0.10.28: the tool ran, but its result could not be read to be masked (nested too
+    # deeply to rebuild), so it was withheld rather than returned unmasked.
+    OUTPUT_UNREADABLE = "output_unreadable"
 
 
 @dataclass

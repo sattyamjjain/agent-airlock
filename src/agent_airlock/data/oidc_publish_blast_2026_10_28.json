@@ -1,0 +1,434 @@
+{
+  "source": "https://github.com/advisories/GHSA-g7cv-rxg3-hmpx",
+  "cve": "CVE-2026-45321",
+  "postmortem": "https://tanstack.com/blog/npm-supply-chain-compromise-postmortem",
+  "retrieved_via": "GitHub REST API: GET /advisories/GHSA-g7cv-rxg3-hmpx",
+  "retrieved_at": "2026-10-28T19:50:43Z",
+  "advisory_updated_at": "2026-06-08T23:53:12Z",
+  "as_of": "2026-10-28T19:50:43Z",
+  "incident_id": "tanstack-oidc-blast-2026-05-11",
+  "supersedes": "oidc_publish_blast_2026_05_11.json",
+  "note": "Every affected version GHSA-g7cv-rxg3-hmpx lists for the 2026-05-11 TanStack OIDC trusted-publisher compromise: 42 npm packages, two exact versions each, copied from the advisory's vulnerable_version_range ('= x.y.z'). Supersedes the 2026-05-11 snapshot, whose versions carried a synthetic '-compromised-2026-05-11' suffix no registry publishes, which named @tanstack/react-query (the postmortem lists it clean), and whose three PyPI rows appear in neither source it cited. The wider Mini Shai-Hulud wave (Mistral, UiPath and others) is not in this list.",
+  "entries": [
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/arktype-adapter",
+      "version": "1.166.12"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/arktype-adapter",
+      "version": "1.166.15"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/eslint-plugin-router",
+      "version": "1.161.9"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/eslint-plugin-router",
+      "version": "1.161.12"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/eslint-plugin-start",
+      "version": "0.0.4"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/eslint-plugin-start",
+      "version": "0.0.7"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/history",
+      "version": "1.161.9"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/history",
+      "version": "1.161.12"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/nitro-v2-vite-plugin",
+      "version": "1.154.12"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/nitro-v2-vite-plugin",
+      "version": "1.154.15"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-router",
+      "version": "1.169.5"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-router",
+      "version": "1.169.8"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-router-devtools",
+      "version": "1.166.16"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-router-devtools",
+      "version": "1.166.19"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-router-ssr-query",
+      "version": "1.166.15"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-router-ssr-query",
+      "version": "1.166.18"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-start",
+      "version": "1.167.68"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-start",
+      "version": "1.167.71"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-start-client",
+      "version": "1.166.51"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-start-client",
+      "version": "1.166.54"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-start-rsc",
+      "version": "0.0.47"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-start-rsc",
+      "version": "0.0.50"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-start-server",
+      "version": "1.166.55"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/react-start-server",
+      "version": "1.166.58"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-cli",
+      "version": "1.166.46"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-cli",
+      "version": "1.166.49"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-core",
+      "version": "1.169.5"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-core",
+      "version": "1.169.8"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-devtools",
+      "version": "1.166.16"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-devtools",
+      "version": "1.166.19"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-devtools-core",
+      "version": "1.167.6"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-devtools-core",
+      "version": "1.167.9"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-generator",
+      "version": "1.166.45"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-generator",
+      "version": "1.166.48"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-plugin",
+      "version": "1.167.38"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-plugin",
+      "version": "1.167.41"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-ssr-query-core",
+      "version": "1.168.3"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-ssr-query-core",
+      "version": "1.168.6"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-utils",
+      "version": "1.161.11"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-utils",
+      "version": "1.161.14"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-vite-plugin",
+      "version": "1.166.53"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/router-vite-plugin",
+      "version": "1.166.56"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-router",
+      "version": "1.169.5"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-router",
+      "version": "1.169.8"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-router-devtools",
+      "version": "1.166.16"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-router-devtools",
+      "version": "1.166.19"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-router-ssr-query",
+      "version": "1.166.15"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-router-ssr-query",
+      "version": "1.166.18"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-start",
+      "version": "1.167.65"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-start",
+      "version": "1.167.68"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-start-client",
+      "version": "1.166.50"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-start-client",
+      "version": "1.166.53"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-start-server",
+      "version": "1.166.54"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/solid-start-server",
+      "version": "1.166.57"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-client-core",
+      "version": "1.168.5"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-client-core",
+      "version": "1.168.8"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-fn-stubs",
+      "version": "1.161.9"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-fn-stubs",
+      "version": "1.161.12"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-plugin-core",
+      "version": "1.169.23"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-plugin-core",
+      "version": "1.169.26"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-server-core",
+      "version": "1.167.33"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-server-core",
+      "version": "1.167.36"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-static-server-functions",
+      "version": "1.166.44"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-static-server-functions",
+      "version": "1.166.47"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-storage-context",
+      "version": "1.166.38"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/start-storage-context",
+      "version": "1.166.41"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/valibot-adapter",
+      "version": "1.166.12"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/valibot-adapter",
+      "version": "1.166.15"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/virtual-file-routes",
+      "version": "1.161.10"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/virtual-file-routes",
+      "version": "1.161.13"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-router",
+      "version": "1.169.5"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-router",
+      "version": "1.169.8"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-router-devtools",
+      "version": "1.166.16"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-router-devtools",
+      "version": "1.166.19"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-router-ssr-query",
+      "version": "1.166.15"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-router-ssr-query",
+      "version": "1.166.18"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-start",
+      "version": "1.167.61"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-start",
+      "version": "1.167.64"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-start-client",
+      "version": "1.166.46"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-start-client",
+      "version": "1.166.49"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-start-server",
+      "version": "1.166.50"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/vue-start-server",
+      "version": "1.166.53"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/zod-adapter",
+      "version": "1.166.12"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@tanstack/zod-adapter",
+      "version": "1.166.15"
+    }
+  ]
+}

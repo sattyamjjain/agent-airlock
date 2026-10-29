@@ -33,6 +33,12 @@ on stdlib mapping traversal (no new detection engine, Pydantic-only core). It is
   :class:`~agent_airlock.mcp_spec.header_integrity.HeaderBodyMismatchError` uses
   (``event`` / ``reason`` / the specific keys involved).
 
+  Every copy is checked. ``_meta`` (and the ``meta`` alias) is read at the top level and
+  under ``params`` (``params._meta`` is the spec's location); each copy that is not
+  ``None`` must pass on its own, and copies that disagree are refused
+  (``meta_conflicting_copies``). Until 0.10.28 the first copy found won, so a decoy
+  top-level ``_meta`` (``{}`` or ``None``) hid an escalating ``params._meta``.
+
 References:
     - MCP 2026-07-28 specification (final) — ``_meta`` on every request.
     - Akamai (2026-06-25): client-controlled metadata manipulation.
@@ -145,12 +151,26 @@ class MetaPin:
 
 @dataclass(frozen=True)
 class MetaTrustConfig:
-    """Tunables for :func:`validate_meta_trust` (deny-by-default; operator narrows)."""
+    """Tunables for :func:`validate_meta_trust` (deny-by-default; operator narrows).
+
+    Raises:
+        TypeError: ``escalation_tokens`` or ``meta_keys`` is a bare ``str`` (it would be
+            read as its characters, so ``_meta`` would never be found).
+    """
 
     escalation_tokens: frozenset[str] = DEFAULT_ESCALATION_TOKENS
     max_meta_bytes: int = DEFAULT_MAX_META_BYTES
     #: Keys under which the ``_meta`` block may live (top level or under ``params``).
     meta_keys: tuple[str, ...] = ("_meta", "meta")
+
+    def __post_init__(self) -> None:
+        for name in ("escalation_tokens", "meta_keys"):
+            value = getattr(self, name)
+            if isinstance(value, (str, bytes)):
+                raise TypeError(
+                    f"MetaTrustConfig.{name} must be a collection of str, not a bare "
+                    f"{type(value).__name__}: {value!r}"
+                )
 
 
 class MetaTrustError(ValueError):
@@ -174,17 +194,33 @@ def _reject(reason: str, message: str, **specifics: Any) -> MetaTrustError:
     return MetaTrustError(message, audit_event)
 
 
-def _extract_meta(request: Mapping[str, Any], meta_keys: tuple[str, ...]) -> Any:
-    """Find the ``_meta`` block at the top level or under ``params``; ``None`` if absent."""
+def _extract_meta_copies(
+    request: Mapping[str, Any], meta_keys: tuple[str, ...]
+) -> list[tuple[str, Any]]:
+    """Every ``_meta`` copy, as ``(location, value)``, at the top level and under ``params``.
+
+    A copy whose value is ``None`` is absent and is left out. A decoy (an empty mapping, or
+    ``None``) at one location therefore never hides a copy at another: every copy is
+    returned and checked.
+    """
+    containers: list[tuple[str, Mapping[str, Any]]] = [("", request)]
     params = request.get("params")
-    containers: list[Mapping[str, Any]] = [request]
     if isinstance(params, Mapping):
-        containers.append(params)
-    for container in containers:
+        containers.append(("params.", params))
+    copies: list[tuple[str, Any]] = []
+    for prefix, container in containers:
         for key in meta_keys:
-            if key in container:
-                return container[key]
-    return None
+            if key in container and container[key] is not None:
+                copies.append((f"{prefix}{key}", container[key]))
+    return copies
+
+
+def _copies_agree(first: Any, other: Any) -> bool:
+    """Whether two ``_meta`` copies are equal (a comparison that raises is a disagreement)."""
+    try:
+        return bool(first == other)
+    except Exception:  # noqa: BLE001 - an uncomparable copy is a disagreement
+        return False
 
 
 def _key_tokens(key: str) -> set[str]:
@@ -232,8 +268,9 @@ def _meta_capabilities(value: Any) -> set[str]:
 def _check_size(meta: Mapping[str, Any], config: MetaTrustConfig) -> None:
     try:
         size = len(json.dumps(meta, default=str).encode("utf-8"))
-    except (TypeError, ValueError):
-        # Unserializable content is itself a shape violation → fail closed.
+    except (TypeError, ValueError, RecursionError):
+        # Unserializable content is itself a shape violation → fail closed. That includes
+        # nesting too deep for the encoder: until 0.10.28 its RecursionError escaped.
         raise _reject(
             "meta_unserializable",
             "_meta could not be serialized for size accounting — refusing untrusted shape",
@@ -403,47 +440,10 @@ def _client_field(meta: Mapping[str, Any], nested: str, flat: str) -> Any:
     return _resolve_meta(meta, flat)
 
 
-def validate_meta_trust(
-    request: Mapping[str, Any],
-    *,
-    pinned: MetaPin | None = None,
-    config: MetaTrustConfig | None = None,
+def _sweep_escalation(
+    meta: Mapping[str, Any], pinned: MetaPin | None, config: MetaTrustConfig
 ) -> None:
-    """Reject a request whose ``_meta`` block cannot be trusted for authorization/routing.
-
-    Reserved fields are resolved in both their bare and ``io.modelcontextprotocol/``
-    namespaced forms (the 2026-07-28 wire shape), preferring the namespaced form, so a
-    pin fires on conformant traffic; a bare key shadowing a namespaced one fails closed.
-
-    Args:
-        request: The request / tool-call mapping. ``_meta`` is looked for at the top
-            level and under ``params`` (keys from ``config.meta_keys``).
-        pinned: The server-side entitlement declaration to check ``_meta`` against. When
-            supplied, any disagreeing ``_meta`` value fails closed. When omitted, any
-            ``_meta`` key asserting a capability/role/scope/permission that would broaden
-            the call is refused (deny-by-default).
-        config: Tunables (escalation token set, size cap, ``_meta`` lookup keys).
-
-    Raises:
-        MetaTrustError: On any trust-boundary violation. The error carries a structured
-            ``audit_event`` mapping (``event`` / ``reason`` / the specific keys involved).
-    """
-    config = config or MetaTrustConfig()
-    meta = _extract_meta(request, config.meta_keys)
-    if meta is None:
-        return  # no _meta → nothing to check
-    if not isinstance(meta, Mapping):
-        raise _reject(
-            "meta_not_mapping",
-            f"_meta must be a mapping, got {type(meta).__name__} — refusing untrusted shape",
-            meta_type=type(meta).__name__,
-        )
-
-    # Type + shape discipline (runs regardless of pin).
-    _check_size(meta, config)
-    _check_duplicate_keys(meta)
-
-    # Identity / privilege-shaped key sweep.
+    """Refuse an identity / privilege-shaped key the caller is not entitled to assert."""
     for key, value in meta.items():
         tokens = _key_tokens(str(key))
         is_capability = bool(tokens & _CAPABILITY_TOKENS)
@@ -485,5 +485,77 @@ def validate_meta_trust(
             asserted=value,
         )
 
+
+def _check_copy(meta: Mapping[str, Any], pinned: MetaPin | None, config: MetaTrustConfig) -> None:
+    """Every check one ``_meta`` copy must pass on its own."""
+    # Type + shape discipline (runs regardless of pin).
+    _check_size(meta, config)
+    _check_duplicate_keys(meta)
+    # Identity / privilege-shaped key sweep.
+    _sweep_escalation(meta, pinned, config)
     if pinned is not None:
         _check_pin(meta, pinned)
+
+
+def validate_meta_trust(
+    request: Mapping[str, Any],
+    *,
+    pinned: MetaPin | None = None,
+    config: MetaTrustConfig | None = None,
+) -> None:
+    """Reject a request whose ``_meta`` block cannot be trusted for authorization/routing.
+
+    Reserved fields are resolved in both their bare and ``io.modelcontextprotocol/``
+    namespaced forms (the 2026-07-28 wire shape), preferring the namespaced form, so a
+    pin fires on conformant traffic; a bare key shadowing a namespaced one fails closed.
+
+    Every ``_meta`` copy is checked: each one at the top level and under ``params`` (keys
+    from ``config.meta_keys``) must pass on its own, and copies that disagree are refused,
+    so a decoy at one location cannot hide another copy.
+
+    Args:
+        request: The request / tool-call mapping. ``_meta`` is looked for at the top
+            level and under ``params`` (keys from ``config.meta_keys``).
+        pinned: The server-side entitlement declaration to check ``_meta`` against. When
+            supplied, any disagreeing ``_meta`` value fails closed. When omitted, any
+            ``_meta`` key asserting a capability/role/scope/permission that would broaden
+            the call is refused (deny-by-default).
+        config: Tunables (escalation token set, size cap, ``_meta`` lookup keys).
+
+    Raises:
+        MetaTrustError: On any trust-boundary violation, including a request that is not
+            a mapping (``meta_request_unreadable``) and ``_meta`` copies that disagree
+            (``meta_conflicting_copies``). The error carries a structured
+            ``audit_event`` mapping (``event`` / ``reason`` / the specific keys involved).
+    """
+    config = config or MetaTrustConfig()
+    if not isinstance(request, Mapping):
+        raise _reject(
+            "meta_request_unreadable",
+            f"request is a {type(request).__name__}, not a mapping — refusing rather than "
+            "skipping its _meta",
+            request_type=type(request).__name__,
+        )
+    copies = _extract_meta_copies(request, config.meta_keys)
+    for location, meta in copies:
+        if not isinstance(meta, Mapping):
+            raise _reject(
+                "meta_not_mapping",
+                f"{location} must be a mapping, got {type(meta).__name__} — refusing "
+                "untrusted shape",
+                meta_type=type(meta).__name__,
+                location=location,
+            )
+    for _location, meta in copies:
+        _check_copy(meta, pinned, config)
+    locations = [location for location, _meta in copies]
+    first = copies[0][1] if copies else None
+    for location, meta in copies[1:]:
+        if not _copies_agree(first, meta):
+            raise _reject(
+                "meta_conflicting_copies",
+                f"_meta copies at {locations!r} disagree ({location} differs from "
+                f"{locations[0]}); a server reading one would trust a value the other "
+                "contradicts — refusing",
+                locations=locations,
+            )

@@ -66,8 +66,9 @@ Anything outside this grammar raises `PresetParseError`. This is
 
 ## Why no PyYAML?
 
-agent-airlock has 3 runtime deps (`pydantic`, `structlog`,
-`tomli`-on-3.10). Adding PyYAML for a 50-line config grammar
+agent-airlock's installed core depends on `pydantic` alone (plus
+`tomli` on Python 3.10; `structlog` is the optional `[logging]`
+extra). Adding PyYAML for a 50-line config grammar
 hurts the install footprint and the security-supply-chain story.
 The restricted parser is ~200 LOC of stdlib code with full test
 coverage.

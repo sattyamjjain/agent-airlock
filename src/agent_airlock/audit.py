@@ -129,6 +129,18 @@ def _masked(text: str) -> str:
     return sanitize_output(text[:_PREVIEW_SCAN_CHARS], max_chars=None).content
 
 
+def _safe_repr(value: Any) -> str:
+    """``repr(value)``, or the value's type name when its ``repr`` raises.
+
+    The audit record is written after the tool ran: until 0.10.28 an argument whose
+    ``repr`` raised escaped the call there, and the call left no record.
+    """
+    try:
+        return repr(value)
+    except Exception:  # noqa: BLE001 - an argument with no repr is named by its type
+        return f"<{type(value).__name__}>"
+
+
 class AuditLogger:
     """Thread-safe JSON Lines audit logger.
 
@@ -306,7 +318,7 @@ class AuditLogger:
                 result[key] = _masked(value)[:100] + "..."
             else:
                 # Convert to string representation
-                result[key] = _masked(repr(value))[:200]
+                result[key] = _masked(_safe_repr(value))[:200]
 
         return result
 
@@ -314,16 +326,22 @@ class AuditLogger:
     def _preview_result(result: Any, blocked: bool) -> str:
         """Create a preview of the result for audit logging.
 
+        The preview goes through the output sanitizer before it is cut to length, as an
+        argument's does, whatever ``sanitize_output`` is set to. Until 0.10.28 it was
+        written as the result's text: with ``sanitize_output=False``, or for an object the
+        output sanitizer returns as it is (a model, a dataclass), the log held the raw
+        key or personal data.
+
         Args:
             result: The function result.
             blocked: Whether the call was blocked.
 
         Returns:
-            A truncated string preview of the result.
+            A truncated, masked string preview of the result.
         """
         if blocked:
             if isinstance(result, dict) and "reason" in result:
-                return f"BLOCKED: {result.get('reason', 'unknown')}"
+                return _masked(f"BLOCKED: {result.get('reason', 'unknown')}")
             return "BLOCKED"
 
         if result is None:
@@ -332,17 +350,13 @@ class AuditLogger:
         # For dict results (like AirlockResponse)
         if isinstance(result, dict):
             if result.get("blocked"):
-                return f"BLOCKED: {result.get('reason', 'unknown')}"
+                return _masked(f"BLOCKED: {result.get('reason', 'unknown')}")
             if "result" in result:
                 result = result["result"]
 
         # Create string preview
         try:
             s = str(result)
-            max_len = 500
-            if len(s) > max_len:
-                return s[:max_len] + f"... ({len(s):,} chars total)"
-            return s
         except Exception as e:
             logger.debug(
                 "preview_result_failed",
@@ -350,6 +364,11 @@ class AuditLogger:
                 error=str(e),
             )
             return f"<{type(result).__name__}>"
+        max_len = 500
+        preview = _masked(s)
+        if len(s) > max_len:
+            return preview[:max_len] + f"... ({len(s):,} chars total)"
+        return preview
 
     def flush(self) -> None:
         """Ensure all pending writes are flushed to disk."""

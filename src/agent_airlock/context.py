@@ -24,13 +24,23 @@ Example:
 
 from __future__ import annotations
 
+import dataclasses
+import enum
+import numbers
+from collections.abc import Iterable, Mapping, Sequence, Set
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from pydantic import BaseModel
+
+from ._arg_walk import is_framework_object
 from ._log import structlog
 
 if TYPE_CHECKING:
+    from pydantic import GetCoreSchemaHandler
+    from pydantic_core import CoreSchema
+
     from .amplification import AmplificationDecision
 
 logger = structlog.get_logger("agent-airlock.context")
@@ -88,6 +98,31 @@ class AirlockContext(Generic[T]):
     _amplification: AmplificationDecision | None = field(default=None, repr=False)
     _authorized_once: set[str] = field(default_factory=set, repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
+
+    def __class_getitem__(cls, params: Any) -> Any:
+        """``AirlockContext[X]`` is ``AirlockContext`` at run time; type checkers still
+        read the parameter.
+
+        Pydantic builds a parametrized standard-library dataclass from a dict without
+        asking :meth:`__get_pydantic_core_schema__`, so until 0.10.28 a field typed
+        ``AirlockContext[Any]`` let a model's JSON construct one.
+        """
+        return cls
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        """Pydantic accepts an existing instance and never builds one from JSON or a dict.
+
+        An ``AirlockContext`` carries identity, roles and host metadata (the access-token
+        claims, the budget tags), so only host code may make one: a run wrapper whose
+        context is an ``AirlockContext`` is read as the host's
+        (:meth:`ContextExtractor.run_wrapper`).
+        """
+        from pydantic_core import core_schema
+
+        return core_schema.is_instance_schema(cls)
 
     def __enter__(self) -> AirlockContext[T]:
         """Enter the context, making it the current context."""
@@ -204,31 +239,131 @@ def reset_context(token: Token[AirlockContext[Any]]) -> None:
     _current_context.reset(token)
 
 
-class ContextExtractor:
-    """Extracts context from function arguments.
+#: What :func:`_read_attribute` returns for an attribute an object does not have.
+_ABSENT = object()
 
-    Inspects function arguments to find context objects that match
-    known patterns (e.g., RunContextWrapper, custom context classes).
 
-    This is used by the @Airlock decorator to automatically extract
-    context from tool calls.
+def _read_attribute(obj: Any, name: str) -> Any:
+    """``obj.<name>``, or :data:`_ABSENT` when it has none or reading it raised."""
+    try:
+        return getattr(obj, name)
+    except Exception:  # noqa: BLE001 - an attribute that cannot be read is not there
+        return _ABSENT
+
+
+@dataclass(frozen=True)
+class RunWrapper:
+    """A first positional argument ``@Airlock`` reads as the host's run wrapper.
+
+    Attributes:
+        wrapper: The argument itself.
+        attribute: The :attr:`ContextExtractor.CONTEXT_ATTRS` name its context is read
+            from: the first of them it has.
+        context: The value at that attribute. The call's identity, roles and metadata are
+            read from it.
+        host_object: True when model JSON cannot have built the wrapper itself (an agent
+            framework's object, or a plain host object), so steps 2.7, 3 and 5 do not walk
+            it. False when only its ``AirlockContext`` vouches for it: a dataclass, model
+            or tuple wrapper is walked like any other argument, its ``AirlockContext``
+            aside, since its other fields may be the model's.
     """
 
-    # Known context attribute names to look for
-    CONTEXT_ATTRS = frozenset(
-        {
-            "context",  # OpenAI Agents SDK RunContextWrapper.context
-            "ctx",
-            "request_context",
-            "session_context",
-        }
-    )
+    wrapper: Any
+    attribute: str
+    context: Any
+    host_object: bool
 
-    # Known ID field names
-    AGENT_ID_ATTRS = frozenset({"agent_id", "agent", "assistant_id"})
-    SESSION_ID_ATTRS = frozenset({"session_id", "session", "conversation_id", "thread_id"})
-    WORKSPACE_ID_ATTRS = frozenset({"workspace_id", "workspace", "tenant_id", "org_id"})
-    USER_ID_ATTRS = frozenset({"user_id", "user", "end_user_id"})
+
+def _model_json_cannot_build(value: Any) -> bool:
+    """Whether ``value`` is a plain host object: one no model JSON can have produced.
+
+    Pydantic builds models, dataclasses (its own and the standard library's), mappings,
+    sequences, sets, named tuples, strings, bytes, numbers and enums from JSON, and any
+    type that defines ``__get_pydantic_core_schema__`` however that schema says. An
+    instance of any other type came from host code.
+    """
+    if isinstance(value, type):
+        return False
+    if isinstance(
+        value,
+        (BaseModel, Mapping, Sequence, Set, str, bytes, bytearray, memoryview, numbers.Number),
+    ):
+        return False
+    if isinstance(value, enum.Enum) or dataclasses.is_dataclass(value):
+        return False
+    return not hasattr(type(value), "__get_pydantic_core_schema__")
+
+
+class ContextExtractor:
+    """Reads the context the host passed with a call.
+
+    A framework passes the host's run wrapper (the OpenAI Agents SDK's
+    ``RunContextWrapper``, say) as a tool's first positional argument, carrying a context
+    object at one of :attr:`CONTEXT_ATTRS`; ``@Airlock`` reads the call's identity, roles
+    and metadata from that object. Only an argument model JSON cannot have built counts
+    as a run wrapper (:meth:`run_wrapper`). Until 0.10.28 any first argument with an
+    attribute of one of those names did, so a tool author's own model with a ``context``
+    or ``ctx`` field let the model write the call's identity, roles, budget tags and
+    access-token claims, and hid that argument from the value gates.
+    """
+
+    #: The attribute names a run wrapper carries its context at, in the order they are
+    #: read: the first one an object has is the one read. A frozenset until 0.10.28, so
+    #: which of two present names won depended on ``PYTHONHASHSEED``.
+    CONTEXT_ATTRS: tuple[str, ...] = ("context", "ctx", "request_context", "session_context")
+
+    # The names each id is read from, in order: the first one present wins.
+    AGENT_ID_ATTRS: tuple[str, ...] = ("agent_id", "agent", "assistant_id")
+    SESSION_ID_ATTRS: tuple[str, ...] = ("session_id", "session", "conversation_id", "thread_id")
+    WORKSPACE_ID_ATTRS: tuple[str, ...] = ("workspace_id", "workspace", "tenant_id", "org_id")
+    USER_ID_ATTRS: tuple[str, ...] = ("user_id", "user", "end_user_id")
+
+    @classmethod
+    def run_wrapper(cls, value: Any) -> RunWrapper | None:
+        """``value`` as the host's run wrapper, or None when it is an ordinary argument.
+
+        ``value`` must carry a context at one of :attr:`CONTEXT_ATTRS`, and model JSON
+        must be unable to have built it:
+
+        - it is an agent framework's own object, verified against the framework's
+          installed distribution (``_arg_walk.is_framework_object``), and not a pydantic
+          model, which JSON builds however the framework defines it;
+        - or the context it carries is an :class:`AirlockContext`, which pydantic never
+          builds from JSON or a dict;
+        - or it is a plain host object: not a pydantic model, dataclass, mapping,
+          sequence, set, named tuple, string, bytes, number or enum, and of a type that
+          defines no ``__get_pydantic_core_schema__``.
+
+        Anything else, a tool author's own model, dataclass, TypedDict or named tuple with
+        a ``context`` field included, is an ordinary argument: never read for identity or
+        metadata, and walked by steps 2.7, 3 and 5.
+
+        Args:
+            value: The call's first positional argument.
+
+        Returns:
+            The :class:`RunWrapper`, or None.
+        """
+        found = cls._context_attribute(value)
+        if found is None:
+            return None
+        attribute, carried = found
+        if (is_framework_object(value) and not isinstance(value, BaseModel)) or (
+            _model_json_cannot_build(value)
+        ):
+            return RunWrapper(value, attribute, carried, host_object=True)
+        if isinstance(carried, AirlockContext):
+            return RunWrapper(value, attribute, carried, host_object=False)
+        return None
+
+    @classmethod
+    def _context_attribute(cls, value: Any) -> tuple[str, Any] | None:
+        """The first :attr:`CONTEXT_ATTRS` name ``value`` has, and the value there."""
+        for attribute in cls.CONTEXT_ATTRS:
+            carried = _read_attribute(value, attribute)
+            if carried is not _ABSENT:
+                return attribute, carried
+        return None
 
     @classmethod
     def extract_from_args(
@@ -236,50 +371,44 @@ class ContextExtractor:
         args: tuple[Any, ...],
         _kwargs: dict[str, Any],
     ) -> AirlockContext[Any]:
-        """Extract context from function arguments.
+        """Read the context the host passed with a call: from its first positional argument.
 
-        Looks for context objects in positional and keyword arguments.
+        Only ``args[0]`` is read, and only when :meth:`run_wrapper` accepts it as the
+        host's run wrapper. Keyword arguments are not read (``_kwargs`` is accepted for
+        compatibility), so a FastMCP ``ctx``, which arrives by keyword, is not either.
+        The identity, roles and metadata come from the context the wrapper carries; when
+        that is falsy, nothing is read. Until 0.10.28 the wrapper itself was then read, so
+        a model's object with ``context=None`` supplied them.
 
         Args:
             args: Positional arguments to the function.
-            kwargs: Keyword arguments to the function.
+            _kwargs: Keyword arguments to the function; not read.
 
         Returns:
-            Extracted context (may have None values if not found).
+            The extracted context, with ``user_context`` set to the run wrapper; every
+            field empty when the call carries none.
         """
-        # Check first positional arg (common pattern: ctx as first arg)
-        user_context = None
-        inner_context = None
-
-        if args:
-            first_arg = args[0]
-            # Check if it looks like a context wrapper
-            for attr in cls.CONTEXT_ATTRS:
-                if hasattr(first_arg, attr):
-                    user_context = first_arg
-                    inner_context = getattr(first_arg, attr, None)
-                    break
-
-        # Extract IDs from the inner context or user context
-        source = inner_context or user_context
-
+        found = cls.run_wrapper(args[0]) if args else None
+        if found is None:
+            return AirlockContext()
+        source = found.context
         return AirlockContext(
             agent_id=cls._extract_field(source, cls.AGENT_ID_ATTRS),
             session_id=cls._extract_field(source, cls.SESSION_ID_ATTRS),
             workspace_id=cls._extract_field(source, cls.WORKSPACE_ID_ATTRS),
             user_id=cls._extract_field(source, cls.USER_ID_ATTRS),
             roles=cls._extract_roles(source),
-            user_context=user_context,
+            user_context=found.wrapper,
             metadata=cls._extract_metadata(source),
         )
 
     @classmethod
-    def _extract_field(cls, obj: Any, field_names: frozenset[str]) -> str | None:
+    def _extract_field(cls, obj: Any, field_names: Iterable[str]) -> str | None:
         """Extract a field value from an object.
 
         Args:
             obj: Object to extract from.
-            field_names: Possible field names.
+            field_names: Possible field names, in the order they are tried.
 
         Returns:
             Field value as string, or None.
@@ -288,8 +417,8 @@ class ContextExtractor:
             return None
 
         for name in field_names:
-            value = getattr(obj, name, None)
-            if value is not None:
+            value = _read_attribute(obj, name)
+            if value is not _ABSENT and value is not None:
                 return str(value)
 
         return None
@@ -308,8 +437,8 @@ class ContextExtractor:
             return []
 
         for attr in ("roles", "permissions", "scopes"):
-            value = getattr(obj, attr, None)
-            if value is not None:
+            value = _read_attribute(obj, attr)
+            if value is not _ABSENT and value is not None:
                 if isinstance(value, (list, tuple, set, frozenset)):
                     return [str(r) for r in value]
                 return [str(value)]
@@ -330,7 +459,7 @@ class ContextExtractor:
             return {}
 
         for attr in ("metadata", "extra", "context_data"):
-            value = getattr(obj, attr, None)
+            value = _read_attribute(obj, attr)
             if isinstance(value, dict):
                 return dict(value)
 

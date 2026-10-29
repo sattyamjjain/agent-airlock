@@ -78,7 +78,10 @@ def delete_database(name: str) -> dict:
 ## Agent-Based Access
 
 A policy can require a caller identity and a role. Airlock reads both from the call's
-context: a context object as the tool's first argument, or one set around the call.
+context: the one a framework's run wrapper carries as the tool's first positional
+argument, or one set around the call. An argument the model's JSON could have built, such
+as the tool's own model or dataclass, is not a run wrapper and is never read for identity
+(see [Agent Identity](../guide/policy.md#agent-identity)).
 
 ```python
 from agent_airlock import Airlock, AirlockContext, SecurityPolicy
@@ -93,7 +96,7 @@ def admin_operation(ctx) -> dict:
 def rotate_keys() -> dict:
     return {"status": "rotated"}
 
-# A framework context object: ctx.context carries agent_id and roles
+# A framework's run wrapper: framework_ctx.context carries agent_id and roles
 admin_operation(framework_ctx)
 
 # No context argument: set one around the call
@@ -192,8 +195,8 @@ def get_policy_for_role(role: str) -> SecurityPolicy:
     return policies.get(role, GUEST_POLICY)
 
 def policy_for_caller(context: AirlockContext) -> SecurityPolicy:
-    # The caller's first role: from the context object passed as the tool's first argument,
-    # or from one set around the call with `with AirlockContext(...)`
+    # The caller's first role: from the context a run wrapper carries as the tool's first
+    # argument, or from one set around the call with `with AirlockContext(...)`
     return get_policy_for_role(context.roles[0] if context.roles else "guest")
 
 # The policy is chosen on every call, from the caller's roles:

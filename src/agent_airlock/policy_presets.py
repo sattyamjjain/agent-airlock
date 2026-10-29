@@ -79,22 +79,20 @@ if TYPE_CHECKING:
     from .mcp_spec.tasks_lifecycle_guard import TaskAdmission, TaskRegistry
 
 
-def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy | None:
-    """Build a CapabilityPolicy, returning None if the module isn't importable.
+def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy:
+    """Build the CapabilityPolicy a preset carries.
 
-    Mirrors the private helpers in `policy.py` so capability gating remains
-    optional.
+    ``capabilities`` is a core module, so its import is not guarded: until 0.10.28 an
+    ``ImportError`` here, and in each preset below, returned None and left the preset
+    with no capability gate.
     """
-    try:
-        from .capabilities import Capability, CapabilityPolicy
+    from .capabilities import Capability, CapabilityPolicy
 
-        return CapabilityPolicy(
-            granted=Capability(granted) if granted is not None else Capability.NONE,
-            denied=Capability(denied) if denied is not None else Capability.NONE,
-            require_sandbox_for=Capability.DANGEROUS,
-        )
-    except ImportError:
-        return None
+    return CapabilityPolicy(
+        granted=Capability(granted) if granted is not None else Capability.NONE,
+        denied=Capability(denied) if denied is not None else Capability.NONE,
+        require_sandbox_for=Capability.DANGEROUS,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -196,20 +194,17 @@ def gtg_1002_defense_policy() -> SecurityPolicy:
     Reference: Anthropic threat-intelligence disclosure (2025).
     Retrieved 2026-04-18.
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS).value,
-            denied=(
-                Capability.PROCESS_SHELL
-                | Capability.PROCESS_EXEC
-                | Capability.FILESYSTEM_DELETE
-                | Capability.NETWORK_ARBITRARY
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS).value,
+        denied=(
+            Capability.PROCESS_SHELL
+            | Capability.PROCESS_EXEC
+            | Capability.FILESYSTEM_DELETE
+            | Capability.NETWORK_ARBITRARY
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -257,21 +252,18 @@ def mex_gov_2026_policy() -> SecurityPolicy:
 
     Reference: public press coverage, Feb 2026. Retrieved 2026-04-18.
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(Capability.FILESYSTEM_READ | Capability.DATABASE_READ).value,
-            denied=(
-                Capability.FILESYSTEM_WRITE
-                | Capability.FILESYSTEM_DELETE
-                | Capability.DATABASE_WRITE
-                | Capability.NETWORK_ARBITRARY
-                | Capability.PROCESS_SHELL
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(Capability.FILESYSTEM_READ | Capability.DATABASE_READ).value,
+        denied=(
+            Capability.FILESYSTEM_WRITE
+            | Capability.FILESYSTEM_DELETE
+            | Capability.DATABASE_WRITE
+            | Capability.NETWORK_ARBITRARY
+            | Capability.PROCESS_SHELL
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -337,21 +329,16 @@ def owasp_mcp_top_10_2026_policy() -> SecurityPolicy:
 
     Reference: https://owasp.org/www-project-mcp-top-10/ (retrieved 2026-04-18).
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(
-                Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
-            ).value,
-            denied=(
-                Capability.PROCESS_SHELL
-                | Capability.FILESYSTEM_DELETE
-                | Capability.NETWORK_ARBITRARY
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(
+            Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
+        ).value,
+        denied=(
+            Capability.PROCESS_SHELL | Capability.FILESYSTEM_DELETE | Capability.NETWORK_ARBITRARY
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -417,21 +404,16 @@ def eu_ai_act_article_15_policy() -> SecurityPolicy:
     Reference: https://artificialintelligenceact.eu/article/15/
     (retrieved 2026-04-18).
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(
-                Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
-            ).value,
-            denied=(
-                Capability.NETWORK_ARBITRARY
-                | Capability.FILESYSTEM_DELETE
-                | Capability.PROCESS_SHELL
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(
+            Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS | Capability.DATABASE_READ
+        ).value,
+        denied=(
+            Capability.NETWORK_ARBITRARY | Capability.FILESYSTEM_DELETE | Capability.PROCESS_SHELL
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -480,23 +462,20 @@ def india_dpdp_2023_policy() -> SecurityPolicy:
     https://www.meity.gov.in/static/uploads/2024/06/2bf1f0e9f04e6fb4f8fef35e82c42aa5.pdf
     (retrieved 2026-04-18).
     """
-    try:
-        from .capabilities import Capability
+    from .capabilities import Capability
 
-        cap_policy = _capabilities(
-            granted=(
-                Capability.FILESYSTEM_READ | Capability.DATABASE_READ | Capability.NETWORK_HTTPS
-            ).value,
-            denied=(
-                Capability.DATA_PII
-                | Capability.DATA_SECRETS
-                | Capability.FILESYSTEM_DELETE
-                | Capability.DATABASE_WRITE
-                | Capability.NETWORK_ARBITRARY
-            ).value,
-        )
-    except ImportError:
-        cap_policy = None
+    cap_policy = _capabilities(
+        granted=(
+            Capability.FILESYSTEM_READ | Capability.DATABASE_READ | Capability.NETWORK_HTTPS
+        ).value,
+        denied=(
+            Capability.DATA_PII
+            | Capability.DATA_SECRETS
+            | Capability.FILESYSTEM_DELETE
+            | Capability.DATABASE_WRITE
+            | Capability.NETWORK_ARBITRARY
+        ).value,
+    )
 
     return SecurityPolicy(
         require_agent_id=True,
@@ -867,7 +846,8 @@ def unit42_mcp_sampling_defaults() -> SamplingGuardConfig:
 
     - ``max_sampling_requests_per_session`` = 50 (hard cap)
     - ``max_tokens_per_sampling_request`` = 4096
-    - ``forbid_persistent_instructions`` = True (refuse system role)
+    - ``forbid_persistent_instructions`` = True (refuse a system role and a non-empty
+      ``systemPrompt``)
     - ``require_user_consent_per_request`` = True (no session-sticky OK)
 
     Usage::
@@ -1431,7 +1411,10 @@ def oauth_state_injection_guard(
     Injects prompt strings into the OAuth ``state`` parameter and the
     callback handler decodes + relays them into a system message. This
     preset wires :class:`OAuthStateEntropyGuard` with the recommended
-    defaults; high-entropy nonces and JWT tri-segments are ignored.
+    defaults. Every ``state`` is scanned: as written, read leniently, in each decoded
+    form (every segment of a JWT-shaped state, and the whole state decoded at once), and
+    as plain text that reads as prose; a state outside RFC 6749's syntax (printable
+    ASCII) is refused.
 
     Primary source:
       https://www.blackhat.com/asia-26/briefings/schedule/#oauth-state-injection
@@ -1660,14 +1643,21 @@ def mcp_config_pin(
     warns). It catches the zero-click pattern even when the injection never
     touched a watched file (env override, in-memory resolution, a launcher).
 
-    The fingerprint covers ``{name, command, args, env-keys}`` (env *values*
-    are excluded — they rotate; the *keys* are what an injection adds). Two
-    failure modes both raise :class:`McpConfigPinViolation` and emit an audit
-    event on the existing structlog + JSON-Lines channels:
+    The fingerprint covers ``{name, command, args, env-keys}``, plus ``cwd`` when the
+    spawn sets one, and since 0.10.28 the values of the code-loading env variables it
+    sets (``PATH``, ``NODE_OPTIONS``, ``LD_PRELOAD``, ...: the set
+    ``McpSubprocessArgInjectionGuard`` refuses), which decide what runs. Every other
+    env *value* is excluded: it rotates, and the *keys* are what an injection adds. No
+    value is logged or put in a refusal. Two failure modes both raise
+    :class:`McpConfigPinViolation` and emit an audit event on the existing structlog +
+    JSON-Lines channels:
 
     - **injected** — a server name not in the pin set (``reason="unpinned"``);
-    - **mutated** — a pinned server whose ``command`` / ``args`` / ``env``-keys
-      changed between registration and spawn (``reason="mutated"``).
+    - **mutated** — a pinned server whose ``command`` / ``args`` / ``env``-keys / ``cwd``
+      / code-loading env value changed between registration and spawn
+      (``reason="mutated"``). A manifest that names a code-loading variable only in
+      ``env_keys`` pins no value for it, so a spawn that sets one does not match: give
+      its value in ``env``.
 
     Args:
         manifest: Known-good entries, each with ``name`` + ``command`` and
@@ -2705,15 +2695,19 @@ def npm_oidc_publish_window_guard_defaults(
     that fetches / runs just-mutated package versions should reject
     blast-list pairs". This preset wires
     :class:`agent_airlock.mcp_spec.oidc_publish_window_guard.OIDCPublishWindowGuard`
-    with the curated 2026-05-11 blast list (TanStack postmortem + Aikido
-    cross-ecosystem advisory).
+    with the incident's blast list: the 84 versions GHSA-g7cv-rxg3-hmpx
+    (CVE-2026-45321) lists, 42 npm packages at two exact versions each. Until
+    0.10.28 the shipped list was a placeholder snapshot whose versions no
+    install could match.
 
     The list is a frozenset of ``(ecosystem, name, version)`` tuples.
     Operators on a non-default vocabulary can pass their own list.
 
     Primary sources:
+      https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
       https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
       https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised
+      (the wider wave; its packages are not in the list)
     """
     from .mcp_spec.oidc_publish_window_guard import load_blast_list_from_2026_05_11
 
@@ -2722,6 +2716,7 @@ def npm_oidc_publish_window_guard_defaults(
         "severity": "critical",
         "default_action": "deny",
         "advisory_url": ("https://tanstack.com/blog/npm-supply-chain-compromise-postmortem"),
+        "ghsa_url": "https://github.com/advisories/GHSA-g7cv-rxg3-hmpx",
         "cross_ecosystem_url": (
             "https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised"
         ),
@@ -3930,8 +3925,13 @@ def lerobot_cve_2026_25874_defaults() -> SecurityPolicy:
             from agent_airlock.policy_presets import lerobot_cve_2026_25874_defaults
 
             @Airlock(policy=lerobot_cve_2026_25874_defaults())
-            def send_observations(payload: bytes, transport: dict) -> bytes:
+            def send_observations(payload: bytes) -> bytes:
                 ...
+
+        Under ``@Airlock`` the transport declaration ``require_authenticated_transport``
+        reads comes from the host, ``with AirlockContext(metadata={"transport":
+        {"authenticated": True, "tls": True}})`` around the call, never from a tool
+        argument, which the model writes (0.10.28).
 
     Primary sources (retrieved 2026-06-07):
       https://www.sentinelone.com/vulnerability-database/cve-2026-25874/

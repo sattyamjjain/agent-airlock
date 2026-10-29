@@ -35,7 +35,7 @@ Thread Safety:
     This module is thread-safe. The Airlock class can be used as a decorator
     from multiple threads concurrently. State is managed through:
     - contextvars for request-scoped context (AirlockContext)
-    - Thread-local storage for network policy (in network.py)
+    - contextvars for the network airgap (in network.py), one per thread and asyncio task
     - Locks in sandbox pool and audit logger
 
     Lock Acquisition Order (to prevent deadlocks):
@@ -50,19 +50,31 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
+import dataclasses
 import functools
 import inspect
+import numbers
 import os
 import re
 import time
 import uuid
-from collections.abc import AsyncGenerator, Callable, Generator, Iterator, Mapping
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Callable,
+    Coroutine,
+    Generator,
+    Iterable,
+    Iterator,
+    Mapping,
+)
 from datetime import datetime, timezone
 from typing import Any, Literal, ParamSpec, TypeVar, overload
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from ._arg_walk import (
     MAX_DEPTH,
@@ -70,6 +82,7 @@ from ._arg_walk import (
     ArgumentValue,
     bind_arguments,
     iter_argument_values,
+    named_models,
     path_text,
     signature_of,
     url_text,
@@ -100,6 +113,7 @@ from .cost_tracking import (
     UnknownTierError,
     get_global_tracker,
 )
+from .exceptions import AirlockError
 from .filesystem import PathValidationError, validate_path
 from .honeypot import (
     create_honeypot_response,
@@ -118,7 +132,7 @@ from .policy import (
     SecurityPolicy,
     ViolationType,
 )
-from .sanitizer import sanitize_output, sanitize_structured
+from .sanitizer import _rebuild_like, sanitize_output, sanitize_structured_report
 from .self_heal import (
     AirlockResponse,
     BlockReason,
@@ -367,17 +381,23 @@ def _looks_like_nested_path(key: str, value: str) -> bool:
 def _filesystem_path(item: ArgumentValue) -> str | None:
     """The filesystem path one argument value names, or None when it names none.
 
-    An ``os.PathLike`` always names one, and so does a ``file:`` URI. A top-level string
-    does when :func:`_looks_like_path` says so (unchanged); a nested string or a mapping
-    key when :func:`_looks_like_nested_path` does. Bytes count only under a path-named
-    key and only when they are shaped like a path (absolute or traversing, no NUL):
-    ``open(b"/etc/passwd")`` works, but most bytes arguments are content, and an upload's
-    bytes under ``file=`` are not a path.
+    An ``os.PathLike`` always names one, and so does a ``file:`` URI, as a string or as a
+    URL object (pydantic ``FileUrl`` / ``AnyUrl``, ``urllib.parse`` results); until
+    0.10.28 a URL object never did, so ``FileUrl("file:///etc/shadow")`` skipped this gate.
+    A URL object of any other scheme names no path; step 5 reads it as a URL. A top-level
+    string does when :func:`_looks_like_path` says so (unchanged); a nested string or a
+    mapping key when :func:`_looks_like_nested_path` does. Bytes count only under a
+    path-named key and only when they are shaped like a path (absolute or traversing, no
+    NUL): ``open(b"/etc/passwd")`` works, but most bytes arguments are content, and an
+    upload's bytes under ``file=`` are not a path.
     """
     value = item.value
     pathlike = path_text(value)
     if pathlike is not None:
         return pathlike
+    url = url_text(value)
+    if url is not None:
+        return _file_uri_path(url)
     if isinstance(value, (bytes, bytearray)):
         raw = bytes(value)
         if item.key.lower() not in PATH_PARAM_NAMES or b"\x00" in raw or len(raw) > 4096:
@@ -465,11 +485,13 @@ def _sanitize_tool_output(
     """Mask sensitive data in a tool's result without changing its type.
 
     Returns ``(result, warnings, masked_count, was_truncated)``. A string is masked and
-    truncated as it always was. A dict, list, tuple or set is masked value by value and
-    keeps its shape; ``max_output_chars`` does not apply to it, because truncating its
-    serialized form would hand back a different type. Anything else is returned as it
-    is, since rebuilding an arbitrary object with masked fields could break its own
-    invariants, and what was detected in it is reported as *not* masked.
+    truncated as it always was. A dict, list, tuple or set is masked value by value,
+    keys included, and keeps its shape; ``max_output_chars`` does not apply to it,
+    because truncating its serialized form would hand back a different type. Anything
+    else is returned as it is, since rebuilding an arbitrary object with masked fields
+    could break its own invariants, and what was detected in it is reported as *not*
+    masked. So is what was detected in such an object inside a container (until 0.10.28
+    those were skipped without a word).
 
     This replaced a defect as old as the sanitizer: every non-string result was
     serialized to JSON, masked, and the masked text discarded, while the log said
@@ -497,12 +519,38 @@ def _sanitize_tool_output(
             sanitization.was_truncated,
         )
     if isinstance(result, dict | list | tuple | set | frozenset):
-        masked, count = sanitize_structured(result, **options)
-        return masked, _masked_warnings(count, func_name), count, False
-    detected = sanitize_output(result, **options).detection_count
+        try:
+            report = sanitize_structured_report(result, **options)
+        except RecursionError as error:
+            raise OutputUnreadableError(func_name, "nested too deeply to mask") from error
+        except Exception as error:  # noqa: BLE001 - a container that cannot be read is refused
+            raise OutputUnreadableError(
+                func_name, f"{type(error).__name__} while masking"
+            ) from error
+        warnings = _masked_warnings(report.masked_count, func_name)
+        output_type = type(result).__name__
+        for leaf_type, found in report.unmasked.items():
+            logger.warning(
+                "output_sensitive_data_unmasked",
+                function=func_name,
+                detections=found,
+                output_type=output_type,
+                value_type=leaf_type,
+            )
+            warnings.append(
+                f"Detected {found} sensitive value(s) in {leaf_type} inside "
+                f"{output_type} output; not masked"
+            )
+        for leaf_type, count in report.unreadable.items():
+            warnings.append(_unreadable_warning(func_name, leaf_type, count, output_type))
+        return report.value, warnings, report.masked_count, False
+    output_type = type(result).__name__
+    try:
+        detected = sanitize_output(result, **options).detection_count
+    except Exception:  # noqa: BLE001 - an object with no text is reported, never raised
+        return result, [_unreadable_warning(func_name, output_type)], 0, False
     if not detected:
         return result, [], 0, False
-    output_type = type(result).__name__
     logger.warning(
         "output_sensitive_data_unmasked",
         function=func_name,
@@ -517,12 +565,66 @@ def _sanitize_tool_output(
     )
 
 
+def _unreadable_warning(
+    func_name: str, value_type: str, count: int = 1, output_type: str | None = None
+) -> str:
+    """Log, and word as a warning, output values whose text could not be read.
+
+    Until 0.10.28 the exception their ``str()`` raised escaped the call after the tool
+    ran, before its audit record was written. They are returned as they are, unchecked.
+    """
+    logger.warning(
+        "output_value_unreadable",
+        function=func_name,
+        values=count,
+        value_type=value_type,
+        output_type=output_type or value_type,
+    )
+    if output_type is None:
+        return f"{value_type} output could not be read; not checked"
+    return (
+        f"{count} {value_type} value(s) inside {output_type} output could not be read; not checked"
+    )
+
+
+class OutputUnreadableError(AirlockError):
+    """A tool's result could not be read to be masked, so the call is refused.
+
+    It stands in for a result nested too deeply for the output walk to rebuild: returning
+    it would hand back unmasked every string the walk would have masked. A deferred result
+    raises it to its consumer for a value it produced that cannot be read. Until 0.10.28 a
+    ``RecursionError`` escaped the call instead, after the tool ran and with no audit record.
+
+    Attributes:
+        function: The tool's name.
+        reason: Why its result could not be read.
+    """
+
+    def __init__(self, function: str, reason: str) -> None:
+        self.function = function
+        self.reason = reason
+        super().__init__(f"the result of '{function}' could not be read: {reason}")
+
+
+class _ResultRefused(Exception):  # noqa: N818 - private control flow, not an error
+    """Carries the refusal ``_post_execution`` made of a result back to the wrapper."""
+
+    def __init__(self, response: dict[str, Any]) -> None:
+        self.response = response
+        super().__init__(response.get("error"))
+
+
 @contextlib.contextmanager
 def _call_scope(config: AirlockConfig, context: AirlockContext[Any] | None) -> Iterator[None]:
-    """The call's context and network airgap, which the tool's body runs inside."""
+    """The call's context and network airgap, which the tool's body runs inside.
+
+    The airgap is entered whenever ``network_policy`` is set. Until 0.10.28 it was entered
+    only when the policy disallowed egress, so a host or port allowlist, or ``block_dns``,
+    on a policy that allowed egress was never applied.
+    """
     token = set_current_context(context) if context is not None else None
     try:
-        if config.network_policy is not None and not config.network_policy.allow_egress:
+        if config.network_policy is not None:
             with network_airgap(config.network_policy):
                 yield
         else:
@@ -532,11 +634,257 @@ def _call_scope(config: AirlockConfig, context: AirlockContext[Any] | None) -> I
             reset_context(token)
 
 
-def _sanitize_stream_item(item: Any, config: AirlockConfig, func_name: str) -> Any:
-    """One item a generator tool yielded, sanitized as a returned value would be."""
-    if not config.sanitize_output or item is None:
-        return item
-    return _sanitize_tool_output(item, config, func_name)[0]
+#: Told about an exception a deferred result raised while producing a value, before it
+#: reaches the consumer, so the call's refusal is audited (``_post_execution``).
+_RefusalReporter = Callable[[Exception], None]
+
+
+def _refusal_reason(error: BaseException) -> BlockReason | None:
+    """The block reason of an Airlock refusal raised while a deferred result ran, or None.
+
+    In the middle of a stream a refusal reaches the consumer as the exception itself, not
+    as a refusal response; this names it for the audit record. Anything else is the
+    tool's own error.
+    """
+    if isinstance(error, NetworkBlockedError):
+        return BlockReason.NETWORK_BLOCKED
+    if isinstance(error, PathValidationError):
+        return BlockReason.PATH_VIOLATION
+    if isinstance(error, CapabilityDeniedError):
+        return BlockReason.CAPABILITY_DENIED
+    if isinstance(error, AirlockBudgetExceeded):
+        return BlockReason.BUDGET_EXCEEDED
+    if isinstance(error, GhostArgumentError):
+        return BlockReason.GHOST_ARGUMENTS
+    if isinstance(error, PolicyEscalation):
+        return BlockReason.ESCALATION_REQUIRED
+    if isinstance(error, PolicyViolation):
+        if error.violation_type == ViolationType.RATE_LIMITED.value:
+            return BlockReason.RATE_LIMIT
+        return BlockReason.POLICY_VIOLATION
+    if isinstance(error, OutputUnreadableError):
+        return BlockReason.OUTPUT_UNREADABLE
+    return None
+
+
+def _report_refusal(on_refusal: _RefusalReporter | None, error: Exception) -> None:
+    """Hand ``error`` to ``on_refusal``. Never raises, so the error itself propagates."""
+    if on_refusal is None:
+        return
+    try:
+        on_refusal(error)
+    except Exception as e:  # the refusal still reaches the consumer
+        logger.error("deferred_refusal_audit_failed", error=str(e))
+
+
+def _is_resource_handle(value: Any) -> bool:
+    """A context manager (an open file, ``os.scandir``, a mock): its lifecycle is the caller's."""
+    kind = type(value)
+    return hasattr(kind, "__enter__") or hasattr(kind, "__aenter__")
+
+
+def _guard_deferred(
+    result: Any,
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Any | None:
+    """The guarded form of a result whose body runs after the call returns, or None.
+
+    A generator, an async generator, a coroutine, and a lazy iterator or async iterator
+    (``map``, ``filter``, ``zip``, a class with ``__next__`` / ``__anext__``) compute their
+    values when the caller asks for them, after ``@Airlock`` has returned. Each is wrapped
+    so every step runs inside the call's airgap and context and every value it produces is
+    sanitized as a returned value would be. Until 0.10.28 only generators were: a sync
+    tool returning a coroutine or a ``map`` ran its body outside the airgap, without the
+    call's context, and unmasked.
+
+    Concrete values (strings, containers, models) are not deferred. Neither is an
+    iterator that is also a context manager, whose lifecycle stays the caller's, nor an
+    asyncio Task or Future, which runs on the loop whether or not it is awaited.
+    """
+    if inspect.isgenerator(result):
+        return _guard_stream(result, config, func_name, context, on_refusal)
+    if inspect.isasyncgen(result):
+        return _guard_async_stream(result, config, func_name, context, on_refusal)
+    if inspect.iscoroutine(result):
+        return _guard_coroutine(result, config, func_name, context, on_refusal)
+    if _is_resource_handle(result):
+        return None
+    if isinstance(result, Iterator):
+        return _guard_iterator(result, config, func_name, context, on_refusal)
+    if isinstance(result, AsyncIterator):
+        return _guard_async_iterator(result, config, func_name, context, on_refusal)
+    return None
+
+
+#: The containers a result is walked through for deferred values, as output masking walks
+#: it (``sanitizer.sanitize_structured``).
+_RESULT_CONTAINERS = (dict, list, tuple, set, frozenset)
+
+#: Leaf types that are never deferred, checked first so a large result is scanned quickly.
+_PLAIN_TYPES = frozenset({str, bytes, bytearray, int, float, complex, bool, type(None)})
+
+
+def _is_deferred(value: Any) -> bool:
+    """Whether ``value`` computes its values after the call: what ``_guard_deferred`` guards."""
+    if inspect.isgenerator(value) or inspect.isasyncgen(value) or inspect.iscoroutine(value):
+        return True
+    if _is_resource_handle(value):
+        return False
+    return isinstance(value, Iterator | AsyncIterator)
+
+
+def _is_rebuilt_shape(value: Any) -> bool:
+    """A dict, list, tuple, set, pydantic model or dataclass instance: what the guard rebuilds."""
+    return isinstance(value, (*_RESULT_CONTAINERS, BaseModel)) or (
+        dataclasses.is_dataclass(value) and not isinstance(value, type)
+    )
+
+
+def _items_inside(node: Any) -> Iterable[Any]:
+    """The values inside a dict (its keys too), list, tuple, set, model or dataclass."""
+    if isinstance(node, dict):
+        return [*node.keys(), *node.values()]
+    if isinstance(node, BaseModel):  # BaseModel's own __iter__, whatever a model overrides
+        return [value for _name, value in BaseModel.__iter__(node)]
+    if isinstance(node, _RESULT_CONTAINERS):
+        return node
+    return [getattr(node, item.name, None) for item in dataclasses.fields(node)]
+
+
+def _holds_deferred(result: Any) -> bool:
+    """Whether a deferred value is anywhere in ``result``'s containers, models and dataclasses."""
+    pending = [result]
+    seen: set[int] = set()
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        for item in _items_inside(node):
+            if type(item) in _PLAIN_TYPES:
+                continue
+            if _is_rebuilt_shape(item):
+                pending.append(item)
+            elif _is_deferred(item):
+                return True
+    return False
+
+
+def _guard_nested_deferred(
+    result: Any,
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Any:
+    """``result`` with every deferred value inside it guarded.
+
+    A generator, coroutine or lazy iterator held in a returned dict, list, tuple, set,
+    pydantic model or dataclass runs when the caller reaches it, after the call. Until
+    0.10.28 only one returned at the top level was guarded: ``{"rows": map(fetch, urls)}``
+    ran outside the airgap, without the call's context, and unmasked. ``result`` itself
+    comes back when it holds none; otherwise every container in it is rebuilt with each
+    deferred value guarded (dict keys included; a model through ``model_copy``, a
+    dataclass as a shallow copy, so neither runs its validation or ``__init__`` again), a
+    container referenced twice or from inside itself once.
+
+    Raises:
+        OutputUnreadableError: ``result`` is nested too deeply to rebuild, or one of its
+            containers raised while it was read or rebuilt.
+    """
+    if not _is_rebuilt_shape(result):
+        return result
+    memo: dict[int, Any] = {}
+
+    def rebuild(node: Any) -> Any:
+        if type(node) in _PLAIN_TYPES:
+            return node
+        if id(node) in memo:
+            return memo[id(node)]
+        if isinstance(node, dict):
+            mapping = copy.copy(node)
+            memo[id(node)] = mapping  # registered first, so a back-reference reaches the copy
+            entries = [(rebuild(key), rebuild(item)) for key, item in node.items()]
+            mapping.clear()
+            for key, item in entries:  # one by one: Counter.update would add, not set
+                mapping[key] = item
+            return mapping
+        if isinstance(node, list):
+            items = copy.copy(node)
+            memo[id(node)] = items
+            items[:] = [rebuild(item) for item in node]
+            return items
+        if isinstance(node, _RESULT_CONTAINERS):
+            rebuilt: Any = _rebuild_like(node, [rebuild(item) for item in node])
+        elif isinstance(node, BaseModel):
+            fields = BaseModel.__iter__(node)
+            rebuilt = node.model_copy(update={name: rebuild(value) for name, value in fields})
+        elif dataclasses.is_dataclass(node) and not isinstance(node, type):
+            rebuilt = copy.copy(node)
+            memo[id(node)] = rebuilt
+            for item in dataclasses.fields(node):
+                if hasattr(node, item.name):  # set as the dataclass's own __init__ sets it
+                    object.__setattr__(rebuilt, item.name, rebuild(getattr(node, item.name)))
+            return rebuilt
+        else:
+            guarded = _guard_deferred(node, config, func_name, context, on_refusal)
+            rebuilt = node if guarded is None else guarded
+        memo[id(node)] = rebuilt
+        return rebuilt
+
+    try:
+        return rebuild(result) if _holds_deferred(result) else result
+    except RecursionError as error:
+        raise OutputUnreadableError(func_name, "nested too deeply to guard") from error
+    except Exception as error:  # noqa: BLE001 - a container that cannot be rebuilt is refused
+        raise OutputUnreadableError(func_name, f"{type(error).__name__} while guarding") from error
+
+
+def _guard_result(
+    result: Any,
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> tuple[Any, list[str], int, bool]:
+    """A result as its caller gets it: deferred values guarded, everything else masked.
+
+    Returns ``(result, warnings, masked_count, was_truncated)``. A deferred result is
+    returned guarded and masked value by value as it produces them, so nothing is counted
+    here.
+
+    Raises:
+        OutputUnreadableError: The result cannot be read to be masked.
+    """
+    guarded = _guard_deferred(result, config, func_name, context, on_refusal)
+    if guarded is not None:
+        return guarded, [], 0, False
+    result = _guard_nested_deferred(result, config, func_name, context, on_refusal)
+    if not config.sanitize_output or result is None:
+        return result, [], 0, False
+    return _sanitize_tool_output(result, config, func_name)
+
+
+def _sanitize_stream_item(
+    item: Any,
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None = None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Any:
+    """One value a deferred result produced, guarded and sanitized as a returned value.
+
+    A value that cannot be read is refused: ``OutputUnreadableError`` reaches the consumer
+    after ``on_refusal`` has audited it.
+    """
+    try:
+        return _guard_result(item, config, func_name, context, on_refusal)[0]
+    except OutputUnreadableError as error:
+        _report_refusal(on_refusal, error)
+        raise
 
 
 def _guard_stream(
@@ -544,6 +892,7 @@ def _guard_stream(
     config: AirlockConfig,
     func_name: str,
     context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
 ) -> Generator[Any, Any, Any]:
     """Run a generator tool's body under the call's guards, one step at a time.
 
@@ -553,17 +902,23 @@ def _guard_stream(
     the network under ``allow_egress=False`` and stream PII unmasked. Each step, and the
     cleanup when the stream is closed early, now runs inside both, and each item is
     sanitized as a returned value would be. Values sent in pass through and the return
-    value is kept.
+    value is kept. A refusal a step raises (the airgap's ``NetworkBlockedError``, or any
+    Airlock refusal the body raised) goes to ``on_refusal`` before it reaches the
+    consumer; until 0.10.28 the stream's audit record was the only one.
     """
     try:
         sent: Any = None
         while True:
-            with _call_scope(config, context):
-                try:
-                    item = stream.send(sent)
-                except StopIteration as stop:
-                    return stop.value
-            sent = yield _sanitize_stream_item(item, config, func_name)
+            try:
+                with _call_scope(config, context):
+                    try:
+                        item = stream.send(sent)
+                    except StopIteration as stop:
+                        return stop.value
+            except Exception as error:
+                _report_refusal(on_refusal, error)
+                raise
+            sent = yield _sanitize_stream_item(item, config, func_name, context, on_refusal)
     finally:
         with _call_scope(config, context):
             stream.close()
@@ -574,20 +929,101 @@ async def _guard_async_stream(
     config: AirlockConfig,
     func_name: str,
     context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
 ) -> AsyncGenerator[Any, Any]:
     """The async-generator form of ``_guard_stream``."""
     try:
         sent: Any = None
         while True:
-            with _call_scope(config, context):
-                try:
-                    item = await stream.asend(sent)
-                except StopAsyncIteration:
-                    return
-            sent = yield _sanitize_stream_item(item, config, func_name)
+            try:
+                with _call_scope(config, context):
+                    try:
+                        item = await stream.asend(sent)
+                    except StopAsyncIteration:
+                        return
+            except Exception as error:
+                _report_refusal(on_refusal, error)
+                raise
+            sent = yield _sanitize_stream_item(item, config, func_name, context, on_refusal)
     finally:
         with _call_scope(config, context):
             await stream.aclose()
+
+
+async def _guard_coroutine(
+    coroutine: Coroutine[Any, Any, Any],
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Any:
+    """Await a coroutine a tool returned under the call's guards, and sanitize its value."""
+    try:
+        with _call_scope(config, context):
+            value = await coroutine
+    except Exception as error:
+        _report_refusal(on_refusal, error)
+        raise
+    return _sanitize_stream_item(value, config, func_name, context, on_refusal)
+
+
+def _guard_iterator(
+    iterator: Iterator[Any],
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> Generator[Any, None, None]:
+    """Step a lazy iterator a tool returned under the call's guards, one item at a time.
+
+    The iterator is closed inside the airgap when the guard is (if it has ``close``).
+    """
+    try:
+        while True:
+            try:
+                with _call_scope(config, context):
+                    try:
+                        item = next(iterator)
+                    except StopIteration:
+                        return
+            except Exception as error:
+                _report_refusal(on_refusal, error)
+                raise
+            yield _sanitize_stream_item(item, config, func_name, context, on_refusal)
+    finally:
+        close = getattr(iterator, "close", None)
+        if callable(close):
+            with _call_scope(config, context):
+                close()
+
+
+async def _guard_async_iterator(
+    iterator: AsyncIterator[Any],
+    config: AirlockConfig,
+    func_name: str,
+    context: AirlockContext[Any] | None,
+    on_refusal: _RefusalReporter | None = None,
+) -> AsyncGenerator[Any, None]:
+    """The async form of ``_guard_iterator``; ``aclose`` is called when the guard closes."""
+    try:
+        while True:
+            try:
+                with _call_scope(config, context):
+                    try:
+                        item = await iterator.__anext__()
+                    except StopAsyncIteration:
+                        return
+            except Exception as error:
+                _report_refusal(on_refusal, error)
+                raise
+            yield _sanitize_stream_item(item, config, func_name, context, on_refusal)
+    finally:
+        aclose = getattr(iterator, "aclose", None)
+        if callable(aclose):
+            with _call_scope(config, context):
+                closing = aclose()
+                if inspect.isawaitable(closing):
+                    await closing
 
 
 def _masked_warnings(count: int, func_name: str) -> list[str]:
@@ -648,15 +1084,20 @@ def _inherit_ambient_identity(context: AirlockContext[Any]) -> None:
 def _run_context(context: AirlockContext[Any]) -> AirlockContext[Any] | None:
     """The ``AirlockContext`` that outlives this call, or None when there is none.
 
-    That is an ``AirlockContext`` the call's first argument carries (a run wrapper's
-    ``context`` / ``ctx``), else the one set around the call with ``with AirlockContext(...)``
-    — unless that one names a different agent than the call does, so belongs to another run.
+    That is an ``AirlockContext`` the call's run wrapper carries (``context.user_context``,
+    a first argument ``ContextExtractor.run_wrapper`` accepted), else the one set around
+    the call with ``with AirlockContext(...)`` — unless that one names a different agent
+    than the call does, so belongs to another run. The wrapper is judged by the same
+    predicate that admitted it; until 0.10.28 any first argument with a ``context`` /
+    ``ctx`` attribute counted, in an order ``PYTHONHASHSEED`` decided.
     """
-    if context.user_context is not None:
-        for attr in ContextExtractor.CONTEXT_ATTRS:
-            inner = getattr(context.user_context, attr, None)
-            if isinstance(inner, AirlockContext):
-                return inner
+    wrapper = (
+        ContextExtractor.run_wrapper(context.user_context)
+        if context.user_context is not None
+        else None
+    )
+    if wrapper is not None and isinstance(wrapper.context, AirlockContext):
+        return wrapper.context
     ambient = get_current_context()
     if ambient is None or ambient is context:
         return None
@@ -693,13 +1134,55 @@ def _call_metadata(context: AirlockContext[Any], key: str) -> Any:
     set around the call with ``with AirlockContext(metadata={...})``.
 
     The budget and amplification checks read ``airlock_tier``, ``input_tokens`` and
-    ``model_id`` here and nowhere else. The model cannot write either context.
+    ``model_id`` here and nowhere else, the token-audience check its claims and the
+    deserialization guard its transport declaration. The model cannot write either context:
+    the call's own comes only from a run wrapper model JSON cannot build
+    (``ContextExtractor.run_wrapper``); until 0.10.28 a tool's own model with a ``context``
+    field passed first supplied it.
     """
     value = context.metadata.get(key)
     if value is not None:
         return value
     ambient = get_current_context()
     return ambient.metadata.get(key) if ambient is not None else None
+
+
+def _token_count_tag(value: Any) -> int | None:
+    """The ``input_tokens`` tag as a count, or None when it is not one.
+
+    A count is an integer of zero or more: any ``numbers.Integral`` (numpy's included),
+    never a bool. Until 0.10.28 anything but an ``int`` (a float, a string, a numpy
+    integer) was priced as 0 tokens, and a negative ``int`` raised out of the call.
+    """
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
+        return None
+    count = int(value)
+    return count if count >= 0 else None
+
+
+def _text_tag(value: Any) -> str | None:
+    """A tag's text when it is a string, a str enum by its value; else None."""
+    return str.__str__(value) if isinstance(value, str) else None
+
+
+def _model_id_tag(value: Any) -> str | None:
+    """The ``model_id`` step 6 prices the call's worst case by, or None when untagged.
+
+    A string, a str enum by its value, is the model id. Any other value names no row of
+    the pricing table, so it is priced as an unlisted model is, at the table's dearest row.
+    Until 0.10.28 a bytes or enum ``model_id`` was priced at the tracker's own row.
+    """
+    if value is None:
+        return None
+    text = _text_tag(value)
+    return text if text is not None else f"<unreadable model_id: {type(value).__name__}>"
+
+
+#: What each step-6 tag must be, for the refusal that names an unreadable one.
+_BUDGET_TAG_SHAPES = {
+    "airlock_tier": "a string naming one of the budget's tiers",
+    "input_tokens": "an integer count of zero or more",
+}
 
 
 #: The ``AirlockContext`` metadata key the host puts an OAuth access token's claims under:
@@ -1005,7 +1488,8 @@ class Airlock:
 
             # Step 0.5: the startup-hook self-check (V0.10.27). A condition of the process,
             # so it comes before anything about the call. Off by default; when on, the walk
-            # runs once per process, on the first call admitted with it on.
+            # runs once per process, on the first call admitted with it on, and `deny`
+            # refuses the calls of tools guarded by this config, not every tool in the process.
             hook_error = self._check_startup_hooks(func_name)
             if hook_error is not None:
                 return kwargs, start_time, context, hook_error, None, None
@@ -1059,28 +1543,43 @@ class Airlock:
             # pathlib.Path or a URL object walked past all three. They now read every
             # argument the call passes (`_arg_walk`), bound once and only when one of them
             # is on. A refusal from them hands the honeypot the arguments by name.
+            # The run wrapper the context came from is left out when model JSON cannot have
+            # built it (`ContextExtractor.run_wrapper`, the predicate that admitted it); one
+            # only its AirlockContext vouches for (a dataclass or model wrapper) is walked,
+            # that AirlockContext aside. Until 0.10.28 any first argument with a `context` /
+            # `ctx` attribute was left out, the tool author's own model included.
+            # (Not named `wrapper`: step 4 reads the decorator's own `wrapper` below.)
+            run_wrapper = (
+                ContextExtractor.run_wrapper(context.user_context)
+                if context.user_context is not None
+                else None
+            )
+            # An agent framework's own model is walked where the tool's annotations name
+            # its class, the only place pydantic builds one from the model's JSON
+            # (`_arg_walk.NamedModels`); one in host-injected state is left alone.
             arguments = (
-                bind_arguments(call_signature, args, cleaned_kwargs)
+                bind_arguments(
+                    call_signature,
+                    args,
+                    cleaned_kwargs,
+                    skip_first=run_wrapper is not None and run_wrapper.host_object,
+                    named=named_models(func),
+                )
                 if self._reads_argument_values(func_name, resolved_policy)
                 else cleaned_kwargs
             )
-            if context.user_context is not None:
-                # The run wrapper the context came from is the host's, not the model's.
-                arguments = {
-                    name: value
-                    for name, value in arguments.items()
-                    if value is not context.user_context
-                }
 
             # Step 2.7: Unsafe-deserialization content guard (V0.8.19,
             # CVE-2026-25874). Inspects argument VALUES for pickle /
             # marshal / dill / jsonpickle payloads (and serialized-object
-            # args over an unauthenticated channel). Inert when
+            # args over an unauthenticated channel, as the host declares it
+            # on the call's context metadata). Inert when
             # policy.deserialization_guard is None.
             deser_error = self._check_deserialization_guard(
                 func_name=func_name,
                 resolved_policy=resolved_policy,
                 arguments=arguments,
+                context=context,
             )
             if deser_error is not None:
                 return arguments, start_time, context, deser_error, None, None
@@ -1093,12 +1592,11 @@ class Airlock:
             # been. Inert when
             # policy.amplification_budget is None; blocks when it is set but
             # carries no threshold.
-            tokens = _call_metadata(context, "input_tokens")
             amp_error = self._check_amplification(
                 func_name=func_name,
                 resolved_policy=resolved_policy,
                 context=context,
-                input_tokens=tokens if isinstance(tokens, int) else None,
+                input_tokens=_token_count_tag(_call_metadata(context, "input_tokens")),
             )
             if amp_error is not None:
                 return kwargs, start_time, context, amp_error, None, None
@@ -1148,20 +1646,69 @@ class Airlock:
             Returns:
                 Tuple of (processed_result, warnings, sanitized_count, was_truncated)
             """
-            warnings: list[str] = []
-            sanitized_count = 0
-            was_truncated = False
 
-            # A generator's items are sanitized as they are yielded, so this call's audit
-            # record counts none of them.
-            if inspect.isgenerator(result):
-                result = _guard_stream(result, self.config, func_name, context)
-            elif inspect.isasyncgen(result):
-                result = _guard_async_stream(result, self.config, func_name, context)
-            elif self.config.sanitize_output and result is not None:
-                result, warnings, sanitized_count, was_truncated = _sanitize_tool_output(
-                    result, self.config, func_name
+            def _refuse_after_run(error: Exception, reason: BlockReason) -> AirlockResponse:
+                """Log and audit a refusal made after the tool ran, and return it."""
+                if isinstance(error, NetworkBlockedError):
+                    response = handle_network_blocked(
+                        func_name,
+                        operation=error.operation,
+                        target=error.target,
+                        details=error.details,
+                    )
+                elif isinstance(error, OutputUnreadableError):
+                    response = AirlockResponse.blocked_response(
+                        reason=reason,
+                        error=f"AIRLOCK_BLOCK: {error}",
+                        fix_hints=[
+                            "The tool ran, but its result could not be checked for sensitive "
+                            "data, so it was withheld. Arguments that return a smaller or "
+                            "flatter result may succeed."
+                        ],
+                    )
+                else:
+                    response = AirlockResponse.blocked_response(
+                        reason=reason,
+                        error=(
+                            f"AIRLOCK_BLOCK: '{func_name}' was refused ({reason.value}) "
+                            "while producing its result"
+                        ),
+                    )
+                self._log_blocked(func_name, response, start_time)
+                audit_logger.log(
+                    tool_name=func_name,
+                    blocked=True,
+                    block_reason=reason.value,
+                    duration_ms=(time.time() - start_time) * 1000,
+                    args=kwargs,
+                    error=response.error,
+                    agent_id=context.agent_id if context else None,
+                    session_id=context.session_id if context else None,
+                    amplification=context._amplification if context else None,
                 )
+                return response
+
+            def _audit_deferred_refusal(error: Exception) -> None:
+                """Record a refusal a deferred result raised after the call returned.
+
+                It reaches the consumer as the exception, mid-stream; until 0.10.28 it left
+                no audit record of the block, only the call's own (not blocked) one.
+                """
+                reason = _refusal_reason(error)
+                if reason is not None:
+                    _refuse_after_run(error, reason)
+
+            # A deferred result (a generator, a coroutine, a lazy iterator), or one held in
+            # a returned container, runs after this call returns, so its values are guarded
+            # and sanitized as they are produced, and this call's audit record counts none
+            # of them. A result that cannot be read to be masked is refused, not returned.
+            try:
+                result, warnings, sanitized_count, was_truncated = _guard_result(
+                    result, self.config, func_name, context, _audit_deferred_refusal
+                )
+            except OutputUnreadableError as error:
+                refusal = _refuse_after_run(error, BlockReason.OUTPUT_UNREADABLE)
+                raise _ResultRefused(refusal.to_dict()) from error
 
             elapsed = time.time() - start_time
             logger.info(
@@ -1329,11 +1876,11 @@ class Airlock:
                 try:
                     # V0.3.0: Apply network airgap if configured
                     # Note: For async, we still use the sync context manager
-                    # as socket operations are fundamentally sync
-                    if (
-                        self.config.network_policy is not None
-                        and not self.config.network_policy.allow_egress
-                    ):
+                    # as socket operations are fundamentally sync. The airgap is per task
+                    # (a ContextVar), so it holds across awaits without touching the
+                    # host's other coroutines. Any NetworkPolicy is applied: until 0.10.28
+                    # only one with allow_egress=False was, so allowlists were ignored.
+                    if self.config.network_policy is not None:
                         with network_airgap(self.config.network_policy):
                             if self.sandbox:
                                 # V0.10.6: validate in the parent before dispatching. On failure the
@@ -1382,6 +1929,8 @@ class Airlock:
                         details=e.details,
                     )
                     self._log_blocked(func_name, response, start_time)
+                    # The caller's identity, as every other refusal records it (until
+                    # 0.10.28 a network refusal's record named no agent or session).
                     audit_logger.log(
                         tool_name=func_name,
                         blocked=True,
@@ -1389,6 +1938,9 @@ class Airlock:
                         duration_ms=(time.time() - start_time) * 1000,
                         args=cleaned_kwargs,
                         error=response.error,
+                        agent_id=context.agent_id,
+                        session_id=context.session_id,
+                        amplification=context._amplification,
                     )
                     return response.to_dict()
                 except Exception as e:
@@ -1396,15 +1948,18 @@ class Airlock:
                 finally:
                     reset_context(token)
 
-                result, warnings, _, _ = _post_execution(
-                    func_name,
-                    result,
-                    start_time,
-                    cleaned_kwargs,
-                    context,
-                    budget_estimate,
-                    resolved_policy,
-                )
+                try:
+                    result, warnings, _, _ = _post_execution(
+                        func_name,
+                        result,
+                        start_time,
+                        cleaned_kwargs,
+                        context,
+                        budget_estimate,
+                        resolved_policy,
+                    )
+                except _ResultRefused as refused:
+                    return refused.response
 
                 if self.return_dict:
                     return AirlockResponse.success_response(
@@ -1467,11 +2022,10 @@ class Airlock:
                 # Set context as current for the duration of execution
                 token = set_current_context(context)
                 try:
-                    # V0.3.0: Apply network airgap if configured
-                    if (
-                        self.config.network_policy is not None
-                        and not self.config.network_policy.allow_egress
-                    ):
+                    # V0.3.0: Apply network airgap if configured. Any NetworkPolicy is
+                    # applied: until 0.10.28 only one with allow_egress=False was, so
+                    # allowlists were ignored.
+                    if self.config.network_policy is not None:
                         with network_airgap(self.config.network_policy):
                             if self.sandbox:
                                 # V0.10.6: validate in the parent before dispatching. On failure the
@@ -1515,6 +2069,8 @@ class Airlock:
                         details=e.details,
                     )
                     self._log_blocked(func_name, response, start_time)
+                    # The caller's identity, as every other refusal records it (until
+                    # 0.10.28 a network refusal's record named no agent or session).
                     audit_logger.log(
                         tool_name=func_name,
                         blocked=True,
@@ -1522,6 +2078,9 @@ class Airlock:
                         duration_ms=(time.time() - start_time) * 1000,
                         args=cleaned_kwargs,
                         error=response.error,
+                        agent_id=context.agent_id,
+                        session_id=context.session_id,
+                        amplification=context._amplification,
                     )
                     return response.to_dict()
                 except Exception as e:
@@ -1529,15 +2088,18 @@ class Airlock:
                 finally:
                     reset_context(token)
 
-                result, warnings, _, _ = _post_execution(
-                    func_name,
-                    result,
-                    start_time,
-                    cleaned_kwargs,
-                    context,
-                    budget_estimate,
-                    resolved_policy,
-                )
+                try:
+                    result, warnings, _, _ = _post_execution(
+                        func_name,
+                        result,
+                        start_time,
+                        cleaned_kwargs,
+                        context,
+                        budget_estimate,
+                        resolved_policy,
+                    )
+                except _ResultRefused as refused:
+                    return refused.response
 
                 if self.return_dict:
                     return AirlockResponse.success_response(
@@ -1557,6 +2119,11 @@ class Airlock:
 
         # Copy annotations for type-aware frameworks
         wrapper.__annotations__ = getattr(func, "__annotations__", {})
+
+        # Names this wrapper as the one the capability gate reads. A decorator stacked above
+        # copies the attribute (``functools.wraps``), so a ``@requires`` above both can find
+        # this wrapper and add its requirement here (``capabilities.requires``).
+        wrapper.__airlock_wrapper__ = wrapper  # type: ignore[union-attr]
 
         # Pydantic V2 pass-through: Copy validator attributes if they exist
         for attr in (
@@ -1678,13 +2245,16 @@ class Airlock:
         return create_strict_validator(func)
 
     def _check_startup_hooks(self, func_name: str) -> AirlockResponse | None:
-        """Refuse every call in an interpreter running startup hooks no allowlist covers.
+        """Refuse this config's calls in an interpreter running startup hooks it does not allow.
 
-        Off unless ``AirlockConfig.startup_hook_check`` is ``warn`` or ``deny``. The walk
-        (``runtime.startup_hooks``) runs once per process, on the first call admitted with
-        the check on, and each hook it finds is logged once. ``deny`` then refuses every
-        guarded call in the process, naming the files. The hooks ran before this did; the
-        check reports them and keeps guarded tools from running beside them, nothing more.
+        Off unless this decorator's ``AirlockConfig.startup_hook_check`` is ``warn`` or
+        ``deny``. The walk (``runtime.startup_hooks``) runs once per process, on the first
+        call admitted with the check on, and each hook it finds is logged once; each config
+        judges that one walk against its own ``startup_hook_allowlist``. ``deny`` then
+        refuses every call to a tool guarded by this config, naming the files. A tool
+        guarded by a config that does not set ``deny`` still runs in the same process. The
+        hooks ran before this did; the check reports them and keeps the tools this config
+        guards from running beside them, nothing more.
 
         Args:
             func_name: Name of the tool being called.
@@ -1717,8 +2287,8 @@ class Airlock:
                 f"no allowlist covers ({', '.join(names)})"
             ),
             fix_hints=[
-                "The process this tool runs in started with code no allowlist covers, so "
-                "no guarded tool runs in it",
+                "The process this tool runs in started with code its allowlist does not "
+                "cover, so this tool, and every tool guarded the same way, does not run in it",
                 "This is not a per-call denial: retrying or changing arguments will not "
                 "help; tell the user the tool host needs attention",
             ],
@@ -1825,26 +2395,22 @@ class Airlock:
             Tuple of (cleaned_kwargs, stripped_args, error_response).
             If error_response is not None, validation failed.
         """
-        should_block = self.config.unknown_args == UnknownArgsMode.BLOCK
+        mode = self.config.unknown_args
         try:
             cleaned_kwargs, stripped = strip_ghost_arguments(
                 func,
                 dict(kwargs),
-                strict=should_block,
+                strict=mode == UnknownArgsMode.BLOCK,
+                log=False,
             )
 
             if stripped:
-                filtered_stripped = _filter_sensitive_keys(sorted(stripped))
-                logger.info(
-                    "ghost_arguments_handled",
-                    function=func_name,
-                    stripped=filtered_stripped,
-                    stripped_count=len(stripped),
-                    mode=self.config.unknown_args.value,
-                )
-
+                # The mode decides how a strip is logged (``handle_unknown_args``): one
+                # structured warning under STRIP_AND_LOG, a debug line under STRIP_SILENT.
+                # Until 0.10.28 the validator also warned and this method logged at info, so
+                # STRIP_SILENT was not silent and STRIP_AND_LOG logged each strip three times.
                 handle_unknown_args(
-                    mode=self.config.unknown_args,
+                    mode=mode,
                     func_name=func_name,
                     stripped_args=stripped,
                     audit_logger=None,
@@ -2217,12 +2783,21 @@ class Airlock:
         outcome: Literal["denied", "timeout"] = (
             "timeout" if oversight_response.verdict is OversightVerdict.TIMEOUT else "denied"
         )
-        logger.info(
-            f"escalation_{outcome}",
-            tool=func_name,
-            rule=escalation.rule,
-            approver=oversight_response.approver,
-        )
+        # Literal event names, so a search of the source finds the line that logs each.
+        if outcome == "timeout":
+            logger.info(
+                "escalation_timeout",
+                tool=func_name,
+                rule=escalation.rule,
+                approver=oversight_response.approver,
+            )
+        else:
+            logger.info(
+                "escalation_denied",
+                tool=func_name,
+                rule=escalation.rule,
+                approver=oversight_response.approver,
+            )
         response = handle_escalation(
             func_name,
             reason=escalation.reason,
@@ -2505,21 +3080,28 @@ class Airlock:
         func_name: str,
         resolved_policy: SecurityPolicy | None,
         arguments: dict[str, Any],
+        context: AirlockContext[Any],
     ) -> AirlockResponse | None:
         """Unsafe-deserialization content guard (V0.8.19, CVE-2026-25874).
 
-        Calls ``policy.deserialization_guard.evaluate(arguments)`` if
+        Calls ``policy.deserialization_guard.evaluate(arguments, transport=...)`` if
         configured. Inspects the call's argument values for serialized-
         object payloads (pickle magic bytes, base64-encoded pickle,
         serializer marker tokens) and, when the guard requires it,
         serialized-object args sent over an unauthenticated transport.
         See :class:`agent_airlock.safe_types.UnsafeDeserializationGuard`.
 
+        The transport declaration is the host's: the value under the guard's
+        ``transport_metadata_key`` on the call's context metadata (``_call_metadata``).
+        A tool argument of that name is the model's, so it is scanned as ordinary content
+        and declares nothing; until 0.10.28 the guard read it as the declaration.
+
         Args:
             func_name: Name of the function being called.
             resolved_policy: The resolved :class:`SecurityPolicy` (or None).
             arguments: Every argument of the call, by name, positional ones
                 included (``bind_arguments``); the guard reads nested values.
+            context: The call's context, read for the transport declaration.
 
         Returns:
             A blocked :class:`AirlockResponse` carrying the guard's
@@ -2529,7 +3111,10 @@ class Airlock:
         if resolved_policy is None or resolved_policy.deserialization_guard is None:
             return None
 
-        decision = resolved_policy.deserialization_guard.evaluate(arguments)
+        guard = resolved_policy.deserialization_guard
+        decision = guard.evaluate(
+            arguments, transport=_call_metadata(context, guard.transport_metadata_key)
+        )
         if decision.allowed:
             return None
 
@@ -2676,7 +3261,12 @@ class Airlock:
         ``block_reason=BUDGET_EXCEEDED``.
 
         The ``airlock_tier``, ``input_tokens`` and ``model_id`` tags are read
-        with :func:`_call_metadata`, never from the tool's arguments.
+        with :func:`_call_metadata`, never from the tool's arguments. A tier or token tag
+        the host set that cannot be read (a tier that is not a string; a token count that
+        is not an integer of zero or more) refuses the call: until 0.10.28 it was priced
+        as 0 tokens, or a negative count raised out of the call. A ``model_id`` that is
+        not a string is priced at the table's dearest row, as an unlisted model is; a str
+        enum is read by its value.
 
         Args:
             func_name: Tool being invoked (for telemetry).
@@ -2694,11 +3284,20 @@ class Airlock:
             return None, None
 
         tier_tag = _call_metadata(context, "airlock_tier")
-        explicit_tier = tier_tag if isinstance(tier_tag, str) else None
+        explicit_tier = _text_tag(tier_tag)
         tokens_tag = _call_metadata(context, "input_tokens")
-        input_tokens = tokens_tag if isinstance(tokens_tag, int) else 0
-        model_tag = _call_metadata(context, "model_id")
-        model_id = model_tag if isinstance(model_tag, str) else None
+        input_tokens = 0 if tokens_tag is None else _token_count_tag(tokens_tag)
+        unreadable = {
+            name: tag
+            for name, tag, read in (
+                ("airlock_tier", tier_tag, explicit_tier),
+                ("input_tokens", tokens_tag, input_tokens),
+            )
+            if tag is not None and read is None
+        }
+        if unreadable or input_tokens is None:
+            return None, self._refuse_unreadable_budget_tags(func_name, unreadable)
+        model_id = _model_id_tag(_call_metadata(context, "model_id"))
 
         cost_tracker = get_global_tracker()
         try:
@@ -2742,6 +3341,42 @@ class Airlock:
                 reason=str(exc),
             )
         return estimate, None
+
+    def _refuse_unreadable_budget_tags(
+        self, func_name: str, tags: dict[str, Any]
+    ) -> AirlockResponse:
+        """The ``budget_exceeded`` refusal for step-6 tags the host set but that cannot be read.
+
+        A budget that cannot read its inputs refuses, as every other gate does: pricing a
+        float or string token count as 0 let any call under the cap. The hints name the
+        tag and the type it had, never its value.
+
+        Args:
+            func_name: Tool being invoked.
+            tags: Each unreadable tag's name and the value the host set.
+
+        Returns:
+            The refusal.
+        """
+        shapes = {name: type(tag).__name__ for name, tag in tags.items()}
+        logger.warning("tier_budget_tags_unreadable", function=func_name, tags=shapes)
+        return AirlockResponse.blocked_response(
+            reason=BlockReason.BUDGET_EXCEEDED,
+            error=(
+                f"AIRLOCK_BLOCK: '{func_name}' refused: its budget cannot be checked, because "
+                f"the call's {', '.join(repr(name) for name in tags)} tag could not be read"
+            ),
+            fix_hints=[
+                *(
+                    f"The {name!r} tag on this call is a {shape}; it must be "
+                    f"{_BUDGET_TAG_SHAPES[name]}"
+                    for name, shape in shapes.items()
+                ),
+                "The host sets these tags on the call's AirlockContext metadata; retrying or "
+                "changing arguments will not help",
+            ],
+            metadata={"function": func_name, "unreadable_tags": shapes},
+        )
 
     def _reconcile_tier_budget(
         self,
@@ -2805,11 +3440,12 @@ class Airlock:
 
         Args:
             func: The callable whose requirement is read: the wrapper ``@Airlock``
-                returned, so a ``@requires`` applied above it (which sets the attribute on
-                that wrapper) counts as well as one applied below it, which
-                ``get_required_capabilities`` finds down the ``__wrapped__`` chain. Until
-                0.10.26 the undecorated tool was read and a ``@requires`` above
-                ``@Airlock`` enforced nothing.
+                returned, so a ``@requires`` applied above it (which adds its requirement
+                to that wrapper, through any decorators between them that keep
+                ``__wrapped__`` or copy its attributes) counts as well as one applied below
+                it, which ``get_required_capabilities`` finds down the ``__wrapped__`` chain.
+                Until 0.10.26 the undecorated tool was read and a ``@requires`` above
+                ``@Airlock`` enforced nothing; until 0.10.28 one counted only when adjacent.
             func_name: Name of the function.
             resolved_policy: The resolved security policy (may have capability_policy).
 

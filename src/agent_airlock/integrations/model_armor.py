@@ -82,8 +82,18 @@ CANONICAL_FILTER_CATEGORIES: tuple[str, ...] = (
 )
 
 
+_INSTALL_HINT = (
+    "Model Armor adapter requires `google-cloud-modelarmor`. "
+    'Install with: pip install "agent-airlock[model-armor]"'
+)
+
+
 class ModelArmorNotInstalled(RuntimeError):
-    """Raised when the google-cloud-modelarmor package isn't importable."""
+    """Raised when the google-cloud-modelarmor package isn't importable.
+
+    Its message is :data:`_INSTALL_HINT`, which names the ``agent-airlock[model-armor]``
+    extra, wherever the import fails (building the client or building a request).
+    """
 
 
 @dataclass
@@ -178,10 +188,7 @@ class ModelArmorScanner:
         try:
             from google.cloud import modelarmor_v1
         except ImportError as e:  # pragma: no cover - exercised by tests via monkeypatch
-            raise ModelArmorNotInstalled(
-                "Model Armor adapter requires `google-cloud-modelarmor`. "
-                'Install with: pip install "agent-airlock[model-armor]"'
-            ) from e
+            raise ModelArmorNotInstalled(_INSTALL_HINT) from e
 
         client_options: dict[str, Any] = {}
         if self.endpoint:
@@ -240,8 +247,8 @@ class ModelArmorScanner:
 
         try:
             from google.cloud import modelarmor_v1
-        except ImportError as e:  # pragma: no cover
-            raise ModelArmorNotInstalled(str(e)) from e
+        except ImportError as e:  # a client was injected, but the package is still missing
+            raise ModelArmorNotInstalled(_INSTALL_HINT) from e
 
         # Build the request. We use the documented snake_case field names;
         # if a future client version renames these, the getattr-based

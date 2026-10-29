@@ -10,7 +10,7 @@ The framework integration surface is the layer above it,
 `src/agent_airlock/integrations/*.py`, which carries a module per framework:
 Anthropic (Messages, Claude Agent SDK, Managed Agents), OpenAI Guardrails,
 LangChain, LangGraph ToolNode, CrewAI, PydanticAI, Google ADK, smolagents, Gemini and GPT
-tool-shape adapters, Google Model Armor, and more, plus `agent_airlock/mcp.py`
+tool-shape adapters, Google Model Armor, and more, plus `agent_airlock/mcp/`
 for FastMCP. That surface is broad; counting the three files in `adapters/` as
 "the integrations" undercounts it by an order of magnitude.
 
