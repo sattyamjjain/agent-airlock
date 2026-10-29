@@ -88,6 +88,7 @@ nav:
     - E2B Sandbox: guide/sandbox.md
     - FastMCP Integration: guide/mcp.md
     - Token audience & startup hooks: guide/token-audience-and-startup-hooks.md
+    - Shell & installer arguments: guide/shell-and-installer-arguments.md
   - API Reference:
     - Airlock Decorator: api/airlock.md
     - Configuration: api/config.md

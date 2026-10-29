@@ -56,7 +56,8 @@ src/agent_airlock/
 │                      sandbox_backend.py, so core.py can raise them without importing
 │                      agent_airlock.sandbox
 ├── _arg_walk.py       names positional arguments by parameter and walks what they hold
-│                      (containers, the tool's own models) for the value gates (2.7, 3, 5)
+│                      (containers, the tool's own models) for the value gates
+│                      (2.7, 2.75, 3, 5)
 │
 ├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
@@ -71,7 +72,7 @@ src/agent_airlock/
 ├── VACCINE      filesystem.py, network.py, honeypot.py, vaccine.py,
 │                camouflage_resistant.py, ssrf_egress_guard.py, sequence_guard.py,
 │                action_contradiction_gate.py, tool_output_trust_guard.py,
-│                done_receipt_guard.py
+│                done_receipt_guard.py, tool_arg_sink_guard.py
 ├── mcp_spec/    per-CVE / per-spec-revision MCP guards — largest subpackage, own CLAUDE.md
 ├── mcp/         FastMCP integration (MCPAirlock, secure_tool, create_secure_mcp_server) —
 │                a refusal raises FastMCP's ToolError (error result whatever the return
@@ -131,6 +132,14 @@ src/agent_airlock/
    - 2.6 action-time contradiction gate
    - 2.7 unsafe-deserialization content guard; its `require_authenticated_transport` reads
      the transport declaration from context metadata, never from an argument
+   - 2.75 shell syntax and package specs in string arguments (`tool_arg_sink_guard`, off
+     until set): `shell_args` (or every argument with `screen_all_str_args`, bar
+     `free_text_args`, and then `**kwargs` names too) carry no `DEFAULT_SHELL_METACHARS`
+     token, and `installer_args` are a bare PEP 440 or npm semver version. Names are
+     parameters: a value is screened by the argument it sits in, not by the nearest key,
+     and a positional argument the call cannot bind is screened. The refusal
+     (`tool_arg_sink`) names the argument and token, never the value, and a mapping key
+     only by its argument
    - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one
      anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)
@@ -142,7 +151,7 @@ src/agent_airlock/
    that does neither hides the wrapper)
 5. Endpoint policy validation
 
-   Steps 2.7, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
+   Steps 2.7, 2.75, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
    by parameter name (`*args` under the parameter's own name; a `**kwargs` key never hides
    a same-named positional-only or `*args` value), down through mappings (every key too,
    URL objects, tuples and frozensets included), sequences, sets and mapping views, and into

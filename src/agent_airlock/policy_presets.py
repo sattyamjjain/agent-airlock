@@ -77,6 +77,7 @@ if TYPE_CHECKING:
     from .mcp_spec.step_up_scope_guard import AdmissionScopeSnapshot
     from .mcp_spec.tasks_admission_guard import TasksAdmissionState
     from .mcp_spec.tasks_lifecycle_guard import TaskAdmission, TaskRegistry
+    from .tool_arg_sink_guard import ToolArgSinkMode
 
 
 def _capabilities(granted: int | None = None, denied: int | None = None) -> CapabilityPolicy:
@@ -4390,6 +4391,118 @@ def token_audience_defaults(*, expected_audience: str) -> dict[str, Any]:
     }
 
 
+#: The nine MCP server CVEs of 27-28 October 2026 in which a string argument of an ordinary
+#: tool reached a shell or a package installer on the server (NVD, retrieved 2026-10-29).
+TOOL_ARG_SINK_CVES: tuple[str, ...] = (
+    "CVE-2026-117558",
+    "CVE-2026-117559",
+    "CVE-2026-117560",
+    "CVE-2026-117561",
+    "CVE-2026-117567",
+    "CVE-2026-117568",
+    "CVE-2026-117569",
+    "CVE-2026-117573",
+    "CVE-2026-59176",
+)
+
+
+@preset
+def tool_arg_sink_defaults(
+    *,
+    free_text_args: Iterable[str] = (),
+    installer_args: Iterable[str] = (),
+    mode: ToolArgSinkMode = "warn",
+) -> dict[str, Any]:
+    """Screen every string tool argument for shell syntax, warning first (v0.10.28+).
+
+    Nine MCP server CVEs published on 27 and 28 October 2026 (CVSS 3.1 7.0-7.8) put a
+    model-written string argument of an ordinary tool into a shell or a package installer on
+    the server: ai-sdlc's ``repo`` (CVE-2026-117558), DroidMind's shell allowlist bypassed
+    with ``$(...)`` and backticks (CVE-2026-117559), ATXP's ``message_id`` / ``subject`` /
+    ``query`` (CVE-2026-117560), sf-mcp's Salesforce CLI flag values (CVE-2026-117561),
+    esp-mcp's ``target`` / ``port`` / ``project_path`` (CVE-2026-117567), mcp-ffmpeg's
+    ``videoPath`` / ``outputDir`` (CVE-2026-117568), Kali-GPT's ``target`` / ``ports``
+    under ``shell=True`` (CVE-2026-117569), hagent's ``args`` (CVE-2026-117573), and
+    functype-mcp-server's ``version``, which ``pnpm add`` installed and the server then
+    imported (CVE-2026-59176, CWE-829, fixed in 1.4.4).
+
+    This preset turns on :class:`~agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard` with
+    ``screen_all_str_args=True`` in ``warn`` mode, so adopting it cannot break a host on day
+    one: a finding is logged (``airlock_tool_arg_sink_warn_only``) and the call runs. Read
+    the log, name the free-text arguments (messages, prompts, file bodies) in
+    ``free_text_args``, then pass ``mode="deny"``.
+
+    OWASP mapping: **MCP05 Command Injection & Execution**; CWE-78, and CWE-829 for an
+    installer argument.
+
+    Args:
+        free_text_args: Arguments left unscreened: free text no shell sees.
+        installer_args: Arguments that must be a bare version (``1.4.4``, ``^1.30.0``).
+        mode: ``"warn"`` (the default) logs a finding and runs the call; ``"deny"``
+            refuses it with block reason ``tool_arg_sink``.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — the :class:`~agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
+        - ``policy`` — a :class:`SecurityPolicy` carrying only that guard, for
+          ``@Airlock(policy=...)``; to keep your own policy, pass the guard as its
+          ``tool_arg_sink_guard`` instead.
+        - ``owasp`` — ``"MCP05"``; ``cwe`` — ``("CWE-78", "CWE-829")``.
+
+    Raises:
+        TypeError: A name collection is a single string or holds a non-string.
+        ValueError: ``mode`` is not ``"warn"`` or ``"deny"``, or a name is in both
+            collections.
+
+    Usage::
+
+        from agent_airlock import Airlock
+        from agent_airlock.policy_presets import tool_arg_sink_defaults
+
+        preset = tool_arg_sink_defaults(free_text_args={"body"})
+
+        @Airlock(policy=preset["policy"])
+        def comment_on_issue(repo: str, body: str) -> str:
+            return f"commented on {repo}"
+
+        comment_on_issue(repo="x; id", body="Looks good; merging.")  # logged, then runs
+
+    Primary source:
+      https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=2026-10-26T00:00:00.000&pubEndDate=2026-10-29T23:59:59.999
+    """
+    from .tool_arg_sink_guard import ToolArgSinkGuard
+
+    guard = ToolArgSinkGuard(
+        screen_all_str_args=True,
+        free_text_args=frozenset(_names_of(free_text_args, "free_text_args")),
+        installer_args=frozenset(_names_of(installer_args, "installer_args")),
+        mode=mode,
+    )
+    return {
+        "preset_id": "tool_arg_sink",
+        "severity": "high",
+        "default_action": guard.mode,
+        "guard": guard,
+        "policy": SecurityPolicy(tool_arg_sink_guard=guard),
+        "owasp": "MCP05",
+        "cwe": ("CWE-78", "CWE-829"),
+        "cves": TOOL_ARG_SINK_CVES,
+        "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-117558",
+    }
+
+
+def _names_of(names: Iterable[str], field_name: str) -> Iterable[str]:
+    """``names``, refusing a lone string, which ``frozenset`` would split into letters."""
+    if isinstance(names, (str, bytes)):
+        raise TypeError(
+            f"{field_name} takes a collection of argument names, not one "
+            f"{type(names).__name__}: write {field_name}={{{names!r}}}"
+        )
+    return names
+
+
 @preset
 def dns_rebinding_safe_url_defaults(
     *,
@@ -6019,6 +6132,9 @@ __all__ = [
     # V0.8.29 CVE-2026-47390 (SSRF-protection bypass via alt-encoding / rebinding; CWE-918)
     "ssrf_egress_guard_defaults",
     "token_audience_defaults",
+    # V0.10.28 shell syntax and package specs in string tool arguments (nine CVEs, 27-28 Oct)
+    "tool_arg_sink_defaults",
+    "TOOL_ARG_SINK_CVES",
     # V0.8.34 GHSA-mrvx-jmjw-vggc (SafeURL DNS-rebinding: resolve + re-validate at call time)
     "dns_rebinding_safe_url_defaults",
     # V0.8.30 CVE-2026-11624 (MCP HTTP-transport Origin/Host DNS-rebinding; CWE-346)

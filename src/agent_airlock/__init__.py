@@ -711,6 +711,13 @@ from .testing import (
     reset_observability,
     reset_sandbox_pool,
 )
+
+# V0.10.28 — Shell syntax and package specs in string tool arguments (step 2.75).
+from .tool_arg_sink_guard import (
+    ToolArgSinkDecision,
+    ToolArgSinkGuard,
+    ToolArgSinkVerdict,
+)
 from .tool_output_trust_guard import (
     ToolOutputTrustDecision,
     ToolOutputTrustError,
@@ -1197,6 +1204,10 @@ __all__ = [
     "UnsafeDeserializationDecision",
     "UnsafeDeserializationVerdict",
     "DEFAULT_DESERIALIZATION_MARKERS",
+    # V0.10.28 — Shell syntax and package specs in string tool arguments
+    "ToolArgSinkGuard",
+    "ToolArgSinkDecision",
+    "ToolArgSinkVerdict",
     # V0.4.0 Capabilities
     "Capability",
     "CapabilityPolicy",
