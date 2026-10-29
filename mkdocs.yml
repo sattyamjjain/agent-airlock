@@ -1,5 +1,5 @@
 site_name: Agent-Airlock
-site_description: A deny-by-default contract layer for AI agent tool calls - strict argument validation, ghost-argument stripping and self-healing retries, in-process and Pydantic-only
+site_description: An in-process contract layer for AI agent tool calls - strict argument validation, ghost-argument stripping and self-healing retries, Pydantic-only
 site_url: https://sattyamjjain.github.io/agent-airlock/
 repo_url: https://github.com/sattyamjjain/agent-airlock
 repo_name: sattyamjjain/agent-airlock

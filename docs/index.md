@@ -1,6 +1,6 @@
 # Agent-Airlock
 
-**A deny-by-default contract layer for AI agent tool calls**
+**An in-process contract layer for AI agent tool calls**
 
 [![PyPI version](https://img.shields.io/pypi/v/agent-airlock?logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/agent-airlock/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)

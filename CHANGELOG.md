@@ -319,6 +319,11 @@ CVE-2026-116684.
   its preset already cited; `docs/cves/index.md` regenerated.
 - New guide page, Shell and installer arguments (`ToolArgSinkGuard`), with the nine CVEs it
   answers; the installation and FastMCP pages state the new mcp floor.
+- The one-line summary (the PyPI description, the README and docs headlines, the site
+  description) no longer calls the library deny-by-default: `SecurityPolicy.default_deny`
+  is `False`, and an empty `allowed_tools` allows every tool. Text that names a mechanism
+  that does fail closed (unknown tiers, unpinned spec revisions, unreadable input) is
+  unchanged.
 
 ### Benchmarks
 

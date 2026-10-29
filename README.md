@@ -2,7 +2,7 @@
 
 # Agent-Airlock
 
-### A deny-by-default contract layer for AI agent tool calls
+### An in-process contract layer for AI agent tool calls
 
 **Strict argument validation, ghost-argument stripping, and self-healing retries — one decorator, any agent or MCP server. Pydantic-only core.**
 

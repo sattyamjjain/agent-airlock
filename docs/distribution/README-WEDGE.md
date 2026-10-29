@@ -30,8 +30,8 @@ One factual sentence, reused verbatim across every list:
 
 The `[project].description` in `pyproject.toml` already reflects this wedge:
 
-> A type-checker and contract layer for AI agent tool calls, deny-by-default,
-> in-process, Pydantic-only. Strict argument validation, ghost-argument stripping,
+> A type-checker and contract layer for AI agent tool calls: in-process,
+> Pydantic-only. Strict argument validation, ghost-argument stripping,
 > and self-healing retries for MCP servers and agent frameworks.
 
 Keep them aligned: if you sharpen one, sharpen the other.
