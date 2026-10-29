@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
-## [0.10.28] - 2026-10-28
+## [0.10.28] - 2026-10-29
 
 A fourth drift audit checked every `CLAUDE.md` claim against the code and turned up ten
 fail-opens: one on the call path, three in the network airgap, three in framework adapters
@@ -30,8 +30,37 @@ had not listed (now under Changed), one was a test that could not fail, and one 
 (under Known limits). All are addressed in this release
 (`tests/test_review_runtime_0_10_28.py`, `tests/test_review_guards_0_10_28.py`).
 
+The release also screens string tool arguments for shell syntax and package specs
+(`ToolArgSinkGuard`, step 2.75, off by default): nine MCP server CVEs published on 27 and
+28 October passed exactly that way. The `[mcp]` extra's floor moves to 1.30.0 / 2.2.0 for
+CVE-2026-116684.
+
+### Added
+
+- `ToolArgSinkGuard`: refuses shell syntax in named (or all) string arguments and anything but a bare version in installer arguments, on the call path. Nine MCP server CVEs of 27-28 Oct passed this exact way.
+- It is `SecurityPolicy.tool_arg_sink_guard`, run as step 2.75 after the deserialization
+  guard and off by default. `shell_args`, or every argument with `screen_all_str_args`
+  except `free_text_args` (and then `**kwargs` names too), may carry no token of the stdio
+  guard's `DEFAULT_SHELL_METACHARS` or of `extra_metachars`. `installer_args` must be a
+  PEP 440 version or an npm semver; the refusal names what else it found: a URL or a
+  `file:` / `npm:` alias, a path, `git+`, `@`, whitespace, extras or a package name.
+  Values are read by the argument they sit in, nested ones and mapping keys included,
+  positional ones under their parameter's name.
+- `mode="deny"` refuses with `BlockReason.TOOL_ARG_SINK` (`tool_arg_sink`), naming the
+  argument and the token, never the value; `mode="warn"` logs
+  `airlock_tool_arg_sink_warn_only` and runs the call.
+- New preset `tool_arg_sink_defaults` (every string argument, warn mode) and
+  `policy_presets.TOOL_ARG_SINK_CVES`: CVE-2026-117558, -117559, -117560, -117561, -117567,
+  -117568, -117569, -117573 and CVE-2026-59176. Guide:
+  `docs/guide/shell-and-installer-arguments.md`.
+
 ### Security
 
+- **mcp floor 1.30.0 / 2.2.0 for CVE-2026-116684.** From 1.10.0 until 1.30.0 and from
+  2.0.0 until 2.2.0, the MCP Python SDK's bearer authentication accepted a token issued for
+  another resource server (GHSA-w4fh-qvv9-3v23, CVSS 3.1 6.8). The `[mcp]` extra now
+  requires `mcp>=1.30.0,!=2.0.*,!=2.1.*`. CI's install resolves mcp 2.3.0 with FastMCP
+  4.1.4; FastMCP 2.x and 3.x, which need mcp<2.0, resolve to 1.30.0.
 - **A tool's own first argument could pose as the host's run context.** `@Airlock` treated
   any first positional argument with a `context`, `ctx`, `request_context` or
   `session_context` attribute as the framework's run wrapper: it read agent id, roles,
@@ -288,6 +317,8 @@ had not listed (now under Changed), one was a test that could not fail, and one 
   CVE-2026-30615 pages.
 - `tests/cves/test_cve_2026_21520_capsule_indirect_injection.py` gains the NVD link and CVSS
   its preset already cited; `docs/cves/index.md` regenerated.
+- New guide page, Shell and installer arguments (`ToolArgSinkGuard`), with the nine CVEs it
+  answers; the installation and FastMCP pages state the new mcp floor.
 
 ### Benchmarks
 

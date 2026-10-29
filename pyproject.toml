@@ -109,8 +109,12 @@ modal = [
 # 2.x return shape needed fixing; see `_registered_tool_names` in tests/test_mcp.py.
 # The MCP tests pass on 2.14.7, 3.4.7 and 4.0.10, and CI's test job installs this
 # extra, so they run there on the newest release the pin allows.
+# The mcp floor (0.10.28) is CVE-2026-116684 / GHSA-w4fh-qvv9-3v23: from 1.10.0 until
+# 1.30.0 and from 2.0.0 until 2.2.0 the SDK's bearer authentication accepted a token issued
+# for another resource server. FastMCP 2.x and 3.x need mcp<2.0 and resolve to 1.30.0;
+# 4.x needs mcp>=2.0 and resolves past 2.1.
 mcp = [
-    "mcp>=1.0",
+    "mcp>=1.30.0,!=2.0.*,!=2.1.*",
     "fastmcp>=2.0,<5.0",
 ]
 # Claude Agent SDK (renamed from Claude Code SDK in Sept 2025).
