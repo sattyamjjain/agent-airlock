@@ -19,19 +19,19 @@ per-argument angle).
 One factual sentence, reused verbatim across every list:
 
 > **agent-airlock** — in-process least-privilege decorator for AI tool calls;
-> deny-by-default, PII masking, per-CVE presets, 7,892 tests.
+> deny-by-default, PII masking, per-CVE presets, 7,999 tests.
 
 > [!NOTE]
 > **Refresh the test count** to the current README **TEST-BADGE** value at the
 > moment you submit each PR (badge is regenerated every release). As of v0.8.84
-> it is **7,892**.
+> it is **7,999**.
 
 ## PyPI description (already on-message)
 
 The `[project].description` in `pyproject.toml` already reflects this wedge:
 
-> A type-checker and contract layer for AI agent tool calls, deny-by-default,
-> in-process, Pydantic-only. Strict argument validation, ghost-argument stripping,
+> A type-checker and contract layer for AI agent tool calls: in-process,
+> Pydantic-only. Strict argument validation, ghost-argument stripping,
 > and self-healing retries for MCP servers and agent frameworks.
 
 Keep them aligned: if you sharpen one, sharpen the other.

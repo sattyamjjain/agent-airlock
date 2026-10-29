@@ -29,7 +29,7 @@ pip install agent-airlock[mcp]
 ```
 
 This installs:
-- `mcp>=1.0` - MCP SDK
+- `mcp>=1.30.0,!=2.0.*,!=2.1.*` - MCP SDK (the floor is CVE-2026-116684: 1.10.0 to 1.29.x and 2.0 to 2.1 accept a bearer token issued for another resource server)
 - `fastmcp>=2.0,<5.0` - FastMCP framework
 
 The integration lives in `agent_airlock.mcp`: import `secure_tool`, `MCPAirlock` and
