@@ -13,6 +13,7 @@ without it behaves exactly as before:
 | `installer_args` | `frozenset()` | arguments that must be a bare version |
 | `extra_metachars` | `frozenset()` | tokens refused on top of the default set |
 | `mode` | `"deny"` | `"deny"` refuses a finding, `"warn"` logs it and runs the call |
+| `dispatch_args` | `{}` | arguments that name a function the tool calls, each with the names it may hold: see [Dispatch arguments](dispatch-arguments.md) |
 
 Each name collection takes a set, list or tuple of strings and is stored as a `frozenset`.
 A config that could not mean what it says raises when the guard is built: a lone string

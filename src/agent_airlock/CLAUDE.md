@@ -139,7 +139,12 @@ src/agent_airlock/
      parameters: a value is screened by the argument it sits in, not by the nearest key,
      and a positional argument the call cannot bind is screened. The refusal
      (`tool_arg_sink`) names the argument and token, never the value, and a mapping key
-     only by its argument
+     only by its argument. `dispatch_args` (`{argument: allowed names}`, CVE-2026-119050)
+     are read first, top level only, as one `str` holding one ASCII identifier
+     (`fullmatch`, so a trailing newline fails): in the allowlist exactly (a dotted path
+     only so), or with an empty allowlist not matched case-folded by
+     `DEFAULT_DISPATCH_DENY`; the refusal shows the name, never the deny pattern. The field
+     is stored as a hashable read-only `_DispatchNames`, so the frozen guard stays hashable
    - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one
      anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)
