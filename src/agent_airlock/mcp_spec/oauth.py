@@ -26,6 +26,11 @@ Key normative requirements enforced:
   semantically required).
 - **Token audience MUST be validated** by the MCP server. `validate_access_token_audience`
   checks the decoded `aud` claim.
+- **A discovery URL a client follows is screened at parse time.** The issuer, endpoint and
+  authorization-server URLs in `AuthorizationServerMetadata` and
+  `ProtectedResourceMetadata` must be https (plain http only on a loopback host) and may not
+  hold a character a URL must percent-encode or `$(`: CVE-2026-119025's `open` ran such an
+  `authorization_endpoint` through PowerShell.
 
 DPoP is **intentionally not implemented**: per the spec page retrieved
 2026-04-18 it is listed only as a SEP draft and not a normative
@@ -36,15 +41,17 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import secrets
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from .._log import structlog
+from ..safe_types import _SHELL_SUBSTITUTION, _URL_MUST_BE_ENCODED
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oauth")
 
@@ -352,15 +359,99 @@ def canonicalize_resource_uri(uri: str) -> str:
 # OAuth 2.0 metadata documents (RFC 8414 + RFC 9728)
 # =============================================================================
 
+# What a character a URL must percent-encode is called in a refusal, so the message names
+# its class and never repeats the URL.
+_URL_CHARACTER_CLASSES: dict[str, str] = {
+    " ": "a space",
+    '"': "a double quote",
+    "`": "a backtick",
+    "<": "an angle bracket",
+    ">": "an angle bracket",
+    "\\": "a backslash",
+    "^": "a caret",
+    "{": "a curly brace",
+    "}": "a curly brace",
+    "|": "a pipe",
+}
+
+
+def _url_character_class(char: str) -> str:
+    if ord(char) < 0x20 or char == "\x7f":
+        return "a control character"
+    return _URL_CHARACTER_CLASSES.get(char, "a character a URL must percent-encode")
+
+
+def _is_loopback_host(host: str) -> bool:
+    """``localhost``, or an address :mod:`ipaddress` reports as loopback. No DNS lookup."""
+    if host == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        # Read an IPv4-mapped address as the IPv4 address it carries, whichever Python
+        # patch release runs: how IPv6Address reports one has changed across releases.
+        return address.ipv4_mapped.is_loopback
+    return address.is_loopback
+
+
+def _screen_metadata_url(field_name: str, value: str) -> str:
+    """Refuse a discovery-metadata URL a client cannot safely follow (CVE-2026-119025).
+
+    ``open`` 7.2.0 before 11.0.0 passed a URL unescaped to ``powershell -EncodedCommand`` on
+    Windows and WSL, so a malicious MCP server whose discovery metadata put ``$(...)`` in its
+    ``authorization_endpoint`` ran PowerShell on the client that opened it: the MCP
+    Inspector 2.0.0 through 2.11.0 did (GHSA-q978-78c7-phqw). No URL needs these characters
+    unencoded (``safe_types._URL_MUST_BE_ENCODED``, the RFC 3986 set, and
+    ``safe_types._SHELL_SUBSTITUTION``), so the value is refused as it is parsed, before any
+    client follows it. The scheme must be https, or plain http on a loopback host, which
+    local MCP development uses. The message names the field and what it holds, never the
+    URL.
+
+    Raises:
+        ValueError: The value holds one of those characters, is not an absolute http(s) URL
+            with a host, or is plain http on a host that is not loopback.
+    """
+    if _SHELL_SUBSTITUTION in value:
+        raise ValueError(
+            f"{field_name} holds a shell command substitution, '$(', which no URL needs unencoded"
+        )
+    for char in value:
+        if char in _URL_MUST_BE_ENCODED:
+            raise ValueError(
+                f"{field_name} holds {_url_character_class(char)}, which a URL must percent-encode"
+            )
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        raise ValueError(f"{field_name} is not a valid URL") from None
+    if parts.scheme not in ("https", "http"):
+        raise ValueError(f"{field_name} must be an https URL")
+    host = parts.hostname
+    if not host:
+        raise ValueError(f"{field_name} has no host")
+    if parts.scheme == "http" and not _is_loopback_host(host):
+        raise ValueError(
+            f"{field_name} uses plain http on a host that is not loopback; it must be https"
+        )
+    return value
+
 
 class AuthorizationServerMetadata(BaseModel):
     """Subset of RFC 8414 Authorization Server Metadata that MCP cares about.
 
     The spec REQUIRES `code_challenge_methods_supported` to be present
     and include `S256`. We enforce both with a `field_validator`.
+
+    The URLs a client follows, `issuer`, `authorization_endpoint`, `token_endpoint` and
+    `registration_endpoint` when set, are screened as they are parsed
+    (`_screen_metadata_url`, CVE-2026-119025). A validation error's text never repeats the
+    input (`hide_input_in_errors`); `ValidationError.errors()` still carries it unless
+    called with `include_input=False`. Extra fields are kept as given and not screened.
     """
 
-    model_config = ConfigDict(strict=True, extra="allow")
+    model_config = ConfigDict(strict=True, extra="allow", hide_input_in_errors=True)
 
     issuer: str
     authorization_endpoint: str
@@ -368,6 +459,13 @@ class AuthorizationServerMetadata(BaseModel):
     code_challenge_methods_supported: list[str] = Field(..., min_length=1)
     registration_endpoint: str | None = None
     client_id_metadata_document_supported: bool | None = None
+
+    @field_validator("issuer", "authorization_endpoint", "token_endpoint", "registration_endpoint")
+    @classmethod
+    def _screen_urls(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None:
+            return None
+        return _screen_metadata_url(str(info.field_name), value)
 
     @field_validator("code_challenge_methods_supported")
     @classmethod
@@ -384,15 +482,24 @@ class ProtectedResourceMetadata(BaseModel):
     """Subset of RFC 9728 Protected Resource Metadata used for AS discovery.
 
     MCP servers MUST return at least one authorization server in
-    `authorization_servers`.
+    `authorization_servers`. Each one is screened as it is parsed, as the
+    `AuthorizationServerMetadata` URLs are (CVE-2026-119025), and a validation error's text
+    never repeats the input.
     """
 
-    model_config = ConfigDict(strict=True, extra="allow")
+    model_config = ConfigDict(strict=True, extra="allow", hide_input_in_errors=True)
 
     resource: str
     authorization_servers: list[str] = Field(..., min_length=1)
     scopes_supported: list[str] | None = None
     bearer_methods_supported: list[str] | None = None
+
+    @field_validator("authorization_servers")
+    @classmethod
+    def _screen_authorization_servers(cls, value: list[str]) -> list[str]:
+        for index, url in enumerate(value):
+            _screen_metadata_url(f"authorization_servers[{index}]", url)
+        return value
 
 
 # =============================================================================

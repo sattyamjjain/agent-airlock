@@ -122,6 +122,15 @@ preset, and
   `package`, `npm:` versions and dot-segment URL spellings. `McpSubprocessArgInjectionGuard` is
   not a walker: it reads `command` / `argv[0]` and env names only, so nested `args` never
   changes its verdict.
+- **Discovery URLs are screened when parsed.** `AuthorizationServerMetadata` (`issuer`,
+  the authorization, token and registration endpoints) and
+  `ProtectedResourceMetadata.authorization_servers` refuse a URL holding a
+  `safe_types._URL_MUST_BE_ENCODED` character or `_SHELL_SUBSTITUTION` (imported, never
+  copied), and any scheme but https, plain http only on `localhost` or a loopback address
+  (no DNS lookup): CVE-2026-119025's `open` ran such an `authorization_endpoint` through
+  PowerShell. Both models set `hide_input_in_errors`, so the error text names the field and
+  the character's class, never the URL; `errors()` still carries the input. Extra fields
+  (`extra="allow"`) are not screened.
 - **Report a field, a variable name or a digest, never an `env` value.** `audit_config_diff`
   compares the values of code-loading variables and `McpConfigPinSet` hashes them, yet a
   diff refusal says only that `env` changed (`MCPCommandMutationDetected.fields`), a pin
@@ -181,9 +190,11 @@ import anywhere here fails the job.
 
 **Internal:** `.._log` and `..exceptions` in most modules, `..observability` in a few; every
 other parent-package import (`..policy`, `..attest.receipt`, `..scan.schema`,
-`..ssrf_egress_guard`, `..validator`, `..cost_tracking`, `..sanitizer`, `..audit`) is used
-by one or two modules, several of them function-local or `TYPE_CHECKING`-only
-(`grep -n 'from \.\.' src/agent_airlock/mcp_spec/*.py` recounts them).
+`..ssrf_egress_guard`, `..validator`, `..cost_tracking`, `..sanitizer`, `..audit`,
+`..safe_types`) is used by one or two modules, several of them function-local or
+`TYPE_CHECKING`-only (`grep -n 'from \.\.' src/agent_airlock/mcp_spec/*.py` recounts them).
+`oauth.py` imports `safe_types` at module level for two private constants; `safe_types`
+imports nothing from this package, so that cannot become a cycle.
 
 **Nothing here imports `..policy_presets`**, at module level or inside a function — the
 `from agent_airlock.policy_presets import ..._defaults` lines in docstrings are `Usage::`

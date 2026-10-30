@@ -258,6 +258,151 @@ class TestProtectedResourceMetadata:
             )
 
 
+class TestMetadataUrlScreen:
+    """CVE-2026-119025: a discovery URL with ``$(...)`` ran PowerShell on the client.
+
+    ``open`` 7.2.0 before 11.0.0 handed a URL unescaped to ``powershell -EncodedCommand`` on
+    Windows and WSL, and a malicious MCP server controls the ``authorization_endpoint`` its
+    discovery metadata names. The URLs a client follows are refused at parse time when they
+    hold a character no URL needs unencoded, or are not https (plain http on loopback only).
+
+    Primary source: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119025
+    """
+
+    VALID: dict[str, object] = {
+        "issuer": "https://auth.example.com",
+        "authorization_endpoint": "https://auth.example.com/authorize",
+        "token_endpoint": "https://auth.example.com/token",
+        "code_challenge_methods_supported": ["S256"],
+    }
+
+    def _refusal(self, **fields: object) -> str:
+        with pytest.raises(ValidationError) as caught:
+            AuthorizationServerMetadata.model_validate({**self.VALID, **fields})
+        return str(caught.value)
+
+    def test_shell_substitution_in_the_authorization_endpoint_is_refused(self) -> None:
+        url = "https://as.example/authorize/$(calc)"
+
+        text = self._refusal(authorization_endpoint=url)
+
+        assert "authorization_endpoint holds a shell command substitution" in text
+        assert url not in text  # never the whole URL
+        assert "$(calc)" not in text
+        assert "as.example" not in text
+
+    @pytest.mark.parametrize(
+        ("char", "named"),
+        [
+            ("`", "a backtick"),
+            (" ", "a space"),
+            ('"', "a double quote"),
+            ("\r", "a control character"),
+            ("\n", "a control character"),
+            ("|", "a pipe"),
+            ("^", "a caret"),
+            ("<", "an angle bracket"),
+            ("\\", "a backslash"),
+            ("{", "a curly brace"),
+        ],
+    )
+    def test_a_character_a_url_must_percent_encode_is_refused_by_its_class(
+        self, char: str, named: str
+    ) -> None:
+        url = f"https://as.example/authorize{char}calc"
+
+        text = self._refusal(authorization_endpoint=url)
+
+        assert f"authorization_endpoint holds {named}, which a URL must percent-encode" in text
+        assert url not in text
+
+    @pytest.mark.parametrize(
+        "field", ["issuer", "authorization_endpoint", "token_endpoint", "registration_endpoint"]
+    )
+    def test_every_url_a_client_follows_is_screened(self, field: str) -> None:
+        text = self._refusal(**{field: "https://as.example/x`calc`"})
+        assert f"{field} holds a backtick" in text
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://localhost:3000/authorize",
+            "http://LOCALHOST/authorize",
+            "http://127.0.0.1:8080/authorize",
+            "http://127.8.0.1/authorize",
+            "http://[::1]:8080/authorize",
+            "http://[::ffff:127.0.0.1]/authorize",
+        ],
+    )
+    def test_plain_http_on_a_loopback_host_is_accepted(self, url: str) -> None:
+        metadata = AuthorizationServerMetadata.model_validate(
+            {**self.VALID, "authorization_endpoint": url}
+        )
+        assert metadata.authorization_endpoint == url
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://as.example/authorize",
+            "http://localhost.as.example/authorize",
+            "http://localhost@as.example/authorize",
+            "http://10.0.0.1/authorize",
+        ],
+    )
+    def test_plain_http_on_any_other_host_is_refused(self, url: str) -> None:
+        text = self._refusal(authorization_endpoint=url)
+        assert "plain http on a host that is not loopback" in text
+
+    @pytest.mark.parametrize(
+        ("url", "reason"),
+        [
+            ("ftp://as.example/authorize", "must be an https URL"),
+            ("javascript:alert(1)", "must be an https URL"),
+            ("/authorize", "must be an https URL"),
+            ("https:///authorize", "has no host"),
+            ("https://[::1/authorize", "is not a valid URL"),
+        ],
+    )
+    def test_anything_but_an_absolute_http_url_with_a_host_is_refused(
+        self, url: str, reason: str
+    ) -> None:
+        assert f"authorization_endpoint {reason}" in self._refusal(authorization_endpoint=url)
+
+    def test_an_unset_registration_endpoint_is_not_screened(self) -> None:
+        metadata = AuthorizationServerMetadata.model_validate(
+            {**self.VALID, "registration_endpoint": None}
+        )
+        assert metadata.registration_endpoint is None
+
+    def test_metadata_parsed_from_a_discovery_response_is_screened(self) -> None:
+        body = (
+            '{"issuer": "https://as.example", '
+            '"authorization_endpoint": "https://as.example/authorize?x=$(calc)", '
+            '"token_endpoint": "https://as.example/token", '
+            '"code_challenge_methods_supported": ["S256"]}'
+        )
+        with pytest.raises(ValidationError, match="shell command substitution"):
+            AuthorizationServerMetadata.model_validate_json(body)
+
+    def test_an_authorization_servers_list_with_one_bad_item_is_refused(self) -> None:
+        bad = "https://as.example/$(calc)"
+        with pytest.raises(ValidationError) as caught:
+            ProtectedResourceMetadata(
+                resource="https://mcp.example.com/mcp",
+                authorization_servers=["https://auth.example.com", bad],
+            )
+        text = str(caught.value)
+        assert "authorization_servers[1] holds a shell command substitution" in text
+        assert bad not in text
+
+    def test_plain_http_authorization_server_is_refused_off_loopback(self) -> None:
+        with pytest.raises(ValidationError, match=r"authorization_servers\[0\] uses plain http"):
+            ProtectedResourceMetadata(
+                resource="https://mcp.example.com/mcp",
+                authorization_servers=["http://auth.example.com"],
+            )
+
+
 # =============================================================================
 # Token audience validation
 # =============================================================================
