@@ -4,19 +4,24 @@ Nine MCP server CVEs published on 27 and 28 October 2026 put a model-written str
 of an ordinary tool into a shell or a package installer on the server. Until 0.10.28 no gate
 on the ``@Airlock`` call path read such an argument for shell syntax: a guarded tool whose
 ``repo: str`` received ``"x; id"`` passed every one. Step 2.75 now does, when the policy
-carries a :class:`ToolArgSinkGuard`.
+carries a :class:`ToolArgSinkGuard`. Its ``dispatch_args`` (``TestDispatchArgs``) read an
+argument that names a function the tool calls: CVE-2026-119050 passed ``read_pickle`` to
+``getattr(pandas, ...)``.
 
 Every value here is a harmless string and no test runs a shell: a guarded tool only records
-that it ran.
+that it ran, and nothing is unpickled or called by name.
 
 Primary sources:
   https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=2026-10-26T00:00:00.000&pubEndDate=2026-10-29T23:59:59.999
   https://github.com/jordanburke/functype/security/advisories/GHSA-wcjj-9m6g-2fr2
+  https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119050
 """
 
 from __future__ import annotations
 
 import asyncio
+import copy
+import dataclasses
 import json
 from collections import UserString
 from pathlib import PurePosixPath
@@ -39,6 +44,7 @@ from agent_airlock.mcp_spec import stdio_command_injection_guard as stdio_module
 from agent_airlock.policy_presets import (
     TOOL_ARG_SINK_CVES,
     list_active,
+    reflection_sink_defaults,
     tool_arg_sink_defaults,
 )
 from agent_airlock.policy_presets import __all__ as presets_all
@@ -689,3 +695,394 @@ class TestTheOctober2026Cves:
             "CVE-2026-117573",
             "CVE-2026-59176",
         )
+
+
+def _pandas_tool(ran: list[str], **guard: Any) -> Any:
+    """A stub of the tool shape CVE-2026-119050 exploited: it would call the named function."""
+
+    @Airlock(policy=_policy(**guard))
+    def pandas_tool(operation: str, args: dict) -> str:
+        ran.append(operation)
+        return RAN
+
+    return pandas_tool
+
+
+class TestDispatchArgs:
+    """CVE-2026-119050: Agno's PandasTools passed a model-chosen name to ``getattr()``.
+
+    The value that reached ``getattr(pandas, ...)`` was a plain identifier, ``read_pickle``:
+    no shell syntax, and no ``eval(`` text for an eval screen to see. ``dispatch_args``
+    reads the argument as the name of the function the tool will call.
+    """
+
+    def test_a_dangerous_name_is_refused_before_the_tool_runs(self) -> None:
+        ran: list[str] = []
+        tool = _pandas_tool(ran, dispatch_args={"operation": ()})
+
+        result = _refused(tool(operation="read_pickle", args={"filepath_or_buffer": "x.pkl"}))
+
+        assert ran == []
+        assert result["metadata"]["verdict"] == "deny_dispatch_name"
+        assert result["metadata"]["argument"] == "operation"
+        assert result["metadata"]["token"] == "read_pickle"
+        assert tool(operation="head", args={"n": 5}) == RAN
+        assert ran == ["head"]
+
+    def test_an_allowlist_admits_its_names_and_nothing_else(self) -> None:
+        ran: list[str] = []
+        tool = _pandas_tool(ran, dispatch_args={"operation": {"head", "describe"}})
+
+        assert tool(operation="describe", args={}) == RAN
+        result = _refused(tool(operation="tail", args={}))
+
+        assert ran == ["describe"]
+        assert result["metadata"]["token"] == "tail"
+        assert result["fix_hints"][0] == (
+            "Choose one of the operations this tool accepts: describe, head"
+        )
+        assert "add it to dispatch_args['operation']" in result["fix_hints"][1]
+
+    @pytest.mark.parametrize(
+        "value",
+        ["__class__", "_private", "pandas.read_pickle", "READ_PICKLE", "to_pickle", 42, None],
+    )
+    def test_without_an_allowlist_these_are_refused(self, value: Any) -> None:
+        ran: list[str] = []
+        tool = _pandas_tool(ran, dispatch_args={"operation": ()})
+
+        result = _refused(tool(operation=value, args={}))
+
+        assert result["metadata"]["verdict"] == "deny_dispatch_name"
+        assert ran == []
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "read_csv",
+            "read_pickle",
+            "to_csv",
+            "to_dict",
+            "unpickle_frame",
+            "load",
+            "loads",
+            "load_npz",
+            "eval",
+            "exec",
+            "compile",
+            "system",
+            "popen",
+            "spawnv",
+            "open",
+            "import_module",
+            "__import__",
+            "getattr",
+            "setattr",
+            "delattr",
+            "globals",
+            "locals",
+            "vars",
+            "breakpoint",
+            "__reduce__",
+            "Read_Csv",
+        ],
+    )
+    def test_every_default_deny_family_is_refused(self, name: str) -> None:
+        result = _refused(
+            _pandas_tool([], dispatch_args={"operation": ()})(operation=name, args={})
+        )
+        assert result["metadata"]["token"] == name
+
+    @pytest.mark.parametrize("name", ["head", "tail", "describe", "info", "mean", "dropna", "Head"])
+    def test_an_identifier_the_denylist_does_not_match_passes(self, name: str) -> None:
+        assert _pandas_tool([], dispatch_args={"operation": ()})(operation=name, args={}) == RAN
+
+    @pytest.mark.parametrize(
+        ("value", "token"),
+        [
+            ("head\n", "\n"),
+            ("head()", "("),
+            ("x; id", ";"),
+            ("head describe", " "),
+            ("1head", "1"),
+            ("café", "é"),
+            ("", None),
+        ],
+    )
+    def test_a_value_that_is_not_one_name_is_refused_by_its_character(
+        self, value: str, token: str | None
+    ) -> None:
+        result = _refused(
+            _pandas_tool([], dispatch_args={"operation": ()})(operation=value, args={})
+        )
+
+        assert result["metadata"]["token"] == token
+        assert "is not a bare name" in result["error"]
+
+    @pytest.mark.parametrize("value", [b"head", ["head"], 3.5])
+    def test_a_value_that_is_not_one_string_is_refused(self, value: Any) -> None:
+        result = _refused(
+            _pandas_tool([], dispatch_args={"operation": ()})(operation=value, args={})
+        )
+        assert "is not a string" in result["error"]
+        assert result["metadata"]["token"] is None
+
+    @pytest.mark.parametrize("value", ["frame.head", "os.path.join"])
+    def test_a_dotted_path_needs_an_allowlist_even_when_no_deny_pattern_matches(
+        self, value: str
+    ) -> None:
+        result = _refused(
+            _pandas_tool([], dispatch_args={"operation": ()})(operation=value, args={})
+        )
+
+        assert "names a dotted path" in result["error"]
+        assert result["metadata"]["token"] == value
+
+    def test_an_allowlisted_dotted_path_passes_exactly(self) -> None:
+        ran: list[str] = []
+        tool = _pandas_tool(ran, dispatch_args={"operation": {"pandas.read_csv"}})
+
+        assert tool(operation="pandas.read_csv", args={}) == RAN
+        _refused(tool(operation="pandas.read_pickle", args={}))
+        _refused(tool(operation="pandas.read_csv ", args={}))
+        assert ran == ["pandas.read_csv"]
+
+    def test_an_allowlist_matches_whole_names_by_case(self) -> None:
+        tool = _pandas_tool([], dispatch_args={"operation": {"head"}})
+        _refused(tool(operation="Head", args={}))
+        _refused(tool(operation="head\n", args={}))
+
+    def test_an_allowlist_can_admit_a_name_the_default_denylist_refuses(self) -> None:
+        # The operator's list is the contract: `to_dict` is a converter `to_*` refuses.
+        assert (
+            _pandas_tool([], dispatch_args={"operation": {"to_dict"}})(operation="to_dict", args={})
+            == RAN
+        )
+
+    def test_a_str_subclass_cannot_claim_a_name_it_does_not_hold(self) -> None:
+        class Sly(str):
+            def __eq__(self, other: object) -> bool:
+                return True
+
+            def __hash__(self) -> int:
+                return hash("head")
+
+        ran: list[str] = []
+        tool = _pandas_tool(ran, dispatch_args={"operation": {"head"}})
+
+        result = _refused(tool(operation=Sly("read_pickle"), args={}))
+
+        assert result["metadata"]["token"] == "read_pickle"
+        assert ran == []
+
+    def test_a_positional_argument_is_read_under_its_parameter_name(self) -> None:
+        ran: list[str] = []
+        result = _refused(_pandas_tool(ran, dispatch_args={"operation": ()})("read_pickle", {}))
+
+        assert result["metadata"]["argument"] == "operation"
+        assert ran == []
+
+    def test_warn_logs_the_refused_name_and_runs_the_call(self, events: _Events) -> None:
+        ran: list[str] = []
+        tool = _pandas_tool(ran, dispatch_args={"operation": ()}, mode="warn")
+
+        assert tool(operation="read_pickle", args={}) == RAN
+
+        assert ran == ["read_pickle"]
+        [warned] = events.named("airlock_tool_arg_sink_warn_only")
+        assert warned == {
+            "function": "pandas_tool",
+            "verdict": "deny_dispatch_name",
+            "argument": "operation",
+            "token": "read_pickle",
+        }
+        assert events.named("airlock_tool_arg_sink_block") == []
+
+    def test_dispatch_args_alone_screens_nothing_else(self) -> None:
+        guard = ToolArgSinkGuard(dispatch_args={"operation": ()})
+        assert not (guard.shell_args or guard.installer_args or guard.screen_all_str_args)
+
+        tool = _pandas_tool([], dispatch_args={"operation": ()})
+        assert tool(operation="head", args={"sep": "x; id"}) == RAN
+
+    def test_it_composes_with_shell_screening(self) -> None:
+        tool = _pandas_tool([], dispatch_args={"operation": ()}, screen_all_str_args=True)
+
+        assert tool(operation="head", args={"n": "5"}) == RAN
+        result = _refused(tool(operation="head", args={"sep": "x; id"}))
+        assert result["metadata"]["verdict"] == "deny_shell_metachar"
+        assert result["metadata"]["argument"] == "args.sep"
+
+    def test_an_argument_the_call_does_not_pass_is_not_read(self) -> None:
+        @Airlock(policy=_policy(dispatch_args={"operation": ()}))
+        def summarise(operation: str = "describe") -> str:
+            return RAN
+
+        assert summarise() == RAN
+
+    def test_a_name_nested_in_another_argument_is_not_read(self) -> None:
+        # Documented scope: a dispatch argument is a parameter. A name inside another
+        # argument is that argument's content; give the name its own parameter.
+        tool = _pandas_tool([], dispatch_args={"operation": ()})
+        assert tool(operation="head", args={"operation": "read_pickle"}) == RAN
+
+    def test_the_default_denylist_cannot_see_what_an_admitted_method_does(self) -> None:
+        # Documented scope: DataFrame.query evaluates an expression string and is admitted.
+        # An allowlist of the operations a tool supports is the control.
+        tool = _pandas_tool([], dispatch_args={"operation": ()})
+        assert tool(operation="query", args={"expr": "a > 1"}) == RAN
+
+    def test_the_refusal_withholds_the_deny_pattern_and_cuts_a_long_name(self) -> None:
+        tool = _pandas_tool([], dispatch_args={"operation": ()})
+
+        refused = json.dumps(_refused(tool(operation="read_pickle", args={})))
+        assert "*pickle*" not in refused
+        assert "read_*" not in refused
+
+        long_name = "_" + "a" * 200
+        result = _refused(tool(operation=long_name, args={}))
+        assert long_name not in json.dumps(result)
+        assert result["metadata"]["token"] == long_name[:64] + "..."
+
+    def test_the_preset_warns_by_default(self, events: _Events) -> None:
+        preset = reflection_sink_defaults(dispatch_args={"operation": ()})
+        assert preset["default_action"] == "warn"
+        ran: list[str] = []
+
+        @Airlock(policy=preset["policy"])
+        def pandas_tool(operation: str, args: dict) -> str:
+            ran.append(operation)
+            return RAN
+
+        assert pandas_tool(operation="read_pickle", args={}) == RAN
+        assert ran == ["read_pickle"]
+        [warned] = events.named("airlock_tool_arg_sink_warn_only")
+        assert warned["verdict"] == "deny_dispatch_name"
+
+    def test_the_preset_in_deny_mode_refuses(self) -> None:
+        preset = reflection_sink_defaults(dispatch_args={"operation": ()}, mode="deny")
+        ran: list[str] = []
+
+        @Airlock(policy=preset["policy"])
+        def pandas_tool(operation: str, args: dict) -> str:
+            ran.append(operation)
+            return RAN
+
+        _refused(pandas_tool(operation="read_pickle", args={}))
+        assert pandas_tool(operation="head", args={}) == RAN
+        assert ran == ["head"]
+
+    def test_the_preset_names_its_cve_and_is_registered(self) -> None:
+        import agent_airlock
+
+        preset = reflection_sink_defaults(dispatch_args={"operation": ("head",)})
+
+        assert preset["preset_id"] == "reflection_sink"
+        assert preset["cves"] == ("CVE-2026-119050",)
+        assert preset["cwe"] == ("CWE-470",)
+        assert preset["owasp"] == "MCP05"
+        assert preset["advisory_url"] == (
+            "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119050"
+        )
+        assert preset["policy"].tool_arg_sink_guard is preset["guard"]
+        assert "reflection_sink_defaults" in {meta.factory_name for meta in list_active()}
+        assert "reflection_sink_defaults" in presets_all
+        # Re-exported from the package root only if its sibling preset is.
+        assert hasattr(agent_airlock, "reflection_sink_defaults") == hasattr(
+            agent_airlock, "tool_arg_sink_defaults"
+        )
+
+
+class TestDispatchArgsConstruction:
+    def test_stored_as_a_read_only_mapping_of_frozensets(self) -> None:
+        source: dict[str, list[str]] = {"operation": ["head", "describe"]}
+        guard = ToolArgSinkGuard(dispatch_args=source)
+        source["operation"].append("read_pickle")
+        source["extra"] = []
+
+        assert dict(guard.dispatch_args) == {"operation": frozenset({"head", "describe"})}
+        with pytest.raises(TypeError):
+            guard.dispatch_args["operation"] = frozenset()  # type: ignore[index]
+
+    def test_the_guard_stays_hashable_and_compares_by_value(self) -> None:
+        listed = ToolArgSinkGuard(dispatch_args={"operation": ["head"]})
+        tupled = ToolArgSinkGuard(dispatch_args={"operation": ("head",)})
+
+        assert listed == tupled
+        assert hash(listed) == hash(tupled)
+        assert len({listed, tupled}) == 1
+        assert copy.deepcopy(listed) == listed
+        assert dataclasses.replace(listed, mode="warn").dispatch_args == listed.dispatch_args
+
+    @pytest.mark.parametrize(
+        ("kwargs", "error", "match"),
+        [
+            ({"dispatch_args": {"operation"}}, TypeError, "dispatch_args maps each argument"),
+            ({"dispatch_args": ["operation"]}, TypeError, "dispatch_args maps each argument"),
+            ({"dispatch_args": {"operation": "head"}}, TypeError, "collection of strings, not"),
+            ({"dispatch_args": {"operation": None}}, TypeError, "must be a collection"),
+            ({"dispatch_args": {"operation": [1]}}, TypeError, "must hold strings"),
+            ({"dispatch_args": {1: ()}}, TypeError, "keys are argument names"),
+            ({"dispatch_args": {"": ()}}, ValueError, "empty argument name"),
+            ({"dispatch_args": {"operation": {""}}}, ValueError, "empty string"),
+            ({"dispatch_args": {"operation": {"head; id"}}}, ValueError, "not an identifier"),
+            ({"dispatch_args": {"operation": {"pandas..read"}}}, ValueError, "not an identifier"),
+            ({"dispatch_args": {"operation": {"1head"}}}, ValueError, "not an identifier"),
+            (
+                {
+                    "dispatch_args": {"operation": ()},
+                    "screen_all_str_args": True,
+                    "free_text_args": {"operation"},
+                },
+                ValueError,
+                "named in both dispatch_args and free_text_args",
+            ),
+            (
+                {"dispatch_args": {"version": ()}, "installer_args": {"version"}},
+                ValueError,
+                "named in both dispatch_args and installer_args",
+            ),
+            ({"dispatch_args": {}}, ValueError, "screens nothing"),
+        ],
+    )
+    def test_a_config_that_could_not_mean_what_it_says_is_refused(
+        self, kwargs: dict[str, Any], error: type[Exception], match: str
+    ) -> None:
+        with pytest.raises(error, match=match):
+            ToolArgSinkGuard(**kwargs)
+
+    def test_the_preset_refuses_what_the_guard_refuses(self) -> None:
+        with pytest.raises(ValueError, match="screens nothing"):
+            reflection_sink_defaults(dispatch_args={})
+        with pytest.raises(TypeError, match="collection of strings, not"):
+            reflection_sink_defaults(dispatch_args={"operation": "head"})
+
+    def test_the_default_denylist_is_the_documented_set(self) -> None:
+        documented = frozenset(
+            {
+                "_*",
+                "*pickle*",
+                "read_*",
+                "to_*",
+                "load",
+                "loads",
+                "load_*",
+                "eval",
+                "exec",
+                "compile",
+                "system",
+                "popen",
+                "spawn*",
+                "open",
+                "import_module",
+                "__import__",
+                "getattr",
+                "setattr",
+                "delattr",
+                "globals",
+                "locals",
+                "vars",
+                "breakpoint",
+            }
+        )
+        assert documented == sink_module.DEFAULT_DISPATCH_DENY

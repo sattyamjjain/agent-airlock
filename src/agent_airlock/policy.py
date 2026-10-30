@@ -465,8 +465,10 @@ class SecurityPolicy:
     # seam runs the guard as Step 2.75, right after the deserialization guard: named (or
     # all) string arguments may carry no shell metacharacters, and installer arguments
     # must be a bare version. Nine MCP server CVEs of 27-28 Oct 2026 spliced such an
-    # argument into a shell or `pnpm add`. OFF by default (None preserves prior behavior
-    # exactly). See :class:`agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
+    # argument into a shell or `pnpm add`. Its dispatch arguments must name a function the
+    # tool may call (CVE-2026-119050: a model-chosen name reached `getattr`). OFF by
+    # default (None preserves prior behavior exactly). See
+    # :class:`agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
     tool_arg_sink_guard: ToolArgSinkGuard | None = None
     # V0.8.24 trace-redaction + per-tenant watermark policy (RedAct-style).
     # When set and ``enabled``, traces/receipts emitted to a NON-LOCAL sink

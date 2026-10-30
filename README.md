@@ -127,6 +127,14 @@ not a bare PEP 440 or npm semver version: a URL, a path, `file:` or `npm:`, `pkg
 `policy_presets.tool_arg_sink_defaults()` does that in warn mode first. Details:
 [Shell and installer arguments](docs/guide/shell-and-installer-arguments.md).
 
+`dispatch_args` covers an argument that names a function the tool then calls. Agno's
+PandasTools passed `read_pickle` to `getattr(pandas, ...)` that way
+([CVE-2026-119050](https://nvd.nist.gov/vuln/detail/CVE-2026-119050)): no shell syntax for the
+check above to see. `ToolArgSinkGuard(dispatch_args={"operation": ("head", "describe")})`
+admits those names only; an empty allowlist refuses private names, `*pickle*`, `read_*`,
+`to_*`, `eval`, `exec` and their like. Preset: `policy_presets.reflection_sink_defaults()`.
+Details: [Dispatch arguments](docs/guide/dispatch-arguments.md).
+
 Full reference on the [documentation site](https://sattyamjjain.github.io/agent-airlock/).
 
 ## Benchmarks

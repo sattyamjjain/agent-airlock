@@ -23,11 +23,19 @@ the call reaches a server that builds a command line:
   plus ``extra_metachars``.
 - ``installer_args`` must be a bare version: a PEP 440 version (:data:`PEP440_VERSION`) or
   an npm semver (:data:`NPM_SEMVER`).
+- ``dispatch_args`` names arguments that select a function by name, as Agno's PandasTools
+  passed ``create_using_function`` to ``getattr(pandas, ...)`` and ``operation`` to
+  ``getattr(dataframe, ...)`` (CVE-2026-119050, CWE-470): ``read_pickle`` is a plain
+  identifier, with nothing in it for the checks above. Such an argument must hold one
+  identifier its allowlist names or, with an empty allowlist, one that
+  :data:`DEFAULT_DISPATCH_DENY` does not match. A dotted path passes only when its
+  allowlist names it.
 
 The names are the tool's parameter names (or ``**kwargs`` keys); a positional argument is
-read under its parameter's name. Everything an argument holds is screened with it: strings
-nested in lists, tuples, sets and mappings (keys too) and in the tool's own models, through
-the walk the other value gates use (:mod:`agent_airlock._arg_walk`).
+read under its parameter's name. Everything a shell or installer argument holds is screened
+with it: strings nested in lists, tuples, sets and mappings (keys too) and in the tool's own
+models, through the walk the other value gates use (:mod:`agent_airlock._arg_walk`). A
+dispatch argument is read as itself, one name.
 
 Honest scope
 ------------
@@ -43,18 +51,27 @@ Honest scope
 - A value starting with ``-`` (option injection, CWE-88) is not shell syntax and passes.
 - Only text is read: strings, bytes, and path and URL objects. A number, or an object the
   host passed, carries no text the model wrote.
+- A dispatch argument is read at the top level only: a name inside another argument (a
+  model's field, a mapping's value) is not, and one argument holds one name, so a list of
+  names is refused. :data:`DEFAULT_DISPATCH_DENY` is a backstop: it cannot see what an
+  admitted method does with its parameters (``DataFrame.query``, which it admits,
+  evaluates an expression string). An allowlist of the names a tool supports is the
+  control.
 
 Primary sources
 ---------------
 https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=2026-10-26T00:00:00.000&pubEndDate=2026-10-29T23:59:59.999
 https://github.com/jordanburke/functype/security/advisories/GHSA-wcjj-9m6g-2fr2
+https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119050
+https://github.com/agno-agi/agno/issues/8699
 """
 
 from __future__ import annotations
 
 import enum
+import fnmatch
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -131,6 +148,50 @@ _DRIVE = re.compile(r"[A-Za-z]:[\\/]", re.ASCII)
 _PACKAGE_NAME = re.compile(r"[A-Za-z]", re.ASCII)
 _WHITESPACE = re.compile(r"\s")
 
+#: The names a ``dispatch_args`` argument may not hold when its allowlist is empty, matched
+#: against the case-folded name with :func:`fnmatch.fnmatchcase`: private and dunder names,
+#: the pickle family, file readers and writers (pandas' ``read_*`` and ``to_*``), loaders,
+#: code evaluation, process spawning, imports and attribute access. A backstop for a tool
+#: whose names were never listed, not a contract (CVE-2026-119050).
+DEFAULT_DISPATCH_DENY: frozenset[str] = frozenset(
+    {
+        "_*",
+        "*pickle*",
+        "read_*",
+        "to_*",
+        "load",
+        "loads",
+        "load_*",
+        "eval",
+        "exec",
+        "compile",
+        "system",
+        "popen",
+        "spawn*",
+        "open",
+        "import_module",
+        "__import__",
+        "getattr",
+        "setattr",
+        "delattr",
+        "globals",
+        "locals",
+        "vars",
+        "breakpoint",
+    }
+)
+
+# A dispatch name is one ASCII identifier, and an allowlist entry an identifier or a dotted
+# path of them. Matched with ``fullmatch``: a ``$`` anchor also matches before a trailing
+# newline, so ``re.match(r"^[A-Za-z_]\w*$", "head\n")`` succeeds.
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*", re.ASCII)
+_DOTTED_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", re.ASCII)
+_NOT_A_NAME_CHARACTER = re.compile(r"[^A-Za-z0-9_]", re.ASCII)
+# A refused name is shown, so a retry knows what was refused; one longer than this is cut.
+_SHOWN_NAME_LENGTH = 64
+# How many allowed names a refusal lists before it says how many more there are.
+_LISTED_NAMES = 20
+
 
 class ToolArgSinkVerdict(str, enum.Enum):
     """Stable reason codes for :class:`ToolArgSinkDecision`."""
@@ -138,6 +199,7 @@ class ToolArgSinkVerdict(str, enum.Enum):
     ALLOW = "allow"
     DENY_SHELL_METACHAR = "deny_shell_metachar"
     DENY_NOT_A_VERSION = "deny_not_a_version"
+    DENY_DISPATCH_NAME = "deny_dispatch_name"
     DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
@@ -152,8 +214,10 @@ class ToolArgSinkDecision:
         detail: What was found and where. It names the argument and the offending token,
             never the whole value.
         argument: Where the finding sits: ``"repo"``, ``"paths[1]"``, ``"config.target"``.
-        token: The text that tripped it: a metacharacter (``";"``, ``"$("``), or for an
-            installer argument the scheme, separator or character that is not a version.
+        token: The text that tripped it: a metacharacter (``";"``, ``"$("``); for an
+            installer argument the scheme, separator or character that is not a version;
+            for a dispatch argument the refused name, or the character that keeps it from
+            being one.
         fix_hints: What the caller can send instead.
     """
 
@@ -172,11 +236,12 @@ _ALLOW = ToolArgSinkDecision(
 
 @dataclass(frozen=True)
 class ToolArgSinkGuard:
-    """Refuse shell syntax in string arguments and anything but a version in installer ones.
+    """Refuse shell syntax, anything but a version, and callable names a tool must not call.
 
     Set it on :attr:`agent_airlock.SecurityPolicy.tool_arg_sink_guard`; ``@Airlock`` runs it
     as step 2.75, after the deserialization guard. Name the arguments a server splices into a
-    command line, or screen every string argument and name the free-text ones instead::
+    command line, or screen every string argument and name the free-text ones instead, and
+    name the arguments a tool turns into a function call::
 
         SecurityPolicy(tool_arg_sink_guard=ToolArgSinkGuard(shell_args={"repo"}))
         SecurityPolicy(
@@ -184,6 +249,11 @@ class ToolArgSinkGuard:
                 screen_all_str_args=True,
                 free_text_args={"message"},
                 installer_args={"version"},
+            )
+        )
+        SecurityPolicy(
+            tool_arg_sink_guard=ToolArgSinkGuard(
+                dispatch_args={"operation": ("head", "describe")},
             )
         )
 
@@ -202,15 +272,24 @@ class ToolArgSinkGuard:
             redirection.
         mode: ``"deny"`` refuses a call with a finding (block reason ``tool_arg_sink``);
             ``"warn"`` logs it and runs the call.
+        dispatch_args: Arguments that name a function the tool calls, each mapped to the
+            names it may hold: ``{"operation": ("head", "describe")}``. The argument must
+            hold one identifier (a dotted path only if listed), in its allowlist exactly;
+            an empty allowlist admits any identifier :data:`DEFAULT_DISPATCH_DENY` does not
+            match. A non-string value, ``None`` included, is refused; an argument the call
+            does not pass is not read. Stored as a read-only mapping of frozensets.
 
     Each name set accepts any collection of strings and is stored as a ``frozenset``.
 
     Raises:
-        TypeError: A name set is a single string or holds a non-string, or
-            ``screen_all_str_args`` is not a bool.
+        TypeError: A name set, or a ``dispatch_args`` allowlist, is a single string or holds
+            a non-string; ``dispatch_args`` is not a mapping or has a key that is not a
+            string; or ``screen_all_str_args`` is not a bool.
         ValueError: ``mode`` is not ``"deny"`` or ``"warn"``; a name or metacharacter is
-            empty; an argument is named both free text and screened; ``free_text_args`` is
-            set without ``screen_all_str_args``; or the guard screens nothing.
+            empty; an argument is named both free text and screened, or both a dispatch
+            argument and free text or an installer argument; an allowlist entry is not an
+            identifier or a dotted path of them; ``free_text_args`` is set without
+            ``screen_all_str_args``; or the guard screens nothing.
     """
 
     shell_args: frozenset[str] = frozenset()
@@ -219,11 +298,13 @@ class ToolArgSinkGuard:
     installer_args: frozenset[str] = frozenset()
     extra_metachars: frozenset[str] = frozenset()
     mode: ToolArgSinkMode = "deny"
+    dispatch_args: Mapping[str, Collection[str]] = field(default_factory=dict)
     _ordered: tuple[str, ...] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in ("shell_args", "free_text_args", "installer_args", "extra_metachars"):
             object.__setattr__(self, name, _string_set(getattr(self, name), name))
+        object.__setattr__(self, "dispatch_args", _dispatch_names(self.dispatch_args))
         if not isinstance(self.screen_all_str_args, bool):
             raise TypeError(
                 f"screen_all_str_args must be a bool; got {type(self.screen_all_str_args).__name__}"
@@ -234,15 +315,22 @@ class ToolArgSinkGuard:
             both = sorted(self.free_text_args & getattr(self, screened))
             if both:
                 raise ValueError(f"{both} named in both free_text_args and {screened}")
+        dispatch = frozenset(self.dispatch_args)
+        for other in ("free_text_args", "installer_args"):
+            both = sorted(dispatch & getattr(self, other))
+            if both:
+                raise ValueError(f"{both} named in both dispatch_args and {other}")
         if self.free_text_args and not self.screen_all_str_args:
             raise ValueError(
                 "free_text_args only exempts arguments from screen_all_str_args: set "
                 "screen_all_str_args=True, or drop free_text_args"
             )
-        if not (self.shell_args or self.installer_args or self.screen_all_str_args):
+        if not (
+            self.shell_args or self.installer_args or self.dispatch_args or self.screen_all_str_args
+        ):
             raise ValueError(
-                "this ToolArgSinkGuard screens nothing: name shell_args or installer_args, "
-                "or set screen_all_str_args=True"
+                "this ToolArgSinkGuard screens nothing: name shell_args, installer_args or "
+                "dispatch_args, or set screen_all_str_args=True"
             )
         # Longest first, then alphabetical, as in the stdio guard: "&&" reports before "&",
         # and the token reported does not depend on frozenset iteration order.
@@ -258,7 +346,8 @@ class ToolArgSinkGuard:
         """Screen a call's arguments and report the first value this guard refuses.
 
         ``@Airlock`` passes every argument by name (``_arg_walk.bind_arguments``), so a
-        positional argument is read under its parameter's name. This only reports: the
+        positional argument is read under its parameter's name. A ``dispatch_args``
+        argument is read first, as one name (CVE-2026-119050). This only reports: the
         caller applies :attr:`mode`.
 
         Args:
@@ -288,6 +377,11 @@ class ToolArgSinkGuard:
                 token = self._metachar_in(key)
                 if token is not None:
                     return _shell_refusal(None, "an argument name", token, installer=False)
+            allowed = self.dispatch_args.get(key)
+            if allowed is not None:
+                finding = _dispatch_finding(str(name), key, value, allowed)
+                if finding is not None:
+                    return finding
             installer, shell = self._reads(name, key)
             if not shell:
                 continue
@@ -504,7 +598,165 @@ _VERSION_HINTS = (
     "'@', extras or whitespace",
 )
 
+
+class _DispatchNames(Mapping[str, frozenset[str]]):
+    """``dispatch_args`` as stored: read-only, and hashable, so the frozen guard stays so."""
+
+    def __init__(self, names: Mapping[str, frozenset[str]]) -> None:
+        self._names = dict(names)
+
+    def __getitem__(self, key: str) -> frozenset[str]:
+        return self._names[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._names)
+
+    def __len__(self) -> int:
+        return len(self._names)
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self._names.items()))
+
+    def __repr__(self) -> str:
+        return repr(self._names)
+
+
+def _dispatch_names(value: Any) -> _DispatchNames:
+    """``dispatch_args`` checked: each argument name mapped to a frozenset of allowed names."""
+    if not isinstance(value, Mapping):
+        raise TypeError(
+            "dispatch_args maps each argument that names a function to the names it may "
+            "hold, such as {'operation': ('head', 'describe')}, or {'operation': ()} for the "
+            f"default denylist; got a {type(value).__name__}"
+        )
+    names: dict[str, frozenset[str]] = {}
+    for key, allowed in value.items():
+        if not isinstance(key, str):
+            raise TypeError(f"dispatch_args keys are argument names; got a {type(key).__name__}")
+        if not key:
+            raise ValueError("dispatch_args holds an empty argument name")
+        entries = _string_set(allowed, f"dispatch_args[{key!r}]")
+        for entry in sorted(entries):
+            if not _DOTTED_NAME.fullmatch(entry):
+                raise ValueError(
+                    f"dispatch_args[{key!r}] allows {entry!r}, which is not an identifier or "
+                    "a dotted path of them"
+                )
+        names[key] = entries
+    return _DispatchNames(names)
+
+
+def _dispatch_finding(
+    argument: str, key: str, value: Any, allowed: Collection[str]
+) -> ToolArgSinkDecision | None:
+    """Refuse a dispatch argument that does not hold one name the tool may call."""
+    where = f"argument {argument!r}"
+    if not isinstance(value, str):
+        return _dispatch_refusal(
+            argument,
+            f"{where} is not a string ({type(value).__name__}): it must name one operation",
+            None,
+            (f"Send {where} as one operation name, a string such as 'head'",),
+        )
+    # The characters it holds, past any __eq__ or __hash__ a str subclass overrides: those
+    # decide frozenset membership, and could claim a name the allowlist does not hold.
+    name = str.__str__(value)
+    if allowed and name in allowed:
+        return None
+    shown = _shown(name) if _DOTTED_NAME.fullmatch(name) else None
+    add_it = f"If {shown!r} is meant, add it to dispatch_args[{key!r}] in this tool's guard"
+    if allowed:
+        accepted = f"Choose one of the operations this tool accepts: {_listed(allowed)}"
+        if shown is None:
+            what, token = _name_problem(name)
+            return _dispatch_refusal(
+                argument,
+                f"{where} is not an operation this tool accepts: {what}",
+                token,
+                (accepted,),
+            )
+        return _dispatch_refusal(
+            argument,
+            f"{where} names {shown!r}, which is not an operation this tool accepts",
+            shown,
+            (accepted, add_it),
+        )
+    if shown is None:
+        what, token = _name_problem(name)
+        return _dispatch_refusal(
+            argument,
+            f"{where} is not a bare name: {what}",
+            token,
+            (
+                "Send one operation name: letters, digits and underscores, not starting with a digit",
+            ),
+        )
+    if not _IDENTIFIER.fullmatch(name):
+        return _dispatch_refusal(
+            argument,
+            f"{where} names a dotted path, {shown!r}, which only an allowlist can admit",
+            shown,
+            ("Send a bare operation name, such as 'head'", add_it),
+        )
+    if not _denied(name):
+        return None
+    # The pattern that matched is not named: a refusal withholds what it denies (0.10.25).
+    return _dispatch_refusal(
+        argument,
+        f"{where} names {shown!r}, which this tool calls only if its allowlist names it",
+        shown,
+        (
+            "Choose a different operation",
+            f"If {shown!r} is meant, list the operations this tool accepts in "
+            f"dispatch_args[{key!r}]: an allowlist replaces the default denylist",
+        ),
+    )
+
+
+def _name_problem(name: str) -> tuple[str, str | None]:
+    """Why ``name`` is not an identifier, and the character that shows it; never the name."""
+    if not name:
+        return "it is empty", None
+    bad = _NOT_A_NAME_CHARACTER.search(name)
+    if bad is not None:
+        return f"it holds {bad.group()!r}, which a name cannot", bad.group()
+    return "it starts with a digit", name[0]
+
+
+def _shown(name: str) -> str:
+    """A refused name as a refusal shows it: whole, unless it is longer than a name needs."""
+    if len(name) <= _SHOWN_NAME_LENGTH:
+        return name
+    return name[:_SHOWN_NAME_LENGTH] + "..."
+
+
+def _listed(allowed: Collection[str]) -> str:
+    """The allowed names, sorted, the first :data:`_LISTED_NAMES` of them."""
+    names = sorted(allowed)
+    more = len(names) - _LISTED_NAMES
+    return ", ".join(names[:_LISTED_NAMES]) + (f" and {more} more" if more > 0 else "")
+
+
+def _denied(name: str) -> bool:
+    """Whether :data:`DEFAULT_DISPATCH_DENY` matches ``name``, case-folded."""
+    folded = name.casefold()
+    return any(fnmatch.fnmatchcase(folded, pattern) for pattern in DEFAULT_DISPATCH_DENY)
+
+
+def _dispatch_refusal(
+    argument: str, detail: str, token: str | None, hints: tuple[str, ...]
+) -> ToolArgSinkDecision:
+    return _refusal(
+        ToolArgSinkVerdict.DENY_DISPATCH_NAME,
+        detail,
+        argument=argument,
+        token=token,
+        hints=hints,
+    )
+
+
 __all__ = [
+    "DEFAULT_DISPATCH_DENY",
     "NPM_SEMVER",
     "PEP440_VERSION",
     "ToolArgSinkDecision",

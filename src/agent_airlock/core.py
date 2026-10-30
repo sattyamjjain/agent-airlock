@@ -1587,8 +1587,10 @@ class Airlock:
             # Step 2.75: Shell syntax and package specs in string arguments (V0.10.28).
             # Nine MCP server CVEs of 27-28 Oct 2026 spliced an ordinary string argument
             # (`repo`, `target`, `args`, `version`) into a shell or `pnpm add` on the
-            # server; nothing on the call path read it for that. Inert when
-            # policy.tool_arg_sink_guard is None.
+            # server; nothing on the call path read it for that. Its `dispatch_args` refuse
+            # an argument naming a function the tool must not call: CVE-2026-119050 (Agno
+            # PandasTools) passed a model-chosen name such as `read_pickle` to `getattr`.
+            # Inert when policy.tool_arg_sink_guard is None.
             sink_error = self._check_tool_arg_sinks(
                 func_name=func_name,
                 resolved_policy=resolved_policy,
@@ -3180,8 +3182,10 @@ class Airlock:
         """Shell syntax and package specs in string arguments (Step 2.75, V0.10.28).
 
         Calls ``policy.tool_arg_sink_guard.evaluate(arguments)`` if configured: named (or
-        all) string arguments may carry no shell metacharacters, and installer arguments
-        must be a bare version. See
+        all) string arguments may carry no shell metacharacters, installer arguments must
+        be a bare version, and a dispatch argument must name a function its allowlist (or,
+        without one, the default denylist) admits, the shape of CVE-2026-119050, where a
+        model-chosen ``read_pickle`` reached ``getattr(pandas, ...)``. See
         :class:`agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
 
         The refusal names the argument and the token that tripped it, never the whole

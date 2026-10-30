@@ -58,10 +58,10 @@ from __future__ import annotations
 import inspect
 import re
 import shlex as _shlex_for_gitpilot
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path as _Path_for_gitpilot
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from .cost_tracking import ModelTierBudget, TierBudget
 from .exceptions import AirlockError
@@ -4504,6 +4504,90 @@ def _names_of(names: Iterable[str], field_name: str) -> Iterable[str]:
 
 
 @preset
+def reflection_sink_defaults(
+    *,
+    dispatch_args: Mapping[str, Iterable[str]],
+    mode: ToolArgSinkMode = "warn",
+) -> dict[str, Any]:
+    """Refuse tool arguments that name a function the tool must not call, warning first.
+
+    CVE-2026-119050 (Agno through 3.1.11, CWE-470, CVSS 3.1 8.1, CVSS 4.0 9.2): Agno's
+    ``PandasTools`` passed a model-controlled function name to ``getattr()``:
+    ``create_using_function`` to ``getattr(pandas, ...)`` and ``operation`` to
+    ``getattr(dataframe, ...)``. A prompt-injected agent can call ``pandas.read_pickle`` on a
+    path it chooses, which unpickles and so runs code, or another reader to read local
+    files. No fixed release when this preset was written. The dangerous value is a plain
+    identifier, so no shell or eval screen sees it.
+
+    This preset turns on :class:`~agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard` with
+    ``dispatch_args`` in ``warn`` mode, so adopting it cannot break a host on day one: a
+    refused name is logged (``airlock_tool_arg_sink_warn_only``) and the call runs. Map each
+    argument that names a function to the names it may hold; an empty collection falls back
+    to :data:`~agent_airlock.tool_arg_sink_guard.DEFAULT_DISPATCH_DENY`. Then pass
+    ``mode="deny"``.
+
+    OWASP mapping: **MCP05 Command Injection & Execution**; CWE-470 (Use of Externally-
+    Controlled Input to Select Classes or Code).
+
+    Args:
+        dispatch_args: Each argument that names a function, mapped to the names it may hold:
+            ``{"operation": ("head", "describe")}``, or ``{"operation": ()}`` for the
+            default denylist.
+        mode: ``"warn"`` (the default) logs a refused name and runs the call; ``"deny"``
+            refuses it with block reason ``tool_arg_sink``.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — the :class:`~agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
+        - ``policy`` — a :class:`SecurityPolicy` carrying only that guard, for
+          ``@Airlock(policy=...)``; to keep your own policy, pass the guard as its
+          ``tool_arg_sink_guard`` instead.
+        - ``owasp`` — ``"MCP05"``; ``cwe`` — ``("CWE-470",)``.
+
+    Raises:
+        TypeError: ``dispatch_args`` is not a mapping, or an allowlist is a single string.
+        ValueError: ``dispatch_args`` is empty, an allowlist entry is not an identifier or a
+            dotted path, or ``mode`` is not ``"warn"`` or ``"deny"``.
+
+    Usage::
+
+        from agent_airlock import Airlock
+        from agent_airlock.policy_presets import reflection_sink_defaults
+
+        preset = reflection_sink_defaults(dispatch_args={"operation": ("head", "describe")})
+
+        @Airlock(policy=preset["policy"])
+        def run_dataframe_operation(dataframe_name: str, operation: str) -> str:
+            return f"ran {operation} on {dataframe_name}"
+
+        run_dataframe_operation(dataframe_name="sales", operation="to_pickle")  # logged, runs
+
+    Primary sources:
+      https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119050
+      https://github.com/agno-agi/agno/issues/8699
+    """
+    from .tool_arg_sink_guard import ToolArgSinkGuard
+
+    # The guard checks each allowlist when it is built, refusing a lone string, and freezes
+    # it, so any iterable of names works; its field is typed by the usual collection.
+    allowlists = cast(Mapping[str, Collection[str]], dispatch_args)
+    guard = ToolArgSinkGuard(dispatch_args=allowlists, mode=mode)
+    return {
+        "preset_id": "reflection_sink",
+        "severity": "high",
+        "default_action": guard.mode,
+        "guard": guard,
+        "policy": SecurityPolicy(tool_arg_sink_guard=guard),
+        "owasp": "MCP05",
+        "cwe": ("CWE-470",),
+        "cves": ("CVE-2026-119050",),
+        "advisory_url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119050",
+    }
+
+
+@preset
 def dns_rebinding_safe_url_defaults(
     *,
     allowed_hosts: list[str] | None = None,
@@ -6135,6 +6219,8 @@ __all__ = [
     # V0.10.28 shell syntax and package specs in string tool arguments (nine CVEs, 27-28 Oct)
     "tool_arg_sink_defaults",
     "TOOL_ARG_SINK_CVES",
+    # Callable names in dispatch arguments (CVE-2026-119050, Agno PandasTools)
+    "reflection_sink_defaults",
     # V0.8.34 GHSA-mrvx-jmjw-vggc (SafeURL DNS-rebinding: resolve + re-validate at call time)
     "dns_rebinding_safe_url_defaults",
     # V0.8.30 CVE-2026-11624 (MCP HTTP-transport Origin/Host DNS-rebinding; CWE-346)
