@@ -1654,8 +1654,8 @@ class Airlock:
             (0.6), the run's halt latch (0.7, checked again last), ghost arguments (1),
             policy resolution and check (2), loops in the run (2.3), source-to-sink data
             flow (2.4), the sequence guard (2.5), the action-contradiction gate (2.6), the
-            deserialization guard (2.7), shell syntax in string arguments (2.75), the
-            amplification budget (2.8), filesystem paths (3), capabilities (4), endpoint
+            deserialization guard (2.7), shell syntax in string arguments (2.75), shell
+            commands by rule (2.77), the amplification budget (2.8), filesystem paths (3), capabilities (4), endpoint
             policies (5) and the per-model-tier budget (6). The first gate that refuses ends
             the call.
 
@@ -1898,6 +1898,16 @@ class Airlock:
             if sink_error is not None:
                 context._refused_at = "2.75:tool_arg_sinks"
                 return arguments, start_time, context, sink_error, None, None
+
+            # Step 2.77: shell commands (V0.10.29, langchain-ai/langchain#40197). An agent
+            # shell tool's command, followed through its wrappers, is allowed, escalated or
+            # refused by the resolved policy's shell_command_policy rules.
+            shell_error = yield from self._check_shell_command(
+                func_name, resolved_policy, context, call=call
+            )
+            if shell_error is not None:
+                context._refused_at = "2.77:shell_command"
+                return arguments, start_time, context, shell_error, None, None
 
             # Step 2.8: Per-run resource-amplification budget (V0.8.74,
             # issue #142, arXiv:2608.12273). Counts calls against the run and
@@ -3629,6 +3639,69 @@ class Airlock:
             {"path": path, "violation_type": violation_type},
         )
         return response
+
+    def _check_shell_command(
+        self,
+        func_name: str,
+        policy: SecurityPolicy | None,
+        context: AirlockContext[Any],
+        *,
+        call: _BoundCall,
+    ) -> Generator[_ApprovalAsk, _ApproverOutcome, AirlockResponse | None]:
+        """Step 2.77: allow, escalate or refuse an agent shell tool's command by rule.
+
+        A denial depends only on the command, so a retry or an argument for it gets the same
+        answer. The refusal names the program, never the rule or the whole command.
+        """
+        if policy is None or policy.shell_command_policy is None:
+            return None
+        shell_policy = policy.shell_command_policy
+        if not shell_policy.applies_to(func_name):
+            return None
+        try:
+            arguments = dict(call.arguments)
+        except Exception:  # noqa: BLE001 - arguments that do not bind are refused below
+            arguments = {name: object() for name in shell_policy.command_args}
+        decision = shell_policy.evaluate(arguments)
+        if decision is None or decision.verdict == "allow":
+            return None
+        if decision.verdict == "ask":
+            escalation = PolicyEscalation(
+                f"Tool '{func_name}' requires approval: {decision.detail}",
+                tool_name=func_name,
+                reason=f"{decision.detail} (argument '{decision.argument}')",
+                rule="shell_command",
+            )
+            return (
+                yield from self._resolve_escalation(
+                    policy, func_name, escalation, context=context, call=call
+                )
+            )
+        violation = (
+            ViolationType.SHELL_COMMAND_UNANALYZABLE
+            if decision.rule == "unanalyzable"
+            else ViolationType.SHELL_COMMAND_DENIED
+        )
+        logger.warning(
+            "shell_command_denied",
+            function=func_name,
+            argument=decision.argument,
+            program=decision.program,
+            rule=decision.rule,
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            decision.detail,
+            {"violation_type": violation.value, "rule": decision.rule},
+        )
+        return handle_policy_violation(
+            func_name,
+            policy_name="ShellCommandPolicy",
+            reason=f"{decision.detail} (argument '{decision.argument}')",
+            violation_type=violation.value,
+        )
 
     def _check_run_halt(
         self, func_name: str, context: AirlockContext[Any]

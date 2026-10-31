@@ -206,3 +206,9 @@ the nine CVEs under `"cves"` and maps to OWASP MCP05, CWE-78 and CWE-829.
 - **Option injection passes.** A value starting with `-` (CWE-88) is not shell syntax.
 - **Only text is read.** A number or an object the host passed carries no text the model
   wrote.
+
+## Judging the command itself
+
+This guard refuses shell syntax in an argument. To decide which commands an agent's shell
+tool may run at all (allow `git status`, ask before `git push`, deny `rm -rf`, wrappers
+followed), see [Shell commands](shell-commands.md).

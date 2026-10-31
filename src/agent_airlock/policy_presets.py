@@ -77,6 +77,7 @@ if TYPE_CHECKING:
     from .mcp_spec.step_up_scope_guard import AdmissionScopeSnapshot
     from .mcp_spec.tasks_admission_guard import TasksAdmissionState
     from .mcp_spec.tasks_lifecycle_guard import TaskAdmission, TaskRegistry
+    from .shell_command_policy import ShellVerdict
     from .tool_arg_sink_guard import ToolArgSinkMode
 
 
@@ -4493,6 +4494,84 @@ def tool_arg_sink_defaults(
     }
 
 
+@preset
+def shell_command_defaults(
+    *,
+    default: ShellVerdict = "ask",
+    command_args: Iterable[str] = ("command", "cmd"),
+    tools: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Allow read-only commands, ask before publishing, deny destruction (v0.10.29+).
+
+    An agent shell tool given an allowlist of ``argv[0]`` admits ``env rm -rf /`` and
+    ``find . -exec rm -rf {} +`` (langchain-ai/langchain#40197). This preset turns on
+    :class:`~agent_airlock.shell_command_policy.ShellCommandPolicy`, which follows wrappers
+    to the commands they launch, with rules after pydantic/pydantic-ai#9015:
+
+    - allow ``git status``, ``git log``, ``git diff``, ``rg``, ``ls`` and ``cat``;
+    - ask before ``git push``, ``git commit``, ``sudo`` and ``doas``;
+    - deny a recursive ``rm``, a force push (``--force``, ``-f``, ``+refspec``),
+      ``find -delete`` and ``rg --pre`` (which runs a command on every file). A shell or
+      interpreter reading its program from a pipe is refused whatever the rules say.
+
+    Anything else gets ``default``: ``ask`` sends it to the policy's approver, which is
+    refused when none is registered.
+
+    OWASP mapping: **MCP05 Command Injection & Execution**; CWE-78.
+
+    Args:
+        default: The verdict for a command no rule names.
+        command_args: The arguments that hold the command.
+        tools: Tool-name globs to apply it to; empty applies it to every tool with one of
+            ``command_args``.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` keys, plus ``shell_policy`` (the
+        :class:`~agent_airlock.shell_command_policy.ShellCommandPolicy`) and ``policy`` (a
+        :class:`SecurityPolicy` carrying only it; to keep your own policy, pass
+        ``shell_policy`` as its ``shell_command_policy`` instead).
+
+    Usage::
+
+        from agent_airlock import Airlock
+        from agent_airlock.policy_presets import shell_command_defaults
+
+        @Airlock(policy=shell_command_defaults()["policy"])
+        def run_shell(command: str) -> str:
+            ...
+    """
+    from .shell_command_policy import ShellCommandPolicy
+
+    shell_policy = ShellCommandPolicy(
+        allow=("git status", "git log", "git diff", "rg", "ls", "cat"),
+        ask=("git push", "git commit", "sudo", "doas"),
+        deny=(
+            "rm -*[rR]*",
+            "rm --recursive",
+            "git push --force*",
+            "git push -f*",
+            "git push -[!-]*f*",
+            "git push +*",
+            "find -delete",
+            "rg --pre*",
+        ),
+        default=default,
+        command_args=tuple(_names_of(command_args, "command_args")),
+        tools=tuple(_names_of(tools, "tools")),
+    )
+    return {
+        "preset_id": "shell_command",
+        "severity": "high",
+        "default_action": "deny",
+        "shell_policy": shell_policy,
+        "policy": SecurityPolicy(shell_command_policy=shell_policy),
+        "owasp": "MCP05",
+        "cwe": ("CWE-78",),
+        "advisory_url": "https://github.com/langchain-ai/langchain/issues/40197",
+    }
+
+
 def _names_of(names: Iterable[str], field_name: str) -> Iterable[str]:
     """``names``, refusing a lone string, which ``frozenset`` would split into letters."""
     if isinstance(names, (str, bytes)):
@@ -6259,5 +6338,6 @@ __all__ = [
     "mcp_attested_admission_defaults",
     # V0.8.84 ASI04 rug-pull: pin a tool definition on approval, deny on drift.
     "mcp_tool_definition_pin_defaults",
+    "shell_command_defaults",
     "MCP_TOOL_DEFINITION_PIN",
 ]

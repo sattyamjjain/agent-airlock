@@ -46,6 +46,7 @@ class SecurityPolicy:
     tool_arg_sink_guard: ToolArgSinkGuard | None = None
     data_flow_policy: DataFlowPolicy | None = None  # V0.10.29
     run_guard: RunGuard | None = None  # V0.10.29
+    shell_command_policy: ShellCommandPolicy | None = None  # V0.10.29
     trace_redaction: TraceRedactionPolicy | None = None
     reauth_on_untrusted_reinvocation: bool = False
     untrusted_reinvocation_threshold: int = 1
@@ -75,6 +76,7 @@ class SecurityPolicy:
 | `reauth_on_untrusted_reinvocation`, `untrusted_reinvocation_threshold` | `bool`, `int` | Once a tool's output has flowed back into the model `threshold` times in a run, the next call to it needs `authorize_once(tool)` on the run's `AirlockContext`. The count lives on that context, so a call that belongs to no run is refused: one with no `AirlockContext` passed in and none set around it, or whose surrounding context names a different agent |
 | `data_flow_policy` | `DataFlowPolicy \| None` | Refuses (`deny`, the default) or escalates (`escalate`) a call of an `@sink` tool made after an `@source(trust="untrusted")` call completed in the same run, until the host calls `clear_taint()` on the run's context (step 2.4). A sink called outside any run is refused. See [Sources and sinks](../guide/data-flow.md) |
 | `run_guard` | `RunGuard \| None` | Halts the run after a hard stop (a refusal in `halt_on`, or of an `irreversible_tools` match), so every later call is refused as `run_halted` (step 0.7); and refuses the call that completes a repeated block of calls, then halts on the next repeat (step 2.3). See [Halting a run, and loops](../guide/run-guard.md) |
+| `shell_command_policy` | `ShellCommandPolicy \| None` | Allows, escalates (rule `shell_command`) or refuses an agent shell tool's command by rule, following wrappers (`env`, `xargs`, `find -exec`, `sudo`, `sh -c`, ...) to the command they launch (step 2.77). See [Shell commands](../guide/shell-commands.md) |
 | `trace_redaction` | `TraceRedactionPolicy \| None` | Redacts traces sent to a non-local sink |
 | `stdio_mode` | `str` | How STDIO subprocess launches are allowed: `"allowlist"`, `"manifest_only"` or `"disabled"` |
 
