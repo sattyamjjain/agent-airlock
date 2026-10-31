@@ -73,6 +73,10 @@ class BlockReason(str, Enum):
     # bare version (ToolArgSinkGuard). Unlike a POLICY_VIOLATION the tool is allowed; the
     # value is not, so the caller can retry with a plain one.
     TOOL_ARG_SINK = "tool_arg_sink"
+    # V0.10.29: an approval came back unreadable: the approver raised, returned something
+    # other than an OversightResponse, or a verdict outside OversightVerdict (the string
+    # "grant" included). Not ESCALATION_DENIED: nobody decided, the integration is broken.
+    POLICY_INDETERMINATE = "policy_indeterminate"
 
 
 @dataclass
@@ -528,7 +532,7 @@ def handle_escalation(
     *,
     reason: str,
     rule: str,
-    outcome: Literal["no_approver", "denied", "timeout"],
+    outcome: Literal["no_approver", "denied", "timeout", "indeterminate"],
     detail: str = "",
     approver: str | None = None,
 ) -> AirlockResponse:
@@ -541,7 +545,8 @@ def handle_escalation(
         outcome: Why the call is blocked. ``"no_approver"`` means the policy escalated
             with nothing registered to escalate to — a **configuration** failure, and the
             reason this helper exists as its own block reason rather than reusing
-            ``POLICY_VIOLATION``.
+            ``POLICY_VIOLATION``. ``"indeterminate"`` means the approver's answer could not
+            be read as an approval (``POLICY_INDETERMINATE``).
         detail: Free-form detail from the approver, when there was one.
         approver: Identifier of the human/system that decided, when known.
 
@@ -552,6 +557,7 @@ def handle_escalation(
         "no_approver": BlockReason.ESCALATION_REQUIRED,
         "denied": BlockReason.ESCALATION_DENIED,
         "timeout": BlockReason.ESCALATION_TIMEOUT,
+        "indeterminate": BlockReason.POLICY_INDETERMINATE,
     }[outcome]
 
     if outcome == "no_approver":
@@ -573,6 +579,16 @@ def handle_escalation(
         fix_hints = [
             "A human reviewed this call and declined it",
             "Do not retry the same call; ask the operator why it was declined",
+        ]
+    elif outcome == "indeterminate":
+        error = (
+            f"AIRLOCK_BLOCK: the approval for '{func_name}' could not be read "
+            f"(rule {rule!r}: {reason}). {detail}"
+        )
+        fix_hints = [
+            "The approver integration answered with something that is not an approval",
+            "Retrying will not help until the approver integration is fixed",
+            "Blocked rather than allowed, because an unreadable answer is not consent",
         ]
     else:
         error = (

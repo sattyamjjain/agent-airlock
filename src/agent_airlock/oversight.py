@@ -47,13 +47,19 @@ https://arxiv.org/abs/2605.18747
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import contextvars
 import datetime as _dt
 import enum
 import functools
+import inspect
+import math
+import threading
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from ._log import structlog
 
@@ -123,6 +129,120 @@ class OversightResponse:
 Approver = Callable[[OversightRequest], OversightResponse]
 """The operator-supplied callable signature."""
 
+
+@dataclass(frozen=True)
+class _ApproverOutcome:
+    """What an approver did within its deadline.
+
+    ``kind`` is ``"answered"`` (``value`` is what it returned, unchecked), ``"raised"``
+    (``error``) or ``"timeout"`` (no answer in time: any later answer is dropped).
+    """
+
+    kind: Literal["answered", "raised", "timeout"]
+    value: Any = None
+    error: BaseException | None = None
+
+
+def _deadline(timeout_seconds: float) -> float | None:
+    """``timeout_seconds`` as a wait bound: None for no bound, never below 0."""
+    if math.isinf(timeout_seconds):
+        return None
+    return max(0.0, timeout_seconds)
+
+
+def _call_with_deadline(
+    approver: Callable[[OversightRequest], Any],
+    request: OversightRequest,
+    timeout_seconds: float,
+) -> _ApproverOutcome:
+    """Call ``approver(request)`` in a worker thread and wait at most ``timeout_seconds``.
+
+    Until 0.10.29 the approver ran inline and the timeout was only echoed on the request,
+    so an approver that hung held the call (and, on the async path, the event loop) for as
+    long as it hung. A late answer is now dropped: the thread runs on, but nothing reads
+    what it returns. The thread is a daemon, so a hung approver never holds up interpreter
+    exit, and runs in a copy of the caller's context. A coroutine returned here (an
+    ``async`` approver on the sync path) is closed, never run, and comes back as the
+    answer, which the caller reads as no approval.
+    """
+    box: list[_ApproverOutcome] = []
+
+    def run() -> None:
+        try:
+            box.append(_ApproverOutcome("answered", value=approver(request)))
+        except BaseException as exc:  # noqa: BLE001 - reported to the caller, not raised here
+            box.append(_ApproverOutcome("raised", error=exc))
+
+    context = contextvars.copy_context()
+    worker = threading.Thread(target=context.run, args=(run,), name="airlock-approver", daemon=True)
+    worker.start()
+    worker.join(_deadline(timeout_seconds))
+    if not box:
+        return _ApproverOutcome("timeout")
+    outcome = box[0]
+    if outcome.kind == "answered" and inspect.iscoroutine(outcome.value):
+        outcome.value.close()
+    return outcome
+
+
+async def _await_with_deadline(
+    approver: Callable[[OversightRequest], Any],
+    request: OversightRequest,
+    timeout_seconds: float,
+) -> _ApproverOutcome:
+    """The async path's :func:`_call_with_deadline`: the event loop is never blocked.
+
+    A sync approver runs in a daemon worker thread whose answer is handed back to the loop;
+    an ``async`` approver (or an awaitable a sync one returns) is awaited with what is left
+    of the deadline and cancelled when it runs out.
+    """
+    loop = asyncio.get_running_loop()
+    ends = None if math.isinf(timeout_seconds) else loop.time() + max(0.0, timeout_seconds)
+    try:
+        if inspect.iscoroutinefunction(approver):
+            outcome = _ApproverOutcome("answered", value=approver(request))
+        else:
+            outcome = await asyncio.wait_for(_threaded(loop, approver, request), _left(loop, ends))
+        if outcome.kind == "answered" and inspect.isawaitable(outcome.value):
+            value = await asyncio.wait_for(outcome.value, _left(loop, ends))
+            outcome = _ApproverOutcome("answered", value=value)
+    except asyncio.TimeoutError:
+        return _ApproverOutcome("timeout")
+    except Exception as exc:  # noqa: BLE001 - an async approver that raised
+        return _ApproverOutcome("raised", error=exc)
+    return outcome
+
+
+def _left(loop: asyncio.AbstractEventLoop, ends: float | None) -> float | None:
+    """Seconds left before ``ends`` on ``loop``'s clock (None: no deadline)."""
+    return None if ends is None else max(0.0, ends - loop.time())
+
+
+def _threaded(
+    loop: asyncio.AbstractEventLoop,
+    approver: Callable[[OversightRequest], Any],
+    request: OversightRequest,
+) -> asyncio.Future[_ApproverOutcome]:
+    """A future the approver's answer, from a daemon worker thread, settles."""
+    future: asyncio.Future[_ApproverOutcome] = loop.create_future()
+
+    def settle(outcome: _ApproverOutcome) -> None:
+        if not future.done():
+            future.set_result(outcome)
+
+    def run() -> None:
+        try:
+            outcome = _ApproverOutcome("answered", value=approver(request))
+        except BaseException as exc:  # noqa: BLE001 - reported to the caller, not raised here
+            outcome = _ApproverOutcome("raised", error=exc)
+        with contextlib.suppress(RuntimeError):  # the loop closed before a late answer
+            loop.call_soon_threadsafe(settle, outcome)
+
+    context = contextvars.copy_context()
+    threading.Thread(target=context.run, args=(run,), name="airlock-approver", daemon=True).start()
+    return future
+
+
 AuditEmitter = Callable[[str, Mapping[str, Any]], None]
 """Optional one-way emitter for ``oversight.request|grant|deny`` events.
 
@@ -182,10 +302,11 @@ def requires_human_oversight(
         channel: Free-form hint passed through to the approver on
             :attr:`OversightRequest.channel`. Useful for routing
             in transports that have multiple endpoints.
-        timeout_seconds: Wall-clock budget declared on the request.
-            Echoed to the approver via
-            :attr:`OversightRequest.timeout_seconds`; the approver
-            is responsible for honouring it.
+        timeout_seconds: Wall-clock budget for the approver, echoed on
+            :attr:`OversightRequest.timeout_seconds` and enforced: the
+            approver runs in a worker thread, and no answer within the
+            budget raises :class:`OversightTimeoutError` (a later answer
+            is dropped). Until 0.10.29 it was only echoed.
         audit_emitter: Optional one-way callable that receives
             ``("oversight.request"|"oversight.grant"|"oversight.deny",
             payload_dict)`` for every gate firing. Useful for OTel /
@@ -227,7 +348,13 @@ def requires_human_oversight(
                 },
             )
 
-            response = approver(request)
+            outcome = _call_with_deadline(approver, request, timeout_seconds)
+            if outcome.kind == "raised" and outcome.error is not None:
+                raise outcome.error
+            response = outcome.value
+            if outcome.kind == "timeout" or not _is_readable(response):
+                _emit_unanswered(audit_emitter, request, outcome.kind, response)
+                raise OversightTimeoutError(request=request)
             if response.request_id != request.request_id:
                 raise ValueError(
                     f"approver returned a response with mismatched request_id: "
@@ -275,6 +402,51 @@ def requires_human_oversight(
         return wrapped  # type: ignore[return-value]
 
     return decorator
+
+
+def _is_readable(response: Any) -> bool:
+    """Whether ``response`` is an :class:`OversightResponse` whose verdict is a member.
+
+    A str such as ``"grant"`` compares equal to ``OversightVerdict.GRANT`` (the enum is a
+    ``str`` enum), so membership is checked with ``isinstance``, never ``==``.
+    """
+    return isinstance(response, OversightResponse) and isinstance(
+        response.verdict, OversightVerdict
+    )
+
+
+def _emit_unanswered(
+    emitter: AuditEmitter | None,
+    request: OversightRequest,
+    kind: str,
+    response: Any,
+) -> None:
+    """Emit ``oversight.timeout`` for no answer in time, ``oversight.indeterminate`` for an
+    answer that is not a readable approval (type names only, never the content)."""
+    if kind == "timeout":
+        _emit(
+            emitter,
+            "oversight.timeout",
+            {
+                "request_id": request.request_id,
+                "tool_name": request.tool_name,
+                "timeout_seconds": request.timeout_seconds,
+            },
+        )
+        return
+    verdict = (
+        getattr(response, "verdict", None) if isinstance(response, OversightResponse) else None
+    )
+    _emit(
+        emitter,
+        "oversight.indeterminate",
+        {
+            "request_id": request.request_id,
+            "tool_name": request.tool_name,
+            "returned": type(response).__name__,
+            "verdict_type": type(verdict).__name__,
+        },
+    )
 
 
 def _emit(
