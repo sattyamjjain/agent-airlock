@@ -103,6 +103,17 @@ class AirlockContext(Generic[T]):
     _authorized_once: GrantStore = field(default_factory=GrantStore, repr=False)
     # V0.10.29: the StandingGrant that admitted this call's escalation, for its audit record.
     _standing_grant: str | None = field(default=None, repr=False)
+    # V0.10.29: the ghost arguments step 1 stripped from this call, the arguments as the
+    # caller sent them (kept only when something was stripped), the call's bound arguments
+    # (step 2's _BoundCall), the policy step 2 resolved, its decision-log entry, and the
+    # call-path step that refused it ("2.5:sequence_guard"), for the audit, decision and
+    # outcome records.
+    _stripped_args: list[str] = field(default_factory=list, repr=False)
+    _requested_args: dict[str, Any] | None = field(default=None, repr=False)
+    _call: Any = field(default=None, repr=False)
+    _resolved_policy: Any = field(default=None, repr=False)
+    _decision: Any = field(default=None, repr=False)
+    _refused_at: str = field(default="", repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
 
     def __class_getitem__(cls, params: Any) -> Any:

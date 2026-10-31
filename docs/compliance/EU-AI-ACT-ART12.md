@@ -22,20 +22,23 @@ determination.
 
 ## What airlock's decision log *does* satisfy
 
-airlock records each `validate → policy → execute → sanitize` decision to a
-hash-chained JSON Lines log
-(`agent_airlock.conformance.DecisionLog`). For the **tool-call decision layer**
-it gives you:
+airlock records tool-call decisions to a hash-chained JSON Lines log
+(`agent_airlock.conformance.DecisionLog`). With
+`AirlockConfig(decision_log=DecisionLog(path))` set (0.10.29), `@Airlock` writes each
+call's decision before the tool runs, refused calls included, and its outcome after,
+naming the decision by hash ([Decision records](../guide/decision-record.md)). Without it,
+nothing writes the log for you: append records yourself or with the CLI below. For the
+**tool-call decision layer** it gives you:
 
 | Art. 12 record-keeping expectation | airlock field / mechanism |
 |---|---|
 | Automatic recording of events over operation | `DecisionLog` — one append-only record per decision |
 | Traceability across the lifecycle | `seq` + `prev_hash` + `record_hash` hash chain |
 | Integrity / tamper-evidence of logs | `record_hash = SHA-256(canonical(fields incl. prev_hash))` — any edit/reorder/deletion breaks every later hash |
-| Identifying risk / modification situations | `decision` (block/warn/error) + `reason` + `stage` |
+| Identifying risk / modification situations | `decision` (block/warn/error) + `reason` + `stage`; from `@Airlock`, `details` adds the rule, the call-path step and digests of the policy, arguments and decision context |
 | Attribution to actor / context | `agent_id` + `session_id` |
 | Time reference per event | `ts` (ISO-8601 UTC) |
-| Availability for the retention period | plain JSONL on the operator's own storage |
+| Availability for the retention period | plain JSONL on the operator's own storage; `checkpoint()` and `prune()` keep a pruned log verifiable from an HMAC-signed chain head |
 
 The evidence is **offline**: no network call, no cloud, and the log stores
 decision **metadata only** — never raw tool arguments or results, so recording
@@ -44,7 +47,7 @@ does not itself create a new data-exposure surface.
 ### Reproduce the evidence
 
 ```bash
-# append decisions (normally your @Airlock integration does this automatically)
+# append decisions by hand (@Airlock does it when AirlockConfig(decision_log=...) is set)
 airlock-conformance record --log decisions.jsonl --stage policy  --tool read_file  --decision allow
 airlock-conformance record --log decisions.jsonl --stage execute --tool spawn_mcp  --decision block --reason "deny-by-default"
 

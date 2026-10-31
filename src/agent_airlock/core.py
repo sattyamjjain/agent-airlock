@@ -91,7 +91,7 @@ from ._log import structlog
 from ._sandbox_errors import SandboxError
 from ._sandbox_errors import SandboxExecutionError as SandboxExecutionError
 from ._sandbox_errors import SandboxUnavailableError as SandboxUnavailableError
-from .approvals import args_digest
+from .approvals import args_digest, unserializable_arguments
 from .audit import AuditLogger
 from .capabilities import (
     Capability,
@@ -241,6 +241,109 @@ class _BoundCall:
             return args_digest(arguments)
         except ValueError:
             return None
+
+
+#: The decision-log ``decision`` an outcome is written with.
+_OUTCOME_DECISION: dict[str, Literal["allow", "block", "error"]] = {
+    "returned": "allow",
+    "refused_after_run": "block",
+    "network_blocked": "block",
+    "raised": "error",
+}
+
+
+def _block_reason_value(refusal: AirlockResponse | None) -> str:
+    if refusal is None or refusal.block_reason is None:
+        return ""
+    return refusal.block_reason.value
+
+
+def _refusal_rule(refusal: AirlockResponse | None) -> str:
+    """The rule that refused: the policy check's violation type, else the block reason."""
+    if refusal is None:
+        return "no_refusal"
+    violation = refusal.metadata.get("violation_type")
+    if isinstance(violation, str) and violation:
+        return violation
+    return _block_reason_value(refusal) or "unnamed"
+
+
+def _digest_of(value: Any) -> str:
+    """The canonical digest of ``value`` as one argument set, or ``"unreadable"``."""
+    try:
+        return args_digest({"value": value})
+    except ValueError:
+        return "unreadable"
+
+
+def _decision_details(
+    func_name: str,
+    context: AirlockContext[Any],
+    has_policy: bool,
+    policy: SecurityPolicy | None,
+    call: _BoundCall,
+    refusal: AirlockResponse | None,
+) -> dict[str, object]:
+    """What a decision entry records: digests of what was decided on, and the verdict.
+
+    The decision context is split as CycloneDX/specification#1016 asks: what the caller
+    supplied (the tool, its arguments, the ghost arguments stripped) and the authority
+    state the policy judged it by (identity, call metadata, the policy). ``rule_id`` and
+    ``layer`` name the refusal and the call-path step it came from. An absent value is
+    named (``no_policy``, ``not_evaluated``, ``no_refusal``, ``unreadable``), never left out.
+    """
+    if policy is not None:
+        policy_digest = policy._compute_policy_digest()
+    else:
+        policy_digest = "not_evaluated" if has_policy else "no_policy"
+    caller = {
+        "tool": func_name,
+        "args_digest": call.digest or "unreadable",
+        "stripped_args": list(context._stripped_args),
+    }
+    authority = {
+        "agent_id": context.agent_id,
+        "roles": sorted(context.roles),
+        "session_id": context.session_id,
+        "workspace_id": context.workspace_id,
+        "user_id": context.user_id,
+        "metadata_digest": _digest_of(context.metadata),
+        "policy_digest": policy_digest,
+    }
+    caller_digest, authority_digest = _digest_of(caller), _digest_of(authority)
+    try:
+        unserializable = unserializable_arguments(call.arguments)
+    except Exception:  # noqa: BLE001 - arguments that do not bind are unread here
+        unserializable = []
+    return {
+        "entry": "decision",
+        "policy_digest": policy_digest,
+        "args_digest": caller["args_digest"],
+        "unserializable_args": unserializable,
+        "stripped_args": caller["stripped_args"],
+        "caller_digest": caller_digest,
+        "authority_digest": authority_digest,
+        "decision_context_digest": _digest_of([caller_digest, authority_digest]),
+        "verdict": "block" if refusal is not None else "allow",
+        "rule_id": _refusal_rule(refusal),
+        "layer": "no_refusal" if refusal is None else context._refused_at or "unnamed",
+    }
+
+
+def _decision_unrecorded(func_name: str) -> AirlockResponse:
+    """The refusal of an admitted call whose decision the log could not hold."""
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.POLICY_INDETERMINATE,
+        error=(
+            f"AIRLOCK_BLOCK: the decision to run '{func_name}' could not be written to the "
+            "decision log, so the call is not run"
+        ),
+        fix_hints=[
+            "The decision log could not be written; this is not about the arguments",
+            "Retry once the operator has fixed the log",
+        ],
+        metadata={"function": func_name},
+    )
 
 
 # Type alias for policy resolver functions. A resolver that returns None refuses the call
@@ -1480,6 +1583,8 @@ class Airlock:
                 args=args,
                 agent_id=context.agent_id,
                 session_id=context.session_id,
+                stripped_args=context._stripped_args,
+                requested_args=context._requested_args,
                 honeypot=True,
             )
 
@@ -1574,6 +1679,7 @@ class Airlock:
                     "kill switch engaged",
                     {"violation_type": "kill_switch", "operator_reason": reason},
                 )
+                context._refused_at = "0:kill_switch"
                 return kwargs, start_time, context, frozen_error, None, None
 
             # Step 0.5: the startup-hook self-check (V0.10.27). A condition of the process,
@@ -1582,6 +1688,7 @@ class Airlock:
             # refuses the calls of tools guarded by this config, not every tool in the process.
             hook_error = self._check_startup_hooks(func_name)
             if hook_error is not None:
+                context._refused_at = "0.5:startup_hooks"
                 return kwargs, start_time, context, hook_error, None, None
 
             # Step 0.6: the OAuth token audience (V0.10.27, CVE-2026-115413). The
@@ -1589,11 +1696,19 @@ class Airlock:
             # asked. Inert until expected_token_audience is set.
             audience_error = self._check_token_audience(func_name, context)
             if audience_error is not None:
+                context._refused_at = "0.6:token_audience"
                 return kwargs, start_time, context, audience_error, None, None
 
             # Step 1: Validate and handle ghost arguments
-            cleaned_kwargs, _, ghost_error = self._validate_ghost_arguments(func, func_name, kwargs)
+            cleaned_kwargs, stripped, ghost_error = self._validate_ghost_arguments(
+                func, func_name, kwargs
+            )
+            # V0.10.29: the audit and decision records name what step 1 stripped.
+            if stripped:
+                context._stripped_args = sorted(stripped)
+                context._requested_args = dict(kwargs)
             if ghost_error is not None:
+                context._refused_at = "1:ghost_arguments"
                 return kwargs, start_time, context, ghost_error, None, None
 
             # The run wrapper the context came from is left out of the argument gates and
@@ -1609,13 +1724,17 @@ class Airlock:
             call = _BoundCall(
                 lambda: bind_arguments(call_signature, args, cleaned_kwargs, skip_first=skip_first)
             )
+            context._call = call
 
             # Step 2: Resolve and check security policy (an escalation waits here on the
             # approver, through the driver: yield from)
             resolved_policy, policy_error = yield from self._resolve_and_check_policy(
                 func_name, context, run_context=run_context, call=call
             )
+            # The refusals below return no policy; the decision record still names it.
+            context._resolved_policy = resolved_policy
             if policy_error is not None:
+                context._refused_at = "2:policy"
                 return kwargs, start_time, context, policy_error, None, None
 
             # Step 2.5: Behavioral tool-call sequence guard (V0.8.12).
@@ -1629,6 +1748,7 @@ class Airlock:
                 context=context,
             )
             if seq_error is not None:
+                context._refused_at = "2.5:sequence_guard"
                 return kwargs, start_time, context, seq_error, None, None
 
             # Step 2.6: Action-time contradiction gate (V0.8.15,
@@ -1642,6 +1762,7 @@ class Airlock:
                 call=call,
             )
             if acg_error is not None:
+                context._refused_at = "2.6:contradiction_gate"
                 return kwargs, start_time, context, acg_error, None, None
 
             # Steps 2.7, 2.75, 3 and 5 read argument values. Until 0.10.24 they read only
@@ -1683,6 +1804,7 @@ class Airlock:
                 context=context,
             )
             if deser_error is not None:
+                context._refused_at = "2.7:deserialization_guard"
                 return arguments, start_time, context, deser_error, None, None
 
             # Step 2.75: Shell syntax and package specs in string arguments (V0.10.28).
@@ -1698,6 +1820,7 @@ class Airlock:
                 arguments=arguments,
             )
             if sink_error is not None:
+                context._refused_at = "2.75:tool_arg_sinks"
                 return arguments, start_time, context, sink_error, None, None
 
             # Step 2.8: Per-run resource-amplification budget (V0.8.74,
@@ -1715,22 +1838,26 @@ class Airlock:
                 input_tokens=_token_count_tag(_call_metadata(context, "input_tokens")),
             )
             if amp_error is not None:
+                context._refused_at = "2.8:amplification_budget"
                 return kwargs, start_time, context, amp_error, None, None
 
             # Step 3: Validate filesystem paths
             fs_error = self._validate_filesystem_paths(func_name, arguments)
             if fs_error is not None:
+                context._refused_at = "3:filesystem_paths"
                 return arguments, start_time, context, fs_error, None, None
 
             # Step 4: Check capability requirements, read from the wrapper and the chain
             # beneath it so a ``@requires`` above or below ``@Airlock`` counts.
             cap_error = self._check_capabilities(wrapper, func_name, resolved_policy)
             if cap_error is not None:
+                context._refused_at = "4:capabilities"
                 return kwargs, start_time, context, cap_error, None, None
 
             # Step 5: Validate endpoint policies (V0.4.1)
             ep_error = self._validate_endpoint_policies(func_name, arguments)
             if ep_error is not None:
+                context._refused_at = "5:endpoint_policies"
                 return arguments, start_time, context, ep_error, None, None
 
             # Step 6: Per-model-tier budget check (V0.8.7)
@@ -1740,12 +1867,14 @@ class Airlock:
                 context=context,
             )
             if budget_error is not None:
+                context._refused_at = "6:tier_budget"
                 return kwargs, start_time, context, budget_error, None, None
 
             # An approval binds to the arguments the approver saw: one changed while it
             # was deciding (a shared dict another task edited) is refused (V0.10.29).
             changed_error = self._changed_since_approval(func_name, call)
             if changed_error is not None:
+                context._refused_at = "2:approval_binding"
                 return kwargs, start_time, context, changed_error, None, None
 
             return cleaned_kwargs, start_time, context, None, budget_estimate, resolved_policy
@@ -1806,6 +1935,8 @@ class Airlock:
                     error=response.error,
                     agent_id=context.agent_id if context else None,
                     session_id=context.session_id if context else None,
+                    stripped_args=context._stripped_args if context else None,
+                    requested_args=context._requested_args if context else None,
                     amplification=context._amplification if context else None,
                 )
                 return response
@@ -1853,6 +1984,8 @@ class Airlock:
                 session_id=context.session_id if context else None,
                 amplification=context._amplification if context else None,
                 standing_grant=context._standing_grant if context else None,
+                stripped_args=context._stripped_args if context else None,
+                requested_args=context._requested_args if context else None,
             )
 
             # V0.8.6 camouflage-resistant guard: tool output flowing back
@@ -1882,6 +2015,86 @@ class Airlock:
                 )
 
             return result, warnings, sanitized_count, was_truncated
+
+        def _decide(
+            func_name: str,
+            args: tuple[Any, ...],
+            kwargs: dict[str, Any],
+            context: AirlockContext[Any],
+            resolved_policy: SecurityPolicy | None,
+            refusal: AirlockResponse | None,
+        ) -> AirlockResponse | None:
+            """Write the call's decision entry before it runs (V0.10.29).
+
+            Returns:
+                A refusal when an admitted call's decision cannot be written: a decision
+                the log does not hold is not run.
+            """
+            log = self.config.decision_log
+            if log is None:
+                return None
+            call = context._call or _BoundCall(
+                lambda: bind_arguments(call_signature, args, dict(kwargs))
+            )
+            policy = resolved_policy or context._resolved_policy
+            details = _decision_details(
+                func_name, context, self.policy is not None, policy, call, refusal
+            )
+            try:
+                context._decision = log.append(
+                    stage="policy",
+                    tool_name=func_name,
+                    decision="block" if refusal is not None else "allow",
+                    reason=_block_reason_value(refusal),
+                    agent_id=context.agent_id,
+                    session_id=context.session_id,
+                    details=details,
+                )
+            except Exception as exc:  # noqa: BLE001 - an unwritable log refuses the call
+                logger.error(
+                    "decision_log_write_failed",
+                    function=func_name,
+                    entry="decision",
+                    error_type=type(exc).__name__,
+                )
+                return None if refusal is not None else _decision_unrecorded(func_name)
+            return None
+
+        def _settle(
+            func_name: str,
+            context: AirlockContext[Any] | None,
+            outcome: str,
+            error: BaseException | None = None,
+        ) -> None:
+            """Write the call's outcome entry, naming its decision's ``record_hash``."""
+            log = self.config.decision_log
+            decision = context._decision if context is not None else None
+            if log is None or decision is None or context is None:
+                return
+            details: dict[str, object] = {
+                "entry": "outcome",
+                "decision_hash": decision.record_hash,
+                "outcome": outcome,
+            }
+            if error is not None:
+                details["error_type"] = type(error).__name__
+            try:
+                log.append(
+                    stage="execute",
+                    tool_name=func_name,
+                    decision=_OUTCOME_DECISION[outcome],
+                    reason=outcome,
+                    agent_id=context.agent_id,
+                    session_id=context.session_id,
+                    details=details,
+                )
+            except Exception as exc:  # noqa: BLE001 - the call already ran: log, never raise
+                logger.error(
+                    "decision_log_write_failed",
+                    function=func_name,
+                    entry="outcome",
+                    error_type=type(exc).__name__,
+                )
 
         def _handle_error(
             func_name: str,
@@ -1939,6 +2152,8 @@ class Airlock:
                 error=response.error,
                 agent_id=context.agent_id if context else None,
                 session_id=context.session_id if context else None,
+                stripped_args=context._stripped_args if context else None,
+                requested_args=context._requested_args if context else None,
             )
 
             return response.to_dict()
@@ -1956,6 +2171,18 @@ class Airlock:
                     budget_estimate,
                     resolved_policy,
                 ) = await _drive_async(_pre_execution(func_name, args, dict(kwargs)))
+                # V0.10.29: the decision is in the log before the tool can run.
+                if self.config.decision_log is not None:
+                    unrecorded = await asyncio.to_thread(
+                        _decide,
+                        func_name,
+                        args,
+                        dict(kwargs),
+                        context,
+                        resolved_policy,
+                        error_response,
+                    )
+                    error_response = error_response or unrecorded
 
                 if error_response is not None:
                     # Check for honeypot response before returning error
@@ -1990,6 +2217,8 @@ class Airlock:
                         error=error_response.error,
                         agent_id=context.agent_id,
                         session_id=context.session_id,
+                        stripped_args=context._stripped_args,
+                        requested_args=context._requested_args,
                         amplification=context._amplification,
                     )
                     return error_response.to_dict()
@@ -2030,6 +2259,8 @@ class Airlock:
                             result = await validated_func(*args, **cleaned_kwargs)  # type: ignore[misc]
 
                 except NetworkBlockedError as e:
+                    if self.config.decision_log is not None:
+                        await asyncio.to_thread(_settle, func_name, context, "network_blocked", e)
                     # Handle network blocking with potential honeypot
                     if should_use_honeypot(self.config.honeypot_config):
                         # Use async version to avoid blocking event loop
@@ -2063,10 +2294,14 @@ class Airlock:
                         error=response.error,
                         agent_id=context.agent_id,
                         session_id=context.session_id,
+                        stripped_args=context._stripped_args,
+                        requested_args=context._requested_args,
                         amplification=context._amplification,
                     )
                     return response.to_dict()
                 except Exception as e:
+                    if self.config.decision_log is not None:
+                        await asyncio.to_thread(_settle, func_name, context, "raised", e)
                     return _handle_error(func_name, e, start_time, cleaned_kwargs, context)
                 finally:
                     reset_context(token)
@@ -2082,7 +2317,12 @@ class Airlock:
                         resolved_policy,
                     )
                 except _ResultRefused as refused:
+                    if self.config.decision_log is not None:
+                        await asyncio.to_thread(_settle, func_name, context, "refused_after_run")
                     return refused.response
+
+                if self.config.decision_log is not None:
+                    await asyncio.to_thread(_settle, func_name, context, "returned")
 
                 if self.return_dict:
                     return AirlockResponse.success_response(
@@ -2105,6 +2345,12 @@ class Airlock:
                     budget_estimate,
                     resolved_policy,
                 ) = _drive(_pre_execution(func_name, args, dict(kwargs)))
+                # V0.10.29: the decision is in the log before the tool can run.
+                if self.config.decision_log is not None:
+                    unrecorded = _decide(
+                        func_name, args, dict(kwargs), context, resolved_policy, error_response
+                    )
+                    error_response = error_response or unrecorded
 
                 if error_response is not None:
                     # Check for honeypot response before returning error
@@ -2138,6 +2384,8 @@ class Airlock:
                         error=error_response.error,
                         agent_id=context.agent_id,
                         session_id=context.session_id,
+                        stripped_args=context._stripped_args,
+                        requested_args=context._requested_args,
                         amplification=context._amplification,
                     )
                     return error_response.to_dict()
@@ -2171,6 +2419,7 @@ class Airlock:
                             result = validated_func(*args, **cleaned_kwargs)
 
                 except NetworkBlockedError as e:
+                    _settle(func_name, context, "network_blocked", e)
                     # Handle network blocking with potential honeypot
                     if should_use_honeypot(self.config.honeypot_config):
                         honeypot_result = create_honeypot_response(
@@ -2203,10 +2452,13 @@ class Airlock:
                         error=response.error,
                         agent_id=context.agent_id,
                         session_id=context.session_id,
+                        stripped_args=context._stripped_args,
+                        requested_args=context._requested_args,
                         amplification=context._amplification,
                     )
                     return response.to_dict()
                 except Exception as e:
+                    _settle(func_name, context, "raised", e)
                     return _handle_error(func_name, e, start_time, cleaned_kwargs, context)
                 finally:
                     reset_context(token)
@@ -2222,7 +2474,10 @@ class Airlock:
                         resolved_policy,
                     )
                 except _ResultRefused as refused:
+                    _settle(func_name, context, "refused_after_run")
                     return refused.response
+
+                _settle(func_name, context, "returned")
 
                 if self.return_dict:
                     return AirlockResponse.success_response(

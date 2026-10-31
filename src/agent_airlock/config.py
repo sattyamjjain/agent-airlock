@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from .anomaly import AnomalyDetectorConfig
     from .capabilities import CapabilityPolicy
+    from .conformance.decision_log import DecisionLog
     from .filesystem import FilesystemPolicy
     from .honeypot import HoneypotConfig
     from .mcp_proxy_guard import CredentialScope
@@ -166,6 +167,13 @@ class AirlockConfig:
     # through a Verhoeff checksum (cuts false positives on random
     # 12-digit numbers). Locale codes are lowercase ISO-3166-1 alpha-2.
     pii_locales: list[str] = field(default_factory=list)
+
+    # V0.10.29 — the hash-chained decision log each call's decision is written to before
+    # the tool runs (verdict, rule, layer, and digests of the policy, the arguments and
+    # the decision context), and its outcome after, naming the decision's record_hash.
+    # Both writes complete before the call goes on, and a decision that cannot be written
+    # refuses the call. See :class:`agent_airlock.conformance.decision_log.DecisionLog`.
+    decision_log: DecisionLog | None = None
 
     # V0.8.25: meant to switch on the fail-closed terminal-claim guard (Goal-Autopilot,
     # arXiv:2606.11688), but nothing reads it: @Airlock checks no terminal claims.
