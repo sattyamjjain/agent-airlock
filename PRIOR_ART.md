@@ -51,7 +51,7 @@ that flatters the gate would misrepresent it, so both halves are recorded here.
 agent-airlock was built on a premise it never measured: that a capable tool-using model
 will, in the ordinary course of completing a task *correctly*, reach for authority the task
 did not require — and that this is a routine failure mode rather than an exotic one. Every
-deny-by-default decision in this codebase is downstream of that assumption.
+fail-closed decision in this codebase is downstream of that assumption.
 
 This paper is the measured version of that premise. **64.36% safe success for the base
 policy, and excess-authority error events at 4.56%**, are a number where this library had
@@ -66,8 +66,9 @@ library's implementation. It validates its problem statement.
 ### Where the two do different jobs
 
 Theirs is a property of a **trained policy**, measured over a distribution of tasks. This
-library's deny-by-default check is a property of the **call path**, and it holds for a call
-the policy has never seen.
+library's argument check (with a `SecurityPolicy(default_deny=True)` allowlist, its tool
+check too) is a property of the **call path**, and it holds for a call the policy has never
+seen.
 
 That distinction is the whole of it. A 98.48% safe-success rate is a claim about an
 evaluation distribution — 2,896 episodes over 500 held-out tasks. It is *not* a claim that
@@ -99,7 +100,7 @@ Specifically, none of the following exists:
 - **No run of agent-airlock inside their evaluation harness**, as a control layer or
   otherwise.
 - **No measurement of what their 0.79% residual excess-authority rate becomes with a
-  deny-by-default gate at the call boundary.** That is the single number that would justify
+  `default_deny=True` gate at the call boundary.** That is the single number that would justify
   the complementarity argument made in the section above, and it is unmeasured. The argument
   is currently reasoning, not evidence.
 - **No measurement in the other direction.** There is no evidence here about how much of
