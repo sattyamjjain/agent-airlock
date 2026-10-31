@@ -492,7 +492,10 @@ def verify_clearance(
             f"clearance issued at {iat_dt.isoformat()} is older than "
             f"max_clearance_age={cfg.max_clearance_age}"
         )
-    if exp_dt is not None and exp_dt < now:
+    # RFC 7519 4.1.4: a token "MUST NOT be accepted for processing" on or after ``exp``.
+    # Until 0.10.29 this compared with ``<``, so a clearance was accepted at ``now == exp``
+    # (handles and task admissions already expire at their deadline, with ``>=``).
+    if exp_dt is not None and exp_dt <= now:
         raise ExpiredClearance(f"clearance expired at {exp_dt.isoformat()}")
 
     return AdmittedClearance(
