@@ -108,6 +108,11 @@ class AuditRecord:
     # the refusal. Until then a honeypot reply wrote no record at all. None otherwise, so
     # every other record is unchanged.
     honeypot: bool | None = None
+    # V0.10.29: on a refusal, the rule that refused (a deny or escalation pattern, a
+    # violation type, else the block reason) and the call-path layer it sits in. The
+    # model's refusal no longer quotes a rule, so this is where an operator finds it.
+    rule_id: str | None = None
+    policy_layer: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary, excluding None values."""
@@ -127,6 +132,19 @@ _PREVIEW_SCAN_CHARS = 4000
 def _masked(text: str) -> str:
     """``text`` with the secrets and PII the output sanitizer detects masked."""
     return sanitize_output(text[:_PREVIEW_SCAN_CHARS], max_chars=None).content
+
+
+#: How much of a masked argument value a log line keeps.
+LOG_VALUE_CHARS = 200
+
+
+def masked_for_log(value: Any, limit: int = LOG_VALUE_CHARS) -> str:
+    """``value`` as text for a log line: masked like an audit preview, then cut to
+    ``limit`` characters. A log line is read by more people than the call, so an argument
+    value goes in only this way (V0.10.29: a key in a URL or path was logged as given)."""
+    text = value if isinstance(value, str) else _safe_repr(value)
+    masked = _masked(text)
+    return masked if len(masked) <= limit else masked[:limit] + "..."
 
 
 def _safe_repr(value: Any) -> str:
@@ -234,6 +252,8 @@ class AuditLogger:
         error: str | None = None,
         amplification: AmplificationDecision | None = None,
         honeypot: bool = False,
+        rule_id: str | None = None,
+        policy_layer: str | None = None,
     ) -> None:
         """Write an audit record to the log file.
 
@@ -254,6 +274,8 @@ class AuditLogger:
                 omits them, so the record is byte-identical to a v0.8.73 one.
             honeypot: True when the caller got a honeypot's fake success in place of
                 this refusal (V0.10.24). Recorded only when True.
+            rule_id: The rule that refused, for a refusal (V0.10.29).
+            policy_layer: The call-path layer that refused, for a refusal (V0.10.29).
         """
         if not self.enabled or self.path is None:
             return
@@ -278,6 +300,8 @@ class AuditLogger:
             run_amplification_ratio=(amplification.amplification_ratio if amplification else None),
             amplification_verdict=amplification.verdict.value if amplification else None,
             honeypot=True if honeypot else None,
+            rule_id=rule_id,
+            policy_layer=policy_layer,
         )
 
         self._write_record(record)
