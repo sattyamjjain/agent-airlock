@@ -95,6 +95,7 @@ nav:
     - Decision records: guide/decision-record.md
     - Sources and sinks: guide/data-flow.md
     - Halting a run, and loops: guide/run-guard.md
+    - Delegation: guide/delegation.md
   - API Reference:
     - Airlock Decorator: api/airlock.md
     - Configuration: api/config.md

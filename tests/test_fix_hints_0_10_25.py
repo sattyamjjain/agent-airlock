@@ -63,6 +63,7 @@ from agent_airlock import core as core_module
 from agent_airlock import sandbox as sandbox_module
 from agent_airlock._arg_walk import MAX_DEPTH
 from agent_airlock.cost_tracking import _reset_tracker, set_global_tracker
+from agent_airlock.nested_runs import nested_run, run_budget
 from agent_airlock.oversight import OversightRequest, OversightResponse, OversightVerdict
 from agent_airlock.policy_presets import strict_tier_budget_policy
 from agent_airlock.self_heal import (
@@ -915,6 +916,18 @@ def _run_halted(env: _Env) -> Any:
         return tool()
 
 
+def _run_budget_exhausted(env: _Env) -> Any:
+    """A nested run the run tree's depth budget has no room for (V0.10.29, run_budget)."""
+
+    @Airlock()
+    def ask_subagent() -> str:
+        with nested_run():
+            return "ran"
+
+    with run_budget(max_depth=0):
+        return ask_subagent()
+
+
 def _handle_expired(env: _Env) -> Any:
     with handle_run("run-1"):
         handle = issue_handle(issuer=ISSUER, scope=SCOPE, ttl_seconds=0.01)
@@ -956,6 +969,7 @@ _REFUSALS: list[tuple[str, Callable[[_Env], Any], BlockReason]] = [
     ("handle-wrong-scope", _handle_wrong_scope, BlockReason.HANDLE_WRONG_SCOPE),
     ("handle-expired", _handle_expired, BlockReason.HANDLE_EXPIRED),
     ("run-halted", _run_halted, BlockReason.RUN_HALTED),
+    ("run-budget-exhausted", _run_budget_exhausted, BlockReason.RUN_BUDGET_EXHAUSTED),
 ]
 
 #: Block reasons the @Airlock call path never returns: OUTPUT_SANITIZED names no refusal,

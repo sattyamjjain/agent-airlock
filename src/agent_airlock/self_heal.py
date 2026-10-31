@@ -80,6 +80,10 @@ class BlockReason(str, Enum):
     # V0.10.29: the call's run was halted by a hard stop or a repeated loop (RunGuard), so
     # no later call in it runs, whatever the call and its own policy.
     RUN_HALTED = "run_halted"
+    # V0.10.29: the run tree's depth or turn budget (run_budget) is spent. The calling agent
+    # gets it as a failed tool result it can finish on, not a policy refusal: nothing about
+    # the call is wrong, the tree has no room left for it.
+    RUN_BUDGET_EXHAUSTED = "run_budget_exhausted"
 
 
 @dataclass
@@ -584,6 +588,58 @@ def handle_run_halted(func_name: str, *, halt_reason: str) -> AirlockResponse:
             "Stop and tell the user. The host has to review the run and start a new one",
         ],
         metadata={"function": func_name, "halt_reason": halt_reason},
+    )
+
+
+def handle_run_budget_exhausted(func_name: str, *, kind: str) -> AirlockResponse:
+    """Create a response for a nested run the run tree's budget has no room for (V0.10.29).
+
+    Args:
+        func_name: Name of the tool whose nested run was refused.
+        kind: ``"depth"`` or ``"turns"``: what ran out.
+
+    Returns:
+        AirlockResponse with ``block_reason=RUN_BUDGET_EXHAUSTED``.
+    """
+    spent = "no nested run is left" if kind == "depth" else "no turn is left"
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.RUN_BUDGET_EXHAUSTED,
+        error=f"AIRLOCK_BLOCK: '{func_name}' did not run: {spent} in this run's budget",
+        fix_hints=[
+            f"The run's {kind} budget is spent, so retrying will not help",
+            "Finish the task with what you have, or report what is left to do",
+        ],
+        metadata={"function": func_name, "budget": kind},
+    )
+
+
+def handle_lease_scope_denied(
+    func_name: str, *, argument: str, capability: str, reason: str
+) -> AirlockResponse:
+    """Create a response for an argument outside the caller's capability leases (V0.10.29).
+
+    Args:
+        func_name: Name of the function that was blocked.
+        argument: The ``@lease_scoped`` argument.
+        capability: The capability its leases are held for.
+        reason: Why it was refused, as the model may read it (no lease target named).
+
+    Returns:
+        AirlockResponse with ``block_reason=CAPABILITY_DENIED``.
+    """
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.CAPABILITY_DENIED,
+        error=f"AIRLOCK_BLOCK: '{func_name}' argument '{argument}' refused: {reason}",
+        fix_hints=[
+            f"Pass a '{argument}' within the {capability} leases this agent holds",
+            "If the task needs another target, tell the user: only the host can grant a lease",
+        ],
+        metadata={
+            "function": func_name,
+            "argument": argument,
+            "capability": capability,
+            "violation_type": "lease_scope",
+        },
     )
 
 

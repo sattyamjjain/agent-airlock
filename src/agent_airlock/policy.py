@@ -18,7 +18,7 @@ import math
 import re
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict as dc_asdict
 from dataclasses import dataclass, field
 from dataclasses import fields as dc_fields
@@ -92,6 +92,13 @@ class PolicyViolation(Exception):
         self.violation_type = violation_type
         self.details = details or {}
         super().__init__(message)
+
+
+def pattern_specificity(pattern: str) -> tuple[bool, int]:
+    """How specific a ``rate_limits`` / ``time_restrictions`` pattern is: the most specific
+    pattern matching a tool decides. A pattern without ``*`` comes first, then the one with
+    more characters besides ``*``; two with the same key keep their dictionary order."""
+    return (pattern.count("*") == 0, len(pattern.replace("*", "")))
 
 
 class ViolationType(str, Enum):
@@ -652,13 +659,7 @@ class SecurityPolicy:
     def _find_matching_patterns(self, tool_name: str, patterns: dict[str, Any]) -> list[str]:
         """Find all patterns that match a tool name, sorted by specificity."""
         matches = [p for p in patterns if self._matches_pattern(tool_name, p)]
-        # Sort by specificity (longer patterns are more specific)
-        # Patterns without wildcards are most specific
-        return sorted(
-            matches,
-            key=lambda p: (p.count("*") == 0, len(p.replace("*", ""))),
-            reverse=True,
-        )
+        return sorted(matches, key=pattern_specificity, reverse=True)
 
     def check_tool_allowed(self, tool_name: str) -> None:
         """Check if a tool is allowed by allow/deny lists.
@@ -1097,25 +1098,79 @@ class SecurityPolicy:
         are caches ``__post_init__`` rebuilds, ``_lock`` cannot be copied, and
         ``_frozen_digest`` is set below.
         """
+        frozen = SecurityPolicy(**self._public_kwargs())
+        with self._lock:
+            frozen._revoked_grants = set(self._revoked_grants)
+        frozen._frozen_digest = frozen._compute_policy_digest()
+        return frozen
+
+    def _public_kwargs(self) -> dict[str, Any]:
+        """Every public field, ready to build a copy: what :meth:`freeze` and
+        :meth:`narrow` rebuild a policy from.
+
+        Containers are copied so the copy cannot be mutated through a reference the caller
+        still holds. Guard objects and budgets are shared by reference, matching the
+        pre-v0.8.74 treatment of capability_policy / model_tier_budget: they carry their
+        own runtime state and must not be duplicated.
+        """
         kwargs: dict[str, Any] = {}
         for spec in dc_fields(self):
             if spec.name.startswith("_"):
                 continue
             value = getattr(self, spec.name)
-            # Containers are copied so the frozen policy cannot be mutated
-            # through a reference the caller still holds. Guard objects and
-            # budgets are shared by reference, matching the pre-v0.8.74
-            # treatment of capability_policy / model_tier_budget — they carry
-            # their own runtime state and must not be duplicated.
             kwargs[spec.name] = (
                 copy.deepcopy(value) if isinstance(value, dict | list | set) else value
             )
+        return kwargs
 
-        frozen = SecurityPolicy(**kwargs)
-        with self._lock:
-            frozen._revoked_grants = set(self._revoked_grants)
-        frozen._frozen_digest = frozen._compute_policy_digest()
-        return frozen
+    def narrow(
+        self,
+        *,
+        allowed_tools: Sequence[str] | None = None,
+        denied_tools: Sequence[str] = (),
+        rate_limits: Mapping[str, str] | None = None,
+        amplification_budget: AmplificationBudget | None = None,
+    ) -> SecurityPolicy:
+        """A copy of this policy that can only admit less (V0.10.29): for a delegated agent.
+
+        Args:
+            allowed_tools: The tools the copy may call, intersected with this policy's
+                allowlist. Omitted, the allowlist is kept. An intersection that comes out
+                empty admits no tool.
+            denied_tools: Patterns added to this policy's deny list.
+            rate_limits: Limits added to this policy's, or put in place of one for the same
+                pattern. Each must be lower than every limit of this policy it could
+                replace: no more calls at once and no faster.
+            amplification_budget: A per-run call budget no looser than this policy's.
+
+        Returns:
+            A new, unfrozen policy for which :meth:`is_subset_of` this one is True. Every
+            other field is this policy's, shared like :meth:`freeze` shares it.
+
+        Raises:
+            TypeError: A tool list is a string rather than a list of patterns.
+            ValueError: A rate limit or the budget would admit more than this policy does.
+        """
+        from .delegation import narrow_policy
+
+        return narrow_policy(
+            self,
+            allowed_tools=allowed_tools,
+            denied_tools=denied_tools,
+            rate_limits=rate_limits,
+            amplification_budget=amplification_budget,
+        )
+
+    def is_subset_of(self, parent: SecurityPolicy) -> bool:
+        """Whether this policy admits no call ``parent`` refuses (V0.10.29).
+
+        Sound, not complete: False also when the subset cannot be proven from the
+        policies' shape, such as a glob that may overlap another.
+        :func:`agent_airlock.delegation.subset_problems` says what was not proven.
+        """
+        from .delegation import subset_problems
+
+        return not subset_problems(self, parent)
 
     def is_frozen(self) -> bool:
         """Whether this policy was produced by :meth:`freeze`."""

@@ -169,6 +169,7 @@ from .cost_tracking import (
     set_global_tracker,
 )
 from .data_flow import DataFlowPolicy, sink, source
+from .delegation import DelegationLease, DelegationRefused
 
 # V0.8.25 — Fail-closed terminal-claim guard (Goal-Autopilot arXiv:2606.11688).
 from .done_receipt_guard import (
@@ -286,6 +287,9 @@ from .integrations.pydantic_ai import (
     PydanticAIAdapter,
     PydanticAIMissingError,
 )
+
+# V0.10.29 — an argument bound to the capability lease its caller holds.
+from .lease_scope import lease_scoped
 
 # V0.4.0 MCP Proxy Guard
 from .mcp_proxy_guard import (
@@ -469,6 +473,7 @@ from .mcp_spec.zero_click_config_guard import (
     UnsignedMCPServerAdded,
     fingerprint_mcp_server,
 )
+from .nested_runs import RunBudgetExhausted, nested_run, run_budget, spend_turn
 
 # V0.3.0 Network egress control
 from .network import (
@@ -1221,6 +1226,14 @@ __all__ = [
     "requires",
     # V0.10.29 run guard
     "RunGuard",
+    # V0.10.29 delegation, argument leases and the nested-run budget
+    "DelegationLease",
+    "DelegationRefused",
+    "lease_scoped",
+    "RunBudgetExhausted",
+    "nested_run",
+    "run_budget",
+    "spend_turn",
     # V0.10.29 shell commands
     "ShellCommandPolicy",
     # V0.10.29 source-to-sink gate
