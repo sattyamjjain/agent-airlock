@@ -74,7 +74,8 @@ and marketplace manifests).
 3. Filesystem paths → 4. capability requirements → 4.5 argument leases → 5. endpoint policy
    → 6. per-model-tier budget
 7. Execute: Pydantic strict validation, then run locally or in the sandbox
-8. `_post_execution`: sanitize output, audit log, mark untrusted output, reconcile cost
+8. `_post_execution`: sanitize output, check it with the tool-output trust guard (when
+   configured), audit log, mark untrusted output, reconcile cost
 
 A blocked call, validation failures included, returns `AirlockResponse.to_dict()` rather than
 raising: a plain dict (`success: False`, `block_reason`, `error`, `fix_hints` for the model

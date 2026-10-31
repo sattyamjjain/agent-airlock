@@ -50,6 +50,17 @@ the model the enclosed text is third-party data to be summarised, never
 instructions to follow — so even un-flagged output crosses the boundary marked
 as data. Flagged output additionally carries the matched signals for audit.
 
+What a flag does (V0.10.29, google/adk-python#6966)
+---------------------------------------------------
+``on_flag`` chooses, and no choice puts a placeholder where the output was: a placeholder
+told the agent nothing, so it called the same tool again, in a loop. ``"envelope"`` (the
+default) returns the output enveloped, as above. ``"typed_error"`` raises
+:class:`ToolOutputTrustError` with the decision's ``fix_hints``, which is what
+``process(raise_on_flag=True)`` did and still does. ``"abort"`` halts the run as well
+(:meth:`AirlockContext.halt`), so every later call in it is refused as ``run_halted``.
+``AirlockConfig(output_trust_guard=...)`` runs the guard on every ``@Airlock`` result,
+after masking.
+
 Zero-runtime-dep: stdlib ``re`` + ``structlog`` only (the structured event is
 bridged to OpenTelemetry by the existing ``audit_otel`` exporter when
 configured). The Pydantic-only core is preserved.
@@ -67,10 +78,13 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from ._log import structlog
 from .exceptions import AirlockError
+
+if TYPE_CHECKING:
+    from .context import AirlockContext
 
 logger = structlog.get_logger("agent-airlock.tool_output_trust_guard")
 
@@ -172,7 +186,8 @@ class ToolOutputTrustDecision:
 
 
 class ToolOutputTrustError(AirlockError):
-    """Raised by ``process(..., raise_on_flag=True)`` on a flagged tool output.
+    """Raised on a flagged tool output by ``on_flag="typed_error"`` or ``"abort"``, and by
+    ``process(..., raise_on_flag=True)``.
 
     Most callers do NOT want this — the default posture envelopes and returns
     the output as data. Use it only when a tool's output must be hard-blocked.
@@ -180,13 +195,20 @@ class ToolOutputTrustError(AirlockError):
     Attributes:
         decision: The decision that triggered the refusal.
         fix_hints: Operator/LLM-actionable guidance.
+        aborted: Whether the run was halted too (``on_flag="abort"``).
     """
 
-    def __init__(self, decision: ToolOutputTrustDecision) -> None:
+    def __init__(self, decision: ToolOutputTrustDecision, *, aborted: bool = False) -> None:
         self.decision = decision
         self.fix_hints = decision.fix_hints
+        self.aborted = aborted
         n = len(decision.signals)
         super().__init__(f"tool output flagged with {n} untrusted-instruction signal(s)")
+
+
+#: What :class:`ToolOutputTrustGuard` does with a flagged output (``on_flag``).
+OnFlag = Literal["envelope", "typed_error", "abort"]
+_ON_FLAG: tuple[str, ...] = ("envelope", "typed_error", "abort")
 
 
 class ToolOutputTrustGuard:
@@ -199,8 +221,14 @@ class ToolOutputTrustGuard:
         envelope_only_when_flagged: When True, only enveloped if a signal fired
             (lighter touch). Default False = STRICT (always envelope).
         advisory: Advisory reference surfaced in ``fix_hints``.
+        on_flag: What a flagged output gets (V0.10.29): ``"envelope"`` (the default)
+            returns it enveloped, ``"typed_error"`` raises :class:`ToolOutputTrustError`,
+            and ``"abort"`` halts the run and raises it. None substitutes a placeholder.
 
     The guard never executes output and never silently drops it.
+
+    Raises:
+        ValueError: ``on_flag`` is none of the three.
     """
 
     def __init__(
@@ -210,7 +238,14 @@ class ToolOutputTrustGuard:
         envelope_only_when_flagged: bool = False,
         advisory: str | None = "Agentjacking / CVE-2026-42824",
         extra_imperative_patterns: tuple[str, ...] = (),
+        on_flag: OnFlag = "envelope",
     ) -> None:
+        if on_flag not in _ON_FLAG:
+            raise ValueError(
+                f"ToolOutputTrustGuard(on_flag=...) must be one of {', '.join(_ON_FLAG)}; "
+                f"got {on_flag!r}"
+            )
+        self.on_flag: OnFlag = on_flag
         self._envelope = envelope
         self._envelope_only_when_flagged = envelope_only_when_flagged
         self._advisory = advisory
@@ -264,20 +299,32 @@ class ToolOutputTrustGuard:
         output: Any,
         *,
         raise_on_flag: bool = False,
+        context: AirlockContext[Any] | None = None,
     ) -> tuple[Any, ToolOutputTrustDecision]:
         """Inspect ``output`` and return ``(safe_output, decision)``.
 
         In the default STRICT posture the returned output is always the
         untrusted-data envelope (flagged or not). With
         ``envelope_only_when_flagged=True`` the raw output passes through unless
-        a signal fired. Set ``raise_on_flag=True`` to hard-block instead.
+        a signal fired. A flagged output gets what ``on_flag`` says;
+        ``raise_on_flag=True`` makes an ``"envelope"`` guard raise as ``"typed_error"``.
+
+        Args:
+            output: The tool's result.
+            raise_on_flag: Raise on a flag even when ``on_flag`` is ``"envelope"``.
+            context: The run ``"abort"`` halts; the context set around the call when
+                omitted. With neither, nothing is halted and the error is still raised.
 
         Raises:
-            ToolOutputTrustError: only when ``raise_on_flag`` and a signal fired.
+            ToolOutputTrustError: A signal fired and the output is not to be returned
+                (``aborted`` when the run was halted too).
         """
         decision = self.inspect(output)
-        if decision.flagged and raise_on_flag:
-            raise ToolOutputTrustError(decision)
+        mode = "typed_error" if raise_on_flag and self.on_flag == "envelope" else self.on_flag
+        if decision.flagged and mode != "envelope":
+            if mode == "abort":
+                _halt_run(context, decision)
+            raise ToolOutputTrustError(decision, aborted=mode == "abort")
 
         should_envelope = self._envelope and (
             decision.flagged or not self._envelope_only_when_flagged
@@ -306,6 +353,13 @@ class ToolOutputTrustGuard:
         elif isinstance(value, (list, tuple)):
             for i, item in enumerate(value):
                 self._scan(item, f"{path}[{i}]", signals, in_diagnostic=in_diagnostic)
+        elif isinstance(value, (set, frozenset)):
+            for i, item in enumerate(sorted(value, key=repr)):
+                self._scan(item, f"{path}{{{i}}}", signals, in_diagnostic=in_diagnostic)
+        elif value is not None and not isinstance(value, (bool, int, float)):
+            # V0.10.29: any other object (a pydantic model, a dataclass, bytes) is read as
+            # the text it would reach the model as, rather than passed unread.
+            self._scan_text(_to_text(value), path, signals, in_diagnostic=in_diagnostic)
 
     def _scan_text(
         self,
@@ -378,6 +432,20 @@ class ToolOutputTrustGuard:
                 )
 
 
+def _halt_run(context: AirlockContext[Any] | None, decision: ToolOutputTrustDecision) -> None:
+    """Halt ``context``'s run (or the one set around the call) for ``on_flag="abort"``."""
+    if context is None:
+        from .context import get_current_context
+
+        context = get_current_context()
+    verdicts = ", ".join(sorted({signal.verdict.value for signal in decision.signals}))
+    if context is None:
+        logger.warning("tool_output_trust_abort_without_run", verdicts=verdicts)
+        return
+    context.halt(f"a tool's output was flagged as untrusted instructions ({verdicts})")
+    logger.warning("tool_output_trust_abort", verdicts=verdicts, agent_id=context.agent_id)
+
+
 def _excerpt(text: str, limit: int = 160) -> str:
     flat = " ".join(text.split())
     return flat if len(flat) <= limit else flat[:limit] + "…"
@@ -391,6 +459,7 @@ def _to_text(value: Any) -> str:
 
 
 __all__ = [
+    "OnFlag",
     "ToolOutputTrustDecision",
     "ToolOutputTrustError",
     "ToolOutputTrustGuard",

@@ -84,6 +84,10 @@ class BlockReason(str, Enum):
     # gets it as a failed tool result it can finish on, not a policy refusal: nothing about
     # the call is wrong, the tree has no room left for it.
     RUN_BUDGET_EXHAUSTED = "run_budget_exhausted"
+    # V0.10.29: the tool ran, and its output carried text shaped like instructions, so a
+    # ToolOutputTrustGuard with on_flag="typed_error" withheld it. Not OUTPUT_SANITIZED:
+    # nothing was masked, the whole output is refused, and no placeholder stands in for it.
+    OUTPUT_UNTRUSTED = "output_untrusted"
 
 
 @dataclass
@@ -610,6 +614,50 @@ def handle_run_budget_exhausted(func_name: str, *, kind: str) -> AirlockResponse
             "Finish the task with what you have, or report what is left to do",
         ],
         metadata={"function": func_name, "budget": kind},
+    )
+
+
+def handle_output_untrusted(
+    func_name: str, *, verdicts: Sequence[str], fix_hints: Sequence[str], aborted: bool
+) -> AirlockResponse:
+    """Create a response for a tool output the trust guard flagged (V0.10.29).
+
+    Args:
+        func_name: Name of the tool whose output was withheld.
+        verdicts: The signals that fired (``override_directive``, ``fenced_command``, ...).
+        fix_hints: The guard's own hints for the flagged output.
+        aborted: Whether the guard halted the run too (``on_flag="abort"``).
+
+    Returns:
+        AirlockResponse with ``block_reason=OUTPUT_UNTRUSTED``, or ``RUN_HALTED`` when the
+        run was halted.
+    """
+    found = ", ".join(verdicts) or "instructions"
+    if aborted:
+        return AirlockResponse.blocked_response(
+            reason=BlockReason.RUN_HALTED,
+            error=(
+                f"AIRLOCK_BLOCK: '{func_name}' returned text shaped like instructions "
+                f"({found}), so its output was withheld and this run was halted"
+            ),
+            fix_hints=[
+                "No call in this run will run any more, whatever the arguments",
+                "Stop and tell the user. The host has to review the run and start a new one",
+            ],
+            metadata={"function": func_name, "verdicts": list(verdicts)},
+        )
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.OUTPUT_UNTRUSTED,
+        error=(
+            f"AIRLOCK_BLOCK: '{func_name}' returned text shaped like instructions ({found}), "
+            "so its output was withheld"
+        ),
+        fix_hints=[
+            *fix_hints,
+            "Calling the tool again with the same arguments returns the same output: do "
+            "not retry it for this. Go on without it, or tell the user",
+        ],
+        metadata={"function": func_name, "verdicts": list(verdicts)},
     )
 
 
