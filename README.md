@@ -156,6 +156,10 @@ fails the release if any row drifts past 30 days.
 
 **Table notes**
 
+Every airlock arm in rows 1 to 6 runs a least-privilege `SecurityPolicy(default_deny=True)`
+with only the tools the task needs on its allowlist (row 5's G0 tier is contract-only), not
+the library defaults, under which an empty allowlist allows every tool.
+
 1. 95% CI 96.5–100% (blocked) and 0–3.6% (false-positive); 6 of 10 OWASP ASI slots measured, ASI07–ASI10 are n=0.
 2. 0/4 before v0.10.6; 100 policy items admitted and 100 refused on both paths. The 2026-09-16 run's 204/204 was vacuous — every policy item was refused on both paths (corrected in the results). Isolation-backend execution _not run_ here: no E2B or Docker in the runner.
 3. 524/609 pairs that have a tool-call target, of 949 attacked. Model-in-the-loop ASR 45% → 10% (gpt-4o-mini, 2026-07-31) is **one model family on a 60-pair subset**, under AgentDojo's fixed-template attack, not an adaptive one. Claude 5.5 (168 pairs/arm, 2026-10-16) is a near-null: Haiku and Sonnet resist unaided (undefended ASR 5-8%), so airlock's realised reduction is +0-1% at a +14% benign-refusal cost; against models this robust the 86% deterministic bound is the informative measure.

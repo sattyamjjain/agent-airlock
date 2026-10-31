@@ -277,6 +277,31 @@ def test_manifests_do_not_self_brand_as_firewall() -> None:
     )
 
 
+def test_self_description_makes_no_unqualified_deny_by_default_claim() -> None:
+    """The library is not deny-by-default as it ships: tool allowlists, capability gates and
+    the other layers are opt-in, and an empty ``allowed_tools`` allows every tool unless
+    ``SecurityPolicy(default_deny=True)``. Until 0.10.29 the manifests, the package
+    docstring and CLAUDE.md said "deny-by-default" anyway (corrected on
+    scadastrangelove/awesome-ai-security-tools#154). A self-description may use the phrase
+    only in a string that names ``default_deny=True``."""
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    texts = [
+        *_self_describing_strings(),
+        agent_airlock.__doc__ or "",
+        pyproject["project"]["description"],
+    ]
+    offenders = [
+        text
+        for text in texts
+        if re.search(r"deny[- ]by[- ]default", text, re.IGNORECASE)
+        and "default_deny=True" not in text
+    ]
+    assert not offenders, (
+        f"a self-description calls agent-airlock deny-by-default without naming "
+        f"default_deny=True: {offenders}"
+    )
+
+
 def test_manifests_make_no_unqualified_zero_dep_claim() -> None:
     """The plugin/marketplace manifests are registry pages too — rendered with no room
     for a footnote, exactly like the PyPI summary
