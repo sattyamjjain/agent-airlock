@@ -91,7 +91,7 @@ from ._log import structlog
 from ._sandbox_errors import SandboxError
 from ._sandbox_errors import SandboxExecutionError as SandboxExecutionError
 from ._sandbox_errors import SandboxUnavailableError as SandboxUnavailableError
-from .audit import AuditLogger
+from .audit import AuditLogger, masked_for_log
 from .capabilities import (
     Capability,
     CapabilityDeniedError,
@@ -1422,6 +1422,7 @@ class Airlock:
             start_time: float,
             args: dict[str, Any],
             context: AirlockContext[Any],
+            refusal: AirlockResponse,
         ) -> None:
             """Record a refusal the caller was answered with honeypot data for.
 
@@ -1437,6 +1438,8 @@ class Airlock:
                 agent_id=context.agent_id,
                 session_id=context.session_id,
                 honeypot=True,
+                rule_id=refusal.rule_id,
+                policy_layer=refusal.policy_layer,
             )
 
         def _pre_execution(
@@ -1747,6 +1750,8 @@ class Airlock:
                     agent_id=context.agent_id if context else None,
                     session_id=context.session_id if context else None,
                     amplification=context._amplification if context else None,
+                    rule_id=response.rule_id,
+                    policy_layer=response.policy_layer,
                 )
                 return response
 
@@ -1878,6 +1883,8 @@ class Airlock:
                 error=response.error,
                 agent_id=context.agent_id if context else None,
                 session_id=context.session_id if context else None,
+                rule_id=response.rule_id,
+                policy_layer=response.policy_layer,
             )
 
             return response.to_dict()
@@ -1913,7 +1920,12 @@ class Airlock:
                         )
                         if honeypot_result is not None:
                             _audit_honeypot(
-                                func_name, block_reason, start_time, dict(kwargs), context
+                                func_name,
+                                block_reason,
+                                start_time,
+                                dict(kwargs),
+                                context,
+                                error_response,
                             )
                             return honeypot_result  # type: ignore[no-any-return]
 
@@ -1930,6 +1942,8 @@ class Airlock:
                         agent_id=context.agent_id,
                         session_id=context.session_id,
                         amplification=context._amplification,
+                        rule_id=error_response.rule_id,
+                        policy_layer=error_response.policy_layer,
                     )
                     return error_response.to_dict()
 
@@ -1980,7 +1994,17 @@ class Airlock:
                         )
                         if honeypot_result is not None:
                             _audit_honeypot(
-                                func_name, "network_blocked", start_time, cleaned_kwargs, context
+                                func_name,
+                                "network_blocked",
+                                start_time,
+                                cleaned_kwargs,
+                                context,
+                                handle_network_blocked(
+                                    func_name,
+                                    operation=e.operation,
+                                    target=e.target,
+                                    details=e.details,
+                                ),
                             )
                             return honeypot_result  # type: ignore[no-any-return]
 
@@ -2003,6 +2027,8 @@ class Airlock:
                         agent_id=context.agent_id,
                         session_id=context.session_id,
                         amplification=context._amplification,
+                        rule_id=response.rule_id,
+                        policy_layer=response.policy_layer,
                     )
                     return response.to_dict()
                 except Exception as e:
@@ -2061,7 +2087,12 @@ class Airlock:
                         )
                         if honeypot_result is not None:
                             _audit_honeypot(
-                                func_name, block_reason, start_time, dict(kwargs), context
+                                func_name,
+                                block_reason,
+                                start_time,
+                                dict(kwargs),
+                                context,
+                                error_response,
                             )
                             return honeypot_result  # type: ignore[no-any-return]
 
@@ -2078,6 +2109,8 @@ class Airlock:
                         agent_id=context.agent_id,
                         session_id=context.session_id,
                         amplification=context._amplification,
+                        rule_id=error_response.rule_id,
+                        policy_layer=error_response.policy_layer,
                     )
                     return error_response.to_dict()
 
@@ -2120,7 +2153,17 @@ class Airlock:
                         )
                         if honeypot_result is not None:
                             _audit_honeypot(
-                                func_name, "network_blocked", start_time, cleaned_kwargs, context
+                                func_name,
+                                "network_blocked",
+                                start_time,
+                                cleaned_kwargs,
+                                context,
+                                handle_network_blocked(
+                                    func_name,
+                                    operation=e.operation,
+                                    target=e.target,
+                                    details=e.details,
+                                ),
                             )
                             return honeypot_result  # type: ignore[no-any-return]
 
@@ -2143,6 +2186,8 @@ class Airlock:
                         agent_id=context.agent_id,
                         session_id=context.session_id,
                         amplification=context._amplification,
+                        rule_id=response.rule_id,
+                        policy_layer=response.policy_layer,
                     )
                     return response.to_dict()
                 except Exception as e:
@@ -2529,10 +2574,13 @@ class Airlock:
             try:
                 resolved_policy = self.policy(context)
             except Exception as e:
+                # The message is the operator's, masked in the log; the model reads only
+                # that the resolver failed and the exception's type (until 0.10.29 it read
+                # the message, a connection string or a key included).
                 logger.error(
                     "policy_resolver_error",
                     function=func_name,
-                    error=str(e),
+                    error=masked_for_log(str(e)),
                 )
                 logger.warning(
                     "policy_indeterminate",
@@ -2543,8 +2591,9 @@ class Airlock:
                 response = handle_policy_violation(
                     func_name,
                     policy_name="PolicyResolver",
-                    reason=f"Policy resolution failed: {e}",
+                    reason=f"the policy resolver failed ({type(e).__name__})",
                 )
+                response.rule_id = "policy_resolver_error"
                 return None, response
             if resolved_policy is None:
                 # Until 0.10.24 a resolver that returned None ran the call with no policy
@@ -2566,7 +2615,7 @@ class Airlock:
                     "policy resolver returned no policy",
                     {"violation_type": "no_policy_resolved"},
                 )
-                return None, handle_policy_violation(
+                response = handle_policy_violation(
                     func_name,
                     policy_name="PolicyResolver",
                     reason=(
@@ -2574,6 +2623,8 @@ class Airlock:
                         "PERMISSIVE_POLICY to allow it on purpose"
                     ),
                 )
+                response.rule_id = "policy_resolver_none"
+                return None, response
         else:
             resolved_policy = self.policy
 
@@ -2593,6 +2644,7 @@ class Airlock:
                         policy_name="FrozenSecurityPolicy",
                         reason=str(e),
                     )
+                    response.rule_id = "frozen_policy_digest"
                     self._safe_invoke_callback(
                         self.config.on_blocked,
                         "on_blocked",
@@ -2639,6 +2691,7 @@ class Airlock:
                         limit=e.details.get("limit", "unknown"),
                         reset_seconds=reset_seconds,
                     )
+                    response.rule_id = str(e.details.get("pattern") or e.violation_type)
                     self._safe_invoke_callback(
                         self.config.on_rate_limit,
                         "on_rate_limit",
@@ -2661,6 +2714,7 @@ class Airlock:
                         reason=_model_safe_policy_reason(func_name, e),
                         violation_type=e.violation_type,
                     )
+                    response.rule_id = str(e.details.get("pattern") or e.violation_type)
                     self._safe_invoke_callback(
                         self.config.on_blocked,
                         "on_blocked",
@@ -2859,13 +2913,18 @@ class Airlock:
             exc = outcome.error
             # An approver that raises is an approval that did not happen.
             logger.warning(
-                "escalation_approver_raised", tool=func_name, rule=escalation.rule, error=str(exc)
+                "escalation_approver_raised",
+                tool=func_name,
+                rule=escalation.rule,
+                error=masked_for_log(str(exc)),
             )
+            # The type only: the message is the approver's transport talking (a URL with
+            # its token, a ticket body), and the refusal reaches the model.
             return self._indeterminate(
                 func_name,
                 escalation,
                 returned=type(exc).__name__,
-                detail=f"approver raised {type(exc).__name__}: {exc}",
+                detail=f"approver raised {type(exc).__name__}",
             )
         answer = outcome.value
         if not isinstance(answer, OversightResponse) or not isinstance(
@@ -3022,7 +3081,7 @@ class Airlock:
                         "path_validation_failed",
                         function=func_name,
                         argument=item.path,
-                        path=e.path,
+                        path=masked_for_log(e.path),
                         violation_type=e.violation_type,
                     )
                     if should_soft_block(self.config.honeypot_config):
@@ -3057,6 +3116,7 @@ class Airlock:
             violation_type=violation_type,
             details=details,
         )
+        response.rule_id = str((details or {}).get("pattern") or violation_type)
         self._safe_invoke_callback(
             self.config.on_blocked,
             "on_blocked",
@@ -3440,16 +3500,18 @@ class Airlock:
                         "endpoint_policy_violation",
                         function=func_name,
                         argument=item.path,
-                        url=url,
+                        url=masked_for_log(url),
                         reason=reason,
                     )
-                    return handle_endpoint_violation(
+                    response = handle_endpoint_violation(
                         func_name,
                         url=url,
                         hostname=e.details.get("hostname", "unknown"),
                         reason=reason,
                         allowed_endpoints=allowed,
                     )
+                    response.rule_id = str(e.details.get("pattern") or reason)
+                    return response
         except ArgumentNestingError as e:
             logger.warning(
                 "endpoint_policy_violation",

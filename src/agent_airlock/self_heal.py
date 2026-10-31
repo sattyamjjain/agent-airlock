@@ -95,6 +95,20 @@ class AirlockResponse:
     fix_hints: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    # Operator-only (V0.10.29): the rule that refused (a deny or escalation pattern, a
+    # violation type) and the layer it sits in. Written to the audit record; to_dict()
+    # leaves both out, so the model never reads a rule it could probe around.
+    rule_id: str | None = None
+    policy_layer: str | None = None
+
+    def __post_init__(self) -> None:
+        """A refusal names its rule and layer even when its maker did not: the block
+        reason, and the layer that returns it (``_LAYER_FOR``)."""
+        if self.block_reason is not None:
+            if self.rule_id is None:
+                self.rule_id = self.block_reason.value
+            if self.policy_layer is None:
+                self.policy_layer = _LAYER_FOR.get(self.block_reason, self.block_reason.value)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -144,8 +158,15 @@ class AirlockResponse:
         error: str,
         fix_hints: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        *,
+        rule_id: str | None = None,
+        policy_layer: str | None = None,
     ) -> AirlockResponse:
-        """Create a blocked response with fix hints."""
+        """Create a blocked response with fix hints.
+
+        ``rule_id`` defaults to the block reason and ``policy_layer`` to the layer that
+        returns it (``_LAYER_FOR``); both go to the audit record only.
+        """
         return cls(
             success=False,
             status="blocked",
@@ -153,7 +174,30 @@ class AirlockResponse:
             block_reason=reason,
             fix_hints=fix_hints or [],
             metadata=metadata or {},
+            rule_id=rule_id,
+            policy_layer=policy_layer,
         )
+
+
+#: The call-path layer each block reason comes from, for the audit record's ``policy_layer``.
+_LAYER_FOR: dict[BlockReason, str] = {
+    BlockReason.VALIDATION_ERROR: "validation",
+    BlockReason.GHOST_ARGUMENTS: "ghost_arguments",
+    BlockReason.POLICY_VIOLATION: "policy",
+    BlockReason.RATE_LIMIT: "policy",
+    BlockReason.SANDBOX_ERROR: "sandbox",
+    BlockReason.PATH_VIOLATION: "filesystem",
+    BlockReason.NETWORK_BLOCKED: "network",
+    BlockReason.CAPABILITY_DENIED: "capability",
+    BlockReason.ENDPOINT_BLOCKED: "endpoint",
+    BlockReason.BUDGET_EXCEEDED: "budget",
+    BlockReason.ESCALATION_REQUIRED: "escalation",
+    BlockReason.ESCALATION_DENIED: "escalation",
+    BlockReason.ESCALATION_TIMEOUT: "escalation",
+    BlockReason.POLICY_INDETERMINATE: "policy",
+    BlockReason.AMPLIFICATION_EXCEEDED: "amplification",
+    BlockReason.OUTPUT_UNREADABLE: "output",
+}
 
 
 def is_refusal(result: Any) -> bool:
@@ -560,9 +604,11 @@ def handle_escalation(
         "indeterminate": BlockReason.POLICY_INDETERMINATE,
     }[outcome]
 
+    # The rule (an escalate_tools glob) is the operator's: it goes to the audit record as
+    # rule_id, not into the text the model reads (until 0.10.29 both quoted it).
     if outcome == "no_approver":
         error = (
-            f"AIRLOCK_BLOCK: '{func_name}' requires human approval (rule {rule!r}: {reason}) "
+            f"AIRLOCK_BLOCK: '{func_name}' requires human approval ({reason}) "
             f"but no approver is registered on the policy. Blocked deny-by-default."
         )
         fix_hints = [
@@ -572,18 +618,14 @@ def handle_escalation(
             "Do not retry; this is a configuration gap, not a transient failure",
         ]
     elif outcome == "denied":
-        error = (
-            f"AIRLOCK_BLOCK: '{func_name}' was denied by human approval "
-            f"(rule {rule!r}: {reason}). {detail}"
-        )
+        error = f"AIRLOCK_BLOCK: '{func_name}' was denied by human approval ({reason}). {detail}"
         fix_hints = [
             "A human reviewed this call and declined it",
             "Do not retry the same call; ask the operator why it was declined",
         ]
     elif outcome == "indeterminate":
         error = (
-            f"AIRLOCK_BLOCK: the approval for '{func_name}' could not be read "
-            f"(rule {rule!r}: {reason}). {detail}"
+            f"AIRLOCK_BLOCK: the approval for '{func_name}' could not be read ({reason}). {detail}"
         )
         fix_hints = [
             "The approver integration answered with something that is not an approval",
@@ -591,10 +633,7 @@ def handle_escalation(
             "Blocked rather than allowed, because an unreadable answer is not consent",
         ]
     else:
-        error = (
-            f"AIRLOCK_BLOCK: human approval for '{func_name}' timed out "
-            f"(rule {rule!r}: {reason}). {detail}"
-        )
+        error = f"AIRLOCK_BLOCK: human approval for '{func_name}' timed out ({reason}). {detail}"
         fix_hints = [
             "The approval request was not answered in time",
             "Blocked rather than allowed, because an unanswered gate is not consent",
@@ -606,12 +645,13 @@ def handle_escalation(
         fix_hints=fix_hints,
         metadata={
             "function": func_name,
-            "escalation_rule": rule,
             "escalation_reason": reason,
             "escalation_outcome": outcome,
             "approver": approver,
             "detail": detail,
         },
+        rule_id=rule,
+        policy_layer="escalation",
     )
 
 

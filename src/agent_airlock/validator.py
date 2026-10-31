@@ -362,6 +362,7 @@ def format_validation_error(error: ValidationError) -> dict[str, Any]:
     top-level ``fix_hints`` of a refusal are built from too (``handle_validation_error``).
     A ``SafePath`` deny-list match has its message replaced (:func:`_is_withheld_value_error`):
     the refusal reaches the model, and the pattern that matched is not the model's to see.
+    For the same reason each error carries the input's type (``input_type``), not the input.
 
     Args:
         error: The Pydantic validation error.
@@ -386,7 +387,9 @@ def format_validation_error(error: ValidationError) -> dict[str, Any]:
                 "field": location,
                 "type": error_type,
                 "message": message,
-                "input": repr(input_value) if input_value is not None else None,
+                # The type, never the value: the refusal reaches the model, and a value
+                # sent to the wrong argument can be a key (until 0.10.29 its repr was here).
+                "input_type": type(input_value).__name__,
                 "fix_hint": fix_hint,
             }
         )
