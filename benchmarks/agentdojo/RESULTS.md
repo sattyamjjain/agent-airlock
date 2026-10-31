@@ -73,6 +73,16 @@ attacked pairs. For 340 of them the injection's ground truth lists no tool call:
 environment after the run, with an empty ground truth. A deterministic tool-call check has
 nothing to evaluate on those pairs, so the bound says nothing about them.
 
+No model run here has measured the 320 workspace pairs either. The 20 travel pairs are
+scored on the answer text, the 320 workspace ones on the environment after a live run.
+A `--model --run` pass is such a run and scores whatever pairs it selects, but every pass
+recorded below took at most three injection tasks per suite, in AgentDojo's order, and in
+workspace those were `injection_task_0`-`2`. Reaching the 320 takes `--suites workspace
+--max-user-tasks 40 --max-injection-tasks 14`, which has not been run. The suite version is
+pinned at v1.2.1 (`BENCHMARK_VERSION` in `run.py`). AgentDojo's own CLI
+(`agentdojo.scripts.benchmark` in 0.1.35) defaults to `--benchmark-version v1.2.2`, so a run
+through it is comparable with these numbers only when it passes `--benchmark-version v1.2.1`.
+
 > This is a deterministic **upper bound on airlock's ASR reduction** over the 609 pairs
 > with a tool-call target — the fraction of those attacks whose target action airlock
 > forces to fail *regardless of model*. It is **NOT** AgentDojo's model-in-the-loop ASR
