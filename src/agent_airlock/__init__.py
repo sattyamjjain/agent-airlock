@@ -629,6 +629,7 @@ from .retry import (
     RetryState,
     retry,
 )
+from .run_guard import RunGuard
 
 # V0.6.1 — runtime manifest-only allowlist primitives.
 from .runtime.manifest_only_allowlist import (
@@ -1217,6 +1218,8 @@ __all__ = [
     "CapabilityDeniedError",
     "ModelCapabilityTier",
     "requires",
+    # V0.10.29 run guard
+    "RunGuard",
     # V0.10.29 source-to-sink gate
     "DataFlowPolicy",
     "source",

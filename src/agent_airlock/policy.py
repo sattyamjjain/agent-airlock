@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     )
     from .data_flow import DataFlowPolicy
     from .oversight import Approver
+    from .run_guard import RunGuard
     from .safe_types import UnsafeDeserializationGuard
     from .sequence_guard import SequenceGuard
     from .tool_arg_sink_guard import ToolArgSinkGuard
@@ -110,6 +111,10 @@ class ViolationType(str, Enum):
     # be known.
     SINK_AFTER_UNTRUSTED_SOURCE = "sink_after_untrusted_source"
     SINK_OUTSIDE_RUN = "sink_outside_run"
+    # V0.10.29 run guard (RunGuard): the call completes a repeated block of calls, or it is
+    # under a run guard and belongs to no run.
+    LOOP_DETECTED = "loop_detected"
+    RUN_GUARD_OUTSIDE_RUN = "run_guard_outside_run"
 
 
 class PolicyEscalation(PolicyViolation):
@@ -524,6 +529,13 @@ class SecurityPolicy:
     # a sink called outside any run is refused. OFF by default (None preserves prior
     # behavior exactly). See :class:`agent_airlock.data_flow.DataFlowPolicy`.
     data_flow_policy: DataFlowPolicy | None = None
+    # V0.10.29 run guard. When set, a refusal whose block reason is in ``halt_on`` (or any
+    # refusal of an ``irreversible_tools`` match) halts the run, so every later call in it
+    # is refused as ``run_halted``; and a block of calls repeated ``loop_repeats`` times
+    # refuses the call that completes it, then halts the run on the next repeat (Step 2.3).
+    # A call under a run guard that belongs to no run is refused. OFF by default (None
+    # preserves prior behavior exactly). See :class:`agent_airlock.run_guard.RunGuard`.
+    run_guard: RunGuard | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -1030,6 +1042,8 @@ class SecurityPolicy:
         # V0.10.29: dropping the source-to-sink gate after freeze() must move the digest.
         if self.data_flow_policy is not None:
             payload["data_flow_policy"] = self.data_flow_policy.canonical()
+        if self.run_guard is not None:
+            payload["run_guard"] = self.run_guard.canonical()
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def _compute_policy_digest(self) -> str:

@@ -149,6 +149,7 @@ from .self_heal import (
     handle_path_violation,
     handle_policy_violation,
     handle_rate_limit,
+    handle_run_halted,
     handle_validation_error,
 )
 from .unknown_args import UnknownArgsMode, handle_unknown_args
@@ -178,6 +179,14 @@ class _ApprovalAsk:
     approver: Callable[[Any], Any]
     request: Any
     timeout: float
+
+
+def _loop_key(call: _BoundCall) -> str:
+    """The arguments' digest a loop is told by; ``unreadable`` when there is none."""
+    try:
+        return call.digest or "unreadable"
+    except Exception:  # noqa: BLE001 - arguments that do not bind are still one call
+        return "unreadable"
 
 
 def _begin_source(
@@ -1335,6 +1344,7 @@ def _share_run_state(context: AirlockContext[Any]) -> AirlockContext[Any] | None
     context.untrusted_reinvocation_count = run.untrusted_reinvocation_count
     context._authorized_once = run._authorized_once
     context._flow = run._flow
+    context._run_state = run._run_state
     context.metadata = {**run.metadata, **context.metadata}
     return run
 
@@ -1641,11 +1651,13 @@ class Airlock:
 
             Runs the gates in the order the ``# Step N`` comments below number them: the
             kill switch (0), the startup-hook self-check (0.5), the OAuth token audience
-            (0.6), ghost arguments (1), policy resolution and check (2), the
-            sequence guard (2.5), the action-contradiction gate (2.6), the deserialization
-            guard (2.7), the amplification budget (2.8), filesystem paths (3), capabilities
-            (4), endpoint policies (5) and the per-model-tier budget (6). The first gate that
-            refuses ends the call.
+            (0.6), the run's halt latch (0.7, checked again last), ghost arguments (1),
+            policy resolution and check (2), loops in the run (2.3), source-to-sink data
+            flow (2.4), the sequence guard (2.5), the action-contradiction gate (2.6), the
+            deserialization guard (2.7), shell syntax in string arguments (2.75), the
+            amplification budget (2.8), filesystem paths (3), capabilities (4), endpoint
+            policies (5) and the per-model-tier budget (6). The first gate that refuses ends
+            the call.
 
             Returns:
                 Tuple of (cleaned_kwargs, start_time, context, error_response or None,
@@ -1728,6 +1740,14 @@ class Airlock:
                 context._refused_at = "0.6:token_audience"
                 return kwargs, start_time, context, audience_error, None, None
 
+            # Step 0.7: the run's halt latch (V0.10.29, openai/openai-agents-python#5351). A
+            # run a RunGuard halted (a hard stop, a repeated loop) refuses every later call,
+            # whatever the call and its own policy, before any gate reads the arguments.
+            halted_error = self._check_run_halt(func_name, context)
+            if halted_error is not None:
+                context._refused_at = "0.7:run_halted"
+                return kwargs, start_time, context, halted_error, None, None
+
             # Step 1: Validate and handle ghost arguments
             cleaned_kwargs, stripped, ghost_error = self._validate_ghost_arguments(
                 func, func_name, kwargs
@@ -1765,6 +1785,16 @@ class Airlock:
             if policy_error is not None:
                 context._refused_at = "2:policy"
                 return kwargs, start_time, context, policy_error, None, None
+
+            # Step 2.3: loops in the run (V0.10.29, prime-radiant-inc/evener#94). Under the
+            # resolved policy's run_guard, a call completing a block of calls repeated
+            # loop_repeats times is refused with a nudge, and the next repeat halts the run.
+            loop_error = self._check_run_loop(
+                func_name, resolved_policy, context, run_context=run_context, call=call
+            )
+            if loop_error is not None:
+                context._refused_at = "2.3:run_loop"
+                return kwargs, start_time, context, loop_error, None, None
 
             # Step 2.4: Source-to-sink data flow (V0.10.29, pydantic/pydantic-ai#11756). A
             # @sink call in a run an @source(trust="untrusted") call has tainted is refused
@@ -1922,6 +1952,13 @@ class Airlock:
             if changed_error is not None:
                 context._refused_at = "2:approval_binding"
                 return kwargs, start_time, context, changed_error, None, None
+
+            # Step 0.7 again: a run halted while this call waited (on an approver, or a
+            # serialize_batch wait) refuses it before it is dispatched.
+            late_halt_error = self._check_run_halt(func_name, context)
+            if late_halt_error is not None:
+                context._refused_at = "0.7:run_halted"
+                return kwargs, start_time, context, late_halt_error, None, None
 
             # Step 2.4's other half: an untrusted source every gate admitted counts as running
             # in its run until the call ends (_end_source), so a serialize_batch sink waits for
@@ -2251,6 +2288,7 @@ class Airlock:
 
                 if error_response is not None:
                     _end_source(context, ran=False)
+                    self._halt_on_refusal(func_name, context, error_response)
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
                         block_reason = (
@@ -2423,6 +2461,7 @@ class Airlock:
 
                 if error_response is not None:
                     _end_source(context, ran=False)
+                    self._halt_on_refusal(func_name, context, error_response)
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
                         block_reason = (
@@ -3590,6 +3629,84 @@ class Airlock:
             {"path": path, "violation_type": violation_type},
         )
         return response
+
+    def _check_run_halt(
+        self, func_name: str, context: AirlockContext[Any]
+    ) -> AirlockResponse | None:
+        """Steps 0.7: refuse a call in a run a ``RunGuard`` halted, whatever its policy."""
+        reason = context._run_state.halt_reason
+        if reason is None:
+            return None
+        logger.warning("run_halted_call_refused", function=func_name, halt_reason=reason)
+        return handle_run_halted(func_name, halt_reason=reason)
+
+    def _check_run_loop(
+        self,
+        func_name: str,
+        policy: SecurityPolicy | None,
+        context: AirlockContext[Any],
+        *,
+        run_context: AirlockContext[Any] | None,
+        call: _BoundCall,
+    ) -> AirlockResponse | None:
+        """Step 2.3: refuse the call that completes a loop, and halt the run on the next.
+
+        A call under a run guard that belongs to no run is refused: the guard keeps its
+        history on the run's context, and with none it would never see a repeat.
+        """
+        guard = policy.run_guard if policy is not None else None
+        if guard is None:
+            return None
+        if run_context is None:
+            return handle_policy_violation(
+                func_name,
+                policy_name="RunGuard",
+                reason=(
+                    f"'{func_name}' is under a run guard and this call belongs to no run. "
+                    "Make the agent's calls inside `with AirlockContext(agent_id=...)`, or "
+                    "pass an AirlockContext as the run wrapper's `context`."
+                ),
+                violation_type=ViolationType.RUN_GUARD_OUTSIDE_RUN.value,
+            )
+        if not guard.detect_loops:
+            return None
+        tripped = context._run_state.record((func_name, _loop_key(call)), guard)
+        if tripped is None:
+            return None
+        period, trips = tripped
+        logger.warning("run_loop_detected", function=func_name, period=period, trips=trips)
+        if trips >= 2:
+            context._run_state.halt(f"a {period}-call loop repeated {guard.loop_repeats} times")
+            return self._check_run_halt(func_name, context)
+        return handle_policy_violation(
+            func_name,
+            policy_name="RunGuard",
+            reason=(
+                f"the last {period * guard.loop_repeats} calls repeat the same {period}-call "
+                f"sequence {guard.loop_repeats} times"
+            ),
+            violation_type=ViolationType.LOOP_DETECTED.value,
+        )
+
+    def _halt_on_refusal(
+        self, func_name: str, context: AirlockContext[Any], refusal: AirlockResponse
+    ) -> None:
+        """Halt the run when ``refusal`` is a hard stop under the call's ``RunGuard``: its
+        block reason is in ``halt_on``, or the tool is one of ``irreversible_tools``."""
+        policy = context._resolved_policy
+        if policy is None and isinstance(self.policy, SecurityPolicy):
+            policy = self.policy  # a refusal before step 2 resolved nothing
+        guard = policy.run_guard if policy is not None else None
+        if guard is None or refusal.block_reason is BlockReason.RUN_HALTED:
+            return
+        reason = refusal.block_reason.value if refusal.block_reason is not None else ""
+        if reason in guard.halt_on:
+            context._run_state.halt(reason)
+        elif any(policy._matches_pattern(func_name, glob) for glob in guard.irreversible_tools):
+            context._run_state.halt(f"a call of irreversible '{func_name}' was refused ({reason})")
+        else:
+            return
+        logger.warning("run_halted", function=func_name, halt_reason=context._run_state.halt_reason)
 
     def _check_data_flow(
         self,

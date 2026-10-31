@@ -109,6 +109,12 @@ src/agent_airlock/
      call with no claims, and a malformed `aud` (port out of range, unclosed bracket) is
      refused under `deny` and logged under `warn`. The comparison reads a scheme's default
      port and a root `/` as absent
+   - 0.7 the run's halt latch (V0.10.29, `run_guard.py`): a run a `RunGuard` halted refuses
+     every later call as `run_halted`, whatever its policy (`context._run_state`, shared by
+     `_share_run_state`); checked again at the end of `_pre_execution`, so a call that waited
+     on an approver is refused too. The wrapper's refusal branch halts the run
+     (`_halt_on_refusal`) on a block reason in `halt_on` or any refusal of an
+     `irreversible_tools` match
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Resolve policy (static, or `Callable[[AirlockContext], SecurityPolicy | None]`; a
    resolver that returns None refuses the call) and check it against the caller's identity
@@ -128,6 +134,10 @@ src/agent_airlock/
    it names a different agent than the call does) and merges that context's metadata under
    its own, so a policy with `reauth_on_untrusted_reinvocation` refuses a call that belongs
    to no run
+   - 2.3 loops in the run (V0.10.29, `run_guard`): `(tool, args digest)` history on the run;
+     a block of 1 to `max_loop_period` calls repeated `loop_repeats` times refuses the call
+     completing it (`loop_detected`), and the run's next trip halts it. A call under a run
+     guard in no run is refused (`run_guard_outside_run`)
    - 2.4 source-to-sink data flow (V0.10.29, `data_flow.py`, off until the sink's policy
      sets `data_flow_policy`): a `@sink` call in a run that an `@source(trust="untrusted")`
      call has tainted is refused or escalated (rule `data_flow`), and one in no run is
