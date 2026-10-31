@@ -91,7 +91,7 @@ from ._log import structlog
 from ._sandbox_errors import SandboxError
 from ._sandbox_errors import SandboxExecutionError as SandboxExecutionError
 from ._sandbox_errors import SandboxUnavailableError as SandboxUnavailableError
-from .audit import AuditLogger
+from .audit import AuditLogger, _safe_repr
 from .capabilities import (
     Capability,
     CapabilityDeniedError,
@@ -543,14 +543,25 @@ def _sanitize_tool_output(
             )
         for leaf_type, count in report.unreadable.items():
             warnings.append(_unreadable_warning(func_name, leaf_type, count, output_type))
+        if report.unmasked and config.withhold_unmaskable_output:
+            raise OutputWithheldError(
+                func_name, f"sensitive data inside {output_type} output that cannot be masked"
+            )
         return report.value, warnings, report.masked_count, False
+    fields = _mcp_result_fields(result)
+    if fields is not None:
+        return _mask_mcp_result(result, fields, config, options, func_name)
     output_type = type(result).__name__
     try:
-        detected = sanitize_output(result, **options).detection_count
+        detected = _object_detections(result, options)
     except Exception:  # noqa: BLE001 - an object with no text is reported, never raised
         return result, [_unreadable_warning(func_name, output_type)], 0, False
     if not detected:
         return result, [], 0, False
+    if config.withhold_unmaskable_output:
+        raise OutputWithheldError(
+            func_name, f"{detected} sensitive value(s) in {output_type} output cannot be masked"
+        )
     logger.warning(
         "output_sensitive_data_unmasked",
         function=func_name,
@@ -563,6 +574,129 @@ def _sanitize_tool_output(
         0,
         False,
     )
+
+
+def _object_text(result: Any) -> Any:
+    """Every field of a model or dataclass result, as ``name=repr(value)``, for detection.
+
+    ``str()`` leaves out a ``Field(repr=False)`` field, which a framework serializing the
+    result (``model_dump``) still sends; until 0.10.29 only ``str()`` was read, so a hidden
+    secret was not even reported. Each field is read with ``repr()``, never serialized, so
+    a generator or other lazy value a field holds is not consumed. Anything else comes back
+    as it is, and is read as its ``str()``.
+    """
+    if isinstance(result, BaseModel):
+        names = list(type(result).model_fields)
+    elif dataclasses.is_dataclass(result) and not isinstance(result, type):
+        names = [item.name for item in dataclasses.fields(result)]
+    else:
+        return result
+    return ", ".join(f"{name}={_safe_repr(getattr(result, name, None))}" for name in names)
+
+
+def _object_detections(result: Any, options: dict[str, Any]) -> int:
+    """What the detectors find in an object result: in its ``str()`` and in its serialized
+    form (:func:`_object_text`), whichever finds more. The serialized form shows hidden
+    fields; the ``str()`` keeps ``key='value'`` shapes a detector reads that JSON does not."""
+    seen = sanitize_output(result, **options).detection_count
+    serialized = _object_text(result)
+    if serialized is result:
+        return seen
+    return max(seen, sanitize_output(serialized, **options).detection_count)
+
+
+def _mcp_result_fields(result: Any) -> tuple[str, str] | None:
+    """``(content, structured_content)`` field names of an MCP tool result, else None.
+
+    Duck-typed, with no SDK import: a pydantic model with a ``content`` field and a
+    ``structured_content`` (mcp 2.x, FastMCP's ``ToolResult``) or ``structuredContent``
+    (mcp 1.x) one, as ``mcp.types.CallToolResult`` and FastMCP's ``ToolResult`` have.
+    """
+    if not isinstance(result, BaseModel):
+        return None
+    names = type(result).model_fields
+    if "content" not in names:
+        return None
+    for structured in ("structured_content", "structuredContent"):
+        if structured in names:
+            return "content", structured
+    return None
+
+
+def _mask_mcp_result(
+    result: BaseModel,
+    fields: tuple[str, str],
+    config: AirlockConfig,
+    options: dict[str, Any],
+    func_name: str,
+) -> tuple[Any, list[str], int, bool]:
+    """``result`` rebuilt (``model_copy``) with its text blocks, structured content and
+    ``_meta`` masked, keeping its type; other content blocks are reported as not masked.
+
+    Until 0.10.29 an MCP result was an object like any other: returned as it was, the key
+    in its text block and in ``structuredContent`` included. A FastMCP ``ToolResult``
+    keeps the raw ``CallToolResult`` it was made from (``_raw_mcp_result``, what it sends
+    on the wire), and a copy would carry it unmasked, so that is masked the same way.
+    """
+    content_name, structured_name = fields
+    blocks, masked_count, unmasked = _mask_content_blocks(getattr(result, content_name), options)
+    update: dict[str, Any] = {content_name: blocks}
+    for name in (structured_name, "meta"):
+        value = getattr(result, name, None)
+        if isinstance(value, dict | list):
+            report = sanitize_structured_report(value, **options)
+            update[name] = report.value
+            masked_count += report.masked_count
+            unmasked += sum(report.unmasked.values())
+    if unmasked and config.withhold_unmaskable_output:
+        raise OutputWithheldError(
+            func_name, f"{unmasked} sensitive value(s) in MCP content that cannot be masked"
+        )
+    masked = result.model_copy(update=update)
+    _mask_raw_mcp_result(masked, config, options, func_name)
+    warnings = _masked_warnings(masked_count, func_name)
+    if unmasked:
+        logger.warning(
+            "output_sensitive_data_unmasked",
+            function=func_name,
+            detections=unmasked,
+            output_type=type(result).__name__,
+        )
+        warnings.append(
+            f"Detected {unmasked} sensitive value(s) in non-text MCP content; not masked"
+        )
+    return masked, warnings, masked_count, False
+
+
+def _mask_content_blocks(blocks: Any, options: dict[str, Any]) -> tuple[list[Any], int, int]:
+    """MCP content blocks with each text block's ``text`` masked, the count masked, and
+    the count detected in other blocks (an image, an embedded resource), left as they are."""
+    out: list[Any] = []
+    masked, unmasked = 0, 0
+    for block in blocks or []:
+        text = getattr(block, "text", None)
+        is_text = getattr(block, "type", None) == "text" and isinstance(text, str)
+        if isinstance(block, BaseModel) and is_text:
+            sanitization = sanitize_output(text, max_chars=None, **options)
+            masked += sanitization.detection_count
+            out.append(block.model_copy(update={"text": sanitization.content}))
+        else:
+            unmasked += _object_detections(block, options)
+            out.append(block)
+    return out, masked, unmasked
+
+
+def _mask_raw_mcp_result(
+    masked: BaseModel, config: AirlockConfig, options: dict[str, Any], func_name: str
+) -> None:
+    """Mask, in place, the raw ``CallToolResult`` a FastMCP ``ToolResult`` copy carries."""
+    private = getattr(masked, "__pydantic_private__", None)
+    raw = private.get("_raw_mcp_result") if isinstance(private, dict) else None
+    raw_fields = _mcp_result_fields(raw)
+    if isinstance(private, dict) and raw is not None and raw_fields is not None:
+        private["_raw_mcp_result"] = _mask_mcp_result(raw, raw_fields, config, options, func_name)[
+            0
+        ]
 
 
 def _unreadable_warning(
@@ -604,6 +738,20 @@ class OutputUnreadableError(AirlockError):
         self.function = function
         self.reason = reason
         super().__init__(f"the result of '{function}' could not be read: {reason}")
+
+
+class OutputWithheldError(OutputUnreadableError):
+    """A result held sensitive data that cannot be masked in place, so it is withheld.
+
+    Raised only with ``AirlockConfig(withhold_unmaskable_output=True)``: an object result
+    (a model, a dataclass, an MCP content block that is not text) in which a secret or PII
+    was detected, which the output walk cannot rebuild masked. Refused as
+    ``output_unreadable``, like the result it subclasses.
+    """
+
+    def __init__(self, function: str, reason: str) -> None:
+        super().__init__(function, reason)
+        self.args = (f"the result of '{function}' was withheld: {reason}",)
 
 
 class _ResultRefused(Exception):  # noqa: N818 - private control flow, not an error
@@ -1670,6 +1818,16 @@ class Airlock:
                         operation=error.operation,
                         target=error.target,
                         details=error.details,
+                    )
+                elif isinstance(error, OutputWithheldError):
+                    response = AirlockResponse.blocked_response(
+                        reason=reason,
+                        error=f"AIRLOCK_BLOCK: {error}",
+                        fix_hints=[
+                            "The tool ran, but its result held sensitive data that cannot be "
+                            "masked in place, so it was withheld. A call that returns text or "
+                            "a dict (which are masked) instead of an object may succeed."
+                        ],
                     )
                 elif isinstance(error, OutputUnreadableError):
                     response = AirlockResponse.blocked_response(

@@ -175,6 +175,12 @@ class AirlockConfig:
     # its terminal claim.
     require_done_receipt: bool = False
 
+    # V0.10.29: with sanitize_output on, refuse (as ``output_unreadable``) a result in
+    # which a secret or PII is detected that cannot be masked in place: an object other
+    # than a str, a container, or an MCP tool result (a model, a dataclass), top level or
+    # nested. Off by default, when such a result is returned with a "not masked" warning.
+    withhold_unmaskable_output: bool = False
+
     # V0.4.1 per-tool credential scopes from ``[airlock.credentials]``. Not applied by
     # @Airlock: pass them to ``MCPProxyConfig(tool_scopes=config.credential_scopes)``.
     # Until 0.10.19 ``from_toml`` passed them to the constructor under a name it does
@@ -391,6 +397,8 @@ class AirlockConfig:
             "token_audience_mode",
             "startup_hook_check",
             "startup_hook_allowlist",
+            # V0.10.29
+            "withhold_unmaskable_output",
         }
 
         # SECURITY: Warn about unknown keys (likely typos)
@@ -412,6 +420,7 @@ class AirlockConfig:
             "audit_otel_enabled",  # V0.4.0
             "audit_include_args_hash",  # V0.4.0
             "require_done_receipt",  # V0.8.25
+            "withhold_unmaskable_output",  # V0.10.29
         ):
             if key in data:
                 result[key] = bool(data[key])
