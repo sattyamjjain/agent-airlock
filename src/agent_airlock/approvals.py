@@ -65,7 +65,8 @@ def args_digest(arguments: Mapping[str, Any]) -> str:
     or dataclass by its class and fields (so two models with different field values never
     share a digest), and anything else as ``{"__unserializable__": type(value).__name__}``.
     Only host code passes such an object (model JSON cannot build one), which is why its
-    type stands in for it.
+    type stands in for it. A mapping with a key shaped like a tag (``__bytes__``) is
+    written as key-value pairs, so a plain dict cannot spell the value a tag stands for.
 
     Args:
         arguments: The call's arguments by parameter name.
@@ -128,7 +129,7 @@ def _canonical_scalar(value: Any) -> dict[str, str] | None:
 def _canonical_container(value: Any, depth: int, seen: frozenset[int]) -> Any:
     if isinstance(value, Mapping):
         items = [(key, _canonical(item, depth, seen)) for key, item in value.items()]
-        if all(type(key) is str for key, _ in items):
+        if all(type(key) is str and not _is_tag(key) for key, _ in items):
             return dict(items)
         pairs = [[_canonical(key, depth, seen), item] for key, item in items]
         return {"__map__": sorted(pairs, key=lambda pair: _dumps(pair[0]))}
@@ -146,6 +147,13 @@ def _canonical_container(value: Any, depth: int, seen: frozenset[int]) -> Any:
         }
         return {"__dataclass__": _qualname(value), "fields": fields}
     return {"__unserializable__": type(value).__name__}
+
+
+def _is_tag(key: str) -> bool:
+    """A key shaped like one of this encoder's tags. Until 0.10.29's review a dict such as
+    ``{"__bytes__": "6869"}``, which model JSON can build, was written exactly as ``b"hi"``,
+    so the two shared a digest and one's approval or standing grant admitted the other."""
+    return key.startswith("__") and key.endswith("__")
 
 
 def _dumps(value: Any) -> str:

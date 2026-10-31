@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import enum
 import json
 import math
 import os
@@ -29,7 +30,7 @@ import pytest
 from pydantic import BaseModel
 
 import agent_airlock
-from agent_airlock import Airlock, AirlockConfig, AirlockContext, SecurityPolicy
+from agent_airlock import Airlock, AirlockConfig, AirlockContext, SecurityPolicy, approvals
 from agent_airlock.approvals import (
     ApprovalLedger,
     GrantStore,
@@ -111,6 +112,39 @@ class TestArgsDigest:
         ]
         for left, right in pairs:
             assert args_digest(left) != args_digest(right), (left, right)
+
+    def test_a_dict_spelled_like_a_tag_is_not_the_value_it_imitates(self) -> None:
+        """Model JSON can build any dict: one written like a tag must not borrow its digest."""
+
+        class Order(BaseModel):
+            amount: int
+
+        class Session:
+            pass
+
+        class Colour(enum.Enum):
+            RED = 1
+
+        values: list[Any] = [
+            b"hi",
+            {1, 2},
+            math.nan,
+            {1: "a"},
+            Order(amount=10),
+            Session(),
+            Colour.RED,
+            datetime(2026, 11, 1),
+        ]
+        for value in values:
+            forged = json.loads(approvals._canonical_json(value))
+            assert isinstance(forged, dict), value
+            assert _digest(x=value) != _digest(x=forged), value
+            assert _digest(x=[value]) != _digest(x=[forged]), value
+
+    def test_a_dict_with_an_ordinary_dunder_key_digests_stably(self) -> None:
+        assert _digest(x={"__typename": "User"}) == _digest(x={"__typename": "User"})
+        assert _digest(x={"__init__": 1}) == _digest(x={"__init__": 1})
+        assert _digest(x={"__init__": 1}) != _digest(x={"__init__": 2})
 
     def test_a_model_or_dataclass_is_read_by_its_fields(self) -> None:
         class Order(BaseModel):
