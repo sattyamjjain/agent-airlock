@@ -40,6 +40,7 @@ if TYPE_CHECKING:
         CostTracker,
         ModelTierBudget,
     )
+    from .data_flow import DataFlowPolicy
     from .oversight import Approver
     from .safe_types import UnsafeDeserializationGuard
     from .sequence_guard import SequenceGuard
@@ -104,6 +105,11 @@ class ViolationType(str, Enum):
     # V0.10.29: default_deny=True with nothing on the allowlist. Refused, and logged as
     # policy_indeterminate: the policy names no tool, so it cannot have allowed this one.
     EMPTY_ALLOWLIST = "empty_allowlist"
+    # V0.10.29 source-to-sink gate (DataFlowPolicy): a sink called after an untrusted
+    # source completed in its run, and a sink called outside any run, whose taint could not
+    # be known.
+    SINK_AFTER_UNTRUSTED_SOURCE = "sink_after_untrusted_source"
+    SINK_OUTSIDE_RUN = "sink_outside_run"
 
 
 class PolicyEscalation(PolicyViolation):
@@ -512,6 +518,12 @@ class SecurityPolicy:
     # before the approver; neither softens a denial, which is checked first.
     standing_grants: list[StandingGrant] = field(default_factory=list)
     approval_ledger: ApprovalLedger | None = None
+    # V0.10.29 source-to-sink gate. When set, a call of a ``@sink`` tool made after an
+    # ``@source(trust="untrusted")`` call completed in the same run is refused or
+    # escalated (Step 2.4), until the host calls ``clear_taint()`` on the run's context;
+    # a sink called outside any run is refused. OFF by default (None preserves prior
+    # behavior exactly). See :class:`agent_airlock.data_flow.DataFlowPolicy`.
+    data_flow_policy: DataFlowPolicy | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -1015,6 +1027,9 @@ class SecurityPolicy:
             payload["standing_grants"] = sorted(g.canonical() for g in self.standing_grants)
         if self.approval_ledger is not None:
             payload["has_approval_ledger"] = True
+        # V0.10.29: dropping the source-to-sink gate after freeze() must move the digest.
+        if self.data_flow_policy is not None:
+            payload["data_flow_policy"] = self.data_flow_policy.canonical()
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def _compute_policy_digest(self) -> str:

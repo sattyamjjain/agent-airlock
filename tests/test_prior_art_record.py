@@ -121,3 +121,23 @@ class TestTheRecordIsReachable:
     def test_benchmark_link_comes_from_the_generator(self) -> None:
         """BENCHMARK.md is generated; a hand-edit would be erased by ``make benchmark``."""
         assert "PRIOR_ART.md" in _GENERATOR.read_text(encoding="utf-8")
+
+
+class TestCamelIsCredited:
+    """The 0.10.29 source-to-sink gate follows CaMeL; the record says so, and says what
+    was not measured. Its figures are the authors', paraphrased rather than quoted."""
+
+    def test_paper_is_identified_by_id_link_authors_and_date(self, prior_art: str) -> None:
+        assert "arXiv:2503.18813" in prior_art
+        assert "https://arxiv.org/abs/2503.18813" in prior_art
+        assert "Edoardo Debenedetti" in prior_art
+        assert "Florian Tramèr" in prior_art
+        assert "24 March 2025" in prior_art
+
+    def test_the_figures_are_attributed_to_the_authors(self, prior_art: str) -> None:
+        assert "77% of tasks solved with provable security, against 84%" in prior_art
+        assert "Those figures are theirs" in prior_art
+
+    def test_the_missing_measurement_is_stated(self, prior_art: str) -> None:
+        assert "Nobody has run the source-to-sink gate on AgentDojo" in prior_art
+        assert "this gate cannot tell it apart" in prior_art

@@ -168,6 +168,7 @@ from .cost_tracking import (
     get_global_tracker,
     set_global_tracker,
 )
+from .data_flow import DataFlowPolicy, sink, source
 
 # V0.8.25 — Fail-closed terminal-claim guard (Goal-Autopilot arXiv:2606.11688).
 from .done_receipt_guard import (
@@ -1216,6 +1217,10 @@ __all__ = [
     "CapabilityDeniedError",
     "ModelCapabilityTier",
     "requires",
+    # V0.10.29 source-to-sink gate
+    "DataFlowPolicy",
+    "source",
+    "sink",
     "get_required_capabilities",
     "capabilities_to_list",
     "PERMISSIVE_CAPABILITY_POLICY",

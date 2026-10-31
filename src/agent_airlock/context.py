@@ -37,6 +37,7 @@ from pydantic import BaseModel
 from ._arg_walk import is_framework_object
 from ._log import structlog
 from .approvals import GrantStore
+from .data_flow import RunFlow, TaintEntry
 
 if TYPE_CHECKING:
     from pydantic import GetCoreSchemaHandler
@@ -114,6 +115,12 @@ class AirlockContext(Generic[T]):
     _resolved_policy: Any = field(default=None, repr=False)
     _decision: Any = field(default=None, repr=False)
     _refused_at: str = field(default="", repr=False)
+    # V0.10.29 source-to-sink gate: the run's taint (shared with the run's context by
+    # _share_run_state and with with_metadata() clones), this call's in-flight ticket when
+    # it is an untrusted source, and its output's provenance tag.
+    _flow: RunFlow = field(default_factory=RunFlow, repr=False)
+    _flow_ticket: Any = field(default=None, repr=False)
+    _provenance: dict[str, object] | None = field(default=None, repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
 
     def __class_getitem__(cls, params: Any) -> Any:
@@ -181,7 +188,23 @@ class AirlockContext(Generic[T]):
             untrusted_reinvocation_count=dict(self.untrusted_reinvocation_count),
         )
         clone._authorized_once = self._authorized_once
+        clone._flow = self._flow
         return clone
+
+    @property
+    def taint_sources(self) -> tuple[TaintEntry, ...]:
+        """The untrusted source calls that completed in this run since the taint was last
+        cleared (V0.10.29). Empty when nothing untrusted has entered it."""
+        return self._flow.sources()
+
+    def clear_taint(self) -> None:
+        """Re-admit sinks after the host has reviewed what entered the run (V0.10.29).
+
+        Call it on the run's context: the one a run wrapper carries, or the one set around
+        the calls. A source still running when it is called taints the run again when it
+        ends.
+        """
+        self._flow.clear()
 
     def authorize_once(
         self,

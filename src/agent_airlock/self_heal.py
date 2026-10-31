@@ -128,13 +128,16 @@ class AirlockResponse:
         cls,
         result: Any,
         warnings: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> AirlockResponse:
-        """Create a successful response."""
+        """Create a successful response. ``metadata`` carries the output's provenance tag
+        when it has one (V0.10.29)."""
         return cls(
             success=True,
             status="completed",
             result=result,
             warnings=warnings or [],
+            metadata=metadata or {},
         )
 
     @classmethod
@@ -385,6 +388,16 @@ _POLICY_FIX_HINTS: dict[str, list[str]] = {
     ],
     "reauth_required": [
         "The host must authorize this call before it can run; changing the arguments will not help",
+        _CONTINUE_OR_TELL,
+    ],
+    "sink_after_untrusted_source": [
+        "This tool acts outward, and this run has read content from outside it; the host "
+        "must review the run before any outward action. Changing the arguments will not help",
+        _CONTINUE_OR_TELL,
+    ],
+    "sink_outside_run": [
+        "This tool acts outward and the call belongs to no run, so what the run has read "
+        "cannot be checked; changing the arguments will not help",
         _CONTINUE_OR_TELL,
     ],
 }
