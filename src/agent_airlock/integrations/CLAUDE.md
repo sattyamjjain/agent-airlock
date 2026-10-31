@@ -43,7 +43,12 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   caller-supplied `PolicyBundle` guards and never builds an `Airlock`. The `gpt5_5_*` /
   `gemini3_*` shape adapters normalise vendor payloads. `langgraph_toolnode_compat` only
   unwraps ToolNode output, and `model_armor`'s `ModelArmorScanner` is called by the user,
-  never by `@Airlock`; neither wraps tools.
+  never by `@Airlock`; neither wraps tools. `openai_agents` (0.10.29) wraps no tool either:
+  it approves a paused run's interruptions into the policy's `approval_ledger`, wraps the
+  SDK's own `Agent.as_tool` invoker in a nested run of the budget (each model call a turn,
+  through `RunHooks.on_llm_start`), and maps a halted run to a tool guardrail's
+  `raise_exception`. The digest it records is of the SDK's own `prepare_arguments`, bound
+  to the tool's signature: the model's JSON leaves defaults out, the call does not.
 - **`@Airlock` enforces only the signature it is handed.** Re-tag a tool with
   `_tool_proxy.named_tool_proxy`, which carries the tool's signature (annotations resolved)
   and is async when the tool is; pass framework-injected context parameters as
@@ -156,8 +161,9 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
 extra of their own (`opentelemetry-api` arrives transitively through `[mcp]`'s FastMCP).
 `anthropic`, `langgraph` and `smolagents` are never imported: those modules use duck typing,
 `importlib.util.find_spec` or `importlib.metadata` probes instead. The OpenAI Agents SDK is
-imported only inside `AirlockGuardrails.wrap_agent`, through `importlib.import_module`, to
-build real `InputGuardrail` / `OutputGuardrail` objects.
+imported only through `importlib.import_module`: inside `AirlockGuardrails.wrap_agent`, to
+build real `InputGuardrail` / `OutputGuardrail` objects, and by `openai_agents._sdk()` when
+one of its helpers is called.
 The grep hits for `from anthropic import` and `from agents import` in this tree are
 `Usage:` docstrings; the one real lazy `import anthropic` in the package is
 `sandbox_backend.ManagedSandboxBackend.is_available`.
