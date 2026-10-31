@@ -98,6 +98,9 @@ class ViolationType(str, Enum):
     REAUTH_REQUIRED = "reauth_required"
     # V0.8.74 third verdict (issue #143). Not a denial — a decision deferred to a human.
     ESCALATION_REQUIRED = "escalation_required"
+    # V0.10.29: default_deny=True with nothing on the allowlist. Refused, and logged as
+    # policy_indeterminate: the policy names no tool, so it cannot have allowed this one.
+    EMPTY_ALLOWLIST = "empty_allowlist"
 
 
 class PolicyEscalation(PolicyViolation):
@@ -508,7 +511,36 @@ class SecurityPolicy:
     _amplification_guard: AmplificationGuard | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
-        """Parse time restrictions and rate limits."""
+        """Check the tool lists and the escalation deadline, then parse time restrictions
+        and rate limits.
+
+        Raises:
+            TypeError: ``allowed_tools`` or ``denied_tools`` is not a list or tuple of
+                strings. ``None`` would read as "no list" and a bare string would iterate
+                its characters as patterns, so either is refused, after logging
+                ``policy_indeterminate`` (until 0.10.29 ``allowed_tools=None`` with the
+                default ``default_deny=False`` admitted every tool).
+            ValueError: ``escalation_timeout_seconds`` is negative or NaN.
+        """
+        for name in ("allowed_tools", "denied_tools"):
+            value = getattr(self, name)
+            if not isinstance(value, (list, tuple)) or not all(
+                isinstance(item, str) for item in value
+            ):
+                logger.warning(
+                    "policy_indeterminate",
+                    source=f"SecurityPolicy.{name}",
+                    shape=type(value).__name__,
+                )
+                raise TypeError(
+                    f"SecurityPolicy.{name} must be a list or tuple of str, not "
+                    f"{type(value).__name__}"
+                )
+        timeout = self.escalation_timeout_seconds
+        if timeout != timeout or timeout < 0:  # timeout != timeout: NaN
+            raise ValueError(
+                f"SecurityPolicy.escalation_timeout_seconds must be >= 0, got {timeout!r}"
+            )
         # Parse time windows
         for pattern, window_str in self.time_restrictions.items():
             self._time_windows[pattern] = TimeWindow.parse(window_str)
@@ -557,6 +589,14 @@ class SecurityPolicy:
         # Check allowed list. With default_deny=True (camouflage-resistant
         # posture), an empty allowlist is deny-all. Without it, an empty
         # allowlist preserves the legacy "allow all" semantic.
+        if self.default_deny and not self.allowed_tools:
+            logger.warning("policy_indeterminate", source="empty_allowlist", tool=tool_name)
+            raise PolicyViolation(
+                f"Tool '{tool_name}' is refused: the policy's allowlist is empty and "
+                "default_deny is on, so no tool is allowed",
+                violation_type=ViolationType.EMPTY_ALLOWLIST.value,
+                details={"tool": tool_name, "allowed": []},
+            )
         if self.allowed_tools or self.default_deny:
             allowed = any(
                 self._matches_pattern(tool_name, pattern) for pattern in self.allowed_tools

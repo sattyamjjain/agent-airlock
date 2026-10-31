@@ -1,0 +1,29 @@
+{
+  "schema": "raknor-v1.1-draft/resource-governance-vectors/0.1",
+  "proposal": "https://github.com/raknor-ai/agent-governance-standard/issues/4",
+  "license": "CC0-1.0",
+  "note": "Black-box: each vector is a configured limit plus a timed sequence of requests. `cost` is in the limit's unit. `t` is seconds from start. Expected per-request outcome is observable through the system API.",
+  "vectors": [
+    {"id": "z1-zero-limit-blocks", "clause": 1,
+     "limit": 0, "fallback": null,
+     "steps": [{"t": 0, "cost": 1, "expect": "blocked"}]},
+    {"id": "z2-under-limit-runs", "clause": 1, "positive_control": true,
+     "limit": 10, "fallback": null,
+     "steps": [{"t": 0, "cost": 4, "expect": "executed"}, {"t": 1, "cost": 4, "expect": "executed"}]},
+    {"id": "z3-crossing-request-blocked", "clause": 1,
+     "limit": 10, "fallback": null,
+     "steps": [{"t": 0, "cost": 8, "expect": "executed"}, {"t": 1, "cost": 4, "expect": "blocked"}]},
+    {"id": "p1-exceeded-persists-past-idle", "clause": 2,
+     "limit": 10, "fallback": null, "counter_ttl_s": 60, "persist_lag_s": 300,
+     "steps": [{"t": 0, "cost": 10, "expect": "executed"}, {"t": 1, "cost": 1, "expect": "blocked"},
+               {"t": 120, "cost": 1, "expect": "blocked"}]},
+    {"id": "p2-explicit-reset-readmits", "clause": 2, "positive_control": true,
+     "limit": 10, "fallback": null, "counter_ttl_s": 60, "persist_lag_s": 300,
+     "steps": [{"t": 0, "cost": 10, "expect": "executed"}, {"t": 1, "cost": 1, "expect": "blocked"},
+               {"t": 130, "reset": true}, {"t": 131, "cost": 1, "expect": "executed"}]},
+    {"id": "f1-fallback-declared", "clause": 3,
+     "limit": 10, "fallback": "economy-model",
+     "steps": [{"t": 0, "cost": 10, "expect": "executed"},
+               {"t": 1, "cost": 1, "expect": "degraded", "expect_event": "resource_degraded", "expect_caller_marker": "economy-model"}]}
+  ]
+}
