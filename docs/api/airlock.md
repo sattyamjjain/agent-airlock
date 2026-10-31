@@ -190,16 +190,30 @@ def external_api_call(query: str) -> dict:
 ### With Cost Tracking (V0.4.0)
 
 `Airlock` takes no cost-tracker argument. `CostTracker` is standalone: record each call's
-token usage with `track()`. When a recorded call breaks a `BudgetConfig` limit (per call
-or per session), `BudgetExceededError` is raised. Amounts are `Decimal`.
+token usage with `track()`. Amounts are `Decimal`. A `BudgetConfig` limit (per call or
+per session, in money or tokens) works like this:
+
+- **Before the call.** `tracker.check_admission(estimate=None)` raises
+  `BudgetExceededError` when a session limit is already reached (`total >= limit`, so a
+  limit of `0` refuses the first call), when the budget was exceeded earlier, or when the
+  `TokenUsage` estimate it is given would cross a limit. `track()` calls it on entry, so a
+  refused call's `with` body never runs; `track("tool", estimate=...)` passes an estimate.
+- **After the call.** Without an estimate, the call that crosses a limit runs, and
+  `record()` keeps its record (it ran) and raises `BudgetExceededError`. The most a session
+  overshoots is that one call.
+- **Until `reset()`.** Once a limit was crossed, every later admission is refused, and so
+  is every later `record()`.
+
+Until 0.10.29 a limit of `0` was no limit, and the call that crossed a limit was dropped
+from the total, so a later, cheaper call was admitted.
 
 ```python
 from decimal import Decimal
-from agent_airlock import CostTracker, BudgetConfig
+from agent_airlock import CostTracker, BudgetConfig, TokenUsage
 
 tracker = CostTracker(budget=BudgetConfig(max_cost_per_session=Decimal("100")))
 
-with tracker.track("expensive_tool") as call:
+with tracker.track("expensive_tool", estimate=TokenUsage(input_tokens=1500)) as call:
     result = call_expensive_api(query)
     call.set_tokens(input_tokens=1200, output_tokens=300)
 ```
