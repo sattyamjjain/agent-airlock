@@ -25,14 +25,23 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   warning). Other settings get a second layer and a `UserWarning`, so nothing either wrap
   asked for is dropped: until the 0.10.28 review only the policy was compared, and a
   LangChain re-wrap asking for a sandbox or masking was skipped. Pass a new walker's every
-  `Airlock` argument to both. `crewai` double-wrapped until 0.10.25 (`Task(agent=a)` shares the
+  `Airlock` argument to both, and the callable the shim wraps as `mark_guarded(...,
+  beneath=forward)`: a stack records every layer's settings, and a walk that finds its own
+  in any layer leaves it alone. Until 0.10.29 only the outermost was read, so an agent or
+  crew wrapped twice with different settings grew a layer on every run, each wrap's
+  run-time walk finding the other's outside its own. `crewai` double-wrapped until 0.10.25 (`Task(agent=a)` shares the
   agent's `tools` list and `wrap_crew` walks it twice), the other walkers until 0.10.28; use
   the marker in a new walker. Tools that appear at run time are walked too: `pydantic_ai`
   follows wrapper, combined and dynamic toolsets and wraps the agent's `_get_toolset`, and
   `crewai` hooks `Crew._prepare_tools`, `Crew.copy` and `Agent._add_skill_loader_tool`. A
   PydanticAI MCP or external toolset has no local function to wrap and gets a warning
   (`warn_on_unwrappable`), not a guard; an output function (`output_type=[fn]`) is guarded
-  through its output processor's `_function_schema.function`. The Claude SDK adapter's
+  through its output processor's `_function_schema.function`. `pydantic_ai_approvals`
+  (V0.10.29) turns an escalation into pydantic-ai's `ApprovalRequired` under
+  `defer_escalations=True` (a shim outside the `Airlock`, reading the call's `RunContext`,
+  or for a `tool_plain` tool the run's, which the run toolset hands over), records a
+  resumed approval in the policy's `approval_ledger` for step 2 to claim, and logs the calls
+  pydantic-ai rejects before any tool runs (`unknown_tool`, `unavailable_tool`). The Claude SDK adapter's
   `wrap_tools` returns guarded copies instead (only `wrap_agent` mutates in place), so wrap
   before `create_sdk_mcp_server`, which keeps its own references. `anthropic` and
   `openai_guardrails` are the older decorator style (`AirlockGuardrails.wrap_agent` adds only

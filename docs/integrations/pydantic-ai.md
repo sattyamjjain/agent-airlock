@@ -98,6 +98,83 @@ result = agent.run_sync("What's the weather in Bangalore?")
    fail). Update the tuple once a new release has been smoke-tested
    against the adapter.
 
+## Check order
+
+A tool call meets pydantic-ai's checks first, then Airlock's:
+
+1. pydantic-ai resolves the tool. A name that does not exist (`unknown_tool`) or a tool not
+   available at this step (`unavailable_tool`, say one tool search has not revealed) is
+   rejected here and answered as a retry: no tool runs and Airlock never sees the call.
+2. pydantic-ai validates the arguments against the tool's schema, in lax mode. A failure is
+   a `validation_error` retry, also before any tool runs.
+3. pydantic-ai's own approval: `requires_approval=True`, an `ApprovalRequired` from an
+   `args_validator`, or, with `defer_escalations=True`, the deferral below.
+4. Airlock, around the tool function: the policy and every other gate in order, then the
+   tool, then masking of its output.
+
+So the policy never spends a rate-limit token on a call pydantic-ai rejects, or on one
+waiting for approval.
+
+## Escalations as deferred approvals
+
+Without more, a call the policy escalates goes to the policy's `approver`, and with none it
+is refused as `escalation_required` (pydantic/pydantic-ai#9015). With
+`defer_escalations=True` it becomes a pydantic-ai deferred approval instead:
+
+```python
+from agent_airlock.approvals import InMemoryApprovalLedger
+from agent_airlock.integrations.pydantic_ai import PydanticAIAdapter
+from agent_airlock.policy import SecurityPolicy
+
+policy = SecurityPolicy(
+    escalate_tools={"delete_file": "deletes a file"},
+    approval_ledger=InMemoryApprovalLedger(),
+)
+PydanticAIAdapter(defer_escalations=True).wrap_agent(agent, policy=policy)
+```
+
+- The escalated call raises pydantic-ai's `ApprovalRequired` before Airlock runs, so it
+  spends nothing. The run ends with a `DeferredToolRequests` (put it in the agent's
+  `output_type`), or a `HandleDeferredToolCalls` handler resolves it inline. Its metadata
+  carries `{"airlock": {"rule": ..., "reason": ...}}`.
+- When a run resumes with the call approved, the adapter records one approval of exactly
+  the arguments the call runs with (`ToolApproved(override_args=...)` included) in the
+  policy's `approval_ledger`, and the call claims it at step 2. An approved call is not a
+  free one (pydantic/pydantic-ai#8839): it spends its rate-limit token and counts against
+  the budgets like any other.
+- An approval replayed for a tool call id already used records nothing, so that call meets
+  the policy as if nobody had approved it.
+- A denied call never reaches the tool or Airlock. Until an approval arrives the tool does
+  not run at all: the deferral is raised before it, whatever pydantic-ai then does with a
+  run that has nowhere to hand the request (no `DeferredToolRequests` output type, no
+  handler).
+- `defer_escalations` needs a policy with an `approval_ledger`, and pydantic-ai itself;
+  `wrap_agent` raises without them.
+
+The approval comes from whoever answers the `DeferredToolRequests`. pydantic-ai says so
+too: approval is not an authorization boundary against a client that can submit its own
+history, so serve the resume only to a host you trust.
+
+A run-time context is what a deferral reads. A tool that takes a `RunContext` has its own;
+a `tool_plain` tool gets the run's through the run toolset the adapter wraps (pydantic-ai
+2.x's `_get_toolset`). Called any other way, an escalated `tool_plain` call goes to the
+approver, or is refused.
+
+A `RunContext` is not one of the arguments an approval binds to, since 0.10.29: the
+digest a ledger approval or a standing grant is matched by covers what the model wrote.
+
+## Rejected tool calls
+
+The calls pydantic-ai rejects in step 1 never reach Airlock, so the adapter logs them from
+the run's messages as each step starts: a `ToolReturnPart` with `outcome="retried"` and a
+`retry.cause` of `unknown_tool` or `unavailable_tool` is logged as
+`pydantic_ai_tool_rejected`, with the tool call id, pydantic-ai's retry `attempt` and
+`max_retries`, and how many rejections answered that call. One whose attempt reached the
+limit is also logged as `pydantic_ai_tool_rejected_final`: the model's next try ends the
+run. `PydanticAIAdapter(log_rejections=False)` turns it off. For a run's messages in hand,
+`log_tool_rejections(result.all_messages())` (from
+`agent_airlock.integrations.pydantic_ai_approvals`) logs them the same way and returns them.
+
 ## Honest scope
 
 - The adapter does not import `pydantic_ai` at module load — passing a

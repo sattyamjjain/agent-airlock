@@ -36,6 +36,7 @@ import warnings
 from collections.abc import Callable, Collection
 from typing import Any, get_type_hints
 
+from .._arg_walk import INJECTED_PARAMS_ATTR
 from .._log import structlog
 from ..exceptions import AirlockError
 
@@ -50,16 +51,35 @@ GUARDED_MARKER = "__airlock_guarded__"
 #: The settings a shim was installed with, read when a later walk finds it already guarded.
 _GUARDED_SETTINGS = "__airlock_guarded_settings__"
 
+#: The settings of every layer of a stacked shim, outermost first (V0.10.29).
+_GUARDED_LAYERS = "__airlock_guarded_layers__"
 
-def mark_guarded(shim: Any, *settings: object) -> None:
+
+def mark_guarded(shim: Any, *settings: object, beneath: Any = None) -> None:
     """Mark ``shim`` as a walker-installed ``Airlock`` shim built from ``settings``.
 
     ``settings`` are everything the shim's ``Airlock`` was built from (its policy, and its
     config and sandbox where the walker takes them), in the order the walker passes them
-    to :func:`already_guarded`.
+    to :func:`already_guarded`. ``beneath`` is the callable the shim wraps: when it is a
+    shim too, its layers are recorded under this one's, so a later walk with either
+    layer's settings leaves the stack alone. Until 0.10.29 only the outermost layer was
+    read, and an agent wrapped twice with different settings got one more layer on every
+    run, as each wrap's run-time walk found the other's outside its own.
     """
     setattr(shim, GUARDED_MARKER, True)
     setattr(shim, _GUARDED_SETTINGS, settings)
+    setattr(shim, _GUARDED_LAYERS, (settings, *_layers(beneath)))
+
+
+def _layers(obj: Any) -> tuple[tuple[object, ...], ...]:
+    """The settings of every layer of ``obj``, outermost first; none for a plain callable."""
+    if not is_guarded(obj):
+        return ()
+    layers = getattr(obj, _GUARDED_LAYERS, None)
+    if isinstance(layers, tuple) and all(isinstance(layer, tuple) for layer in layers):
+        return layers
+    recorded = getattr(obj, _GUARDED_SETTINGS, None)
+    return (recorded,) if isinstance(recorded, tuple) else ()
 
 
 def is_guarded(obj: Any) -> bool:
@@ -72,14 +92,12 @@ def is_guarded(obj: Any) -> bool:
 
 
 def guarded_with(obj: Any, *settings: object) -> bool:
-    """Whether ``obj`` is a shim a walker built from exactly ``settings`` (the same objects)."""
-    if not is_guarded(obj):
-        return False
-    recorded = getattr(obj, _GUARDED_SETTINGS, None)
-    return (
-        isinstance(recorded, tuple)
-        and len(recorded) == len(settings)
+    """Whether ``obj`` is a shim with a layer a walker built from exactly ``settings`` (the
+    same objects)."""
+    return any(
+        len(recorded) == len(settings)
         and all(old is new for old, new in zip(recorded, settings, strict=True))
+        for recorded in _layers(obj)
     )
 
 
@@ -146,6 +164,8 @@ def named_tool_proxy(
     signature, annotations = _contract(forward, name=name, relaxed=frozenset(relaxed_params))
     proxy = _async_proxy(forward) if _is_async(forward) else _sync_proxy(forward)
     _adopt_identity(proxy, forward, name=name, signature=signature, annotations=annotations)
+    # V0.10.29: the framework's injected context is no argument an approval binds to.
+    setattr(proxy, INJECTED_PARAMS_ATTR, frozenset(relaxed_params))
     return proxy
 
 

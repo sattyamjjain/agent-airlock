@@ -264,7 +264,7 @@ class CrewAIAdapter:
         def hooked(*args: Any, **kwargs: Any) -> Any:
             return after(original(*args, **kwargs))
 
-        mark_guarded(hooked, policy)
+        mark_guarded(hooked, policy, beneath=original)
         try:
             setattr(owner, attr, hooked)
         except (AttributeError, TypeError, ValueError):
@@ -398,7 +398,7 @@ class CrewAIAdapter:
         # rather than `_run` / `func`, and the tool's signature, so Airlock validates it.
         airlock = Airlock(policy=policy) if policy is not None else Airlock()
         wrapped = airlock(named_tool_proxy(forward, name=name))
-        mark_guarded(wrapped, policy)
+        mark_guarded(wrapped, policy, beneath=forward)
 
         if target_attr is not None:
             setattr(tool, target_attr, wrapped)  # noqa: B010

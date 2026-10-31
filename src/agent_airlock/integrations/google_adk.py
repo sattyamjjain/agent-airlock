@@ -223,7 +223,7 @@ def _airlock_guard(
     """Airlock-decorate one ADK tool callable, marked so a second walk leaves it alone."""
     airlock = Airlock(policy=policy) if policy is not None else Airlock()
     guarded: Callable[..., Any] = airlock(_relax_injected_params(func))
-    mark_guarded(guarded, policy)
+    mark_guarded(guarded, policy, beneath=func)
     return guarded
 
 
