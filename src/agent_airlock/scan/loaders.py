@@ -12,6 +12,10 @@ Accepted shapes (any nesting of the below is walked):
 A config that only registers server *commands* (no inlined tool schemas) yields
 zero tools for that server — there is nothing to statically type-check, and the
 loader says so rather than inventing schemas.
+
+A tool listed under ``mcpServers`` is recorded with that entry's name
+(:attr:`LoadedTools.servers`), which ``--trust-server`` matches. Nothing a tool or a
+server card says about itself names its server: those are written by the server.
 """
 
 from __future__ import annotations
@@ -39,6 +43,13 @@ class LoadedTools:
     tools: list[dict[str, Any]] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: For each tool, the ``mcpServers`` entry it was listed under, or None.
+    servers: list[str | None] = field(default_factory=list)
+
+    def add(self, tool: Mapping[str, Any], server: str | None) -> None:
+        """Record one tool and the server it was listed under."""
+        self.tools.append(dict(tool))
+        self.servers.append(server)
 
 
 def load_tool_defs(path: str | Path) -> LoadedTools:
@@ -99,14 +110,17 @@ def _load_one_file(file: Path, result: LoadedTools) -> None:
         result.warnings.append(f"{file}: no tool declarations found")
 
 
-def _extract_tools(node: Any, result: LoadedTools) -> None:
-    """Walk a decoded JSON node and append any tool declarations found."""
+def _extract_tools(node: Any, result: LoadedTools, server: str | None = None) -> None:
+    """Walk a decoded JSON node and append any tool declarations found.
+
+    ``server`` is the ``mcpServers`` entry the node sits under, if any.
+    """
     if isinstance(node, list):
         for item in node:
             if _looks_like_tool(item):
-                result.tools.append(dict(item))
+                result.add(item, server)
             else:
-                _extract_tools(item, result)
+                _extract_tools(item, result, server)
         return
     if not isinstance(node, Mapping):
         return
@@ -114,15 +128,15 @@ def _extract_tools(node: Any, result: LoadedTools) -> None:
     if isinstance(tools, list):
         for item in tools:
             if _looks_like_tool(item):
-                result.tools.append(dict(item))
+                result.add(item, server)
     servers = node.get("mcpServers")
     if isinstance(servers, Mapping):
-        for server in servers.values():
-            if isinstance(server, Mapping):
-                _extract_tools(server, result)
+        for name, entry in servers.items():
+            if isinstance(entry, Mapping):
+                _extract_tools(entry, result, str(name))
     # A bare single tool def.
     if "tools" not in node and "mcpServers" not in node and _looks_like_tool(node):
-        result.tools.append(dict(node))
+        result.add(node, server)
 
 
 def _looks_like_tool(node: Any) -> bool:

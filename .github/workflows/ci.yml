@@ -52,19 +52,20 @@ jobs:
         # The failure mode this guards is invisible by construction: importorskip
         # turns a missing dependency into a skip, and a skipped test looks exactly like
         # a passing one in the summary line. The import lines fail when an extra stops
-        # resolving. The run below fails when any test in the five files does not pass:
+        # resolving. The run below fails when any test in these files does not pass:
         # pytest's exit code fails the step on a failure or error, and the summary line
         # must report passes only (deselected tests and warnings allowed), so a skip, an
         # xfail or no test at all fails it too. Until 0.10.28 this ran --collect-only,
         # which exits 0 on a module-level importorskip and never reaches one inside a
         # test function (two in test_kill_switch_wiring.py), so it asserted nothing the
-        # import lines did not. The five files run in a few seconds.
+        # import lines did not. They run in a few seconds.
         run: |
           python -c "import fakeredis, redis, lupa; print('redis', redis.__version__, '| fakeredis', fakeredis.__version__)"
           python -c "import fastmcp; print('fastmcp', fastmcp.__version__)"
           python -c "import cryptography; print('cryptography', cryptography.__version__)"
           set -o pipefail
           pytest tests/test_redis_rate_limit.py tests/kill_switch/test_kill_switch_wiring.py \
+            tests/scan/test_mcp_tool_annotations.py \
             tests/test_mcp_integration_0_10_18.py tests/test_identity.py \
             tests/test_attested_admission.py -rs --no-cov | tee extra-backed-tests.log
           sed -E 's/\x1b\[[0-9;]*m//g' extra-backed-tests.log > extra-backed-tests.plain.log
