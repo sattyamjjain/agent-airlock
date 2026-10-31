@@ -84,6 +84,30 @@ Tool patterns support glob-style matching:
 | `*` | Everything |
 | `search_*` | `search_users`, `search_products` |
 
+### Check Order
+
+`SecurityPolicy.check()` runs its checks in this order, and the first that fails refuses
+the call:
+
+1. Agent identity (`require_agent_id`, `allowed_roles`)
+2. The deny list (`denied_tools`), which wins over the allowlist
+3. The allowlist (`allowed_tools`), or the default when it is empty
+4. The time window (`time_restrictions`)
+5. The rate limit (`rate_limits`)
+6. Escalation (`escalate_tools`), last, so a denied tool is never softened into "ask a
+   human"
+
+**An empty allowlist.** With the default `default_deny=False`, an empty `allowed_tools`
+allows every tool that is not denied, and the policy warns once (a `FutureWarning`, since
+0.10.29) that it does: the default changes in a future minor release. Say what you mean:
+`allowed_tools=["*"]` allows every tool and stays quiet, and `default_deny=True` makes the
+empty allowlist deny every tool. `STRICT_POLICY` does not restrict tool names: it has no
+allowlist, so it requires an identity and limits rates but admits any tool.
+
+**Rate limits.** Only the most specific matching pattern applies, so a `"*"` ceiling stops
+applying to a tool that has its own pattern: with `{"*": "3/hour", "search_*": "100/hour"}`,
+`search_web` gets 100 an hour, not 3.
+
 ### Example
 
 ```python
@@ -111,7 +135,8 @@ policy = SecurityPolicy(
 from agent_airlock import PERMISSIVE_POLICY
 ```
 
-An empty `SecurityPolicy()`: allows every tool, with no rate limit.
+`SecurityPolicy(allowed_tools=["*"])`: allows every tool, with no rate limit. Until 0.10.29
+it was an empty `SecurityPolicy()`, which allows the same tools but now warns.
 
 ### STRICT_POLICY
 
@@ -121,7 +146,8 @@ from agent_airlock import STRICT_POLICY
 
 Requires an agent identity, limits every tool to 100 calls an hour, and applies a
 capability policy that grants `FILESYSTEM_READ`, `NETWORK_HTTPS` and `DATABASE_READ` and
-denies `PROCESS_SHELL` and `FILESYSTEM_DELETE`. It also turns on trace redaction.
+denies `PROCESS_SHELL` and `FILESYSTEM_DELETE`. It also turns on trace redaction. It has
+no allowlist, so it does not restrict which tools run.
 
 ### READ_ONLY_POLICY
 
