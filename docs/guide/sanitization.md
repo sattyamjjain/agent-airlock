@@ -75,6 +75,13 @@ as an exception after the tool had run.
 
 "Masked As" is what `@Airlock` returns, using each type's default strategy.
 
+The detectors for ASCII-shaped values (email, phone, card, IP, API and AWS keys, JWT, and
+the India types) read word boundaries the ASCII way, so a value written right next to
+Devanagari, Arabic, Hebrew, Thai or Bengali text (`ईमेलbob@example.com`) is masked like a
+space-separated one; until 0.10.29 it was not. A no-break or other Unicode space between
+the groups of a number still counts as a separator. A chained address
+(`bob-@list.dan@ex.org`) is masked whole.
+
 ### PII (Personally Identifiable Information)
 
 Masked when `mask_pii=True` (the default).
