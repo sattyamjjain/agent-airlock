@@ -152,11 +152,24 @@ class TestContractChecks:
         assert "SCAN005" in _codes(result)
 
     def test_missing_schema_is_open_surface(self) -> None:
-        tool = {"name": "get_thing", "description": "Get a thing."}  # no inputSchema
-        result = scan_tool(tool, resolve_policy("permissive"))
-        # Non-destructive + open surface → WARN (SCAN004).
+        tool = {
+            "name": "get_thing",
+            "description": "Get a thing.",
+            "annotations": {"readOnlyHint": True},
+        }  # no inputSchema
+        result = scan_tool(
+            tool, resolve_policy("permissive"), server="srv", trusted_servers={"srv"}
+        )
+        # Non-destructive (a trusted read-only hint) + open surface → WARN (SCAN004).
         assert "SCAN004" in _codes(result)
         assert result.grade is Grade.WARN
+
+    def test_missing_schema_without_annotations_is_a_destructive_open_surface(self) -> None:
+        """0.10.29: no annotations reads as the MCP spec default, destructive."""
+        tool = {"name": "get_thing", "description": "Get a thing."}
+        result = scan_tool(tool, resolve_policy("permissive"))
+        assert "SCAN003" in _codes(result)
+        assert result.grade is Grade.FAIL
 
     def test_malformed_issuer_warns(self) -> None:
         tool = {
@@ -241,18 +254,171 @@ class TestCapabilityInference:
         assert infer_required_capability(tool) & Capability.FILESYSTEM_DELETE
 
     def test_annotations_read_only(self) -> None:
+        """A trusted server's read-only hint is used; open-world is still the default."""
         tool = {"name": "x", "annotations": {"readOnlyHint": True}, "description": "d"}
-        assert infer_required_capability(tool) & Capability.FILESYSTEM_READ
+        assert infer_required_capability(tool, trusted=True) == (
+            Capability.FILESYSTEM_READ | Capability.NETWORK_HTTPS
+        )
 
     def test_name_heuristic(self) -> None:
         assert infer_required_capability({"name": "delete_user", "description": "d"}) & (
             Capability.FILESYSTEM_DELETE
         )
 
-    def test_unknown_is_none(self) -> None:
-        assert (
-            infer_required_capability({"name": "frobnicate", "description": "d"}) is Capability.NONE
+    def test_no_annotations_means_destructive(self) -> None:
+        """0.10.29: absent hints read at the spec defaults: destructive, open-world.
+
+        Until 0.10.29 this tool inferred ``Capability.NONE``, and so passed every
+        capability cap.
+        """
+        assert infer_required_capability({"name": "frobnicate", "description": "d"}) == (
+            Capability.FILESYSTEM_DELETE | Capability.NETWORK_HTTPS
         )
+
+
+def _closed(name: str, annotations: dict | None = None) -> dict:
+    """A tool with a closed, typed schema, so only capability inference can fail it."""
+    tool: dict = {
+        "name": name,
+        "description": "A tool.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "maxLength": 64}},
+            "additionalProperties": False,
+        },
+    }
+    if annotations is not None:
+        tool["annotations"] = annotations
+    return tool
+
+
+class TestAnnotationTrust:
+    """0.10.29: the precedence cited in openai/openai-agents-python#5315, pinned.
+
+    Explicit capabilities beat annotations, which beat the name heuristic. An absent
+    hint reads at its MCP spec default (not read-only, destructive, open-world), the
+    name heuristic only adds, and a hint that lowers the risk counts only for a server
+    named in ``trusted_servers``: the spec says never to decide anything from an
+    untrusted server's annotations (modelcontextprotocol/servers#5058).
+    """
+
+    def test_explicit_beats_annotations_beats_name(self) -> None:
+        explicit = {
+            "name": "delete_rows",
+            "capabilities": ["NETWORK_HTTPS"],
+            "annotations": {"destructiveHint": True},
+        }
+        assert infer_required_capability(explicit) is Capability.NETWORK_HTTPS
+        # A benign name does not take away what the annotations say...
+        destructive = {"name": "get_status", "annotations": {"destructiveHint": True}}
+        assert infer_required_capability(destructive, trusted=True) & Capability.FILESYSTEM_DELETE
+        # ...and a dangerous name adds to a trusted read-only hint, never removes from it.
+        read_only = {
+            "name": "delete_rows",
+            "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        }
+        assert infer_required_capability(read_only, trusted=True) == (
+            Capability.FILESYSTEM_READ | Capability.FILESYSTEM_DELETE
+        )
+
+    def test_untrusted_read_only_get_env_is_still_flagged(self) -> None:
+        tool = _closed("get_env", {"readOnlyHint": True, "openWorldHint": False})
+        result = scan_tool(tool, resolve_policy("strict"), server="untrusted-srv")
+        assert result.grade is Grade.FAIL
+        assert "SCAN006" in _codes(result)
+        assert "FILESYSTEM_DELETE" in result.inferred_capability
+        assert result.untrusted_hints == ["readOnlyHint: true", "openWorldHint: false"]
+
+    def test_untrusted_non_destructive_create_entities_is_still_destructive(self) -> None:
+        tool = {
+            "name": "create_entities",
+            "description": "Create entities in the knowledge graph.",
+            "annotations": {"destructiveHint": False},
+            "inputSchema": {"type": "object", "additionalProperties": True},
+        }
+        result = scan_tool(tool, resolve_policy("permissive"), server="memory")
+        assert "FILESYSTEM_DELETE" in result.inferred_capability
+        assert "SCAN003" in _codes(result)  # a destructive open surface, a FAIL
+
+    def test_trusted_server_hints_are_honoured(self) -> None:
+        get_env = _closed("get_env", {"readOnlyHint": True, "openWorldHint": False})
+        result = scan_tool(get_env, resolve_policy("strict"), server="srv", trusted_servers=["srv"])
+        assert result.grade is Grade.PASS
+        assert result.inferred_capability == "FILESYSTEM_READ"
+        assert result.untrusted_hints == []
+        create = {"name": "create_entities", "annotations": {"destructiveHint": False}}
+        assert not infer_required_capability(create, trusted=True) & Capability.FILESYSTEM_DELETE
+
+    def test_a_tool_with_no_server_is_untrusted(self) -> None:
+        """Trust comes from the caller, never from a server name the tool might carry."""
+        tool = _closed("get_env", {"readOnlyHint": True, "openWorldHint": False})
+        tool["server"] = "srv"
+        result = scan_tool(tool, resolve_policy("strict"), trusted_servers=["srv"])
+        assert result.grade is Grade.FAIL
+        assert "FILESYSTEM_DELETE" in result.inferred_capability
+
+    @pytest.mark.parametrize("annotations", [["readOnlyHint"], "readOnly", 1])
+    def test_annotations_that_are_not_a_mapping_read_as_absent(self, annotations) -> None:
+        tool = {"name": "x", "annotations": annotations}
+        assert infer_required_capability(tool, trusted=True) == (
+            Capability.FILESYSTEM_DELETE | Capability.NETWORK_HTTPS
+        )
+
+    def test_a_hint_that_is_not_a_boolean_lowers_nothing(self) -> None:
+        tool = {"name": "x", "annotations": {"readOnlyHint": "true", "openWorldHint": 0}}
+        assert infer_required_capability(tool, trusted=True) == (
+            Capability.FILESYSTEM_DELETE | Capability.NETWORK_HTTPS
+        )
+
+    def test_destructive_hint_counts_only_when_not_read_only(self) -> None:
+        tool = {
+            "name": "x",
+            "annotations": {"readOnlyHint": True, "destructiveHint": True, "openWorldHint": False},
+        }
+        assert infer_required_capability(tool, trusted=True) == Capability.FILESYSTEM_READ
+
+    def test_a_trusted_non_destructive_writer_needs_write(self) -> None:
+        tool = {"name": "x", "annotations": {"destructiveHint": False, "openWorldHint": False}}
+        assert infer_required_capability(tool, trusted=True) == Capability.FILESYSTEM_WRITE
+
+    def test_scan_tools_pairs_each_tool_with_its_server(self) -> None:
+        tool = _closed("get_env", {"readOnlyHint": True, "openWorldHint": False})
+        report = scan_tools(
+            [tool, tool],
+            resolve_policy("strict"),
+            servers=["srv", "other"],
+            trusted_servers=["srv"],
+        )
+        assert [r.grade for r in report.results] == [Grade.PASS, Grade.FAIL]
+        assert report.to_dict()["trusted_servers"] == ["srv"]
+        assert report.to_dict()["results"][1]["server"] == "other"
+
+    def test_scan_tools_refuses_a_server_list_of_another_length(self) -> None:
+        with pytest.raises(ValueError, match="servers"):
+            scan_tools([_closed("x")], resolve_policy("strict"), servers=["a", "b"])
+
+    def test_cli_trust_server_lowers_the_risk_of_that_server_only(self, tmp_path, capsys) -> None:
+        tool = _closed("get_env", {"readOnlyHint": True, "openWorldHint": False})
+        f = tmp_path / "mcp.json"
+        f.write_text(json.dumps({"mcpServers": {"srv": {"command": "uvx", "tools": [tool]}}}))
+
+        assert cli.main([str(f), "--policy", "strict"]) == 2
+        out = capsys.readouterr().out
+        assert "not used: server 'srv' is not trusted (--trust-server srv)" in out
+
+        assert cli.main([str(f), "--policy", "strict", "--trust-server", "srv"]) == 0
+        assert cli.main([str(f), "--policy", "strict", "--trust-server", "other"]) == 2
+        assert "--trust-server other: no mcpServers entry of that name" in capsys.readouterr().out
+
+    def test_cli_json_carries_server_and_untrusted_hints(self, tmp_path, capsys) -> None:
+        tool = _closed("get_env", {"readOnlyHint": True})
+        f = tmp_path / "mcp.json"
+        f.write_text(json.dumps({"mcpServers": {"srv": {"tools": [tool]}}}))
+        cli.main([str(f), "--output", "json"])
+        data = json.loads(capsys.readouterr().out)
+        assert data["trusted_servers"] == []
+        assert data["results"][0]["server"] == "srv"
+        assert data["results"][0]["untrusted_hints"] == ["readOnlyHint: true"]
 
 
 # --------------------------------------------------------------------------- #
@@ -283,7 +449,18 @@ class TestLoaders:
         f.write_text(
             json.dumps({"mcpServers": {"srv": {"command": "uvx", "tools": [_compliant_tool()]}}})
         )
-        assert len(load_tool_defs(f).tools) == 1
+        loaded = load_tool_defs(f)
+        assert len(loaded.tools) == 1
+        assert loaded.servers == ["srv"]
+
+    def test_only_an_mcp_servers_entry_names_a_server(self, tmp_path) -> None:
+        """A server card's own name is written by the server, so it names nothing."""
+        f = tmp_path / "card.json"
+        f.write_text(json.dumps({"name": "srv", "tools": [_compliant_tool()]}))
+        (tmp_path / "list.json").write_text(json.dumps([_compliant_tool()]))
+        loaded = load_tool_defs(tmp_path)
+        assert loaded.servers == [None, None]
+        assert len(loaded.tools) == len(loaded.servers)
 
     def test_directory_prefers_known_config(self, tmp_path) -> None:
         (tmp_path / "mcp.json").write_text(json.dumps({"tools": [_compliant_tool()]}))
