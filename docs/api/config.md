@@ -23,6 +23,7 @@ class AirlockConfig:
     mask_pii: bool = True
     mask_secrets: bool = True
     sanitize_output: bool = True
+    withhold_unmaskable_output: bool = False
     pii_locales: list[str] = field(default_factory=list)
 
     # Audit
@@ -73,6 +74,7 @@ class AirlockConfig:
 | Attribute | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `sanitize_output` | `bool` | `True` | Enable output sanitization |
+| `withhold_unmaskable_output` | `bool` | `False` | Refuse (`output_unreadable`) a result whose detected secret or PII cannot be masked in place (a model, a dataclass, non-text MCP content) |
 | `mask_pii` | `bool` | `True` | Mask PII in outputs |
 | `mask_secrets` | `bool` | `True` | Mask secrets in outputs |
 | `pii_locales` | `list[str]` | `[]` | `["in"]` adds the India PII types |

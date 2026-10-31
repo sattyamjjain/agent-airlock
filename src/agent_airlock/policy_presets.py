@@ -3446,7 +3446,9 @@ def capsule_indirect_injection_cve_2026_21520_defaults(
     )
     return {
         "policy": policy,
-        "airlock_config": AirlockConfig(unknown_args=UnknownArgsMode.BLOCK),
+        "airlock_config": AirlockConfig(
+            unknown_args=UnknownArgsMode.BLOCK, withhold_unmaskable_output=True
+        ),
         "denied_sinks": _CAPSULE_INDIRECT_INJECTION_EXFIL_SINKS,
         "tool_corpus": _CAPSULE_INDIRECT_INJECTION_TOOL_CORPUS,
         "source": "https://nvd.nist.gov/vuln/detail/CVE-2026-21520",
@@ -3728,6 +3730,7 @@ def context7_contextcrush_cve_2026_75130_defaults(
         "airlock_config": AirlockConfig(
             unknown_args=UnknownArgsMode.BLOCK,
             filesystem_policy=fs_policy,
+            withhold_unmaskable_output=True,
         ),
         "guard": guard,
         "check_served_content": _check_served_content,

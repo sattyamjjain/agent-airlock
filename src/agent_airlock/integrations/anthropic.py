@@ -246,7 +246,7 @@ class ToolRegistry:
                 f"AIRLOCK_BLOCK: tool {name!r} is async and was not run. The caller must use "
                 "ToolRegistry.aprocess_tool_use (or aprocess_message_tools) for it.",
             )
-        return _result_block(tool_use_id, result)
+        return _result_block(tool_use_id, result, self.config)
 
     async def aprocess_tool_use(self, tool_use: Any) -> dict[str, Any]:
         """Like :meth:`process_tool_use`, awaiting an async tool's result.
@@ -272,7 +272,7 @@ class ToolRegistry:
                 result = await result
             except Exception as exc:  # noqa: BLE001 - reported to the model, never raised
                 return _call_failed(tool_use_id, name, exc)
-        return _result_block(tool_use_id, result)
+        return _result_block(tool_use_id, result, self.config)
 
     def _prepare(self, tool_use: Any) -> tuple[str, tuple[str, dict[str, Any]] | dict[str, Any]]:
         """``(tool_use_id, (name, inputs))``, or ``(tool_use_id, error_block)``."""
@@ -332,10 +332,23 @@ def _error_block(tool_use_id: str, text: str) -> dict[str, Any]:
     return {"type": "tool_result", "tool_use_id": tool_use_id, "content": text, "is_error": True}
 
 
-def _result_block(tool_use_id: str, result: Any) -> dict[str, Any]:
+def _result_block(
+    tool_use_id: str, result: Any, config: AirlockConfig | None = None
+) -> dict[str, Any]:
     if is_refusal(result):
         return _error_block(tool_use_id, refusal_text(result))
-    return {"type": "tool_result", "tool_use_id": tool_use_id, "content": _content(result)}
+    content = _content(result)
+    if config is not None and config.sanitize_output and isinstance(content, str):
+        # A model or dataclass result reaches here unmasked (@Airlock masks only strings
+        # and containers) and is serialized with model_dump, which renders Field(repr=False)
+        # fields too; until 0.10.29 that JSON went to the model as it was.
+        content = sanitize_output(
+            content,
+            mask_pii=config.mask_pii,
+            mask_secrets=config.mask_secrets,
+            pii_locales=config.pii_locales or None,
+        ).content
+    return {"type": "tool_result", "tool_use_id": tool_use_id, "content": content}
 
 
 def _is_content_block(block: Any) -> bool:
