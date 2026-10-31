@@ -22,9 +22,11 @@ specific contract violation, and the run carries a CI-friendly exit code.
 from __future__ import annotations
 
 import enum
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+from pydantic import BaseModel
 
 from ..capabilities import Capability, CapabilityPolicy
 from ..policy import PolicyViolation, SecurityPolicy
@@ -79,8 +81,8 @@ _SENSITIVE_ARG_TOKENS: tuple[str, ...] = (
     "code",
 )
 
-# Coarse name → capability heuristic, used ONLY when a tool declares no explicit
-# capabilities and no MCP annotations. Documented as a heuristic in the report.
+# Coarse name → capability heuristic. It only adds to what the annotations (or their
+# spec defaults) imply, and is not read when a tool declares explicit capabilities.
 _NAME_CAPABILITY_RULES: tuple[tuple[tuple[str, ...], Capability], ...] = (
     (
         ("exec", "shell", "spawn", "subprocess", "run_command", "bash", "sh_"),
@@ -129,6 +131,10 @@ class ToolScanResult:
     grade: Grade
     violations: list[ContractViolation] = field(default_factory=list)
     inferred_capability: str = "NONE"
+    #: The ``mcpServers`` entry the tool was listed under, when the loader saw one.
+    server: str | None = None
+    #: Risk-lowering hints the tool carries that were not used: its server is not trusted.
+    untrusted_hints: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -139,6 +145,8 @@ class ToolScanResult:
             "tool": self.tool_name,
             "grade": self.grade.value,
             "inferred_capability": self.inferred_capability,
+            "server": self.server,
+            "untrusted_hints": list(self.untrusted_hints),
             "violations": [v.to_dict() for v in self.violations],
         }
 
@@ -149,6 +157,8 @@ class ScanReport:
 
     results: list[ToolScanResult] = field(default_factory=list)
     policy_name: str = "permissive"
+    #: The servers whose risk-lowering hints were used, sorted.
+    trusted_servers: list[str] = field(default_factory=list)
 
     @property
     def tools_scanned(self) -> int:
@@ -183,6 +193,7 @@ class ScanReport:
     def to_dict(self) -> dict[str, Any]:
         return {
             "policy": self.policy_name,
+            "trusted_servers": list(self.trusted_servers),
             "tools_scanned": self.tools_scanned,
             "passed": len(self.passed),
             "warned": len(self.warned),
@@ -198,25 +209,78 @@ class ScanReport:
 # --------------------------------------------------------------------------- #
 
 
-def infer_required_capability(tool: Mapping[str, Any]) -> Capability:
+def infer_required_capability(tool: Mapping[str, Any], *, trusted: bool = False) -> Capability:
     """Infer the capability a tool requires from its declared contract.
 
     Precedence (most authoritative first):
 
-    1. An explicit ``capabilities`` list of :class:`Capability` member names.
-    2. MCP tool ``annotations`` (``destructiveHint`` / ``readOnlyHint`` /
-       ``openWorldHint``) — real MCP-spec fields.
-    3. A coarse tool-name heuristic (documented as such).
+    1. An explicit ``capabilities`` list of :class:`Capability` member names, returned
+       as declared.
+    2. MCP tool ``annotations`` (``readOnlyHint`` / ``destructiveHint`` /
+       ``openWorldHint``), each absent hint read at its MCP spec default: not
+       read-only, destructive, open-world. So a tool with no annotations is read as
+       destructive and open-world. A hint that lowers the risk (``readOnlyHint: true``,
+       ``destructiveHint: false``, ``openWorldHint: false``) counts only when
+       ``trusted``: the spec says not to decide anything from an untrusted server's
+       annotations.
+    3. A coarse tool-name heuristic, which only adds to step 2 and never removes from
+       it.
 
-    Returns ``Capability.NONE`` when nothing can be inferred.
+    Args:
+        tool: One MCP tool definition. ``annotations`` may be a mapping or a pydantic
+            model such as ``mcp.types.ToolAnnotations``.
+        trusted: Whether the tool's server is one the caller trusts.
+
+    Returns:
+        The capability the tool needs; never ``Capability.NONE`` without explicit
+        capabilities, since the spec defaults always need some.
     """
     explicit = _capability_from_explicit(tool)
     if explicit is not Capability.NONE:
         return explicit
-    annotated = _capability_from_annotations(tool)
-    if annotated is not Capability.NONE:
-        return annotated
-    return _capability_from_name(str(tool.get("name", "")))
+    annotated = _capability_from_annotations(_read_annotations(tool), trusted=trusted)
+    return annotated | _capability_from_name(str(tool.get("name", "")))
+
+
+#: The hints that lower a tool's inferred risk, with the value that lowers it.
+_RISK_LOWERING_HINTS: tuple[tuple[str, bool], ...] = (
+    ("readOnlyHint", True),
+    ("destructiveHint", False),
+    ("openWorldHint", False),
+)
+
+
+def _read_annotations(tool: Mapping[str, Any]) -> dict[str, Any]:
+    """A tool's ``annotations`` as a plain dict keyed by the MCP spec's camelCase names.
+
+    A pydantic model (``mcp.types.ToolAnnotations``, whose fields are snake_case in
+    mcp 2.x) is read through ``model_dump(by_alias=True, exclude_none=True)``, so an
+    unset hint stays absent and gets its spec default. Anything else that is not a
+    mapping, or a model that cannot be dumped, reads as no annotations: the spec
+    defaults, which are the worst case.
+    """
+    ann = tool.get("annotations")
+    if isinstance(ann, BaseModel):
+        try:
+            ann = ann.model_dump(by_alias=True, exclude_none=True)
+        except Exception:  # noqa: BLE001 - an unreadable model reads as absent (worst case)
+            return {}
+    return dict(ann) if isinstance(ann, Mapping) else {}
+
+
+def _untrusted_hints(tool: Mapping[str, Any], *, trusted: bool) -> list[str]:
+    """The risk-lowering hints a tool carries that were not used, as ``"name: value"``.
+
+    Empty when the server is trusted, or when explicit capabilities decide anyway.
+    """
+    if trusted or _capability_from_explicit(tool) is not Capability.NONE:
+        return []
+    ann = _read_annotations(tool)
+    return [
+        f"{name}: {str(value).lower()}"
+        for name, value in _RISK_LOWERING_HINTS
+        if ann.get(name) is value
+    ]
 
 
 def _capability_from_explicit(tool: Mapping[str, Any]) -> Capability:
@@ -231,20 +295,25 @@ def _capability_from_explicit(tool: Mapping[str, Any]) -> Capability:
     return combined
 
 
-def _capability_from_annotations(tool: Mapping[str, Any]) -> Capability:
-    ann = tool.get("annotations")
-    if not isinstance(ann, Mapping):
-        return Capability.NONE
-    combined = Capability.NONE
-    if ann.get("destructiveHint") is True:
-        combined = combined | Capability.FILESYSTEM_DELETE
-    if ann.get("openWorldHint") is True:
+def _capability_from_annotations(ann: Mapping[str, Any], *, trusted: bool) -> Capability:
+    """The capability the hints imply, an absent or untrusted lowering hint at its default.
+
+    One effect capability (read, write or delete), plus ``NETWORK_HTTPS`` for an
+    open-world tool. ``destructiveHint`` counts only on a tool that is not read-only,
+    as the spec says.
+    """
+    read_only = trusted and ann.get("readOnlyHint") is True
+    destructive = not (trusted and ann.get("destructiveHint") is False)
+    open_world = not (trusted and ann.get("openWorldHint") is False)
+    combined: Capability
+    if read_only:
+        combined = Capability.FILESYSTEM_READ
+    elif destructive:
+        combined = Capability.FILESYSTEM_DELETE
+    else:
+        combined = Capability.FILESYSTEM_WRITE
+    if open_world:
         combined = combined | Capability.NETWORK_HTTPS
-    # ``not combined`` uses Flag truthiness (Capability(0) is falsy) rather than an
-    # ``is NONE`` identity check, which would narrow ``combined`` to a Literal and
-    # break the subsequent ``|`` under mypy's Flag handling.
-    if ann.get("readOnlyHint") is True and not combined:
-        combined = combined | Capability.FILESYSTEM_READ
     return combined
 
 
@@ -611,6 +680,8 @@ def scan_tool(
     *,
     card_guard: Any | None = None,
     ref_guard: Any | None = None,
+    server: str | None = None,
+    trusted_servers: Collection[str] = (),
 ) -> ToolScanResult:
     """Statically check one tool declaration against a least-privilege policy.
 
@@ -622,6 +693,10 @@ def scan_tool(
             ``mcp_spec_2026_07`` preset's guard.
         ref_guard: The SEP-2106 external-``$ref`` guard to reuse. Defaults to a
             :class:`~agent_airlock.mcp_spec.schema_ref_guard.SchemaRefGuard`.
+        server: The server the tool came from, as the caller knows it (never read
+            from the tool definition, which the server writes).
+        trusted_servers: Servers whose risk-lowering hints may be used. A tool with no
+            ``server``, or one not listed, is read at the spec defaults.
 
     Returns:
         A graded :class:`ToolScanResult`.
@@ -631,40 +706,35 @@ def scan_tool(
     if ref_guard is None:
         ref_guard = _default_ref_guard()
     tool_name = str(tool.get("name", "")).strip() or "<unnamed>"
-    required = infer_required_capability(tool)
-    destructive = (
-        is_destructive_tool(tool_name)
-        or bool(
-            required
-            & (
-                Capability.FILESYSTEM_DELETE
-                | Capability.PROCESS_SHELL
-                | Capability.FILESYSTEM_WRITE
-            )
-        )
-        or _has_destructive_annotation(tool)
-    )
+    trusted = server is not None and server in trusted_servers
+    required = infer_required_capability(tool, trusted=trusted)
 
     violations: list[ContractViolation] = []
     _check_policy_allowed(tool_name, policy, violations)
     _check_server_card_trust(tool, card_guard, violations)
-    _check_schema_contract(tool, destructive, ref_guard, violations)
+    _check_schema_contract(tool, _is_destructive(tool, tool_name, required), ref_guard, violations)
     _check_type_constraints(tool, violations)
     _check_capability_caps(tool_name, required, policy.capability_policy, violations)
     _check_issuer_shape(tool, violations)
 
-    grade = _worst([v.grade for v in violations])
     return ToolScanResult(
         tool_name=tool_name,
-        grade=grade,
+        grade=_worst([v.grade for v in violations]),
         violations=violations,
         inferred_capability=_cap_names(required),
+        server=server,
+        untrusted_hints=_untrusted_hints(tool, trusted=trusted),
     )
 
 
-def _has_destructive_annotation(tool: Mapping[str, Any]) -> bool:
-    ann = tool.get("annotations")
-    return isinstance(ann, Mapping) and ann.get("destructiveHint") is True
+def _is_destructive(tool: Mapping[str, Any], tool_name: str, required: Capability) -> bool:
+    """Whether an open argument surface on this tool is a FAIL (SCAN003), not a WARN."""
+    mutating = Capability.FILESYSTEM_DELETE | Capability.PROCESS_SHELL | Capability.FILESYSTEM_WRITE
+    return (
+        is_destructive_tool(tool_name)
+        or bool(required & mutating)
+        or _read_annotations(tool).get("destructiveHint") is True
+    )
 
 
 def scan_tools(
@@ -672,14 +742,42 @@ def scan_tools(
     policy: SecurityPolicy,
     *,
     policy_name: str = "permissive",
+    servers: Sequence[str | None] | None = None,
+    trusted_servers: Collection[str] = (),
 ) -> ScanReport:
     """Statically check a set of tool declarations against a policy.
 
     A single guard instance is reused across all tools (one preset construction).
+
+    Args:
+        tools: The tool definitions.
+        policy: The least-privilege policy to check against.
+        policy_name: The name the report carries.
+        servers: The server each tool came from, in the same order
+            (:attr:`~agent_airlock.scan.loaders.LoadedTools.servers`); None when the
+            caller knows none, so no tool's risk-lowering hints are used.
+        trusted_servers: Servers whose risk-lowering hints may be used.
+
+    Raises:
+        ValueError: ``servers`` is not the same length as ``tools``.
     """
+    if servers is None:
+        servers = [None] * len(tools)
+    if len(servers) != len(tools):
+        raise ValueError(f"servers names {len(servers)} servers for {len(tools)} tools")
     card_guard = _default_card_guard()
     ref_guard = _default_ref_guard()
     results = [
-        scan_tool(tool, policy, card_guard=card_guard, ref_guard=ref_guard) for tool in tools
+        scan_tool(
+            tool,
+            policy,
+            card_guard=card_guard,
+            ref_guard=ref_guard,
+            server=server,
+            trusted_servers=trusted_servers,
+        )
+        for tool, server in zip(tools, servers, strict=True)
     ]
-    return ScanReport(results=results, policy_name=policy_name)
+    return ScanReport(
+        results=results, policy_name=policy_name, trusted_servers=sorted(trusted_servers)
+    )

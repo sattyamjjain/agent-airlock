@@ -73,6 +73,42 @@ list of `Capability` member names → MCP `annotations`
 (`destructiveHint` / `readOnlyHint` / `openWorldHint`, real MCP-spec fields) → a
 coarse tool-name heuristic (documented as a heuristic).
 
+- An explicit `capabilities` list is used as declared. It is airlock's own field, not
+  an MCP one, so it is read as your declaration: keep it in tool definitions you
+  wrote.
+- Otherwise each hint the annotations leave out takes its MCP spec default: not
+  read-only, destructive, open-world. A tool with no annotations is read as
+  destructive (`FILESYSTEM_DELETE`) and open-world (`NETWORK_HTTPS`), so under the
+  default `strict` policy it fails `SCAN006`. Until 0.10.29 it fell through to the
+  name heuristic.
+- The name heuristic only adds to that: a `delete_*` name adds `FILESYSTEM_DELETE`
+  to a read-only tool, and a benign name never takes a capability away.
+- `annotations` may be a mapping or a pydantic model such as `mcp.types.ToolAnnotations`
+  (read through `model_dump(by_alias=True, exclude_none=True)`, since mcp 2.x names the
+  fields `read_only_hint` and so on). Anything else reads as no annotations.
+
+### Annotations from servers you trust
+
+The MCP spec says to treat annotations as untrusted unless they come from a trusted
+server. So a hint that lowers the risk (`readOnlyHint: true`, `destructiveHint: false`,
+`openWorldHint: false`) is used only for tools listed under an `mcpServers` entry you
+name with `--trust-server` (repeatable). A hint that raises it always counts.
+
+```bash
+airlock scan-tools ./mcp.json --trust-server filesystem --trust-server memory
+```
+
+A tool's server is the `mcpServers` key it is listed under in the file you scan. Nothing
+a tool or a server card says about itself names its server, so a tool from a bare tool
+list or a `{"tools": [...]}` export is never trusted. The text report adds a `note:`
+line for each tool whose lowering hints were not used, and the JSON report gains
+`trusted_servers` at the top and `server` and `untrusted_hints` on each result. A
+`--trust-server` name no scanned entry has is reported as a loader note.
+
+Programmatically, pass the same through `scan_tools(..., servers=loaded.servers,
+trusted_servers=[...])`, or `scan_tool(..., server=..., trusted_servers=[...])` for one
+tool. Without them no tool's lowering hints are used.
+
 ## Policies
 
 `--policy` maps 1:1 to a **shipped** `SecurityPolicy` constant — no invented policy:
@@ -137,7 +173,13 @@ Quote the fixture rate only beside that one. See
 from agent_airlock.scan import scan_tools, resolve_policy, load_tool_defs
 
 loaded = load_tool_defs("./tools/")
-report = scan_tools(loaded.tools, resolve_policy("strict"), policy_name="strict")
+report = scan_tools(
+    loaded.tools,
+    resolve_policy("strict"),
+    policy_name="strict",
+    servers=loaded.servers,
+    trusted_servers=["filesystem"],
+)
 print(report.exit_code)                 # 0 / 1 / 2
 for result in report.failed:
     print(result.tool_name, [v.code for v in result.violations])

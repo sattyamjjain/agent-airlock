@@ -18,6 +18,10 @@ separate, deferred PR — see ``pyproject.toml``)::
     python -m agent_airlock.cli.scan_tools ./mcp.json --output json
 
 Exit codes: ``0`` = all pass, ``1`` = warnings only, ``2`` = at least one failure.
+
+A tool's MCP annotations lower its inferred risk only when its ``mcpServers`` entry is
+named with ``--trust-server``; otherwise it is read at the spec defaults (destructive,
+open-world), as the MCP spec says to treat annotations from an untrusted server.
 """
 
 from __future__ import annotations
@@ -28,7 +32,7 @@ import sys
 from collections.abc import Sequence
 
 from ..scan import POLICY_CHOICES, load_tool_defs, resolve_policy, scan_tools
-from ..scan.contract import Grade, ScanReport
+from ..scan.contract import Grade, ScanReport, ToolScanResult
 from ..scan.loaders import LoadedTools
 
 _GRADE_LABEL = {Grade.PASS: "PASS", Grade.WARN: "WARN", Grade.FAIL: "FAIL"}
@@ -60,14 +64,43 @@ def _build_parser() -> argparse.ArgumentParser:
         default="text",
         help="Report format (default: text). 'sarif' emits SARIF 2.1.0 for the GitHub Security tab.",
     )
+    parser.add_argument(
+        "--trust-server",
+        action="append",
+        default=[],
+        dest="trusted_servers",
+        metavar="NAME",
+        help=(
+            "Use the readOnlyHint / destructiveHint / openWorldHint of the tools listed "
+            "under this mcpServers entry to lower their inferred risk. Repeatable. "
+            "Without it, every tool is read at the MCP spec defaults (destructive, "
+            "open-world)."
+        ),
+    )
     return parser
 
 
-def run(path: str, policy_name: str) -> tuple[ScanReport, LoadedTools]:
-    """Load tool defs from ``path`` and scan them against the named policy."""
+def run(
+    path: str, policy_name: str, trusted_servers: Sequence[str] = ()
+) -> tuple[ScanReport, LoadedTools]:
+    """Load tool defs from ``path`` and scan them against the named policy.
+
+    A trusted server name that no scanned ``mcpServers`` entry has adds a loader
+    warning, so a typo in ``--trust-server`` is reported rather than trusting nothing
+    in silence.
+    """
     loaded = load_tool_defs(path)
     policy = resolve_policy(policy_name)
-    report = scan_tools(loaded.tools, policy, policy_name=policy_name)
+    report = scan_tools(
+        loaded.tools,
+        policy,
+        policy_name=policy_name,
+        servers=loaded.servers,
+        trusted_servers=trusted_servers,
+    )
+    seen = {server for server in loaded.servers if server is not None}
+    for name in sorted(set(trusted_servers) - seen):
+        loaded.warnings.append(f"--trust-server {name}: no mcpServers entry of that name")
     return report, loaded
 
 
@@ -84,6 +117,8 @@ def _print_text(report: ScanReport, loaded: LoadedTools) -> None:
             print(f"    {v.code} ({v.grade.value}): {v.message}")
             if v.suggestion:
                 print(f"      -> {v.suggestion}")
+        if result.untrusted_hints:
+            print(f"    note: {_untrusted_note(result)}")
     for warning in loaded.warnings:
         print(f"  note: {warning}")
     print()
@@ -93,6 +128,17 @@ def _print_text(report: ScanReport, loaded: LoadedTools) -> None:
         print("Status: WARNING — under-specified contracts")
     else:
         print("Status: PASSED — all tool contracts fit the policy")
+
+
+def _untrusted_note(result: ToolScanResult) -> str:
+    """Why a tool's risk-lowering hints were not used, and how to use them."""
+    hints = ", ".join(result.untrusted_hints)
+    if result.server is None:
+        return f"{hints} not used: the tool is not listed under an mcpServers entry"
+    return (
+        f"{hints} not used: server '{result.server}' is not trusted "
+        f"(--trust-server {result.server})"
+    )
 
 
 def _print_json(report: ScanReport, loaded: LoadedTools) -> None:
@@ -135,7 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     try:
-        report, loaded = run(args.path, args.policy)
+        report, loaded = run(args.path, args.policy, args.trusted_servers)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
