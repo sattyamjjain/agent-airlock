@@ -56,9 +56,10 @@ is the sharpest illustration: it answers *may this principal call this action on
 resource*, and answers it well — but the arguments are the part it does not model, and an
 authorized principal calling an authorized action with fabricated arguments passes.
 
-That gap is the whole of airlock's wedge, and it is deliberately narrow: **a deny-by-default
-type-checker and contract layer for the arguments themselves, in-process, at the call
-boundary.** The two compose in the obvious direction — containment bounds what a call can do,
+That gap is the whole of airlock's wedge, and it is deliberately narrow: **a type-checker
+and contract layer for the arguments themselves, in-process, at the call boundary.** Tool
+allowlists and the other policy layers are opt-in; `SecurityPolicy(default_deny=True)`
+makes an empty allowlist deny every tool. The two compose in the obvious direction — containment bounds what a call can do,
 airlock refuses the call before it is made — and they are complementary rather than
 overlapping. Note the ordering that follows from that: airlock validates in the *calling*
 process, before dispatch. That holds under `sandbox=True` as well (since v0.10.6): the
