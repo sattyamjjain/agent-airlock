@@ -124,6 +124,7 @@ from .honeypot import (
 from .kill_switch.registry import get as _kill_switch_get
 from .kill_switch.registry import is_frozen as _kill_switch_frozen
 from .network import NetworkBlockedError, network_airgap
+from .oversight import _ApproverOutcome, _await_with_deadline, _call_with_deadline
 from .policy import (
     AgentIdentity,
     PolicyEscalation,
@@ -160,6 +161,43 @@ logger = structlog.get_logger("agent-airlock")
 
 P = ParamSpec("P")
 R = TypeVar("R")
+_T = TypeVar("_T")
+
+
+@dataclasses.dataclass(frozen=True)
+class _ApprovalAsk:
+    """What step 2 waits on when a call escalates: the approver, the request it is asked,
+    and the deadline (``escalation_timeout_seconds``). The pre-execution steps yield one
+    and are sent back the :class:`~agent_airlock.oversight._ApproverOutcome`, so the sync
+    path answers it in a worker thread and the async path without blocking the loop."""
+
+    approver: Callable[[Any], Any]
+    request: Any
+    timeout: float
+
+
+def _drive(steps: Generator[_ApprovalAsk, _ApproverOutcome, _T]) -> _T:
+    """Run ``steps`` to their result, answering each approval in a worker thread."""
+    try:
+        ask = next(steps)
+        while True:
+            ask = steps.send(_call_with_deadline(ask.approver, ask.request, ask.timeout))
+    except StopIteration as done:
+        result: _T = done.value
+        return result
+
+
+async def _drive_async(steps: Generator[_ApprovalAsk, _ApproverOutcome, _T]) -> _T:
+    """:func:`_drive` for the async path: an approval is awaited, the loop runs meanwhile."""
+    try:
+        ask = next(steps)
+        while True:
+            outcome = await _await_with_deadline(ask.approver, ask.request, ask.timeout)
+            ask = steps.send(outcome)
+    except StopIteration as done:
+        result: _T = done.value
+        return result
+
 
 # Type alias for policy resolver functions. A resolver that returns None refuses the call
 # (V0.10.24; it used to run the call with no policy at all): return PERMISSIVE_POLICY to
@@ -1405,15 +1443,23 @@ class Airlock:
             func_name: str,
             args: tuple[Any, ...],
             kwargs: dict[str, Any],
-        ) -> tuple[
-            dict[str, Any],
-            float,
-            AirlockContext[Any],
-            AirlockResponse | None,
-            BudgetEstimate | None,
-            SecurityPolicy | None,
+        ) -> Generator[
+            _ApprovalAsk,
+            _ApproverOutcome,
+            tuple[
+                dict[str, Any],
+                float,
+                AirlockContext[Any],
+                AirlockResponse | None,
+                BudgetEstimate | None,
+                SecurityPolicy | None,
+            ],
         ]:
             """Shared pre-execution logic for sync and async wrappers.
+
+            A generator: when step 2 escalates to an approver it yields an
+            :class:`_ApprovalAsk` and resumes with the answer. The sync wrapper runs it
+            with :func:`_drive`, the async one with :func:`_drive_async`.
 
             Runs the gates in the order the ``# Step N`` comments below number them: the
             kill switch (0), the startup-hook self-check (0.5), the OAuth token audience
@@ -1506,8 +1552,9 @@ class Airlock:
             if ghost_error is not None:
                 return kwargs, start_time, context, ghost_error, None, None
 
-            # Step 2: Resolve and check security policy
-            resolved_policy, policy_error = self._resolve_and_check_policy(
+            # Step 2: Resolve and check security policy (an escalation waits here on the
+            # approver, through the driver: yield from)
+            resolved_policy, policy_error = yield from self._resolve_and_check_policy(
                 func_name, context, run_context=run_context
             )
             if policy_error is not None:
@@ -1847,7 +1894,7 @@ class Airlock:
                     error_response,
                     budget_estimate,
                     resolved_policy,
-                ) = _pre_execution(func_name, args, dict(kwargs))
+                ) = await _drive_async(_pre_execution(func_name, args, dict(kwargs)))
 
                 if error_response is not None:
                     # Check for honeypot response before returning error
@@ -1996,7 +2043,7 @@ class Airlock:
                     error_response,
                     budget_estimate,
                     resolved_policy,
-                ) = _pre_execution(func_name, args, dict(kwargs))
+                ) = _drive(_pre_execution(func_name, args, dict(kwargs)))
 
                 if error_response is not None:
                     # Check for honeypot response before returning error
@@ -2450,8 +2497,14 @@ class Airlock:
         context: AirlockContext[Any],
         *,
         run_context: AirlockContext[Any] | None,
-    ) -> tuple[SecurityPolicy | None, AirlockResponse | None]:
+    ) -> Generator[
+        _ApprovalAsk, _ApproverOutcome, tuple[SecurityPolicy | None, AirlockResponse | None]
+    ]:
         """Resolve and check security policy.
+
+        A generator, like ``_pre_execution``: an escalation yields its
+        :class:`_ApprovalAsk` (``_resolve_escalation``). A policy that cannot be resolved,
+        or a frozen one that changed, is refused and logged as ``policy_indeterminate``.
 
         Args:
             func_name: Name of the function being called.
@@ -2481,6 +2534,12 @@ class Airlock:
                     function=func_name,
                     error=str(e),
                 )
+                logger.warning(
+                    "policy_indeterminate",
+                    function=func_name,
+                    source="policy_resolver",
+                    error_type=type(e).__name__,
+                )
                 response = handle_policy_violation(
                     func_name,
                     policy_name="PolicyResolver",
@@ -2496,6 +2555,9 @@ class Airlock:
                     function=func_name,
                     agent_id=context.agent_id,
                     workspace_id=context.workspace_id,
+                )
+                logger.warning(
+                    "policy_indeterminate", function=func_name, source="policy_resolver_none"
                 )
                 self._safe_invoke_callback(
                     self.config.on_blocked,
@@ -2523,6 +2585,9 @@ class Airlock:
                 try:
                     resolved_policy.verify_frozen()
                 except PolicyMutationError as e:
+                    logger.warning(
+                        "policy_indeterminate", function=func_name, source="frozen_policy_digest"
+                    )
                     response = handle_policy_violation(
                         func_name,
                         policy_name="FrozenSecurityPolicy",
@@ -2561,7 +2626,9 @@ class Airlock:
                 # If this clause is ever removed, the subclass relationship means the
                 # call still BLOCKS via the generic handler. That is the intended
                 # failure mode: losing the approver path must not open the gate.
-                escalation_response = self._resolve_escalation(resolved_policy, func_name, e)
+                escalation_response = yield from self._resolve_escalation(
+                    resolved_policy, func_name, e
+                )
                 if escalation_response is not None:
                     return resolved_policy, escalation_response
             except PolicyViolation as e:
@@ -2693,13 +2760,18 @@ class Airlock:
         policy: SecurityPolicy,
         func_name: str,
         escalation: PolicyEscalation,
-    ) -> AirlockResponse | None:
+    ) -> Generator[_ApprovalAsk, _ApproverOutcome, AirlockResponse | None]:
         """Route a :class:`PolicyEscalation` to the operator-supplied approver.
 
         Reuses the v0.8.4 :mod:`agent_airlock.oversight` primitive rather than inventing
         a second approval surface: the same :class:`~agent_airlock.oversight.Approver`
         callable, the same :class:`~agent_airlock.oversight.OversightRequest` /
         ``OversightResponse`` shapes, the same ``request_id`` echo contract.
+
+        A generator: it yields an :class:`_ApprovalAsk` and resumes with what the
+        approver did within ``escalation_timeout_seconds`` (the driver runs it in a worker
+        thread, so the deadline holds and the async path's loop is not blocked; until
+        0.10.29 it ran inline and the timeout was only echoed on the request).
 
         Args:
             policy: The resolved policy that escalated.
@@ -2708,12 +2780,14 @@ class Airlock:
 
         Returns:
             ``None`` if the approver granted and the call may proceed. An
-            :class:`AirlockResponse` in **every** other case — no approver registered,
-            explicit denial, timeout, a malformed approver reply, or an approver that
-            itself raised. Deny-by-default: there is exactly one path that returns
-            ``None``, and it requires an affirmative ``GRANT``.
+            :class:`AirlockResponse` in **every** other case: no approver registered,
+            explicit denial, timeout, or an answer that is not an approval
+            (``policy_indeterminate``: an approver that raised, returned something other
+            than an ``OversightResponse``, or a verdict outside ``OversightVerdict``, such
+            as the string ``"grant"``). There is exactly one path that returns ``None``,
+            and it requires an affirmative ``OversightVerdict.GRANT``.
         """
-        from .oversight import OversightRequest, OversightVerdict
+        from .oversight import OversightRequest
 
         approver = policy.approver
 
@@ -2749,30 +2823,108 @@ class Airlock:
             timeout_seconds=float(policy.escalation_timeout_seconds),
             requested_at=datetime.now(timezone.utc).isoformat(),
         )
-
-        try:
-            oversight_response = approver(request)
-        except Exception as exc:  # noqa: BLE001 - operator transport, any failure blocks
-            # An approver that raises is an approval that did not happen.
-            logger.warning(
-                "escalation_approver_raised", tool=func_name, rule=escalation.rule, error=str(exc)
+        outcome = yield _ApprovalAsk(approver, request, request.timeout_seconds)
+        refusal = self._read_approval(func_name, escalation, request, outcome)
+        if refusal is not None:
+            self._safe_invoke_callback(
+                self.config.on_blocked,
+                "on_blocked",
+                func_name,
+                escalation.message,
+                {"violation_type": escalation.violation_type, **escalation.details},
             )
+        return refusal
+
+    def _read_approval(
+        self,
+        func_name: str,
+        escalation: PolicyEscalation,
+        request: Any,
+        outcome: _ApproverOutcome,
+    ) -> AirlockResponse | None:
+        """The refusal for what the approver did, or None for a readable ``GRANT``."""
+        from .oversight import OversightResponse, OversightVerdict
+
+        if outcome.kind == "timeout":
+            logger.info("escalation_timeout", tool=func_name, rule=escalation.rule)
+            logger.warning("policy_indeterminate", function=func_name, source="approver_timeout")
             return handle_escalation(
                 func_name,
                 reason=escalation.reason,
                 rule=escalation.rule,
-                outcome="denied",
+                outcome="timeout",
+                detail=f"no answer within {request.timeout_seconds:g}s",
+            )
+        if outcome.kind == "raised":
+            exc = outcome.error
+            # An approver that raises is an approval that did not happen.
+            logger.warning(
+                "escalation_approver_raised", tool=func_name, rule=escalation.rule, error=str(exc)
+            )
+            return self._indeterminate(
+                func_name,
+                escalation,
+                returned=type(exc).__name__,
                 detail=f"approver raised {type(exc).__name__}: {exc}",
             )
+        answer = outcome.value
+        if not isinstance(answer, OversightResponse) or not isinstance(
+            answer.verdict, OversightVerdict
+        ):
+            verdict = answer.verdict if isinstance(answer, OversightResponse) else None
+            return self._indeterminate(
+                func_name,
+                escalation,
+                returned=type(answer).__name__,
+                verdict_type=type(verdict).__name__,
+                detail="the approver's answer is not an OversightResponse with an "
+                "OversightVerdict verdict",
+            )
+        return self._read_verdict(func_name, escalation, request, answer)
+
+    def _indeterminate(
+        self,
+        func_name: str,
+        escalation: PolicyEscalation,
+        *,
+        detail: str,
+        **shape: str,
+    ) -> AirlockResponse:
+        """Refuse an approval that cannot be read, logging only the type names of what
+        came back (``shape``), never its content."""
+        logger.warning(
+            "policy_indeterminate",
+            function=func_name,
+            source="approver",
+            rule=escalation.rule,
+            **shape,
+        )
+        return handle_escalation(
+            func_name,
+            reason=escalation.reason,
+            rule=escalation.rule,
+            outcome="indeterminate",
+            detail=detail,
+        )
+
+    def _read_verdict(
+        self,
+        func_name: str,
+        escalation: PolicyEscalation,
+        request: Any,
+        answer: Any,
+    ) -> AirlockResponse | None:
+        """The refusal for a readable ``OversightResponse``, or None when it grants."""
+        from .oversight import OversightVerdict
 
         # Same protocol fault the oversight decorator enforces: an approver that does
         # not echo the request_id is not answering *this* request, so it cannot grant it.
-        if oversight_response.request_id != request.request_id:
+        if answer.request_id != request.request_id:
             logger.warning(
                 "escalation_request_id_mismatch",
                 tool=func_name,
                 expected=request.request_id,
-                got=oversight_response.request_id,
+                got=answer.request_id,
             )
             return handle_escalation(
                 func_name,
@@ -2781,22 +2933,22 @@ class Airlock:
                 outcome="denied",
                 detail=(
                     "approver returned a mismatched request_id "
-                    f"(expected {request.request_id!r}, got {oversight_response.request_id!r})"
+                    f"(expected {request.request_id!r}, got {answer.request_id!r})"
                 ),
-                approver=oversight_response.approver,
+                approver=answer.approver,
             )
 
-        if oversight_response.verdict is OversightVerdict.GRANT:
+        if answer.verdict is OversightVerdict.GRANT:
             logger.info(
                 "escalation_granted",
                 tool=func_name,
                 rule=escalation.rule,
-                approver=oversight_response.approver,
+                approver=answer.approver,
             )
             return None
 
         outcome: Literal["denied", "timeout"] = (
-            "timeout" if oversight_response.verdict is OversightVerdict.TIMEOUT else "denied"
+            "timeout" if answer.verdict is OversightVerdict.TIMEOUT else "denied"
         )
         # Literal event names, so a search of the source finds the line that logs each.
         if outcome == "timeout":
@@ -2804,31 +2956,23 @@ class Airlock:
                 "escalation_timeout",
                 tool=func_name,
                 rule=escalation.rule,
-                approver=oversight_response.approver,
+                approver=answer.approver,
             )
         else:
             logger.info(
                 "escalation_denied",
                 tool=func_name,
                 rule=escalation.rule,
-                approver=oversight_response.approver,
+                approver=answer.approver,
             )
-        response = handle_escalation(
+        return handle_escalation(
             func_name,
             reason=escalation.reason,
             rule=escalation.rule,
             outcome=outcome,
-            detail=oversight_response.detail,
-            approver=oversight_response.approver,
+            detail=answer.detail,
+            approver=answer.approver,
         )
-        self._safe_invoke_callback(
-            self.config.on_blocked,
-            "on_blocked",
-            func_name,
-            escalation.message,
-            {"violation_type": escalation.violation_type, **escalation.details},
-        )
-        return response
 
     def _reads_argument_values(self, func_name: str, resolved_policy: Any) -> bool:
         """Whether a gate that reads argument values (steps 2.7, 2.75, 3, 5) is on."""

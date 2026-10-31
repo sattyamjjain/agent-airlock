@@ -150,7 +150,8 @@ phase:
 | `oversight.request`  | Before calling the approver               |
 | `oversight.grant`    | Approver returned `GRANT`                 |
 | `oversight.deny`     | Approver returned `DENY`                  |
-| `oversight.timeout`  | Approver returned `TIMEOUT`               |
+| `oversight.timeout`  | Approver returned `TIMEOUT`, or gave no answer within `timeout_seconds` |
+| `oversight.indeterminate` | Approver's answer is not an `OversightResponse` with an `OversightVerdict` verdict (the decorator then raises `OversightTimeoutError`) |
 
 The same events also flow through the module's `structlog` logger
 (`agent-airlock.oversight`) regardless of whether `audit_emitter`
@@ -172,10 +173,18 @@ loudly rather than silently letting a wrong-tool decision through.
   can multiplex inside their approver.
 - No bundled transports. Operators wire Slack / PagerDuty / CLI
   themselves.
-- Sync `approver(request)` blocks the calling thread until it
-  returns. If the operator's approver needs a long-running wait,
-  it should respect `request.timeout_seconds` and return
-  `OversightVerdict.TIMEOUT` when the budget is exhausted.
+- The approver runs in a daemon worker thread and gets
+  `timeout_seconds` to answer (enforced since 0.10.29; until then
+  the budget was only echoed on the request). No answer in time
+  raises `OversightTimeoutError`, and an answer that arrives later
+  is dropped, never applied. The thread is not stopped, so an
+  approver must not act on its own decision after the deadline: a
+  transport that, say, posts "approved" back to a ticket after
+  `request.timeout_seconds` reports something that did not happen.
+- A verdict must be an `OversightVerdict` member. The string
+  `"grant"` compares equal to `OversightVerdict.GRANT` (it is a
+  `str` enum), so the decorator checks with `isinstance` and treats
+  anything else as no approval.
 
 ## Related
 

@@ -52,16 +52,16 @@ class SecurityPolicy:
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `allowed_tools` | `list[str]` | Allowlist of tool patterns. Empty allows every tool not denied |
-| `denied_tools` | `list[str]` | Denylist of tool patterns. Takes precedence over the allowlist |
-| `default_deny` | `bool` | With `True`, an empty allowlist denies every tool |
+| `allowed_tools` | `list[str]` | Allowlist of tool patterns. Empty allows every tool not denied. A value that is not a list or tuple of str (`None`, a bare string) raises `TypeError` |
+| `denied_tools` | `list[str]` | Denylist of tool patterns. Takes precedence over the allowlist. Same type check |
+| `default_deny` | `bool` | With `True`, an empty allowlist denies every tool, refused as `empty_allowlist` and logged as `policy_indeterminate` |
 | `rate_limits` | `dict[str, str]` | Rate limits per tool pattern (`"100/hour"`). The most specific pattern applies |
 | `time_restrictions` | `dict[str, str]` | Time windows per tool pattern (`"09:00-17:00"`) |
 | `require_agent_id` | `bool` | Refuse a call that carries no agent identity |
 | `allowed_roles` | `list[str]` | Refuse a call whose agent holds none of these roles; an anonymous call holds none |
 | `capability_policy` | `CapabilityPolicy \| None` | Checked against what a tool declares with `@requires(...)` |
 | `escalate_tools` | `dict[str, str]` | Tool patterns that need a human's approval, with the reason the approver sees |
-| `approver` | `Approver \| None` | Transport that asks the human. A matched escalation with no approver is refused |
+| `approver` | `Approver \| None` | Transport that asks the human. A matched escalation with no approver is refused. It runs in a worker thread and must answer within `escalation_timeout_seconds` (default 300): no answer in time is refused as `escalation_timeout`, and a later answer is dropped, so an approver must not act after its deadline. An answer that is not an `OversightResponse` with an `OversightVerdict` verdict (the string `"grant"`, `None`, an exception) is refused as `policy_indeterminate`. On an async tool the event loop keeps running while it decides, and an `async` approver is awaited |
 | `model_tier_budget` | `ModelTierBudget \| None` | Per-model-tier cost caps, checked before the tool runs |
 | `amplification_budget` | `AmplificationBudget \| None` | Per-run call budget against a declared baseline |
 | `sequence_guard`, `action_contradiction_gate`, `deserialization_guard` | | Optional guards run after the policy check |
