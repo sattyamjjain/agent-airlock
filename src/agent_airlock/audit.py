@@ -86,6 +86,9 @@ class AuditRecord:
     result_type: str = "unknown"
     result_preview: str = ""
     error: str | None = None
+    # V0.10.29: the operator's StandingGrant that admitted this escalated call without
+    # asking the approver. None otherwise, so every other record is unchanged.
+    standing_grant: str | None = None
     # V0.8.74 resource amplification (issue #142, arXiv:2608.12273).
     #
     # These make the Convergent-Detour-Hijacking shape *detectable* rather than merely
@@ -232,6 +235,7 @@ class AuditLogger:
         args: dict[str, Any] | None = None,
         result: Any = None,
         error: str | None = None,
+        standing_grant: str | None = None,
         amplification: AmplificationDecision | None = None,
         honeypot: bool = False,
     ) -> None:
@@ -249,6 +253,8 @@ class AuditLogger:
             args: Tool arguments (will be redacted).
             result: Tool result (will be previewed).
             error: Error message if call failed.
+            standing_grant: The id of the standing grant that admitted the call, when one
+                did (V0.10.29).
             amplification: V0.8.74 per-run amplification decision (issue #142).
                 When None the five ``run_*`` fields stay unset and ``to_dict()``
                 omits them, so the record is byte-identical to a v0.8.73 one.
@@ -272,6 +278,7 @@ class AuditLogger:
             result_type=type(result).__name__ if result is not None else "None",
             result_preview=self._preview_result(result, blocked),
             error=error,
+            standing_grant=standing_grant,
             run_call_count=amplification.run_call_count if amplification else None,
             run_input_tokens=amplification.run_input_tokens if amplification else None,
             run_baseline_calls=amplification.baseline_calls if amplification else None,

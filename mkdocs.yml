@@ -90,6 +90,7 @@ nav:
     - Token audience & startup hooks: guide/token-audience-and-startup-hooks.md
     - Shell & installer arguments: guide/shell-and-installer-arguments.md
     - Dispatch arguments: guide/dispatch-arguments.md
+    - Approvals bound to the call: guide/bound-approvals.md
   - API Reference:
     - Airlock Decorator: api/airlock.md
     - Configuration: api/config.md
