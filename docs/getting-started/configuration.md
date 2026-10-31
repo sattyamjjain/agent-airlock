@@ -270,8 +270,12 @@ breaker = CircuitBreaker("payments-api", CircuitBreakerConfig(
 ## Cost Tracking (V0.4.0)
 
 Monitor and limit API spending. `Airlock` takes no cost-tracker argument: a `CostTracker`
-records the token usage you report to it, and raises `BudgetExceededError` when a recorded
-call breaks a limit. Amounts are `Decimal`.
+records the token usage you report to it. Amounts are `Decimal`, and a limit of `0` is a
+limit (nothing may be spent). A limit blocks a call before it runs when the limit is
+already reached, or when you pass a cost estimate that would cross it
+(`track("tool", estimate=TokenUsage(...))`, or `check_admission(estimate)`). Otherwise the
+call that crosses runs and is recorded, `BudgetExceededError` is raised, and every later
+call is refused until `reset()`: the most a session overshoots is one call.
 
 ```python
 from decimal import Decimal

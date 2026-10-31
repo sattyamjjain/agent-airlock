@@ -120,6 +120,9 @@ class BudgetConfig:
     the budget-warning check divided a ``Decimal`` by it, which raises TypeError. That
     happened before the call was recorded, so the error was logged, the record dropped,
     and the session total never grew: a float session budget was never reached.
+
+    A limit of 0 is a limit: nothing may be spent (until 0.10.29 every limit was tested
+    for truthiness, so 0 meant no limit, #407). A negative or NaN limit is refused.
     """
 
     max_cost_per_call: Decimal | None = None
@@ -137,6 +140,19 @@ class BudgetConfig:
                 raise TypeError(f"{name} must be a Decimal, int, float or str, not {value!r}")
             # str() first, so 0.1 becomes Decimal("0.1"), not its binary expansion.
             setattr(self, name, Decimal(str(value)))
+        for name in (
+            "max_cost_per_call",
+            "max_cost_per_session",
+            "max_tokens_per_call",
+            "max_tokens_per_session",
+        ):
+            limit: Any = getattr(self, name)
+            if limit is None:
+                continue
+            if limit != limit or limit < 0:  # limit != limit: NaN
+                raise ValueError(
+                    f"BudgetConfig.{name} must be a non-negative number, got {limit!r}"
+                )
 
 
 # Default pricing per 1K tokens.
@@ -256,6 +272,13 @@ class CostTracker:
 
         # Get summary
         print(tracker.get_summary())
+
+    The budget contract: :meth:`check_admission` refuses a call before it runs when a
+    session limit is already reached, when the budget was exceeded before (the latch), or
+    when a cost estimate it is given would cross a limit; ``track()`` calls it on entry.
+    Without an estimate the call that crosses a limit runs and is recorded, so the most a
+    session overshoots is one call, and :meth:`record` raises ``BudgetExceededError`` and
+    latches the budget closed: every later admission is refused until :meth:`reset`.
     """
 
     def __init__(
@@ -277,6 +300,8 @@ class CostTracker:
         self._records: list[CostRecord] = []
         self._callbacks: list[CostCallback] = []
         self._lock = threading.Lock()
+        # The first limit a recorded call crossed; set until reset().
+        self._exceeded: BudgetExceededError | None = None
 
     def get_price(self, token_type: str) -> Decimal:
         """Get price per 1K tokens for model.
@@ -324,11 +349,18 @@ class CostTracker:
             duration_ms: Execution duration in milliseconds.
             metadata: Additional metadata.
 
+        The call has run, so it is recorded whatever the budget says. Until 0.10.29 a
+        call that crossed a limit raised before it was appended, so the session total
+        stayed below the limit and a later, cheaper call was admitted: with a limit of 10
+        tokens, calls of 6, 6 and 3 left a total of 9 after 15 were spent.
+
         Returns:
             The created cost record.
 
         Raises:
-            BudgetExceededError: If budget limit is exceeded.
+            BudgetExceededError: The call crossed a limit, or the budget was already
+                exceeded. The record is kept and the budget stays closed until
+                :meth:`reset`.
         """
         cost = self.calculate_cost(tokens)
 
@@ -342,10 +374,11 @@ class CostTracker:
         )
 
         with self._lock:
-            # Check budget limits before recording
-            self._check_budget(tokens, cost)
-
+            latched = self._latched_error()
+            violation = latched or self._budget_violation(tokens, cost)
             self._records.append(record)
+            if violation is not None and self._exceeded is None:
+                self._exceeded = violation
 
             logger.debug(
                 "cost_recorded",
@@ -361,67 +394,143 @@ class CostTracker:
             except Exception:
                 logger.exception("cost_callback_error", tool=tool_name)
 
+        if violation is not None:
+            raise violation
         return record
 
-    def _check_budget(self, tokens: TokenUsage, cost: Decimal) -> None:
-        """Check if operation would exceed budget."""
+    def check_admission(self, estimate: TokenUsage | None = None) -> None:
+        """Refuse a call before it runs when the budget cannot admit it.
+
+        Refused when the budget was exceeded before (until :meth:`reset`), when a session
+        limit is already reached (``total >= limit``, so a limit of 0 refuses the first
+        call), or when ``estimate`` would take the call past a per-call or session limit.
+        Without an estimate a call under every limit is admitted, and :meth:`record`
+        catches the one that crosses.
+
+        Args:
+            estimate: The call's expected (or worst-case) token usage, if known.
+
+        Raises:
+            BudgetExceededError: The call is refused.
+        """
         if not self.budget:
             return
+        with self._lock:
+            refusal = self._latched_error()
+            if refusal is None:
+                summary = self._get_summary_unlocked()
+                refusal = self._limit_reached(summary)
+                if refusal is None and estimate is not None:
+                    cost = self.calculate_cost(estimate)
+                    refusal = self._budget_violation(estimate, cost, summary)
+        if refusal is not None:
+            raise refusal
 
-        # Check per-call limits
-        if self.budget.max_cost_per_call and cost > self.budget.max_cost_per_call:
-            raise BudgetExceededError(
-                f"Call cost ${cost} exceeds limit ${self.budget.max_cost_per_call}",
+    def _latched_error(self) -> BudgetExceededError | None:
+        """A fresh refusal for a budget exceeded earlier, or None. Call with the lock held."""
+        first = self._exceeded
+        if first is None:
+            return None
+        return BudgetExceededError(
+            f"Budget exceeded earlier ({first}); reset() reopens it",
+            current_cost=first.current_cost,
+            budget_limit=first.budget_limit,
+            budget_type=first.budget_type,
+        )
+
+    def _limit_reached(self, summary: CostSummary) -> BudgetExceededError | None:
+        """The session limit ``summary`` has already reached, if any."""
+        budget = self.budget
+        if budget is None:
+            return None
+        if (
+            budget.max_tokens_per_session is not None
+            and summary.total_tokens >= budget.max_tokens_per_session
+        ):
+            return BudgetExceededError(
+                f"Session tokens {summary.total_tokens} reached limit "
+                f"{budget.max_tokens_per_session}",
+                current_cost=Decimal(summary.total_tokens),
+                budget_limit=Decimal(budget.max_tokens_per_session),
+                budget_type="session_tokens",
+            )
+        if (
+            budget.max_cost_per_session is not None
+            and summary.total_cost_usd >= budget.max_cost_per_session
+        ):
+            return BudgetExceededError(
+                f"Session cost ${summary.total_cost_usd} reached limit "
+                f"${budget.max_cost_per_session}",
+                current_cost=summary.total_cost_usd,
+                budget_limit=budget.max_cost_per_session,
+                budget_type="session_cost",
+            )
+        return None
+
+    def _budget_violation(
+        self, tokens: TokenUsage, cost: Decimal, summary: CostSummary | None = None
+    ) -> BudgetExceededError | None:
+        """The limit a call of ``tokens`` costing ``cost`` would cross, if any.
+
+        Every limit is compared with ``is not None``: until 0.10.29 each was tested for
+        truthiness, so a limit of 0 was no limit (#407). Call with the lock held.
+        """
+        budget = self.budget
+        if budget is None:
+            return None
+        if budget.max_cost_per_call is not None and cost > budget.max_cost_per_call:
+            return BudgetExceededError(
+                f"Call cost ${cost} exceeds limit ${budget.max_cost_per_call}",
                 current_cost=cost,
-                budget_limit=self.budget.max_cost_per_call,
+                budget_limit=budget.max_cost_per_call,
                 budget_type="per_call_cost",
             )
-
         if (
-            self.budget.max_tokens_per_call
-            and tokens.total_tokens > self.budget.max_tokens_per_call
+            budget.max_tokens_per_call is not None
+            and tokens.total_tokens > budget.max_tokens_per_call
         ):
-            raise BudgetExceededError(
-                f"Call tokens {tokens.total_tokens} exceeds limit "
-                f"{self.budget.max_tokens_per_call}",
+            return BudgetExceededError(
+                f"Call tokens {tokens.total_tokens} exceeds limit {budget.max_tokens_per_call}",
                 current_cost=cost,
-                budget_limit=Decimal(self.budget.max_tokens_per_call),
+                budget_limit=Decimal(budget.max_tokens_per_call),
                 budget_type="per_call_tokens",
             )
-
-        # Check session limits
-        summary = self._get_summary_unlocked()
-
-        if self.budget.max_cost_per_session:
+        if summary is None:
+            summary = self._get_summary_unlocked()
+        if budget.max_cost_per_session is not None:
             new_total = summary.total_cost_usd + cost
-            if new_total > self.budget.max_cost_per_session:
-                raise BudgetExceededError(
-                    f"Session cost ${new_total} exceeds limit ${self.budget.max_cost_per_session}",
+            if new_total > budget.max_cost_per_session:
+                return BudgetExceededError(
+                    f"Session cost ${new_total} exceeds limit ${budget.max_cost_per_session}",
                     current_cost=new_total,
-                    budget_limit=self.budget.max_cost_per_session,
+                    budget_limit=budget.max_cost_per_session,
                     budget_type="session_cost",
                 )
-
-            # Warn if approaching limit
-            percentage = float(new_total / self.budget.max_cost_per_session) * 100
-            if percentage >= self.budget.warn_at_percentage:
-                logger.warning(
-                    "budget_warning",
-                    current=str(new_total),
-                    limit=str(self.budget.max_cost_per_session),
-                    percentage=percentage,
-                )
-
-        if self.budget.max_tokens_per_session:
+            self._warn_if_near(new_total, budget.max_cost_per_session)
+        if budget.max_tokens_per_session is not None:
             new_total_tokens = summary.total_tokens + tokens.total_tokens
-            if new_total_tokens > self.budget.max_tokens_per_session:
-                raise BudgetExceededError(
+            if new_total_tokens > budget.max_tokens_per_session:
+                return BudgetExceededError(
                     f"Session tokens {new_total_tokens} exceeds limit "
-                    f"{self.budget.max_tokens_per_session}",
+                    f"{budget.max_tokens_per_session}",
                     current_cost=Decimal(new_total_tokens),
-                    budget_limit=Decimal(self.budget.max_tokens_per_session),
+                    budget_limit=Decimal(budget.max_tokens_per_session),
                     budget_type="session_tokens",
                 )
+        return None
+
+    def _warn_if_near(self, new_total: Decimal, limit: Decimal) -> None:
+        """Log ``budget_warning`` when ``new_total`` reaches the warning share of ``limit``."""
+        if self.budget is None or limit <= 0:
+            return  # a 0 limit has no share to warn at; anything over it is refused
+        percentage = float(new_total / limit) * 100
+        if percentage >= self.budget.warn_at_percentage:
+            logger.warning(
+                "budget_warning",
+                current=str(new_total),
+                limit=str(limit),
+                percentage=percentage,
+            )
 
     def _get_summary_unlocked(self) -> CostSummary:
         """Get summary without lock (internal use)."""
@@ -501,28 +610,36 @@ class CostTracker:
         return build_task_budget(total, total - summary.total_tokens, soft=soft)
 
     def reset(self) -> None:
-        """Reset all tracked costs."""
+        """Reset all tracked costs, and reopen a budget that was exceeded."""
         with self._lock:
             self._records = []
+            self._exceeded = None
 
-    def track(self, tool_name: str) -> CostContext:
+    def track(self, tool_name: str, estimate: TokenUsage | None = None) -> CostContext:
         """Create context manager for tracking a tool call.
+
+        Entering it runs :meth:`check_admission` (with ``estimate``, when given), so a
+        refused call raises ``BudgetExceededError`` before the ``with`` body runs.
 
         Args:
             tool_name: Name of the tool being tracked.
+            estimate: The call's expected token usage, checked against the limits first.
 
         Returns:
             Context manager for tracking.
         """
-        return CostContext(self, tool_name)
+        return CostContext(self, tool_name, estimate=estimate)
 
 
 class CostContext:
     """Context manager for tracking a single tool call."""
 
-    def __init__(self, tracker: CostTracker, tool_name: str) -> None:
+    def __init__(
+        self, tracker: CostTracker, tool_name: str, estimate: TokenUsage | None = None
+    ) -> None:
         self.tracker = tracker
         self.tool_name = tool_name
+        self._estimate = estimate
         self._input_tokens = 0
         self._output_tokens = 0
         self._metadata: dict[str, Any] = {}
@@ -542,6 +659,9 @@ class CostContext:
         self._metadata.update(kwargs)
 
     def __enter__(self) -> CostContext:
+        # Refuse before the body runs: a reached limit, a latched budget, or an estimate
+        # that would cross a limit (until 0.10.29 the body ran and only __exit__ raised).
+        self.tracker.check_admission(self._estimate)
         self._start_time = time.time()
         return self
 
