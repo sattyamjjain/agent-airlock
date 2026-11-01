@@ -77,8 +77,8 @@ class SecurityPolicy:
 | `approval_ledger` | `ApprovalLedger \| None` | Approvals recorded ahead of a call, each claimed by exactly one call, before the approver is asked. See [Approvals bound to the call](../guide/bound-approvals.md) |
 | `effect_guard` | `EffectGuard \| None` | Runs each call to a tool that is not `@reversibility("reversible")` at most once, keyed on the `tool_call_id` the host puts on the call's context: a replay of a committed call returns the stored value, one of a pending or unknown call is refused (`effect_status_unknown`). See [At-most-once dispatch](../guide/effect-guard.md) |
 | `model_tier_budget` | `ModelTierBudget \| None` | Per-model-tier cost caps, checked before the tool runs |
-| `amplification_budget` | `AmplificationBudget \| None` | Per-run call budget against a declared baseline. Its `max_wall_seconds` caps how long a run may keep calling tools, from its first call |
-| `sequence_guard`, `action_contradiction_gate`, `deserialization_guard` | | Optional guards run after the policy check |
+| `amplification_budget` | `AmplificationBudget \| None` | Per-run call budget against a declared baseline. Its `max_wall_seconds` caps how long a run may keep calling tools, from its first call. Its `max_sessions` (10,000) bounds the runs' ledgers kept, least recently used dropped first and logged (`amplification_ledger_evicted`); a run whose ledger was dropped counts from zero again |
+| `sequence_guard`, `action_contradiction_gate`, `deserialization_guard` | | Optional guards run after the policy check. `SequenceGuard(max_sessions=...)` (10,000) bounds its session traces the same way (`sequence_guard.session_evicted`); the gate keeps only sessions it has tripped |
 | `tool_arg_sink_guard` | `ToolArgSinkGuard \| None` | Refuses shell syntax in named (or all) string arguments, anything but a bare version in installer arguments, and a function name its allowlist (or the default denylist) does not admit in dispatch arguments (step 2.75). See [Shell and installer arguments](../guide/shell-and-installer-arguments.md) and [Dispatch arguments](../guide/dispatch-arguments.md) |
 | `argument_secret_guard` | `ArgumentSecretGuard \| None` | Refuses (or, in mask mode, masks) secrets and personal data in string arguments before the tool runs (step 2.76). See [Secrets in tool arguments](../guide/argument-secrets.md) |
 | `reauth_on_untrusted_reinvocation`, `untrusted_reinvocation_threshold` | `bool`, `int` | Once a tool's output has flowed back into the model `threshold` times in a run, the next call to it needs `authorize_once(tool)` on the run's `AirlockContext`. The count lives on that context, so a call that belongs to no run is refused: one with no `AirlockContext` passed in and none set around it, or whose surrounding context names a different agent |
@@ -90,6 +90,11 @@ class SecurityPolicy:
 
 How a call carries its identity for `require_agent_id` and `allowed_roles` is described in
 [Agent Identity](../guide/policy.md#agent-identity).
+
+`policy.reset_run(session_id)` drops one run's entries from that per-run state when the run
+ends: its amplification ledger, its sequence trace and its gate flag. A trace or flag kept
+under an agent id belongs to the agent and stays. [Google ADK](../integrations/google-adk.md)'s
+`AirlockAdkPlugin` calls it for each invocation.
 
 ### Pattern Matching
 

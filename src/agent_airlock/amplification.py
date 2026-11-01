@@ -45,6 +45,7 @@ from __future__ import annotations
 import enum
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
@@ -89,6 +90,14 @@ class AmplificationBudget:
             through, for operators establishing a baseline before enforcing one.
         max_wall_seconds: Ceiling on how long one run may keep calling tools, measured
             from its first call (V0.10.29). A call at or after the deadline is over budget.
+        max_sessions: How many runs' ledgers the guard keeps (V0.10.29). A new run past it
+            drops the least recently used run's ledger, logged as
+            ``amplification_ledger_evicted``; that run's count starts again if it calls
+            once more, so keep it above the runs you have in flight.
+
+    Raises:
+        ValueError: ``max_wall_seconds`` is not a positive number, or ``max_sessions`` is
+            not a whole number of 1 or more.
     """
 
     baseline_calls_per_run: int | None = None
@@ -96,11 +105,15 @@ class AmplificationBudget:
     max_amplification_ratio: float | None = None
     action: Literal["block", "warn"] = "block"
     max_wall_seconds: float | None = None
+    max_sessions: int = 10_000
 
     def __post_init__(self) -> None:
         wall = self.max_wall_seconds
         if wall is not None and not (wall == wall and wall > 0):  # wall == wall: not NaN
             raise ValueError(f"max_wall_seconds must be a positive number; got {wall!r}")
+        sessions = self.max_sessions
+        if isinstance(sessions, bool) or not isinstance(sessions, int) or sessions < 1:
+            raise ValueError(f"max_sessions must be a whole number of 1 or more; got {sessions!r}")
 
     def is_configured(self) -> bool:
         """True when at least one enforceable threshold is set."""
@@ -167,22 +180,39 @@ class AmplificationGuard:
     Thread-safe. Ledgers are keyed by session, so a harness that supplies no context gets
     one shared anonymous ledger — which is honest about the limitation rather than
     silently counting unrelated runs as one. See ``session_key=None`` handling in
-    :meth:`record_and_check`.
+    :meth:`record_and_check`. At most ``budget.max_sessions`` ledgers are kept, least
+    recently used dropped first (V0.10.29).
     """
 
     def __init__(self, budget: AmplificationBudget) -> None:
         self.budget = budget
-        self._ledgers: dict[str, RunLedger] = {}
+        self._ledgers: OrderedDict[str, RunLedger] = OrderedDict()
         self._lock = threading.Lock()
 
     #: Ledger key used when the harness supplied no run identity.
     ANONYMOUS_KEY = "__anonymous__"
 
     def ledger_for(self, session_key: str | None) -> RunLedger:
-        """Return (creating if needed) the ledger for one run."""
+        """Return (creating if needed) the ledger for one run, now its most recently used.
+
+        A ledger created past ``budget.max_sessions`` drops the least recently used one.
+        """
         key = session_key or self.ANONYMOUS_KEY
         with self._lock:
-            return self._ledgers.setdefault(key, RunLedger())
+            ledger = self._ledgers.get(key)
+            if ledger is not None:
+                self._ledgers.move_to_end(key)
+                return ledger
+            ledger = self._ledgers[key] = RunLedger()
+            while len(self._ledgers) > self.budget.max_sessions:
+                evicted, dropped = self._ledgers.popitem(last=False)
+                logger.warning(
+                    "amplification_ledger_evicted",
+                    session_key=evicted,
+                    run_call_count=dropped.call_count,
+                    max_sessions=self.budget.max_sessions,
+                )
+            return ledger
 
     def reset(self, session_key: str | None = None) -> None:
         """Drop one run's counters, or all of them when ``session_key`` is ``None``."""

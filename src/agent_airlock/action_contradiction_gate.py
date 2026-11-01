@@ -320,12 +320,16 @@ class ActionContradictionGate:
         # eventual privileged action.
         detector_kind = self._run_detectors(context)
         with self._lock:
-            state = self._states.setdefault(session_key, _ContradictionState())
+            # Only a tripped session is stored (V0.10.29): an untripped one is the
+            # default state, so storing it kept one entry per session ever seen.
+            state = self._states.get(session_key)
             if detector_kind is not None:
+                if state is None:
+                    state = self._states[session_key] = _ContradictionState()
                 state.tripped = True
                 state.last_detector_kind = detector_kind
-            tripped = state.tripped
-            last_kind = state.last_detector_kind or "unknown"
+            tripped = state is not None and state.tripped
+            last_kind = (state.last_detector_kind if state is not None else None) or "unknown"
 
         if not tripped:
             return

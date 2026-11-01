@@ -70,6 +70,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -220,6 +221,11 @@ class SequenceGuard:
             per-session trace. Falls back to ``"__anonymous__"`` if both
             are absent — and emits a structlog warning so deployments
             without identity don't silently log everything to one bucket.
+        max_sessions: How many sessions' traces are kept in memory (V0.10.29).
+            A new session past it drops the least recently used session's
+            trace, logged as ``sequence_guard.session_evicted``; that
+            session's next call is then read as its first. The persisted
+            baseline is not trimmed.
     """
 
     mode: SequenceGuardMode
@@ -229,10 +235,11 @@ class SequenceGuard:
     low_probability_threshold: float = 0.05
     min_baseline_samples: int = 50
     session_key_kind: SessionKeyKind = "agent_id"
+    max_sessions: int = 10_000
 
     # --- internal state ---------------------------------------------------
 
-    _traces: dict[str, _SessionTrace] = field(default_factory=dict, repr=False)
+    _traces: OrderedDict[str, _SessionTrace] = field(default_factory=OrderedDict, repr=False)
     _baseline_cache: dict[str, dict[str, dict[str, int]]] | None = field(default=None, repr=False)
     _normalised_dag: dict[str, frozenset[str]] | None = field(default=None, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -265,6 +272,11 @@ class SequenceGuard:
             )
         if self.action not in ("block", "warn"):
             raise ValueError(f"SequenceGuard.action must be 'block' or 'warn'; got {self.action!r}")
+        sessions = self.max_sessions
+        if isinstance(sessions, bool) or not isinstance(sessions, int) or sessions < 1:
+            raise ValueError(
+                f"SequenceGuard.max_sessions must be a whole number of 1 or more; got {sessions!r}"
+            )
 
     # -- Public API -------------------------------------------------------
 
@@ -295,7 +307,7 @@ class SequenceGuard:
         """
         shape = args_shape_hash(args, kwargs)
         with self._lock:
-            trace = self._traces.setdefault(session_key, _SessionTrace())
+            trace = self._trace_for(session_key)
             previous = trace.last_tool
             trace.history.append((tool_name, shape))
             trace.last_tool = tool_name
@@ -338,6 +350,26 @@ class SequenceGuard:
             return list(trace.history) if trace is not None else []
 
     # -- Internals --------------------------------------------------------
+
+    def _trace_for(self, session_key: str) -> _SessionTrace:
+        """The session's trace, now its most recently used; the caller holds the lock.
+
+        One created past :attr:`max_sessions` drops the least recently used trace.
+        """
+        trace = self._traces.get(session_key)
+        if trace is not None:
+            self._traces.move_to_end(session_key)
+            return trace
+        trace = self._traces[session_key] = _SessionTrace()
+        while len(self._traces) > self.max_sessions:
+            evicted, dropped = self._traces.popitem(last=False)
+            logger.warning(
+                "sequence_guard.session_evicted",
+                session_key=evicted,
+                calls=len(dropped.history),
+                max_sessions=self.max_sessions,
+            )
+        return trace
 
     def _check_declared(self, *, session_key: str, previous: str | None, tool_name: str) -> None:
         assert self._normalised_dag is not None  # noqa: S101  # nosec B101 - guarded by __post_init__

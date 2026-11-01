@@ -239,6 +239,7 @@ class TestDigests:
         assert b"rate_limit_mode" not in payload
         assert b"rate_limit_scope" not in payload
         assert b"max_wall_seconds" not in payload
+        assert b"max_sessions" not in payload
 
     def test_changing_a_new_setting_moves_the_digest(self) -> None:
         base = SecurityPolicy(rate_limits={"*": "3/hour"})._compute_policy_digest()
@@ -247,6 +248,15 @@ class TestDigests:
             SecurityPolicy(rate_limits={"*": "3/hour"}, rate_limit_scope="agent"),
         ):
             assert changed._compute_policy_digest() != base
+
+    def test_changing_a_new_budget_setting_moves_the_digest(self) -> None:
+        def digest(**budget: Any) -> str:
+            policy = SecurityPolicy(
+                amplification_budget=AmplificationBudget(max_calls_per_run=5, **budget)
+            )
+            return policy._compute_policy_digest()
+
+        assert len({digest(), digest(max_wall_seconds=60), digest(max_sessions=50)}) == 3
 
 
 class TestBesideTheOtherGates:
@@ -343,6 +353,12 @@ class TestNarrowingTheNewSettings:
                 {"amplification_budget": AmplificationBudget(max_calls_per_run=100)},
                 "amplification_budget",
                 id="no-deadline",
+            ),
+            pytest.param(
+                {"amplification_budget": AmplificationBudget(max_calls_per_run=5)},
+                {"amplification_budget": AmplificationBudget(max_calls_per_run=5, max_sessions=1)},
+                "amplification_budget",
+                id="fewer-ledgers",
             ),
         ],
     )
