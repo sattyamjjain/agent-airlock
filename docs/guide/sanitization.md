@@ -47,10 +47,21 @@ result = get_customer(customer_id=123)
   Dictionary keys are masked too; when two keys mask to the same string, the later ones
   get a ` (2)`, ` (3)` suffix, so no value is dropped. It is never truncated, because
   truncating its serialized form would hand back a different type.
+- **An MCP tool result** (`mcp.types.CallToolResult`, FastMCP's `ToolResult`: a model with
+  `content` and `structured_content` / `structuredContent`) is rebuilt with `model_copy`
+  and keeps its type: each text block's `text`, the structured content and `_meta` are
+  masked, and so is the raw `CallToolResult` a FastMCP `ToolResult` keeps for the wire.
+  Other content blocks (an image, an embedded resource) are left as they are, and what
+  was found in them is reported as not masked. Until 0.10.29 an MCP result was returned
+  unmasked, like any other object.
 - **Any other object** (a Pydantic model, a dataclass) is returned as it is, since
-  rebuilding it with masked fields could break its own invariants. What was detected in
-  it is logged as `output_sensitive_data_unmasked` and returned as a warning that says it
-  was *not* masked. The same goes for a value inside a dict, list, tuple or set that the
+  rebuilding it with masked fields could break its own invariants. It is read both as its
+  `str()` and as it serializes (`model_dump_json()`, which includes `Field(repr=False)`
+  fields; a dataclass field by field), and what was detected in it is logged as
+  `output_sensitive_data_unmasked` and returned as a warning that says it was *not*
+  masked. With `AirlockConfig(withhold_unmaskable_output=True)` such a result, or a
+  container holding one, is refused as `output_unreadable` instead, after the tool ran;
+  the CVE-2026-21520 and CVE-2026-75130 injection presets turn it on. The same goes for a value inside a dict, list, tuple or set that the
   walk cannot rebuild (bytes, a model, a dataclass, a deque...): it is left as it is, and
   what was found in it is reported as not masked. Return a dict or a string to have it
   masked. Numbers no detector can match (under nine digits, or a float with a fractional
