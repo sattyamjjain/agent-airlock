@@ -1077,6 +1077,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Server Factory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pinning-the-servers-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning the server's tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1477,6 +1494,34 @@
     
   
     Secrets in tool arguments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tool-definition-pins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool-definition pins
   
 
     
@@ -3168,6 +3213,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Server Factory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pinning-the-servers-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning the server's tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3363,6 +3425,11 @@ applies <code>secure_tool</code> using the server's defaults:</p>
 <code>default_policy</code> for that tool), <code>tool_name=</code> and <code>tool_description=</code>. Only tools registered
 through it are guarded. The factory installs nothing on the server itself, so a tool added
 with a plain <code>@mcp.tool</code> runs without Airlock.</p>
+<h3 id="pinning-the-servers-tools">Pinning the server's tools<a class="headerlink" href="#pinning-the-servers-tools" title="Permanent link">&para;</a></h3>
+<p><code>create_secure_mcp_server(..., pin_guard=guard)</code> checks the server's own tools against a
+<code>ToolDefinitionPinGuard</code>: at startup, and on every <code>tools/list</code> and <code>tools/call</code>. A tool
+added or changed after approval is neither listed nor run. Clients can check every listing
+they receive the same way. See <a href="../tool-definition-pins/">Tool-definition pins</a>.</p>
 <h2 id="mcp-context">MCP Context<a class="headerlink" href="#mcp-context" title="Permanent link">&para;</a></h2>
 <p>A secured tool can still take FastMCP's <code>Context</code>. FastMCP injects it and keeps it out of
 the tool's input schema, and Airlock passes it through unchanged:</p>
