@@ -8,7 +8,9 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from agent_airlock.safe_types import (
+    AGENT_CONFIG_DENY_PATTERNS,
     DEFAULT_PATH_DENY_PATTERNS,
+    PERSISTENCE_DENY_PATTERNS,
     SafePath,
     SafePathValidationError,
     SafePathValidator,
@@ -213,3 +215,135 @@ class TestEdgeCases:
         validator = SafeURLValidator()
         with pytest.raises(SafeURLValidationError):
             validator("example.com/api")
+
+
+# Paths a prompt-injected agent writes to persist or to change what its host runs next
+# (V0.10.30). Each was admitted by the default validator in 0.10.29.
+_PERSISTENCE_PATHS = [
+    "/Users/u/Library/LaunchAgents/com.apple.sysmond.plist",
+    "/Users/u/Library/LaunchAgents",
+    "/Library/LaunchAgents/x.plist",
+    "/Library/LaunchDaemons/x.plist",
+    "/System/Library/LaunchDaemons/x.plist",
+    "Library/LaunchAgents/x.plist",
+    "/var/spool/cron/crontabs/u",
+    "/var/spool/cron/u",
+    "/var/at/tabs/u",
+    "/usr/lib/cron/tabs/u",
+    "/etc/crontab",
+    "/etc/cron.d/x",
+    "/etc/cron.daily/x",
+    "/etc/systemd/system/x.service",
+    "/etc/systemd/system/multi-user.target.wants/x.service",
+    "/usr/lib/systemd/system/x.service",
+    "/home/u/.config/systemd/user/x.service",
+    "/home/u/.local/share/systemd/user/x.service",
+    "C:\\Users\\u\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\x.bat",
+    "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp\\x.lnk",
+    "/home/u/.bashrc",
+    "/home/u/.bash_profile",
+    "/home/u/.profile",
+    "/home/u/.zshrc",
+    "/home/u/.zprofile",
+    "/home/u/.zshenv",
+    "/home/u/.config/fish/config.fish",
+    "/etc/profile.d/x.sh",
+    "/home/u/.ssh/authorized_keys",
+    "/etc/ssh/authorized_keys/u",
+]
+
+_AGENT_CONFIG_PATHS = [
+    "/repo/.mcp.json",
+    ".mcp.json",
+    "/home/u/.claude.json",
+    "/repo/.claude/settings.json",
+    "/repo/.claude/settings.local.json",
+    "/repo/.cursor/mcp.json",
+    "/repo/.vscode/mcp.json",
+    "/repo/.vscode/tasks.json",
+    "C:\\repo\\.vscode\\tasks.json",
+    "/home/u/.gitconfig",
+    "/home/u/.config/git/config",
+]
+
+# Names that only look like the ones above.
+_LOOKALIKE_PATHS = [
+    "/app/data/report.txt",
+    "/app/data/bashrc_notes.txt",
+    "/app/src/launch_agents.py",
+    "/app/data/startup.md",
+    "/app/data/system",
+    "/app/docs/mcp.json.md",
+    "/app/src/claude/settings.py",
+]
+
+
+class TestPersistenceAndAgentConfigDeny:
+    """The default validator refuses OS persistence and agent config paths."""
+
+    @pytest.mark.parametrize("path", _PERSISTENCE_PATHS)
+    def test_persistence_path_refused(self, path: str) -> None:
+        with pytest.raises(SafePathValidationError) as exc_info:
+            SafePathValidator()(path)
+        assert exc_info.value.pattern in PERSISTENCE_DENY_PATTERNS + [".ssh", "*/.ssh/*"]
+
+    @pytest.mark.parametrize("path", _AGENT_CONFIG_PATHS)
+    def test_agent_config_path_refused(self, path: str) -> None:
+        with pytest.raises(SafePathValidationError) as exc_info:
+            SafePathValidator()(path)
+        assert exc_info.value.pattern in AGENT_CONFIG_DENY_PATTERNS
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/Users/u/library/launchagents/x.plist",
+            "/USERS/U/LIBRARY/LAUNCHDAEMONS/X.PLIST",
+            "/home/u/.BashRC",
+            "/home/u/.ssh/Authorized_Keys",
+            "C:\\Users\\u\\appdata\\roaming\\microsoft\\windows\\start menu\\programs\\startup\\x.bat",
+            "/repo/.MCP.json",
+            "/repo/.Claude/Settings.json",
+            "/repo/.VSCode/Tasks.json",
+        ],
+    )
+    def test_matched_whatever_the_case(self, path: str) -> None:
+        with pytest.raises(SafePathValidationError):
+            SafePathValidator()(path)
+
+    @pytest.mark.parametrize("path", _LOOKALIKE_PATHS)
+    def test_lookalike_names_allowed(self, path: str) -> None:
+        assert SafePathValidator()(path) == Path(path)
+
+    def test_older_patterns_keep_their_case(self) -> None:
+        # "SYSTEM" (the Windows registry hive) stays case-sensitive, so a file named
+        # "system" is not refused.
+        assert SafePathValidator()("/app/data/system") == Path("/app/data/system")
+
+    def test_empty_deny_patterns_still_allows_everything(self) -> None:
+        validator = SafePathValidator(deny_patterns=[])
+        for path in _PERSISTENCE_PATHS + _AGENT_CONFIG_PATHS + _LOOKALIKE_PATHS:
+            assert validator(path) == Path(path)
+
+    def test_lists_are_part_of_the_defaults(self) -> None:
+        for pattern in PERSISTENCE_DENY_PATTERNS + AGENT_CONFIG_DENY_PATTERNS:
+            assert pattern in DEFAULT_PATH_DENY_PATTERNS
+
+    def test_lists_exported_from_the_package(self) -> None:
+        import agent_airlock
+
+        assert agent_airlock.PERSISTENCE_DENY_PATTERNS is PERSISTENCE_DENY_PATTERNS
+        assert agent_airlock.AGENT_CONFIG_DENY_PATTERNS is AGENT_CONFIG_DENY_PATTERNS
+        assert "PERSISTENCE_DENY_PATTERNS" in agent_airlock.__all__
+        assert "AGENT_CONFIG_DENY_PATTERNS" in agent_airlock.__all__
+
+    def test_lists_alone_match_case_insensitively(self) -> None:
+        validator = SafePathValidator(deny_patterns=list(PERSISTENCE_DENY_PATTERNS))
+        with pytest.raises(SafePathValidationError):
+            validator("/Users/u/library/launchagents/x.plist")
+
+    def test_safe_path_type_refuses(self) -> None:
+        class PathModel(BaseModel):
+            path: SafePath
+
+        with pytest.raises(ValidationError):
+            PathModel(path="/Users/u/Library/LaunchAgents/com.apple.sysmond.plist")
