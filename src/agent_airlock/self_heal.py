@@ -94,6 +94,24 @@ class BlockReason(str, Enum):
     EFFECT_STATUS_UNKNOWN = "effect_status_unknown"
 
 
+#: Whether a refusal with this block reason can pass on a retry, when the reason alone
+#: says. A rate limit says only with its reset time, so handle_rate_limit sets it, and a
+#: policy violation only when it is a denial of the tool, so the policy step sets it.
+_RETRYABLE: dict[BlockReason, bool] = {
+    BlockReason.KILL_SWITCH: False,
+    BlockReason.STARTUP_HOOK: False,
+    BlockReason.BUDGET_EXCEEDED: False,
+    BlockReason.AMPLIFICATION_EXCEEDED: False,
+    BlockReason.ESCALATION_DENIED: False,
+    BlockReason.POLICY_INDETERMINATE: False,
+    BlockReason.RUN_HALTED: False,
+    BlockReason.RUN_BUDGET_EXHAUSTED: False,
+    BlockReason.EFFECT_STATUS_UNKNOWN: False,
+    BlockReason.VALIDATION_ERROR: True,
+    BlockReason.TOOL_ARG_SINK: True,
+}
+
+
 @dataclass
 class AirlockResponse:
     """Structured response from Airlock for blocked or modified calls.
@@ -115,15 +133,23 @@ class AirlockResponse:
     # leaves both out, so the model never reads a rule it could probe around.
     rule_id: str | None = None
     policy_layer: str | None = None
+    # V0.10.29: whether retrying can help. False when no retry will (a frozen fleet, a
+    # spent budget, a denial), True when a corrected or later call can pass (a validation
+    # error, a rate limit with its reset time), None when the refusal does not say.
+    # Defaults by block reason (_RETRYABLE) when not set.
+    retryable: bool | None = None
 
     def __post_init__(self) -> None:
         """A refusal names its rule and layer even when its maker did not: the block
-        reason, and the layer that returns it (``_LAYER_FOR``)."""
+        reason, and the layer that returns it (``_LAYER_FOR``). It says whether a retry
+        can help when its block reason does (``_RETRYABLE``)."""
         if self.block_reason is not None:
             if self.rule_id is None:
                 self.rule_id = self.block_reason.value
             if self.policy_layer is None:
                 self.policy_layer = _LAYER_FOR.get(self.block_reason, self.block_reason.value)
+            if self.retryable is None:
+                self.retryable = _RETRYABLE.get(self.block_reason)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -149,6 +175,9 @@ class AirlockResponse:
 
         if self.metadata:
             data["metadata"] = self.metadata
+
+        if self.retryable is not None:
+            data["retryable"] = self.retryable
 
         return data
 
@@ -626,7 +655,7 @@ def handle_amplification_exceeded(
     fix_hints = (
         [
             "Amplification checking is enabled but no threshold is set",
-            "Set AmplificationBudget(max_calls_per_run=N), or "
+            "Set AmplificationBudget(max_calls_per_run=N), max_wall_seconds=S, or "
             "max_amplification_ratio=R with baseline_calls_per_run=B",
             "Blocked deny-by-default: a budget that cannot fire is not a budget",
         ]
@@ -872,7 +901,7 @@ def handle_rate_limit(
     Returns:
         AirlockResponse with rate limit info.
     """
-    return AirlockResponse.blocked_response(
+    response = AirlockResponse.blocked_response(
         reason=BlockReason.RATE_LIMIT,
         error=f"AIRLOCK_BLOCK: Rate limit exceeded for '{func_name}'.",
         fix_hints=[
@@ -885,6 +914,9 @@ def handle_rate_limit(
             "reset_seconds": reset_seconds,
         },
     )
+    # A retry after reset_seconds can pass (V0.10.29).
+    response.retryable = True
+    return response
 
 
 #: ``PathValidationError.details`` keys kept out of the model-visible metadata: the deny

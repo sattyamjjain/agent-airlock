@@ -50,10 +50,11 @@ parent)` says what it could not prove. The rules:
 | allowlist | each child pattern is within a parent pattern, or the parent admits every tool |
 | deny list | each parent pattern is within a child pattern |
 | time windows, rate limits | every parent pattern is kept, no looser; a pattern the child adds is no looser than any of the parent's |
+| `rate_limit_mode`, `rate_limit_scope` | `"all"` if the parent's is; `"policy"` (one bucket for every agent) if the parent's is |
 | `require_agent_id`, `allowed_roles` | on if the parent's is; the child's roles are among the parent's |
 | re-authorization | on if the parent's is, at a threshold no higher |
 | escalations | every parent rule is kept; the child's approver, channel and ledger are the parent's or none; no standing grant admits what the parent's do not |
-| call budget | no looser than the parent's |
+| call budget | no looser than the parent's: calls per run, amplification ratio and `max_wall_seconds` |
 | every other field | the parent's own object |
 
 A field added to `SecurityPolicy` later fails the check until the rules compare it.

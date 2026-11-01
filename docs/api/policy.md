@@ -20,6 +20,8 @@ class SecurityPolicy:
 
     # Rate limiting and time windows
     rate_limits: dict[str, str] = field(default_factory=dict)
+    rate_limit_mode: Literal["most_specific", "all"] = "most_specific"
+    rate_limit_scope: Literal["policy", "agent"] = "policy"
     time_restrictions: dict[str, str] = field(default_factory=dict)
 
     # Agent identity
@@ -61,7 +63,9 @@ class SecurityPolicy:
 | `allowed_tools` | `list[str]` | Allowlist of tool patterns. Empty allows every tool not denied. A value that is not a list or tuple of str (`None`, a bare string) raises `TypeError` |
 | `denied_tools` | `list[str]` | Denylist of tool patterns. Takes precedence over the allowlist. Same type check |
 | `default_deny` | `bool` | With `True`, an empty allowlist denies every tool, refused as `empty_allowlist` and logged as `policy_indeterminate` |
-| `rate_limits` | `dict[str, str]` | Rate limits per tool pattern (`"100/hour"`). The most specific pattern applies |
+| `rate_limits` | `dict[str, str]` | Rate limits per tool pattern (`"100/hour"`). The most specific pattern applies, or every matching one under `rate_limit_mode="all"`. A call refused after it took its token (by a later gate or the approver), or replayed by an effect guard, gives the token back |
+| `rate_limit_mode` | `str` | `"most_specific"` (default) or `"all"`: with `{"*": "3/hour", "search_*": "100/hour"}`, `"all"` admits 3 searches an hour, the default 100. Under `"all"` a call takes a token from every matching bucket or from none |
+| `rate_limit_scope` | `str` | `"policy"` (default): one bucket per pattern for every agent the policy serves. `"agent"`: one per pattern per agent id, and one shared bucket for calls with none |
 | `time_restrictions` | `dict[str, str]` | Time windows per tool pattern (`"09:00-17:00"`) |
 | `require_agent_id` | `bool` | Refuse a call that carries no agent identity |
 | `allowed_roles` | `list[str]` | Refuse a call whose agent holds none of these roles; an anonymous call holds none |
@@ -72,7 +76,7 @@ class SecurityPolicy:
 | `approval_ledger` | `ApprovalLedger \| None` | Approvals recorded ahead of a call, each claimed by exactly one call, before the approver is asked. See [Approvals bound to the call](../guide/bound-approvals.md) |
 | `effect_guard` | `EffectGuard \| None` | Runs each call to a tool that is not `@reversibility("reversible")` at most once, keyed on the `tool_call_id` the host puts on the call's context: a replay of a committed call returns the stored value, one of a pending or unknown call is refused (`effect_status_unknown`). See [At-most-once dispatch](../guide/effect-guard.md) |
 | `model_tier_budget` | `ModelTierBudget \| None` | Per-model-tier cost caps, checked before the tool runs |
-| `amplification_budget` | `AmplificationBudget \| None` | Per-run call budget against a declared baseline |
+| `amplification_budget` | `AmplificationBudget \| None` | Per-run call budget against a declared baseline. Its `max_wall_seconds` caps how long a run may keep calling tools, from its first call |
 | `sequence_guard`, `action_contradiction_gate`, `deserialization_guard` | | Optional guards run after the policy check |
 | `tool_arg_sink_guard` | `ToolArgSinkGuard \| None` | Refuses shell syntax in named (or all) string arguments, anything but a bare version in installer arguments, and a function name its allowlist (or the default denylist) does not admit in dispatch arguments (step 2.75). See [Shell and installer arguments](../guide/shell-and-installer-arguments.md) and [Dispatch arguments](../guide/dispatch-arguments.md) |
 | `reauth_on_untrusted_reinvocation`, `untrusted_reinvocation_threshold` | `bool`, `int` | Once a tool's output has flowed back into the model `threshold` times in a run, the next call to it needs `authorize_once(tool)` on the run's `AirlockContext`. The count lives on that context, so a call that belongs to no run is refused: one with no `AirlockContext` passed in and none set around it, or whose surrounding context names a different agent |

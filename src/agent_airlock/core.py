@@ -138,6 +138,7 @@ from .policy import (
     PolicyEscalation,
     PolicyMutationError,
     PolicyViolation,
+    RateCharge,
     SecurityPolicy,
     ViolationType,
 )
@@ -455,6 +456,36 @@ def _effect_done(context: AirlockContext[Any] | None, value: _T, *, deferred: bo
     if ticket is not None:
         ticket.committed(value, deferred=deferred)
     return value
+
+
+#: Policy violations that refuse the tool itself, whatever the call: never retryable.
+_TOOL_DENIALS = frozenset(
+    {
+        ViolationType.TOOL_DENIED.value,
+        ViolationType.TOOL_NOT_ALLOWED.value,
+        ViolationType.EMPTY_ALLOWLIST.value,
+    }
+)
+
+
+def _hold_rate_charge(context: AirlockContext[Any], charge: RateCharge | None) -> None:
+    """Keep the rate tokens one policy check took with those the call's earlier checks
+    took: a delegated run's ceilings (step 2.1) each take their own."""
+    if charge is None:
+        return
+    held: RateCharge | None = context._rate_charge
+    if held is None:
+        context._rate_charge = charge
+    else:
+        held.limiters.extend(charge.limiters)
+
+
+def _refund_rate(context: AirlockContext[Any]) -> None:
+    """Give back the rate tokens a call took at steps 2 and 2.1 and did not run on."""
+    charge = context._rate_charge
+    if charge is not None:
+        charge.refund()
+        context._rate_charge = None
 
 
 # Type alias for policy resolver functions. A resolver that returns None refuses the call
@@ -2490,6 +2521,9 @@ class Airlock:
                     _end_source(context, ran=False)
                     _effect_released(context)
                     self._halt_on_refusal(func_name, context, error_response)
+                    # A call refused after it took its rate token gives it back
+                    # (V0.10.29), so only calls that run spend one.
+                    _refund_rate(context)
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
                         block_reason = (
@@ -2539,6 +2573,8 @@ class Airlock:
                 if replay is not None:
                     # The stored value is the source's output all the same: it taints the run.
                     _end_source(context, ran=True)
+                    # The tool did not run again, so the call's rate tokens go back.
+                    _refund_rate(context)
                     if self.config.decision_log is not None:
                         await asyncio.to_thread(_settle, func_name, context, "replayed")
                     return _replayed(func_name, replay, start_time, dict(kwargs), context)  # type: ignore[no-any-return]
@@ -2703,6 +2739,9 @@ class Airlock:
                     _end_source(context, ran=False)
                     _effect_released(context)
                     self._halt_on_refusal(func_name, context, error_response)
+                    # A call refused after it took its rate token gives it back
+                    # (V0.10.29), so only calls that run spend one.
+                    _refund_rate(context)
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
                         block_reason = (
@@ -2751,6 +2790,8 @@ class Airlock:
                 if replay is not None:
                     # The stored value is the source's output all the same: it taints the run.
                     _end_source(context, ran=True)
+                    # The tool did not run again, so the call's rate tokens go back.
+                    _refund_rate(context)
                     _settle(func_name, context, "replayed")
                     return _replayed(func_name, replay, start_time, dict(kwargs), context)  # type: ignore[no-any-return]
 
@@ -3340,7 +3381,7 @@ class Airlock:
                 context,
                 args_digest=(call.digest if policy.reauth_on_untrusted_reinvocation else None),
             )
-            policy.check(func_name, agent=_caller_identity(context))
+            _hold_rate_charge(context, policy.check(func_name, agent=_caller_identity(context)))
             if tool is not None:
                 _escalate_irreversible(policy, func_name, tool)
         except PolicyEscalation as e:
@@ -3350,6 +3391,8 @@ class Airlock:
             # If this clause is ever removed, the subclass relationship means the
             # call still BLOCKS via the generic handler. That is the intended
             # failure mode: losing the approver path must not open the gate.
+            # The call took its rate token before it escalated (V0.10.29).
+            _hold_rate_charge(context, e.rate_charge)
             return (
                 yield from self._resolve_escalation(
                     policy, func_name, e, context=context, call=call
@@ -3427,6 +3470,10 @@ class Airlock:
             violation_type=e.violation_type,
         )
         response.rule_id = str(e.details.get("pattern") or e.violation_type)
+        # A tool the policy does not allow stays refused however the call is retried
+        # (V0.10.29).
+        if e.violation_type in _TOOL_DENIALS:
+            response.retryable = False
         self._safe_invoke_callback(
             self.config.on_blocked,
             "on_blocked",

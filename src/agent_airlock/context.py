@@ -133,6 +133,10 @@ class AirlockContext(Generic[T]):
     # run was started from a DelegationLease). Every call in the run must pass each policy
     # on it at step 2.1; shared like _flow.
     _ceiling: tuple[SecurityPolicy, ...] = field(default=(), repr=False)
+    # V0.10.29: the rate tokens this call took at steps 2 and 2.1, given back when a later
+    # gate or the approver refuses the call, or it is replayed, so only calls that run
+    # spend one.
+    _rate_charge: Any = field(default=None, repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
 
     def __class_getitem__(cls, params: Any) -> Any:
