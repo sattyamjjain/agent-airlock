@@ -2016,7 +2016,7 @@ class Airlock:
                 context._refused_at = "2.6:contradiction_gate"
                 return kwargs, start_time, context, acg_error, None, None
 
-            # Steps 2.7, 2.75, 3 and 5 read argument values. Until 0.10.24 they read only
+            # Steps 2.7, 2.75, 2.76, 3 and 5 read argument values. Until 0.10.24 they read only
             # keyword arguments, and only str values, so a positional argument, a list of
             # paths, a pathlib.Path or a URL object walked past all three. They now read
             # every argument the call passes (`_arg_walk`), bound once and only when one of
