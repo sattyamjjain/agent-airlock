@@ -1263,6 +1263,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/argument-secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets in tool arguments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3460,13 +3488,14 @@
 <a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>    <span class="n">action_contradiction_gate</span><span class="p">:</span> <span class="n">ActionContradictionGate</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>    <span class="n">deserialization_guard</span><span class="p">:</span> <span class="n">UnsafeDeserializationGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>    <span class="n">tool_arg_sink_guard</span><span class="p">:</span> <span class="n">ToolArgSinkGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>    <span class="n">data_flow_policy</span><span class="p">:</span> <span class="n">DataFlowPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
-<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>    <span class="n">run_guard</span><span class="p">:</span> <span class="n">RunGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
-<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>    <span class="n">shell_command_policy</span><span class="p">:</span> <span class="n">ShellCommandPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
-<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>    <span class="n">trace_redaction</span><span class="p">:</span> <span class="n">TraceRedactionPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>    <span class="n">reauth_on_untrusted_reinvocation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a>    <span class="n">untrusted_reinvocation_threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
-<a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a>    <span class="n">stdio_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"allowlist"</span><span class="p">,</span> <span class="s2">"manifest_only"</span><span class="p">,</span> <span class="s2">"disabled"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"allowlist"</span>
+<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>    <span class="n">argument_secret_guard</span><span class="p">:</span> <span class="n">ArgumentSecretGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>    <span class="n">data_flow_policy</span><span class="p">:</span> <span class="n">DataFlowPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
+<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>    <span class="n">run_guard</span><span class="p">:</span> <span class="n">RunGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
+<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>    <span class="n">shell_command_policy</span><span class="p">:</span> <span class="n">ShellCommandPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
+<a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>    <span class="n">trace_redaction</span><span class="p">:</span> <span class="n">TraceRedactionPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a>    <span class="n">reauth_on_untrusted_reinvocation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a>    <span class="n">untrusted_reinvocation_threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<a id="__codelineno-1-44" name="__codelineno-1-44" href="#__codelineno-1-44"></a>    <span class="n">stdio_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"allowlist"</span><span class="p">,</span> <span class="s2">"manifest_only"</span><span class="p">,</span> <span class="s2">"disabled"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"allowlist"</span>
 </code></pre></div>
 <h3 id="attributes">Attributes<a class="headerlink" href="#attributes" title="Permanent link">&para;</a></h3>
 <table>
@@ -3572,6 +3601,11 @@
 <td><code>tool_arg_sink_guard</code></td>
 <td><code>ToolArgSinkGuard \| None</code></td>
 <td>Refuses shell syntax in named (or all) string arguments, anything but a bare version in installer arguments, and a function name its allowlist (or the default denylist) does not admit in dispatch arguments (step 2.75). See <a href="../../guide/shell-and-installer-arguments/">Shell and installer arguments</a> and <a href="../../guide/dispatch-arguments/">Dispatch arguments</a></td>
+</tr>
+<tr>
+<td><code>argument_secret_guard</code></td>
+<td><code>ArgumentSecretGuard \| None</code></td>
+<td>Refuses (or, in mask mode, masks) secrets and personal data in string arguments before the tool runs (step 2.76). See <a href="../../guide/argument-secrets/">Secrets in tool arguments</a></td>
 </tr>
 <tr>
 <td><code>reauth_on_untrusted_reinvocation</code>, <code>untrusted_reinvocation_threshold</code></td>

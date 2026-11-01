@@ -1263,6 +1263,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/argument-secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets in tool arguments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3203,7 +3231,7 @@
 <a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">TYPE_ONLY</span><span class="p">)</span>  <span class="c1"># [EMAIL]</span>
 <a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>
 <a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="c1"># Hash (for correlation)</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">HASH</span><span class="p">)</span>       <span class="c1"># [SHA256:855f96e9...]</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">HASH</span><span class="p">)</span>       <span class="c1"># [HMAC:3f9a8c2e1b7d4065]</span>
 </code></pre></div>
 <h2 id="selective-type-masking">Selective Type Masking<a class="headerlink" href="#selective-type-masking" title="Permanent link">&para;</a></h2>
 <p><code>AirlockConfig</code> has no per-type switch, only <code>mask_pii</code>, <code>mask_secrets</code> and

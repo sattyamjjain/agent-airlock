@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://sattyamjjain.github.io/agent-airlock/api/airlock/">
       
       
-        <link rel="prev" href="../../guide/effect-guard/">
+        <link rel="prev" href="../../guide/argument-secrets/">
       
       
         <link rel="next" href="../config/">
@@ -1250,6 +1250,34 @@
     
   
     At-most-once dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/argument-secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets in tool arguments
   
 
     
@@ -3966,7 +3994,7 @@ out.</p>
 <tr>
 <td><code>retryable</code></td>
 <td><code>bool</code></td>
-<td>Whether a retry can pass: <code>false</code> for a kill switch, a startup hook, a spent budget, an exceeded amplification budget, a denied escalation, an indeterminate policy, a halted run, a spent run budget, an effect of unknown status and a tool the policy does not allow; <code>true</code> for a validation error, a shell or installer argument refusal and a rate limit (after <code>metadata.reset_seconds</code>). Absent when the refusal does not say</td>
+<td>Whether a retry can pass: <code>false</code> for a kill switch, a startup hook, a spent budget, an exceeded amplification budget, a denied escalation, an indeterminate policy, a halted run, a spent run budget, an effect of unknown status and a tool the policy does not allow; <code>true</code> for a validation error, a shell or installer argument refusal, a secret or personal data in an argument and a rate limit (after <code>metadata.reset_seconds</code>). Absent when the refusal does not say</td>
 </tr>
 <tr>
 <td><code>metadata</code></td>

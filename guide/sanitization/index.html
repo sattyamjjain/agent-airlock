@@ -1024,6 +1024,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#hidden-html" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hidden HTML
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arguments-not-only-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arguments, Not Only Results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#selective-detection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1449,6 +1471,34 @@
     
   
     At-most-once dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../argument-secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets in tool arguments
   
 
     
@@ -3143,6 +3193,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#hidden-html" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hidden HTML
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arguments-not-only-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arguments, Not Only Results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#selective-detection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3381,12 +3453,22 @@ mobile numbers.</p>
 <td><code>-----BEGIN PRIVATE KEY-----</code></td>
 <td><code>[REDACTED]</code></td>
 </tr>
+<tr>
+<td>Environment dump</td>
+<td>three or more <code>API_KEY=...</code> lines</td>
+<td>each value <code>[REDACTED]</code></td>
+</tr>
 </tbody>
 </table>
 <p>Detection is by known shape. An API key is an OpenAI key (legacy <code>sk-...</code>, or
 <code>sk-proj-</code>/<code>sk-svcacct-</code>/<code>sk-admin-</code>), an Anthropic <code>sk-ant-...</code> key, a Google <code>AIza</code> key, a
-GitHub <code>ghp_</code>/<code>gho_</code>/<code>github_pat_</code> token or a Slack <code>xox</code> token; a shorter or unrecognised key
-passes through. A password is
+GitHub <code>ghp_</code>/<code>gho_</code>/<code>ghu_</code>/<code>ghs_</code>/<code>ghr_</code>/<code>github_pat_</code> token or a Slack <code>xox</code> token; a
+shorter or unrecognised key passes through. Since 0.10.29 the GitHub and Slack prefixes match
+in any case with a body of at least 20 (GitHub) or 10 (Slack) token characters, and an AWS
+<code>AKIA</code> id matches in lowercase too (its 16-character body still fixed). An environment dump is
+three or more <code>KEY=VALUE</code> lines (<code>export</code> allowed) or JSON <code>"key": "value"</code> pairs whose key ends
+in <code>_KEY</code>, <code>_TOKEN</code>, <code>_SECRET</code> or <code>_PAT</code> or contains <code>PASSWORD</code>, in any case: each such value
+is masked whatever it looks like. A password is
 the value (8+ characters) after <code>password</code>, <code>passwd</code>, <code>pwd</code>, <code>secret</code> or <code>token</code> and <code>=</code> or
 <code>:</code>. The private-key rule masks the whole PEM block, or the header and the base64 lines after it
 when the <code>END</code> line is missing. There is no separate
@@ -3412,9 +3494,27 @@ the standalone sanitizer with a <code>mask_config</code> mapping:</p>
 <a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">TYPE_ONLY</span><span class="p">)</span>  <span class="c1"># [EMAIL]</span>
 <a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
 <a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># Hash (for correlation)</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">HASH</span><span class="p">)</span>       <span class="c1"># [SHA256:855f96e9...]</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="n">mask_email</span><span class="p">(</span><span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">HASH</span><span class="p">)</span>       <span class="c1"># [HMAC:3f9a8c2e1b7d4065]</span>
 </code></pre></div>
 <p>The mapping replaces the defaults: a type you leave out of it is masked <code>FULL</code>.</p>
+<p><code>HASH</code> is an HMAC-SHA256 tag of 16 hex characters under a key (0.10.29). Until then it was an
+unkeyed sha256 cut to 8 characters, which anyone could recompute for every phone number or PAN
+and so reverse. Pass the request's key as <code>hash_key=</code> so one value gets one tag for the whole
+request (joins keep working); without one, each call makes its own key, so tags from two calls
+cannot be joined. <code>sanitize_structured</code> uses one key for a whole structure. Pass
+<code>reverse_map={}</code> to have it filled with each tag and the value it stands for: that map is for
+the host, never for the model.</p>
+<h2 id="hidden-html">Hidden HTML<a class="headerlink" href="#hidden-html" title="Permanent link">&para;</a></h2>
+<p><code>AirlockConfig(strip_hidden_html=True)</code> (0.10.29) removes the parts of an HTML result a person
+cannot see before it is masked: elements an inline style hides (<code>display:none</code>,
+<code>visibility:hidden</code>, <code>opacity:0</code>, <code>font-size:0</code>, a <code>text-indent</code> of -100 or more units), the
+<code>hidden</code> attribute, and comments. Text with the <code>sr-only</code>, <code>visually-hidden</code> or
+<code>visuallyhidden</code> class is kept, since a screen reader reads it. Only inline styles are read: a
+stylesheet rule that hides an element is not. <code>sanitize_output(..., strip_hidden_html=True)</code>
+does the same for one string.</p>
+<h2 id="arguments-not-only-results">Arguments, Not Only Results<a class="headerlink" href="#arguments-not-only-results" title="Permanent link">&para;</a></h2>
+<p>Masking covers what a tool returns. To screen what the model passes in, see
+<a href="../argument-secrets/">Secrets in tool arguments</a>.</p>
 <h2 id="selective-detection">Selective Detection<a class="headerlink" href="#selective-detection" title="Permanent link">&para;</a></h2>
 <p><code>AirlockConfig</code> switches detection by group: <code>mask_pii</code>, <code>mask_secrets</code> and
 <code>pii_locales</code>. To enable or disable specific data types, use the standalone functions:</p>
