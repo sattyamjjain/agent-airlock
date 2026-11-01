@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.30] - 2026-11-01
+
+The default `SafePath` validator refuses the paths an agent writes to persist or to change
+what its IDE runs next, and matches its deny patterns against the path Windows opens as
+well as the path as written (#442). A write made through an argument that is not
+`SafePath`-typed, an extension install and an IDE's own browser are outside it.
+
+### Added
+
+- `PERSISTENCE_DENY_PATTERNS` and `AGENT_CONFIG_DENY_PATTERNS`, exported from `agent_airlock`, both in `DEFAULT_PATH_DENY_PATTERNS` and matched whatever the case: launchd jobs, the crontab spools and `/etc/cron.*`, systemd unit directories, the Windows Startup folders, shell start files and `authorized_keys` anywhere; `.mcp.json`, `~/.claude.json`, `.claude/settings.json`, `.claude/settings.local.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.vscode/tasks.json`, `~/.gitconfig` and `~/.config/git/config`. The trojanized `anthropic.claude-code` build on the Cursor marketplace (29 Oct 2026) persisted through `authorized_keys`, a LaunchAgent and a crontab.
+- Deny patterns are also matched with each path component's trailing dots and spaces dropped, the path Windows opens, in `SafePathValidator` and `FilesystemPolicy`: `.ssh./id_rsa`, `.mcp.json.` and `.env ` passed (the shape of CVE-2026-103572).
+
+### Changed
+
+- The default `SafePath` validator refuses paths it allowed in 0.10.29. Pass `deny_patterns=` to opt out.
+
 ## [0.10.29] - 2026-11-01
 
 An outside review of 0.10.28 sent a work order, done here as 29 pull requests (#409 to
