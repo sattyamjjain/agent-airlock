@@ -58,7 +58,8 @@ jobs:
         # xfail or no test at all fails it too. Until 0.10.28 this ran --collect-only,
         # which exits 0 on a module-level importorskip and never reaches one inside a
         # test function (two in test_kill_switch_wiring.py), so it asserted nothing the
-        # import lines did not. They run in a few seconds.
+        # import lines did not. They run in a few seconds; test_mcp_tool_pins_0_10_29.py
+        # runs a pinned FastMCP server (0.10.29).
         run: |
           python -c "import fakeredis, redis, lupa; print('redis', redis.__version__, '| fakeredis', fakeredis.__version__)"
           python -c "import fastmcp; print('fastmcp', fastmcp.__version__)"
@@ -69,6 +70,7 @@ jobs:
             tests/test_mcp_integration_0_10_18.py tests/test_identity.py \
             tests/test_effect_guard_0_10_29.py \
             tests/test_attested_admission.py tests/test_result_masking_0_10_29.py \
+            tests/test_mcp_tool_pins_0_10_29.py \
             -rs --no-cov | tee extra-backed-tests.log
           sed -E 's/\x1b\[[0-9;]*m//g' extra-backed-tests.log > extra-backed-tests.plain.log
           grep -qE '^=+ [0-9]+ passed(, [0-9]+ deselected)?(, [0-9]+ warnings?)? in ' extra-backed-tests.plain.log || {

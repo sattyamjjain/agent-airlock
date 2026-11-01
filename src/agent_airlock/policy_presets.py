@@ -6209,7 +6209,9 @@ def mcp_tool_definition_pin_defaults(
     clearance and then gates on ``allowed_tools``, which is a set of tool **names** — a
     server that keeps the name may change the description and ``inputSchema`` the name
     refers to, and the pre-existing stack admits that call. This preset pins the definition
-    itself and refuses it when it moves.
+    itself and refuses it when it moves. Since 0.10.29 a pin also covers ``annotations``
+    and ``outputSchema``, and a whole ``tools/list`` result can be checked, so a tool that
+    appears after approval is refused.
 
     Composes with, and does not replace, ``mcp_description_manifest_guard_defaults`` (is the
     description honest about the contract) and ``mcp_schema_2020_12_contract_defaults`` (can
@@ -6231,6 +6233,12 @@ def mcp_tool_definition_pin_defaults(
         - ``inspect(definition)`` — the
           :class:`~agent_airlock.mcp_spec.tool_definition_pin_guard.ToolDefinitionDecision`
           without raising.
+        - ``check_listing(tools)`` — raises
+          :class:`~agent_airlock.mcp_spec.tool_definition_pin_guard.ToolListingDriftError`
+          when a ``tools/list`` result carries a tool the pins do not admit (V0.10.29).
+        - ``inspect_listing(tools)`` — the
+          :class:`~agent_airlock.mcp_spec.tool_definition_pin_guard.ToolListingDecision`
+          without raising (V0.10.29).
         - ``guard`` — the underlying ``ToolDefinitionPinGuard``.
         - ``drift_error`` — the ``ToolDefinitionDriftError`` type.
 
@@ -6263,6 +6271,8 @@ def mcp_tool_definition_pin_defaults(
         "approve": _approve,
         "check_tool": _check_tool,
         "inspect": _inspect,
+        "check_listing": guard.validate_listing,
+        "inspect_listing": guard.check_listing,
         "guard": guard,
         "drift_error": ToolDefinitionDriftError,
         "advisory_url": (

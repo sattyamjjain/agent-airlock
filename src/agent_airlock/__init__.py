@@ -1382,6 +1382,7 @@ def create_secure_mcp_server(
     *,
     config: AirlockConfig | None = None,
     default_policy: SecurityPolicy | None = None,
+    pin_guard: "ToolDefinitionPinGuard | None" = None,
 ) -> tuple[object, "Callable[..., object]"]:
     """Create a FastMCP server with pre-configured Airlock security.
 
@@ -1391,16 +1392,19 @@ def create_secure_mcp_server(
         name: Name of the MCP server.
         config: Default Airlock configuration.
         default_policy: Default security policy for all tools.
+        pin_guard: V0.10.29. Pins the server's own tools are checked against at startup
+            and on every ``tools/list`` and ``tools/call``.
 
     Returns:
         Tuple of (FastMCP instance, secure_tool decorator).
     """
     from .mcp import create_secure_mcp_server as _create
 
-    return _create(name, config=config, default_policy=default_policy)
+    return _create(name, config=config, default_policy=default_policy, pin_guard=pin_guard)
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from .mcp_spec.tool_definition_pin_guard import ToolDefinitionPinGuard
     from .sandbox import SandboxPool

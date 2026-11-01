@@ -139,6 +139,13 @@ The decorator also takes per-tool overrides: `@secure(sandbox=True)`, `policy=` 
 through it are guarded. The factory installs nothing on the server itself, so a tool added
 with a plain `@mcp.tool` runs without Airlock.
 
+### Pinning the server's tools
+
+`create_secure_mcp_server(..., pin_guard=guard)` checks the server's own tools against a
+`ToolDefinitionPinGuard`: at startup, and on every `tools/list` and `tools/call`. A tool
+added or changed after approval is neither listed nor run. Clients can check every listing
+they receive the same way. See [Tool-definition pins](tool-definition-pins.md).
+
 ## MCP Context
 
 A secured tool can still take FastMCP's `Context`. FastMCP injects it and keeps it out of

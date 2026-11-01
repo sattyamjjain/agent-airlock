@@ -6,6 +6,9 @@ Provides integration with FastMCP servers:
   result carrying the refusal and its fix hints
 - Progress notifications at the start and end of a call
 - ``MCPContextExtractor`` for reading identifiers off a FastMCP ``Context``
+- ``create_secure_mcp_server(..., pin_guard=...)``: the server's own tools checked against
+  a ``ToolDefinitionPinGuard`` at startup and on every ``tools/list`` and ``tools/call``
+  (V0.10.29)
 
 FastMCP validates and coerces a call's arguments against the tool's schema before the
 tool, and so Airlock, sees them.
@@ -21,10 +24,13 @@ from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
 from .._log import structlog
 from ..config import DEFAULT_CONFIG, AirlockConfig
+from ..mcp_spec.tool_definition_pin_guard import ToolListingDriftError
 from ..policy import SecurityPolicy
 
 if TYPE_CHECKING:
     from fastmcp import Context
+
+    from ..mcp_spec.tool_definition_pin_guard import ToolDefinitionPinGuard, ToolListingDecision
 
 logger = structlog.get_logger("agent-airlock.mcp")
 
@@ -305,11 +311,100 @@ def secure_tool(
     return decorator
 
 
+def _fields(audit_event: dict[str, Any]) -> dict[str, Any]:
+    """An audit event's fields as log keywords: its ``event`` name is the log line's own."""
+    return {key: value for key, value in audit_event.items() if key != "event"}
+
+
+def _wire_definition(tool: Any) -> Any:
+    """A FastMCP tool as the definition ``tools/list`` sends for it."""
+    return tool.to_mcp_tool().model_dump(by_alias=True, exclude_none=True, mode="json")
+
+
+async def tool_definitions(server: Any) -> list[dict[str, Any]]:
+    """The definitions a FastMCP server serves, one per tool name: the version a call of
+    that name resolves to. Approve them into a ``ToolDefinitionPinGuard`` to pin the server's
+    own tools, and keep ``guard.pins`` (V0.10.29)."""
+    names = sorted({tool.name for tool in await server.list_tools(run_middleware=False)})
+    definitions = []
+    for tool_name in names:
+        tool = await server.get_tool(tool_name)
+        if tool is not None:
+            definitions.append(_wire_definition(tool))
+    return definitions
+
+
+async def check_server_tools(server: Any, guard: ToolDefinitionPinGuard) -> ToolListingDecision:
+    """Judge a FastMCP server's own tools against ``guard``'s pins (V0.10.29).
+
+    Raises:
+        ToolListingDriftError: A tool is unpinned or has drifted and ``guard.enforce`` is on.
+    """
+    decision = guard.check_listing(await tool_definitions(server))
+    if not decision.allowed:
+        logger.warning("mcp_server_tools_refused", **_fields(decision.audit_event))
+        if guard.enforce:
+            raise ToolListingDriftError(decision)
+    return decision
+
+
+def _tool_pin_lifespan(guard: ToolDefinitionPinGuard) -> Callable[[Any], Any]:
+    """A FastMCP lifespan that refuses to start serving while a tool is not admitted."""
+
+    @contextlib.asynccontextmanager
+    async def lifespan(server: Any) -> Any:
+        await check_server_tools(server, guard)
+        yield {}
+
+    return lifespan
+
+
+def _tool_pin_middleware(guard: ToolDefinitionPinGuard) -> Any:
+    """FastMCP middleware: list only admitted tools and refuse a call of any other.
+
+    Every ``tools/list`` is checked, so a tool added or changed after startup is caught
+    the next time a client lists, after the ``list_changed`` notification FastMCP sends.
+    """
+    from fastmcp.exceptions import ToolError
+    from fastmcp.server.middleware import Middleware
+
+    class ToolPinMiddleware(Middleware):  # type: ignore[misc,unused-ignore]  # Any without fastmcp
+        async def on_list_tools(self, context: Any, call_next: Any) -> Any:
+            tools = await call_next(context)
+            kept = []
+            for tool in tools:
+                decision = guard.check(_wire_definition(tool))
+                if decision.allowed or not guard.enforce:
+                    kept.append(tool)
+                else:
+                    logger.warning("mcp_tool_not_listed", **_fields(decision.audit_event))
+            return kept
+
+        async def on_call_tool(self, context: Any, call_next: Any) -> Any:
+            tool_name = context.message.name
+            server = getattr(context.fastmcp_context, "fastmcp", None)
+            tool = await server.get_tool(tool_name) if server is not None else None
+            if tool is not None:
+                decision = guard.check(_wire_definition(tool))
+                if not decision.allowed and guard.enforce:
+                    logger.warning("mcp_tool_call_refused", **_fields(decision.audit_event))
+                    raise ToolError(f"AIRLOCK_BLOCK: {decision.detail}")
+            elif server is None and guard.enforce:
+                raise ToolError(
+                    f"AIRLOCK_BLOCK: the definition of '{tool_name}' could not be read, "
+                    "so it cannot be checked against its pin"
+                )
+            return await call_next(context)
+
+    return ToolPinMiddleware()
+
+
 def create_secure_mcp_server(
     name: str,
     *,
     config: AirlockConfig | None = None,
     default_policy: SecurityPolicy | None = None,
+    pin_guard: ToolDefinitionPinGuard | None = None,
 ) -> tuple[Any, Callable[..., Any]]:
     """Create a FastMCP server with pre-configured Airlock security.
 
@@ -337,6 +432,11 @@ def create_secure_mcp_server(
         name: Name of the MCP server.
         config: Default Airlock configuration.
         default_policy: Default security policy for all tools.
+        pin_guard: V0.10.29. Pins for the server's own tools
+            (:class:`~agent_airlock.mcp_spec.tool_definition_pin_guard.ToolDefinitionPinGuard`).
+            The server refuses to start while one of its tools is unpinned or drifted, and
+            afterwards lists only the tools the pins admit and refuses a call of any other.
+            With the guard's ``enforce`` off it only logs.
 
     Returns:
         Tuple of (FastMCP instance, secure_tool decorator).
@@ -351,7 +451,14 @@ def create_secure_mcp_server(
 
     from fastmcp import FastMCP
 
-    mcp = FastMCP(name)
+    if pin_guard is None:
+        mcp = FastMCP(name)
+    else:
+        mcp = FastMCP(
+            name,
+            middleware=[_tool_pin_middleware(pin_guard)],
+            lifespan=_tool_pin_lifespan(pin_guard),
+        )
     config = config or DEFAULT_CONFIG
 
     def make_secure_tool(
@@ -435,6 +542,8 @@ class MCPContextExtractor:
 __all__ = [
     "MCPAirlock",
     "MCPContextExtractor",
+    "check_server_tools",
     "create_secure_mcp_server",
     "secure_tool",
+    "tool_definitions",
 ]
