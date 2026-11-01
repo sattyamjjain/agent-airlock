@@ -96,6 +96,7 @@ nav:
     - Sources and sinks: guide/data-flow.md
     - Halting a run, and loops: guide/run-guard.md
     - Delegation: guide/delegation.md
+    - Tool output trust: guide/tool-output-trust.md
   - API Reference:
     - Airlock Decorator: api/airlock.md
     - Configuration: api/config.md

@@ -150,6 +150,7 @@ from .self_heal import (
     handle_ghost_argument_error,
     handle_lease_scope_denied,
     handle_network_blocked,
+    handle_output_untrusted,
     handle_path_violation,
     handle_policy_violation,
     handle_rate_limit,
@@ -157,6 +158,7 @@ from .self_heal import (
     handle_run_halted,
     handle_validation_error,
 )
+from .tool_output_trust_guard import ToolOutputTrustError
 from .unknown_args import UnknownArgsMode, handle_unknown_args
 from .validator import (
     GhostArgumentError,
@@ -891,6 +893,8 @@ def _refusal_reason(error: BaseException) -> BlockReason | None:
         return BlockReason.POLICY_VIOLATION
     if isinstance(error, OutputUnreadableError):
         return BlockReason.OUTPUT_UNREADABLE
+    if isinstance(error, ToolOutputTrustError):
+        return BlockReason.RUN_HALTED if error.aborted else BlockReason.OUTPUT_UNTRUSTED
     return None
 
 
@@ -1089,10 +1093,37 @@ def _guard_result(
     guarded = _guard_deferred(result, config, func_name, context, on_refusal)
     if guarded is not None:
         return guarded, [], 0, False
-    result = _guard_nested_deferred(result, config, func_name, context, on_refusal)
-    if not config.sanitize_output or result is None:
-        return result, [], 0, False
-    return _sanitize_tool_output(result, config, func_name)
+    nested = _guard_nested_deferred(result, config, func_name, context, on_refusal)
+    # A container rebuilt around a deferred value keeps its shape: its readable values
+    # are checked, and each value the deferred one produces gets the envelope itself.
+    keep_shape = nested is not result
+    if not config.sanitize_output or nested is None:
+        return _trusted(nested, config, context, envelope=not keep_shape), [], 0, False
+    masked, warnings, count, truncated = _sanitize_tool_output(nested, config, func_name)
+    return _trusted(masked, config, context, envelope=not keep_shape), warnings, count, truncated
+
+
+def _trusted(
+    value: Any,
+    config: AirlockConfig,
+    context: AirlockContext[Any] | None,
+    *,
+    envelope: bool,
+) -> Any:
+    """``value`` after the config's tool-output trust guard, run after masking (V0.10.29).
+
+    Returned as the guard's ``process`` returns it (the untrusted-data envelope by default,
+    or as it was when ``envelope`` is False); ``None`` has nothing to check.
+
+    Raises:
+        ToolOutputTrustError: The guard flagged it under ``on_flag`` ``"typed_error"`` or
+            ``"abort"`` (which has halted the call's run).
+    """
+    guard = config.output_trust_guard
+    if guard is None or value is None:
+        return value
+    safe, _ = guard.process(value, context=context)
+    return safe if envelope else value
 
 
 def _sanitize_stream_item(
@@ -1109,7 +1140,7 @@ def _sanitize_stream_item(
     """
     try:
         return _guard_result(item, config, func_name, context, on_refusal)[0]
-    except OutputUnreadableError as error:
+    except (OutputUnreadableError, ToolOutputTrustError) as error:
         _report_refusal(on_refusal, error)
         raise
 
@@ -2043,6 +2074,13 @@ class Airlock:
                             "flatter result may succeed."
                         ],
                     )
+                elif isinstance(error, ToolOutputTrustError):
+                    response = handle_output_untrusted(
+                        func_name,
+                        verdicts=sorted({s.verdict.value for s in error.decision.signals}),
+                        fix_hints=error.fix_hints,
+                        aborted=error.aborted,
+                    )
                 else:
                     response = AirlockResponse.blocked_response(
                         reason=reason,
@@ -2087,6 +2125,13 @@ class Airlock:
                 )
             except OutputUnreadableError as error:
                 refusal = _refuse_after_run(error, BlockReason.OUTPUT_UNREADABLE)
+                raise _ResultRefused(refusal.to_dict()) from error
+            except ToolOutputTrustError as error:
+                # V0.10.29: the trust guard flagged the result under typed_error or abort.
+                # Refused, never replaced by a placeholder: a placeholder told the agent
+                # nothing, so it called the tool again (google/adk-python#6966).
+                reason = BlockReason.RUN_HALTED if error.aborted else BlockReason.OUTPUT_UNTRUSTED
+                refusal = _refuse_after_run(error, reason)
                 raise _ResultRefused(refusal.to_dict()) from error
 
             elapsed = time.time() - start_time

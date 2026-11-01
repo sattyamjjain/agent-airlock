@@ -260,7 +260,12 @@ src/agent_airlock/
    returned as-is and its detections reported as not masked, numbers no detector matches
    unread, bytes decoded and each value's first 100,000 characters read, a value whose
    `str()` raises reported as unreadable; a result too deep to
-   rebuild is refused as `output_unreadable`, after the tool ran) → audit log (`result_preview`
+   rebuild is refused as `output_unreadable`, after the tool ran) → the tool-output trust
+   guard, when `AirlockConfig(output_trust_guard=...)` sets one (V0.10.29, `_trusted`, inside
+   `_guard_result`, so each streamed value is checked as it is produced): its `on_flag`
+   returns a flagged output enveloped, refuses it as `output_untrusted`, or halts the run and
+   refuses it as `run_halted`; `None` is not checked, and a container rebuilt around a
+   deferred value keeps its shape → audit log (`result_preview`
    masked like `args_preview`, whatever `sanitize_output` says; an argument whose `repr()` raises
    (`audit._safe_repr`) or a result whose `str()` raises is previewed as `<TypeName>`, since an
    exception there would escape a call that already ran) → mark untrusted output

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from .honeypot import HoneypotConfig
     from .mcp_proxy_guard import CredentialScope
     from .network import EndpointPolicy, NetworkPolicy
+    from .tool_output_trust_guard import ToolOutputTrustGuard
 
 from .unknown_args import UnknownArgsMode, mode_from_strict_bool
 
@@ -175,6 +176,13 @@ class AirlockConfig:
     # refuses the call. See :class:`agent_airlock.conformance.decision_log.DecisionLog`.
     decision_log: DecisionLog | None = None
 
+    # V0.10.29 — the tool-output trust guard, run on every result after masking (step 8),
+    # streamed values included. A flagged output gets what the guard's on_flag says:
+    # returned enveloped, refused with fix_hints (output_untrusted), or refused with the
+    # run halted (run_halted); none is replaced by a placeholder. See
+    # :class:`agent_airlock.tool_output_trust_guard.ToolOutputTrustGuard`.
+    output_trust_guard: ToolOutputTrustGuard | None = None
+
     # V0.8.25: meant to switch on the fail-closed terminal-claim guard (Goal-Autopilot,
     # arXiv:2606.11688), but nothing reads it: @Airlock checks no terminal claims.
     # Deprecated, removal in v1.0.0, and setting it warns. Until 0.10.19 this comment said
@@ -267,7 +275,20 @@ class AirlockConfig:
             self.audit_log_path = Path(os.environ["AIRLOCK_AUDIT_LOG_PATH"])
 
         self._validate_call_time_checks()
+        self._validate_output_trust_guard()
         self._warn_on_settings_not_applied()
+
+    def _validate_output_trust_guard(self) -> None:
+        """Refuse an ``output_trust_guard`` that is not one, rather than run no guard."""
+        if self.output_trust_guard is None:
+            return
+        from .tool_output_trust_guard import ToolOutputTrustGuard
+
+        if not isinstance(self.output_trust_guard, ToolOutputTrustGuard):
+            raise TypeError(
+                "AirlockConfig.output_trust_guard must be a ToolOutputTrustGuard; got a "
+                f"{type(self.output_trust_guard).__name__}"
+            )
 
     def _validate_call_time_checks(self) -> None:
         """Refuse a token-audience or startup-hook setting that could not apply as written.
