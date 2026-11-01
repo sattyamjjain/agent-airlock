@@ -3171,17 +3171,17 @@
 <tr>
 <td><code>allowed_tools</code></td>
 <td><code>list[str]</code></td>
-<td>Allowlist of tool patterns. Empty allows every tool not denied</td>
+<td>Allowlist of tool patterns. Empty allows every tool not denied. A value that is not a list or tuple of str (<code>None</code>, a bare string) raises <code>TypeError</code></td>
 </tr>
 <tr>
 <td><code>denied_tools</code></td>
 <td><code>list[str]</code></td>
-<td>Denylist of tool patterns. Takes precedence over the allowlist</td>
+<td>Denylist of tool patterns. Takes precedence over the allowlist. Same type check</td>
 </tr>
 <tr>
 <td><code>default_deny</code></td>
 <td><code>bool</code></td>
-<td>With <code>True</code>, an empty allowlist denies every tool</td>
+<td>With <code>True</code>, an empty allowlist denies every tool, refused as <code>empty_allowlist</code> and logged as <code>policy_indeterminate</code></td>
 </tr>
 <tr>
 <td><code>rate_limits</code></td>
@@ -3216,7 +3216,7 @@
 <tr>
 <td><code>approver</code></td>
 <td><code>Approver \| None</code></td>
-<td>Transport that asks the human. A matched escalation with no approver is refused</td>
+<td>Transport that asks the human. A matched escalation with no approver is refused. It runs in a worker thread and must answer within <code>escalation_timeout_seconds</code> (default 300): no answer in time is refused as <code>escalation_timeout</code>, and a later answer is dropped, so an approver must not act after its deadline. An answer that is not an <code>OversightResponse</code> with an <code>OversightVerdict</code> verdict (the string <code>"grant"</code>, <code>None</code>, an exception) is refused as <code>policy_indeterminate</code>. On an async tool the event loop keeps running while it decides, and an <code>async</code> approver is awaited</td>
 </tr>
 <tr>
 <td><code>model_tier_budget</code></td>

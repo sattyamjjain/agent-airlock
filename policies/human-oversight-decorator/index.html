@@ -2850,7 +2850,11 @@ phase:</p>
 </tr>
 <tr>
 <td><code>oversight.timeout</code></td>
-<td>Approver returned <code>TIMEOUT</code></td>
+<td>Approver returned <code>TIMEOUT</code>, or gave no answer within <code>timeout_seconds</code></td>
+</tr>
+<tr>
+<td><code>oversight.indeterminate</code></td>
+<td>Approver's answer is not an <code>OversightResponse</code> with an <code>OversightVerdict</code> verdict (the decorator then raises <code>OversightTimeoutError</code>)</td>
 </tr>
 </tbody>
 </table>
@@ -2871,10 +2875,18 @@ loudly rather than silently letting a wrong-tool decision through.</p>
   can multiplex inside their approver.</li>
 <li>No bundled transports. Operators wire Slack / PagerDuty / CLI
   themselves.</li>
-<li>Sync <code>approver(request)</code> blocks the calling thread until it
-  returns. If the operator's approver needs a long-running wait,
-  it should respect <code>request.timeout_seconds</code> and return
-  <code>OversightVerdict.TIMEOUT</code> when the budget is exhausted.</li>
+<li>The approver runs in a daemon worker thread and gets
+  <code>timeout_seconds</code> to answer (enforced since 0.10.29; until then
+  the budget was only echoed on the request). No answer in time
+  raises <code>OversightTimeoutError</code>, and an answer that arrives later
+  is dropped, never applied. The thread is not stopped, so an
+  approver must not act on its own decision after the deadline: a
+  transport that, say, posts "approved" back to a ticket after
+  <code>request.timeout_seconds</code> reports something that did not happen.</li>
+<li>A verdict must be an <code>OversightVerdict</code> member. The string
+  <code>"grant"</code> compares equal to <code>OversightVerdict.GRANT</code> (it is a
+  <code>str</code> enum), so the decorator checks with <code>isinstance</code> and treats
+  anything else as no approval.</li>
 </ul>
 <h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
 <ul>
