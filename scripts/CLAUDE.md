@@ -38,7 +38,7 @@ make check-registry-parity-distance     # release-only: refuse to skip a version
 What CI runs — `ci.yml` jobs, on PRs and pushes to `main`:
 
 - `test` (full Python matrix) — installs `.[dev,redis,mcp,crypto]`, imports the redis,
-  FastMCP and cryptography extras, then runs the five extra-backed test files and fails
+  FastMCP and cryptography extras, then runs the extra-backed test files and fails
   unless their summary is passes only (a skip, xfail, error or failure fails it); ruff
   check, mypy, pytest with the coverage floor; on 3.11 only, `generate_benchmark.py
   --check` and a pytest-benchmark smoke run that asserts the suite executes (deliberately

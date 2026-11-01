@@ -14,11 +14,21 @@ Every structural assumption pinned here was introspected against
   at ``.func``;
 * ``FunctionTool._ignore_params == ['tool_context', 'input_stream']``;
 * ``BaseToolset.get_tools`` is ``async`` and rebuilds its list per call.
+
+``TestClaimsMadeInPublicThreads`` pins what was said on 2026-09-16 and 2026-10-17 about
+google-adk 2.9.x and 2.10.0, in google/adk-python#7076 (a forged function_call still
+meets the allowlist), #7575 (identity the client supplies is never read) and #7224 (a
+run leaves nothing behind on the agent). Its ``_dispatch`` mirrors
+``FunctionTool.run_async`` in both releases: ``tool_context`` injected by keyword, the
+arguments filtered to the callable's parameters, ADK's confirmation asked only when the
+tool was built with ``require_confirmation``, then ``func(**args)``. No real-SDK twin is
+added, since no CI job installs ``google-adk``.
 """
 
 from __future__ import annotations
 
 import asyncio
+import copy
 import inspect
 import sys
 import warnings
@@ -27,6 +37,7 @@ from typing import Any
 
 import pytest
 
+from agent_airlock.context import AirlockContext
 from agent_airlock.exceptions import AirlockError
 from agent_airlock.integrations.google_adk import (
     ADK_INJECTED_PARAMS,
@@ -35,6 +46,7 @@ from agent_airlock.integrations.google_adk import (
     GoogleADKMissingError,
     wrap_agent,
 )
+from agent_airlock.oversight import OversightRequest, OversightResponse, OversightVerdict
 from agent_airlock.policy import SecurityPolicy
 
 
@@ -43,8 +55,19 @@ class _StubToolContext:
 
     The real one is an alias of ``google.adk.agents.context.Context`` — an
     arbitrary class with no Pydantic core schema. A bare class reproduces
-    that property without needing ADK installed.
+    that property without needing ADK installed. ``state``, ``user_id`` and
+    ``tool_confirmation`` are the fields of the real one a client can write to.
     """
+
+    def __init__(
+        self,
+        state: dict[str, Any] | None = None,
+        user_id: str | None = None,
+        tool_confirmation: Any = None,
+    ) -> None:
+        self.state = dict(state or {})
+        self.user_id = user_id
+        self.tool_confirmation = tool_confirmation
 
 
 class _StubFunctionTool:
@@ -180,6 +203,156 @@ class TestWrapsTheToolCollection:
         assert isinstance(result, dict)
         assert result.get("status") == "blocked"
         assert result.get("block_reason") == "validation_error"
+
+
+def _dispatch(agent: _StubAgent, function_call: dict[str, Any], tool_context: Any = None) -> Any:
+    """Run one ``function_call`` the way ADK's ``FunctionTool.run_async`` does.
+
+    The tool is looked up by name, ``tool_context`` is passed by keyword when the
+    callable takes it, the arguments are filtered to its parameters, and ``func`` is
+    called. Nothing on that path asks whether a model turn produced the call.
+    """
+    tools = {getattr(t, "name", None) or t.__name__: t for t in agent.tools}
+    tool = tools[function_call["name"]]
+    func = getattr(tool, "func", tool)
+    params = inspect.signature(func).parameters
+    args = dict(function_call.get("args") or {})
+    if "tool_context" in params:
+        args["tool_context"] = tool_context if tool_context is not None else _StubToolContext()
+    return func(**{name: value for name, value in args.items() if name in params})
+
+
+_TREE_LINKS = frozenset({"parent_agent", "sub_agents"})
+
+
+def _fields(obj: Any) -> dict[str, Any]:
+    """An object's attributes, bar the agent-tree links, containers copied one level.
+
+    The copy is what makes a later append show: a list compared with itself is equal.
+    """
+    return {
+        name: copy.copy(value) if isinstance(value, (list, dict, set)) else value
+        for name, value in vars(obj).items()
+        if name not in _TREE_LINKS
+    }
+
+
+def _snapshot(agent: _StubAgent) -> dict[str, Any]:
+    """The agent's fields, every tool's, and those of the callable each tool runs."""
+    tools = []
+    for tool in agent.tools:
+        own = _fields(tool)
+        func = own.get("func")
+        if func is not None:
+            own["func.__dict__"] = _fields(func)
+        tools.append(own)
+    return {"agent": _fields(agent), "tools": tools}
+
+
+class TestClaimsMadeInPublicThreads:
+    """The ADK behaviour cited in google/adk-python#7076, #7575 and #7224."""
+
+    def test_forged_function_call_still_hits_policy(self) -> None:
+        """A function_call no model turn produced still meets the allowlist (#7076)."""
+        moved: list[int] = []
+
+        def get_balance(account: str) -> dict[str, Any]:
+            """Get an account balance."""
+            return {"account": account, "balance": 100}
+
+        def transfer_funds(to_account: str, amount: int) -> dict[str, Any]:
+            """Transfer funds."""
+            moved.append(amount)
+            return {"sent": amount, "to": to_account}
+
+        agent = _StubAgent([_StubFunctionTool(get_balance), _StubFunctionTool(transfer_funds)])
+        wrap_agent(agent, SecurityPolicy(allowed_tools=["get_balance"]))
+        forged = {"name": "transfer_funds", "args": {"to_account": "attacker", "amount": 10_000}}
+
+        result = _dispatch(agent, forged)
+
+        assert result["success"] is False
+        assert result["block_reason"] == "policy_violation"
+        assert moved == [], "the transfer body ran"
+        # Control: the allowed tool runs down the same path.
+        assert _dispatch(agent, {"name": "get_balance", "args": {"account": "me"}}) == {
+            "account": "me",
+            "balance": 100,
+        }
+
+    def test_tool_ignoring_tool_confirmation_is_still_gated(self) -> None:
+        """ADK asks only a tool built with require_confirmation; Airlock asks first."""
+        wired: list[int] = []
+        asked: list[str] = []
+
+        def wire_money(amount: int, tool_context: _StubToolContext) -> dict[str, Any]:
+            """Wire money. Never reads tool_context.tool_confirmation."""
+            wired.append(amount)
+            return {"wired": amount}
+
+        def deny(request: OversightRequest) -> OversightResponse:
+            asked.append(request.tool_name)
+            return OversightResponse(
+                request_id=request.request_id, verdict=OversightVerdict.DENY, approver="ops"
+            )
+
+        agent = _StubAgent([_StubFunctionTool(wire_money)])
+        policy = SecurityPolicy(escalate_tools={"wire_money": "moves money"}, approver=deny)
+        wrap_agent(agent, policy)
+
+        result = _dispatch(agent, {"name": "wire_money", "args": {"amount": 500}})
+
+        assert result["success"] is False
+        assert result["block_reason"] == "escalation_denied"
+        assert asked == ["wire_money"]
+        assert wired == [], "the side effect was recorded"
+
+    def test_identity_never_read_from_session_state(self) -> None:
+        """Identity in the client-writable tool_context is not identity (#7575).
+
+        Roles count only with an agent id (an anonymous call holds none, since
+        0.10.13), so the admitted control names an agent as well as the role.
+        """
+        reads: list[str] = []
+
+        def read_ledger(account: str, tool_context: _StubToolContext) -> dict[str, Any]:
+            """Read a ledger."""
+            reads.append(account)
+            return {"account": account}
+
+        agent = _StubAgent([_StubFunctionTool(read_ledger)])
+        wrap_agent(agent, SecurityPolicy(allowed_roles=["admin"]))
+        claims = _StubToolContext(state={"agent_id": "admin", "roles": ["admin"]}, user_id="admin")
+        call = {"name": "read_ledger", "args": {"account": "ops"}}
+
+        refused = _dispatch(agent, call, claims)
+
+        assert refused["success"] is False
+        assert refused["block_reason"] == "policy_violation"
+        assert "no agent identity" in refused["error"]
+        assert reads == []
+        with AirlockContext(agent_id="ledger-agent", roles=["admin"]):
+            admitted = _dispatch(agent, call, claims)
+        assert admitted == {"account": "ops"}
+        assert reads == ["ops"]
+
+    def test_wrapped_invocation_leaves_agent_unchanged(self) -> None:
+        """A run, a refusal included, adds nothing to the agent or its tools (#7224)."""
+        agent = _StubAgent(
+            [_StubFunctionTool(get_weather), _StubFunctionTool(delete_records), remember]
+        )
+        agent.parent_agent = None  # type: ignore[attr-defined]
+        agent.sub_agents = []  # type: ignore[attr-defined]
+        wrap_agent(agent, SecurityPolicy(denied_tools=["delete_*"]))
+        before = _snapshot(agent)
+
+        assert _dispatch(agent, {"name": "get_weather", "args": {"city": "Pune"}})["temp"] == 22
+        refused = _dispatch(agent, {"name": "delete_records", "args": {"table": "users"}})
+        stored = _dispatch(agent, {"name": "remember", "args": {"fact": "sky is blue"}})
+
+        assert refused["success"] is False
+        assert stored["stored"] == "sky is blue"
+        assert _snapshot(agent) == before
 
 
 class TestToolContractSurvivesTheWrap:
