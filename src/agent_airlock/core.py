@@ -81,11 +81,13 @@ from ._arg_walk import (
     ArgumentNestingError,
     ArgumentValue,
     bind_arguments,
+    injected_params,
     iter_argument_values,
     named_models,
     path_text,
     signature_of,
     url_text,
+    without_injected,
 )
 from ._log import structlog
 from ._sandbox_errors import SandboxError
@@ -1627,6 +1629,9 @@ class Airlock:
         # Positional arguments are named against this signature for the gates that read
         # argument values (`_arg_walk.bind_arguments`); built once, not per call.
         call_signature = signature_of(func)
+        # V0.10.29: the parameters an adapter's framework injects (a pydantic-ai RunContext)
+        # are not the model's arguments, so no approval digest covers them.
+        injected = injected_params(func)
         is_async = asyncio.iscoroutinefunction(func)
         # The wrapper this decorator returns: assigned below, read by the capability gate
         # at call time, because ``@requires`` applied above ``@Airlock`` sets its attribute
@@ -1809,7 +1814,10 @@ class Airlock:
             )
             skip_first = run_wrapper is not None and run_wrapper.host_object
             call = _BoundCall(
-                lambda: bind_arguments(call_signature, args, cleaned_kwargs, skip_first=skip_first)
+                lambda: without_injected(
+                    bind_arguments(call_signature, args, cleaned_kwargs, skip_first=skip_first),
+                    injected,
+                )
             )
             context._call = call
 

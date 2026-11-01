@@ -268,7 +268,7 @@ def _guard(
     """
     proxy = named_tool_proxy(forward, name=name, relaxed_params=_filled_params(forward))
     guarded: Callable[..., Any] = airlock(proxy)
-    mark_guarded(guarded, *settings)
+    mark_guarded(guarded, *settings, beneath=forward)
     return guarded
 
 

@@ -62,7 +62,7 @@ import functools
 import inspect
 import warnings
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .._log import structlog
@@ -70,6 +70,7 @@ from ..core import Airlock
 from ..exceptions import AirlockError
 from ..policy import SecurityPolicy
 from ._tool_proxy import already_guarded, guarded_with, mark_guarded, named_tool_proxy
+from .pydantic_ai_approvals import Deferral, RejectionTracker, deferring, run_toolset
 
 logger = structlog.get_logger("agent-airlock.integrations.pydantic_ai")
 
@@ -148,14 +149,30 @@ def _guard_callable(
     *,
     name: str,
     policy: SecurityPolicy | None,
+    deferral: Deferral | None = None,
 ) -> Callable[..., Any]:
-    """``forward`` behind a new ``Airlock``, re-tagged with the tool's name and contract."""
+    """``forward`` behind a new ``Airlock``, re-tagged with the tool's name and contract.
+
+    With a ``deferral`` (``defer_escalations=True``), a call the policy escalates is
+    deferred to pydantic-ai's approvals before the ``Airlock`` runs (V0.10.29).
+    """
     # The proxy carries the tool's name, so SecurityPolicy lists match the tool rather
     # than `function`, and the tool's signature, so Airlock validates it.
     proxy = named_tool_proxy(forward, name=name, relaxed_params=_run_context_params(tool, forward))
     airlock = Airlock(policy=policy) if policy is not None else Airlock()
     wrapped: Callable[..., Any] = airlock(proxy)
-    mark_guarded(wrapped, policy)
+    if deferral is not None and policy is not None:
+        wrapped = deferring(
+            wrapped,
+            proxy=proxy,
+            name=name,
+            policy=policy,
+            takes_ctx=bool(getattr(tool, "takes_ctx", False)),
+            deferral=deferral,
+        )
+        mark_guarded(wrapped, policy, deferral, beneath=forward)
+    else:
+        mark_guarded(wrapped, policy, beneath=forward)
     return wrapped
 
 
@@ -220,6 +237,22 @@ class PydanticAIAdapter:
 
     attach_output_validate: bool = True
     warn_on_unwrappable: bool = True
+    defer_escalations: bool = False
+    approval_ttl_seconds: float = 60.0
+    log_rejections: bool = True
+    _deferral: Deferral | None = field(default=None, init=False, repr=False)
+    _rejections: RejectionTracker | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.defer_escalations:
+            self._deferral = Deferral(grant_ttl_seconds=self.approval_ttl_seconds)
+        if self.log_rejections:
+            self._rejections = RejectionTracker()
+
+    def _settings(self, policy: SecurityPolicy | None) -> tuple[object, ...]:
+        """What a shim this adapter installs is built from: a wrap that asks for something
+        else (deferred approvals or not) gets its own layer rather than being skipped."""
+        return (policy,) if self._deferral is None else (policy, self._deferral)
 
     def wrap_agent(self, agent: Any, *, policy: SecurityPolicy | None = None) -> Any:
         """Wrap a PydanticAI ``Agent`` so every tool routes through Airlock.
@@ -254,6 +287,7 @@ class PydanticAIAdapter:
                 ``tools``, so it's not a recognised PydanticAI shape.
         """
         self._maybe_check_sdk(agent)
+        self._check_deferrable(policy)
         unwrappable: list[tuple[int, str]] = []
         wrapped_count = self._wrap_toolsets_or_tools(agent, policy=policy, report=unwrappable)
         output_toolset = getattr(agent, "_output_toolset", None)
@@ -273,6 +307,32 @@ class PydanticAIAdapter:
         )
         self._warn_unwrappable([description for _, description in unwrappable])
         return agent
+
+    def _check_deferrable(self, policy: SecurityPolicy | None) -> None:
+        """Refuse ``defer_escalations`` that could not work, before any tool is wrapped.
+
+        An approved call is admitted through the policy's ``approval_ledger``, and the
+        deferral is pydantic-ai's own ``ApprovalRequired``: without either, every escalated
+        call would be refused however it was approved.
+
+        Raises:
+            AirlockError: ``defer_escalations`` with no policy, or one with no
+                ``approval_ledger``.
+            PydanticAIMissingError: pydantic-ai, which defines ``ApprovalRequired``, is not
+                installed.
+        """
+        if self._deferral is None:
+            return
+        if policy is None or policy.approval_ledger is None:
+            raise AirlockError(
+                "defer_escalations needs a SecurityPolicy with an approval_ledger "
+                "(InMemoryApprovalLedger, or SQLiteApprovalLedger shared by replicas): an "
+                "approved call is admitted by claiming the approval recorded there"
+            )
+        try:
+            from pydantic_ai.exceptions import ApprovalRequired  # noqa: F401
+        except ImportError as exc:
+            raise PydanticAIMissingError(_INSTALL_HINT) from exc
 
     def _wrap_toolsets_or_tools(
         self, agent: Any, *, policy: SecurityPolicy | None, report: list[tuple[int, str]]
@@ -380,7 +440,7 @@ class PydanticAIAdapter:
         the run context; there is nothing static to wrap. Its per-run copies are made from
         the same ``toolset_func`` attribute, so they inherit the re-pointed factory.
         """
-        if already_guarded(factory, policy, tool=_describe_toolset(toolset)):
+        if already_guarded(factory, *self._settings(policy), tool=_describe_toolset(toolset)):
             return
         adapter = self
 
@@ -401,7 +461,7 @@ class PydanticAIAdapter:
                 return walk_when_built()
             return walk_built(built)
 
-        mark_guarded(guarded_factory, policy)
+        mark_guarded(guarded_factory, *self._settings(policy), beneath=factory)
         toolset.toolset_func = guarded_factory
 
     def _hook_run_toolsets(self, agent: Any, *, policy: SecurityPolicy | None) -> bool:
@@ -427,7 +487,7 @@ class PydanticAIAdapter:
                     stacklevel=4,
                 )
             return False
-        if already_guarded(original, policy, tool="the agent's run toolsets"):
+        if already_guarded(original, *self._settings(policy), tool="the agent's run toolsets"):
             return True
 
         adapter = self
@@ -452,9 +512,13 @@ class PydanticAIAdapter:
             fresh = [(key, description) for key, description in report if key not in warned]
             warned.update(key for key, _ in fresh)
             adapter._warn_unwrappable([description for _, description in fresh])
-            return toolset
+            if adapter._deferral is None and adapter._rejections is None:
+                return toolset
+            # V0.10.29: hands each call's run context to the deferral (a tool_plain tool
+            # gets none) and logs the calls pydantic-ai rejects before any tool runs.
+            return run_toolset(toolset, tracker=adapter._rejections)
 
-        mark_guarded(guarded_get_toolset, policy)
+        mark_guarded(guarded_get_toolset, *self._settings(policy), beneath=original)
         agent._get_toolset = guarded_get_toolset
         return True
 
@@ -499,7 +563,8 @@ class PydanticAIAdapter:
         whether or not it is the same object as ``tool.function``. A tool whose call path
         is already guarded is left alone (idempotent per tool).
         """
-        if already_guarded(_call_path(tool), policy, tool=name):
+        settings = self._settings(policy)
+        if already_guarded(_call_path(tool), *settings, tool=name):
             return tool
 
         target_attr: str | None = None
@@ -522,8 +587,8 @@ class PydanticAIAdapter:
 
         wrapped = (
             forward
-            if guarded_with(forward, policy)
-            else _guard_callable(tool, forward, name=name, policy=policy)
+            if guarded_with(forward, *settings)
+            else _guard_callable(tool, forward, name=name, policy=policy, deferral=self._deferral)
         )
         schema: Any = getattr(tool, "function_schema", None)
         schema_function = getattr(schema, "function", None)
@@ -533,7 +598,9 @@ class PydanticAIAdapter:
             schema.function = (
                 wrapped
                 if schema_function is forward
-                else _guard_callable(tool, schema_function, name=name, policy=policy)
+                else _guard_callable(
+                    tool, schema_function, name=name, policy=policy, deferral=self._deferral
+                )
             )
 
         if target_attr is not None:

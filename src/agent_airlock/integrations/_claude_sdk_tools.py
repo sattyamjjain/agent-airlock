@@ -122,7 +122,7 @@ def guard_sdk_tool(tool: Any, *, policy: SecurityPolicy | None = None) -> Any:
         result = await airlocked(**dict(args or {}))
         return _sdk_error_result(result) if _is_refusal(result) else result
 
-    mark_guarded(handler, policy)
+    mark_guarded(handler, policy, beneath=tool.handler)
     guarded = copy.copy(tool)
     guarded.handler = handler
     return guarded

@@ -195,6 +195,35 @@ class BoundArguments(dict[str, Any]):
     named_models: NamedModels | None = None
 
 
+#: Where an adapter's proxy names the parameters its framework injects, a run context the
+#: model never writes (``integrations._tool_proxy.named_tool_proxy``, V0.10.29).
+INJECTED_PARAMS_ATTR = "__airlock_injected_params__"
+
+
+def injected_params(func: Any) -> frozenset[str]:
+    """The framework-injected parameter names ``func`` declares; none when it declares none."""
+    declared = getattr(func, INJECTED_PARAMS_ATTR, None)
+    if not isinstance(declared, frozenset | set | tuple | list):
+        return frozenset()
+    return frozenset(name for name in declared if isinstance(name, str))
+
+
+def without_injected(arguments: BoundArguments, injected: frozenset[str]) -> BoundArguments:
+    """``arguments`` without the parameters a framework injects (V0.10.29).
+
+    An approval binds to the arguments the model wrote. Until 0.10.29 a pydantic-ai tool
+    that takes a ``RunContext`` had that context in its digest, the run's messages and
+    usage included, so an approval a host recorded for the model's arguments never matched.
+    """
+    if not injected:
+        return arguments
+    kept = BoundArguments(
+        (name, value) for name, value in arguments.items() if name not in injected
+    )
+    kept.named_models = arguments.named_models
+    return kept
+
+
 #: Annotations that could not be read name every model: the walk then reads them all.
 _ANY_MODEL: tuple[type, ...] = (BaseModel,)
 

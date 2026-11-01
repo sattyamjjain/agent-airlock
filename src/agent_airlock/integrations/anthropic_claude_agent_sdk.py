@@ -292,7 +292,7 @@ class AnthropicClaudeAgentSDKAdapter:
         # validates it, and is async when the tool is.
         airlock = Airlock(policy=policy) if policy is not None else Airlock()
         wrapped = airlock(named_tool_proxy(forward, name=name))
-        mark_guarded(wrapped, policy)
+        mark_guarded(wrapped, policy, beneath=forward)
 
         if hasattr(tool, "forward"):
             # Tool object (non-function): mutate in place. Use setattr so
