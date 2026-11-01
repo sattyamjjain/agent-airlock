@@ -71,7 +71,11 @@ class TestCVE2026_26118:
 
     def test_endpoint_policy_allows_legitimate_azure_resource_url(self) -> None:
         """A legitimate Azure Resource Manager URL is not flagged by default."""
-        policy = EndpointPolicy(allowed_endpoints=["management.azure.com"])
+        # Since 0.10.29 an admitted name is resolved; a stub answer keeps this control
+        # about the allowlist rather than the CI runner's DNS.
+        policy = EndpointPolicy(
+            allowed_endpoints=["management.azure.com"], resolver=lambda h: ["93.184.216.34"]
+        )
         validate_endpoint(
             "https://management.azure.com/subscriptions/abc/resourceGroups?api-version=2024-01-01",
             policy,
