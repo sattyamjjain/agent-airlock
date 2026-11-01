@@ -44,6 +44,8 @@ from __future__ import annotations
 
 import enum
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -85,18 +87,30 @@ class AmplificationBudget:
             that makes 50% more calls than declared. Needs ``baseline_calls_per_run``.
         action: ``"block"`` refuses the call; ``"warn"`` records the verdict and lets it
             through, for operators establishing a baseline before enforcing one.
+        max_wall_seconds: Ceiling on how long one run may keep calling tools, measured
+            from its first call (V0.10.29). A call at or after the deadline is over budget.
     """
 
     baseline_calls_per_run: int | None = None
     max_calls_per_run: int | None = None
     max_amplification_ratio: float | None = None
     action: Literal["block", "warn"] = "block"
+    max_wall_seconds: float | None = None
+
+    def __post_init__(self) -> None:
+        wall = self.max_wall_seconds
+        if wall is not None and not (wall == wall and wall > 0):  # wall == wall: not NaN
+            raise ValueError(f"max_wall_seconds must be a positive number; got {wall!r}")
 
     def is_configured(self) -> bool:
         """True when at least one enforceable threshold is set."""
-        if self.max_calls_per_run is not None:
+        if self.max_calls_per_run is not None or self.max_wall_seconds is not None:
             return True
         return self.max_amplification_ratio is not None and self.baseline_calls_per_run is not None
+
+
+#: The clock run durations are measured on; a module attribute so tests can move it.
+_now: Callable[[], float] = time.monotonic
 
 
 @dataclass
@@ -105,8 +119,12 @@ class RunLedger:
 
     call_count: int = 0
     input_tokens: int = 0
+    #: When the run's first call was recorded, on :data:`_now`'s clock (V0.10.29).
+    started_at: float | None = None
 
     def record(self, input_tokens: int | None) -> None:
+        if self.started_at is None:
+            self.started_at = _now()
         self.call_count += 1
         if input_tokens:
             self.input_tokens += int(input_tokens)
@@ -197,6 +215,7 @@ class AmplificationGuard:
             ledger.record(input_tokens)
             count = ledger.call_count
             tokens = ledger.input_tokens or None
+            elapsed = _now() - (ledger.started_at or 0.0)
 
         budget = self.budget
         baseline = budget.baseline_calls_per_run
@@ -217,8 +236,15 @@ class AmplificationGuard:
             return _decide(
                 AmplificationVerdict.UNCONFIGURED,
                 "amplification checking is enabled but no threshold is set "
-                "(set max_calls_per_run, or max_amplification_ratio with "
-                "baseline_calls_per_run); blocked deny-by-default",
+                "(set max_calls_per_run, max_wall_seconds, or max_amplification_ratio "
+                "with baseline_calls_per_run); blocked deny-by-default",
+            )
+
+        if budget.max_wall_seconds is not None and elapsed >= budget.max_wall_seconds:
+            return _decide(
+                AmplificationVerdict.OVER_BUDGET,
+                f"run has been calling tools for {elapsed:.1f}s, at or over the declared "
+                f"wall-clock cap of {budget.max_wall_seconds:g}s",
             )
 
         if budget.max_calls_per_run is not None and count > budget.max_calls_per_run:

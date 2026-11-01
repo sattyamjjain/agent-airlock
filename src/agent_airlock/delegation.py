@@ -204,6 +204,21 @@ def _rate_problem(child: SecurityPolicy, parent: SecurityPolicy) -> str | None:
     return f"rate_limits: {wider} are not lower than the parent's" if wider else None
 
 
+def _rate_mode_problem(child: SecurityPolicy, parent: SecurityPolicy) -> str | None:
+    """How the limits apply: every matching pattern's, and one bucket for every agent."""
+    if parent.rate_limit_mode == "all" and child.rate_limit_mode != "all":
+        return (
+            "rate_limit_mode: the child spends only its most specific pattern's token, "
+            "where the parent spends one from every pattern that matches"
+        )
+    if parent.rate_limit_scope == "policy" and child.rate_limit_scope != "policy":
+        return (
+            "rate_limit_scope: the child gives each agent its own bucket, where the "
+            "parent's agents share one"
+        )
+    return None
+
+
 def _identity_problem(child: SecurityPolicy, parent: SecurityPolicy) -> str | None:
     if parent.require_agent_id and not child.require_agent_id:
         return "require_agent_id: the child admits calls that name no agent"
@@ -277,6 +292,9 @@ def _budget_problem(child: SecurityPolicy, parent: SecurityPolicy) -> str | None
         return "amplification_budget: the child's max_calls_per_run is above the parent's"
     if not _ratio_within(mine, theirs):
         return "amplification_budget: the child's amplification ratio is looser than the parent's"
+    wall = theirs.max_wall_seconds
+    if wall is not None and (mine.max_wall_seconds is None or mine.max_wall_seconds > wall):
+        return "amplification_budget: the child's max_wall_seconds is above the parent's"
     return None
 
 
@@ -285,6 +303,7 @@ _RULES: tuple[Callable[[SecurityPolicy, SecurityPolicy], str | None], ...] = (
     _denylist_problem,
     _window_problem,
     _rate_problem,
+    _rate_mode_problem,
     _identity_problem,
     _reauth_problem,
     _escalation_problem,
@@ -299,6 +318,8 @@ _COMPARED = frozenset(
         "denied_tools",
         "time_restrictions",
         "rate_limits",
+        "rate_limit_mode",
+        "rate_limit_scope",
         "require_agent_id",
         "allowed_roles",
         "reauth_on_untrusted_reinvocation",

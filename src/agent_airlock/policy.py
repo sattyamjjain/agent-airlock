@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from dataclasses import fields as dc_fields
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NoReturn
 
 from ._log import structlog
 from .amplification import AmplificationBudget, AmplificationGuard
@@ -163,6 +163,9 @@ class PolicyEscalation(PolicyViolation):
         self.tool_name = tool_name
         self.reason = reason
         self.rule = rule
+        # V0.10.29: the rate tokens the call took before it escalated, which a refusal by
+        # the approver gives back. Set by SecurityPolicy.check.
+        self.rate_charge: RateCharge | None = None
         super().__init__(
             message,
             violation_type=ViolationType.ESCALATION_REQUIRED.value,
@@ -322,11 +325,47 @@ class RateLimit:
             self._refill()
             return int(self.tokens)
 
+    def release(self, tokens: int = 1) -> None:
+        """Give back tokens a call took and did not use, up to the bucket's size (V0.10.29)."""
+        with self._lock:
+            self._refill()
+            self.tokens = min(float(self.max_tokens), self.tokens + tokens)
+
     def seconds_until_available(self, tokens: int = 1) -> int:
         """Whole seconds until ``tokens`` can be acquired; 0 when they can be now."""
         with self._lock:
             self._refill()
             return _seconds_to_refill(tokens - self.tokens, self)
+
+
+@dataclass
+class RateCharge:
+    """The rate tokens one call took, so a call refused after it took them gives them back.
+
+    ``SecurityPolicy.check`` returns one, and a :class:`PolicyEscalation` carries one on
+    ``rate_charge``: escalation is checked after the rate limit, so a call the approver
+    then refuses has already been charged.
+    """
+
+    limiters: list[RateLimit] = field(default_factory=list)
+    _refunded: bool = field(default=False, repr=False)
+
+    def refund(self) -> None:
+        """Give each token back, once."""
+        if self._refunded:
+            return
+        self._refunded = True
+        for limiter in self.limiters:
+            limiter.release()
+
+
+def _budget_payload(budget: AmplificationBudget) -> dict[str, Any]:
+    """An amplification budget for the policy digest; ``max_wall_seconds`` (V0.10.29) only
+    when set, so a budget without it keeps its 0.10.28 digest."""
+    payload = dc_asdict(budget)
+    if payload.get("max_wall_seconds") is None:
+        payload.pop("max_wall_seconds", None)
+    return payload
 
 
 def _seconds_to_refill(missing: float, limit: RateLimit) -> int:
@@ -433,6 +472,12 @@ class SecurityPolicy:
     denied_tools: list[str] = field(default_factory=list)
     time_restrictions: dict[str, str] = field(default_factory=dict)
     rate_limits: dict[str, str] = field(default_factory=dict)
+    # V0.10.29: "most_specific" applies only the most specific matching rate pattern, as
+    # before; "all" needs a token from every matching pattern, so a "*" ceiling holds over
+    # a tool with its own pattern. "agent" scope keeps a bucket per agent id (one shared
+    # bucket for calls with none) instead of one for every agent the policy serves.
+    rate_limit_mode: Literal["most_specific", "all"] = "most_specific"
+    rate_limit_scope: Literal["policy", "agent"] = "policy"
     require_agent_id: bool = False
     allowed_roles: list[str] = field(default_factory=list)
     # V0.4.0 capability gating
@@ -575,6 +620,8 @@ class SecurityPolicy:
     # V0.10.29: ids of revoked standing grants. Outside the digest, since a revocation
     # only narrows what the policy admits; freeze() carries it over by hand.
     _revoked_grants: set[str] = field(default_factory=set, repr=False)
+    # V0.10.29: per-agent buckets under rate_limit_scope="agent", by (pattern, agent id).
+    _agent_limiters: dict[tuple[str, str], RateLimit] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         """Check the tool lists and the escalation deadline, then parse time restrictions
@@ -614,6 +661,10 @@ class SecurityPolicy:
         # Parse rate limits
         for pattern, limit_str in self.rate_limits.items():
             self._rate_limiters[pattern] = RateLimit.parse(limit_str)
+        if self.rate_limit_mode not in ("most_specific", "all"):
+            raise ValueError(f"unknown rate_limit_mode {self.rate_limit_mode!r}")
+        if self.rate_limit_scope not in ("policy", "agent"):
+            raise ValueError(f"unknown rate_limit_scope {self.rate_limit_scope!r}")
 
         # V0.8.74: one guard per policy, holding the per-run ledgers.
         if self.amplification_budget is not None:
@@ -744,39 +795,62 @@ class SecurityPolicy:
                 },
             )
 
-    def check_rate_limit(self, tool_name: str) -> None:
-        """Check if a tool call is within rate limits.
+    def check_rate_limit(self, tool_name: str, agent: AgentIdentity | None = None) -> RateCharge:
+        """Take a rate token for a tool call, from each bucket that applies.
+
+        Under ``rate_limit_mode="most_specific"`` one bucket applies, the most specific
+        pattern's; under ``"all"``, every matching pattern's, all or none. Under
+        ``rate_limit_scope="agent"`` each is the agent's own bucket for the pattern.
 
         Args:
             tool_name: Name of the tool to check.
+            agent: The caller, whose bucket ``rate_limit_scope="agent"`` uses.
+
+        Returns:
+            The tokens taken, so a call refused later can give them back.
 
         Raises:
-            PolicyViolation: If rate limit exceeded.
+            PolicyViolation: If a bucket has no token; no token is taken then.
         """
-        matching_patterns = self._find_matching_patterns(tool_name, self._rate_limiters)
+        patterns = self._find_matching_patterns(tool_name, self._rate_limiters)
+        if self.rate_limit_mode == "most_specific":
+            patterns = patterns[:1]
+        charge = RateCharge()
+        for pattern in patterns:
+            limiter = self._limiter_for(pattern, agent)
+            if not limiter.acquire():
+                charge.refund()
+                self._raise_rate_limited(tool_name, pattern, limiter)
+            charge.limiters.append(limiter)
+        return charge
 
-        if not matching_patterns:
-            return  # No rate limit applies
+    def _limiter_for(self, pattern: str, agent: AgentIdentity | None) -> RateLimit:
+        """The bucket a call draws on for ``pattern``: the policy's, or its agent's."""
+        if self.rate_limit_scope == "policy":
+            return self._rate_limiters[pattern]
+        key = (pattern, agent.agent_id if agent is not None else "")
+        with self._lock:
+            limiter = self._agent_limiters.get(key)
+            if limiter is None:
+                limiter = RateLimit.parse(self.rate_limits[pattern])
+                self._agent_limiters[key] = limiter
+            return limiter
 
-        # Use most specific matching pattern
-        pattern = matching_patterns[0]
-        limiter = self._rate_limiters[pattern]
-
-        if not limiter.acquire():
-            raise PolicyViolation(
-                f"Rate limit exceeded for tool '{tool_name}'. Limit: {self.rate_limits[pattern]}",
-                violation_type=ViolationType.RATE_LIMITED.value,
-                details={
-                    "tool": tool_name,
-                    "pattern": pattern,
-                    "limit": self.rate_limits[pattern],
-                    "remaining": limiter.remaining(),
-                    # Until 0.10.18 this was missing, and the refusal told the model to
-                    # wait a flat 60 seconds whatever the limit ("1/hour" included). At
-                    # least 1: the acquire above just failed, whatever refilled since.
-                    "reset_seconds": max(1, limiter.seconds_until_available()),
-                },
-            )
+    def _raise_rate_limited(self, tool_name: str, pattern: str, limiter: RateLimit) -> NoReturn:
+        raise PolicyViolation(
+            f"Rate limit exceeded for tool '{tool_name}'. Limit: {self.rate_limits[pattern]}",
+            violation_type=ViolationType.RATE_LIMITED.value,
+            details={
+                "tool": tool_name,
+                "pattern": pattern,
+                "limit": self.rate_limits[pattern],
+                "remaining": limiter.remaining(),
+                # Until 0.10.18 this was missing, and the refusal told the model to
+                # wait a flat 60 seconds whatever the limit ("1/hour" included). At
+                # least 1: the acquire above just failed, whatever refilled since.
+                "reset_seconds": max(1, limiter.seconds_until_available()),
+            },
+        )
 
     def check_agent_identity(self, agent: AgentIdentity | None) -> None:
         """Check if agent identity meets policy requirements.
@@ -874,7 +948,7 @@ class SecurityPolicy:
         tool_name: str,
         agent: AgentIdentity | None = None,
         dt: datetime | None = None,
-    ) -> None:
+    ) -> RateCharge:
         """Run all policy checks for a tool call.
 
         Args:
@@ -882,8 +956,13 @@ class SecurityPolicy:
             agent: Agent identity (optional).
             dt: Datetime for time checks (defaults to now).
 
+        Returns:
+            The rate tokens the call took (V0.10.29; it returned None), which a caller
+            refusing the call afterwards gives back with ``refund()``.
+
         Raises:
-            PolicyViolation: If any policy check fails.
+            PolicyViolation: If any policy check fails. A :class:`PolicyEscalation`
+                carries the call's tokens on ``rate_charge``.
         """
         logger.debug(
             "policy_check",
@@ -901,15 +980,20 @@ class SecurityPolicy:
         self.check_time_restriction(tool_name, dt)
 
         # Check rate limits
-        self.check_rate_limit(tool_name)
+        charge = self.check_rate_limit(tool_name, agent)
 
         # V0.8.74: escalation is checked LAST, on purpose. Everything above is a
         # denial; reaching here means the call would otherwise be allowed. Only an
         # otherwise-allowable call can be escalated, so a denied tool can never be
         # softened into "ask a human".
-        self.check_escalation(tool_name)
+        try:
+            self.check_escalation(tool_name)
+        except PolicyEscalation as escalation:
+            escalation.rate_charge = charge
+            raise
 
         logger.debug("policy_check_passed", tool=tool_name)
+        return charge
 
     def check_escalation(self, tool_name: str) -> None:
         """Raise :class:`PolicyEscalation` if this tool matches an escalation rule.
@@ -1044,7 +1128,7 @@ class SecurityPolicy:
             # deterministic across processes, and freeze() covers config, not
             # behavior (same treatment as ModelTierBudget's tier_resolver).
             "amplification_budget": (
-                dc_asdict(self.amplification_budget)
+                _budget_payload(self.amplification_budget)
                 if self.amplification_budget is not None
                 else None
             ),
@@ -1069,6 +1153,12 @@ class SecurityPolicy:
             payload["shell_command_policy"] = self.shell_command_policy.canonical()
         if self.effect_guard is not None:
             payload["effect_guard"] = self.effect_guard.canonical()
+        # V0.10.29 settings, present only when changed so a policy that keeps the
+        # defaults keeps the digest it had in 0.10.28.
+        if self.rate_limit_mode != "most_specific":
+            payload["rate_limit_mode"] = self.rate_limit_mode
+        if self.rate_limit_scope != "policy":
+            payload["rate_limit_scope"] = self.rate_limit_scope
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def _compute_policy_digest(self) -> str:
