@@ -3118,6 +3118,10 @@ parent)</code> says what it could not prove. The rules:</p>
 <td>every parent pattern is kept, no looser; a pattern the child adds is no looser than any of the parent's</td>
 </tr>
 <tr>
+<td><code>rate_limit_mode</code>, <code>rate_limit_scope</code></td>
+<td><code>"all"</code> if the parent's is; <code>"policy"</code> (one bucket for every agent) if the parent's is</td>
+</tr>
+<tr>
 <td><code>require_agent_id</code>, <code>allowed_roles</code></td>
 <td>on if the parent's is; the child's roles are among the parent's</td>
 </tr>
@@ -3131,7 +3135,7 @@ parent)</code> says what it could not prove. The rules:</p>
 </tr>
 <tr>
 <td>call budget</td>
-<td>no looser than the parent's</td>
+<td>no looser than the parent's: calls per run, amplification ratio and <code>max_wall_seconds</code></td>
 </tr>
 <tr>
 <td>every other field</td>

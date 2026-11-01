@@ -3964,6 +3964,11 @@ out.</p>
 <td>Corrective suggestions for the LLM</td>
 </tr>
 <tr>
+<td><code>retryable</code></td>
+<td><code>bool</code></td>
+<td>Whether a retry can pass: <code>false</code> for a kill switch, a startup hook, a spent budget, an exceeded amplification budget, a denied escalation, an indeterminate policy, a halted run, a spent run budget, an effect of unknown status and a tool the policy does not allow; <code>true</code> for a validation error, a shell or installer argument refusal and a rate limit (after <code>metadata.reset_seconds</code>). Absent when the refusal does not say</td>
+</tr>
+<tr>
 <td><code>metadata</code></td>
 <td><code>dict</code></td>
 <td>Details, e.g. the function name and the offending arguments</td>
