@@ -96,6 +96,21 @@ class OversightRequest:
             on the decorator. Echoed onto the request so the
             approver can use it for its own poll loops if it wants.
         requested_at: ISO 8601 UTC timestamp when the gate fired.
+        args_digest: The sha256 of the call's bound arguments in canonical JSON
+            (:func:`agent_airlock.approvals.args_digest`). Echo it on the response to
+            bind the decision to these arguments: a response naming another digest is
+            refused. None only on a request built outside this package.
+        args_preview: The bound arguments by name, each masked as an audit preview is
+            (a value under a secret-sounding name replaced outright), for a human to read.
+        agent_id: The calling agent's id, when the call carries one.
+        session_id: The call's session id, when it carries one.
+        policy_digest: The digest of the ``SecurityPolicy`` that escalated, so a decision
+            stored with it can be checked against the policy in force on resume.
+        expires_at: ISO 8601 UTC time after which no answer is taken
+            (``requested_at`` plus the timeout).
+
+    The last six fields arrived in 0.10.29, with defaults, so an approver written for
+    0.10.28 keeps working.
     """
 
     request_id: str
@@ -104,6 +119,12 @@ class OversightRequest:
     channel: str
     timeout_seconds: float
     requested_at: str
+    args_digest: str | None = None
+    args_preview: Mapping[str, str] = field(default_factory=dict)
+    agent_id: str | None = None
+    session_id: str | None = None
+    policy_digest: str | None = None
+    expires_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -118,12 +139,16 @@ class OversightResponse:
         detail: Free-form explanation suitable for audit logs.
         approver: Optional identifier of the human/system that
             decided (e.g. ``"alice@example.com"``, ``"pagerduty-bot"``).
+        args_digest: Optional echo of :attr:`OversightRequest.args_digest`: the
+            arguments the decision was made about. One that differs from the request's
+            is refused (0.10.29); None binds nothing and is read as before.
     """
 
     request_id: str
     verdict: OversightVerdict
     detail: str = ""
     approver: str | None = None
+    args_digest: str | None = None
 
 
 Approver = Callable[[OversightRequest], OversightResponse]
@@ -328,14 +353,7 @@ def requires_human_oversight(
     def decorator(fn: F) -> F:
         @functools.wraps(fn)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
-            request = OversightRequest(
-                request_id=str(uuid.uuid4()),
-                tool_name=fn.__name__,
-                args={"args": args, "kwargs": dict(kwargs)},
-                channel=channel,
-                timeout_seconds=float(timeout_seconds),
-                requested_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
-            )
+            request = _decorator_request(fn, args, kwargs, channel, float(timeout_seconds))
             _emit(
                 audit_emitter,
                 "oversight.request",
@@ -360,8 +378,11 @@ def requires_human_oversight(
                     f"approver returned a response with mismatched request_id: "
                     f"expected {request.request_id!r}, got {response.request_id!r}"
                 )
+            _check_echo(request, response)
 
             if response.verdict is OversightVerdict.GRANT:
+                if _bound_digest(fn, args, kwargs) != request.args_digest:
+                    raise ValueError("the call's arguments changed after the approval was asked")
                 _emit(
                     audit_emitter,
                     "oversight.grant",
@@ -402,6 +423,57 @@ def requires_human_oversight(
         return wrapped  # type: ignore[return-value]
 
     return decorator
+
+
+def _bound_arguments(fn: Callable[..., Any], args: Any, kwargs: Any) -> dict[str, Any]:
+    """The decorated call's arguments by parameter name, or as given when they do not bind."""
+    try:
+        return dict(inspect.signature(fn).bind_partial(*args, **kwargs).arguments)
+    except (TypeError, ValueError):
+        return {"args": list(args), "kwargs": dict(kwargs)}
+
+
+def _bound_digest(fn: Callable[..., Any], args: Any, kwargs: Any) -> str | None:
+    """:func:`~agent_airlock.approvals.args_digest` of the call, None when unreadable."""
+    from .approvals import args_digest
+
+    try:
+        return args_digest(_bound_arguments(fn, args, kwargs))
+    except ValueError:
+        return None
+
+
+def _decorator_request(
+    fn: Callable[..., Any], args: Any, kwargs: Any, channel: str, timeout_seconds: float
+) -> OversightRequest:
+    """The request ``@requires_human_oversight`` asks, bound to the call's arguments."""
+    from .audit import AuditLogger
+
+    now = _dt.datetime.now(_dt.timezone.utc)
+    return OversightRequest(
+        request_id=str(uuid.uuid4()),
+        tool_name=fn.__name__,
+        args={"args": args, "kwargs": dict(kwargs)},
+        channel=channel,
+        timeout_seconds=timeout_seconds,
+        requested_at=now.isoformat(),
+        args_digest=_bound_digest(fn, args, kwargs),
+        args_preview=AuditLogger._redact_args(_bound_arguments(fn, args, kwargs)),
+        expires_at=(now + _dt.timedelta(seconds=timeout_seconds)).isoformat(),
+    )
+
+
+def _check_echo(request: OversightRequest, response: OversightResponse) -> None:
+    """Raise when the decision names arguments other than the request's.
+
+    Raises:
+        ValueError: The response echoes an ``args_digest`` other than the request's.
+    """
+    if response.args_digest is not None and response.args_digest != request.args_digest:
+        raise ValueError(
+            "approver returned a decision about other arguments: expected args_digest "
+            f"{request.args_digest!r}, got {response.args_digest!r}"
+        )
 
 
 def _is_readable(response: Any) -> bool:

@@ -78,6 +78,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from ._log import structlog
+from .approvals import consume_grant
 from .policy import PolicyViolation, ViolationType
 
 logger = structlog.get_logger("agent-airlock.action_contradiction_gate")
@@ -290,6 +291,7 @@ class ActionContradictionGate:
         context: Any,
         tool_name: str,
         session_key: str,
+        args_digest: str | None = None,
     ) -> None:
         """Run all configured detectors against the context; if any
         trips and the tool is a privileged sink, enforce the gate.
@@ -303,6 +305,9 @@ class ActionContradictionGate:
                 caller derives it from
                 ``context.agent_id``/``session_id`` per
                 :attr:`session_key_kind` to keep this method pure.
+            args_digest: The call's :func:`~agent_airlock.approvals.args_digest`,
+                which an ``authorize_once`` grant bound to arguments must match
+                (0.10.29).
 
         Raises:
             ActionContradictionViolation: ``action="block"`` and the
@@ -327,12 +332,10 @@ class ActionContradictionGate:
         if not self._is_privileged_sink(tool_name):
             return
 
-        # Privileged sink + tripped session → check the one-shot grant.
-        authorized: set[str] = getattr(context, "_authorized_once", set())
-        if tool_name in authorized:
-            # Consume the grant; do NOT clear the sticky flag — the
-            # next privileged call must mint a fresh authorize_once.
-            authorized.discard(tool_name)
+        # Privileged sink + tripped session → spend the one-shot grant, under its
+        # store's lock (0.10.29). Do NOT clear the sticky flag — the next privileged
+        # call must mint a fresh authorize_once.
+        if consume_grant(context, tool_name, args_digest):
             logger.info(
                 "action_contradiction_gate.authorize_once_consumed",
                 tool_name=tool_name,

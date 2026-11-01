@@ -34,6 +34,8 @@ class SecurityPolicy:
     approver: Approver | None = None
     escalation_channel: str = "default"
     escalation_timeout_seconds: float = 300.0
+    standing_grants: list[StandingGrant] = field(default_factory=list)
+    approval_ledger: ApprovalLedger | None = None
 
     # Budgets and guards, all off by default
     model_tier_budget: ModelTierBudget | None = None
@@ -62,6 +64,8 @@ class SecurityPolicy:
 | `capability_policy` | `CapabilityPolicy \| None` | Checked against what a tool declares with `@requires(...)` |
 | `escalate_tools` | `dict[str, str]` | Tool patterns that need a human's approval, with the reason the approver sees |
 | `approver` | `Approver \| None` | Transport that asks the human. A matched escalation with no approver is refused. It runs in a worker thread and must answer within `escalation_timeout_seconds` (default 300): no answer in time is refused as `escalation_timeout`, and a later answer is dropped, so an approver must not act after its deadline. An answer that is not an `OversightResponse` with an `OversightVerdict` verdict (the string `"grant"`, `None`, an exception) is refused as `policy_indeterminate`. On an async tool the event loop keeps running while it decides, and an `async` approver is awaited |
+| `standing_grants` | `list[StandingGrant]` | The operator's standing approvals of one exact tool called with exact target arguments: such a call runs without asking, and its audit record names the grant. Revoke one with `revoke_standing_grant(grant_id)` |
+| `approval_ledger` | `ApprovalLedger \| None` | Approvals recorded ahead of a call, each claimed by exactly one call, before the approver is asked. See [Approvals bound to the call](../guide/bound-approvals.md) |
 | `model_tier_budget` | `ModelTierBudget \| None` | Per-model-tier cost caps, checked before the tool runs |
 | `amplification_budget` | `AmplificationBudget \| None` | Per-run call budget against a declared baseline |
 | `sequence_guard`, `action_contradiction_gate`, `deserialization_guard` | | Optional guards run after the policy check |

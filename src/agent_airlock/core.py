@@ -69,7 +69,7 @@ from collections.abc import (
     Iterator,
     Mapping,
 )
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, ParamSpec, TypeVar, overload
 from urllib.parse import urlparse
 from urllib.request import url2pathname
@@ -91,6 +91,7 @@ from ._log import structlog
 from ._sandbox_errors import SandboxError
 from ._sandbox_errors import SandboxExecutionError as SandboxExecutionError
 from ._sandbox_errors import SandboxUnavailableError as SandboxUnavailableError
+from .approvals import args_digest
 from .audit import AuditLogger
 from .capabilities import (
     Capability,
@@ -197,6 +198,49 @@ async def _drive_async(steps: Generator[_ApprovalAsk, _ApproverOutcome, _T]) -> 
     except StopIteration as done:
         result: _T = done.value
         return result
+
+
+class _BoundCall:
+    """A call's arguments by name and their digest, each worked out when first asked for.
+
+    Step 2 asks only when a grant, a standing grant or an escalation needs them, so a call
+    no approval touches never pays for the digest. ``approval`` holds the digest an
+    approver granted and the escalation it answered: pre-execution ends by working the
+    digest out again from the live values, so an argument changed while the approver
+    was deciding is refused rather than run (agno-agi/agno#10600, V0.10.29).
+    """
+
+    def __init__(self, bind: Callable[[], Mapping[str, Any]]) -> None:
+        self._bind = bind
+        self._arguments: Mapping[str, Any] | None = None
+        self._digest: str | None = None
+        self._digested = False
+        self.approval: tuple[str, PolicyEscalation] | None = None
+
+    @property
+    def arguments(self) -> Mapping[str, Any]:
+        if self._arguments is None:
+            self._arguments = self._bind()
+        return self._arguments
+
+    @property
+    def digest(self) -> str | None:
+        """The arguments' digest; None when they nest too deep or contain themselves."""
+        if not self._digested:
+            self._digested = True
+            self._digest = self._digest_of(self.arguments)
+        return self._digest
+
+    def fresh_digest(self) -> str | None:
+        """The digest worked out again from the values as they are now."""
+        return self._digest_of(self._bind())
+
+    @staticmethod
+    def _digest_of(arguments: Mapping[str, Any]) -> str | None:
+        try:
+            return args_digest(arguments)
+        except ValueError:
+            return None
 
 
 # Type alias for policy resolver functions. A resolver that returns None refuses the call
@@ -1552,10 +1596,24 @@ class Airlock:
             if ghost_error is not None:
                 return kwargs, start_time, context, ghost_error, None, None
 
+            # The run wrapper the context came from is left out of the argument gates and
+            # the approval digest when model JSON cannot have built it
+            # (`ContextExtractor.run_wrapper`, the predicate that admitted it).
+            # (Not named `wrapper`: step 4 reads the decorator's own `wrapper` below.)
+            run_wrapper = (
+                ContextExtractor.run_wrapper(context.user_context)
+                if context.user_context is not None
+                else None
+            )
+            skip_first = run_wrapper is not None and run_wrapper.host_object
+            call = _BoundCall(
+                lambda: bind_arguments(call_signature, args, cleaned_kwargs, skip_first=skip_first)
+            )
+
             # Step 2: Resolve and check security policy (an escalation waits here on the
             # approver, through the driver: yield from)
             resolved_policy, policy_error = yield from self._resolve_and_check_policy(
-                func_name, context, run_context=run_context
+                func_name, context, run_context=run_context, call=call
             )
             if policy_error is not None:
                 return kwargs, start_time, context, policy_error, None, None
@@ -1581,6 +1639,7 @@ class Airlock:
                 func_name=func_name,
                 resolved_policy=resolved_policy,
                 context=context,
+                call=call,
             )
             if acg_error is not None:
                 return kwargs, start_time, context, acg_error, None, None
@@ -1595,12 +1654,7 @@ class Airlock:
             # only its AirlockContext vouches for (a dataclass or model wrapper) is walked,
             # that AirlockContext aside. Until 0.10.28 any first argument with a `context` /
             # `ctx` attribute was left out, the tool author's own model included.
-            # (Not named `wrapper`: step 4 reads the decorator's own `wrapper` below.)
-            run_wrapper = (
-                ContextExtractor.run_wrapper(context.user_context)
-                if context.user_context is not None
-                else None
-            )
+            # (`run_wrapper` is worked out before step 2, which binds the approval digest.)
             # An agent framework's own model is walked where the tool's annotations name
             # its class, the only place pydantic builds one from the model's JSON
             # (`_arg_walk.NamedModels`); one in host-injected state is left alone.
@@ -1609,7 +1663,7 @@ class Airlock:
                     call_signature,
                     args,
                     cleaned_kwargs,
-                    skip_first=run_wrapper is not None and run_wrapper.host_object,
+                    skip_first=skip_first,
                     named=named_models(func),
                 )
                 if self._reads_argument_values(func_name, resolved_policy)
@@ -1687,6 +1741,12 @@ class Airlock:
             )
             if budget_error is not None:
                 return kwargs, start_time, context, budget_error, None, None
+
+            # An approval binds to the arguments the approver saw: one changed while it
+            # was deciding (a shared dict another task edited) is refused (V0.10.29).
+            changed_error = self._changed_since_approval(func_name, call)
+            if changed_error is not None:
+                return kwargs, start_time, context, changed_error, None, None
 
             return cleaned_kwargs, start_time, context, None, budget_estimate, resolved_policy
 
@@ -1792,6 +1852,7 @@ class Airlock:
                 agent_id=context.agent_id if context else None,
                 session_id=context.session_id if context else None,
                 amplification=context._amplification if context else None,
+                standing_grant=context._standing_grant if context else None,
             )
 
             # V0.8.6 camouflage-resistant guard: tool output flowing back
@@ -2497,6 +2558,7 @@ class Airlock:
         context: AirlockContext[Any],
         *,
         run_context: AirlockContext[Any] | None,
+        call: _BoundCall,
     ) -> Generator[
         _ApprovalAsk, _ApproverOutcome, tuple[SecurityPolicy | None, AirlockResponse | None]
     ]:
@@ -2514,6 +2576,7 @@ class Airlock:
                 ``reauth_on_untrusted_reinvocation`` refuses a call that has none: it counts
                 untrusted outputs across a run's calls, and with no run the count would
                 never pass one, which is how the guard did nothing until 0.10.23.
+            call: The call's arguments, bound when a grant or an escalation needs them.
 
         Returns:
             Tuple of (resolved_policy, error_response).
@@ -2617,7 +2680,13 @@ class Airlock:
                         violation_type=ViolationType.REAUTH_REQUIRED.value,
                         details={"tool": func_name, "reason": "no_run_context"},
                     )
-                resolved_policy.check_reauthorization(func_name, context)
+                resolved_policy.check_reauthorization(
+                    func_name,
+                    context,
+                    args_digest=(
+                        call.digest if resolved_policy.reauth_on_untrusted_reinvocation else None
+                    ),
+                )
                 resolved_policy.check(func_name, agent=_caller_identity(context))
             except PolicyEscalation as e:
                 # V0.8.74 (issue #143): the third verdict. This clause MUST stay above
@@ -2627,7 +2696,7 @@ class Airlock:
                 # call still BLOCKS via the generic handler. That is the intended
                 # failure mode: losing the approver path must not open the gate.
                 escalation_response = yield from self._resolve_escalation(
-                    resolved_policy, func_name, e
+                    resolved_policy, func_name, e, context=context, call=call
                 )
                 if escalation_response is not None:
                     return resolved_policy, escalation_response
@@ -2760,6 +2829,9 @@ class Airlock:
         policy: SecurityPolicy,
         func_name: str,
         escalation: PolicyEscalation,
+        *,
+        context: AirlockContext[Any],
+        call: _BoundCall,
     ) -> Generator[_ApprovalAsk, _ApproverOutcome, AirlockResponse | None]:
         """Route a :class:`PolicyEscalation` to the operator-supplied approver.
 
@@ -2773,24 +2845,36 @@ class Airlock:
         thread, so the deadline holds and the async path's loop is not blocked; until
         0.10.29 it ran inline and the timeout was only echoed on the request).
 
+        Since 0.10.29 the approval binds to the call: a call whose arguments cannot be
+        read is refused, a standing grant or an approval claimed from the policy's ledger
+        admits the call without asking, and the request carries the arguments' digest
+        and masked preview.
+
         Args:
             policy: The resolved policy that escalated.
             func_name: Name of the tool being called.
             escalation: The raised escalation, carrying ``reason`` and ``rule``.
+            context: The call's context: its ids go on the request, and a standing grant
+                that admits the call is recorded on it for the audit record.
+            call: The call's bound arguments; a granted digest is kept on it.
 
         Returns:
-            ``None`` if the approver granted and the call may proceed. An
-            :class:`AirlockResponse` in **every** other case: no approver registered,
-            explicit denial, timeout, or an answer that is not an approval
-            (``policy_indeterminate``: an approver that raised, returned something other
-            than an ``OversightResponse``, or a verdict outside ``OversightVerdict``, such
-            as the string ``"grant"``). There is exactly one path that returns ``None``,
-            and it requires an affirmative ``OversightVerdict.GRANT``.
+            ``None`` if a standing grant, a ledger claim or the approver's ``GRANT``
+            admits the call. An :class:`AirlockResponse` in **every** other case: no
+            approver registered, explicit denial, timeout, or an answer that is not an
+            approval of these arguments (``policy_indeterminate``: unreadable arguments,
+            an approver that raised, returned something other than an
+            ``OversightResponse``, a verdict outside ``OversightVerdict`` such as the
+            string ``"grant"``, or a decision naming another ``args_digest``).
         """
-        from .oversight import OversightRequest
+        if call.digest is None:
+            return self._escalation_refused(
+                func_name, escalation, self._unbindable(func_name, escalation)
+            )
+        if self._admitted_without_asking(policy, func_name, escalation, context, call):
+            return None
 
         approver = policy.approver
-
         # 1c bullet 4 — the case this feature exists for. A policy that escalates
         # with nothing to escalate to blocks, loudly, naming the configuration gap.
         if approver is None:
@@ -2801,39 +2885,138 @@ class Airlock:
                 reason=escalation.reason,
             )
             response = handle_escalation(
-                func_name,
-                reason=escalation.reason,
-                rule=escalation.rule,
-                outcome="no_approver",
+                func_name, reason=escalation.reason, rule=escalation.rule, outcome="no_approver"
             )
-            self._safe_invoke_callback(
-                self.config.on_blocked,
-                "on_blocked",
-                func_name,
-                escalation.message,
-                {"violation_type": escalation.violation_type, **escalation.details},
-            )
-            return response
+            return self._escalation_refused(func_name, escalation, response)
 
-        request = OversightRequest(
+        request = self._oversight_request(policy, func_name, escalation, context, call)
+        outcome = yield _ApprovalAsk(approver, request, request.timeout_seconds)
+        refusal = self._read_approval(func_name, escalation, request, outcome)
+        if refusal is not None:
+            return self._escalation_refused(func_name, escalation, refusal)
+        call.approval = (request.args_digest, escalation)
+        return None
+
+    def _escalation_refused(
+        self, func_name: str, escalation: PolicyEscalation, refusal: AirlockResponse
+    ) -> AirlockResponse:
+        """Tell ``on_blocked`` about an escalation that did not admit the call; return it."""
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            escalation.message,
+            {"violation_type": escalation.violation_type, **escalation.details},
+        )
+        return refusal
+
+    def _unbindable(self, func_name: str, escalation: PolicyEscalation) -> AirlockResponse:
+        """Refuse an escalation whose arguments cannot be read to bind an approval to."""
+        logger.warning(
+            "policy_indeterminate", function=func_name, source="approval_args", rule=escalation.rule
+        )
+        return handle_escalation(
+            func_name,
+            reason=escalation.reason,
+            rule=escalation.rule,
+            outcome="indeterminate",
+            detail="the call's arguments nest too deep or contain themselves, so no "
+            "approval can be bound to them",
+        )
+
+    def _admitted_without_asking(
+        self,
+        policy: SecurityPolicy,
+        func_name: str,
+        escalation: PolicyEscalation,
+        context: AirlockContext[Any],
+        call: _BoundCall,
+    ) -> bool:
+        """Whether a standing grant or an approval claimed from the ledger admits the call.
+
+        A standing grant is the operator's; it is named on the call's context so the
+        audit record lists it. A ledger approval is spent by this call only: the ledger
+        claims it atomically, so two replicas never both run one approval.
+        """
+        grant = policy.standing_grant_for(func_name, call.arguments)
+        if grant is not None:
+            context._standing_grant = grant.grant_id
+            logger.info(
+                "escalation_standing_grant",
+                tool=func_name,
+                rule=escalation.rule,
+                grant_id=grant.grant_id,
+            )
+            return True
+        ledger = policy.approval_ledger
+        if ledger is None or call.digest is None:
+            return False
+        call_id = str(uuid.uuid4())
+        try:
+            claimed = ledger.claim(func_name, call.digest, call_id)
+        except Exception as exc:  # noqa: BLE001 - a ledger that fails claims nothing
+            logger.warning("approval_ledger_error", tool=func_name, error_type=type(exc).__name__)
+            return False
+        if claimed is not True:
+            return False
+        logger.info(
+            "escalation_ledger_claimed", tool=func_name, rule=escalation.rule, call_id=call_id
+        )
+        return True
+
+    def _oversight_request(
+        self,
+        policy: SecurityPolicy,
+        func_name: str,
+        escalation: PolicyEscalation,
+        context: AirlockContext[Any],
+        call: _BoundCall,
+    ) -> Any:
+        """The request an escalated call asks the approver, bound to its arguments."""
+        from .oversight import OversightRequest
+
+        now = datetime.now(timezone.utc)
+        timeout = float(policy.escalation_timeout_seconds)
+        preview = AuditLogger._redact_args(dict(call.arguments))
+        return OversightRequest(
             request_id=str(uuid.uuid4()),
             tool_name=func_name,
             args={"escalation_reason": escalation.reason, "escalation_rule": escalation.rule},
             channel=policy.escalation_channel,
-            timeout_seconds=float(policy.escalation_timeout_seconds),
-            requested_at=datetime.now(timezone.utc).isoformat(),
+            timeout_seconds=timeout,
+            requested_at=now.isoformat(),
+            args_digest=call.digest,
+            args_preview={str(name): value for name, value in preview.items()},
+            agent_id=context.agent_id,
+            session_id=context.session_id,
+            policy_digest=policy._compute_policy_digest(),
+            expires_at=(now + timedelta(seconds=timeout)).isoformat(),
         )
-        outcome = yield _ApprovalAsk(approver, request, request.timeout_seconds)
-        refusal = self._read_approval(func_name, escalation, request, outcome)
-        if refusal is not None:
-            self._safe_invoke_callback(
-                self.config.on_blocked,
-                "on_blocked",
+
+    def _changed_since_approval(self, func_name: str, call: _BoundCall) -> AirlockResponse | None:
+        """Refuse a granted call whose arguments no longer hash to what was approved."""
+        if call.approval is None:
+            return None
+        approved, escalation = call.approval
+        if call.fresh_digest() == approved:
+            return None
+        logger.warning(
+            "policy_indeterminate",
+            function=func_name,
+            source="approval_args_changed",
+            rule=escalation.rule,
+        )
+        return self._escalation_refused(
+            func_name,
+            escalation,
+            handle_escalation(
                 func_name,
-                escalation.message,
-                {"violation_type": escalation.violation_type, **escalation.details},
-            )
-        return refusal
+                reason=escalation.reason,
+                rule=escalation.rule,
+                outcome="indeterminate",
+                detail="the call's arguments changed after the approval was asked",
+            ),
+        )
 
     def _read_approval(
         self,
@@ -2936,6 +3119,20 @@ class Airlock:
                     f"(expected {request.request_id!r}, got {answer.request_id!r})"
                 ),
                 approver=answer.approver,
+            )
+        # V0.10.29: a decision bound to other arguments is not a decision about this call.
+        if answer.args_digest is not None and answer.args_digest != request.args_digest:
+            logger.warning(
+                "escalation_args_digest_mismatch",
+                tool=func_name,
+                expected=request.args_digest,
+                got=answer.args_digest,
+            )
+            return self._indeterminate(
+                func_name,
+                escalation,
+                returned="OversightResponse",
+                detail="the approver's answer names other arguments (args_digest mismatch)",
             )
 
         if answer.verdict is OversightVerdict.GRANT:
@@ -3163,6 +3360,7 @@ class Airlock:
         func_name: str,
         resolved_policy: SecurityPolicy | None,
         context: AirlockContext[Any],
+        call: _BoundCall,
     ) -> AirlockResponse | None:
         """Action-time contradiction gate (V0.8.15, arXiv:2605.27157).
 
@@ -3183,6 +3381,8 @@ class Airlock:
             context: Current :class:`AirlockContext` — read for the
                 detector inputs (``metadata``) and the explicit-allow
                 grant (``_authorized_once``).
+            call: The call's bound arguments, whose digest a grant bound to
+                arguments must match (V0.10.29).
 
         Returns:
             Error response if the action is blocked, None otherwise.
@@ -3211,6 +3411,7 @@ class Airlock:
                 context=context,
                 tool_name=func_name,
                 session_key=session_key,
+                args_digest=call.digest,
             )
         except ActionContradictionViolation as e:
             response = handle_policy_violation(

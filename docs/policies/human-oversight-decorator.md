@@ -105,6 +105,13 @@ class OversightRequest:
     channel: str
     timeout_seconds: float
     requested_at: str           # ISO 8601 UTC
+    # 0.10.29, with defaults:
+    args_digest: str | None = None          # sha256 of the bound arguments
+    args_preview: Mapping[str, str] = {}    # the arguments, masked
+    agent_id: str | None = None
+    session_id: str | None = None
+    policy_digest: str | None = None        # @Airlock escalations only
+    expires_at: str | None = None           # requested_at + timeout
 
 
 @dataclass(frozen=True)
@@ -113,7 +120,12 @@ class OversightResponse:
     verdict: OversightVerdict
     detail: str = ""
     approver: str | None = None # human identifier, optional
+    args_digest: str | None = None  # 0.10.29: echo to bind the decision
 ```
+
+A response echoing an `args_digest` other than the request's raises `ValueError`, and
+so does a `GRANT` for a call whose arguments changed after the request was built. See
+[Approvals bound to the call](../guide/bound-approvals.md).
 
 ## Testing helper
 

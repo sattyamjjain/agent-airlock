@@ -36,6 +36,7 @@ from pydantic import BaseModel
 
 from ._arg_walk import is_framework_object
 from ._log import structlog
+from .approvals import GrantStore
 
 if TYPE_CHECKING:
     from pydantic import GetCoreSchemaHandler
@@ -96,7 +97,12 @@ class AirlockContext(Generic[T]):
     # every audit call site can carry the run's call/token counters without
     # threading a new parameter through each one.
     _amplification: AmplificationDecision | None = field(default=None, repr=False)
-    _authorized_once: set[str] = field(default_factory=set, repr=False)
+    # V0.10.29: a GrantStore, not a set of tool names: a grant can name the arguments it
+    # admits and a time to live, is spent under a lock, and is shared by with_metadata()
+    # clones rather than copied, so a grant spent through a clone is spent.
+    _authorized_once: GrantStore = field(default_factory=GrantStore, repr=False)
+    # V0.10.29: the StandingGrant that admitted this call's escalation, for its audit record.
+    _standing_grant: str | None = field(default=None, repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
 
     def __class_getitem__(cls, params: Any) -> Any:
@@ -163,18 +169,36 @@ class AirlockContext(Generic[T]):
             metadata=new_metadata,
             untrusted_reinvocation_count=dict(self.untrusted_reinvocation_count),
         )
-        clone._authorized_once = set(self._authorized_once)
+        clone._authorized_once = self._authorized_once
         return clone
 
-    def authorize_once(self, tool_name: str) -> None:
+    def authorize_once(
+        self,
+        tool_name: str,
+        *,
+        args_digest: str | None = None,
+        ttl_seconds: float | None = None,
+    ) -> None:
         """Grant a single subsequent invocation of ``tool_name`` past the
-        camouflage-resistant reauthorization threshold.
+        camouflage-resistant reauthorization threshold or a tripped action-contradiction
+        gate.
 
-        The grant is consumed by the next ``SecurityPolicy.check_reauthorization``
-        for this tool. Use when the harness has independently verified that
-        the next call's arguments did NOT originate from prior tool output.
+        The grant is consumed by the next such check for this tool, under a lock, so two
+        concurrent calls never both spend it. Use when the harness has independently
+        verified that the next call's arguments did NOT originate from prior tool output.
+
+        Args:
+            tool_name: The tool the grant admits one call of.
+            args_digest: When given, the grant admits only a call whose bound arguments
+                hash to it (:func:`agent_airlock.approvals.args_digest`); a call with
+                other arguments is refused and the grant kept (0.10.29).
+            ttl_seconds: When given, the grant lapses this many seconds from now, and a
+                call at or after that moment is refused (0.10.29).
+
+        Raises:
+            ValueError: ``ttl_seconds`` is not a positive number.
         """
-        self._authorized_once.add(tool_name)
+        self._authorized_once.add(tool_name, args_digest=args_digest, ttl_seconds=ttl_seconds)
 
     def mark_untrusted_output(self, tool_name: str) -> None:
         """Record that ``tool_name`` produced output that flows back into

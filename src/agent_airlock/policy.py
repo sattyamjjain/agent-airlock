@@ -18,6 +18,7 @@ import math
 import re
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import asdict as dc_asdict
 from dataclasses import dataclass, field
 from dataclasses import fields as dc_fields
@@ -27,10 +28,12 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from ._log import structlog
 from .amplification import AmplificationBudget, AmplificationGuard
+from .approvals import StandingGrant, consume_grant
 from .exceptions import AirlockError
 
 if TYPE_CHECKING:
     from .action_contradiction_gate import ActionContradictionGate
+    from .approvals import ApprovalLedger
     from .capabilities import CapabilityPolicy
     from .cost_tracking import (
         BudgetEstimate,
@@ -500,6 +503,15 @@ class SecurityPolicy:
     approver: Approver | None = None
     escalation_channel: str = "default"
     escalation_timeout_seconds: float = 300.0
+    # V0.10.29 approvals bound to the call. ``standing_grants`` are the operator's
+    # standing approvals of one exact tool called with exact target arguments: such an
+    # escalated call runs without asking the approver, and its audit record names the
+    # grant. ``approval_ledger`` holds approvals recorded ahead of a call
+    # (``ledger.grant(tool, args_digest(arguments), expires_at=...)``), each claimed by
+    # exactly one call, across processes with ``SQLiteApprovalLedger``. Both are asked
+    # before the approver; neither softens a denial, which is checked first.
+    standing_grants: list[StandingGrant] = field(default_factory=list)
+    approval_ledger: ApprovalLedger | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -509,6 +521,9 @@ class SecurityPolicy:
     _frozen_digest: str | None = field(default=None, repr=False)
     # Rebuilt by __post_init__; underscore-prefixed so freeze() skips it.
     _amplification_guard: AmplificationGuard | None = field(default=None, repr=False)
+    # V0.10.29: ids of revoked standing grants. Outside the digest, since a revocation
+    # only narrows what the policy admits; freeze() carries it over by hand.
+    _revoked_grants: set[str] = field(default_factory=set, repr=False)
 
     def __post_init__(self) -> None:
         """Check the tool lists and the escalation deadline, then parse time restrictions
@@ -552,6 +567,48 @@ class SecurityPolicy:
         # V0.8.74: one guard per policy, holding the per-run ledgers.
         if self.amplification_budget is not None:
             self._amplification_guard = AmplificationGuard(self.amplification_budget)
+        self._check_standing_grants()
+
+    def _check_standing_grants(self) -> None:
+        """Refuse a standing-grant list that is not one, or that repeats a grant id.
+
+        Raises:
+            TypeError: ``standing_grants`` is not a list or tuple of ``StandingGrant``.
+            ValueError: Two grants share a ``grant_id``.
+        """
+        grants = self.standing_grants
+        if not isinstance(grants, list | tuple) or not all(
+            isinstance(grant, StandingGrant) for grant in grants
+        ):
+            raise TypeError("SecurityPolicy.standing_grants must be a list of StandingGrant")
+        ids = [grant.grant_id for grant in grants]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"SecurityPolicy.standing_grants repeats a grant_id: {ids}")
+
+    def standing_grant_for(
+        self, tool_name: str, arguments: Mapping[str, Any]
+    ) -> StandingGrant | None:
+        """The first unrevoked standing grant that admits this call, or None."""
+        with self._lock:
+            revoked = set(self._revoked_grants)
+        for grant in self.standing_grants:
+            if grant.grant_id not in revoked and grant.matches(tool_name, arguments):
+                return grant
+        return None
+
+    def revoke_standing_grant(self, grant_id: str) -> bool:
+        """Stop a standing grant admitting calls, from the next call on.
+
+        Returns:
+            True when the policy holds an unrevoked grant with this id.
+        """
+        with self._lock:
+            known = any(grant.grant_id == grant_id for grant in self.standing_grants)
+            fresh = known and grant_id not in self._revoked_grants
+            self._revoked_grants.add(grant_id)
+        if fresh:
+            logger.info("standing_grant_revoked", grant_id=grant_id)
+        return fresh
 
     def _matches_pattern(self, tool_name: str, pattern: str) -> bool:
         """Check if tool name matches a glob pattern."""
@@ -713,6 +770,8 @@ class SecurityPolicy:
         self,
         tool_name: str,
         context: Any | None,
+        *,
+        args_digest: str | None = None,
     ) -> None:
         """V0.8.6 debate-amplification guard.
 
@@ -729,6 +788,8 @@ class SecurityPolicy:
         Args:
             tool_name: Tool being invoked.
             context: AirlockContext for the current call (or None — no-op).
+            args_digest: The call's :func:`~agent_airlock.approvals.args_digest`, which
+                a grant bound to arguments must match (0.10.29).
 
         Raises:
             PolicyViolation: If reauthorization is required but not granted.
@@ -739,13 +800,12 @@ class SecurityPolicy:
             return
         # Duck-typed: avoid a hard import cycle with context.py
         counts: dict[str, int] = getattr(context, "untrusted_reinvocation_count", {})
-        authorized: set[str] = getattr(context, "_authorized_once", set())
         prior = counts.get(tool_name, 0)
         if prior < self.untrusted_reinvocation_threshold:
             return
-        if tool_name in authorized:
-            # Consume the one-shot grant
-            authorized.discard(tool_name)
+        # Spend the one-shot grant, under its store's lock (0.10.29; it was checked and
+        # then discarded, so two concurrent calls could both pass).
+        if consume_grant(context, tool_name, args_digest):
             return
         raise PolicyViolation(
             (
@@ -948,6 +1008,13 @@ class SecurityPolicy:
             "escalation_channel": self.escalation_channel,
             "escalation_timeout_seconds": self.escalation_timeout_seconds,
         }
+        # V0.10.29: a standing grant admits calls without a human, so adding one after
+        # freeze() moves the digest. Present only when set, so a policy without them keeps
+        # the digest it had in 0.10.28.
+        if self.standing_grants:
+            payload["standing_grants"] = sorted(g.canonical() for g in self.standing_grants)
+        if self.approval_ledger is not None:
+            payload["has_approval_ledger"] = True
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def _compute_policy_digest(self) -> str:
@@ -1003,6 +1070,8 @@ class SecurityPolicy:
             )
 
         frozen = SecurityPolicy(**kwargs)
+        with self._lock:
+            frozen._revoked_grants = set(self._revoked_grants)
         frozen._frozen_digest = frozen._compute_policy_digest()
         return frozen
 
