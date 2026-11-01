@@ -163,6 +163,13 @@ src/agent_airlock/
      only so), or with an empty allowlist not matched case-folded by
      `DEFAULT_DISPATCH_DENY`; the refusal shows the name, never the deny pattern. The field
      is stored as a hashable read-only `_DispatchNames`, so the frozen guard stays hashable
+   - 2.77 shell commands (V0.10.29, `shell_command_policy.py`, off until the policy sets
+     `shell_command_policy`): `command_args` split by a POSIX quoting scanner (`_Line`;
+     shlex returns a quoted `';'` and the operator alike), each command followed through
+     the wrappers in `_WRAPPERS` / `_shell` / `_Interpreter` and git's `-c` keys; deny or
+     ask rules match anywhere, allow rules only an innermost command; what cannot be
+     followed (substitution, inline code, stdin programs, unknown wrapper options,
+     dangerous `NAME=` assignments) is denied. Ask escalates (rule `shell_command`)
    - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one
      anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)

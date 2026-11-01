@@ -89,6 +89,7 @@ nav:
     - FastMCP Integration: guide/mcp.md
     - Token audience & startup hooks: guide/token-audience-and-startup-hooks.md
     - Shell & installer arguments: guide/shell-and-installer-arguments.md
+    - Shell commands: guide/shell-commands.md
     - Dispatch arguments: guide/dispatch-arguments.md
     - Approvals bound to the call: guide/bound-approvals.md
     - Decision records: guide/decision-record.md

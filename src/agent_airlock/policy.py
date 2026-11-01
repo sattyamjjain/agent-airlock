@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from .run_guard import RunGuard
     from .safe_types import UnsafeDeserializationGuard
     from .sequence_guard import SequenceGuard
+    from .shell_command_policy import ShellCommandPolicy
     from .tool_arg_sink_guard import ToolArgSinkGuard
     from .trace_redaction import TraceRedactionPolicy
 
@@ -115,6 +116,10 @@ class ViolationType(str, Enum):
     # under a run guard and belongs to no run.
     LOOP_DETECTED = "loop_detected"
     RUN_GUARD_OUTSIDE_RUN = "run_guard_outside_run"
+    # V0.10.29 shell command policy (ShellCommandPolicy): a command a deny rule (or the
+    # default) refuses, and one the policy cannot follow to what it runs.
+    SHELL_COMMAND_DENIED = "shell_command_denied"
+    SHELL_COMMAND_UNANALYZABLE = "shell_command_unanalyzable"
 
 
 class PolicyEscalation(PolicyViolation):
@@ -536,6 +541,12 @@ class SecurityPolicy:
     # A call under a run guard that belongs to no run is refused. OFF by default (None
     # preserves prior behavior exactly). See :class:`agent_airlock.run_guard.RunGuard`.
     run_guard: RunGuard | None = None
+    # V0.10.29 shell commands. When set, the command arguments of an agent shell tool are
+    # split with a POSIX quoting scanner (never a shell), followed through wrappers (env,
+    # xargs, find -exec, sudo, sh -c, ...) and allowed, escalated (rule ``shell_command``)
+    # or refused by rule (Step 2.77). OFF by default (None preserves prior behavior
+    # exactly). See :class:`agent_airlock.shell_command_policy.ShellCommandPolicy`.
+    shell_command_policy: ShellCommandPolicy | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -1044,6 +1055,8 @@ class SecurityPolicy:
             payload["data_flow_policy"] = self.data_flow_policy.canonical()
         if self.run_guard is not None:
             payload["run_guard"] = self.run_guard.canonical()
+        if self.shell_command_policy is not None:
+            payload["shell_command_policy"] = self.shell_command_policy.canonical()
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def _compute_policy_digest(self) -> str:

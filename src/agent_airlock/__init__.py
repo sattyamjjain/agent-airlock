@@ -691,6 +691,7 @@ from .sdk_provenance import (
     classify_sdk_lineage,
 )
 from .self_heal import AirlockResponse, BlockReason, is_refusal, refusal_text
+from .shell_command_policy import ShellCommandPolicy
 from .ssrf_egress_guard import (
     SSRFEgressBlocked,
     SSRFEgressDecision,
@@ -1220,6 +1221,8 @@ __all__ = [
     "requires",
     # V0.10.29 run guard
     "RunGuard",
+    # V0.10.29 shell commands
+    "ShellCommandPolicy",
     # V0.10.29 source-to-sink gate
     "DataFlowPolicy",
     "source",

@@ -409,6 +409,15 @@ _POLICY_FIX_HINTS: dict[str, list[str]] = {
         "Change your approach, or stop and tell the user what is blocking you. One more "
         "repeat ends this run",
     ],
+    "shell_command_denied": [
+        "This command is not permitted, however it is wrapped or phrased; do not retry it",
+        _CONTINUE_OR_TELL,
+    ],
+    "shell_command_unanalyzable": [
+        "Write the command as plain words: no command substitution, inline code (-c, -e) or "
+        "program read from a pipe; a command that cannot be checked is refused",
+        _CONTINUE_OR_TELL,
+    ],
     "run_guard_outside_run": [
         "This tool is under a run guard and the call belongs to no run, so it cannot be "
         "checked against the run; changing the arguments will not help",
