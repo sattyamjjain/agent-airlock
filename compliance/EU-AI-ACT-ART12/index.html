@@ -1061,6 +1061,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/decision-record/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision records
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2702,10 +2730,13 @@ identified and the system's functioning can be monitored.</p>
 is "high-risk," and what its full obligations are, is the provider's
 determination.</p>
 <h2 id="what-airlocks-decision-log-does-satisfy">What airlock's decision log <em>does</em> satisfy<a class="headerlink" href="#what-airlocks-decision-log-does-satisfy" title="Permanent link">&para;</a></h2>
-<p>airlock records each <code>validate → policy → execute → sanitize</code> decision to a
-hash-chained JSON Lines log
-(<code>agent_airlock.conformance.DecisionLog</code>). For the <strong>tool-call decision layer</strong>
-it gives you:</p>
+<p>airlock records tool-call decisions to a hash-chained JSON Lines log
+(<code>agent_airlock.conformance.DecisionLog</code>). With
+<code>AirlockConfig(decision_log=DecisionLog(path))</code> set (0.10.29), <code>@Airlock</code> writes each
+call's decision before the tool runs, refused calls included, and its outcome after,
+naming the decision by hash (<a href="../../guide/decision-record/">Decision records</a>). Without it,
+nothing writes the log for you: append records yourself or with the CLI below. For the
+<strong>tool-call decision layer</strong> it gives you:</p>
 <table>
 <thead>
 <tr>
@@ -2728,7 +2759,7 @@ it gives you:</p>
 </tr>
 <tr>
 <td>Identifying risk / modification situations</td>
-<td><code>decision</code> (block/warn/error) + <code>reason</code> + <code>stage</code></td>
+<td><code>decision</code> (block/warn/error) + <code>reason</code> + <code>stage</code>; from <code>@Airlock</code>, <code>details</code> adds the rule, the call-path step and digests of the policy, arguments and decision context</td>
 </tr>
 <tr>
 <td>Attribution to actor / context</td>
@@ -2740,7 +2771,7 @@ it gives you:</p>
 </tr>
 <tr>
 <td>Availability for the retention period</td>
-<td>plain JSONL on the operator's own storage</td>
+<td>plain JSONL on the operator's own storage; <code>checkpoint()</code> and <code>prune()</code> keep a pruned log verifiable from an HMAC-signed chain head</td>
 </tr>
 </tbody>
 </table>
@@ -2748,7 +2779,7 @@ it gives you:</p>
 decision <strong>metadata only</strong> — never raw tool arguments or results, so recording
 does not itself create a new data-exposure surface.</p>
 <h3 id="reproduce-the-evidence">Reproduce the evidence<a class="headerlink" href="#reproduce-the-evidence" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># append decisions (normally your @Airlock integration does this automatically)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># append decisions by hand (@Airlock does it when AirlockConfig(decision_log=...) is set)</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>airlock-conformance<span class="w"> </span>record<span class="w"> </span>--log<span class="w"> </span>decisions.jsonl<span class="w"> </span>--stage<span class="w"> </span>policy<span class="w">  </span>--tool<span class="w"> </span>read_file<span class="w">  </span>--decision<span class="w"> </span>allow
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>airlock-conformance<span class="w"> </span>record<span class="w"> </span>--log<span class="w"> </span>decisions.jsonl<span class="w"> </span>--stage<span class="w"> </span>execute<span class="w"> </span>--tool<span class="w"> </span>spawn_mcp<span class="w">  </span>--decision<span class="w"> </span>block<span class="w"> </span>--reason<span class="w"> </span><span class="s2">"deny-by-default"</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>

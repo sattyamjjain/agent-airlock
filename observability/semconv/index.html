@@ -1067,6 +1067,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/decision-record/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision records
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3284,7 +3312,7 @@ creates a child span.</p>
 <tr>
 <td><code>airlock.args_hash</code></td>
 <td>string</td>
-<td>SHA-256 of the canonicalised argument tuple. Useful for replay detection in post-incident analysis. Never contains argument <em>values</em>.</td>
+<td><code>agent_airlock.approvals.args_digest</code> of the arguments: SHA-256 of their canonical JSON, 64 hex characters, the digest approvals and <a href="../../guide/decision-record/">decision records</a> bind to (until 0.10.29, 16 characters of a <code>json.dumps(default=str)</code>). <code>unreadable</code> when they nest deeper than 32 levels or contain themselves. Useful for replay detection in post-incident analysis. Never contains argument <em>values</em>.</td>
 </tr>
 </tbody>
 </table>
