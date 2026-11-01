@@ -41,7 +41,11 @@ class TestAFloatBudgetIsEnforced:
         with pytest.raises(BudgetExceededError):
             tracker.record("tool", _THOUSAND_TOKENS)
 
-        assert tracker.get_summary().total_cost_usd == Decimal("0.02")
+        # Since 0.10.29 the call that crossed the limit is recorded too, since it ran, and
+        # the budget stays closed (until then it was dropped and the total read 0.02).
+        assert tracker.get_summary().total_cost_usd == Decimal("0.03")
+        with pytest.raises(BudgetExceededError):
+            tracker.check_admission()
 
     @pytest.mark.parametrize(
         ("given", "stored"),
