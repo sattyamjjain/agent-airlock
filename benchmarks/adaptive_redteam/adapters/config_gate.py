@@ -150,7 +150,10 @@ class EndpointAdapter:
                 "ALLOWED_URL": "https://api.allowed.example/v1",
             }
             kwargs = _subst(dict(candidate.call.kwargs), tokens)
-            policy = EndpointPolicy(allowed_endpoints=["api.allowed.example"])
+            # Offline: api.allowed.example is invented, so no host is resolved.
+            policy = EndpointPolicy(
+                allowed_endpoints=["api.allowed.example"], resolve_hostnames=False
+            )
             config = AirlockConfig(endpoint_policies={"fetch_url": policy})
 
             def fetch_url(url: str, **_rest: Any) -> str:

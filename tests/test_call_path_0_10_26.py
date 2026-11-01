@@ -46,6 +46,16 @@ from agent_airlock.amplification import AmplificationBudget
 from agent_airlock.capabilities import get_required_capabilities
 from agent_airlock.core import _looks_like_path
 
+
+def _resolves_public(host: str) -> list[str]:
+    """Every name resolves to a public address: these cases are about the allowlist, not DNS.
+
+    Since 0.10.29 ``EndpointPolicy`` resolves an admitted hostname and refuses one that does
+    not resolve; the made-up names here would not.
+    """
+    return ["93.184.216.34"]
+
+
 CALLS: list[str] = []
 
 
@@ -245,7 +255,11 @@ class TestEndpointGateUninspectableWording:
     @pytest.fixture
     def fetch(self) -> Any:
         config = AirlockConfig(
-            endpoint_policies={"fetch": EndpointPolicy(allowed_endpoints=["api.example.com"])},
+            endpoint_policies={
+                "fetch": EndpointPolicy(
+                    allowed_endpoints=["api.example.com"], resolver=_resolves_public
+                )
+            },
             enable_audit_log=False,
         )
 

@@ -53,12 +53,13 @@ import ipaddress
 import re
 import socket
 import threading
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any, NoReturn
 
 from ._log import structlog
+from .safe_types import _CANONICAL_METADATA_IPS, _default_host_resolver, metadata_ip_candidates
 
 logger = structlog.get_logger("agent-airlock.network")
 
@@ -105,12 +106,22 @@ class NetworkPolicy:
         block_dns: If True, also block DNS lookups. Prevents DNS-based exfiltration. A
                   forward lookup of an IP literal asks no DNS server and is allowed (the
                   allowlists still apply); a reverse lookup is refused.
+        block_private_ips: If True, refuse a connection or datagram to an internal
+                  address: loopback, private, link-local, cloud metadata or a blocked IPv6
+                  range, in any encoding, a name a ``connect`` resolves itself included.
+                  The airgap sees every connect of the call, so this covers redirect hops
+                  and DNS rebinding inside the tool, which an argument check cannot.
+                  ``allowed_hosts`` does not exempt an address from it. Off by default.
+        allowed_private_ips: Internal addresses ``block_private_ips`` still admits (a
+                  local egress proxy, a sidecar), compared after decoding.
     """
 
     allow_egress: bool = True
     allowed_hosts: list[str] = field(default_factory=list)
     allowed_ports: list[int] = field(default_factory=list)
     block_dns: bool = False
+    block_private_ips: bool = False
+    allowed_private_ips: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -132,14 +143,32 @@ class EndpointPolicy:
         allowed_endpoints: Hostnames/patterns allowed. Supports wildcards (*.example.com).
             Empty list means no endpoint restriction (only blocked_patterns apply).
         blocked_patterns: Hostname patterns to always block. Checked before allowed_endpoints.
-        allow_private_ips: If False (default), block private/loopback/link-local IPs.
-        allow_metadata_urls: If False (default), block cloud metadata endpoints.
+        allow_private_ips: If False (default), block private/loopback/link-local IPs,
+            in every encoding an HTTP client accepts (decimal ``2130706433``, hex
+            ``0x7f000001``, octal ``0177.0.0.1``, short ``127.1``, IPv4-mapped IPv6).
+        allow_metadata_urls: If False (default), block cloud metadata endpoints, in the
+            same encodings.
+        resolve_hostnames: If True (default), a hostname that passed every other check,
+            ``allowed_endpoints`` included, is resolved, and refused when an address it
+            resolves to is internal and the matching ``allow_*`` flag is False (a
+            wildcard-DNS name such as ``169.254.169.254.nip.io``, or an allowlisted name
+            rebound to an internal address). Only names the policy would admit are looked
+            up, so a name it refuses is never sent to DNS. The lookup runs before the
+            tool, so the tool's own lookup can still answer differently: the airgap's
+            ``NetworkPolicy(block_private_ips=True)`` checks at connect time.
+        deny_on_resolution_failure: If True (default), a hostname that does not resolve
+            (or whose resolver raises) is refused as ``unresolvable_host``.
+        resolver: Maps a hostname to its addresses as strings. Defaults to the system
+            resolver; inject one for deterministic tests.
     """
 
     allowed_endpoints: list[str] = field(default_factory=list)
     blocked_patterns: list[str] = field(default_factory=list)
     allow_private_ips: bool = False
     allow_metadata_urls: bool = False
+    resolve_hostnames: bool = True
+    deny_on_resolution_failure: bool = True
+    resolver: Callable[[str], list[str]] | None = None
 
 
 # Cloud metadata IPs/hosts to block
@@ -277,11 +306,16 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
     """Validate a URL against an endpoint policy.
 
     Checks in order:
-    1. Parse URL and extract hostname
+    1. Parse URL and extract hostname; refuse a parser-differential authority
     2. Check blocked patterns
-    3. Check metadata URL blocking
-    4. Check private IP blocking
+    3. Check metadata URL and private IP blocking, on every IP the host could stand for:
+       until 0.10.29 only the literal string was compared, so ``http://2130706433/``,
+       ``http://0x7f000001/``, ``http://127.1/`` and ``http://0xa9fea9fe/`` were admitted
+    4. Check localhost aliases
     5. Check allowed endpoints (if specified)
+    6. Resolve a hostname that passed (``resolve_hostnames``) and repeat step 3 on every
+       address it resolves to; refuse one that does not resolve
+       (``deny_on_resolution_failure``)
 
     Args:
         url: The URL to validate.
@@ -298,10 +332,75 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
         validate_endpoint("https://api.example.com/data", policy)  # OK
         validate_endpoint("https://evil.com/steal", policy)  # Raises
     """
+    hostname = _endpoint_hostname(url)
+
+    # Check blocked patterns first
+    for pattern in policy.blocked_patterns:
+        if _matches_endpoint_pattern(hostname, pattern):
+            logger.warning(
+                "endpoint_blocked",
+                url=_logged(url),
+                hostname=_logged(hostname),
+                pattern=pattern,
+                reason="blocked_pattern",
+            )
+            raise NetworkBlockedError(
+                f"URL blocked by pattern '{pattern}': {hostname}",
+                operation="endpoint_validation",
+                target=url,
+                details={
+                    "reason": "blocked_pattern",
+                    "hostname": hostname,
+                    "pattern": pattern,
+                },
+            )
+
+    if not policy.allow_metadata_urls and hostname in _METADATA_HOSTS:
+        _refuse_endpoint(url, hostname, "metadata_url", "Cloud metadata endpoint blocked")
+    _check_internal(url, hostname, metadata_ip_candidates(hostname), policy)
+
+    # Check localhost aliases
+    # nosec B104 - "0.0.0.0" is being blocklisted here, not used as a bind address
+    if not policy.allow_private_ips and hostname in ("localhost", "0.0.0.0"):  # nosec B104
+        raise NetworkBlockedError(
+            f"Localhost blocked: {hostname}",
+            operation="endpoint_validation",
+            target=url,
+            details={"reason": "localhost", "hostname": hostname},
+        )
+
+    # Check allowed endpoints (if specified)
+    if policy.allowed_endpoints and not any(
+        _matches_endpoint_pattern(hostname, allowed) for allowed in policy.allowed_endpoints
+    ):
+        logger.warning(
+            "endpoint_blocked",
+            url=_logged(url),
+            hostname=_logged(hostname),
+            reason="not_in_allowlist",
+            allowed_endpoints=policy.allowed_endpoints,
+        )
+        raise NetworkBlockedError(
+            f"Host '{hostname}' not in allowed endpoints",
+            operation="endpoint_validation",
+            target=url,
+            details={
+                "reason": "not_in_allowlist",
+                "hostname": hostname,
+                "allowed_endpoints": policy.allowed_endpoints,
+            },
+        )
+
+    _check_resolved(url, hostname, policy)
+
+
+def _endpoint_hostname(url: str) -> str:
+    """The hostname ``url`` names, refusing a URL without one or with a differential."""
     from urllib.parse import urlparse
 
     try:
         parsed = urlparse(url)
+        hostname = parsed.hostname
     except Exception as e:
         raise NetworkBlockedError(
             f"Invalid URL: {e}",
@@ -310,7 +409,6 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
             details={"reason": "parse_error"},
         ) from e
 
-    hostname = parsed.hostname
     if not hostname:
         raise NetworkBlockedError(
             "URL must have a hostname",
@@ -336,90 +434,71 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
             target=url,
             details={"reason": "malformed_authority", "hostname": hostname},
         )
+    return hostname
 
-    # Check blocked patterns first
-    for pattern in policy.blocked_patterns:
-        if _matches_endpoint_pattern(hostname, pattern):
-            logger.warning(
-                "endpoint_blocked",
-                url=_logged(url),
-                hostname=_logged(hostname),
-                pattern=pattern,
-                reason="blocked_pattern",
+
+def _refuse_endpoint(url: str, hostname: str, reason: str, message: str, **logged: Any) -> NoReturn:
+    """Log an endpoint refusal and raise it. ``logged`` goes to the log line only."""
+    logger.warning(
+        "endpoint_blocked", url=_logged(url), hostname=_logged(hostname), reason=reason, **logged
+    )
+    raise NetworkBlockedError(
+        f"{message}: {hostname}",
+        operation="endpoint_validation",
+        target=url,
+        details={"reason": reason, "hostname": hostname},
+    )
+
+
+def _check_internal(
+    url: str,
+    hostname: str,
+    candidates: set[ipaddress.IPv4Address | ipaddress.IPv6Address],
+    policy: EndpointPolicy,
+    **logged: Any,
+) -> None:
+    """Refuse when a candidate IP is a metadata or internal address ``policy`` refuses.
+
+    ``candidates`` are every IP the host (or an address it resolved to) could stand for
+    (``metadata_ip_candidates``): the address itself, the IPv4 an IPv6 transition form
+    embeds, and the decimal, hex, octal and short IPv4 encodings ``inet_aton`` accepts.
+    """
+    if not policy.allow_metadata_urls and _CANONICAL_METADATA_IPS.intersection(candidates):
+        _refuse_endpoint(url, hostname, "metadata_url", "Cloud metadata endpoint blocked", **logged)
+    if not policy.allow_private_ips and any(_is_private_ip(str(ip)) for ip in candidates):
+        _refuse_endpoint(url, hostname, "private_ip", "Private IP blocked", **logged)
+
+
+def _check_resolved(url: str, hostname: str, policy: EndpointPolicy) -> None:
+    """Resolve ``hostname`` and refuse an internal or missing answer (step 6).
+
+    Skipped for an IP literal (step 3 read it), with ``resolve_hostnames`` off, or when
+    the policy allows both private and metadata addresses (nothing to refuse).
+    """
+    if not policy.resolve_hostnames or (policy.allow_private_ips and policy.allow_metadata_urls):
+        return
+    if metadata_ip_candidates(hostname):
+        return
+    resolver = policy.resolver or _default_host_resolver
+    try:
+        addresses = [str(address) for address in resolver(hostname)]
+    except Exception as exc:  # any resolver failure is a host that did not resolve
+        addresses, error = [], type(exc).__name__
+    else:
+        error = "no address" if not addresses else ""
+    decoded = [(address, metadata_ip_candidates(address)) for address in addresses]
+    if error or not all(candidates for _address, candidates in decoded):
+        if policy.deny_on_resolution_failure:
+            _refuse_endpoint(
+                url,
+                hostname,
+                "unresolvable_host",
+                "Host could not be resolved to an address",
+                error=error or "not an IP address",
             )
-            raise NetworkBlockedError(
-                f"URL blocked by pattern '{pattern}': {hostname}",
-                operation="endpoint_validation",
-                target=url,
-                details={
-                    "reason": "blocked_pattern",
-                    "hostname": hostname,
-                    "pattern": pattern,
-                },
-            )
-
-    # Check metadata URLs
-    if not policy.allow_metadata_urls and hostname in _METADATA_HOSTS:
-        logger.warning(
-            "endpoint_blocked",
-            url=_logged(url),
-            hostname=_logged(hostname),
-            reason="metadata_url",
-        )
-        raise NetworkBlockedError(
-            f"Cloud metadata endpoint blocked: {hostname}",
-            operation="endpoint_validation",
-            target=url,
-            details={"reason": "metadata_url", "hostname": hostname},
-        )
-
-    # Check private IPs
-    if not policy.allow_private_ips and _is_private_ip(hostname):
-        logger.warning(
-            "endpoint_blocked",
-            url=_logged(url),
-            hostname=_logged(hostname),
-            reason="private_ip",
-        )
-        raise NetworkBlockedError(
-            f"Private IP blocked: {hostname}",
-            operation="endpoint_validation",
-            target=url,
-            details={"reason": "private_ip", "hostname": hostname},
-        )
-
-    # Check localhost aliases
-    # nosec B104 - "0.0.0.0" is being blocklisted here, not used as a bind address
-    if not policy.allow_private_ips and hostname in ("localhost", "0.0.0.0"):  # nosec B104
-        raise NetworkBlockedError(
-            f"Localhost blocked: {hostname}",
-            operation="endpoint_validation",
-            target=url,
-            details={"reason": "localhost", "hostname": hostname},
-        )
-
-    # Check allowed endpoints (if specified)
-    if policy.allowed_endpoints:
-        for allowed in policy.allowed_endpoints:
-            if _matches_endpoint_pattern(hostname, allowed):
-                return  # Allowed
-        logger.warning(
-            "endpoint_blocked",
-            url=_logged(url),
-            hostname=_logged(hostname),
-            reason="not_in_allowlist",
-            allowed_endpoints=policy.allowed_endpoints,
-        )
-        raise NetworkBlockedError(
-            f"Host '{hostname}' not in allowed endpoints",
-            operation="endpoint_validation",
-            target=url,
-            details={
-                "reason": "not_in_allowlist",
-                "hostname": hostname,
-                "allowed_endpoints": policy.allowed_endpoints,
-            },
-        )
+        return
+    for address, candidates in decoded:
+        _check_internal(url, hostname, candidates, policy, resolved_ip=address)
 
 
 @dataclass
@@ -587,6 +666,16 @@ def _check_address(
                 host=host,
                 port=port,
             )
+        kind = _internal_address_kind(host, policy) if policy.block_private_ips else None
+        if kind is not None:
+            _blocked(
+                operation,
+                f"Network egress blocked: {noun} to an internal address ({kind}) denied",
+                target=str(address),
+                details={"reason": "private_address", "host": host, "kind": kind},
+                host=host,
+                port=port,
+            )
         if host is not None and not (_is_host_allowed(host, policy) or host in frame.resolved):
             _blocked(
                 operation,
@@ -613,6 +702,44 @@ def _check_address(
                 host=host,
                 port=port,
             )
+
+
+def _internal_address_kind(host: str | None, policy: NetworkPolicy) -> str | None:
+    """What makes ``host`` an internal address ``block_private_ips`` refuses, or None.
+
+    The host is decoded through every encoding it could stand for
+    (``metadata_ip_candidates``). A name, which ``connect`` resolves itself, is resolved
+    here with the lookup the airgap replaced, and refused when it does not resolve; the
+    connect then resolves it again, so a name rebound between the two lookups is the one
+    case this leaves open (clients that look up first, then connect to the address, as
+    ``socket.create_connection`` does, are not exposed to it). An empty host is this
+    machine. Addresses on ``allowed_private_ips`` are admitted. A Unix-domain socket (no
+    host) is not an address and is left to ``allow_egress``.
+    """
+    if host is None:
+        return None
+    text = host.split("%", 1)[0].strip("[]")
+    if not text:
+        return "this machine"
+    candidates = metadata_ip_candidates(text)
+    if not candidates:
+        try:
+            infos = _original("getaddrinfo")(text, None)
+        except (OSError, UnicodeError, ValueError):
+            return "unresolvable name"
+        for info in infos:
+            candidates |= metadata_ip_candidates(str(info[4][0]).split("%", 1)[0])
+        if not candidates:
+            return "unresolvable name"
+    exempt = {
+        str(ip) for entry in policy.allowed_private_ips for ip in metadata_ip_candidates(entry)
+    }
+    internal = {ip for ip in candidates if str(ip) not in exempt}
+    if _CANONICAL_METADATA_IPS.intersection(internal):
+        return "cloud metadata"
+    if any(_is_private_ip(str(ip)) for ip in internal):
+        return "private, loopback or link-local"
+    return None
 
 
 def _check_lookup(frames: tuple[_AirgapFrame, ...], host: Any, operation: str) -> None:
@@ -659,8 +786,9 @@ def _admit(frames: tuple[_AirgapFrame, ...], addresses: Iterable[Any]) -> None:
 
     Only the open airgaps of the current call record them. A listed name that resolves
     to an internal address (127.0.0.1, 169.254.169.254) gets that address admitted with
-    it: keeping a tool off internal addresses is the job of ``EndpointPolicy`` and the
-    SSRF egress guard (``ssrf_egress_guard``), not of this allowlist.
+    it: keeping a tool off internal addresses is the job of ``block_private_ips``, which
+    ``_check_address`` applies at connect whatever the allowlist admitted, and of
+    ``EndpointPolicy`` and the SSRF egress guard (``ssrf_egress_guard``) before the call.
     """
     hosts = [text for address in addresses if (text := _host_text(address))]
     for frame in frames:

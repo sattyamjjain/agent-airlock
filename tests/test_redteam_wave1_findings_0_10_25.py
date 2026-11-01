@@ -33,6 +33,15 @@ from agent_airlock.safe_types import UnsafeDeserializationGuard
 from agent_airlock.ssrf_egress_guard import SSRFEgressGuard, SSRFEgressVerdict
 
 
+def _resolves_public(host: str) -> list[str]:
+    """Every name resolves to a public address: these cases are about the allowlist, not DNS.
+
+    Since 0.10.29 ``EndpointPolicy`` resolves an admitted hostname and refuses one that does
+    not resolve; the made-up names here would not.
+    """
+    return ["93.184.216.34"]
+
+
 class TestTextPickleLeadingWhitespace:
     """Finding 1: a text pickle behind leading whitespace must be refused."""
 
@@ -101,13 +110,17 @@ class TestAuthorityParserDifferential:
         assert authority_has_differential(url) is False
 
     def test_validate_endpoint_refuses_backslash_host(self) -> None:
-        policy = EndpointPolicy(allowed_endpoints=["api.allowed.example"])
+        policy = EndpointPolicy(
+            allowed_endpoints=["api.allowed.example"], resolver=_resolves_public
+        )
         with pytest.raises(NetworkBlockedError) as excinfo:
             validate_endpoint(r"http://127.0.0.1\@api.allowed.example/", policy)
         assert excinfo.value.details["reason"] == "malformed_authority"
 
     def test_validate_endpoint_still_admits_the_allowlisted_host(self) -> None:
-        policy = EndpointPolicy(allowed_endpoints=["api.allowed.example"])
+        policy = EndpointPolicy(
+            allowed_endpoints=["api.allowed.example"], resolver=_resolves_public
+        )
         validate_endpoint("https://api.allowed.example/v1/data", policy)  # no raise
 
     def test_ssrf_guard_refuses_backslash_host(self) -> None:

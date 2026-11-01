@@ -238,10 +238,12 @@ The airgap follows the call's context, which sets its limits:
 - A task the tool leaves running after it returns is checked only while some airgap is
   still open in the process.
 - A name on `allowed_hosts` admits the addresses it resolves to, for that call, internal
-  ones included: keeping a tool off internal addresses is the job of `EndpointPolicy` and
-  the SSRF egress guard. A lookup the allowlist did not check admits nothing, and an empty
-  host, which reaches this machine, is refused under a host allowlist (`http://:8080/`
-  reached a local service until 0.10.28).
+  ones included, unless `block_private_ips=True`, which refuses a loopback, private,
+  link-local or metadata address at every connect and datagram (redirect hops and rebinds
+  included; `allowed_private_ips` exempts named addresses). `EndpointPolicy` and the SSRF
+  egress guard check the argument URLs before the call. A lookup the allowlist did not check
+  admits nothing, and an empty host, which reaches this machine, is refused under a host
+  allowlist (`http://:8080/` reached a local service until 0.10.28).
 - A Unix-domain socket has a path, not a host: `allow_egress=False` refuses it, and a host
   or port allowlist does not apply to it.
 

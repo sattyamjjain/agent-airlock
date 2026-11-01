@@ -597,6 +597,8 @@ def _parse_network_policy(data: dict[str, Any]) -> NetworkPolicy:
         allowed_hosts=list(data.get("allowed_hosts", [])),
         allowed_ports=list(data.get("allowed_ports", [])),
         block_dns=bool(data.get("block_dns", False)),
+        block_private_ips=bool(data.get("block_private_ips", False)),
+        allowed_private_ips=list(data.get("allowed_private_ips", [])),
     )
 
 
@@ -653,6 +655,8 @@ def _parse_endpoint_policies(data: dict[str, Any]) -> dict[str, EndpointPolicy]:
                 blocked_patterns=list(tool_data.get("blocked_patterns", [])),
                 allow_private_ips=bool(tool_data.get("allow_private_ips", False)),
                 allow_metadata_urls=bool(tool_data.get("allow_metadata_urls", False)),
+                resolve_hostnames=bool(tool_data.get("resolve_hostnames", True)),
+                deny_on_resolution_failure=bool(tool_data.get("deny_on_resolution_failure", True)),
             )
     return policies
 

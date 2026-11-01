@@ -87,6 +87,16 @@ from agent_airlock.safe_types import UnsafeDeserializationGuard
 from agent_airlock.unknown_args import UnknownArgsMode
 from agent_airlock.validator import create_argument_validator
 
+
+def _resolves_public(host: str) -> list[str]:
+    """Every name resolves to a public address: these cases are about the allowlist, not DNS.
+
+    Since 0.10.29 ``EndpointPolicy`` resolves an admitted hostname and refuses one that does
+    not resolve; the made-up names here would not.
+    """
+    return ["93.184.216.34"]
+
+
 AUD = "https://mcp.example.com"
 OTHER = "https://other.example.com"
 METADATA_URL = "http://169.254.169.254/latest/meta-data/"
@@ -226,7 +236,11 @@ class TestTheEndpointGateWalksTheModelsArgument:
     @staticmethod
     def _tool() -> Any:
         config = AirlockConfig(
-            endpoint_policies={"fetch": EndpointPolicy(allowed_endpoints=["api.example.com"])},
+            endpoint_policies={
+                "fetch": EndpointPolicy(
+                    allowed_endpoints=["api.example.com"], resolver=_resolves_public
+                )
+            },
             enable_audit_log=False,
         )
 
@@ -947,7 +961,11 @@ def _fs_tool(allowed: Path) -> Any:
 
 def _fetch_tool() -> Any:
     config = AirlockConfig(
-        endpoint_policies={"fetch": EndpointPolicy(allowed_endpoints=["api.example.com"])},
+        endpoint_policies={
+            "fetch": EndpointPolicy(
+                allowed_endpoints=["api.example.com"], resolver=_resolves_public
+            )
+        },
         enable_audit_log=False,
     )
 

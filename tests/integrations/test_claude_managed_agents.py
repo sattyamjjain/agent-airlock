@@ -70,6 +70,15 @@ from agent_airlock.sandbox_backend import ManagedSandboxBackend
 WORKSPACE = RemotePathPolicy(allowed_roots=("/workspace",))
 
 
+def _resolves_public(host: str) -> list[str]:
+    """Every name resolves to a public address: these cases are about the allowlist, not DNS.
+
+    Since 0.10.29 ``EndpointPolicy`` resolves an admitted hostname and refuses one that does
+    not resolve; the made-up names here would not.
+    """
+    return ["93.184.216.34"]
+
+
 def _event(
     name: str = "read",
     tool_input: Any = None,
@@ -581,7 +590,10 @@ class TestWebFetch:
     @pytest.fixture
     def gate(self) -> ManagedAgentToolGate:
         return ManagedAgentToolGate(
-            {"web_fetch"}, endpoint_policy=EndpointPolicy(allowed_endpoints=["docs.example.com"])
+            {"web_fetch"},
+            endpoint_policy=EndpointPolicy(
+                allowed_endpoints=["docs.example.com"], resolver=_resolves_public
+            ),
         )
 
     def test_an_allowed_host(self, gate: ManagedAgentToolGate) -> None:

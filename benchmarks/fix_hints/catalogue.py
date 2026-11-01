@@ -801,8 +801,11 @@ def build_config(spec: Mapping[str, Any]) -> AirlockConfig:
         kwargs["filesystem_policy"] = FilesystemPolicy(allowed_roots=[Path(r) for r in roots])
     endpoints = spec.get("endpoints")
     if endpoints:
+        # Offline: the scenarios name invented hosts, and this bench measures the
+        # refusals' fix_hints, not DNS, so no host is resolved (0.10.29 resolves by default).
         kwargs["endpoint_policies"] = {
-            tool: EndpointPolicy(allowed_endpoints=list(hosts)) for tool, hosts in endpoints.items()
+            tool: EndpointPolicy(allowed_endpoints=list(hosts), resolve_hostnames=False)
+            for tool, hosts in endpoints.items()
         }
     capability = spec.get("capability")
     if capability:

@@ -204,7 +204,12 @@ src/agent_airlock/
      or a call with no agent id is refused. Only then is each use metered
      (`check_and_use`). A refusal is `capability_denied` with `violation_type`
      `lease_scope`, and names no lease target
-5. Endpoint policy validation
+5. Endpoint policy validation: every IP a host stands for (`metadata_ip_candidates`:
+   decimal, hex, octal, short and IPv6-transition forms) meets the private and metadata
+   checks, and a hostname that passes `allowed_endpoints` is then resolved
+   (`resolve_hostnames`, `resolver`) and refused on an internal or missing answer; a name
+   the allowlist refuses is never looked up. Redirects and rebinds inside the tool are the
+   airgap's, with `NetworkPolicy(block_private_ips=True)`
 
    Steps 2.7, 2.75, 2.76, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
    by parameter name (`*args` under the parameter's own name; a `**kwargs` key never hides
@@ -254,7 +259,9 @@ src/agent_airlock/
    `getnameinfo` lookups, asyncio's included; a host allowlist admits only the addresses
    its own lookups of a listed host returned in that call, and refuses an empty host (this
    machine); `block_dns` lets a forward lookup of an IP literal through (it asks no DNS
-   server); a Unix-domain socket meets only `allow_egress=False`. Sandbox mode validates in
+   server); `block_private_ips` refuses an internal address at connect and `sendto`, a name
+   passed to `connect` resolved first, whatever the allowlist admitted (`allowed_private_ips`
+   exempts); a Unix-domain socket meets only `allow_egress=False`. Sandbox mode validates in
    the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way, and a
    tool that raises in the sandbox gets the answer it gets locally; a sandbox that fails is
    refused as `sandbox_error`. E2B, Docker and Modal run one payload (`generate_execution_code`)

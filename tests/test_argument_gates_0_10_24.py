@@ -50,6 +50,16 @@ from agent_airlock.network import EndpointPolicy
 from agent_airlock.policy import PERMISSIVE_POLICY, SecurityPolicy
 from agent_airlock.safe_types import UnsafeDeserializationGuard, UnsafeDeserializationVerdict
 
+
+def _resolves_public(host: str) -> list[str]:
+    """Every name resolves to a public address: these cases are about the allowlist, not DNS.
+
+    Since 0.10.29 ``EndpointPolicy`` resolves an admitted hostname and refuses one that does
+    not resolve; the made-up names here would not.
+    """
+    return ["93.184.216.34"]
+
+
 SECRET = "TOP-SECRET-CONTENT"
 
 
@@ -347,7 +357,11 @@ class TestTheEndpointGateReadsEveryArgument:
     @staticmethod
     def _config() -> AirlockConfig:
         return AirlockConfig(
-            endpoint_policies={"fetch": EndpointPolicy(allowed_endpoints=["api.example.com"])}
+            endpoint_policies={
+                "fetch": EndpointPolicy(
+                    allowed_endpoints=["api.example.com"], resolver=_resolves_public
+                )
+            }
         )
 
     def test_a_positional_url(self) -> None:

@@ -121,12 +121,16 @@ def filesystem_policy(scope: FsScope) -> FilesystemPolicy:
 
 
 def endpoint_policy(scope: EndpointScope) -> EndpointPolicy:
-    """Build a tool's ``EndpointPolicy`` (an allowlist, or the open-web default)."""
+    """Build a tool's ``EndpointPolicy`` (an allowlist, or the open-web default).
+
+    ``resolve_hostnames=False``: a replay runs offline and deterministically, so the hosts
+    in the corpus are never looked up (0.10.29 resolves an admitted host by default).
+    """
     if scope.kind == "allowlist":
         if not scope.hosts:
             raise ValueError("an allowlist scope needs at least one host")
-        return EndpointPolicy(allowed_endpoints=list(scope.hosts))
-    return EndpointPolicy()
+        return EndpointPolicy(allowed_endpoints=list(scope.hosts), resolve_hostnames=False)
+    return EndpointPolicy(resolve_hostnames=False)
 
 
 def make_config(tool_name: str, scope: ToolScope | None) -> AirlockConfig:

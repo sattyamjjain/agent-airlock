@@ -17,6 +17,15 @@ from agent_airlock.network import (
 from agent_airlock.self_heal import handle_endpoint_violation
 
 
+def _resolves_public(host: str) -> list[str]:
+    """Every name resolves to a public address: these cases are about the allowlist, not DNS.
+
+    Since 0.10.29 ``EndpointPolicy`` resolves an admitted hostname and refuses one that does
+    not resolve; the made-up names here would not.
+    """
+    return ["93.184.216.34"]
+
+
 class TestEndpointPolicy:
     """Tests for EndpointPolicy dataclass."""
 
@@ -36,6 +45,7 @@ class TestValidateEndpoint:
         """Test that a URL matching allowed endpoints passes validation."""
         policy = EndpointPolicy(
             allowed_endpoints=["api.example.com", "management.azure.com"],
+            resolver=_resolves_public,
         )
         # Should not raise
         validate_endpoint("https://api.example.com/data", policy)
@@ -54,6 +64,7 @@ class TestValidateEndpoint:
         """Test wildcard pattern matching (*.blob.core.windows.net)."""
         policy = EndpointPolicy(
             allowed_endpoints=["*.blob.core.windows.net"],
+            resolver=_resolves_public,
         )
         validate_endpoint("https://myaccount.blob.core.windows.net/data", policy)
 
@@ -198,6 +209,7 @@ class TestEndpointIntegration:
             endpoint_policies={
                 "fetch_data": EndpointPolicy(
                     allowed_endpoints=["api.example.com"],
+                    resolver=_resolves_public,
                 ),
             },
             enable_audit_log=False,

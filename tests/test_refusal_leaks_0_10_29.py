@@ -143,6 +143,31 @@ class TestLoggedArgumentValues:
         assert KEY not in logged and KEY_BODY not in logged
         assert any(event == "endpoint_policy_violation" for event, _ in events.seen)
 
+    @pytest.mark.parametrize(
+        ("policy", "host"),
+        [
+            pytest.param(
+                EndpointPolicy(blocked_patterns=["*.example.test"]),
+                "api.example.test",
+                id="blocked-pattern",
+            ),
+            pytest.param(EndpointPolicy(), "10.0.0.1", id="private-ip"),
+            pytest.param(EndpointPolicy(), "169.254.169.254", id="metadata"),
+        ],
+    )
+    def test_every_endpoint_refusal_logs_no_raw_key(
+        self, events: _Events, policy: EndpointPolicy, host: str
+    ) -> None:
+        @Airlock(config=AirlockConfig(endpoint_policies={"fetch": policy}))
+        def fetch(url: str) -> str:
+            return url
+
+        result = fetch(url=f"https://{host}/?token={KEY}")
+        assert isinstance(result, dict)
+        assert result["block_reason"] == "endpoint_blocked"
+        logged = repr(events.seen)
+        assert KEY not in logged and KEY_BODY not in logged
+
     def test_a_path_refusal_logs_no_raw_key(self, events: _Events, tmp_path: Path) -> None:
         policy = FilesystemPolicy(allowed_roots=[tmp_path.resolve()])
 

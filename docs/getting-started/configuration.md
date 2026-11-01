@@ -149,6 +149,13 @@ bind_resolved_paths = false  # true: the tool gets the absolute path that was ch
 allow_egress = true
 allowed_hosts = ["api.company.com"]
 allowed_ports = [443]
+block_private_ips = true      # refuse loopback, private, link-local and metadata at connect
+
+# Per-tool URL rules (step 5), keyed by tool name
+[airlock.endpoints.fetch]
+allowed_endpoints = ["api.company.com"]
+resolve_hostnames = true          # default: resolve an admitted name, refuse internal answers
+deny_on_resolution_failure = true # default: refuse a name that does not resolve
 
 # V0.3.0 Honeypot
 [airlock.honeypot]
@@ -213,6 +220,57 @@ def search_users(query: str) -> list:
 def delete_user(user_id: int) -> dict:
     return [...]
 ```
+
+## Endpoint Policies and Private Addresses
+
+`AirlockConfig(endpoint_policies={tool_name: EndpointPolicy(...)})` checks every URL a tool's
+arguments carry before the tool runs (step 5). Since 0.10.29 it reads the address a host
+stands for, not the literal string: decimal (`http://2130706433/`), hex
+(`http://0x7f000001/`), octal (`http://0251.0376.0251.0376/`), short (`http://127.1/`) and
+IPv4-mapped IPv6 forms are refused like the addresses they decode to. A hostname that passes
+the blocked patterns and `allowed_endpoints` is then resolved, and refused when any address it
+resolves to is private, loopback, link-local or a cloud metadata address
+(`http://169.254.169.254.nip.io/` included), or when it does not resolve. Only names the
+policy would admit are looked up, so a name it refuses is never sent to DNS.
+
+That lookup adds the resolver's latency to each call with a hostname URL. An allowlisted
+name that resolves to an internal service needs `allow_private_ips=True`, and a test that
+allowlists a made-up name needs `resolver=` (a function from a hostname to its addresses) or
+`resolve_hostnames=False`.
+
+`NetworkPolicy(block_private_ips=True)` refuses the same internal addresses inside the network
+airgap, at every connect and datagram the tool makes during the call. `allowed_hosts` does not
+exempt an address from it; `allowed_private_ips` does (a local egress proxy, a sidecar).
+
+```python
+from agent_airlock import Airlock, AirlockConfig, EndpointPolicy, NetworkPolicy
+
+config = AirlockConfig(
+    endpoint_policies={"fetch": EndpointPolicy(allowed_endpoints=["api.example.com"])},
+    network_policy=NetworkPolicy(block_private_ips=True, allowed_private_ips=["127.0.0.1"]),
+)
+
+
+@Airlock(config=config)
+def fetch(url: str) -> str:
+    return url
+```
+
+### What the call-path checks cannot see
+
+- Step 5 reads the URLs in the tool's arguments, once, before the tool runs. A redirect the
+  tool follows, a page that navigates or loads another URL, and a name the tool resolves
+  again later (DNS rebinding) are not arguments, so step 5 never sees them.
+- The airgap sees them only with `block_private_ips` on, and only for the connects and
+  datagrams the call's own context makes: the tool's code, the asyncio tasks it creates and
+  `asyncio.to_thread`. A thread the tool starts itself, a subprocess (a headless browser, a
+  `curl`), a socket made from `_socket` directly, an event loop that does its own socket I/O
+  (uvloop) and other processes are outside it (see
+  [The Network Airgap](../guide/concepts.md#the-network-airgap)).
+- A name passed straight to `socket.connect` is resolved by the airgap and then again by the
+  connect itself, so a record that changes between the two lookups is not seen. Clients that
+  look up first and connect to the address (`socket.create_connection`, `urllib`, `requests`,
+  `httpx`) are not exposed to that.
 
 ## Capability Gating (V0.4.0)
 
