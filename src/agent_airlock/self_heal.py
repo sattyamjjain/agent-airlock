@@ -95,7 +95,7 @@ class BlockReason(str, Enum):
 
     # V0.10.29: a tool argument carried a secret or personal data (ArgumentSecretGuard).
     # The refusal names the argument and the kind of data, never the value.
-    ARGUMENT_SECRET = "argument_secret"
+    ARGUMENT_SECRET = "argument_secret"  # nosec B105 - enum value name, not a credential
 
 
 #: Whether a refusal with this block reason can pass on a retry, when the reason alone
