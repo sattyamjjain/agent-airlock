@@ -67,6 +67,7 @@ jobs:
           pytest tests/test_redis_rate_limit.py tests/kill_switch/test_kill_switch_wiring.py \
             tests/scan/test_mcp_tool_annotations.py \
             tests/test_mcp_integration_0_10_18.py tests/test_identity.py \
+            tests/test_effect_guard_0_10_29.py \
             tests/test_attested_admission.py -rs --no-cov | tee extra-backed-tests.log
           sed -E 's/\x1b\[[0-9;]*m//g' extra-backed-tests.log > extra-backed-tests.plain.log
           grep -qE '^=+ [0-9]+ passed(, [0-9]+ deselected)?(, [0-9]+ warnings?)? in ' extra-backed-tests.plain.log || {

@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         ModelTierBudget,
     )
     from .data_flow import DataFlowPolicy
+    from .effect_guard import EffectGuard
     from .oversight import Approver
     from .run_guard import RunGuard
     from .safe_types import UnsafeDeserializationGuard
@@ -554,6 +555,14 @@ class SecurityPolicy:
     # or refused by rule (Step 2.77). OFF by default (None preserves prior behavior
     # exactly). See :class:`agent_airlock.shell_command_policy.ShellCommandPolicy`.
     shell_command_policy: ShellCommandPolicy | None = None
+    # V0.10.29 at-most-once dispatch. When set, each call to a tool that is not
+    # @reversibility("reversible") is recorded pending before it runs and committed (with
+    # the value it returned) or unknown after, keyed on the tool_call_id the host puts on
+    # the call's context metadata: a replay of a committed call returns that value without
+    # running, and one of a pending or unknown call is refused (effect_status_unknown).
+    # OFF by default (None preserves prior behavior exactly). See
+    # :class:`agent_airlock.effect_guard.EffectGuard`.
+    effect_guard: EffectGuard | None = None
 
     # Parsed/cached values
     _time_windows: dict[str, TimeWindow] = field(default_factory=dict, repr=False)
@@ -1058,6 +1067,8 @@ class SecurityPolicy:
             payload["run_guard"] = self.run_guard.canonical()
         if self.shell_command_policy is not None:
             payload["shell_command_policy"] = self.shell_command_policy.canonical()
+        if self.effect_guard is not None:
+            payload["effect_guard"] = self.effect_guard.canonical()
         return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def _compute_policy_digest(self) -> str:

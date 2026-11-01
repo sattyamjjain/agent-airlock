@@ -97,6 +97,7 @@ nav:
     - Halting a run, and loops: guide/run-guard.md
     - Delegation: guide/delegation.md
     - Tool output trust: guide/tool-output-trust.md
+    - At-most-once dispatch: guide/effect-guard.md
   - API Reference:
     - Airlock Decorator: api/airlock.md
     - Configuration: api/config.md
