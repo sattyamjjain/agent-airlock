@@ -799,6 +799,19 @@ def _escalation(verdict: OversightVerdict | None) -> Callable[[_Env], Any]:
     return make
 
 
+def _escalation_unreadable(env: _Env) -> Any:
+    """An approver that answers with the string "grant", not the OversightVerdict member."""
+
+    def approver(request: OversightRequest) -> OversightResponse:
+        return OversightResponse(request_id=request.request_id, verdict="grant")  # type: ignore[arg-type]
+
+    @Airlock(policy=SecurityPolicy(escalate_tools={"tool": "needs a human"}, approver=approver))
+    def tool() -> str:
+        return "ran"
+
+    return tool()
+
+
 def _kill_switch(env: _Env) -> Any:
     env.monkeypatch.setattr(core_module, "_kill_switch_frozen", lambda: True)
     env.monkeypatch.setattr(core_module, "_kill_switch_get", lambda: None)
@@ -919,6 +932,7 @@ _REFUSALS: list[tuple[str, Callable[[_Env], Any], BlockReason]] = [
         _escalation(OversightVerdict.TIMEOUT),
         BlockReason.ESCALATION_TIMEOUT,
     ),
+    ("escalation-unreadable", _escalation_unreadable, BlockReason.POLICY_INDETERMINATE),
     ("kill-switch", _kill_switch, BlockReason.KILL_SWITCH),
     ("token-audience", _token_audience, BlockReason.TOKEN_AUDIENCE),
     ("startup-hook", _startup_hook, BlockReason.STARTUP_HOOK),
