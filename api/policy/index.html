@@ -1179,6 +1179,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/delegation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Delegation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1415,6 +1443,17 @@
     <span class="md-ellipsis">
       
         Example
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#narrowing-a-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Narrowing a policy
       
     </span>
   </a>
@@ -3059,6 +3098,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#narrowing-a-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Narrowing a policy
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3471,6 +3521,27 @@
 <a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="p">},</span>
 <a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="p">)</span>
 </code></pre></div>
+<h3 id="narrowing-a-policy">Narrowing a policy<a class="headerlink" href="#narrowing-a-policy" title="Permanent link">&para;</a></h3>
+<p>Since 0.10.29, for a delegated agent:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>narrow(*, allowed_tools=None, denied_tools=(), rate_limits=None, amplification_budget=None)</code></td>
+<td>A copy that can only admit less: the allowlist intersected, deny patterns added, rate limits and the call budget lowered. Raises <code>ValueError</code> when a value would admit more</td>
+</tr>
+<tr>
+<td><code>is_subset_of(parent)</code></td>
+<td>Whether this policy admits no call <code>parent</code> refuses. False also when the policies' shape cannot prove it; <code>agent_airlock.delegation.subset_problems(child, parent)</code> says why</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="../../guide/delegation/">Delegation</a>.</p>
 <h2 id="predefined-policies">Predefined Policies<a class="headerlink" href="#predefined-policies" title="Permanent link">&para;</a></h2>
 <h3 id="permissive_policy">PERMISSIVE_POLICY<a class="headerlink" href="#permissive_policy" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">PERMISSIVE_POLICY</span>
