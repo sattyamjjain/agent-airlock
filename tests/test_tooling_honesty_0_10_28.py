@@ -62,6 +62,7 @@ EXTRA_BACKED_FILES = (
     "tests/test_attested_admission.py",
     "tests/test_result_masking_0_10_29.py",
     "tests/test_mcp_tool_pins_0_10_29.py",
+    "tests/test_permission_prompt_0_10_29.py",
 )
 
 

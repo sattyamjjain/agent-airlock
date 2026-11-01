@@ -139,6 +139,7 @@ nav:
     - Claude Agent SDK: integrations/anthropic-claude-agent-sdk.md
     - Managed Agents: integrations/managed-agents.md
     - OpenAI Agents SDK: integrations/openai-agents.md
+    - Claude Code permission prompts: integrations/claude-code-permission-prompt.md
   - CLI:
     - Kill switch: cli/kill-switch.md
     - Policy bundle lock: cli/policy-bundle-lock.md

@@ -77,7 +77,9 @@ src/agent_airlock/
 ├── mcp_spec/    per-CVE / per-spec-revision MCP guards — largest subpackage, own CLAUDE.md
 ├── mcp/         FastMCP integration (MCPAirlock, secure_tool, create_secure_mcp_server) —
 │                a refusal raises FastMCP's ToolError (error result whatever the return
-│                type); plus cimd.py — pinned CIMD trust anchor, denies on drift
+│                type); plus cimd.py — pinned CIMD trust anchor, denies on drift — and
+│                permission_prompt.py, the `claude -p --permission-prompt-tool` server
+│                (one text block of JSON, no output schema: structuredContent is refused)
 ├── kill_switch/ fleet freeze: one signed broadcast freezes, an M-of-N quorum of signer keys
 │                resets — registry, signer, quorum, broadcast, transports/
 ├── data/        dated snapshots (model pricing, advisory blast radius)
