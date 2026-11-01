@@ -98,6 +98,9 @@ class AuditRecord:
     # @source tool's own output, or any output produced in a run an untrusted source
     # tainted). None otherwise, so every other record is unchanged.
     provenance: dict[str, object] | None = None
+    # V0.10.29: "replayed" when the effect guard answered a replayed tool_call_id with the
+    # value its committed attempt returned, without running the tool. None otherwise.
+    effect: str | None = None
     # V0.8.74 resource amplification (issue #142, arXiv:2608.12273).
     #
     # These make the Convergent-Detour-Hijacking shape *detectable* rather than merely
@@ -248,6 +251,7 @@ class AuditLogger:
         stripped_args: list[str] | None = None,
         requested_args: dict[str, Any] | None = None,
         provenance: dict[str, object] | None = None,
+        effect: str | None = None,
         amplification: AmplificationDecision | None = None,
         honeypot: bool = False,
     ) -> None:
@@ -273,6 +277,8 @@ class AuditLogger:
                 recorded masked, and only alongside ``stripped_args`` (V0.10.29).
             provenance: The output's provenance tag (V0.10.29,
                 :func:`agent_airlock.data_flow.output_provenance`).
+            effect: ``"replayed"`` when the effect guard returned a committed attempt's
+                value without running the tool (V0.10.29).
             amplification: V0.8.74 per-run amplification decision (issue #142).
                 When None the five ``run_*`` fields stay unset and ``to_dict()``
                 omits them, so the record is byte-identical to a v0.8.73 one.
@@ -304,6 +310,7 @@ class AuditLogger:
                 else None
             ),
             provenance=provenance,
+            effect=effect,
             run_call_count=amplification.run_call_count if amplification else None,
             run_input_tokens=amplification.run_input_tokens if amplification else None,
             run_baseline_calls=amplification.baseline_calls if amplification else None,

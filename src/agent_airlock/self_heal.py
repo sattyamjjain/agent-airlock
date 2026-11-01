@@ -88,6 +88,10 @@ class BlockReason(str, Enum):
     # ToolOutputTrustGuard with on_flag="typed_error" withheld it. Not OUTPUT_SANITIZED:
     # nothing was masked, the whole output is refused, and no placeholder stands in for it.
     OUTPUT_UNTRUSTED = "output_untrusted"
+    # V0.10.29: an earlier attempt of this tool_call_id may have taken effect (its
+    # response was lost, or it is still running), and the tool is not reversible, so it is
+    # not run again (EffectGuard).
+    EFFECT_STATUS_UNKNOWN = "effect_status_unknown"
 
 
 @dataclass
@@ -515,6 +519,40 @@ def handle_capability_denied(
             "missing_capabilities": list(missing),
             "denied_capabilities": list(denied),
         },
+    )
+
+
+def handle_effect_status_unknown(
+    func_name: str,
+    *,
+    status: str,
+    idempotency_key: str,
+) -> AirlockResponse:
+    """Create a response for a call an earlier attempt may already have carried out.
+
+    Args:
+        func_name: Name of the tool.
+        status: The earlier attempt's status in the effect store (``pending`` or
+            ``unknown``).
+        idempotency_key: The call's idempotency key, which the backend can be asked
+            about.
+
+    Returns:
+        AirlockResponse that tells the caller not to retry.
+    """
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.EFFECT_STATUS_UNKNOWN,
+        error=(
+            f"AIRLOCK_BLOCK: an earlier attempt of '{func_name}' with this tool_call_id may "
+            f"already have taken effect (its outcome is {status}), and the tool is not "
+            "reversible, so it is not run again"
+        ),
+        fix_hints=[
+            "Do not retry this call: an earlier attempt may already have taken effect",
+            f"Ask the backend whether idempotency key {idempotency_key} was applied",
+            "If it was not, make a new tool call, which carries a new tool_call_id",
+        ],
+        metadata={"function": func_name, "effect_status": status},
     )
 
 

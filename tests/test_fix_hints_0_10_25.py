@@ -814,6 +814,20 @@ def _escalation_unreadable(env: _Env) -> Any:
     return tool()
 
 
+def _effect_status_unknown(env: _Env) -> Any:
+    """A replay of a call whose first attempt timed out after it may have taken effect."""
+    from agent_airlock.context import AirlockContext
+    from agent_airlock.effect_guard import EffectGuard
+
+    @Airlock(policy=SecurityPolicy(effect_guard=EffectGuard()))
+    def tool() -> str:
+        raise TimeoutError("the response never came back")
+
+    with AirlockContext(metadata={"tool_call_id": "call-1"}):
+        tool()
+        return tool()
+
+
 def _kill_switch(env: _Env) -> Any:
     env.monkeypatch.setattr(core_module, "_kill_switch_frozen", lambda: True)
     env.monkeypatch.setattr(core_module, "_kill_switch_get", lambda: None)
@@ -969,6 +983,7 @@ _REFUSALS: list[tuple[str, Callable[[_Env], Any], BlockReason]] = [
         BlockReason.ESCALATION_TIMEOUT,
     ),
     ("escalation-unreadable", _escalation_unreadable, BlockReason.POLICY_INDETERMINATE),
+    ("effect-status-unknown", _effect_status_unknown, BlockReason.EFFECT_STATUS_UNKNOWN),
     ("kill-switch", _kill_switch, BlockReason.KILL_SWITCH),
     ("token-audience", _token_audience, BlockReason.TOKEN_AUDIENCE),
     ("startup-hook", _startup_hook, BlockReason.STARTUP_HOOK),

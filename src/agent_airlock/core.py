@@ -118,6 +118,7 @@ from .cost_tracking import (
 )
 from .data_flow import DataFlowPolicy, TaintEntry, flow_tags, output_provenance
 from .delegation import ceiling_chain
+from .effect_guard import EffectTicket, get_reversibility
 from .exceptions import AirlockError
 from .filesystem import PathValidationError, validate_path
 from .honeypot import (
@@ -147,6 +148,7 @@ from .self_heal import (
     handle_amplification_exceeded,
     handle_budget_exceeded,
     handle_capability_denied,
+    handle_effect_status_unknown,
     handle_endpoint_violation,
     handle_escalation,
     handle_ghost_argument_error,
@@ -292,6 +294,7 @@ class _BoundCall:
 #: The decision-log ``decision`` an outcome is written with.
 _OUTCOME_DECISION: dict[str, Literal["allow", "block", "error"]] = {
     "returned": "allow",
+    "replayed": "allow",
     "refused_after_run": "block",
     "network_blocked": "block",
     "raised": "error",
@@ -390,6 +393,68 @@ def _decision_unrecorded(func_name: str) -> AirlockResponse:
         ],
         metadata={"function": func_name},
     )
+
+
+def _escalate_irreversible(policy: SecurityPolicy, func_name: str, tool: Any) -> None:
+    """Raise the escalation ``EffectGuard.require_approval_for_irreversible`` asks for.
+
+    Raises:
+        PolicyEscalation: The policy's effect guard escalates irreversible tools and this
+            tool is irreversible (untagged counts), whatever ``escalate_tools`` says.
+    """
+    guard = policy.effect_guard
+    if guard is None or not guard.require_approval_for_irreversible:
+        return
+    if get_reversibility(tool) != "irreversible":
+        return
+    raise PolicyEscalation(
+        f"Tool '{func_name}' has an irreversible effect and needs a human's approval",
+        tool_name=func_name,
+        reason="irreversible effect (EffectGuard.require_approval_for_irreversible)",
+        rule="effect_guard:irreversible",
+    )
+
+
+def _effect_refusal_reason(refusal: str, guard: Any) -> str:
+    """What an effect-guard refusal tells the caller, by ``EffectTicket.refusal``."""
+    if refusal == "no_target":
+        return "an irreversible call names its target: pass one of " + ", ".join(guard.target_args)
+    if refusal == "call_id_reused":
+        return "this tool_call_id was used before for a call with other arguments or another tool"
+    return (
+        "the call carries no tool_call_id, so it cannot be run at most once; the host or "
+        "adapter puts one on the call's context (AirlockContext(metadata={'tool_call_id': "
+        "...}))"
+    )
+
+
+def _effect_replay(context: AirlockContext[Any]) -> Any:
+    """The committed record a replayed call returns instead of running, or None."""
+    ticket: EffectTicket | None = context._effect
+    return ticket.replay if ticket is not None else None
+
+
+def _effect_released(context: AirlockContext[Any] | None) -> None:
+    """Give back the effect ticket of a call refused before it ran (the decision log
+    could not take it, after step 6.5 admitted it), so a retry is a first attempt."""
+    ticket: EffectTicket | None = context._effect if context is not None else None
+    if ticket is not None:
+        ticket.released()
+
+
+def _effect_failed(context: AirlockContext[Any] | None, error: BaseException) -> None:
+    """Tell the call's effect ticket the tool raised: unknown or released."""
+    ticket: EffectTicket | None = context._effect if context is not None else None
+    if ticket is not None:
+        ticket.failed(error)
+
+
+def _effect_done(context: AirlockContext[Any] | None, value: _T, *, deferred: bool = False) -> _T:
+    """Record ``value`` as the call's committed result; return it."""
+    ticket: EffectTicket | None = context._effect if context is not None else None
+    if ticket is not None:
+        ticket.committed(value, deferred=deferred)
+    return value
 
 
 # Type alias for policy resolver functions. A resolver that returns None refuses the call
@@ -1824,7 +1889,7 @@ class Airlock:
             # Step 2: Resolve and check security policy (an escalation waits here on the
             # approver, through the driver: yield from)
             resolved_policy, policy_error = yield from self._resolve_and_check_policy(
-                func_name, context, run_context=run_context, call=call
+                func_name, context, run_context=run_context, call=call, tool=wrapper
             )
             # The refusals below return no policy; the decision record still names it.
             context._resolved_policy = resolved_policy
@@ -2036,6 +2101,14 @@ class Airlock:
             if late_halt_error is not None:
                 context._refused_at = "0.7:run_halted"
                 return kwargs, start_time, context, late_halt_error, None, None
+
+            # Step 6.5: at-most-once dispatch (V0.10.29). Last of the gates, so a replay meets
+            # every gate again, the policy and an approval included, before it returns a
+            # stored result. Inert when policy.effect_guard is None.
+            effect_error = self._admit_effect(func_name, resolved_policy, context, call, wrapper)
+            if effect_error is not None:
+                context._refused_at = "6.5:effect_guard"
+                return kwargs, start_time, context, effect_error, None, None
 
             # Step 2.4's other half: an untrusted source every gate admitted counts as running
             # in its run until the call ends (_end_source), so a serialize_batch sink waits for
@@ -2289,6 +2362,30 @@ class Airlock:
                     error_type=type(exc).__name__,
                 )
 
+        def _replayed(
+            func_name: str,
+            record: Any,
+            start_time: float,
+            kwargs: dict[str, Any],
+            context: AirlockContext[Any],
+        ) -> Any:
+            """Answer a replay of a committed call with its stored value, without running.
+
+            Every gate has run again by now (step 6.5 is last). The audit record says the
+            value was replayed, so a duplicate request is visible rather than silent.
+            """
+            audit_logger.log(
+                tool_name=func_name,
+                blocked=False,
+                duration_ms=(time.time() - start_time) * 1000,
+                args=kwargs,
+                result=record.result,
+                agent_id=context.agent_id,
+                session_id=context.session_id,
+                effect="replayed",
+            )
+            return record.result
+
         def _handle_error(
             func_name: str,
             error: Exception,
@@ -2384,6 +2481,7 @@ class Airlock:
 
                 if error_response is not None:
                     _end_source(context, ran=False)
+                    _effect_released(context)
                     self._halt_on_refusal(func_name, context, error_response)
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
@@ -2423,6 +2521,14 @@ class Airlock:
                     )
                     return error_response.to_dict()
 
+                replay = _effect_replay(context)
+                if replay is not None:
+                    # The stored value is the source's output all the same: it taints the run.
+                    _end_source(context, ran=True)
+                    if self.config.decision_log is not None:
+                        await asyncio.to_thread(_settle, func_name, context, "replayed")
+                    return _replayed(func_name, replay, start_time, dict(kwargs), context)  # type: ignore[no-any-return]
+
                 # Set context as current for the duration of execution
                 token = set_current_context(context)
                 try:
@@ -2461,6 +2567,7 @@ class Airlock:
                 except NetworkBlockedError as e:
                     if self.config.decision_log is not None:
                         await asyncio.to_thread(_settle, func_name, context, "network_blocked", e)
+                    _effect_failed(context, e)
                     # Handle network blocking with potential honeypot
                     if should_use_honeypot(self.config.honeypot_config):
                         # Use async version to avoid blocking event loop
@@ -2502,6 +2609,7 @@ class Airlock:
                 except Exception as e:
                     if self.config.decision_log is not None:
                         await asyncio.to_thread(_settle, func_name, context, "raised", e)
+                    _effect_failed(context, e)
                     failed = _handle_error(func_name, e, start_time, cleaned_kwargs, context)
                     if isinstance(e, RunBudgetExhausted) and e.hard_stop:
                         raise
@@ -2510,6 +2618,9 @@ class Airlock:
                     _end_source(context, ran=True)
                     reset_context(token)
 
+                # A deferred result takes effect as it is consumed, after the call
+                # returns: its effect stays unknown to the effect guard.
+                deferred = _is_deferred(result)
                 try:
                     result, warnings, _, _ = _post_execution(
                         func_name,
@@ -2523,19 +2634,23 @@ class Airlock:
                 except _ResultRefused as refused:
                     if self.config.decision_log is not None:
                         await asyncio.to_thread(_settle, func_name, context, "refused_after_run")
-                    return refused.response
+                    return _effect_done(context, refused.response)
 
                 if self.config.decision_log is not None:
                     await asyncio.to_thread(_settle, func_name, context, "returned")
 
                 if self.return_dict:
-                    return AirlockResponse.success_response(
-                        result,
-                        warnings=warnings or None,
-                        metadata=_provenance_metadata(context),
-                    ).to_dict()
+                    return _effect_done(
+                        context,
+                        AirlockResponse.success_response(
+                            result,
+                            warnings=warnings or None,
+                            metadata=_provenance_metadata(context),
+                        ).to_dict(),
+                        deferred=deferred,
+                    )
 
-                return result
+                return _effect_done(context, result, deferred=deferred)
 
             wrapper = async_wrapper
         else:
@@ -2560,6 +2675,7 @@ class Airlock:
 
                 if error_response is not None:
                     _end_source(context, ran=False)
+                    _effect_released(context)
                     self._halt_on_refusal(func_name, context, error_response)
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
@@ -2598,6 +2714,13 @@ class Airlock:
                     )
                     return error_response.to_dict()
 
+                replay = _effect_replay(context)
+                if replay is not None:
+                    # The stored value is the source's output all the same: it taints the run.
+                    _end_source(context, ran=True)
+                    _settle(func_name, context, "replayed")
+                    return _replayed(func_name, replay, start_time, dict(kwargs), context)  # type: ignore[no-any-return]
+
                 # Set context as current for the duration of execution
                 token = set_current_context(context)
                 try:
@@ -2628,6 +2751,7 @@ class Airlock:
 
                 except NetworkBlockedError as e:
                     _settle(func_name, context, "network_blocked", e)
+                    _effect_failed(context, e)
                     # Handle network blocking with potential honeypot
                     if should_use_honeypot(self.config.honeypot_config):
                         honeypot_result = create_honeypot_response(
@@ -2667,6 +2791,7 @@ class Airlock:
                     return response.to_dict()
                 except Exception as e:
                     _settle(func_name, context, "raised", e)
+                    _effect_failed(context, e)
                     failed = _handle_error(func_name, e, start_time, cleaned_kwargs, context)
                     if isinstance(e, RunBudgetExhausted) and e.hard_stop:
                         raise
@@ -2675,6 +2800,9 @@ class Airlock:
                     _end_source(context, ran=True)
                     reset_context(token)
 
+                # A deferred result takes effect as it is consumed, after the call
+                # returns: its effect stays unknown to the effect guard.
+                deferred = _is_deferred(result)
                 try:
                     result, warnings, _, _ = _post_execution(
                         func_name,
@@ -2687,18 +2815,22 @@ class Airlock:
                     )
                 except _ResultRefused as refused:
                     _settle(func_name, context, "refused_after_run")
-                    return refused.response
+                    return _effect_done(context, refused.response)
 
                 _settle(func_name, context, "returned")
 
                 if self.return_dict:
-                    return AirlockResponse.success_response(
-                        result,
-                        warnings=warnings or None,
-                        metadata=_provenance_metadata(context),
-                    ).to_dict()
+                    return _effect_done(
+                        context,
+                        AirlockResponse.success_response(
+                            result,
+                            warnings=warnings or None,
+                            metadata=_provenance_metadata(context),
+                        ).to_dict(),
+                        deferred=deferred,
+                    )
 
-                return result
+                return _effect_done(context, result, deferred=deferred)
 
             wrapper = sync_wrapper
 
@@ -3028,6 +3160,7 @@ class Airlock:
         *,
         run_context: AirlockContext[Any] | None,
         call: _BoundCall,
+        tool: Any,
     ) -> Generator[
         _ApprovalAsk, _ApproverOutcome, tuple[SecurityPolicy | None, AirlockResponse | None]
     ]:
@@ -3046,6 +3179,8 @@ class Airlock:
                 untrusted outputs across a run's calls, and with no run the count would
                 never pass one, which is how the guard did nothing until 0.10.23.
             call: The call's arguments, bound when a grant or an escalation needs them.
+            tool: The wrapper ``@Airlock`` returned, whose ``@reversibility`` tag an
+                effect guard that escalates irreversible tools reads.
 
         Returns:
             Tuple of (resolved_policy, error_response).
@@ -3112,7 +3247,7 @@ class Airlock:
         if resolved_policy is None:
             return None, None
         refused = yield from self._check_resolved_policy(
-            func_name, resolved_policy, context, run_context=run_context, call=call
+            func_name, resolved_policy, context, run_context=run_context, call=call, tool=tool
         )
         return resolved_policy, refused
 
@@ -3125,11 +3260,13 @@ class Airlock:
         run_context: AirlockContext[Any] | None,
         call: _BoundCall,
         policy_name: str = "SecurityPolicy",
+        tool: Any = None,
     ) -> Generator[_ApprovalAsk, _ApproverOutcome, AirlockResponse | None]:
         """Check one resolved policy for this call: its frozen digest, re-authorization and
         ``check()``, an escalation routed to its approver. Step 2 runs it for the tool's
         policy, step 2.1 for each policy of a delegated run's chain (``policy_name``
-        ``"DelegationCeiling"``)."""
+        ``"DelegationCeiling"``). ``tool`` is the wrapper, for the effect guard's
+        irreversible-tool escalation."""
         # v0.5.5: verify frozen policy has not drifted mid-session
         # (CVE-2026-41349 consent-bypass guard). Runs before check()
         # so a mutated policy never reaches the allow/deny logic.
@@ -3153,6 +3290,8 @@ class Airlock:
                 args_digest=(call.digest if policy.reauth_on_untrusted_reinvocation else None),
             )
             policy.check(func_name, agent=_caller_identity(context))
+            if tool is not None:
+                _escalate_irreversible(policy, func_name, tool)
         except PolicyEscalation as e:
             # V0.8.74 (issue #143): the third verdict. This clause MUST stay above
             # the PolicyViolation handler below — PolicyEscalation subclasses it,
@@ -3616,6 +3755,69 @@ class Airlock:
                 detail="the call's arguments changed after the approval was asked",
             ),
         )
+
+    def _admit_effect(
+        self,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        context: AirlockContext[Any],
+        call: _BoundCall,
+        tool: Any,
+    ) -> AirlockResponse | None:
+        """Step 6.5: record the call before it runs, or answer a replay (V0.10.29).
+
+        Keys on the ``tool_call_id`` of the call's context metadata, which only the host
+        or an adapter sets; an argument of that name is the model's and is never read.
+        The admitted ticket is put on the call's context, where the wrapper records the
+        outcome and the tool reads its ``idempotency_key``.
+        """
+        guard = resolved_policy.effect_guard if resolved_policy is not None else None
+        if guard is None:
+            return None
+        call_id = _call_metadata(context, "tool_call_id")
+        try:
+            ticket = guard.admit(
+                tool_name=func_name,
+                tool_call_id=call_id if isinstance(call_id, str) and call_id else None,
+                arguments=call.arguments,
+                kind=get_reversibility(tool),
+            )
+        except ValueError:
+            logger.warning("policy_indeterminate", function=func_name, source="effect_guard")
+            return self._effect_refused(
+                func_name,
+                "the call's arguments nest too deep or contain themselves, so no idempotency "
+                "key can be built for it",
+            )
+        if ticket.refusal is None:
+            context._effect = ticket
+            if ticket.replay is not None:
+                logger.info("effect_replayed", function=func_name, tool_call_id=call_id)
+            return None
+        logger.warning("effect_guard_refused", function=func_name, refusal=ticket.refusal)
+        if ticket.refusal == "status_unknown" and ticket.held is not None:
+            response = handle_effect_status_unknown(
+                func_name,
+                status=ticket.held.status.value,
+                idempotency_key=ticket.idempotency_key,
+            )
+            return self._effect_refused(func_name, response.error or "", response)
+        return self._effect_refused(func_name, _effect_refusal_reason(ticket.refusal, guard))
+
+    def _effect_refused(
+        self, func_name: str, reason: str, response: AirlockResponse | None = None
+    ) -> AirlockResponse:
+        """Tell ``on_blocked`` about an effect-guard refusal; return its response."""
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            reason,
+            {"violation_type": "effect_guard"},
+        )
+        if response is not None:
+            return response
+        return handle_policy_violation(func_name, policy_name="EffectGuard", reason=reason)
 
     def _read_approval(
         self,

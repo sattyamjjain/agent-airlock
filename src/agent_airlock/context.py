@@ -108,6 +108,8 @@ class AirlockContext(Generic[T]):
     _authorized_once: GrantStore = field(default_factory=GrantStore, repr=False)
     # V0.10.29: the StandingGrant that admitted this call's escalation, for its audit record.
     _standing_grant: str | None = field(default=None, repr=False)
+    # V0.10.29: this call's EffectTicket when the policy has an effect guard.
+    _effect: Any = field(default=None, repr=False)
     # V0.10.29: the ghost arguments step 1 stripped from this call, the arguments as the
     # caller sent them (kept only when something was stripped), the call's bound arguments
     # (step 2's _BoundCall), the policy step 2 resolved, its decision-log entry, and the
@@ -290,6 +292,17 @@ class AirlockContext(Generic[T]):
         ends.
         """
         self._flow.clear()
+
+    @property
+    def idempotency_key(self) -> str | None:
+        """The call's idempotency key, when its policy has an effect guard.
+
+        The sha256 of the tool's name and its canonical arguments: the same for the same
+        business input whatever the call's ``tool_call_id``, so a tool can send it to its
+        backend (``get_current_context().idempotency_key``). None outside such a call.
+        """
+        effect = self._effect
+        return effect.idempotency_key if effect is not None else None
 
     def authorize_once(
         self,

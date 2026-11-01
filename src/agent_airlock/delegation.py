@@ -325,6 +325,7 @@ _CARRIED = (
     "data_flow_policy",
     "run_guard",
     "shell_command_policy",
+    "effect_guard",
 )
 
 #: Fields that cannot widen what a policy admits: a longer wait for the approver admits
