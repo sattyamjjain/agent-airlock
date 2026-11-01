@@ -76,14 +76,33 @@ class SanitizationResult:
         }
 
 
-# Compiled regex patterns for sensitive data detection
+# Every whitespace character Python's Unicode ``\s`` matches. The ASCII-shaped detectors
+# below compile with ``re.ASCII``, under which ``\s`` is ASCII whitespace only, so a
+# separator a number may use is spelled out to stay as wide as it was (a no-break space
+# between the groups of a phone number or an Aadhaar).
+_WS = r"\s\x1c-\x1f\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000"
+
+# Compiled regex patterns for sensitive data detection.
+#
+# The ASCII-shaped detectors compile with ``re.ASCII`` (V0.10.29). Under Python's Unicode
+# rules ``\b`` and ``\w`` treat a Devanagari, Arabic, Hebrew, Thai or Bengali letter as a
+# word character, so there was no boundary between it and a Latin one, and an address,
+# key or number written right next to such text (``ईमेलbob@example.com``,
+# ``पैनABCPE1234F``) was not detected, while the space-separated form was
+# (langchain-ai/langchain#40002).
 PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
-    # PII Patterns
-    SensitiveDataType.EMAIL: re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
-    SensitiveDataType.PHONE: re.compile(
-        r"\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b"
+    # PII Patterns. A chained ``local@domain@domain`` run is one match, masked whole: until
+    # 0.10.29 ``bob-@list.dan@ex.org`` matched up to the second "@" and left "@ex.org" in
+    # the clear. The TLD class was ``[A-Z|a-z]``, which also took "|".
+    SensitiveDataType.EMAIL: re.compile(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:@[A-Za-z0-9.-]+\.[A-Za-z]{2,})*\b",
+        re.ASCII,
     ),
-    SensitiveDataType.SSN: re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
+    SensitiveDataType.PHONE: re.compile(
+        rf"\b(?:\+?1[-.{_WS}]?)?\(?[0-9]{{3}}\)?[-.{_WS}]?[0-9]{{3}}[-.{_WS}]?[0-9]{{4}}\b",
+        re.ASCII,
+    ),
+    SensitiveDataType.SSN: re.compile(rf"\b\d{{3}}[-{_WS}]?\d{{2}}[-{_WS}]?\d{{4}}\b", re.ASCII),
     # Groups may be split by one consistent "-" or " " (the backreference): until 0.10.16
     # only contiguous digits matched, so "4111-1111-1111-1111" was never masked.
     SensitiveDataType.CREDIT_CARD: re.compile(
@@ -91,18 +110,22 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         r"4[0-9]{3}([- ]?)[0-9]{4}\1[0-9]{4}\1[0-9]{4}|"  # Visa
         r"5[1-5][0-9]{2}([- ]?)[0-9]{4}\2[0-9]{4}\2[0-9]{4}|"  # Mastercard
         r"3[47][0-9]{2}([- ]?)[0-9]{6}\3[0-9]{5}|"  # Amex, 4-6-5
-        r"6(?:011|5[0-9]{2})([- ]?)[0-9]{4}\4[0-9]{4}\4[0-9]{4})\b"  # Discover
+        r"6(?:011|5[0-9]{2})([- ]?)[0-9]{4}\4[0-9]{4}\4[0-9]{4})\b",  # Discover
+        re.ASCII,
     ),
     SensitiveDataType.IP_ADDRESS: re.compile(
         r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
-        r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
+        r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b",
+        re.ASCII,
     ),
     # India-specific PII Patterns
     SensitiveDataType.AADHAAR: re.compile(
-        r"\b[2-9][0-9]{3}[\s-]?[0-9]{4}[\s-]?[0-9]{4}\b"  # 12 digits, starts with 2-9
+        rf"\b[2-9][0-9]{{3}}[{_WS}-]?[0-9]{{4}}[{_WS}-]?[0-9]{{4}}\b",  # 12 digits, 2-9 first
+        re.ASCII,
     ),
     SensitiveDataType.PAN: re.compile(
-        r"\b[A-Z]{5}[0-9]{4}[A-Z]\b"  # ABCDE1234F format
+        r"\b[A-Z]{5}[0-9]{4}[A-Z]\b",  # ABCDE1234F format
+        re.ASCII,
     ),
     # NPCI UPI handle (PSP/bank) allowlist. Curated to real, widely-used
     # handles; expanded in v0.8.37 to cover WhatsApp Pay, the major private
@@ -128,10 +151,11 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         # PSU / generic
         r"sbi|pnb|boi|cnrb|upi"
         r")\b",
-        re.IGNORECASE,
+        re.IGNORECASE | re.ASCII,
     ),
     SensitiveDataType.IFSC: re.compile(
-        r"\b[A-Z]{4}0[A-Z0-9]{6}\b"  # 4 letters + 0 + 6 alphanumeric
+        r"\b[A-Z]{4}0[A-Z0-9]{6}\b",  # 4 letters + 0 + 6 alphanumeric
+        re.ASCII,
     ),
     # V0.8.9 Devanagari (Unicode U+0900–U+097F) personal-name span heuristic.
     # Matches 2+ Devanagari word characters surrounded by word boundaries.
@@ -150,7 +174,9 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     # ``(4, 14)``, and overlap is all the old reverse-splice masker needed to
     # corrupt the text around them. Masking no longer depends on this property
     # either way — see :func:`merge_overlapping_detections`.
-    SensitiveDataType.INDIA_MOBILE: re.compile(r"(?<!\d)(?:\+?91[\s-]?|0)[6-9]\d{9}(?!\d)"),
+    SensitiveDataType.INDIA_MOBILE: re.compile(
+        rf"(?<!\d)(?:\+?91[{_WS}-]?|0)[6-9]\d{{9}}(?!\d)", re.ASCII
+    ),
     # Secret Patterns
     SensitiveDataType.API_KEY: re.compile(
         r"\b(?:"
@@ -167,9 +193,10 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         r"gho_[a-zA-Z0-9]{36}|"  # GitHub OAuth
         r"github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|"  # GitHub fine-grained
         r"xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}"  # Slack
-        r")\b"
+        r")\b",
+        re.ASCII,
     ),
-    SensitiveDataType.AWS_KEY: re.compile(r"\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b"),
+    SensitiveDataType.AWS_KEY: re.compile(r"\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b", re.ASCII),
     SensitiveDataType.PASSWORD: re.compile(
         r"(?i)(?:password|passwd|pwd|secret|token)[\s]*[=:]\s*['\"]?([^\s'\"]{8,})['\"]?",
     ),
@@ -181,7 +208,9 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         r"(?:[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
         r"|(?:\s*[A-Za-z0-9+/=]{4,})*)"
     ),
-    SensitiveDataType.JWT: re.compile(r"\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\b"),
+    SensitiveDataType.JWT: re.compile(
+        r"\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\b", re.ASCII
+    ),
     SensitiveDataType.CONNECTION_STRING: re.compile(
         r"(?i)(?:"
         r"mongodb(?:\+srv)?://[^\s]+|"
@@ -258,6 +287,10 @@ def _mask_value(
             local, domain = parts
             masked_local = local[0] + "***" if len(local) > 1 else "***"
             return f"{masked_local}@{domain}"
+        if len(parts) > 2:
+            # A chained run (``bob-@list.dan@ex.org``): which part is the domain is unclear,
+            # so no part of it is kept.
+            return parts[0][:1] + "***@***"
 
     if data_type == SensitiveDataType.CREDIT_CARD:
         # Show last 4 digits only
