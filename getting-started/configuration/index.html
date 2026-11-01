@@ -3233,8 +3233,12 @@ breaker stacked above it never counts a failure.</p>
 </code></pre></div>
 <h2 id="cost-tracking-v040">Cost Tracking (V0.4.0)<a class="headerlink" href="#cost-tracking-v040" title="Permanent link">&para;</a></h2>
 <p>Monitor and limit API spending. <code>Airlock</code> takes no cost-tracker argument: a <code>CostTracker</code>
-records the token usage you report to it, and raises <code>BudgetExceededError</code> when a recorded
-call breaks a limit. Amounts are <code>Decimal</code>.</p>
+records the token usage you report to it. Amounts are <code>Decimal</code>, and a limit of <code>0</code> is a
+limit (nothing may be spent). A limit blocks a call before it runs when the limit is
+already reached, or when you pass a cost estimate that would cross it
+(<code>track("tool", estimate=TokenUsage(...))</code>, or <code>check_admission(estimate)</code>). Otherwise the
+call that crosses runs and is recorded, <code>BudgetExceededError</code> is raised, and every later
+call is refused until <code>reset()</code>: the most a session overshoots is one call.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">CostTracker</span><span class="p">,</span> <span class="n">BudgetConfig</span><span class="p">,</span> <span class="n">BudgetExceededError</span>
 <a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>

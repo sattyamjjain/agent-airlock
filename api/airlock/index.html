@@ -3567,14 +3567,28 @@ Airlock gives for any exception the tool raises.</p>
 </code></pre></div>
 <h3 id="with-cost-tracking-v040">With Cost Tracking (V0.4.0)<a class="headerlink" href="#with-cost-tracking-v040" title="Permanent link">&para;</a></h3>
 <p><code>Airlock</code> takes no cost-tracker argument. <code>CostTracker</code> is standalone: record each call's
-token usage with <code>track()</code>. When a recorded call breaks a <code>BudgetConfig</code> limit (per call
-or per session), <code>BudgetExceededError</code> is raised. Amounts are <code>Decimal</code>.</p>
+token usage with <code>track()</code>. Amounts are <code>Decimal</code>. A <code>BudgetConfig</code> limit (per call or
+per session, in money or tokens) works like this:</p>
+<ul>
+<li><strong>Before the call.</strong> <code>tracker.check_admission(estimate=None)</code> raises
+  <code>BudgetExceededError</code> when a session limit is already reached (<code>total &gt;= limit</code>, so a
+  limit of <code>0</code> refuses the first call), when the budget was exceeded earlier, or when the
+  <code>TokenUsage</code> estimate it is given would cross a limit. <code>track()</code> calls it on entry, so a
+  refused call's <code>with</code> body never runs; <code>track("tool", estimate=...)</code> passes an estimate.</li>
+<li><strong>After the call.</strong> Without an estimate, the call that crosses a limit runs, and
+  <code>record()</code> keeps its record (it ran) and raises <code>BudgetExceededError</code>. The most a session
+  overshoots is that one call.</li>
+<li><strong>Until <code>reset()</code>.</strong> Once a limit was crossed, every later admission is refused, and so
+  is every later <code>record()</code>.</li>
+</ul>
+<p>Until 0.10.29 a limit of <code>0</code> was no limit, and the call that crossed a limit was dropped
+from the total, so a later, cheaper call was admitted.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">CostTracker</span><span class="p">,</span> <span class="n">BudgetConfig</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">CostTracker</span><span class="p">,</span> <span class="n">BudgetConfig</span><span class="p">,</span> <span class="n">TokenUsage</span>
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
 <a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">tracker</span> <span class="o">=</span> <span class="n">CostTracker</span><span class="p">(</span><span class="n">budget</span><span class="o">=</span><span class="n">BudgetConfig</span><span class="p">(</span><span class="n">max_cost_per_session</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">"100"</span><span class="p">)))</span>
 <a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="k">with</span> <span class="n">tracker</span><span class="o">.</span><span class="n">track</span><span class="p">(</span><span class="s2">"expensive_tool"</span><span class="p">)</span> <span class="k">as</span> <span class="n">call</span><span class="p">:</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="k">with</span> <span class="n">tracker</span><span class="o">.</span><span class="n">track</span><span class="p">(</span><span class="s2">"expensive_tool"</span><span class="p">,</span> <span class="n">estimate</span><span class="o">=</span><span class="n">TokenUsage</span><span class="p">(</span><span class="n">input_tokens</span><span class="o">=</span><span class="mi">1500</span><span class="p">))</span> <span class="k">as</span> <span class="n">call</span><span class="p">:</span>
 <a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">call_expensive_api</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
 <a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="n">call</span><span class="o">.</span><span class="n">set_tokens</span><span class="p">(</span><span class="n">input_tokens</span><span class="o">=</span><span class="mi">1200</span><span class="p">,</span> <span class="n">output_tokens</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
 </code></pre></div>
