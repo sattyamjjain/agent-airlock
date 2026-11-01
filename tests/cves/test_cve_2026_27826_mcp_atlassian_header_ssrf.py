@@ -60,7 +60,11 @@ class TestCVE2026_27826:
             validate_endpoint("https://evil.example.com/api", policy)
 
     def test_endpoint_policy_allows_legitimate_atlassian_host(self) -> None:
-        policy = EndpointPolicy(allowed_endpoints=["*.atlassian.net"])
+        # Since 0.10.29 an admitted name is resolved; a stub answer keeps this control
+        # about the allowlist rather than the CI runner's DNS.
+        policy = EndpointPolicy(
+            allowed_endpoints=["*.atlassian.net"], resolver=lambda h: ["93.184.216.34"]
+        )
         validate_endpoint(
             "https://example-corp.atlassian.net/rest/api/2/issue/ENG-1",
             policy,

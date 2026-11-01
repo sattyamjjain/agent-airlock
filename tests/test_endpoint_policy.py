@@ -120,6 +120,7 @@ class TestValidateEndpoint:
         """Test empty allowlist allows all URLs (except blocked patterns)."""
         policy = EndpointPolicy(
             blocked_patterns=["evil.com"],
+            resolver=_resolves_public,
         )
         validate_endpoint("https://any-host.com/data", policy)
 
