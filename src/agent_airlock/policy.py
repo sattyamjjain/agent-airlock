@@ -18,6 +18,7 @@ import math
 import re
 import threading
 import time
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict as dc_asdict
 from dataclasses import dataclass, field
@@ -630,6 +631,8 @@ class SecurityPolicy:
     _revoked_grants: set[str] = field(default_factory=set, repr=False)
     # V0.10.29: per-agent buckets under rate_limit_scope="agent", by (pattern, agent id).
     _agent_limiters: dict[tuple[str, str], RateLimit] = field(default_factory=dict, repr=False)
+    # V0.10.29: whether this instance has warned that its empty allowlist allows every tool.
+    _empty_allowlist_warned: bool = field(default=False, repr=False)
 
     def __post_init__(self) -> None:
         """Check the tool lists and the escalation deadline, then parse time restrictions
@@ -749,7 +752,7 @@ class SecurityPolicy:
 
         # Check allowed list. With default_deny=True (camouflage-resistant
         # posture), an empty allowlist is deny-all. Without it, an empty
-        # allowlist preserves the legacy "allow all" semantic.
+        # allowlist preserves the legacy "allow all" semantic, and says so once.
         if self.default_deny and not self.allowed_tools:
             logger.warning("policy_indeterminate", source="empty_allowlist", tool=tool_name)
             raise PolicyViolation(
@@ -758,6 +761,9 @@ class SecurityPolicy:
                 violation_type=ViolationType.EMPTY_ALLOWLIST.value,
                 details={"tool": tool_name, "allowed": []},
             )
+        if not self.allowed_tools and not self.default_deny:
+            self._warn_empty_allowlist()
+            return
         if self.allowed_tools or self.default_deny:
             allowed = any(
                 self._matches_pattern(tool_name, pattern) for pattern in self.allowed_tools
@@ -768,6 +774,20 @@ class SecurityPolicy:
                     violation_type=ViolationType.TOOL_NOT_ALLOWED.value,
                     details={"tool": tool_name, "allowed": self.allowed_tools},
                 )
+
+    def _warn_empty_allowlist(self) -> None:
+        """Warn, once per policy, that an empty allowlist with ``default_deny=False`` allows
+        every tool (V0.10.29). ``allowed_tools=["*"]`` says so on purpose and stays quiet."""
+        if self._empty_allowlist_warned:
+            return
+        self._empty_allowlist_warned = True
+        warnings.warn(
+            "SecurityPolicy has an empty allowed_tools and default_deny=False, so every tool "
+            "is allowed. Pass allowed_tools=['*'] to keep that, or default_deny=True to deny "
+            "unlisted tools; the default changes in a future minor release.",
+            FutureWarning,
+            stacklevel=3,
+        )
 
     def check_time_restriction(self, tool_name: str, dt: datetime | None = None) -> None:
         """Check if a tool call is within allowed time window.
@@ -1321,8 +1341,9 @@ class SecurityPolicy:
 # Predefined policies for common use cases
 
 
-PERMISSIVE_POLICY = SecurityPolicy()
-"""Allows all tools with no restrictions."""
+PERMISSIVE_POLICY = SecurityPolicy(allowed_tools=["*"])
+"""Allows all tools with no restrictions. Says so with ``allowed_tools=["*"]`` (V0.10.29),
+which allows every tool as an empty allowlist does, without the empty allowlist's warning."""
 
 
 def _get_strict_capability_policy() -> CapabilityPolicy:
