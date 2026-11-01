@@ -3,10 +3,11 @@
 <!-- AUTO-MANAGED: project-description -->
 ## Overview
 
-**agent-airlock** — an in-process, deny-by-default contract layer and type-checker for AI
-agent tool calls. It intercepts calls into MCP (Model Context Protocol) servers and agent
-frameworks, validates arguments strictly, applies policy, and sandboxes dangerous execution.
-The wedge is argument validation at the call boundary; every other layer wraps it.
+**agent-airlock** — an in-process contract layer and type-checker for AI agent tool calls.
+It intercepts calls into MCP (Model Context Protocol) servers and agent frameworks,
+validates arguments strictly, applies policy, and sandboxes dangerous execution. The wedge
+is argument validation at the call boundary; every other layer wraps it and is opt-in
+(`SecurityPolicy(default_deny=True)` makes an empty allowlist deny every tool).
 
 **The installed core is Pydantic-only** (plus `tomli` on Python 3.10); everything else,
 structlog included, is an extra (`src/agent_airlock/_log.py` falls back to a stdlib shim).
