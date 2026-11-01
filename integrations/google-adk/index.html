@@ -2318,6 +2318,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#run-lifecycle-plugin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run lifecycle plugin
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-is-not-covered" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3116,6 +3127,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#run-lifecycle-plugin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run lifecycle plugin
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-is-not-covered" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3273,6 +3295,47 @@ it can act on.</p>
 <p><strong>Reports what it could not guard</strong> instead of skipping it silently.</p>
 </li>
 </ol>
+<h2 id="run-lifecycle-plugin">Run lifecycle plugin<a class="headerlink" href="#run-lifecycle-plugin" title="Permanent link">&para;</a></h2>
+<p>The adapter guards each tool call; <code>AirlockAdkPlugin</code> sees the run around them. Add it to
+the runner beside the wrapped agent:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">google.adk.runners</span><span class="w"> </span><span class="kn">import</span> <span class="n">Runner</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.amplification</span><span class="w"> </span><span class="kn">import</span> <span class="n">AmplificationBudget</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.integrations.google_adk</span><span class="w"> </span><span class="kn">import</span> <span class="n">wrap_agent</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.integrations.google_adk_plugin</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockAdkPlugin</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">amplification_budget</span><span class="o">=</span><span class="n">AmplificationBudget</span><span class="p">(</span><span class="n">max_calls_per_run</span><span class="o">=</span><span class="mi">40</span><span class="p">))</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">wrap_agent</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">Runner</span><span class="p">(</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="n">app_name</span><span class="o">=</span><span class="s2">"support"</span><span class="p">,</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="n">agent</span><span class="o">=</span><span class="n">agent</span><span class="p">,</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="n">session_service</span><span class="o">=</span><span class="n">session_service</span><span class="p">,</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="n">plugins</span><span class="o">=</span><span class="p">[</span><span class="n">AirlockAdkPlugin</span><span class="p">(</span><span class="n">policy</span><span class="p">)],</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li><strong>Each invocation is one Airlock run.</strong> When nothing around the run names a
+  <code>session_id</code>, the plugin sets an <code>AirlockContext</code> with <code>session_id</code>
+  <code>adk-invocation:&lt;invocation id&gt;</code> for the run's tool calls, keeping the agent id, roles
+  and metadata of one you set around it. The amplification budget, the sequence guard and
+  the action-contradiction gate then count each invocation alone; without the plugin, a
+  host that sets no session id has every run count in one anonymous ledger. A
+  <code>session_id</code> you set yourself is kept, and its state is yours to drop
+  (<code>policy.reset_run</code>).</li>
+<li><strong>The end of a run is recorded and cleaned up.</strong> <code>after_run_callback</code> and
+  <code>on_run_error_callback</code> log <code>adk_invocation_finished</code> with an <code>outcome</code> of <code>completed</code>,
+  <code>error</code>, or <code>cancelled</code> when <code>invocation_context.is_aborted</code> is set (ADK v2.10.0 and
+  later), and drop the run's entries from the policies you passed.</li>
+<li><strong>A cancel ADK reports to no hook.</strong> A <code>CancelledError</code> that is neither an abort nor an
+  early close reaches neither callback (google/adk-python#7770, still so in v2.13.0), and
+  before v2.12.0 neither did an aborted run's. That run's entries stay until <code>close()</code>,
+  which ADK calls as the runner closes (<code>adk_invocation_unfinished</code>), or until the
+  policies' own <code>max_sessions</code> bounds drop them, least recently used first.</li>
+</ul>
+<p>Pass every policy your tools use (<code>AirlockAdkPlugin(policy_a, policy_b)</code>). The plugin is
+built on the installed ADK's <code>BasePlugin</code>, so <code>App(plugins=[...])</code> takes it too; without
+the extra it raises <code>GoogleADKMissingError</code>.</p>
 <h2 id="what-is-not-covered">What is <em>not</em> covered<a class="headerlink" href="#what-is-not-covered" title="Permanent link">&para;</a></h2>
 <p>Stated plainly, because a user who believes a tool is guarded when it is
 not is worse off than one who is told.</p>

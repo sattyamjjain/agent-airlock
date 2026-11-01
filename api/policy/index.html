@@ -3668,12 +3668,12 @@
 <tr>
 <td><code>amplification_budget</code></td>
 <td><code>AmplificationBudget \| None</code></td>
-<td>Per-run call budget against a declared baseline. Its <code>max_wall_seconds</code> caps how long a run may keep calling tools, from its first call</td>
+<td>Per-run call budget against a declared baseline. Its <code>max_wall_seconds</code> caps how long a run may keep calling tools, from its first call. Its <code>max_sessions</code> (10,000) bounds the runs' ledgers kept, least recently used dropped first and logged (<code>amplification_ledger_evicted</code>); a run whose ledger was dropped counts from zero again</td>
 </tr>
 <tr>
 <td><code>sequence_guard</code>, <code>action_contradiction_gate</code>, <code>deserialization_guard</code></td>
 <td></td>
-<td>Optional guards run after the policy check</td>
+<td>Optional guards run after the policy check. <code>SequenceGuard(max_sessions=...)</code> (10,000) bounds its session traces the same way (<code>sequence_guard.session_evicted</code>); the gate keeps only sessions it has tripped</td>
 </tr>
 <tr>
 <td><code>tool_arg_sink_guard</code></td>
@@ -3719,6 +3719,10 @@
 </table>
 <p>How a call carries its identity for <code>require_agent_id</code> and <code>allowed_roles</code> is described in
 <a href="../../guide/policy/#agent-identity">Agent Identity</a>.</p>
+<p><code>policy.reset_run(session_id)</code> drops one run's entries from that per-run state when the run
+ends: its amplification ledger, its sequence trace and its gate flag. A trace or flag kept
+under an agent id belongs to the agent and stays. <a href="../../integrations/google-adk/">Google ADK</a>'s
+<code>AirlockAdkPlugin</code> calls it for each invocation.</p>
 <h3 id="pattern-matching">Pattern Matching<a class="headerlink" href="#pattern-matching" title="Permanent link">&para;</a></h3>
 <p>Tool patterns support glob-style matching:</p>
 <table>
