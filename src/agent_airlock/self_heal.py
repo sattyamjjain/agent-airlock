@@ -77,6 +77,9 @@ class BlockReason(str, Enum):
     # other than an OversightResponse, or a verdict outside OversightVerdict (the string
     # "grant" included). Not ESCALATION_DENIED: nobody decided, the integration is broken.
     POLICY_INDETERMINATE = "policy_indeterminate"
+    # V0.10.29: the call's run was halted by a hard stop or a repeated loop (RunGuard), so
+    # no later call in it runs, whatever the call and its own policy.
+    RUN_HALTED = "run_halted"
 
 
 @dataclass
@@ -400,6 +403,17 @@ _POLICY_FIX_HINTS: dict[str, list[str]] = {
         "cannot be checked; changing the arguments will not help",
         _CONTINUE_OR_TELL,
     ],
+    "loop_detected": [
+        "You have made the same calls in the same order several times in a row; they are "
+        "not getting you closer to the goal",
+        "Change your approach, or stop and tell the user what is blocking you. One more "
+        "repeat ends this run",
+    ],
+    "run_guard_outside_run": [
+        "This tool is under a run guard and the call belongs to no run, so it cannot be "
+        "checked against the run; changing the arguments will not help",
+        _CONTINUE_OR_TELL,
+    ],
 }
 
 _DEFAULT_POLICY_FIX_HINTS = [
@@ -537,6 +551,30 @@ def handle_amplification_exceeded(
             "run_baseline_calls": baseline_calls,
             "run_amplification_ratio": amplification_ratio,
         },
+    )
+
+
+def handle_run_halted(func_name: str, *, halt_reason: str) -> AirlockResponse:
+    """Create a response for a call in a run a ``RunGuard`` halted (V0.10.29).
+
+    Args:
+        func_name: Name of the function that was refused.
+        halt_reason: What halted the run (the first refusal that did).
+
+    Returns:
+        AirlockResponse with ``block_reason=RUN_HALTED``.
+    """
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.RUN_HALTED,
+        error=(
+            f"AIRLOCK_BLOCK: this run was halted ({halt_reason}), so '{func_name}' and every "
+            "later call in it are refused"
+        ),
+        fix_hints=[
+            "The run was stopped after a hard stop; no call in it will run, whatever the arguments",
+            "Stop and tell the user. The host has to review the run and start a new one",
+        ],
+        metadata={"function": func_name, "halt_reason": halt_reason},
     )
 
 

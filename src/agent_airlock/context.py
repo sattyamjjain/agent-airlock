@@ -38,6 +38,7 @@ from ._arg_walk import is_framework_object
 from ._log import structlog
 from .approvals import GrantStore
 from .data_flow import RunFlow, TaintEntry
+from .run_guard import RunState
 
 if TYPE_CHECKING:
     from pydantic import GetCoreSchemaHandler
@@ -119,6 +120,8 @@ class AirlockContext(Generic[T]):
     # _share_run_state and with with_metadata() clones), this call's in-flight ticket when
     # it is an untrusted source, and its output's provenance tag.
     _flow: RunFlow = field(default_factory=RunFlow, repr=False)
+    # V0.10.29 run guard: the run's halt latch and recent calls, shared like _flow.
+    _run_state: RunState = field(default_factory=RunState, repr=False)
     _flow_ticket: Any = field(default=None, repr=False)
     _provenance: dict[str, object] | None = field(default=None, repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
@@ -189,7 +192,23 @@ class AirlockContext(Generic[T]):
         )
         clone._authorized_once = self._authorized_once
         clone._flow = self._flow
+        clone._run_state = self._run_state
         return clone
+
+    @property
+    def halted(self) -> bool:
+        """Whether this run was halted (V0.10.29): every later call in it is refused."""
+        return self._run_state.halted
+
+    @property
+    def halt_reason(self) -> str | None:
+        """What halted this run, or None."""
+        return self._run_state.halt_reason
+
+    def halt(self, reason: str = "halted by the host") -> None:
+        """Halt this run from host code: every later call in it is refused as
+        ``run_halted``. A halted run stays halted; start a new run to go on."""
+        self._run_state.halt(reason)
 
     @property
     def taint_sources(self) -> tuple[TaintEntry, ...]:

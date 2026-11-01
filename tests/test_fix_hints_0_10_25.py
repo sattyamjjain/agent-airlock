@@ -903,6 +903,18 @@ def _handle_wrong_scope(env: _Env) -> Any:
         return _handle_tool()(session=issue_handle(issuer=ISSUER, scope="elsewhere"))
 
 
+def _run_halted(env: _Env) -> Any:
+    """A call in a run the host halted (V0.10.29, RunGuard)."""
+
+    @Airlock()
+    def tool() -> str:
+        return "ran"
+
+    with AirlockContext(agent_id="agent") as run:
+        run.halt("a hard stop")
+        return tool()
+
+
 def _handle_expired(env: _Env) -> Any:
     with handle_run("run-1"):
         handle = issue_handle(issuer=ISSUER, scope=SCOPE, ttl_seconds=0.01)
@@ -943,6 +955,7 @@ _REFUSALS: list[tuple[str, Callable[[_Env], Any], BlockReason]] = [
     ("handle-wrong-issuer", _handle_wrong_issuer, BlockReason.HANDLE_WRONG_ISSUER),
     ("handle-wrong-scope", _handle_wrong_scope, BlockReason.HANDLE_WRONG_SCOPE),
     ("handle-expired", _handle_expired, BlockReason.HANDLE_EXPIRED),
+    ("run-halted", _run_halted, BlockReason.RUN_HALTED),
 ]
 
 #: Block reasons the @Airlock call path never returns: OUTPUT_SANITIZED names no refusal,
