@@ -295,6 +295,10 @@ def _budget_problem(child: SecurityPolicy, parent: SecurityPolicy) -> str | None
     wall = theirs.max_wall_seconds
     if wall is not None and (mine.max_wall_seconds is None or mine.max_wall_seconds > wall):
         return "amplification_budget: the child's max_wall_seconds is above the parent's"
+    if mine.max_sessions < theirs.max_sessions:
+        # A run whose ledger is dropped counts from zero again, so fewer kept ledgers
+        # let a run's count restart sooner than the parent's would.
+        return "amplification_budget: the child's max_sessions is below the parent's"
     return None
 
 

@@ -110,6 +110,15 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   mode). `CostTracker.to_task_budget` and the SDK adapter's `task_budget_request_kit`
   delegate to it. Not the Managed Agents session budget, a dollar cap set at session
   creation.
+- **`google_adk_plugin` (0.10.29) wraps no tool.** `AirlockAdkPlugin.__new__` builds a
+  subclass on the installed ADK's `BasePlugin` (once per base), since ADK's `App` validates
+  `isinstance` and its plugin manager `getattr`s every callback. It names each invocation's
+  run (`AirlockContext(session_id="adk-invocation:<id>")`, set in `before_run_callback`
+  and unset in the same task's `after_run_callback`) and drops the run's entries through
+  `SecurityPolicy.reset_run`. ADK reports a non-abort `CancelledError` to no hook
+  (google/adk-python#7770), so `close()` and the guards' `max_sessions` LRUs are the
+  backstop; test it with a runner stand-in that calls the hooks as `_exec_with_plugin`
+  does.
 - **`adapters/`** holds the commerce adapters, which satisfy the `CommerceAdapter` Protocol in
   `agent_commerce_caps.py` (contract in `docs/adapters.md`). **`scanners/`** defines a
   `Scanner` Protocol and registry; nothing under `src/` registers a scanner.

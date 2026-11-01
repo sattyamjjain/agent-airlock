@@ -362,11 +362,14 @@ class RateCharge:
 
 
 def _budget_payload(budget: AmplificationBudget) -> dict[str, Any]:
-    """An amplification budget for the policy digest; ``max_wall_seconds`` (V0.10.29) only
-    when set, so a budget without it keeps its 0.10.28 digest."""
+    """An amplification budget for the policy digest; ``max_wall_seconds`` and
+    ``max_sessions`` (V0.10.29) only when changed, so a budget that keeps their defaults
+    keeps its 0.10.28 digest."""
     payload = dc_asdict(budget)
     if payload.get("max_wall_seconds") is None:
         payload.pop("max_wall_seconds", None)
+    if payload.get("max_sessions") == AmplificationBudget.max_sessions:
+        payload.pop("max_sessions", None)
     return payload
 
 
@@ -1109,6 +1112,27 @@ class SecurityPolicy:
             cost_tracker=cost_tracker,
             model_id=model_id,
         )
+
+    def reset_run(self, session_key: str) -> None:
+        """Drop one run's entries from the per-run state this policy keeps (V0.10.29).
+
+        That is the amplification ledger, the sequence guard's trace and the
+        action-contradiction gate's flag kept under ``session_key``. A trace or flag kept
+        under an agent id (``session_key_kind="agent_id"``, the default, when the call
+        names an agent) is the agent's rather than one run's, and stays. A host calls this
+        when a run ends; ``AirlockAdkPlugin`` does it for each ADK invocation it gave a run
+        id.
+
+        Args:
+            session_key: The run's ``session_id``.
+        """
+        for store in (
+            self._amplification_guard,
+            self.sequence_guard,
+            self.action_contradiction_gate,
+        ):
+            if store is not None:
+                store.reset(session_key)
 
     # -- v0.5.5 policy freezing (CVE-2026-41349 consent-bypass guard) --
 

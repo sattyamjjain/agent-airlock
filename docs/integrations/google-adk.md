@@ -118,6 +118,51 @@ A full runnable script, which needs no API key and no network, is
 
 4. **Reports what it could not guard** instead of skipping it silently.
 
+## Run lifecycle plugin
+
+The adapter guards each tool call; `AirlockAdkPlugin` sees the run around them. Add it to
+the runner beside the wrapped agent:
+
+```python
+from google.adk.runners import Runner
+
+from agent_airlock.amplification import AmplificationBudget
+from agent_airlock.integrations.google_adk import wrap_agent
+from agent_airlock.integrations.google_adk_plugin import AirlockAdkPlugin
+from agent_airlock.policy import SecurityPolicy
+
+policy = SecurityPolicy(amplification_budget=AmplificationBudget(max_calls_per_run=40))
+wrap_agent(agent, policy=policy)
+runner = Runner(
+    app_name="support",
+    agent=agent,
+    session_service=session_service,
+    plugins=[AirlockAdkPlugin(policy)],
+)
+```
+
+- **Each invocation is one Airlock run.** When nothing around the run names a
+  `session_id`, the plugin sets an `AirlockContext` with `session_id`
+  `adk-invocation:<invocation id>` for the run's tool calls, keeping the agent id, roles
+  and metadata of one you set around it. The amplification budget, the sequence guard and
+  the action-contradiction gate then count each invocation alone; without the plugin, a
+  host that sets no session id has every run count in one anonymous ledger. A
+  `session_id` you set yourself is kept, and its state is yours to drop
+  (`policy.reset_run`).
+- **The end of a run is recorded and cleaned up.** `after_run_callback` and
+  `on_run_error_callback` log `adk_invocation_finished` with an `outcome` of `completed`,
+  `error`, or `cancelled` when `invocation_context.is_aborted` is set (ADK v2.10.0 and
+  later), and drop the run's entries from the policies you passed.
+- **A cancel ADK reports to no hook.** A `CancelledError` that is neither an abort nor an
+  early close reaches neither callback (google/adk-python#7770, still so in v2.13.0), and
+  before v2.12.0 neither did an aborted run's. That run's entries stay until `close()`,
+  which ADK calls as the runner closes (`adk_invocation_unfinished`), or until the
+  policies' own `max_sessions` bounds drop them, least recently used first.
+
+Pass every policy your tools use (`AirlockAdkPlugin(policy_a, policy_b)`). The plugin is
+built on the installed ADK's `BasePlugin`, so `App(plugins=[...])` takes it too; without
+the extra it raises `GoogleADKMissingError`.
+
 ## What is *not* covered
 
 Stated plainly, because a user who believes a tool is guarded when it is

@@ -54,7 +54,7 @@ parent)` says what it could not prove. The rules:
 | `require_agent_id`, `allowed_roles` | on if the parent's is; the child's roles are among the parent's |
 | re-authorization | on if the parent's is, at a threshold no higher |
 | escalations | every parent rule is kept; the child's approver, channel and ledger are the parent's or none; no standing grant admits what the parent's do not |
-| call budget | no looser than the parent's: calls per run, amplification ratio and `max_wall_seconds` |
+| call budget | no looser than the parent's: calls per run, amplification ratio and `max_wall_seconds`, and `max_sessions` no lower |
 | every other field | the parent's own object |
 
 A field added to `SecurityPolicy` later fails the check until the rules compare it.
