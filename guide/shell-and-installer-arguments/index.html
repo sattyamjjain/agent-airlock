@@ -16,7 +16,7 @@
         <link rel="prev" href="../token-audience-and-startup-hooks/">
       
       
-        <link rel="next" href="../dispatch-arguments/">
+        <link rel="next" href="../shell-commands/">
       
       
         
@@ -1146,10 +1146,49 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#judging-the-command-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Judging the command itself
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shell-commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shell commands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2930,6 +2969,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#judging-the-command-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Judging the command itself
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3266,6 +3316,10 @@ the nine CVEs under <code>"cves"</code> and maps to OWASP MCP05, CWE-78 and CWE-
 <li><strong>Only text is read.</strong> A number or an object the host passed carries no text the model
   wrote.</li>
 </ul>
+<h2 id="judging-the-command-itself">Judging the command itself<a class="headerlink" href="#judging-the-command-itself" title="Permanent link">&para;</a></h2>
+<p>This guard refuses shell syntax in an argument. To decide which commands an agent's shell
+tool may run at all (allow <code>git status</code>, ask before <code>git push</code>, deny <code>rm -rf</code>, wrappers
+followed), see <a href="../shell-commands/">Shell commands</a>.</p>
 
 
 
