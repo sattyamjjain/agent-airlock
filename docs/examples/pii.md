@@ -84,7 +84,7 @@ mask_email(MaskingStrategy.PARTIAL)    # j***@example.com
 mask_email(MaskingStrategy.TYPE_ONLY)  # [EMAIL]
 
 # Hash (for correlation)
-mask_email(MaskingStrategy.HASH)       # [SHA256:855f96e9...]
+mask_email(MaskingStrategy.HASH)       # [HMAC:3f9a8c2e1b7d4065]
 ```
 
 ## Selective Type Masking

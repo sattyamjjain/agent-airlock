@@ -349,7 +349,7 @@ Available strategies:
 | `FULL` | `john@example.com` | `[REDACTED]` |
 | `PARTIAL` | `john@example.com` | `j***@example.com` |
 | `TYPE_ONLY` | `john@example.com` | `[EMAIL]` |
-| `HASH` | `john@example.com` | `[SHA256:855f96e9...]` |
+| `HASH` | `john@example.com` | `[HMAC:3f9a8c2e1b7d4065]` (keyed per request) |
 
 ## Sensitive Data Types
 

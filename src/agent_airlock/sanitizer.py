@@ -57,7 +57,7 @@ class MaskingStrategy(str, Enum):
     FULL = "full"  # Replace entirely with [REDACTED]
     PARTIAL = "partial"  # Keep first/last few chars: sk-****-abcd
     TYPE_ONLY = "type_only"  # Replace with [EMAIL], [SSN], etc.
-    HASH = "hash"  # Replace with hash prefix: [SHA256:a1b2c3...]
+    HASH = "hash"  # Replace with a keyed tag: [HMAC:<16 hex>]
 
 
 @dataclass
