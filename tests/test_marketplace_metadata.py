@@ -281,14 +281,21 @@ def test_self_description_makes_no_unqualified_deny_by_default_claim() -> None:
     """The library is not deny-by-default as it ships: tool allowlists, capability gates and
     the other layers are opt-in, and an empty ``allowed_tools`` allows every tool unless
     ``SecurityPolicy(default_deny=True)``. Until 0.10.29 the manifests, the package
-    docstring and CLAUDE.md said "deny-by-default" anyway (corrected on
-    scadastrangelove/awesome-ai-security-tools#154). A self-description may use the phrase
-    only in a string that names ``default_deny=True``."""
+    docstring, CLAUDE.md and the listing drafts under ``docs/distribution/`` said
+    "deny-by-default" anyway (corrected on scadastrangelove/awesome-ai-security-tools#154).
+    A self-description may use the phrase only in a string, or a draft's line, that names
+    ``default_deny=True``."""
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    draft_lines = [
+        line
+        for draft in sorted(DIST_DIR.glob("*.md"))
+        for line in draft.read_text(encoding="utf-8").splitlines()
+    ]
     texts = [
         *_self_describing_strings(),
         agent_airlock.__doc__ or "",
         pyproject["project"]["description"],
+        *draft_lines,
     ]
     offenders = [
         text
