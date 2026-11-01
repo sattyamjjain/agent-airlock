@@ -373,6 +373,12 @@ module = [
     "opentelemetry.*",
     "langchain_core",
     "langchain_core.*",
+    # langgraph (`interrupt`) and langchain (`AgentMiddleware`), imported only inside
+    # integrations/langgraph.py's functions; neither is installed in CI.
+    "langgraph",
+    "langgraph.*",
+    "langchain",
+    "langchain.*",
     "jwt",
     "jwt.*",
     "claude_agent_sdk",

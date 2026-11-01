@@ -50,9 +50,17 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   `coroutine` / `_run` / `_arun` through `named_tool_proxy`, so async calls are guarded too
   and policy lists match the tool's `name` (both since 0.10.28). `smolagents_wrapper` runs
   caller-supplied `PolicyBundle` guards and never builds an `Airlock`. The `gpt5_5_*` /
-  `gemini3_*` shape adapters normalise vendor payloads. `langgraph_toolnode_compat` only
-  unwraps ToolNode output, and `model_armor`'s `ModelArmorScanner` is called by the user,
-  never by `@Airlock`; neither wraps tools. `openai_agents` (0.10.29) wraps no tool either:
+  `gemini3_*` shape adapters normalise vendor payloads. `langgraph` (V0.10.29) is not a
+  walker: `airlock_wrap_tool_call` / `airlock_awrap_tool_call` are ToolNode `wrap_tool_call`
+  hooks (and `airlock_middleware` a `create_agent` middleware) that run each call through an
+  `Airlock` built once per tool from `tool.tool_call_schema` (`_spread`, reusing
+  `_claude_sdk_tools._schema_fields`), whose body is the node's `execute`; a refusal or an
+  unknown tool is an error `ToolMessage`. `InterruptApprovals` puts an escalation to
+  `interrupt()` and admits the resumed call only on an HMAC token over its re-derived
+  binding (thread, `checkpoint_ns`, `checkpoint_map`, tool call id, args digest), spent once
+  from a ledger outside the checkpoint store. `langgraph_toolnode_compat` only unwraps
+  ToolNode output, and `model_armor`'s `ModelArmorScanner` is called by the user, never by
+  `@Airlock`; neither wraps tools. `openai_agents` (0.10.29) wraps no tool either:
   it approves a paused run's interruptions into the policy's `approval_ledger`, wraps the
   SDK's own `Agent.as_tool` invoker in a nested run of the budget (each model call a turn,
   through `RunHooks.on_llm_start`), and maps a halted run to a tool guardrail's
@@ -168,8 +176,10 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
 **External:** `claude_agent_sdk`, `crewai`, `pydantic_ai`, `google.adk` and `google.cloud`
 (Model Armor) each have a pyproject extra; `langchain_core` and `opentelemetry` have no
 extra of their own (`opentelemetry-api` arrives transitively through `[mcp]`'s FastMCP).
-`anthropic`, `langgraph` and `smolagents` are never imported: those modules use duck typing,
-`importlib.util.find_spec` or `importlib.metadata` probes instead. The OpenAI Agents SDK is
+`anthropic` and `smolagents` are never imported: those modules use duck typing,
+`importlib.util.find_spec` or `importlib.metadata` probes instead. `langgraph` (`interrupt`),
+`langchain` (`AgentMiddleware`) and `langchain_core.messages` (`ToolMessage`) are imported
+inside `langgraph.py`'s functions only. The OpenAI Agents SDK is
 imported only through `importlib.import_module`: inside `AirlockGuardrails.wrap_agent`, to
 build real `InputGuardrail` / `OutputGuardrail` objects, and by `openai_agents._sdk()` when
 one of its helpers is called.

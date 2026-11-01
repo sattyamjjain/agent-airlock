@@ -132,6 +132,7 @@ nav:
     - Compatibility matrix: COMPATIBILITY.md
     - Google ADK: integrations/google-adk.md
     - PydanticAI: integrations/pydantic-ai.md
+    - LangGraph: integrations/langgraph.md
     - CrewAI: integrations/crewai.md
     - Claude Agent SDK: integrations/anthropic-claude-agent-sdk.md
     - Managed Agents: integrations/managed-agents.md
