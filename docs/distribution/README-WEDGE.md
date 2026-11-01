@@ -7,7 +7,7 @@ submissions only.**
 
 ## The one-liner (canonical)
 
-> **in-process least-privilege for AI tool calls, deny-by-default, per-CVE presets.**
+> **in-process least-privilege for AI tool calls, strict argument validation, per-CVE presets.**
 
 Lead with **least-privilege / type-checker / contract layer for tool calls**.
 Do **not** call it a "firewall" (crowded term; collides with an existing WAF
@@ -19,12 +19,12 @@ per-argument angle).
 One factual sentence, reused verbatim across every list:
 
 > **agent-airlock** — in-process least-privilege decorator for AI tool calls;
-> deny-by-default, PII masking, per-CVE presets, 7,999 tests.
+> strict argument validation, PII masking, per-CVE presets, 9,294 tests.
 
 > [!NOTE]
 > **Refresh the test count** to the current README **TEST-BADGE** value at the
-> moment you submit each PR (badge is regenerated every release). As of v0.8.84
-> it is **7,999**.
+> moment you submit each PR (badge is regenerated every release). As of v0.10.29
+> it is **9,294**.
 
 ## PyPI description (already on-message)
 
@@ -40,8 +40,12 @@ Keep them aligned: if you sharpen one, sharpen the other.
 
 - **in-process** — the check runs at the `@Airlock` decorator seam, in the tool
   process. No sidecar, no model call, microsecond overhead.
-- **least-privilege / deny-by-default** — a `SecurityPolicy` allow-lists exactly
-  the tools/args a task needs; everything else is refused.
+- **least-privilege** — a `SecurityPolicy` allow-lists exactly the tools/args a
+  task needs; with `default_deny=True` everything else is refused. It is opt-in: an
+  empty allowlist without it allows every tool.
+- **strict argument validation** — Pydantic strict mode at the call boundary: a
+  wrong-typed argument is refused with fix hints before the tool runs, and ghost
+  arguments are stripped or refused.
 - **per-CVE presets** — curated, opt-in policy bundles that track named MCP CVEs
   and spec SEPs (composed from existing primitives, Pydantic-only core).
 - **PII masking** — output sanitizer with 13 PII types incl. India DPDP

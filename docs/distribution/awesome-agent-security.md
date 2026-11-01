@@ -6,12 +6,12 @@
 
 - **Target list:** `awesome-agent-security` <!-- verify canonical repo URL -->
 - **Section:** Tools / Runtime defenses
-- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.10.28 = 7,999).
+- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.10.29 = 9,294).
 
 ## Entry (list format)
 
 ```markdown
-- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) — in-process least-privilege decorator for AI tool calls; deny-by-default, PII masking, per-CVE presets, 7,999 tests.
+- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) — in-process least-privilege decorator for AI tool calls; strict argument validation, PII masking, per-CVE presets, 9,294 tests.
 ```
 
 ## PR title
@@ -24,11 +24,11 @@ Add agent-airlock (in-process least-privilege for agent tool calls)
 
 ```
 agent-airlock is a decorator (@Airlock) that wraps an agent tool and enforces a
-validate → policy → execute → sanitize seam in-process: deny-by-default
-least-privilege SecurityPolicy, strict typed argument validation, ghost-argument
+validate → policy → execute → sanitize seam in-process: opt-in least-privilege
+SecurityPolicy, strict typed argument validation, ghost-argument
 stripping, output PII/secret masking, capability gating, and opt-in per-CVE /
 MCP-spec presets. Integrates with LangChain, LangGraph, PydanticAI, OpenAI
-Agents, Anthropic, CrewAI, and more. Apache-2.0, Pydantic-only core, 7,999 tests.
+Agents, Anthropic, CrewAI, and more. Apache-2.0, Pydantic-only core, 9,294 tests.
 
 Repo: https://github.com/sattyamjjain/agent-airlock
 PyPI: https://pypi.org/project/agent-airlock/
