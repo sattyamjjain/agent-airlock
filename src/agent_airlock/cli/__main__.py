@@ -34,7 +34,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "doctor": ("doctor", "Scan a codebase for unprotected tools and unsafe patterns."),
     "verify": ("verify", "Verify Airlock protection status and emit a badge."),
     "explain": ("explain", "Privilege right-sizing report (least-privilege suggestions)."),
-    "policy": ("policy", "Compile and explain security policies."),
+    "policy": ("policy", "Compile, explain and check the coverage of security policies."),
     # Attestation / evidence / packaging.
     "attest": ("attest", "Emit identity + LayerContract attestation receipts."),
     "baseline": ("baseline", "Record or compare a security baseline snapshot."),

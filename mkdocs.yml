@@ -143,6 +143,7 @@ nav:
     - Kill switch: cli/kill-switch.md
     - Policy bundle lock: cli/policy-bundle-lock.md
     - Policy compile / explain: cli/policy-compile-explain.md
+    - Policy coverage: cli/policy-coverage.md
     - Attest receipt: cli/attest-receipt.md
     - Console: cli/console.md
     - Graph serve: cli/graph-serve.md
