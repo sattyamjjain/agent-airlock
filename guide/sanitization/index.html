@@ -3293,6 +3293,12 @@ was returned unmasked; an unreadable value, or a result too deep to walk, escape
 as an exception after the tool had run.</p>
 <h2 id="sensitive-data-types">Sensitive Data Types<a class="headerlink" href="#sensitive-data-types" title="Permanent link">&para;</a></h2>
 <p>"Masked As" is what <code>@Airlock</code> returns, using each type's default strategy.</p>
+<p>The detectors for ASCII-shaped values (email, phone, card, IP, API and AWS keys, JWT, and
+the India types) read word boundaries the ASCII way, so a value written right next to
+Devanagari, Arabic, Hebrew, Thai or Bengali text (<code>ईमेलbob@example.com</code>) is masked like a
+space-separated one; until 0.10.29 it was not. A no-break or other Unicode space between
+the groups of a number still counts as a separator. A chained address
+(<code>bob-@list.dan@ex.org</code>) is masked whole.</p>
 <h3 id="pii-personally-identifiable-information">PII (Personally Identifiable Information)<a class="headerlink" href="#pii-personally-identifiable-information" title="Permanent link">&para;</a></h3>
 <p>Masked when <code>mask_pii=True</code> (the default).</p>
 <table>
