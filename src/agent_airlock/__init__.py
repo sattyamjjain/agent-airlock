@@ -187,6 +187,8 @@ from .filesystem import (
     FilesystemPolicy,
     PathValidationError,
     is_path_within_roots,
+    open_contained,
+    open_contained_file,
     validate_path,
 )
 
@@ -1135,6 +1137,8 @@ __all__ = [
     "FilesystemPolicy",
     "PathValidationError",
     "validate_path",
+    "open_contained",
+    "open_contained_file",
     "is_path_within_roots",
     "RESTRICTIVE_FILESYSTEM_POLICY",
     "SANDBOX_FILESYSTEM_POLICY",

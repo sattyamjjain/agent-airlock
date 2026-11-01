@@ -141,6 +141,7 @@ startup_hook_check = "warn"
 allowed_roots = ["/app/data", "/tmp"]
 deny_patterns = ["*.env", "**/.git/**"]
 allow_symlinks = false
+bind_resolved_paths = false  # true: the tool gets the absolute path that was checked
 
 # V0.3.0 Network: only api.company.com, on port 443. allow_egress = false would refuse
 # every connection and lookup, and the allowlists would then do nothing
@@ -161,6 +162,32 @@ fake_delay_ms = 100
 
 The token-audience and startup-hook keys are described in
 [Token audience and startup hooks](../guide/token-audience-and-startup-hooks.md).
+
+## Filesystem Paths
+
+`FilesystemPolicy` decides which paths a call may name; it does not open them. Its check
+runs before the tool, against the path as it resolves then, so it is not atomic: a
+directory swapped for a symlink after the check is followed by the tool's own `open()`.
+Open through `open_contained_file` (or `open_contained`, for a raw descriptor) to have the
+open walk the checked path from the allowed root without following a symlink, and set
+`bind_resolved_paths=True` to hand the tool the absolute path that was checked. What each
+covers, and the platforms the atomic open needs, are in
+[Core Concepts](../guide/concepts.md#filesystem-paths-and-the-open-that-follows).
+
+```python
+from pathlib import Path
+
+from agent_airlock import Airlock, AirlockConfig, FilesystemPolicy, open_contained_file
+
+policy = FilesystemPolicy(allowed_roots=[Path("/srv/app/data")], bind_resolved_paths=True)
+
+
+@Airlock(config=AirlockConfig(filesystem_policy=policy))
+def write_report(path: str, text: str) -> str:
+    with open_contained_file(path, policy, "w") as handle:
+        handle.write(text)
+    return path
+```
 
 ## Per-Tool Configuration
 

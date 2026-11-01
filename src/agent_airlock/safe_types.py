@@ -336,7 +336,9 @@ class SafePathValidator:
             value: Path to validate.
 
         Returns:
-            Validated Path object.
+            Validated Path object. With ``root_dir`` set, the absolute path under
+            ``root_dir`` that was checked: until 0.10.29 the relative input came back, and
+            ``open()`` resolved it against the working directory, outside the jail.
 
         Raises:
             SafePathValidationError: If the path is unsafe.
@@ -405,6 +407,7 @@ class SafePathValidator:
                     f"Path resolution failed: {e}",
                     path=path_str,
                 ) from e
+            return resolved
 
         return path
 

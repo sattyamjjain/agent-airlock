@@ -584,6 +584,7 @@ def _parse_filesystem_policy(data: dict[str, Any]) -> FilesystemPolicy:
         allow_symlinks=bool(data.get("allow_symlinks", False)),
         deny_patterns=list(data.get("deny_patterns", [])),
         max_path_depth=int(data.get("max_path_depth", 20)),
+        bind_resolved_paths=bool(data.get("bind_resolved_paths", False)),
     )
 
 

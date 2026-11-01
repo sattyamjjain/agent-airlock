@@ -70,6 +70,7 @@ from collections.abc import (
     Mapping,
 )
 from datetime import datetime, timedelta, timezone
+from pathlib import Path, PurePath
 from typing import Any, Literal, ParamSpec, TypeVar, overload
 from urllib.parse import urlparse
 from urllib.request import url2pathname
@@ -286,9 +287,9 @@ class _BoundCall:
         return self._digest_of(self._bind())
 
     def replace(self, apply: Callable[[], None]) -> None:
-        """Change the values the tool will get (``apply``: step 2.76's masking), then work
-        the arguments and their digest out again, so the later steps and the decision
-        record read what the tool runs with. An approval moves onto the new digest only
+        """Change the values the tool will get (``apply``: step 2.76's masking, step 3's
+        ``bind_resolved_paths``), then work the arguments and their digest out again, so
+        the later steps and the decision record read what the tool runs with. An approval moves onto the new digest only
         when the values were still the ones it approved: one changed while the approver
         was deciding is still refused."""
         approval = self.approval
@@ -757,6 +758,70 @@ def _filesystem_path(item: ArgumentValue) -> str | None:
     if item.depth == 0 and not item.is_key:
         return value if _looks_like_path(item.key, value) else None
     return value if _looks_like_nested_path(item.key, value) else None
+
+
+def _bound_path_value(value: Any, path: str, resolved: Path) -> Any:
+    """What ``FilesystemPolicy(bind_resolved_paths=True)`` hands the tool for ``value``.
+
+    A plain path string becomes the absolute path it resolved to, a ``pathlib`` path the
+    same, in its own class. None (passed as given): a ``file:`` URI, whose string is not
+    the path, and any other ``os.PathLike``, whose type cannot be rebuilt.
+    """
+    if isinstance(value, str):
+        return str(resolved) if value == path else None
+    if isinstance(value, PurePath):
+        return type(value)(resolved)
+    return None
+
+
+class _GatedKwargs(dict[str, Any]):
+    """The keyword arguments a call runs with once the gates passed it.
+
+    ``call_args`` carries its positional arguments when a gate rebound one (step 3 with
+    ``bind_resolved_paths``), else None: the call's own.
+    """
+
+    call_args: tuple[Any, ...] | None = None
+
+
+def _call_args(args: tuple[Any, ...], gated_kwargs: Mapping[str, Any]) -> tuple[Any, ...]:
+    """The positional arguments to call the tool with: ``args``, or the rebound ones."""
+    rebound = getattr(gated_kwargs, "call_args", None)
+    return args if rebound is None else rebound
+
+
+def _rebind_arguments(
+    signature: inspect.Signature | None,
+    args: tuple[Any, ...],
+    kwargs: Mapping[str, Any],
+    bindings: Mapping[str, tuple[str, Any]],
+) -> _GatedKwargs:
+    """``kwargs`` with each binding applied, carrying the positional arguments with theirs.
+
+    ``bindings`` maps an argument's bound name (``bind_arguments``) to the name it was
+    passed under and its new value. A positional parameter passed positionally is rebound
+    in place; one passed by keyword, a keyword-only one and a ``**kwargs`` item are
+    rebound by key. A call that did not bind (``arg[i]`` names) is left as passed: it
+    fails on its own.
+    """
+    positions: dict[str, int] = {}
+    if signature is not None:
+        for index, (name, parameter) in enumerate(signature.parameters.items()):
+            if parameter.kind not in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                break
+            positions[name] = index
+    call_args = list(args)
+    gated = _GatedKwargs(kwargs)
+    for bound_name, (key, value) in bindings.items():
+        if bound_name == key and positions.get(key, len(args)) < len(args):
+            call_args[positions[key]] = value
+        elif key in gated:
+            gated[key] = value
+    gated.call_args = tuple(call_args)
+    return gated
 
 
 def _endpoint_url(item: ArgumentValue) -> str | None:
@@ -2081,7 +2146,12 @@ class Airlock:
             skip_first = run_wrapper is not None and run_wrapper.host_object
             call = _BoundCall(
                 lambda: without_injected(
-                    bind_arguments(call_signature, args, cleaned_kwargs, skip_first=skip_first),
+                    bind_arguments(
+                        call_signature,
+                        _call_args(args, cleaned_kwargs),
+                        cleaned_kwargs,
+                        skip_first=skip_first,
+                    ),
                     injected,
                 )
             )
@@ -2265,11 +2335,24 @@ class Airlock:
                 context._refused_at = "2.8:amplification_budget"
                 return kwargs, start_time, context, amp_error, None, None
 
-            # Step 3: Validate filesystem paths
-            fs_error = self._validate_filesystem_paths(func_name, arguments)
+            # Step 3: Validate filesystem paths. With bind_resolved_paths, a top-level
+            # str or pathlib argument is then rebound to the absolute path it resolved to
+            # when checked, so the tool opens what was checked (GHSA-52hc-jp32-qrr3).
+            path_bindings: dict[str, tuple[str, Any]] = {}
+            fs_error = self._validate_filesystem_paths(func_name, arguments, path_bindings)
             if fs_error is not None:
                 context._refused_at = "3:filesystem_paths"
                 return arguments, start_time, context, fs_error, None, None
+            if path_bindings:
+                gated = _rebind_arguments(call_signature, args, cleaned_kwargs, path_bindings)
+
+                def rebind() -> None:
+                    nonlocal cleaned_kwargs
+                    cleaned_kwargs = gated
+
+                # Through the bound call, so the later steps, the decision record and an
+                # approval granted at step 2 read the paths the tool will open.
+                call.replace(rebind)
 
             # Step 4: Check capability requirements, read from the wrapper and the chain
             # beneath it so a ``@requires`` above or below ``@Airlock`` counts.
@@ -2771,6 +2854,8 @@ class Airlock:
                         await asyncio.to_thread(_settle, func_name, context, "replayed")
                     return _replayed(func_name, replay, start_time, dict(kwargs), context)  # type: ignore[no-any-return]
 
+                # The positional arguments step 3 rebound (bind_resolved_paths), else the call's.
+                call_args = _call_args(args, cleaned_kwargs)
                 # Set context as current for the duration of execution
                 token = set_current_context(context)
                 try:
@@ -2787,24 +2872,24 @@ class Airlock:
                                 # ValidationError propagates to the shared `except Exception` below,
                                 # which routes to _handle_error and returns the same AirlockResponse,
                                 # BlockReason and fix_hints the non-sandbox path returns.
-                                v_args, v_kwargs = validate_sandbox_args(args, cleaned_kwargs)
+                                v_args, v_kwargs = validate_sandbox_args(call_args, cleaned_kwargs)
                                 result = await self._execute_in_sandbox_async(
                                     func, *v_args, **v_kwargs
                                 )
                             else:
-                                result = await validated_func(*args, **cleaned_kwargs)  # type: ignore[misc]
+                                result = await validated_func(*call_args, **cleaned_kwargs)  # type: ignore[misc]
                     else:
                         if self.sandbox:
                             # V0.10.6: validate in the parent before dispatching. On failure the
                             # ValidationError propagates to the shared `except Exception` below,
                             # which routes to _handle_error and returns the same AirlockResponse,
                             # BlockReason and fix_hints the non-sandbox path returns.
-                            v_args, v_kwargs = validate_sandbox_args(args, cleaned_kwargs)
+                            v_args, v_kwargs = validate_sandbox_args(call_args, cleaned_kwargs)
                             result = await self._execute_in_sandbox_async(func, *v_args, **v_kwargs)
                         else:
                             # Await the async validated function
                             # Type ignore: validated_func preserves async nature of func
-                            result = await validated_func(*args, **cleaned_kwargs)  # type: ignore[misc]
+                            result = await validated_func(*call_args, **cleaned_kwargs)  # type: ignore[misc]
 
                 except NetworkBlockedError as e:
                     if self.config.decision_log is not None:
@@ -2987,6 +3072,8 @@ class Airlock:
                     _settle(func_name, context, "replayed")
                     return _replayed(func_name, replay, start_time, dict(kwargs), context)  # type: ignore[no-any-return]
 
+                # The positional arguments step 3 rebound (bind_resolved_paths), else the call's.
+                call_args = _call_args(args, cleaned_kwargs)
                 # Set context as current for the duration of execution
                 token = set_current_context(context)
                 try:
@@ -3000,20 +3087,20 @@ class Airlock:
                                 # ValidationError propagates to the shared `except Exception` below,
                                 # which routes to _handle_error and returns the same AirlockResponse,
                                 # BlockReason and fix_hints the non-sandbox path returns.
-                                v_args, v_kwargs = validate_sandbox_args(args, cleaned_kwargs)
+                                v_args, v_kwargs = validate_sandbox_args(call_args, cleaned_kwargs)
                                 result = self._execute_in_sandbox(func, *v_args, **v_kwargs)
                             else:
-                                result = validated_func(*args, **cleaned_kwargs)
+                                result = validated_func(*call_args, **cleaned_kwargs)
                     else:
                         if self.sandbox:
                             # V0.10.6: validate in the parent before dispatching. On failure the
                             # ValidationError propagates to the shared `except Exception` below,
                             # which routes to _handle_error and returns the same AirlockResponse,
                             # BlockReason and fix_hints the non-sandbox path returns.
-                            v_args, v_kwargs = validate_sandbox_args(args, cleaned_kwargs)
+                            v_args, v_kwargs = validate_sandbox_args(call_args, cleaned_kwargs)
                             result = self._execute_in_sandbox(func, *v_args, **v_kwargs)
                         else:
-                            result = validated_func(*args, **cleaned_kwargs)
+                            result = validated_func(*call_args, **cleaned_kwargs)
 
                 except NetworkBlockedError as e:
                     _settle(func_name, context, "network_blocked", e)
@@ -4284,6 +4371,7 @@ class Airlock:
         self,
         func_name: str,
         arguments: dict[str, Any],
+        bindings: dict[str, tuple[str, Any]] | None = None,
     ) -> AirlockResponse | None:
         """Validate every filesystem path the call's arguments carry.
 
@@ -4299,6 +4387,9 @@ class Airlock:
         Args:
             func_name: Name of the function being called.
             arguments: Every argument of the call, by name (``bind_arguments``).
+            bindings: Filled, when the policy sets ``bind_resolved_paths``, with each
+                top-level argument to rebind: its bound name, mapped to the name it was
+                passed under and the resolved path (:func:`_bound_path_value`).
 
         Returns:
             Error response if validation failed, None otherwise.
@@ -4306,6 +4397,7 @@ class Airlock:
         policy = self.config.filesystem_policy
         if policy is None:
             return None
+        bind = bindings is not None and policy.bind_resolved_paths
 
         try:
             for item in iter_argument_values(arguments):
@@ -4313,7 +4405,11 @@ class Airlock:
                 if path is None:
                     continue
                 try:
-                    validate_path(path, policy)
+                    resolved = validate_path(path, policy)
+                    if bind and bindings is not None and item.depth == 0 and not item.is_key:
+                        bound = _bound_path_value(item.value, path, resolved)
+                        if bound is not None:
+                            bindings[item.path] = (item.key, bound)
                 except PathValidationError as e:
                     logger.warning(
                         "path_validation_failed",

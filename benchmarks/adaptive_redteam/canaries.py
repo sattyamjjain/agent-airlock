@@ -45,7 +45,9 @@ def canary_env(tmp_root: Path | None = None) -> Iterator[Path]:
     """
     created = False
     if tmp_root is None:
-        tmp_root = Path(tempfile.mkdtemp(prefix="airlock-redteam-"))
+        # Resolved: on macOS the temp dir is under /var, a symlink to /private/var, and a
+        # FilesystemPolicy with allow_symlinks=False refuses paths through it.
+        tmp_root = Path(tempfile.mkdtemp(prefix="airlock-redteam-")).resolve()
         created = True
     audit_path = tmp_root / "airlock_audit.jsonl"
     prior = os.environ.get(AUDIT_ENV)
@@ -100,7 +102,7 @@ class FileCanary:
     @classmethod
     @contextlib.contextmanager
     def create(cls) -> Iterator[FileCanary]:
-        root = Path(tempfile.mkdtemp(prefix="airlock-forbidden-"))
+        root = Path(tempfile.mkdtemp(prefix="airlock-forbidden-")).resolve()
         canary = root / "canary.secret"
         canary.write_text("sentinel", encoding="utf-8")
         inst = cls(root=root, canary=canary)

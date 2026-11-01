@@ -1,19 +1,28 @@
 """Filesystem security module for Agent-Airlock.
 
-Provides bulletproof path validation to prevent directory traversal attacks,
-symlink exploitation, and unauthorized file access.
+Path validation against directory traversal, symlink escapes and unauthorized file
+access, and an open that cannot be redirected after the check.
 
 SECURITY: Uses os.path.commonpath() (NOT string prefix matching) for CVE-resistant
-path validation. Prevents TOCTOU race conditions with atomic path resolution.
+path validation. :func:`validate_path` checks a path as it resolves when it runs and holds
+nothing open, so it is not atomic: a component swapped after the check (a directory
+replaced by a symlink to outside the root, GHSA-52hc-jp32-qrr3) is followed by the tool's
+own ``open()``. :func:`open_contained` closes that window: it walks the checked path from
+the allowed root one component at a time, never following a symlink, so it opens what was
+checked or refuses.
 """
 
 from __future__ import annotations
 
+import errno
 import fnmatch
 import os
+import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from ._log import structlog
 
@@ -58,12 +67,21 @@ class FilesystemPolicy:
                       resolved path. Supports ** for recursive matching.
         max_path_depth: Maximum directory depth from root. Prevents DoS via
                        extremely deep paths.
+        bind_resolved_paths: If True, ``@Airlock`` hands the tool the absolute path each
+                       top-level ``str`` or ``pathlib`` argument resolved to when it was
+                       checked, rather than the value as passed, so a relative path or a
+                       ``~`` the tool would resolve differently opens what was checked.
+                       Nested values (inside a list, a dict or a model) are passed as
+                       given. It does not make the open atomic: a component swapped after
+                       the check is still followed, unless the tool opens through
+                       :func:`open_contained`. Off by default.
     """
 
     allowed_roots: list[Path] = field(default_factory=list)
     allow_symlinks: bool = False
     deny_patterns: list[str] = field(default_factory=list)
     max_path_depth: int = 20
+    bind_resolved_paths: bool = False
 
     def __post_init__(self) -> None:
         """Normalize allowed roots to absolute paths."""
@@ -173,8 +191,12 @@ def validate_path(
 ) -> Path:
     """Validate a path against a filesystem security policy.
 
-    SECURITY: This function performs atomic path resolution to prevent TOCTOU
-    race conditions. All checks are performed on the resolved path.
+    The path is checked as it resolves when this runs (``os.path.realpath``), and nothing
+    is held open, so the check is not atomic: a component swapped between this check and
+    the tool's own ``open()`` (a directory replaced by a symlink, GHSA-52hc-jp32-qrr3) is
+    followed by that ``open()``. A tool that opens through :func:`open_contained` (or
+    :func:`open_contained_file`) is not exposed to that window. All checks are performed
+    on the resolved path.
 
     A path that begins with ``~`` (after any leading whitespace) is checked in **both**
     forms, and both must pass: the literal one, which is what ``open()`` and
@@ -323,25 +345,231 @@ def _validate_form(
 def _refuse_symlinked(path: Path, original_path: str, form_details: dict[str, Any]) -> None:
     """Refuse ``path`` when any component of its absolute form is a symlink.
 
+    Every component that exists is checked, the leaf's ancestors included when the leaf
+    does not exist yet: until 0.10.29 the walk was skipped for a missing leaf, so
+    ``ws/link/new.txt`` passed with ``link`` a symlink, and every ``OSError`` was
+    swallowed. A component that does not exist has nothing to follow, so the walk moves
+    on to its parent; any other error reading a component refuses the path, since the
+    check cannot say what it would follow.
+
     ``form_details`` is empty for the literal form, whose refusal names the symlink, and
     marks the ``expanduser`` form, whose refusal leaves the location out.
     """
+    current = path.absolute()
+    while True:
+        try:
+            mode = os.lstat(current).st_mode
+        except FileNotFoundError:
+            mode = 0
+        except OSError as exc:
+            raise PathValidationError(
+                "Path could not be checked for symlinks",
+                original_path,
+                "symlink_check_failed",
+                {"error": type(exc).__name__, **form_details},
+            ) from exc
+        if stat.S_ISLNK(mode):
+            raise PathValidationError(
+                f"Path contains symlink at {current}",
+                original_path,
+                "symlink_detected",
+                form_details or {"symlink_location": str(current)},
+            )
+        if current == current.parent:
+            return
+        current = current.parent
+
+
+#: The access and creation flags each ``open()`` mode letter stands for.
+_MODE_CREATION = {
+    "r": 0,
+    "w": os.O_CREAT | os.O_TRUNC,
+    "a": os.O_CREAT | os.O_APPEND,
+    "x": os.O_CREAT | os.O_EXCL,
+}
+
+
+def open_contained(
+    path: str | os.PathLike[str],
+    policy: FilesystemPolicy,
+    flags: int = os.O_RDONLY,
+    mode: int = 0o600,
+) -> int:
+    """Open ``path`` under ``policy`` without following a symlink, and return the descriptor.
+
+    :func:`validate_path` checks a path as it resolves when it runs; a component swapped
+    after that is followed by a later ``open()`` (GHSA-52hc-jp32-qrr3). This runs the same
+    checks, then opens the path they resolved, starting from the allowed root that
+    contains it: each directory below the root is opened relative to the one above it
+    (``dir_fd``) with ``O_NOFOLLOW``, and the leaf with ``flags | O_NOFOLLOW``, so a
+    component that is a symlink by the time it is opened is refused, and what is opened is
+    what was checked, or nothing. With no ``allowed_roots`` the walk starts at the
+    filesystem root. A policy that allows symlinks gets them resolved at check time, so the
+    walk follows the path they resolved to and refuses one that appears later.
+
+    Hard links and mount points are not symlinks, and are not detected.
+
+    Args:
+        path: The path to open, relative or absolute.
+        policy: The filesystem policy it must pass.
+        flags: ``os.open`` flags for the leaf, e.g. ``os.O_WRONLY | os.O_CREAT``.
+        mode: Permission bits for a file ``flags`` creates.
+
+    Returns:
+        An open file descriptor, which the caller closes.
+
+    Raises:
+        PathValidationError: The path fails :func:`validate_path`; a component is a
+            symlink when it is opened (``symlink_detected``); or this platform cannot open
+            relative to a directory without following symlinks (``atomic_open_unsupported``,
+            Windows), which is refused rather than answered with the racy open.
+        OSError: The open failed for another reason: a directory that does not exist, a
+            permission error, ``O_EXCL`` on a file that exists.
+    """
+    original_path = os.fsdecode(os.fspath(path))
+    _require_atomic_open(original_path)
+    resolved = validate_path(original_path, policy)
+    root = _containing_root(resolved, policy)
+    parts = _components(resolved, root, original_path)
+    if not parts:
+        return os.open(root, flags, mode)
+    dir_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        absolute_path = path.absolute()
-        if absolute_path.exists():
-            current = absolute_path
-            while current != current.parent:  # Stop at root
-                if current.is_symlink():
-                    raise PathValidationError(
-                        f"Path contains symlink at {current}",
-                        original_path,
-                        "symlink_detected",
-                        form_details or {"symlink_location": str(current)},
-                    )
-                current = current.parent
+        for part in parts[:-1]:
+            child = _open_component(
+                part, dir_fd, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, 0, original_path
+            )
+            os.close(dir_fd)
+            dir_fd = child
+        return _open_component(parts[-1], dir_fd, flags | os.O_NOFOLLOW, mode, original_path)
+    finally:
+        os.close(dir_fd)
+
+
+@contextmanager
+def open_contained_file(
+    path: str | os.PathLike[str],
+    policy: FilesystemPolicy,
+    mode: str = "r",
+    *,
+    encoding: str | None = None,
+    errors: str | None = None,
+    newline: str | None = None,
+    create_mode: int = 0o600,
+) -> Iterator[IO[Any]]:
+    """:func:`open_contained` as a file object, closed when the block exits.
+
+    Args:
+        path: The path to open.
+        policy: The filesystem policy it must pass.
+        mode: An ``open()`` mode: one of ``r``, ``w``, ``a``, ``x``, optionally with ``+``
+            and ``b`` or ``t``.
+        encoding: Passed to ``open()`` for a text mode.
+        errors: Passed to ``open()`` for a text mode.
+        newline: Passed to ``open()`` for a text mode.
+        create_mode: Permission bits for a file the mode creates.
+
+    Yields:
+        The open file object.
+
+    Raises:
+        ValueError: ``mode`` is not an ``open()`` mode.
+        PathValidationError: As :func:`open_contained`.
+    """
+    fd = open_contained(path, policy, _flags_for_mode(mode), create_mode)
+    try:
+        handle = os.fdopen(fd, mode, encoding=encoding, errors=errors, newline=newline)
+    except BaseException:
+        os.close(fd)
+        raise
+    with handle:
+        yield handle
+
+
+def _flags_for_mode(mode: str) -> int:
+    """The ``os.open`` flags an ``open()`` mode string stands for."""
+    letters = [letter for letter in mode if letter in _MODE_CREATION]
+    if (
+        len(letters) != 1
+        or set(mode) - set("rwaxbt+")
+        or len(set(mode)) != len(mode)
+        or {"b", "t"} <= set(mode)
+    ):
+        raise ValueError(f"invalid mode: {mode!r}")
+    letter = letters[0]
+    one_way = os.O_RDONLY if letter == "r" else os.O_WRONLY
+    access = os.O_RDWR if "+" in mode else one_way
+    return access | _MODE_CREATION[letter]
+
+
+def _require_atomic_open(original_path: str) -> None:
+    """Refuse on a platform that cannot open relative to a directory without following."""
+    if (
+        os.open not in os.supports_dir_fd
+        or os.stat not in os.supports_dir_fd
+        or not hasattr(os, "O_NOFOLLOW")
+        or not hasattr(os, "O_DIRECTORY")
+    ):
+        raise PathValidationError(
+            "This platform cannot open a path relative to a directory without following "
+            "symlinks, so open_contained refuses rather than fall back to a racy open",
+            original_path,
+            "atomic_open_unsupported",
+        )
+
+
+def _containing_root(resolved: Path, policy: FilesystemPolicy) -> Path:
+    """The allowed root ``resolved`` lies in, or its filesystem root when there are none."""
+    if not policy.allowed_roots:
+        return Path(resolved.anchor)
+    for root in policy.allowed_roots:
+        if is_path_within_roots(resolved, [root]):
+            return root
+    raise PathValidationError(  # pragma: no cover - validate_path refused it already
+        "Path is outside allowed directories",
+        str(resolved),
+        "outside_allowed_roots",
+    )
+
+
+def _components(resolved: Path, root: Path, original_path: str) -> tuple[str, ...]:
+    """The names to walk from ``root`` to ``resolved``, refusing any that is not a name."""
+    parts = resolved.relative_to(root).parts
+    for part in parts:
+        if part in ("", ".", "..") or os.sep in part or (os.altsep and os.altsep in part):
+            raise PathValidationError(
+                "Path has a component that is not a plain name",
+                original_path,
+                "invalid_path",
+            )
+    return parts
+
+
+def _open_component(name: str, dir_fd: int, flags: int, mode: int, original_path: str) -> int:
+    """``os.open(name, dir_fd=dir_fd)``, a symlink where one was not checked refused."""
+    try:
+        return os.open(name, flags, mode, dir_fd=dir_fd)
+    except OSError as exc:
+        # O_NOFOLLOW on a symlink: ELOOP for the leaf, ENOTDIR (macOS) or ELOOP (Linux)
+        # with O_DIRECTORY. ENOTDIR also means a regular file, which is not a refusal.
+        if exc.errno == errno.ELOOP or (
+            exc.errno == errno.ENOTDIR and _is_symlink_at(name, dir_fd)
+        ):
+            raise PathValidationError(
+                "Path changed after it was checked: a component is now a symlink",
+                original_path,
+                "symlink_detected",
+                {"component": name},
+            ) from exc
+        raise
+
+
+def _is_symlink_at(name: str, dir_fd: int) -> bool:
+    """Whether ``name`` in the directory ``dir_fd`` is a symlink."""
+    try:
+        return stat.S_ISLNK(os.stat(name, dir_fd=dir_fd, follow_symlinks=False).st_mode)
     except OSError:
-        # Path doesn't exist yet or permission error - OK for non-must_exist
-        pass
+        return False
 
 
 # Predefined policies for common use cases

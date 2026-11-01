@@ -256,14 +256,17 @@ class TestPathTraversalAttacks:
 
     def test_dot_dot_slash_attack(self) -> None:
         """Test that ../ traversal is blocked."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            policy = FilesystemPolicy(allowed_roots=[Path(tmpdir) / "data"])
+        with tempfile.TemporaryDirectory() as raw_tmpdir:
+            # Resolved: on macOS the temp dir is under /var, a symlink to /private/var, and
+            # since 0.10.29 the symlink walk covers a leaf that does not exist yet.
+            tmpdir = Path(raw_tmpdir).resolve()
+            policy = FilesystemPolicy(allowed_roots=[tmpdir / "data"])
 
             # Create the data subdirectory
-            (Path(tmpdir) / "data").mkdir()
+            (tmpdir / "data").mkdir()
 
             # Attempt traversal
-            malicious_path = str(Path(tmpdir) / "data" / ".." / "secret.txt")
+            malicious_path = str(tmpdir / "data" / ".." / "secret.txt")
 
             with pytest.raises(PathValidationError) as exc_info:
                 validate_path(malicious_path, policy)

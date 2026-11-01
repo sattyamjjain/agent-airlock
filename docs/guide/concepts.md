@@ -245,6 +245,54 @@ The airgap follows the call's context, which sets its limits:
 - A Unix-domain socket has a path, not a host: `allow_egress=False` refuses it, and a host
   or port allowlist does not apply to it.
 
+## Filesystem Paths and the Open That Follows
+
+With `AirlockConfig(filesystem_policy=FilesystemPolicy(...))`, step 3 checks every path the
+call's arguments carry: it must resolve inside `allowed_roots`, match no `deny_patterns`,
+and, with `allow_symlinks=False` (the default), go through no symlink. Since 0.10.29 that
+includes the ancestors of a file that does not exist yet, so on macOS a path under `/tmp` or
+`/var` (both symlinks into `/private`) is refused whether or not the file exists: pass the
+resolved path.
+
+That check is not atomic. `validate_path` checks a path as it resolves when the check runs
+and holds nothing open, so a component swapped between the check and the tool's own
+`open()` (a directory replaced by a symlink to somewhere outside the root,
+GHSA-52hc-jp32-qrr3) is followed by that `open()`. Two settings close or narrow the window:
+
+- **`open_contained` and `open_contained_file`.** The tool opens through them instead of
+  `open()`. They run the same checks, then walk the checked path from the allowed root one
+  directory at a time (`os.open(..., dir_fd=...)` with `O_NOFOLLOW`) and open the leaf with
+  `O_NOFOLLOW`. A component that is a symlink by the time it is opened is refused as
+  `symlink_detected`, so the tool opens what was checked or nothing, whatever
+  `allow_symlinks` says (a policy that allows symlinks has them resolved at check time, and
+  the walk follows the path they resolved to). Hard links and mount points are not
+  symlinks, and the walk does not detect them.
+- **`FilesystemPolicy(bind_resolved_paths=True)`.** The tool receives the absolute path each
+  top-level `str` or `pathlib` argument resolved to when it was checked, not the value as
+  passed, so a relative path, or a `~` the tool would expand, opens what was checked. Nested
+  values (in a list, a dict or a model) are passed as given, and so are a `file:` URI and
+  an `os.PathLike` that is not a `pathlib` path. This binds the path; it does not make the
+  open atomic.
+
+`open_contained` needs `os.open` and `os.stat` with `dir_fd`, and `O_NOFOLLOW`: Linux, macOS
+and the BSDs have them. Where they are missing (Windows), it raises `PathValidationError`
+with `violation_type="atomic_open_unsupported"` rather than fall back to the racy open.
+
+```python
+import os
+from pathlib import Path
+
+from agent_airlock import FilesystemPolicy, open_contained, open_contained_file
+
+policy = FilesystemPolicy(allowed_roots=[Path("/srv/app/data")])
+
+with open_contained_file("/srv/app/data/reports/out.md", policy, "w") as handle:
+    handle.write("report")
+
+fd = open_contained("/srv/app/data/reports/out.md", policy, os.O_RDONLY)
+os.close(fd)
+```
+
 ## Unknown Arguments Mode (V0.4.0)
 
 The `UnknownArgsMode` enum replaces the boolean `strict_mode`:
