@@ -335,6 +335,12 @@ kill switch, the startup-hook check and the budgets are operational controls.
   core value-reading gates, when one of them is on (`_reads_argument_values`), refuse input
   too deep or self-containing to read, and a resolver that returns no policy refuses the
   call.
+- **Path deny lists.** In `SafePathValidator` only the entries of `PERSISTENCE_DENY_PATTERNS`
+  and `AGENT_CONFIG_DENY_PATTERNS` match whatever the case (`_CASELESS_PATTERNS`); the older
+  ones stay case-sensitive, or `SYSTEM` would refuse a file named `system`. It and
+  `FilesystemPolicy` also match the path with each component's trailing dots and spaces
+  dropped (`filesystem._fold_trailing_dots`). `DEFAULT_PATH_DENY_PATTERNS` guards `SafePath`
+  arguments (step 7); step 3 reads only `FilesystemPolicy.deny_patterns`, empty by default.
 - **Guard + preset pairs.** `mcp_spec/` guards come in three shapes (see
   `mcp_spec/CLAUDE.md`); a guard's preset factory, usually `*_defaults()`, lives in
   `policy_presets.py`. Register it with `@preset` **and** list it in

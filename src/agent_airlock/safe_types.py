@@ -49,6 +49,7 @@ from pydantic import AfterValidator
 
 from ._arg_walk import ArgumentNestingError, iter_argument_values
 from ._log import structlog
+from .filesystem import _fold_trailing_dots
 
 logger = structlog.get_logger("agent-airlock.safe_types")
 
@@ -396,7 +397,9 @@ class SafePathValidator:
     This validator rejects paths that:
     - Contain parent traversal (..)
     - Access the home directory (~)
-    - Match deny patterns (secrets, configs, OS persistence, agent config, etc.)
+    - Match deny patterns (secrets, configs, OS persistence, agent config, etc.), as
+      written or with each component's trailing dots and spaces dropped, as Windows opens
+      it (``.ssh./id_rsa``, ``.mcp.json.``, ``.env `` with a trailing space)
     - Are absolute paths (when not allowed)
     - Escape the root directory (when specified)
 
@@ -479,9 +482,14 @@ class SafePathValidator:
                 path=path_str,
             )
 
-        # Check against deny patterns
+        # Check against deny patterns, as written and as Windows opens it (trailing dots and
+        # spaces dropped from each component: ".ssh./id_rsa" is ".ssh/id_rsa" there). The
+        # refusal names the path as written.
+        folded = _fold_trailing_dots(path_str)
         for pattern in self.deny_patterns:
-            if self._matches_pattern(path_str, pattern):
+            if self._matches_pattern(path_str, pattern) or (
+                folded != path_str and self._matches_pattern(folded, pattern)
+            ):
                 raise SafePathValidationError(
                     f"Path matches denied pattern '{pattern}': {path_str}",
                     path=path_str,

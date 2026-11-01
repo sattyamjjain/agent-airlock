@@ -355,6 +355,34 @@ def write_temp(path: SafePathInTmp) -> bool:
     ...
 ```
 
+`SafePath` refuses parent traversal, a leading `~` and any path matching
+`DEFAULT_PATH_DENY_PATTERNS`: secrets (`.env`, `.ssh`, `*.pem`, `.aws`), `.git` and a few
+system files. Since 0.10.30 the defaults also hold two lists you can import on their own:
+
+- `PERSISTENCE_DENY_PATTERNS`: places that start a program again with nobody asking.
+  launchd jobs (`Library/LaunchAgents`, `Library/LaunchDaemons`), the crontab spools and
+  `/etc/cron.*`, systemd unit directories (system and `~/.config/systemd/user`), the Windows
+  Startup folders, shell start files (`.bashrc`, `.bash_profile`, `.profile`, `.zshrc`,
+  `.zprofile`, `.zshenv`, `config.fish` and the rest) and `authorized_keys` wherever it is.
+- `AGENT_CONFIG_DENY_PATTERNS`: files a coding agent or IDE reads as something to run.
+  `.mcp.json`, `~/.claude.json`, `.claude/settings.json`, `.claude/settings.local.json`,
+  `.cursor/mcp.json`, `.vscode/mcp.json`, `.vscode/tasks.json`, `~/.gitconfig` and
+  `~/.config/git/config`.
+
+Both lists match whatever the case, since macOS and Windows file systems ignore it by
+default, so `/Users/u/library/launchagents/x.plist` is refused too. The older patterns
+keep their case-sensitive match. Every pattern is also checked against the path with each
+component's trailing dots and spaces dropped, which is the path Windows opens:
+`.ssh./id_rsa`, `.mcp.json.` and `.env ` (a trailing space) are refused, and the refusal
+names the path as written. `FilesystemPolicy(deny_patterns=...)` gets the same fold.
+
+So the default validator refuses paths 0.10.29 allowed. To check a narrower set, pass your
+own list to `SafePathValidator(deny_patterns=[...])` or
+`create_safe_path_type(deny_patterns=[...])`; `deny_patterns=[]` turns the pattern check
+off (traversal and `~` are still refused). These lists cover a write made through a
+`SafePath` argument of a tool call. Airlock does not see an extension being installed, or
+what an IDE's own browser does.
+
 ### SafeURL
 
 ```python

@@ -347,3 +347,56 @@ class TestPersistenceAndAgentConfigDeny:
 
         with pytest.raises(ValidationError):
             PathModel(path="/Users/u/Library/LaunchAgents/com.apple.sysmond.plist")
+
+
+class TestTrailingDotAndSpaceFold:
+    """Deny patterns also match the path Windows opens: trailing dots and spaces dropped."""
+
+    @pytest.mark.parametrize(
+        ("path", "pattern"),
+        [
+            ("/home/u/.ssh./id_ed25519", "*/.ssh/*"),
+            ("/home/u/.ssh./authorized_keys", "*/.ssh/*"),
+            ("/home/u/.ssh /id_ed25519", "*/.ssh/*"),
+            ("/repo/.mcp.json.", ".mcp.json"),
+            ("/repo/.mcp.json. . ", ".mcp.json"),
+            ("/repo/.env ", ".env"),
+            ("/repo/.git./config", "*/.git/*"),
+            ("C:\\repo\\.vscode.\\tasks.json", ".vscode/tasks.json"),
+            ("/Users/u/Library/LaunchAgents./x.plist", "*/Library/LaunchAgents/*"),
+        ],
+    )
+    def test_folded_path_refused(self, path: str, pattern: str) -> None:
+        with pytest.raises(SafePathValidationError) as exc_info:
+            SafePathValidator()(path)
+        assert exc_info.value.pattern == pattern
+
+    def test_refusal_names_the_path_as_written(self) -> None:
+        with pytest.raises(SafePathValidationError) as exc_info:
+            SafePathValidator()("/repo/.mcp.json.")
+        assert exc_info.value.path == "/repo/.mcp.json."
+        assert str(exc_info.value).endswith(": /repo/.mcp.json.")
+
+    @pytest.mark.parametrize(
+        "path",
+        ["/app/data/report.txt.", "/app/v1.2./notes.md", "/app/data/report .txt"],
+    )
+    def test_folded_lookalikes_allowed(self, path: str) -> None:
+        assert SafePathValidator()(path) == Path(path)
+
+    def test_empty_deny_patterns_skips_the_fold_too(self) -> None:
+        validator = SafePathValidator(deny_patterns=[])
+        for path in ["/home/u/.ssh./id_ed25519", "/repo/.mcp.json.", "/repo/.env "]:
+            assert validator(path) == Path(path)
+
+    def test_custom_patterns_are_folded(self) -> None:
+        validator = SafePathValidator(deny_patterns=["secrets.toml"])
+        with pytest.raises(SafePathValidationError):
+            validator("/app/secrets.toml.")
+
+    def test_safe_path_type_refuses_a_trailing_dot(self) -> None:
+        class PathModel(BaseModel):
+            path: SafePath
+
+        with pytest.raises(ValidationError):
+            PathModel(path="/repo/.mcp.json.")
