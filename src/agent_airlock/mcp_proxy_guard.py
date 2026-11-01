@@ -439,6 +439,12 @@ class MCPProxyGuard:
         - Token audience matches allowed_audiences
         - Token freshness (if require_fresh_token is True)
 
+        Known limits:
+        - A token with no ``iat`` claim skips the age check: there is no issue time to
+          age. Some identity providers omit ``iat``, so refusing such a token would break
+          them; where your IdP always sets it, check for it (or for ``exp``) before this
+          call, or set ``require_fresh_token``.
+
         Args:
             tool_name: Name of the tool being called.
             token: JWT token string (decoded if token_claims not provided).
@@ -498,7 +504,8 @@ class MCPProxyGuard:
                     },
                 )
 
-        # Check token age
+        # Check token age. A token without ``iat`` skips it (see Known limits above): some
+        # IdPs omit the claim, so this is documented rather than refused (0.10.29).
         iat = claims.get("iat")
         if iat is not None:
             token_age = time.time() - float(iat)

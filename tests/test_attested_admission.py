@@ -334,6 +334,71 @@ class TestExpiry:
             verify_clearance(blob, cfg)
 
 
+class TestExpiryBoundary:
+    """0.10.29: a clearance is expired at its ``exp`` second (RFC 7519 4.1.4).
+
+    Raised in modelcontextprotocol/python-sdk#3729: under RFC 7519 a token must not be
+    accepted on or after ``exp``. ``verify_clearance`` compared with ``<``, so a clearance
+    was accepted at ``now == exp``.
+    """
+
+    _NOW = datetime(2026, 10, 31, 12, 0, 0, tzinfo=timezone.utc)
+
+    def _verify(self, keypair: tuple[Ed25519PrivateKey, bytes], exp_offset: int) -> Any:
+        priv, pem = keypair
+        cfg = AttestedAdmissionConfig(
+            trust_root=TrustRoot(key_id="test", ed25519_pem=pem),
+            enforcement_mode="ENFORCE",
+            clock=lambda: self._NOW,
+        )
+        now = int(self._NOW.timestamp())
+        blob = _make_clearance(priv, iat=now - 60, exp=now + exp_offset)
+        return verify_clearance(blob, cfg)
+
+    def test_exp_equal_to_now_is_expired(
+        self, ed25519_keypair: tuple[Ed25519PrivateKey, bytes]
+    ) -> None:
+        with pytest.raises(ExpiredClearance):
+            self._verify(ed25519_keypair, 0)
+
+    def test_exp_one_second_ahead_is_admitted(
+        self, ed25519_keypair: tuple[Ed25519PrivateKey, bytes]
+    ) -> None:
+        assert self._verify(ed25519_keypair, 1).server_id == "srv-alpha"
+
+    def test_exp_one_second_behind_is_expired(
+        self, ed25519_keypair: tuple[Ed25519PrivateKey, bytes]
+    ) -> None:
+        with pytest.raises(ExpiredClearance):
+            self._verify(ed25519_keypair, -1)
+
+    def test_a_handle_at_its_deadline_is_expired(self) -> None:
+        """Control: handles already expire at the deadline (``>=``)."""
+        from agent_airlock.handles import IssuedHandle
+
+        handle = IssuedHandle(
+            handle="h", issuer="tool", scope="s", run_id="r", issued_at=100.0, ttl_seconds=10.0
+        )
+        assert handle.is_expired(now=110.0) is True
+        assert handle.is_expired(now=109.999) is False
+
+    def test_a_task_admission_at_its_expiry_is_refused(self) -> None:
+        """Control: a task's authorizing token expires at ``expires_at`` (``>=``)."""
+        from agent_airlock.mcp_spec.tasks_lifecycle_guard import (
+            TaskLifecycleError,
+            admit_task,
+            check_task_op,
+            new_registry,
+        )
+
+        registry = new_registry()
+        admit_task(registry, "task-1", scopes="tasks", issuer="as", principal="p", expires_at=500.0)
+        check = {"live_scopes": "tasks", "live_issuer": "as", "principal": "p"}
+        check_task_op(registry, "tasks/get", "task-1", now=499.0, **check)
+        with pytest.raises(TaskLifecycleError):
+            check_task_op(registry, "tasks/get", "task-1", now=500.0, **check)
+
+
 # ---------------------------------------------------------------------------
 # Missing well-known document
 # ---------------------------------------------------------------------------
