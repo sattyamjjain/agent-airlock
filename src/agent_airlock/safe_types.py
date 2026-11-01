@@ -22,6 +22,9 @@ The validators reject:
     - Home directory access (~)
     - Secret files (.env, .ssh, *.pem, *.key)
     - System files (/etc/passwd, /etc/shadow)
+    - OS persistence (launchd jobs, crontabs, systemd units, the Windows Startup folder,
+      shell start files, authorized_keys) and agent config (.mcp.json,
+      .claude/settings.json, .vscode/tasks.json, ...), whatever the case
     - Metadata URLs (AWS/GCP)
     - File URLs (file://)
     - Private/link-local IPs
@@ -46,8 +49,113 @@ from pydantic import AfterValidator
 
 from ._arg_walk import ArgumentNestingError, iter_argument_values
 from ._log import structlog
+from .filesystem import _fold_trailing_dots
 
 logger = structlog.get_logger("agent-airlock.safe_types")
+
+
+# Places that start a program again with nobody asking: at login, on a schedule, at boot, or
+# when sshd accepts a key (V0.10.30). An agent a prompt injection tells to persist writes
+# one of these: on 29 Oct 2026 a trojanized build of the Claude Code extension, served by the
+# Cursor marketplace, added a key to authorized_keys and installed a LaunchAgent, a crontab
+# and a scheduled task. A Windows scheduled task is registered through the Task Scheduler,
+# not by writing a file, so no path covers it.
+# Matched whatever the case, as macOS and Windows file systems ignore it by default.
+PERSISTENCE_DENY_PATTERNS = [
+    # macOS launchd jobs: ~/Library, /Library and /System/Library
+    "Library/LaunchAgents",
+    "Library/LaunchAgents/*",
+    "*/Library/LaunchAgents/*",
+    "Library/LaunchDaemons",
+    "Library/LaunchDaemons/*",
+    "*/Library/LaunchDaemons/*",
+    # cron: the crontab spools (Debian, RHEL, macOS, the BSDs) and the system tables
+    "/var/spool/cron",
+    "/var/spool/cron/*",
+    "/var/at/tabs",
+    "/var/at/tabs/*",
+    "/usr/lib/cron/tabs",
+    "/usr/lib/cron/tabs/*",
+    "/var/cron/tabs",
+    "/var/cron/tabs/*",
+    "/etc/crontab",
+    "/etc/cron.*",
+    "/etc/anacrontab",
+    # systemd units, system and user
+    "/etc/systemd/system",
+    "/etc/systemd/system/*",
+    "/etc/systemd/user",
+    "/etc/systemd/user/*",
+    "/run/systemd/system",
+    "/run/systemd/system/*",
+    "/run/systemd/user",
+    "/run/systemd/user/*",
+    "/lib/systemd/system",
+    "/lib/systemd/system/*",
+    "/usr/lib/systemd/system",
+    "/usr/lib/systemd/system/*",
+    "/usr/lib/systemd/user",
+    "/usr/lib/systemd/user/*",
+    "/usr/local/lib/systemd/system",
+    "/usr/local/lib/systemd/system/*",
+    ".config/systemd/user",
+    ".config/systemd/user/*",
+    "*/.config/systemd/user/*",
+    ".local/share/systemd/user",
+    ".local/share/systemd/user/*",
+    "*/.local/share/systemd/user/*",
+    # Windows Startup folders: %APPDATA% (one user) and %ProgramData% (all users)
+    "Microsoft/Windows/Start Menu/Programs/Startup",
+    "Microsoft/Windows/Start Menu/Programs/Startup/*",
+    "*/Microsoft/Windows/Start Menu/Programs/Startup/*",
+    # Shell start files: bash, zsh and fish read them as each shell starts
+    ".bashrc",
+    ".bash_profile",
+    ".bash_login",
+    ".profile",
+    ".zshenv",
+    ".zprofile",
+    ".zshrc",
+    ".zlogin",
+    "config.fish",
+    "*/fish/conf.d/*",
+    "/etc/profile",
+    "/etc/profile.d/*",
+    "/etc/bash.bashrc",
+    "/etc/zshenv",
+    "/etc/zprofile",
+    "/etc/zshrc",
+    "/etc/zlogin",
+    "/etc/zsh/*",
+    # Keys sshd accepts, wherever AuthorizedKeysFile points (not only ~/.ssh), the per-user
+    # directory layout (/etc/ssh/authorized_keys/%u) included
+    "authorized_keys",
+    "authorized_keys2",
+    "authorized_keys/*",
+    "*/authorized_keys/*",
+]
+
+# Files a coding agent or an IDE reads as something to run: an MCP server's launch command,
+# a hook, a task run when the folder opens, a git setting naming a program (V0.10.30). Each
+# is named in its vendor's docs: Claude Code (.mcp.json, .claude/settings.json,
+# .claude/settings.local.json, ~/.claude.json), Cursor (.cursor/mcp.json), VS Code
+# (.vscode/mcp.json, .vscode/tasks.json) and git (~/.gitconfig, ~/.config/git/config).
+# Matched whatever the case, like the persistence list.
+AGENT_CONFIG_DENY_PATTERNS = [
+    ".mcp.json",
+    ".claude.json",
+    ".claude/settings.json",
+    ".claude/settings.local.json",
+    ".cursor/mcp.json",
+    ".vscode/mcp.json",
+    ".vscode/tasks.json",
+    ".gitconfig",
+    ".config/git/config",
+]
+
+# The patterns matched whatever the case. The older defaults keep their case-sensitive
+# match, as before.
+_CASELESS_PATTERNS = frozenset(PERSISTENCE_DENY_PATTERNS + AGENT_CONFIG_DENY_PATTERNS)
 
 
 # Default deny patterns for paths (can be customized)
@@ -101,6 +209,9 @@ DEFAULT_PATH_DENY_PATTERNS = [
     "ntds.dit",
     "SAM",
     "SYSTEM",
+    # OS persistence and agent config (V0.10.30)
+    *PERSISTENCE_DENY_PATTERNS,
+    *AGENT_CONFIG_DENY_PATTERNS,
 ]
 
 
@@ -286,7 +397,9 @@ class SafePathValidator:
     This validator rejects paths that:
     - Contain parent traversal (..)
     - Access the home directory (~)
-    - Match deny patterns (secrets, configs, etc.)
+    - Match deny patterns (secrets, configs, OS persistence, agent config, etc.), as
+      written or with each component's trailing dots and spaces dropped, as Windows opens
+      it (``.ssh./id_rsa``, ``.mcp.json.``, ``.env `` with a trailing space)
     - Are absolute paths (when not allowed)
     - Escape the root directory (when specified)
 
@@ -369,9 +482,14 @@ class SafePathValidator:
                 path=path_str,
             )
 
-        # Check against deny patterns
+        # Check against deny patterns, as written and as Windows opens it (trailing dots and
+        # spaces dropped from each component: ".ssh./id_rsa" is ".ssh/id_rsa" there). The
+        # refusal names the path as written.
+        folded = _fold_trailing_dots(path_str)
         for pattern in self.deny_patterns:
-            if self._matches_pattern(path_str, pattern):
+            if self._matches_pattern(path_str, pattern) or (
+                folded != path_str and self._matches_pattern(folded, pattern)
+            ):
                 raise SafePathValidationError(
                     f"Path matches denied pattern '{pattern}': {path_str}",
                     path=path_str,
@@ -416,6 +534,10 @@ class SafePathValidator:
         # Normalize path separators
         path_normalized = path.replace("\\", "/")
         pattern_normalized = pattern.replace("\\", "/")
+        if pattern in _CASELESS_PATTERNS:
+            # macOS and Windows open ~/library/launchagents as ~/Library/LaunchAgents
+            path_normalized = path_normalized.casefold()
+            pattern_normalized = pattern_normalized.casefold()
 
         # Check exact match
         if path_normalized == pattern_normalized:
@@ -753,7 +875,8 @@ def validate_safe_url_allow_http(value: str) -> str:
 SafePath = Annotated[Path, AfterValidator(validate_safe_path)]
 """Safe path type that validates against common attack patterns.
 
-Rejects: traversal (..), home (~), .env, .ssh, *.pem, /etc/passwd, etc.
+Rejects: traversal (..), home (~), .env, .ssh, *.pem, /etc/passwd, LaunchAgents, crontabs,
+shell start files, authorized_keys, .mcp.json, etc.
 """
 
 SafePathStrict = Annotated[Path, AfterValidator(validate_safe_path_strict)]

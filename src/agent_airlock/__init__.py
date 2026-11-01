@@ -647,8 +647,10 @@ from .runtime.manifest_only_allowlist import (
 
 # V0.4.0 Safe types
 from .safe_types import (
+    AGENT_CONFIG_DENY_PATTERNS,
     DEFAULT_DESERIALIZATION_MARKERS,
     DEFAULT_PATH_DENY_PATTERNS,
+    PERSISTENCE_DENY_PATTERNS,
     SafePath,
     SafePathInTmp,
     SafePathStrict,
@@ -1213,6 +1215,8 @@ __all__ = [
     "create_safe_path_type",
     "create_safe_url_type",
     "DEFAULT_PATH_DENY_PATTERNS",
+    "PERSISTENCE_DENY_PATTERNS",  # V0.10.30
+    "AGENT_CONFIG_DENY_PATTERNS",  # V0.10.30
     # V0.8.19 — Unsafe-deserialization guard (CVE-2026-25874 anchor)
     "UnsafeDeserializationGuard",
     "UnsafeDeserializationDecision",

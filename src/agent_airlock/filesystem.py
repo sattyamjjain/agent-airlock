@@ -17,6 +17,7 @@ from __future__ import annotations
 import errno
 import fnmatch
 import os
+import re
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -93,12 +94,43 @@ def _get_path_depth(path: Path) -> int:
     return len(path.parts)
 
 
+_SEPARATOR = re.compile(r"([/\\])")
+
+
+def _fold_trailing_dots(path: str) -> str:
+    """Return ``path`` with the trailing dots and spaces of each component stripped.
+
+    Windows drops them when it opens a path, so ``.ssh.\\id_rsa`` opens ``.ssh\\id_rsa`` and
+    ``.mcp.json.`` opens ``.mcp.json``: a deny pattern matched only against the path as
+    written misses both (CVE-2026-103572, Copilot for Visual Studio, was that shape on
+    ``.mcp.json``). Both separators split, whatever the platform. ``.``, ``..`` and any
+    other component made only of dots and spaces are kept as they are.
+    """
+    parts = _SEPARATOR.split(path)
+    # re.split keeps the separators at the odd indices, so the components are the even ones.
+    for index in range(0, len(parts), 2):
+        stripped = parts[index].rstrip(". ")
+        if stripped:
+            parts[index] = stripped
+    return "".join(parts)
+
+
 def _matches_deny_pattern(path: Path, patterns: list[str]) -> str | None:
-    """Check if path matches any deny pattern.
+    """Check if path, or the path Windows would open for it, matches any deny pattern.
 
     Returns:
         The matching pattern if found, None otherwise.
     """
+    matched = _matches_deny_pattern_as_written(path, patterns)
+    if matched is None:
+        folded = _fold_trailing_dots(str(path))
+        if folded != str(path):
+            matched = _matches_deny_pattern_as_written(Path(folded), patterns)
+    return matched
+
+
+def _matches_deny_pattern_as_written(path: Path, patterns: list[str]) -> str | None:
+    """Check ``path`` exactly as given against each deny pattern."""
     path_str = str(path)
     path_name = path.name
 

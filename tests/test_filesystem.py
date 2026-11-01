@@ -431,3 +431,46 @@ class TestEdgeCases:
             except PathValidationError:
                 # On Windows, might match
                 pass
+
+
+class TestTrailingDotFold:
+    """Deny patterns match the path Windows opens, trailing dots and spaces dropped."""
+
+    @pytest.mark.parametrize("name", [".ssh./id_rsa", ".ssh /id_rsa", ".ssh. ./id_rsa"])
+    def test_folded_component_refused(self, name: str) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            with pytest.raises(PathValidationError) as exc_info:
+                validate_path(root / name, FilesystemPolicy(deny_patterns=[".ssh"]))
+            assert exc_info.value.violation_type == "denied_pattern"
+            assert exc_info.value.details["pattern"] == ".ssh"
+            assert exc_info.value.path == str(root / name)
+
+    def test_folded_file_name_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            with pytest.raises(PathValidationError):
+                validate_path(root / ".env.", FilesystemPolicy(deny_patterns=[".env"]))
+
+    def test_unrelated_path_still_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            path = root / "notes." / "id_rsa"
+            assert validate_path(path, FilesystemPolicy(deny_patterns=[".ssh"])) == path
+
+    @pytest.mark.parametrize(
+        ("path", "folded"),
+        [
+            ("/a/.ssh./id_rsa", "/a/.ssh/id_rsa"),
+            ("/a/.env ", "/a/.env"),
+            ("C:\\a\\.vscode. \\tasks.json.", "C:\\a\\.vscode\\tasks.json"),
+            ("/a/./b", "/a/./b"),
+            ("/a/../b", "/a/../b"),
+            ("/a/.../b", "/a/.../b"),
+            ("/", "/"),
+        ],
+    )
+    def test_fold(self, path: str, folded: str) -> None:
+        from agent_airlock.filesystem import _fold_trailing_dots
+
+        assert _fold_trailing_dots(path) == folded
