@@ -2262,6 +2262,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#check-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#escalations-as-deferred-approvals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Escalations as deferred approvals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rejected-tool-calls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rejected tool calls
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#honest-scope" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2965,6 +2998,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#check-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#escalations-as-deferred-approvals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Escalations as deferred approvals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rejected-tool-calls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rejected tool calls
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#honest-scope" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3099,6 +3165,73 @@ adapter binds to (PR pydantic/pydantic-ai#4859).</p>
    against the adapter.</p>
 </li>
 </ol>
+<h2 id="check-order">Check order<a class="headerlink" href="#check-order" title="Permanent link">&para;</a></h2>
+<p>A tool call meets pydantic-ai's checks first, then Airlock's:</p>
+<ol>
+<li>pydantic-ai resolves the tool. A name that does not exist (<code>unknown_tool</code>) or a tool not
+   available at this step (<code>unavailable_tool</code>, say one tool search has not revealed) is
+   rejected here and answered as a retry: no tool runs and Airlock never sees the call.</li>
+<li>pydantic-ai validates the arguments against the tool's schema, in lax mode. A failure is
+   a <code>validation_error</code> retry, also before any tool runs.</li>
+<li>pydantic-ai's own approval: <code>requires_approval=True</code>, an <code>ApprovalRequired</code> from an
+   <code>args_validator</code>, or, with <code>defer_escalations=True</code>, the deferral below.</li>
+<li>Airlock, around the tool function: the policy and every other gate in order, then the
+   tool, then masking of its output.</li>
+</ol>
+<p>So the policy never spends a rate-limit token on a call pydantic-ai rejects, or on one
+waiting for approval.</p>
+<h2 id="escalations-as-deferred-approvals">Escalations as deferred approvals<a class="headerlink" href="#escalations-as-deferred-approvals" title="Permanent link">&para;</a></h2>
+<p>Without more, a call the policy escalates goes to the policy's <code>approver</code>, and with none it
+is refused as <code>escalation_required</code> (pydantic/pydantic-ai#9015). With
+<code>defer_escalations=True</code> it becomes a pydantic-ai deferred approval instead:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.approvals</span><span class="w"> </span><span class="kn">import</span> <span class="n">InMemoryApprovalLedger</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.integrations.pydantic_ai</span><span class="w"> </span><span class="kn">import</span> <span class="n">PydanticAIAdapter</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">SecurityPolicy</span><span class="p">(</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">escalate_tools</span><span class="o">=</span><span class="p">{</span><span class="s2">"delete_file"</span><span class="p">:</span> <span class="s2">"deletes a file"</span><span class="p">},</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">approval_ledger</span><span class="o">=</span><span class="n">InMemoryApprovalLedger</span><span class="p">(),</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="p">)</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">PydanticAIAdapter</span><span class="p">(</span><span class="n">defer_escalations</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">wrap_agent</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li>The escalated call raises pydantic-ai's <code>ApprovalRequired</code> before Airlock runs, so it
+  spends nothing. The run ends with a <code>DeferredToolRequests</code> (put it in the agent's
+  <code>output_type</code>), or a <code>HandleDeferredToolCalls</code> handler resolves it inline. Its metadata
+  carries <code>{"airlock": {"rule": ..., "reason": ...}}</code>.</li>
+<li>When a run resumes with the call approved, the adapter records one approval of exactly
+  the arguments the call runs with (<code>ToolApproved(override_args=...)</code> included) in the
+  policy's <code>approval_ledger</code>, and the call claims it at step 2. An approved call is not a
+  free one (pydantic/pydantic-ai#8839): it spends its rate-limit token and counts against
+  the budgets like any other.</li>
+<li>An approval replayed for a tool call id already used records nothing, so that call meets
+  the policy as if nobody had approved it.</li>
+<li>A denied call never reaches the tool or Airlock. Until an approval arrives the tool does
+  not run at all: the deferral is raised before it, whatever pydantic-ai then does with a
+  run that has nowhere to hand the request (no <code>DeferredToolRequests</code> output type, no
+  handler).</li>
+<li><code>defer_escalations</code> needs a policy with an <code>approval_ledger</code>, and pydantic-ai itself;
+  <code>wrap_agent</code> raises without them.</li>
+</ul>
+<p>The approval comes from whoever answers the <code>DeferredToolRequests</code>. pydantic-ai says so
+too: approval is not an authorization boundary against a client that can submit its own
+history, so serve the resume only to a host you trust.</p>
+<p>A run-time context is what a deferral reads. A tool that takes a <code>RunContext</code> has its own;
+a <code>tool_plain</code> tool gets the run's through the run toolset the adapter wraps (pydantic-ai
+2.x's <code>_get_toolset</code>). Called any other way, an escalated <code>tool_plain</code> call goes to the
+approver, or is refused.</p>
+<p>A <code>RunContext</code> is not one of the arguments an approval binds to, since 0.10.29: the
+digest a ledger approval or a standing grant is matched by covers what the model wrote.</p>
+<h2 id="rejected-tool-calls">Rejected tool calls<a class="headerlink" href="#rejected-tool-calls" title="Permanent link">&para;</a></h2>
+<p>The calls pydantic-ai rejects in step 1 never reach Airlock, so the adapter logs them from
+the run's messages as each step starts: a <code>ToolReturnPart</code> with <code>outcome="retried"</code> and a
+<code>retry.cause</code> of <code>unknown_tool</code> or <code>unavailable_tool</code> is logged as
+<code>pydantic_ai_tool_rejected</code>, with the tool call id, pydantic-ai's retry <code>attempt</code> and
+<code>max_retries</code>, and how many rejections answered that call. One whose attempt reached the
+limit is also logged as <code>pydantic_ai_tool_rejected_final</code>: the model's next try ends the
+run. <code>PydanticAIAdapter(log_rejections=False)</code> turns it off. For a run's messages in hand,
+<code>log_tool_rejections(result.all_messages())</code> (from
+<code>agent_airlock.integrations.pydantic_ai_approvals</code>) logs them the same way and returns them.</p>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
 <ul>
 <li>The adapter does not import <code>pydantic_ai</code> at module load — passing a
