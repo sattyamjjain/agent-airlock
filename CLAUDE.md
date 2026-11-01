@@ -66,12 +66,13 @@ and marketplace manifests).
 0. Kill switch → 0.5 startup-hook self-check → 0.6 OAuth token audience (both off until
    configured) → 0.7 the run's halt latch
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
-2. Policy and caller identity → 2.3 loops in the run → 2.4 source-to-sink data flow → 2.5
-   tool-call sequence guard → 2.6 action-time contradiction gate → 2.7
-   unsafe-deserialization guard → 2.75 shell syntax, package specs and function names in
-   string arguments → 2.77 shell commands by rule → 2.8 per-run amplification budget
-3. Filesystem paths → 4. capability requirements → 5. endpoint policy → 6. per-model-tier
+2. Policy and caller identity → 2.1 a delegated run's ceiling → 2.3 loops in the run → 2.4
+   source-to-sink data flow → 2.5 tool-call sequence guard → 2.6 action-time contradiction
+   gate → 2.7 unsafe-deserialization guard → 2.75 shell syntax, package specs and function
+   names in string arguments → 2.77 shell commands by rule → 2.8 per-run amplification
    budget
+3. Filesystem paths → 4. capability requirements → 4.5 argument leases → 5. endpoint policy
+   → 6. per-model-tier budget
 7. Execute: Pydantic strict validation, then run locally or in the sandbox
 8. `_post_execution`: sanitize output, audit log, mark untrusted output, reconcile cost
 

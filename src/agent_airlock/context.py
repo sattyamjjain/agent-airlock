@@ -45,6 +45,9 @@ if TYPE_CHECKING:
     from pydantic_core import CoreSchema
 
     from .amplification import AmplificationDecision
+    from .capability_caps import CapabilityCapEngine, Lease
+    from .delegation import DelegationLease
+    from .policy import SecurityPolicy
 
 logger = structlog.get_logger("agent-airlock.context")
 
@@ -124,6 +127,10 @@ class AirlockContext(Generic[T]):
     _run_state: RunState = field(default_factory=RunState, repr=False)
     _flow_ticket: Any = field(default=None, repr=False)
     _provenance: dict[str, object] | None = field(default=None, repr=False)
+    # V0.10.29 delegation: the run's delegation chain, outermost first (empty unless the
+    # run was started from a DelegationLease). Every call in the run must pass each policy
+    # on it at step 2.1; shared like _flow.
+    _ceiling: tuple[SecurityPolicy, ...] = field(default=(), repr=False)
     _token: Token[AirlockContext[Any]] | None = field(default=None, repr=False)
 
     def __class_getitem__(cls, params: Any) -> Any:
@@ -193,7 +200,66 @@ class AirlockContext(Generic[T]):
         clone._authorized_once = self._authorized_once
         clone._flow = self._flow
         clone._run_state = self._run_state
+        clone._ceiling = self._ceiling
         return clone
+
+    @property
+    def ceiling(self) -> SecurityPolicy | None:
+        """The policy this run was delegated (V0.10.29): the innermost of its delegation
+        chain, which every call in it must pass besides its tool's own. None for a run
+        that was not delegated."""
+        return self._ceiling[-1] if self._ceiling else None
+
+    def delegate(
+        self,
+        child_policy: SecurityPolicy,
+        *,
+        agent_id: str | None = None,
+        parent_policy: SecurityPolicy | None = None,
+        engine: CapabilityCapEngine | None = None,
+        leases: Sequence[Lease] = (),
+        max_depth: int | None = None,
+        max_turns: int | None = None,
+    ) -> DelegationLease:
+        """Issue a one-use lease on a child run under ``child_policy`` (V0.10.29).
+
+        Refused unless ``child_policy`` admits no call the parent's policy refuses
+        (:meth:`SecurityPolicy.is_subset_of`). Enter the lease (``with lease as child:``)
+        to start the child's run; see :class:`agent_airlock.delegation.DelegationLease`.
+
+        Args:
+            child_policy: The child's policy, best built with the parent's
+                :meth:`~agent_airlock.policy.SecurityPolicy.narrow`. The lease keeps a
+                frozen copy.
+            agent_id: The child's agent id; the parent's when omitted.
+            parent_policy: The policy this run is under. Needed only when the run was not
+                itself delegated: a delegated run's parent is its own ceiling.
+            engine: A :class:`~agent_airlock.capability_caps.CapabilityCapEngine` that
+                meters the parent's ``delegate_to_agent`` capability on entry and holds
+                the leases below.
+            leases: Capability leases granted to the child for its run, each within one
+                the parent holds in ``engine``, and revoked when the run ends.
+            max_depth: The child run's own depth budget (``nested_run``).
+            max_turns: The child run's own turn budget, taken from what is left.
+
+        Raises:
+            DelegationRefused: The child's policy or leases are wider than the parent's,
+                or this run has no policy to narrow.
+            ValueError: A limit is not a whole number of 0 or more, or ``parent_policy``
+                is given to a delegated run.
+        """
+        from .delegation import issue_delegation
+
+        return issue_delegation(
+            self,
+            child_policy,
+            agent_id=agent_id,
+            parent_policy=parent_policy,
+            engine=engine,
+            leases=leases,
+            max_depth=max_depth,
+            max_turns=max_turns,
+        )
 
     @property
     def halted(self) -> bool:

@@ -62,6 +62,7 @@ src/agent_airlock/
 ├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
 │                oversight.py, identity.py, redis_rate_limit.py, amplification.py,
+│                delegation.py, lease_scope.py, nested_runs.py,
 │                capability_caps/, policy_compiler/, budget/
 ├── EXECUTION    sandbox.py, sandbox_backend.py, streaming.py, context.py,
 │                conversation.py, runtime/; circuit_breaker.py and retry.py are
@@ -134,6 +135,14 @@ src/agent_airlock/
    it names a different agent than the call does) and merges that context's metadata under
    its own, so a policy with `reauth_on_untrusted_reinvocation` refuses a call that belongs
    to no run
+   - 2.1 the delegation ceiling (V0.10.29, `delegation.py`): a run started from a
+     `DelegationLease` carries its delegation chain (`context._ceiling`, outermost first,
+     shared by `_share_run_state`; `ceiling_chain` adds the one set around the call). Each
+     policy on it is checked as step 2 checks the tool's (`_check_resolved_policy`, an
+     escalation to that policy's approver), then its `amplification_budget` counted; the
+     tool's own policy is skipped when it is on the chain. `subset_problems` compares the
+     fields a ceiling applies by rule (`_COMPARED`) and requires the rest (`_CARRIED`) to be
+     the parent's own object; a public field in neither set is refused
    - 2.3 loops in the run (V0.10.29, `run_guard`): `(tool, args digest)` history on the run;
      a block of 1 to `max_loop_period` calls repeated `loop_repeats` times refuses the call
      completing it (`loop_detected`), and the run's next trip halts it. A call under a run
@@ -179,6 +188,13 @@ src/agent_airlock/
    `__wrapped__` chain beneath it and combined, so `@requires` counts above or below
    `@Airlock`, through any decorator that keeps `__wrapped__` or copies attributes (one
    that does neither hides the wrapper)
+   - 4.5 argument leases (V0.10.29, `lease_scope.py`): each `@lease_scoped(arg=...)`
+     argument (found like `@requires`, above or below `@Airlock`; its default when the call
+     leaves it out) must match, with `fnmatchcase`, the target of a lease the caller holds
+     in the scope's `CapabilityCapEngine` for the capability's value; a `..` segment, a NUL
+     or a call with no agent id is refused. Only then is each use metered
+     (`check_and_use`). A refusal is `capability_denied` with `violation_type`
+     `lease_scope`, and names no lease target
 5. Endpoint policy validation
 
    Steps 2.7, 2.75, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
@@ -233,7 +249,10 @@ src/agent_airlock/
    the parent (`validate_sandbox_args`) before dispatch, so both paths fail the same way, and a
    tool that raises in the sandbox gets the answer it gets locally; a sandbox that fails is
    refused as `sandbox_error`. E2B, Docker and Modal run one payload (`generate_execution_code`)
-   whose outcome comes back as JSON: never unpickle anything a sandbox printed
+   whose outcome comes back as JSON: never unpickle anything a sandbox printed. A tool that
+   raises `nested_runs.RunBudgetExhausted` (a `nested_run()` or `spend_turn()` the run tree's
+   ContextVar budget has no room for) returns `run_budget_exhausted` to the agent that
+   called it; one the root set `hard_stop` on is raised on after its audit record
 8. `_post_execution` — when `sanitize_output` is on, sanitize output via
    `_sanitize_tool_output` (a string is masked and truncated; a dict, list, tuple, set or
    frozenset is masked value by value, keys included, and keeps its type, masked keys that

@@ -115,6 +115,7 @@ from .cost_tracking import (
     get_global_tracker,
 )
 from .data_flow import DataFlowPolicy, TaintEntry, flow_tags, output_provenance
+from .delegation import ceiling_chain
 from .exceptions import AirlockError
 from .filesystem import PathValidationError, validate_path
 from .honeypot import (
@@ -125,6 +126,8 @@ from .honeypot import (
 )
 from .kill_switch.registry import get as _kill_switch_get
 from .kill_switch.registry import is_frozen as _kill_switch_frozen
+from .lease_scope import LeaseRefusal, check_lease_scopes, lease_scopes
+from .nested_runs import RunBudgetExhausted
 from .network import NetworkBlockedError, network_airgap
 from .oversight import _ApproverOutcome, _await_with_deadline, _call_with_deadline
 from .policy import (
@@ -145,10 +148,12 @@ from .self_heal import (
     handle_endpoint_violation,
     handle_escalation,
     handle_ghost_argument_error,
+    handle_lease_scope_denied,
     handle_network_blocked,
     handle_path_violation,
     handle_policy_violation,
     handle_rate_limit,
+    handle_run_budget_exhausted,
     handle_run_halted,
     handle_validation_error,
 )
@@ -1345,6 +1350,7 @@ def _share_run_state(context: AirlockContext[Any]) -> AirlockContext[Any] | None
     context._authorized_once = run._authorized_once
     context._flow = run._flow
     context._run_state = run._run_state
+    context._ceiling = run._ceiling
     context.metadata = {**run.metadata, **context.metadata}
     return run
 
@@ -1652,12 +1658,13 @@ class Airlock:
             Runs the gates in the order the ``# Step N`` comments below number them: the
             kill switch (0), the startup-hook self-check (0.5), the OAuth token audience
             (0.6), the run's halt latch (0.7, checked again last), ghost arguments (1),
-            policy resolution and check (2), loops in the run (2.3), source-to-sink data
-            flow (2.4), the sequence guard (2.5), the action-contradiction gate (2.6), the
-            deserialization guard (2.7), shell syntax in string arguments (2.75), shell
-            commands by rule (2.77), the amplification budget (2.8), filesystem paths (3), capabilities (4), endpoint
-            policies (5) and the per-model-tier budget (6). The first gate that refuses ends
-            the call.
+            policy resolution and check (2), the delegation ceiling (2.1), loops in the run
+            (2.3), source-to-sink data flow (2.4), the sequence guard (2.5), the
+            action-contradiction gate (2.6), the deserialization guard (2.7), shell syntax
+            in string arguments (2.75), shell commands by rule (2.77), the amplification
+            budget (2.8), filesystem paths (3), capabilities (4), argument leases (4.5),
+            endpoint policies (5) and the per-model-tier budget (6). The first gate that
+            refuses ends the call.
 
             Returns:
                 Tuple of (cleaned_kwargs, start_time, context, error_response or None,
@@ -1785,6 +1792,17 @@ class Airlock:
             if policy_error is not None:
                 context._refused_at = "2:policy"
                 return kwargs, start_time, context, policy_error, None, None
+
+            # Step 2.1: the delegation ceiling (V0.10.29, openai/codex#36381). A call in a
+            # run started from a DelegationLease must also pass every policy on the run's
+            # delegation chain, its parent's included: their tool lists, identity, time
+            # windows, rate limits, escalations, re-authorization and call budget.
+            ceiling_error = yield from self._check_ceilings(
+                func_name, resolved_policy, context, run_context=run_context, call=call
+            )
+            if ceiling_error is not None:
+                context._refused_at = "2.1:delegation_ceiling"
+                return kwargs, start_time, context, ceiling_error, None, None
 
             # Step 2.3: loops in the run (V0.10.29, prime-radiant-inc/evener#94). Under the
             # resolved policy's run_guard, a call completing a block of calls repeated
@@ -1939,6 +1957,16 @@ class Airlock:
             if cap_error is not None:
                 context._refused_at = "4:capabilities"
                 return kwargs, start_time, context, cap_error, None, None
+
+            # Step 4.5: argument leases (V0.10.29, modelcontextprotocol#3354). A
+            # @lease_scoped argument must fall within a lease its caller holds for the
+            # capability, whatever the tool's schema admits; the use is then metered.
+            lease_error = self._check_lease_scopes(
+                wrapper, func_name, context, call, call_signature
+            )
+            if lease_error is not None:
+                context._refused_at = "4.5:lease_scope"
+                return kwargs, start_time, context, lease_error, None, None
 
             # Step 5: Validate endpoint policies (V0.4.1)
             ep_error = self._validate_endpoint_policies(func_name, arguments)
@@ -2230,6 +2258,11 @@ class Airlock:
                     func_name,
                     error,
                 )
+            elif isinstance(error, RunBudgetExhausted):
+                # V0.10.29: the run tree's depth or turn budget is spent. The agent that
+                # called the tool gets a failed result it can finish on; a root's hard stop
+                # is raised out of the run by the wrapper after this record is written.
+                response = handle_run_budget_exhausted(func_name, kind=error.kind)
             elif isinstance(error, SandboxError):
                 # The sandbox failed, not the tool: E2B was missing, no sandbox could be
                 # created, or no result came back. Until 0.10.17 this got the generic
@@ -2416,7 +2449,10 @@ class Airlock:
                 except Exception as e:
                     if self.config.decision_log is not None:
                         await asyncio.to_thread(_settle, func_name, context, "raised", e)
-                    return _handle_error(func_name, e, start_time, cleaned_kwargs, context)
+                    failed = _handle_error(func_name, e, start_time, cleaned_kwargs, context)
+                    if isinstance(e, RunBudgetExhausted) and e.hard_stop:
+                        raise
+                    return failed
                 finally:
                     _end_source(context, ran=True)
                     reset_context(token)
@@ -2578,7 +2614,10 @@ class Airlock:
                     return response.to_dict()
                 except Exception as e:
                     _settle(func_name, context, "raised", e)
-                    return _handle_error(func_name, e, start_time, cleaned_kwargs, context)
+                    failed = _handle_error(func_name, e, start_time, cleaned_kwargs, context)
+                    if isinstance(e, RunBudgetExhausted) and e.hard_stop:
+                        raise
+                    return failed
                 finally:
                     _end_source(context, ran=True)
                     reset_context(token)
@@ -3017,106 +3056,236 @@ class Airlock:
         else:
             resolved_policy = self.policy
 
-        if resolved_policy is not None:
-            # v0.5.5: verify frozen policy has not drifted mid-session
-            # (CVE-2026-41349 consent-bypass guard). Runs before check()
-            # so a mutated policy never reaches the allow/deny logic.
-            if resolved_policy.is_frozen():
-                try:
-                    resolved_policy.verify_frozen()
-                except PolicyMutationError as e:
-                    logger.warning(
-                        "policy_indeterminate", function=func_name, source="frozen_policy_digest"
-                    )
-                    response = handle_policy_violation(
-                        func_name,
-                        policy_name="FrozenSecurityPolicy",
-                        reason=str(e),
-                    )
-                    self._safe_invoke_callback(
-                        self.config.on_blocked,
-                        "on_blocked",
-                        func_name,
-                        str(e),
-                        {
-                            "violation_type": "policy_mutation",
-                            "stored_digest": e.stored_digest,
-                            "actual_digest": e.actual_digest,
-                        },
-                    )
-                    return resolved_policy, response
+        if resolved_policy is None:
+            return None, None
+        refused = yield from self._check_resolved_policy(
+            func_name, resolved_policy, context, run_context=run_context, call=call
+        )
+        return resolved_policy, refused
 
-            try:
-                if resolved_policy.reauth_on_untrusted_reinvocation and run_context is None:
-                    raise PolicyViolation(
-                        f"Tool '{func_name}' is under reauth_on_untrusted_reinvocation, "
-                        "which counts a run's untrusted tool outputs across its calls, and "
-                        "this call belongs to no run. Make the agent's calls inside "
-                        "`with AirlockContext(agent_id=...)`, or pass an AirlockContext as "
-                        "the run wrapper's `context`.",
-                        violation_type=ViolationType.REAUTH_REQUIRED.value,
-                        details={"tool": func_name, "reason": "no_run_context"},
-                    )
-                resolved_policy.check_reauthorization(
-                    func_name,
-                    context,
-                    args_digest=(
-                        call.digest if resolved_policy.reauth_on_untrusted_reinvocation else None
-                    ),
+    def _check_resolved_policy(
+        self,
+        func_name: str,
+        policy: SecurityPolicy,
+        context: AirlockContext[Any],
+        *,
+        run_context: AirlockContext[Any] | None,
+        call: _BoundCall,
+        policy_name: str = "SecurityPolicy",
+    ) -> Generator[_ApprovalAsk, _ApproverOutcome, AirlockResponse | None]:
+        """Check one resolved policy for this call: its frozen digest, re-authorization and
+        ``check()``, an escalation routed to its approver. Step 2 runs it for the tool's
+        policy, step 2.1 for each policy of a delegated run's chain (``policy_name``
+        ``"DelegationCeiling"``)."""
+        # v0.5.5: verify frozen policy has not drifted mid-session
+        # (CVE-2026-41349 consent-bypass guard). Runs before check()
+        # so a mutated policy never reaches the allow/deny logic.
+        drift = self._frozen_policy_drift(func_name, policy, policy_name)
+        if drift is not None:
+            return drift
+        try:
+            if policy.reauth_on_untrusted_reinvocation and run_context is None:
+                raise PolicyViolation(
+                    f"Tool '{func_name}' is under reauth_on_untrusted_reinvocation, "
+                    "which counts a run's untrusted tool outputs across its calls, and "
+                    "this call belongs to no run. Make the agent's calls inside "
+                    "`with AirlockContext(agent_id=...)`, or pass an AirlockContext as "
+                    "the run wrapper's `context`.",
+                    violation_type=ViolationType.REAUTH_REQUIRED.value,
+                    details={"tool": func_name, "reason": "no_run_context"},
                 )
-                resolved_policy.check(func_name, agent=_caller_identity(context))
-            except PolicyEscalation as e:
-                # V0.8.74 (issue #143): the third verdict. This clause MUST stay above
-                # the PolicyViolation handler below — PolicyEscalation subclasses it,
-                # so ordering is what makes escalation distinguishable from denial.
-                # If this clause is ever removed, the subclass relationship means the
-                # call still BLOCKS via the generic handler. That is the intended
-                # failure mode: losing the approver path must not open the gate.
-                escalation_response = yield from self._resolve_escalation(
-                    resolved_policy, func_name, e, context=context, call=call
+            policy.check_reauthorization(
+                func_name,
+                context,
+                args_digest=(call.digest if policy.reauth_on_untrusted_reinvocation else None),
+            )
+            policy.check(func_name, agent=_caller_identity(context))
+        except PolicyEscalation as e:
+            # V0.8.74 (issue #143): the third verdict. This clause MUST stay above
+            # the PolicyViolation handler below — PolicyEscalation subclasses it,
+            # so ordering is what makes escalation distinguishable from denial.
+            # If this clause is ever removed, the subclass relationship means the
+            # call still BLOCKS via the generic handler. That is the intended
+            # failure mode: losing the approver path must not open the gate.
+            return (
+                yield from self._resolve_escalation(
+                    policy, func_name, e, context=context, call=call
                 )
-                if escalation_response is not None:
-                    return resolved_policy, escalation_response
-            except PolicyViolation as e:
-                if e.violation_type == ViolationType.RATE_LIMITED.value:
-                    reset_seconds = int(e.details.get("reset_seconds", 60))
-                    response = handle_rate_limit(
-                        func_name,
-                        limit=e.details.get("limit", "unknown"),
-                        reset_seconds=reset_seconds,
-                    )
-                    self._safe_invoke_callback(
-                        self.config.on_rate_limit,
-                        "on_rate_limit",
-                        func_name,
-                        reset_seconds,
-                    )
-                else:
-                    # The refusal reaches the model, so it reads a reason that names no
-                    # deny glob; the operator keeps the full message here and in
-                    # on_blocked below.
-                    logger.warning(
-                        "policy_violation",
-                        function=func_name,
-                        violation_type=e.violation_type,
-                        reason=e.message,
-                    )
-                    response = handle_policy_violation(
-                        func_name,
-                        policy_name="SecurityPolicy",
-                        reason=_model_safe_policy_reason(func_name, e),
-                        violation_type=e.violation_type,
-                    )
-                    self._safe_invoke_callback(
-                        self.config.on_blocked,
-                        "on_blocked",
-                        func_name,
-                        e.message,
-                        {"violation_type": e.violation_type, **e.details},
-                    )
-                return resolved_policy, response
+            )
+        except PolicyViolation as e:
+            return self._policy_violation_response(func_name, e, policy_name)
+        return None
 
-        return resolved_policy, None
+    def _frozen_policy_drift(
+        self, func_name: str, policy: SecurityPolicy, policy_name: str
+    ) -> AirlockResponse | None:
+        """The refusal for a frozen policy that changed since ``freeze()``, else None."""
+        if not policy.is_frozen():
+            return None
+        try:
+            policy.verify_frozen()
+        except PolicyMutationError as e:
+            logger.warning(
+                "policy_indeterminate", function=func_name, source="frozen_policy_digest"
+            )
+            response = handle_policy_violation(
+                func_name,
+                policy_name=f"Frozen{policy_name}",
+                reason=str(e),
+            )
+            self._safe_invoke_callback(
+                self.config.on_blocked,
+                "on_blocked",
+                func_name,
+                str(e),
+                {
+                    "violation_type": "policy_mutation",
+                    "stored_digest": e.stored_digest,
+                    "actual_digest": e.actual_digest,
+                },
+            )
+            return response
+        return None
+
+    def _policy_violation_response(
+        self, func_name: str, e: PolicyViolation, policy_name: str
+    ) -> AirlockResponse:
+        """The refusal for a policy's ``PolicyViolation``: the rate-limit answer, or one
+        whose reason names no deny glob."""
+        if e.violation_type == ViolationType.RATE_LIMITED.value:
+            reset_seconds = int(e.details.get("reset_seconds", 60))
+            response = handle_rate_limit(
+                func_name,
+                limit=e.details.get("limit", "unknown"),
+                reset_seconds=reset_seconds,
+            )
+            self._safe_invoke_callback(
+                self.config.on_rate_limit,
+                "on_rate_limit",
+                func_name,
+                reset_seconds,
+            )
+            return response
+        # The refusal reaches the model, so it reads a reason that names no
+        # deny glob; the operator keeps the full message here and in
+        # on_blocked below.
+        logger.warning(
+            "policy_violation",
+            function=func_name,
+            violation_type=e.violation_type,
+            reason=e.message,
+        )
+        response = handle_policy_violation(
+            func_name,
+            policy_name=policy_name,
+            reason=_model_safe_policy_reason(func_name, e),
+            violation_type=e.violation_type,
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            e.message,
+            {"violation_type": e.violation_type, **e.details},
+        )
+        return response
+
+    def _check_ceilings(
+        self,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        context: AirlockContext[Any],
+        *,
+        run_context: AirlockContext[Any] | None,
+        call: _BoundCall,
+    ) -> Generator[_ApprovalAsk, _ApproverOutcome, AirlockResponse | None]:
+        """Step 2.1: a delegated run's calls pass every policy on its delegation chain.
+
+        Each policy is checked as step 2 checks the tool's (an escalation goes to that
+        policy's approver), then its per-run call budget is counted. The tool's own policy
+        is skipped when it is on the chain, so its rate limits are not spent twice.
+        """
+        for ceiling in ceiling_chain(context):
+            if ceiling is resolved_policy:
+                continue
+            response = yield from self._check_resolved_policy(
+                func_name,
+                ceiling,
+                context,
+                run_context=run_context,
+                call=call,
+                policy_name="DelegationCeiling",
+            )
+            if response is None:
+                response = self._check_amplification(
+                    func_name=func_name,
+                    resolved_policy=ceiling,
+                    context=context,
+                    input_tokens=_token_count_tag(_call_metadata(context, "input_tokens")),
+                )
+            if response is not None:
+                return response
+        return None
+
+    def _check_lease_scopes(
+        self,
+        func: Callable[..., Any],
+        func_name: str,
+        context: AirlockContext[Any],
+        call: _BoundCall,
+        signature: inspect.Signature | None,
+    ) -> AirlockResponse | None:
+        """Step 4.5: each ``@lease_scoped`` argument falls within a lease its caller holds.
+
+        A lease check that raises admits nothing: the call is refused.
+        """
+        scopes = lease_scopes(func)
+        if not scopes:
+            return None
+        identity = _caller_identity(context)
+        defaults = {
+            name: parameter.default
+            for name, parameter in (signature.parameters.items() if signature else ())
+            if parameter.default is not inspect.Parameter.empty
+        }
+        try:
+            refusal = check_lease_scopes(
+                scopes,
+                agent_id=identity.agent_id if identity is not None else None,
+                arguments=call.arguments,
+                defaults=defaults,
+            )
+        except Exception as exc:  # noqa: BLE001 - a lease that cannot be checked admits nothing
+            logger.warning(
+                "lease_scope_indeterminate", function=func_name, error_type=type(exc).__name__
+            )
+            first = scopes[0]
+            refusal = LeaseRefusal(
+                first.arg, first.capability.value, "its lease could not be checked"
+            )
+        if refusal is None:
+            return None
+        logger.warning(
+            "lease_scope_denied",
+            function=func_name,
+            argument=refusal.arg,
+            capability=refusal.capability,
+            reason=refusal.reason,
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            refusal.reason,
+            {
+                "violation_type": "lease_scope",
+                "argument": refusal.arg,
+                "capability": refusal.capability,
+            },
+        )
+        return handle_lease_scope_denied(
+            func_name, argument=refusal.arg, capability=refusal.capability, reason=refusal.reason
+        )
 
     def _check_amplification(
         self,

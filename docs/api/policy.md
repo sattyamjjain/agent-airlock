@@ -113,6 +113,17 @@ policy = SecurityPolicy(
 )
 ```
 
+### Narrowing a policy
+
+Since 0.10.29, for a delegated agent:
+
+| Method | |
+| --- | --- |
+| `narrow(*, allowed_tools=None, denied_tools=(), rate_limits=None, amplification_budget=None)` | A copy that can only admit less: the allowlist intersected, deny patterns added, rate limits and the call budget lowered. Raises `ValueError` when a value would admit more |
+| `is_subset_of(parent)` | Whether this policy admits no call `parent` refuses. False also when the policies' shape cannot prove it; `agent_airlock.delegation.subset_problems(child, parent)` says why |
+
+See [Delegation](../guide/delegation.md).
+
 ## Predefined Policies
 
 ### PERMISSIVE_POLICY
