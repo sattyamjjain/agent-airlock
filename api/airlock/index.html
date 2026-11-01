@@ -4168,6 +4168,32 @@ out.</p>
 <a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">    </span><span class="sd">"""Path must be under /tmp/airlock."""</span>
 <a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>    <span class="o">...</span>
 </code></pre></div>
+<p><code>SafePath</code> refuses parent traversal, a leading <code>~</code> and any path matching
+<code>DEFAULT_PATH_DENY_PATTERNS</code>: secrets (<code>.env</code>, <code>.ssh</code>, <code>*.pem</code>, <code>.aws</code>), <code>.git</code> and a few
+system files. Since 0.10.30 the defaults also hold two lists you can import on their own:</p>
+<ul>
+<li><code>PERSISTENCE_DENY_PATTERNS</code>: places that start a program again with nobody asking.
+  launchd jobs (<code>Library/LaunchAgents</code>, <code>Library/LaunchDaemons</code>), the crontab spools and
+  <code>/etc/cron.*</code>, systemd unit directories (system and <code>~/.config/systemd/user</code>), the Windows
+  Startup folders, shell start files (<code>.bashrc</code>, <code>.bash_profile</code>, <code>.profile</code>, <code>.zshrc</code>,
+  <code>.zprofile</code>, <code>.zshenv</code>, <code>config.fish</code> and the rest) and <code>authorized_keys</code> wherever it is.</li>
+<li><code>AGENT_CONFIG_DENY_PATTERNS</code>: files a coding agent or IDE reads as something to run.
+  <code>.mcp.json</code>, <code>~/.claude.json</code>, <code>.claude/settings.json</code>, <code>.claude/settings.local.json</code>,
+  <code>.cursor/mcp.json</code>, <code>.vscode/mcp.json</code>, <code>.vscode/tasks.json</code>, <code>~/.gitconfig</code> and
+  <code>~/.config/git/config</code>.</li>
+</ul>
+<p>Both lists match whatever the case, since macOS and Windows file systems ignore it by
+default, so <code>/Users/u/library/launchagents/x.plist</code> is refused too. The older patterns
+keep their case-sensitive match. Every pattern is also checked against the path with each
+component's trailing dots and spaces dropped, which is the path Windows opens:
+<code>.ssh./id_rsa</code>, <code>.mcp.json.</code> and <code>.env</code> (a trailing space) are refused, and the refusal
+names the path as written. <code>FilesystemPolicy(deny_patterns=...)</code> gets the same fold.</p>
+<p>So the default validator refuses paths 0.10.29 allowed. To check a narrower set, pass your
+own list to <code>SafePathValidator(deny_patterns=[...])</code> or
+<code>create_safe_path_type(deny_patterns=[...])</code>; <code>deny_patterns=[]</code> turns the pattern check
+off (traversal and <code>~</code> are still refused). These lists cover a write made through a
+<code>SafePath</code> argument of a tool call. Airlock does not see an extension being installed, or
+what an IDE's own browser does.</p>
 <h3 id="safeurl">SafeURL<a class="headerlink" href="#safeurl" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SafeURL</span><span class="p">,</span> <span class="n">SafeURLAllowHttp</span>
 <a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
