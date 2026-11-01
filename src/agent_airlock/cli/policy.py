@@ -1,16 +1,21 @@
-"""``airlock policy compile / explain`` CLI (v0.5.9+)."""
+"""``airlock policy compile / explain / coverage`` CLI (v0.5.9+; ``coverage`` V0.10.29)."""
 
 from __future__ import annotations
 
 import argparse
+import importlib
+import json
+import os
 import sys
 
+from ..policy import SecurityPolicy
 from ..policy_compiler import (
     PolicyCompiler,
     explain_preset,
     register_llm_backend,
 )
 from ..policy_compiler.compiler import _REGISTRY  # noqa: PLC2701
+from ..policy_coverage import CoverageReport, airlock_tools, coverage_report
 
 
 def _stub_backend(system_prompt: str, user_text: str) -> str:  # noqa: ARG001
@@ -136,6 +141,65 @@ def _cmd_explain(args: argparse.Namespace) -> int:
     return 0
 
 
+class _UsageError(Exception):
+    """A coverage run that cannot start: the module or the policy cannot be loaded."""
+
+
+def _load_policy(spec: str) -> SecurityPolicy:
+    """The ``SecurityPolicy`` that ``MODULE:NAME`` names (``NAME`` may be dotted)."""
+    module_name, sep, attribute = spec.partition(":")
+    if not sep or not module_name or not attribute:
+        raise _UsageError(f"--policy takes MODULE:NAME, got {spec!r}")
+    target: object = importlib.import_module(module_name)
+    for part in attribute.split("."):
+        target = getattr(target, part)
+    if not isinstance(target, SecurityPolicy):
+        raise _UsageError(
+            f"{spec} is a {type(target).__name__}, not a SecurityPolicy; a policy resolver "
+            "cannot be classified without a call's context"
+        )
+    return target
+
+
+def _print_report(report: CoverageReport, module: str, policy: str) -> None:
+    print(f"policy coverage of {module} under {policy} ({len(report.tools)} tools)")
+    width = max(len(entry.tool) for entry in report.tools)
+    for entry in report.tools:
+        print(f"  {entry.coverage.value:<20} {entry.tool:<{width}}  {entry.rule}")
+    if report.uncovered:
+        count = len(report.uncovered)
+        noun = "tool is" if count == 1 else "tools are"
+        print(
+            f"\n{count} {noun} admitted only because allowed_tools is empty: "
+            f"{', '.join(report.uncovered)}\nName each in allowed_tools, deny it, or "
+            "escalate it."
+        )
+
+
+def _cmd_coverage(args: argparse.Namespace) -> int:
+    if os.getcwd() not in sys.path:
+        sys.path.insert(0, os.getcwd())  # the console script's sys.path lacks the project
+    try:
+        policy = _load_policy(args.policy)
+        tools = airlock_tools(args.module)
+    except (_UsageError, ImportError, AttributeError) as exc:
+        print(f"airlock policy coverage: {exc}", file=sys.stderr)
+        return 2
+    if not tools:
+        print(
+            f"airlock policy coverage: found no @Airlock tools in {args.module}; point "
+            "--module at the package that defines them",
+            file=sys.stderr,
+        )
+        return 2
+    report = coverage_report(policy, tools)
+    if args.format == "json":
+        print(json.dumps({"module": args.module, "policy": args.policy, **report.to_dict()}))
+    else:
+        _print_report(report, args.module, args.policy)
+    return 0 if report.covered else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="airlock policy")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -152,6 +216,20 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to a compiled policy YAML (use '-' for stdin)",
     )
     p_explain.set_defaults(func=_cmd_explain)
+
+    p_coverage = sub.add_parser(
+        "coverage",
+        help="classify every @Airlock tool of a module under a policy; exit 1 when one is "
+        "admitted only because allowed_tools is empty",
+    )
+    p_coverage.add_argument(
+        "--module", required=True, help="module or package whose @Airlock tools to check"
+    )
+    p_coverage.add_argument(
+        "--policy", required=True, help="the SecurityPolicy to check them against, MODULE:NAME"
+    )
+    p_coverage.add_argument("--format", choices=["text", "json"], default="text")
+    p_coverage.set_defaults(func=_cmd_coverage)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

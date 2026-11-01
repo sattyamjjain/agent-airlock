@@ -28,7 +28,15 @@ Or for specific cleanup:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, cast
+
 from ._log import structlog
+
+if TYPE_CHECKING:
+    from .policy import SecurityPolicy
+    from .policy_coverage import CoverageReport
 
 logger = structlog.get_logger("agent-airlock.testing")
 
@@ -156,3 +164,51 @@ def reset_startup_hook_check() -> None:
     from .runtime.startup_hooks import _reset_process_state
 
     _reset_process_state()
+
+
+def assert_policy_covers(
+    tools: ModuleType | Iterable[Callable[..., Any] | str], policy: SecurityPolicy
+) -> CoverageReport:
+    """Fail when ``policy`` admits one of ``tools`` only because its allowlist is empty.
+
+    A policy with an empty ``allowed_tools`` and ``default_deny=False`` admits any tool it
+    does not deny, so a tool added later is admitted without anyone deciding to admit it.
+    Each tool must be allowed by name or pattern, denied, or escalated (V0.10.29).
+
+    Args:
+        tools: The tools: a module or package (its ``@Airlock`` tools, as
+            ``airlock policy coverage`` finds them), or tools and tool names.
+        policy: The policy the tools run under.
+
+    Returns:
+        The coverage report, every tool classified.
+
+    Raises:
+        AssertionError: A tool is admitted only by the empty-allowlist default.
+        TypeError: ``policy`` is not a ``SecurityPolicy``, or a tool has no name.
+    """
+    from .policy import SecurityPolicy as _SecurityPolicy
+    from .policy_coverage import _tool_name, airlock_tools, coverage_report
+
+    if not isinstance(policy, _SecurityPolicy):
+        raise TypeError(f"assert_policy_covers needs a SecurityPolicy, not {type(policy).__name__}")
+    if isinstance(tools, ModuleType):
+        names = list(airlock_tools(tools))
+    else:
+        names = [_named(tool, _tool_name) for tool in cast("Iterable[Any]", tools)]
+    report = coverage_report(policy, names)
+    if report.uncovered:
+        raise AssertionError(
+            "the policy admits these tools only because allowed_tools is empty: "
+            f"{', '.join(report.uncovered)}. Name each in allowed_tools, deny it, or "
+            "escalate it."
+        )
+    return report
+
+
+def _named(tool: Any, tool_name: Callable[[Any], str | None]) -> str:
+    """A tool's name: as given, the name ``@Airlock`` checks its calls by, or ``__name__``."""
+    name = tool if isinstance(tool, str) else tool_name(tool) or getattr(tool, "__name__", None)
+    if not isinstance(name, str) or not name:
+        raise TypeError(f"cannot tell the name of tool {tool!r}")
+    return name

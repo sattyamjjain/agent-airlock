@@ -92,3 +92,4 @@ This path involves no backend and no keyword matching; it reads what is in the f
 
 - [`airlock policy-bundle-lock`](policy-bundle-lock.md) — pinning a compiled bundle
 - [Policy guide](../guide/policy.md) — writing `SecurityPolicy` by hand
+- [`airlock policy coverage`](policy-coverage.md) — checking that a policy names every tool
