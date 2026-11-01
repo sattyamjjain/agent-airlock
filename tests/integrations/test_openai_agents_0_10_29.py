@@ -155,6 +155,13 @@ class _Invoker:
 
 @dataclass
 class _FunctionTool:
+    """The SDK's ``FunctionTool``, as far as the adapter reads it.
+
+    The docstring is load-bearing on Python 3.10: without one, ``@dataclass`` builds it
+    from ``inspect.signature(cls)``, which follows the ``__wrapped__`` default to None and
+    raises.
+    """
+
     name: str
     on_invoke_tool: Any
     __wrapped__: Any = None
