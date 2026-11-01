@@ -93,6 +93,17 @@ through it is comparable with these numbers only when it passes `--benchmark-ver
 Each dated block below is one run and is never edited after the fact; newer runs are
 prepended under the marker.
 
+**Utility with and without the attack, and runs that did both.** OWASP AISVS 1.01 control
+11.1.6 (L2) asks that adversarial results be reported alongside results for the same tasks,
+scored the same way, with no attack applied. The 2026-07-31 block does that: benign utility
+beside utility under attack, the same user tasks scored by AgentDojo's own utility checks.
+The cross-model blocks (2026-08-08, 2026-10-16) report ASR and the benign FP cost only. From
+the next run both formats also carry airlock's utility with no attack and under attack, and a
+*task and attack both* column: the attacked trajectories that solved the user's task **and**
+did what the injection asked, which neither rate shows on its own
+(langchain-ai/langgraph#8817). The blocks below predate the column, so it fills on the next
+run; no number in them is re-derived.
+
 **Why a second model, and which one.** The 2026-07-31 block below is one model (gpt-4o-mini)
 on a 60-pair subset, so its airlock ASR sits in a wide Wilson interval a reviewer can read as
 subset selection. The harness now takes `--model` more than once and reports **each model with
