@@ -110,11 +110,17 @@ Masked when `mask_secrets=True` (the default).
 | JWT | `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.abc` | `eyJhbGciOi...[JWT]` |
 | Connection String | `postgres://user:pass@host` | `[REDACTED]` |
 | Private Key | `-----BEGIN PRIVATE KEY-----` | `[REDACTED]` |
+| Environment dump | three or more `API_KEY=...` lines | each value `[REDACTED]` |
 
 Detection is by known shape. An API key is an OpenAI key (legacy `sk-...`, or
 `sk-proj-`/`sk-svcacct-`/`sk-admin-`), an Anthropic `sk-ant-...` key, a Google `AIza` key, a
-GitHub `ghp_`/`gho_`/`github_pat_` token or a Slack `xox` token; a shorter or unrecognised key
-passes through. A password is
+GitHub `ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_`/`github_pat_` token or a Slack `xox` token; a
+shorter or unrecognised key passes through. Since 0.10.29 the GitHub and Slack prefixes match
+in any case with a body of at least 20 (GitHub) or 10 (Slack) token characters, and an AWS
+`AKIA` id matches in lowercase too (its 16-character body still fixed). An environment dump is
+three or more `KEY=VALUE` lines (`export` allowed) or JSON `"key": "value"` pairs whose key ends
+in `_KEY`, `_TOKEN`, `_SECRET` or `_PAT` or contains `PASSWORD`, in any case: each such value
+is masked whatever it looks like. A password is
 the value (8+ characters) after `password`, `passwd`, `pwd`, `secret` or `token` and `=` or
 `:`. The private-key rule masks the whole PEM block, or the header and the base64 lines after it
 when the `END` line is missing. There is no separate
@@ -144,10 +150,33 @@ mask_email(MaskingStrategy.PARTIAL)    # j***@example.com
 mask_email(MaskingStrategy.TYPE_ONLY)  # [EMAIL]
 
 # Hash (for correlation)
-mask_email(MaskingStrategy.HASH)       # [SHA256:855f96e9...]
+mask_email(MaskingStrategy.HASH)       # [HMAC:3f9a8c2e1b7d4065]
 ```
 
 The mapping replaces the defaults: a type you leave out of it is masked `FULL`.
+
+`HASH` is an HMAC-SHA256 tag of 16 hex characters under a key (0.10.29). Until then it was an
+unkeyed sha256 cut to 8 characters, which anyone could recompute for every phone number or PAN
+and so reverse. Pass the request's key as `hash_key=` so one value gets one tag for the whole
+request (joins keep working); without one, each call makes its own key, so tags from two calls
+cannot be joined. `sanitize_structured` uses one key for a whole structure. Pass
+`reverse_map={}` to have it filled with each tag and the value it stands for: that map is for
+the host, never for the model.
+
+## Hidden HTML
+
+`AirlockConfig(strip_hidden_html=True)` (0.10.29) removes the parts of an HTML result a person
+cannot see before it is masked: elements an inline style hides (`display:none`,
+`visibility:hidden`, `opacity:0`, `font-size:0`, a `text-indent` of -100 or more units), the
+`hidden` attribute, and comments. Text with the `sr-only`, `visually-hidden` or
+`visuallyhidden` class is kept, since a screen reader reads it. Only inline styles are read: a
+stylesheet rule that hides an element is not. `sanitize_output(..., strip_hidden_html=True)`
+does the same for one string.
+
+## Arguments, Not Only Results
+
+Masking covers what a tool returns. To screen what the model passes in, see
+[Secrets in tool arguments](argument-secrets.md).
 
 ## Selective Detection
 

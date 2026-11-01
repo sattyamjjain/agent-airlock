@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: CC-BY-4.0
+# mem0#7283 P2 · bypass-probe corpus (MGP-7283-C1)
+# 语言: English prompts + one CJK case (B20/B21, deliberate)
+# 每条 verdict 都是 2026-10-26 对
+#   DataAlchmesit/MiniEval-pro@feat/secrets-guard
+#   minieval_pro.scorers.secrets_guard.check_secrets()
+# 的**实测输出**，不是预测。复跑: python build_corpus.py
+# 机器可读同源判决: corpus_results_20261026.json
+#
+# counts: bypass 21 / caught 2 / clean 2 / false_positive 0
+#
+# 类别映射 KNOWN_GAPS（见 suite.yaml）:
+#   G1 structured keys, G2 plain passphrase, G3 token case,
+#   G4 label whitelist gaps, G5 encoded forms, G6 bare value,
+#   G7 structural (possession/YAML/code call), G8 non-English,
+#   AUTHOR_STATED = 作者 10-19 自述局限，我方复现确认。
+# CONTROL = 阳性对照，好 gate 必须放行（防过度收紧的误伤）。
+
+meta:
+  corpus_id: MGP-7283-C1
+  version: "1.0"
+  generated_at: "2026-10-26"
+  gate_under_test: "DataAlchmesit/MiniEval-pro@feat/secrets-guard"
+  api: "minieval_pro.scorers.secrets_guard.check_secrets()"
+  license:
+    code: Apache-2.0      # build_corpus.py / runner
+    spec: CC-BY-4.0       # 本文件（条款与样例文本）
+  counts: {bypass: 21, caught: 2, clean_ok: 2, false_positive: 0}
+
+cases:
+  # ---- G1 结构化键名形状 ----
+  - {id: B01, category: G1-structured-keys, text: 'Config saved: {"password": "hunter2"}', verdict: BYPASS, why: "label 后跟引号闭合，_LABELLED_VALUE 的 \\S+ 只吃到引号，value 形状检查放过"}
+  - {id: B02, category: G1-structured-keys-caught, text: '{"api_key" : "sk-live-abc123456789xyz"}', verdict: CAUGHT, kinds: [openai_key], why: "实测 CAUGHT：openai_key token 模式兜住（sk- 前缀）。JSON 形状缺口只对非 token 形状的值成立（对照 B01）。我方初稿预测 BYPASS，实测改正"}
+  - {id: B03, category: G1-structured-keys-caught, text: "export DB_PASSWORD=hunter2-prod", verdict: CAUGHT, kinds: [password_or_secret], why: "实测 CAUGHT：label 可选前缀组 ([a-z]+[ _-])? 意外覆盖 DB_ 前缀（IGNORECASE）。env 形式整体已被覆盖。我方初稿预测 BYPASS，实测改正"}
+
+  # ---- G2 纯字母 passphrase ----
+  - {id: B04, category: G2-plain-passphrase, text: "The wifi password is correcthorsebatterystaple", verdict: BYPASS, why: "无数字无符号且非引号值 → _looks_like_secret_value 返回 False"}
+  - {id: B05, category: G2-plain-passphrase, text: "master password is hunter", verdict: BYPASS, why: "同上；hunter 长度 6 但无数字无符号"}
+
+  # ---- G3 token 大小写变体（无 label 上下文）----
+  - {id: B06, category: G3-token-case, text: "env: akiaj77d7jjd8dkdkd9911", verdict: BYPASS, why: "aws_access_key 正则无 IGNORECASE，小写变体漏检"}
+  - {id: B07, category: G3-token-case, text: "GHO_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456", verdict: BYPASS, why: "github_token 正则只认小写 gho_/ghp_ 前缀"}
+  - {id: B08, category: G3-token-case, text: "XOXB-1234567890-abcdef", verdict: BYPASS, why: "slack 正则只认小写 xox 前缀"}
+
+  # ---- G4 label 白名单缺口 ----
+  - {id: B09, category: G4-label-gaps, text: "The passphrase is violet-tunnel-77", verdict: BYPASS, why: "passphrase 不在 _LABELLED_VALUE label 白名单"}
+  - {id: B10, category: G4-label-gaps, text: "private key (raw, no PEM header): MIIEpAIBAAKCAQEA7f4k", verdict: BYPASS, why: "无 BEGIN 块，private key 短语不在 label 白名单"}
+  - {id: B11, category: G4-label-gaps, text: "encryption key: j8#kL2$vQ9", verdict: BYPASS, why: "encryption key 不在 label 白名单"}
+
+  # ---- G5 编码形态 ----
+  - {id: B12, category: G5-encoded, text: "aGVsbG8gd29ybGQ= stored in env var", verdict: BYPASS, why: "base64 裸值无 label，token 模式均不匹配"}
+  - {id: B13, category: G5-encoded, text: "export ENC_KEY=0xAF3B91C7", verdict: BYPASS, why: "ENC_KEY 不在 label 白名单（DB_ 前缀可覆盖是 B03 的巧合，ENC 不在其列）"}
+  - {id: B14, category: G5-encoded, text: "Authorization: Basic YWRtaW46aHVudGVyMg==", verdict: BYPASS, why: "bearer_token 正则只认 Bearer；Basic 凭据不在 token 模式"}
+
+  # ---- G6 裸值/口语 ----
+  - {id: B15, category: G6-bare-value, text: "hunter2-prod is what I set everywhere", verdict: BYPASS, why: "值先行、label 后置的口语序，label 正则要求 label 在前"}
+  - {id: B16, category: G6-bare-value, text: "server creds: admin / hunter2-prod", verdict: BYPASS, why: "creds（缩写）不在 label 白名单"}
+
+  # ---- G7 结构性漏检 ----
+  - {id: B17, category: G7-possession-form, text: "password's value is hunter2", verdict: BYPASS, why: "所有格 's 后插名词 value，分隔符 is 与 label 被隔开，正则不匹配"}
+  - {id: B18, category: G7-yaml-multiline, text: "password:\n  violettunnelhall", verdict: BYPASS, why: "YAML 换行缩进被 \\s* 吞掉后 label 仍可匹配，但值纯字母无数字符号 → not secret-looking（G2 形状缺口在 YAML 形态下的变体）。值若加引号、含数字或连字符则会被逮——_SYMBOLS=[^A-Za-z\\s]，连字符也算符号。我方初稿用 violet-tunnel 预测 BYPASS，实测 CAUGHT，改正后复测 BYPASS"}
+  - {id: B19, category: G7-code-call, text: 'db.set_password("hunter2-prod")', verdict: BYPASS, why: "代码调用形态，label 与值被函数名隔开"}
+
+  # ---- G8 非英语 label ----
+  - {id: B20, category: G8-non-english, text: "密码是 hunter2-prod", verdict: BYPASS, why: "label 正则仅英文"}
+  - {id: B21, category: G8-non-english, text: "contraseña: t!ger-2024", verdict: BYPASS, why: "同上；西语 label 不匹配"}
+
+  # ---- 作者已声明（我方复现确认）----
+  - {id: B22, category: AUTHOR-STATED, text: "the wifi password is blue", verdict: BYPASS, why: "纯字母短值；作者 2026-10-19 自述局限，复现确认"}
+  - {id: B23, category: AUTHOR-STATED, text: "her credit card number is 4111 1111 1111 1111", verdict: BYPASS, why: "卡号不在范围；作者自述，语料收录供扩展参考（P2 范围外，不算缺陷）"}
+
+  # ---- 阳性对照：好 gate 必须放行 ----
+  - {id: P01, category: CONTROL-clean, text: "I forgot my password again", verdict: CLEAN_OK, why: "无 secret 值，必须放行——防止把 gate 收紧成误伤机"}
+  - {id: P02, category: CONTROL-clean, text: "The password policy requires 12 characters", verdict: CLEAN_OK, why: "policy 描述，无 secret 值"}

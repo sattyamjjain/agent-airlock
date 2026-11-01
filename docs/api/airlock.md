@@ -300,7 +300,7 @@ from agent_airlock import AirlockResponse
 | `error` | `str` | Error message |
 | `block_reason` | `str` | Why it was blocked, e.g. `"ghost_arguments"`, `"validation_error"` |
 | `fix_hints` | `list[str]` | Corrective suggestions for the LLM |
-| `retryable` | `bool` | Whether a retry can pass: `false` for a kill switch, a startup hook, a spent budget, an exceeded amplification budget, a denied escalation, an indeterminate policy, a halted run, a spent run budget, an effect of unknown status and a tool the policy does not allow; `true` for a validation error, a shell or installer argument refusal and a rate limit (after `metadata.reset_seconds`). Absent when the refusal does not say |
+| `retryable` | `bool` | Whether a retry can pass: `false` for a kill switch, a startup hook, a spent budget, an exceeded amplification budget, a denied escalation, an indeterminate policy, a halted run, a spent run budget, an effect of unknown status and a tool the policy does not allow; `true` for a validation error, a shell or installer argument refusal, a secret or personal data in an argument and a rate limit (after `metadata.reset_seconds`). Absent when the refusal does not say |
 | `metadata` | `dict` | Details, e.g. the function name and the offending arguments |
 | `result` | `Any` | The tool's result (successes under `return_dict=True`) |
 | `warnings` | `list[str]` | E.g. how many values were masked |

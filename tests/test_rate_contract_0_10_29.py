@@ -47,6 +47,7 @@ class TestRetryable:
             (BlockReason.EFFECT_STATUS_UNKNOWN, False),
             (BlockReason.VALIDATION_ERROR, True),
             (BlockReason.TOOL_ARG_SINK, True),
+            (BlockReason.ARGUMENT_SECRET, True),
             (BlockReason.PATH_VIOLATION, None),
         ],
     )

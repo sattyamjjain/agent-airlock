@@ -182,6 +182,11 @@ class AirlockConfig:
     # run halted (run_halted); none is replaced by a placeholder. See
     # :class:`agent_airlock.tool_output_trust_guard.ToolOutputTrustGuard`.
     output_trust_guard: ToolOutputTrustGuard | None = None
+    # V0.10.29 — remove the HTML elements a person cannot see (inline-styled out of view,
+    # the ``hidden`` attribute, comments) from a string result before it is masked, so
+    # instructions hidden in a fetched page do not reach the model. Applied with
+    # sanitize_output. See :mod:`agent_airlock.hidden_html`.
+    strip_hidden_html: bool = False
 
     # V0.8.25: meant to switch on the fail-closed terminal-claim guard (Goal-Autopilot,
     # arXiv:2606.11688), but nothing reads it: @Airlock checks no terminal claims.
@@ -413,6 +418,8 @@ class AirlockConfig:
             "credentials",
             # V0.8.9 opt-in locale tags for region-specific PII
             "pii_locales",
+            # V0.10.29 hidden HTML in string results
+            "strip_hidden_html",
             # V0.8.25 opt-in fail-closed terminal-claim guard
             "require_done_receipt",
             # V0.10.27 token audience and startup-hook checks
@@ -441,6 +448,7 @@ class AirlockConfig:
             "audit_otel_enabled",  # V0.4.0
             "audit_include_args_hash",  # V0.4.0
             "require_done_receipt",  # V0.8.25
+            "strip_hidden_html",  # V0.10.29
         ):
             if key in data:
                 result[key] = bool(data[key])

@@ -1,0 +1,17 @@
+Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+  https://creativecommons.org/licenses/by/4.0/
+
+  Copyright 2026 chenhz01 (正明 / 善伦)
+
+  本文件覆盖本目录下的规范类产物：suite.yaml 中定义的 11 条一致性条款、
+  其复现方法、期望结果，以及 KNOWN_GAPS 局限登记的方法学框架。
+
+  您可自由：
+    - 共享：复制、分发本规范
+    - 演绎：修改、重组本规范
+  唯需遵守：
+    - 署名：须注明出处（chenhz01 / mem0#7283 P2 conformance suite, MGP-7283）
+    - 不得暗示本规范作者为您的演绎产物背书
+
+  代码类产物（脚本）受 Apache-2.0 约束，见 LICENSE。

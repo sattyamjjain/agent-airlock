@@ -465,7 +465,7 @@ class TestMaskingStrategies:
         content = "Email: test@example.com"
         masked, _ = mask_sensitive_data(content, [SensitiveDataType.EMAIL], config)
 
-        assert "[SHA256:" in masked
+        assert "[HMAC:" in masked  # 0.10.29: keyed, was "[SHA256:"
 
 
 class TestSensitiveDataTypes:

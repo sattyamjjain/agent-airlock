@@ -7,8 +7,11 @@ sensitive data leakage back to LLMs and control output costs.
 from __future__ import annotations
 
 import copy
+import hashlib
+import hmac
 import json
 import re
+import secrets
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -43,6 +46,9 @@ class SensitiveDataType(str, Enum):
     PRIVATE_KEY = "private_key"
     JWT = "jwt"
     CONNECTION_STRING = "connection_string"
+    # V0.10.29: three or more secret-named KEY=VALUE lines or JSON keys (an environment
+    # dump). Their values are masked whatever they look like.
+    ENV_DUMP = "env_dump"
 
 
 class MaskingStrategy(str, Enum):
@@ -189,14 +195,22 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         # and the rest of the key was left in the output.
         r"sk-ant-[a-zA-Z0-9_-]{20,}|"
         r"AIza[0-9A-Za-z_-]{35}|"  # Google
-        r"ghp_[a-zA-Z0-9]{36}|"  # GitHub PAT
-        r"gho_[a-zA-Z0-9]{36}|"  # GitHub OAuth
+        # GitHub classic tokens (PAT, OAuth, user, server, refresh) and Slack tokens, their
+        # prefix in any case and their body at least token-sized: until 0.10.29 only the
+        # lowercase prefix and the exact length matched, so "GHO_..." and "XOXB-..." passed
+        # (chenhz01/mem0-7283-conformance cases B07, B08).
+        r"(?i:gh[pousr]_)[a-zA-Z0-9]{20,}|"
         r"github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|"  # GitHub fine-grained
-        r"xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}"  # Slack
+        r"(?i:xox[baprs])-[a-zA-Z0-9-]{10,}"  # Slack
         r")\b",
         re.ASCII,
     ),
-    SensitiveDataType.AWS_KEY: re.compile(r"\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b", re.ASCII),
+    # An AWS access key id is 4 prefix letters and 16 more. "AKIA", the common one, is also
+    # matched in lowercase (V0.10.29); the other prefixes stay uppercase, where a lowercase
+    # match would take ordinary words ("asia...").
+    SensitiveDataType.AWS_KEY: re.compile(
+        r"\b(?:(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}|(?i:akia)[0-9a-zA-Z]{16})\b", re.ASCII
+    ),
     SensitiveDataType.PASSWORD: re.compile(
         r"(?i)(?:password|passwd|pwd|secret|token)[\s]*[=:]\s*['\"]?([^\s'\"]{8,})['\"]?",
     ),
@@ -244,13 +258,25 @@ DEFAULT_MASK_CONFIG: dict[SensitiveDataType, MaskingStrategy] = {
     SensitiveDataType.PRIVATE_KEY: MaskingStrategy.FULL,
     SensitiveDataType.JWT: MaskingStrategy.PARTIAL,
     SensitiveDataType.CONNECTION_STRING: MaskingStrategy.FULL,
+    SensitiveDataType.ENV_DUMP: MaskingStrategy.FULL,
 }
+
+
+#: Hex characters a HASH tag keeps: 64 bits of the HMAC (V0.10.29; the unkeyed sha256 kept 32).
+HASH_TAG_CHARS = 16
+
+
+def _hmac_tag(value: str, key: bytes) -> str:
+    """The HASH strategy's tag for ``value`` under ``key``."""
+    digest = hmac.new(key, value.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"[HMAC:{digest[:HASH_TAG_CHARS]}]"
 
 
 def _mask_value(
     value: str,
     data_type: SensitiveDataType,
     strategy: MaskingStrategy,
+    hash_key: bytes | None = None,
 ) -> str:
     """Apply masking strategy to a sensitive value.
 
@@ -258,6 +284,8 @@ def _mask_value(
         value: The sensitive value to mask.
         data_type: Type of sensitive data.
         strategy: Masking strategy to apply.
+        hash_key: The request's key for the HASH strategy; a fresh one when None, so
+            the tag cannot be recomputed from a guess.
 
     Returns:
         Masked value string.
@@ -269,10 +297,10 @@ def _mask_value(
         return f"[{data_type.value.upper()}]"
 
     if strategy == MaskingStrategy.HASH:
-        import hashlib
-
-        hash_prefix = hashlib.sha256(value.encode()).hexdigest()[:8]
-        return f"[SHA256:{hash_prefix}...]"
+        # HMAC-SHA256 under a per-request key (V0.10.29). The unkeyed sha256 cut to 8 hex
+        # characters it replaced could be reversed by hashing every phone number, Aadhaar
+        # or PAN.
+        return _hmac_tag(value, hash_key if hash_key is not None else secrets.token_bytes(32))
 
     # PARTIAL masking - show first and last few characters
     if len(value) <= 8:
@@ -503,6 +531,54 @@ _INDIA_LOCALE_PII_TYPES: tuple[SensitiveDataType, ...] = (
 )
 
 
+#: A secret-sounding variable or key name: ``*_KEY``, ``*_TOKEN``, ``*_SECRET``, ``*_PAT``,
+#: or anything with ``PASSWORD`` in it, in any case.
+_SECRET_NAME = re.compile(r"(?i)(?:.*_(?:KEY|TOKEN|SECRET|PAT)|.*PASSWORD.*)")
+_ENV_LINE = re.compile(
+    r"(?m)^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(\S[^\r\n]*?)[ \t]*$"
+)
+_JSON_PAIR = re.compile(r'"([^"\\\r\n]{1,128})"[ \t]*:[ \t]*"((?:[^"\\\r\n]|\\.)*)"')
+
+#: How many secret-named entries make an environment dump (V0.10.29).
+ENV_DUMP_MIN_ENTRIES = 3
+
+
+def _unquoted(content: str, start: int, end: int) -> tuple[int, int]:
+    """``(start, end)`` without the quotes around an env value, when it has them."""
+    if end - start >= 2 and content[start] in "'\"" and content[end - 1] == content[start]:
+        return start + 1, end - 1
+    return start, end
+
+
+def _env_dump_detections(content: str) -> list[dict[str, Any]]:
+    """The values of an environment dump's secret-named entries, when it has enough.
+
+    An entry is a ``KEY=VALUE`` line (``export`` allowed) or a JSON ``"KEY": "VALUE"`` pair
+    whose key :data:`_SECRET_NAME` matches. With at least :data:`ENV_DUMP_MIN_ENTRIES` of
+    them every value is a detection, whatever it looks like: a dumped credential need not
+    carry a known prefix (modelcontextprotocol/servers#4882).
+    """
+    spans: list[tuple[int, int]] = []
+    for pattern in (_ENV_LINE, _JSON_PAIR):
+        for match in pattern.finditer(content):
+            if _SECRET_NAME.fullmatch(match.group(1)) and match.group(2):
+                start, end = _unquoted(content, match.start(2), match.end(2))
+                if end > start:
+                    spans.append((start, end))
+    if len(spans) < ENV_DUMP_MIN_ENTRIES:
+        return []
+    return [
+        {
+            "type": SensitiveDataType.ENV_DUMP.value,
+            "value": content[start:end],
+            "start": start,
+            "end": end,
+            "full_match": content[start:end],
+        }
+        for start, end in sorted(set(spans))
+    ]
+
+
 def detect_sensitive_data(
     content: str,
     types: list[SensitiveDataType] | None = None,
@@ -529,6 +605,9 @@ def detect_sensitive_data(
     detections: list[dict[str, Any]] = []
 
     for data_type in types:
+        if data_type is SensitiveDataType.ENV_DUMP:
+            detections.extend(_env_dump_detections(content))
+            continue
         pattern = PATTERNS.get(data_type)
         if not pattern:  # pragma: no cover - all types have patterns
             continue
@@ -733,6 +812,9 @@ def mask_sensitive_data(
     types: list[SensitiveDataType] | None = None,
     mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
     pii_locales: list[str] | None = None,
+    *,
+    hash_key: bytes | None = None,
+    reverse_map: dict[str, str] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Mask sensitive data in content.
 
@@ -744,6 +826,11 @@ def mask_sensitive_data(
             :func:`detect_sensitive_data`). When ``"in"`` is present,
             Aadhaar matches are Verhoeff-validated and Devanagari name
             matches are filtered through the common-noun allowlist.
+        hash_key: The request's key for the HASH strategy, so one value has one tag
+            for the whole request; one key is made for this call when None.
+        reverse_map: When given, each HASH tag is recorded in it against the value it
+            stands for. It is for the host, which can join tags back to values; never
+            pass it, or anything built from it, to the model.
 
     Returns:
         Tuple of (masked_content, list of detections).
@@ -760,6 +847,7 @@ def mask_sensitive_data(
     # overlap resolution cannot represent two spans claiming the same characters.
     detections = merge_overlapping_detections(content, detections)
 
+    key = hash_key if hash_key is not None else secrets.token_bytes(32)
     spans: list[tuple[int, int, str]] = []
     for detection in detections:
         data_type = SensitiveDataType(detection["type"])
@@ -770,12 +858,15 @@ def mask_sensitive_data(
             # but keep the "password=" prefix
             full_match = detection["full_match"]
             password_value = detection["value"]
-            masked_value = _mask_value(password_value, data_type, strategy)
+            masked_value = _mask_value(password_value, data_type, strategy, key)
             replacement = full_match.replace(password_value, masked_value)
             detection["masked_as"] = "[REDACTED]"
         else:
-            replacement = _mask_value(detection["value"], data_type, strategy)
+            masked_value = _mask_value(detection["value"], data_type, strategy, key)
+            replacement = masked_value
             detection["masked_as"] = replacement
+        if reverse_map is not None and strategy == MaskingStrategy.HASH:
+            reverse_map[masked_value] = detection["value"]
 
         spans.append((detection["start"], detection["end"], replacement))
 
@@ -856,6 +947,7 @@ def _types_to_mask(
                 SensitiveDataType.PRIVATE_KEY,
                 SensitiveDataType.JWT,
                 SensitiveDataType.CONNECTION_STRING,
+                SensitiveDataType.ENV_DUMP,
             ]
         )
     return types_to_mask
@@ -886,6 +978,10 @@ def sanitize_output(
     max_chars: int | None = None,
     mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
     pii_locales: list[str] | None = None,
+    *,
+    strip_hidden_html: bool = False,
+    hash_key: bytes | None = None,
+    reverse_map: dict[str, str] | None = None,
 ) -> SanitizationResult:
     """Sanitize output content.
 
@@ -905,6 +1001,13 @@ def sanitize_output(
             filtered against a small common-noun allowlist. Existing
             callers that did not pass this argument get exactly the
             previous behavior — defaults are unchanged.
+        strip_hidden_html: V0.10.29. Remove the HTML elements a person cannot see
+            (:func:`agent_airlock.hidden_html.strip_hidden_html`) before masking, so
+            instructions hidden in a page do not reach the model.
+        hash_key: V0.10.29. The request's key for the HASH strategy
+            (:func:`mask_sensitive_data`).
+        reverse_map: V0.10.29. Filled with each HASH tag and the value it stands for,
+            for the host only (:func:`mask_sensitive_data`).
 
     Returns:
         SanitizationResult with sanitized content and metadata.
@@ -919,6 +1022,10 @@ def sanitize_output(
             text = str(content)
     else:
         text = str(content)
+    if strip_hidden_html and "<" in text:
+        from .hidden_html import strip_hidden_html as _strip
+
+        text = _strip(text)
 
     original_length = len(text)
     detections: list[dict[str, Any]] = []
@@ -929,7 +1036,12 @@ def sanitize_output(
     # Mask sensitive data
     if types_to_mask:
         text, detections = mask_sensitive_data(
-            text, types_to_mask, mask_config, pii_locales=pii_locales
+            text,
+            types_to_mask,
+            mask_config,
+            pii_locales=pii_locales,
+            hash_key=hash_key,
+            reverse_map=reverse_map,
         )
 
         if detections:
@@ -1181,6 +1293,8 @@ def sanitize_structured(
     mask_secrets: bool = True,
     mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
     pii_locales: list[str] | None = None,
+    strip_hidden_html: bool = False,
+    hash_key: bytes | None = None,
 ) -> tuple[Any, int]:
     """Mask sensitive data in every string inside a dict, list, tuple or set.
 
@@ -1202,6 +1316,9 @@ def sanitize_structured(
         mask_secrets: As for :func:`sanitize_output`.
         mask_config: As for :func:`sanitize_output`.
         pii_locales: As for :func:`sanitize_output`.
+        strip_hidden_html: As for :func:`sanitize_output`, for each string (V0.10.29).
+        hash_key: As for :func:`sanitize_output`. One key covers the whole structure, so
+            a value repeated in two leaves gets one HASH tag.
 
     Returns:
         ``(sanitized, detection_count)``. ``value`` itself comes back when nothing was
@@ -1213,6 +1330,8 @@ def sanitize_structured(
         mask_secrets=mask_secrets,
         mask_config=mask_config,
         pii_locales=pii_locales,
+        strip_hidden_html=strip_hidden_html,
+        hash_key=hash_key,
     )
     if report.unmasked:
         logger.warning("structured_sensitive_data_unmasked", detections=report.unmasked)
@@ -1228,6 +1347,8 @@ def sanitize_structured_report(
     mask_secrets: bool = True,
     mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
     pii_locales: list[str] | None = None,
+    strip_hidden_html: bool = False,
+    hash_key: bytes | None = None,
 ) -> StructuredSanitization:
     """:func:`sanitize_structured`, also reporting what it found and could not mask.
 
@@ -1245,6 +1366,9 @@ def sanitize_structured_report(
         mask_secrets: As for :func:`sanitize_output`.
         mask_config: As for :func:`sanitize_output`.
         pii_locales: As for :func:`sanitize_output`.
+        strip_hidden_html: As for :func:`sanitize_output`, for each string (V0.10.29).
+        hash_key: As for :func:`sanitize_output`; one is made for the whole structure
+            when None, so a value repeated in two leaves gets one HASH tag.
 
     Returns:
         The masked structure, the number of values masked, and the values found in
@@ -1255,6 +1379,8 @@ def sanitize_structured_report(
         "mask_secrets": mask_secrets,
         "mask_config": mask_config,
         "pii_locales": pii_locales,
+        "strip_hidden_html": strip_hidden_html,
+        "hash_key": hash_key if hash_key is not None else secrets.token_bytes(32),
     }
     walker = _StructureMasker(options)
     masked, count = walker.walk(value)
@@ -1461,6 +1587,8 @@ def sanitize_with_workspace_config(
     mask_secrets: bool = True,
     max_chars: int | None = None,
     mask_config: dict[SensitiveDataType, MaskingStrategy] | None = None,
+    *,
+    hash_key: bytes | None = None,
 ) -> SanitizationResult:
     """Sanitize output with workspace-specific PII rules.
 
@@ -1471,6 +1599,8 @@ def sanitize_with_workspace_config(
         mask_secrets: If True, mask secrets.
         max_chars: Maximum output length.
         mask_config: Custom masking strategies.
+        hash_key: The request's key for the HASH strategy (V0.10.29); one is made for
+            this call when None.
 
     Returns:
         SanitizationResult with sanitized content.
@@ -1489,6 +1619,7 @@ def sanitize_with_workspace_config(
     original_length = len(text)
     detections: list[dict[str, Any]] = []
     result_text = text
+    hash_key = hash_key if hash_key is not None else secrets.token_bytes(32)
 
     # Get active types based on workspace config
     active_types = workspace_config.get_active_types()
@@ -1579,11 +1710,11 @@ def sanitize_with_workspace_config(
             if data_type == SensitiveDataType.PASSWORD:
                 full_match = detection["full_match"]
                 password_value = detection["value"]
-                masked_value = _mask_value(password_value, data_type, strategy)
+                masked_value = _mask_value(password_value, data_type, strategy, hash_key)
                 masked = full_match.replace(password_value, masked_value)
                 detection["masked_as"] = "[REDACTED]"
             else:
-                masked = _mask_value(detection["value"], data_type, strategy)
+                masked = _mask_value(detection["value"], data_type, strategy, hash_key)
                 detection["masked_as"] = masked
 
         spans.append((detection["start"], detection["end"], masked))

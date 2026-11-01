@@ -61,7 +61,7 @@ import shlex as _shlex_for_gitpilot
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path as _Path_for_gitpilot
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 
 from .cost_tracking import ModelTierBudget, TierBudget
 from .exceptions import AirlockError
@@ -4572,6 +4572,86 @@ def shell_command_defaults(
     }
 
 
+#: Tool names a memory store writes through (V0.10.29): what ``argument_secret_defaults``
+#: screens unless given others.
+MEMORY_WRITE_TOOLS: tuple[str, ...] = ("*memory*", "remember*", "save_*", "add_memories")
+
+
+@preset
+def argument_secret_defaults(
+    *,
+    tools: Iterable[str] = MEMORY_WRITE_TOOLS,
+    free_text_args: Iterable[str] = (),
+    mode: Literal["block", "mask"] = "block",
+) -> dict[str, Any]:
+    """Refuse secrets and personal data in the arguments of memory-write tools (v0.10.29+).
+
+    A tool call's arguments are model output. A memory tool stores what it is given where
+    every later run reads it back, so a key, a password or an environment dump in its
+    argument outlives the run that leaked it (BerriAI/litellm#46454, mem0ai/mem0#7283).
+
+    This preset turns on :class:`~agent_airlock.argument_secret_guard.ArgumentSecretGuard`
+    for tools named like memory writes (``*memory*``, ``remember*``, ``save_*``,
+    ``add_memories``), in ``block`` mode: a finding refuses the call with block reason
+    ``argument_secret``, naming the argument and the kind of data, never the value. Pass
+    ``tools=("*",)`` to screen every tool. The detectors are the sanitizer's, so what they
+    miss this misses: a plain passphrase with no label, a credential in another language
+    (the chenhz01/mem0-7283-conformance corpus, pinned in
+    ``tests/test_argument_secret_guard_0_10_29.py``).
+
+    OWASP mapping: **MCP01 Token Mismanagement & Secret Exposure**; CWE-200, CWE-312.
+
+    Args:
+        tools: Tool-name patterns to screen.
+        free_text_args: Arguments left unscreened.
+        mode: ``"block"`` (the default) refuses the call; ``"mask"`` masks a top-level
+            keyword string argument in place and refuses anything it cannot mask.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus ``guard``, ``policy``
+        (a :class:`SecurityPolicy` carrying only that guard), ``owasp`` and ``cwe``.
+
+    Raises:
+        TypeError: ``tools`` or ``free_text_args`` is a single string.
+        ValueError: ``mode`` is not ``"block"`` or ``"mask"``.
+
+    Usage::
+
+        from agent_airlock import Airlock
+        from agent_airlock.policy_presets import argument_secret_defaults
+
+        preset = argument_secret_defaults()
+
+        @Airlock(policy=preset["policy"])
+        def add_memories(fact: str) -> str:
+            return "stored"
+
+        add_memories(fact="export DB_PASSWORD=hunter2-prod")  # refused: argument_secret
+
+    Primary source:
+      https://github.com/mem0ai/mem0/issues/7283
+    """
+    from .argument_secret_guard import ArgumentSecretGuard
+
+    guard = ArgumentSecretGuard(
+        mode=mode,
+        tools=tuple(_names_of(tools, "tools")),
+        free_text_args=frozenset(_names_of(free_text_args, "free_text_args")),
+    )
+    return {
+        "preset_id": "argument_secret",
+        "severity": "high",
+        "default_action": guard.mode,
+        "guard": guard,
+        "policy": SecurityPolicy(argument_secret_guard=guard),
+        "owasp": "MCP01",
+        "cwe": ("CWE-200", "CWE-312"),
+        "cves": (),
+        "advisory_url": "https://github.com/mem0ai/mem0/issues/7283",
+    }
+
+
 def _names_of(names: Iterable[str], field_name: str) -> Iterable[str]:
     """``names``, refusing a lone string, which ``frozenset`` would split into letters."""
     if isinstance(names, (str, bytes)):
@@ -6300,6 +6380,9 @@ __all__ = [
     "TOOL_ARG_SINK_CVES",
     # Callable names in dispatch arguments (CVE-2026-119050, Agno PandasTools)
     "reflection_sink_defaults",
+    # V0.10.29 secrets and personal data in memory-write arguments (mem0ai/mem0#7283)
+    "argument_secret_defaults",
+    "MEMORY_WRITE_TOOLS",
     # V0.8.34 GHSA-mrvx-jmjw-vggc (SafeURL DNS-rebinding: resolve + re-validate at call time)
     "dns_rebinding_safe_url_defaults",
     # V0.8.30 CVE-2026-11624 (MCP HTTP-transport Origin/Host DNS-rebinding; CWE-346)

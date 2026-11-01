@@ -373,7 +373,7 @@ result = sanitize_output(
 | `FULL` | `[REDACTED]` |
 | `PARTIAL` | `123***789` |
 | `TYPE_ONLY` | `[SSN]` |
-| `HASH` | `[SHA256:01a54629...]` |
+| `HASH` | `[HMAC:` and 16 hex characters `]`, keyed per request (0.10.29) |
 
 ---
 

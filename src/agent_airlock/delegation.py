@@ -342,6 +342,7 @@ _CARRIED = (
     "action_contradiction_gate",
     "deserialization_guard",
     "tool_arg_sink_guard",
+    "argument_secret_guard",
     "trace_redaction",
     "data_flow_policy",
     "run_guard",
