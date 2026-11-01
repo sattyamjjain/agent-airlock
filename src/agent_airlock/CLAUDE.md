@@ -231,6 +231,15 @@ src/agent_airlock/
    the call's audit record, written at return, counts none of its items, and a refusal
    raised while it runs is audited as a block before it reaches the consumer
 
+**Decision record** (V0.10.29, off by default): with
+`AirlockConfig(decision_log=DecisionLog(path))` set, the wrapper writes each call's `decision`
+entry after `_pre_execution`, refused calls included, before the tool can run, and an
+`outcome` entry naming its `record_hash` after
+(`_decide` / `_settle` in `core.py`; the async path awaits both through `asyncio.to_thread`).
+An admitted call whose entry cannot be written is refused as `policy_indeterminate`. The
+entry's `layer` is `context._refused_at`, which every refusal return in `_pre_execution`
+sets: a new gate's return must set it too, or `tests/test_decision_record_0_10_29.py` fails.
+
 The order is defense-in-depth — kill switch → startup hooks → token audience → ghost
 arguments → policy (and the 2.5–2.8 gates) → filesystem → capability → network → budget →
 strict validation and sandbox at execute. Most guard layers trace to a named advisory; the

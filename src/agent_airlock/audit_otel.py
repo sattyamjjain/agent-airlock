@@ -21,7 +21,6 @@ This provides forensics-grade audit trails for security teams.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -37,17 +36,19 @@ logger = structlog.get_logger("agent-airlock.audit_otel")
 
 
 def _hash_args(args: dict[str, Any]) -> str:
-    """Create SHA256 hash of arguments for audit trail.
+    """The canonical digest of a call's arguments, for forensic correlation.
 
-    This allows forensic correlation without storing sensitive data.
+    The same digest an approval and a decision record bind to
+    (:func:`agent_airlock.approvals.args_digest`): an object JSON cannot encode is
+    marked as such. Until 0.10.29 it was ``json.dumps(default=str)`` cut to 16 hex
+    characters, under which an object read as whatever its ``str()`` said.
     """
-    import json
+    from .approvals import args_digest
 
     try:
-        serialized = json.dumps(args, sort_keys=True, default=str)
-        return hashlib.sha256(serialized.encode()).hexdigest()[:16]
-    except Exception:
-        return "hash_failed"
+        return args_digest(args)
+    except ValueError:
+        return "unreadable"
 
 
 @dataclass

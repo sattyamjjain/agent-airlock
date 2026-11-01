@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from typing import Any
 
@@ -32,8 +33,29 @@ def _cmd_revision(revision: str) -> int:
     return 0 if report.ok else 1
 
 
+def _open_log(args: argparse.Namespace, *, verify_on_load: bool) -> DecisionLog:
+    """The log at ``--log``, with its checkpoint key read from ``--checkpoint-key-env``.
+
+    The key is read from the environment so it stays out of argv and shell history.
+
+    Raises:
+        DecisionLogError: The variable is named but not set, or the chain does not verify.
+    """
+    key: bytes | None = None
+    if args.checkpoint_key_env:
+        value = os.environ.get(args.checkpoint_key_env)
+        if not value:
+            raise DecisionLogError(f"--checkpoint-key-env {args.checkpoint_key_env} is not set")
+        key = value.encode("utf-8")
+    return DecisionLog(args.log, verify_on_load=verify_on_load, checkpoint_key=key)
+
+
 def _cmd_record(args: argparse.Namespace) -> int:
-    log = DecisionLog(args.log)
+    try:
+        log = _open_log(args, verify_on_load=True)
+    except DecisionLogError as exc:
+        print(f"decision log unreadable: {exc}", file=sys.stderr)
+        return 2
     rec = log.append(
         stage=args.stage,
         tool_name=args.tool,
@@ -51,7 +73,7 @@ def _cmd_record(args: argparse.Namespace) -> int:
 
 def _cmd_verify(args: argparse.Namespace) -> int:
     try:
-        result = DecisionLog(args.log, verify_on_load=False).verify()
+        result = _open_log(args, verify_on_load=False).verify()
     except DecisionLogError as exc:
         print(f"decision log unreadable: {exc}", file=sys.stderr)
         return 2
@@ -63,7 +85,11 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
 
 def _cmd_export(args: argparse.Namespace) -> int:
-    log = DecisionLog(args.log, verify_on_load=False)
+    try:
+        log = _open_log(args, verify_on_load=False)
+    except DecisionLogError as exc:
+        print(f"decision log unreadable: {exc}", file=sys.stderr)
+        return 2
     bundle: dict[str, Any] = export_evidence_bundle(log)
     payload = json.dumps(bundle, indent=2, sort_keys=True)
     if args.output:
@@ -117,6 +143,15 @@ def main(argv: list[str] | None = None) -> int:
     p_exp.add_argument("--output", default=None, help="write JSON bundle here (default: stdout)")
     p_exp.add_argument("--quiet", action="store_true", help="suppress the coverage table")
     p_exp.set_defaults(func=_cmd_export)
+
+    for subparser in (p_rec, p_ver, p_exp):
+        subparser.add_argument(
+            "--checkpoint-key-env",
+            default=None,
+            metavar="VAR",
+            help="environment variable holding the key the log's checkpoints are signed "
+            "with (needed once a signed log is pruned)",
+        )
 
     args = parser.parse_args(argv)
     if args.revision is not None:

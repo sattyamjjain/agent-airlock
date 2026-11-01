@@ -31,6 +31,7 @@ class AirlockConfig:
     audit_otel_enabled: bool = False
     audit_otel_endpoint: str | None = None
     audit_include_args_hash: bool = True
+    decision_log: DecisionLog | None = None  # V0.10.29
 
     # E2B Sandbox
     e2b_api_key: str | None = None
@@ -89,6 +90,7 @@ or for picking individual types.
 |-----------|------|---------|-------------|
 | `enable_audit_log` | `bool` | `True` | Append JSON Lines audit records to `audit_log_path` |
 | `audit_log_path` | `Path` | `airlock_audit.json` | Audit log file, relative to the working directory; `AIRLOCK_AUDIT_LOG_PATH` replaces the default when no path is given in code or TOML |
+| `decision_log` | `DecisionLog \| None` | `None` | Hash-chained log each call's decision is written to before the tool runs, and its outcome after. A decision that cannot be written refuses the call. Set in code only. See [Decision records](../guide/decision-record.md) |
 
 #### Sandbox
 

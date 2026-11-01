@@ -51,6 +51,7 @@ __all__ = [
     "StandingGrant",
     "args_digest",
     "consume_grant",
+    "unserializable_arguments",
 ]
 
 #: How deep :func:`args_digest` reads, the depth the argument gates read to.
@@ -79,6 +80,33 @@ def args_digest(arguments: Mapping[str, Any]) -> str:
             they cannot be read to bind an approval to.
     """
     return hashlib.sha256(_canonical_json(dict(arguments)).encode("utf-8")).hexdigest()
+
+
+def unserializable_arguments(arguments: Mapping[str, Any]) -> list[str]:
+    """The arguments :func:`args_digest` could only mark by type, by name.
+
+    Their content is not in the digest (a host object JSON cannot encode), so a record that
+    carries the digest names them rather than pass them off as data (V0.10.29). An argument
+    too deep to read is named too.
+    """
+    names = []
+    for name, value in arguments.items():
+        try:
+            if _has_marker(_canonical(value, 0, frozenset())):
+                names.append(str(name))
+        except ValueError:
+            names.append(str(name))
+    return sorted(names)
+
+
+def _has_marker(node: Any) -> bool:
+    """Whether an encoded value holds an ``__unserializable__`` marker. A string that only
+    mentions it does not, and a dict spelled like one is encoded as pairs (``_is_tag``)."""
+    if isinstance(node, dict):
+        return "__unserializable__" in node or any(_has_marker(v) for v in node.values())
+    if isinstance(node, list):
+        return any(_has_marker(item) for item in node)
+    return False
 
 
 def _canonical_json(value: Any) -> str:

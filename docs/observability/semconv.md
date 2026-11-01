@@ -99,7 +99,7 @@ Set when the relevant feature produced data for this call.
 | --- | --- | --- |
 | `airlock.sanitized_count` | int | Number of PII / secret detections the sanitizer masked on this response. |
 | `airlock.truncated` | bool | `true` if the output was truncated by the configured token or character limit. |
-| `airlock.args_hash` | string | SHA-256 of the canonicalised argument tuple. Useful for replay detection in post-incident analysis. Never contains argument *values*. |
+| `airlock.args_hash` | string | `agent_airlock.approvals.args_digest` of the arguments: SHA-256 of their canonical JSON, 64 hex characters, the digest approvals and [decision records](../guide/decision-record.md) bind to (until 0.10.29, 16 characters of a `json.dumps(default=str)`). `unreadable` when they nest deeper than 32 levels or contain themselves. Useful for replay detection in post-incident analysis. Never contains argument *values*. |
 
 ## Events
 
