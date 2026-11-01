@@ -823,6 +823,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#filesystem-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filesystem Paths
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#per-tool-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -830,6 +841,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#endpoint-policies-and-private-addresses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoint Policies and Private Addresses
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Endpoint Policies and Private Addresses">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-call-path-checks-cannot-see" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the call-path checks cannot see
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -3282,6 +3321,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#filesystem-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filesystem Paths
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#per-tool-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3289,6 +3339,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#endpoint-policies-and-private-addresses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoint Policies and Private Addresses
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Endpoint Policies and Private Addresses">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-call-path-checks-cannot-see" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the call-path checks cannot see
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -3543,113 +3621,188 @@ setting: they belong to <code>SecurityPolicy(rate_limits=...)</code>.</p>
 <a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="n">allowed_roots</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"/app/data"</span><span class="p">,</span><span class="w"> </span><span class="s2">"/tmp"</span><span class="p">]</span>
 <a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="n">deny_patterns</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"*.env"</span><span class="p">,</span><span class="w"> </span><span class="s2">"**/.git/**"</span><span class="p">]</span>
 <a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="n">allow_symlinks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>
-<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="c1"># V0.3.0 Network: only api.company.com, on port 443. allow_egress = false would refuse</span>
-<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="c1"># every connection and lookup, and the allowlists would then do nothing</span>
-<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="k">[airlock.network]</span>
-<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="n">allow_egress</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="n">allowed_hosts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"api.company.com"</span><span class="p">]</span>
-<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="n">allowed_ports</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mi">443</span><span class="p">]</span>
-<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>
-<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="c1"># V0.3.0 Honeypot</span>
-<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="k">[airlock.honeypot]</span>
-<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="n">strategy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"honeypot"</span>
-<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="n">fake_delay_ms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span>
-<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>
-<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a><span class="c1"># V0.10.27 startup hooks you know, by file name</span>
-<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="k">[airlock.startup_hook_allowlist]</span>
-<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a><span class="s2">"distutils-precedence.pth"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&lt;the file's sha256, 64 hex characters&gt;"</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="n">bind_resolved_paths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="w">  </span><span class="c1"># true: the tool gets the absolute path that was checked</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="c1"># V0.3.0 Network: only api.company.com, on port 443. allow_egress = false would refuse</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="c1"># every connection and lookup, and the allowlists would then do nothing</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="k">[airlock.network]</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="n">allow_egress</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="n">allowed_hosts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"api.company.com"</span><span class="p">]</span>
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="n">allowed_ports</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mi">443</span><span class="p">]</span>
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="n">block_private_ips</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">      </span><span class="c1"># refuse loopback, private, link-local and metadata at connect</span>
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="c1"># Per-tool URL rules (step 5), keyed by tool name</span>
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="k">[airlock.endpoints.fetch]</span>
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="n">allowed_endpoints</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"api.company.com"</span><span class="p">]</span>
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a><span class="n">resolve_hostnames</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">          </span><span class="c1"># default: resolve an admitted name, refuse internal answers</span>
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="n">deny_on_resolution_failure</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="c1"># default: refuse a name that does not resolve</span>
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a><span class="c1"># V0.3.0 Honeypot</span>
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a><span class="k">[airlock.honeypot]</span>
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a><span class="n">strategy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"honeypot"</span>
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a><span class="n">fake_delay_ms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span>
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a>
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a><span class="c1"># V0.10.27 startup hooks you know, by file name</span>
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a><span class="k">[airlock.startup_hook_allowlist]</span>
+<a id="__codelineno-4-42" name="__codelineno-4-42" href="#__codelineno-4-42"></a><span class="s2">"distutils-precedence.pth"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&lt;the file's sha256, 64 hex characters&gt;"</span>
 </code></pre></div>
 <p>The token-audience and startup-hook keys are described in
 <a href="../../guide/token-audience-and-startup-hooks/">Token audience and startup hooks</a>.</p>
+<h2 id="filesystem-paths">Filesystem Paths<a class="headerlink" href="#filesystem-paths" title="Permanent link">&para;</a></h2>
+<p><code>FilesystemPolicy</code> decides which paths a call may name; it does not open them. Its check
+runs before the tool, against the path as it resolves then, so it is not atomic: a
+directory swapped for a symlink after the check is followed by the tool's own <code>open()</code>.
+Open through <code>open_contained_file</code> (or <code>open_contained</code>, for a raw descriptor) to have the
+open walk the checked path from the allowed root without following a symlink, and set
+<code>bind_resolved_paths=True</code> to hand the tool the absolute path that was checked. What each
+covers, and the platforms the atomic open needs, are in
+<a href="../../guide/concepts/#filesystem-paths-and-the-open-that-follows">Core Concepts</a>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">FilesystemPolicy</span><span class="p">,</span> <span class="n">open_contained_file</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">FilesystemPolicy</span><span class="p">(</span><span class="n">allowed_roots</span><span class="o">=</span><span class="p">[</span><span class="n">Path</span><span class="p">(</span><span class="s2">"/srv/app/data"</span><span class="p">)],</span> <span class="n">bind_resolved_paths</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">filesystem_policy</span><span class="o">=</span><span class="n">policy</span><span class="p">))</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">write_report</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="k">with</span> <span class="n">open_contained_file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>        <span class="n">handle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="k">return</span> <span class="n">path</span>
+</code></pre></div>
 <h2 id="per-tool-configuration">Per-Tool Configuration<a class="headerlink" href="#per-tool-configuration" title="Permanent link">&para;</a></h2>
 <p>Override configuration for specific tools:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">UnknownArgsMode</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># Global config (permissive for development)</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">default_config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">unknown_args</span><span class="o">=</span><span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">STRIP_SILENT</span><span class="p">)</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="c1"># Strict config for sensitive operations</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">strict_config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">unknown_args</span><span class="o">=</span><span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">BLOCK</span><span class="p">,</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="n">mask_pii</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="p">)</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">default_config</span><span class="p">)</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">search_users</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
-<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="k">return</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>
-<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>
-<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">strict_config</span><span class="p">)</span>
-<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_user</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>    <span class="k">return</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">UnknownArgsMode</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># Global config (permissive for development)</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">default_config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">unknown_args</span><span class="o">=</span><span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">STRIP_SILENT</span><span class="p">)</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># Strict config for sensitive operations</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">strict_config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">unknown_args</span><span class="o">=</span><span class="n">UnknownArgsMode</span><span class="o">.</span><span class="n">BLOCK</span><span class="p">,</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">mask_pii</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="p">)</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">default_config</span><span class="p">)</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">search_users</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="k">return</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">strict_config</span><span class="p">)</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="k">def</span><span class="w"> </span><span class="nf">delete_user</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>    <span class="k">return</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>
 </code></pre></div>
+<h2 id="endpoint-policies-and-private-addresses">Endpoint Policies and Private Addresses<a class="headerlink" href="#endpoint-policies-and-private-addresses" title="Permanent link">&para;</a></h2>
+<p><code>AirlockConfig(endpoint_policies={tool_name: EndpointPolicy(...)})</code> checks every URL a tool's
+arguments carry before the tool runs (step 5). Since 0.10.29 it reads the address a host
+stands for, not the literal string: decimal (<code>http://2130706433/</code>), hex
+(<code>http://0x7f000001/</code>), octal (<code>http://0251.0376.0251.0376/</code>), short (<code>http://127.1/</code>) and
+IPv4-mapped IPv6 forms are refused like the addresses they decode to. A hostname that passes
+the blocked patterns and <code>allowed_endpoints</code> is then resolved, and refused when any address it
+resolves to is private, loopback, link-local or a cloud metadata address
+(<code>http://169.254.169.254.nip.io/</code> included), or when it does not resolve. Only names the
+policy would admit are looked up, so a name it refuses is never sent to DNS.</p>
+<p>That lookup adds the resolver's latency to each call with a hostname URL. An allowlisted
+name that resolves to an internal service needs <code>allow_private_ips=True</code>, and a test that
+allowlists a made-up name needs <code>resolver=</code> (a function from a hostname to its addresses) or
+<code>resolve_hostnames=False</code>.</p>
+<p><code>NetworkPolicy(block_private_ips=True)</code> refuses the same internal addresses inside the network
+airgap, at every connect and datagram the tool makes during the call. <code>allowed_hosts</code> does not
+exempt an address from it; <code>allowed_private_ips</code> does (a local egress proxy, a sidecar).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">EndpointPolicy</span><span class="p">,</span> <span class="n">NetworkPolicy</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">endpoint_policies</span><span class="o">=</span><span class="p">{</span><span class="s2">"fetch"</span><span class="p">:</span> <span class="n">EndpointPolicy</span><span class="p">(</span><span class="n">allowed_endpoints</span><span class="o">=</span><span class="p">[</span><span class="s2">"api.example.com"</span><span class="p">])},</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">network_policy</span><span class="o">=</span><span class="n">NetworkPolicy</span><span class="p">(</span><span class="n">block_private_ips</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">allowed_private_ips</span><span class="o">=</span><span class="p">[</span><span class="s2">"127.0.0.1"</span><span class="p">]),</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">)</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">return</span> <span class="n">url</span>
+</code></pre></div>
+<h3 id="what-the-call-path-checks-cannot-see">What the call-path checks cannot see<a class="headerlink" href="#what-the-call-path-checks-cannot-see" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Step 5 reads the URLs in the tool's arguments, once, before the tool runs. A redirect the
+  tool follows, a page that navigates or loads another URL, and a name the tool resolves
+  again later (DNS rebinding) are not arguments, so step 5 never sees them.</li>
+<li>The airgap sees them only with <code>block_private_ips</code> on, and only for the connects and
+  datagrams the call's own context makes: the tool's code, the asyncio tasks it creates and
+  <code>asyncio.to_thread</code>. A thread the tool starts itself, a subprocess (a headless browser, a
+  <code>curl</code>), a socket made from <code>_socket</code> directly, an event loop that does its own socket I/O
+  (uvloop) and other processes are outside it (see
+  <a href="../../guide/concepts/#the-network-airgap">The Network Airgap</a>).</li>
+<li>A name passed straight to <code>socket.connect</code> is resolved by the airgap and then again by the
+  connect itself, so a record that changes between the two lookups is not seen. Clients that
+  look up first and connect to the address (<code>socket.create_connection</code>, <code>urllib</code>, <code>requests</code>,
+  <code>httpx</code>) are not exposed to that.</li>
+</ul>
 <h2 id="capability-gating-v040">Capability Gating (V0.4.0)<a class="headerlink" href="#capability-gating-v040" title="Permanent link">&para;</a></h2>
 <p>Configure fine-grained permissions per tool. <code>@requires</code> declares what a tool needs;
 <code>@Airlock</code> checks that against a capability policy, taken from the <code>SecurityPolicy</code>
 passed as <code>policy=</code> or, when that has none, from <code>AirlockConfig(capability_policy=...)</code>.
 With no capability policy set, <code>@requires</code> is not enforced.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">Capability</span><span class="p">,</span> <span class="n">requires</span><span class="p">,</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">STRICT_CAPABILITY_POLICY</span><span class="p">,</span> <span class="n">READ_ONLY_CAPABILITY_POLICY</span><span class="p">,</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">)</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># Using predefined policies</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">capability_policy</span><span class="o">=</span><span class="n">READ_ONLY_CAPABILITY_POLICY</span><span class="p">)</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="c1"># Using decorator</span>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="nd">@requires</span><span class="p">(</span><span class="n">Capability</span><span class="o">.</span><span class="n">FILESYSTEM_READ</span><span class="p">)</span>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>  <span class="c1"># allowed: FILESYSTEM_READ is granted</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="nd">@requires</span><span class="p">(</span><span class="n">Capability</span><span class="o">.</span><span class="n">FILESYSTEM_READ</span> <span class="o">|</span> <span class="n">Capability</span><span class="o">.</span><span class="n">NETWORK_HTTP</span><span class="p">)</span>
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch_and_save</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>  <span class="c1"># blocked: NETWORK_HTTP is not granted</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">Capability</span><span class="p">,</span> <span class="n">requires</span><span class="p">,</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">STRICT_CAPABILITY_POLICY</span><span class="p">,</span> <span class="n">READ_ONLY_CAPABILITY_POLICY</span><span class="p">,</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="p">)</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="c1"># Using predefined policies</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span><span class="n">capability_policy</span><span class="o">=</span><span class="n">READ_ONLY_CAPABILITY_POLICY</span><span class="p">)</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="c1"># Using decorator</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="nd">@requires</span><span class="p">(</span><span class="n">Capability</span><span class="o">.</span><span class="n">FILESYSTEM_READ</span><span class="p">)</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>  <span class="c1"># allowed: FILESYSTEM_READ is granted</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="nd">@requires</span><span class="p">(</span><span class="n">Capability</span><span class="o">.</span><span class="n">FILESYSTEM_READ</span> <span class="o">|</span> <span class="n">Capability</span><span class="o">.</span><span class="n">NETWORK_HTTP</span><span class="p">)</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch_and_save</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>  <span class="c1"># blocked: NETWORK_HTTP is not granted</span>
 </code></pre></div>
 <h2 id="safe-types-v040">Safe Types (V0.4.0)<a class="headerlink" href="#safe-types-v040" title="Permanent link">&para;</a></h2>
 <p>Use built-in safe types for automatic validation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SafePath</span><span class="p">,</span> <span class="n">SafePathStrict</span><span class="p">,</span> <span class="n">SafeURL</span><span class="p">,</span> <span class="n">SafeURLAllowHttp</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># Path types</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">SafePath</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="sd">"""Validates against traversal attacks."""</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="o">...</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">write_config</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">SafePathStrict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">    </span><span class="sd">"""Same checks, and also rejects absolute paths."""</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="o">...</span>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>
-<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="c1"># URL types</span>
-<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch_api</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="n">SafeURL</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="w">    </span><span class="sd">"""Validates HTTPS only."""</span>
-<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="o">...</span>
-<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>
-<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch_legacy</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="n">SafeURLAllowHttp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="w">    </span><span class="sd">"""Allows both HTTP and HTTPS."""</span>
-<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>    <span class="o">...</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SafePath</span><span class="p">,</span> <span class="n">SafePathStrict</span><span class="p">,</span> <span class="n">SafeURL</span><span class="p">,</span> <span class="n">SafeURLAllowHttp</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1"># Path types</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">SafePath</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="sd">"""Validates against traversal attacks."""</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="o">...</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">write_config</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">SafePathStrict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">    </span><span class="sd">"""Same checks, and also rejects absolute paths."""</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    <span class="o">...</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="c1"># URL types</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch_api</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="n">SafeURL</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">    </span><span class="sd">"""Validates HTTPS only."""</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>    <span class="o">...</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch_legacy</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="n">SafeURLAllowHttp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="w">    </span><span class="sd">"""Allows both HTTP and HTTPS."""</span>
+<a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>    <span class="o">...</span>
 </code></pre></div>
 <h2 id="circuit-breaker-v040">Circuit Breaker (V0.4.0)<a class="headerlink" href="#circuit-breaker-v040" title="Permanent link">&para;</a></h2>
 <p>Configure fault tolerance for external dependencies. <code>Airlock</code> takes no circuit-breaker
 argument: <code>CircuitBreaker(name, config)</code> is its own decorator. Stack it under <code>@Airlock</code>
 so it sees the tool's exceptions; Airlock turns an exception into a blocked response, so a
 breaker stacked above it never counts a failure.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">Airlock</span><span class="p">,</span> <span class="n">CircuitBreaker</span><span class="p">,</span> <span class="n">CircuitBreakerConfig</span><span class="p">,</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">AGGRESSIVE_BREAKER</span><span class="p">,</span> <span class="n">CONSERVATIVE_BREAKER</span><span class="p">,</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="p">)</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="c1"># Predefined configs</span>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="n">breaker</span> <span class="o">=</span> <span class="n">CircuitBreaker</span><span class="p">(</span><span class="s2">"external-api"</span><span class="p">,</span> <span class="n">AGGRESSIVE_BREAKER</span><span class="p">)</span>  <span class="c1"># Opens after 3 failures</span>
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="nd">@Airlock</span><span class="p">()</span>
-<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="nd">@breaker</span>
-<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">risky_external_call</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span> <span class="o">...</span>
-<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>
-<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="c1"># Custom config</span>
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="n">breaker</span> <span class="o">=</span> <span class="n">CircuitBreaker</span><span class="p">(</span><span class="s2">"payments-api"</span><span class="p">,</span> <span class="n">CircuitBreakerConfig</span><span class="p">(</span>
-<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>    <span class="n">failure_threshold</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>      <span class="c1"># Open after 5 consecutive failures</span>
-<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>    <span class="n">timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span>             <span class="c1"># Allow a trial call after 30s</span>
-<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>    <span class="n">success_threshold</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>      <span class="c1"># Close again after 2 successes</span>
-<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="p">))</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">Airlock</span><span class="p">,</span> <span class="n">CircuitBreaker</span><span class="p">,</span> <span class="n">CircuitBreakerConfig</span><span class="p">,</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">AGGRESSIVE_BREAKER</span><span class="p">,</span> <span class="n">CONSERVATIVE_BREAKER</span><span class="p">,</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="p">)</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="c1"># Predefined configs</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="n">breaker</span> <span class="o">=</span> <span class="n">CircuitBreaker</span><span class="p">(</span><span class="s2">"external-api"</span><span class="p">,</span> <span class="n">AGGRESSIVE_BREAKER</span><span class="p">)</span>  <span class="c1"># Opens after 3 failures</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="nd">@Airlock</span><span class="p">()</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="nd">@breaker</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">risky_external_call</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span> <span class="o">...</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="c1"># Custom config</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="n">breaker</span> <span class="o">=</span> <span class="n">CircuitBreaker</span><span class="p">(</span><span class="s2">"payments-api"</span><span class="p">,</span> <span class="n">CircuitBreakerConfig</span><span class="p">(</span>
+<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>    <span class="n">failure_threshold</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>      <span class="c1"># Open after 5 consecutive failures</span>
+<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>    <span class="n">timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span>             <span class="c1"># Allow a trial call after 30s</span>
+<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>    <span class="n">success_threshold</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>      <span class="c1"># Close again after 2 successes</span>
+<a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a><span class="p">))</span>
 </code></pre></div>
 <h2 id="cost-tracking-v040">Cost Tracking (V0.4.0)<a class="headerlink" href="#cost-tracking-v040" title="Permanent link">&para;</a></h2>
 <p>Monitor and limit API spending. <code>Airlock</code> takes no cost-tracker argument: a <code>CostTracker</code>
@@ -3659,18 +3812,18 @@ already reached, or when you pass a cost estimate that would cross it
 (<code>track("tool", estimate=TokenUsage(...))</code>, or <code>check_admission(estimate)</code>). Otherwise the
 call that crosses runs and is recorded, <code>BudgetExceededError</code> is raised, and every later
 call is refused until <code>reset()</code>: the most a session overshoots is one call.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">CostTracker</span><span class="p">,</span> <span class="n">BudgetConfig</span><span class="p">,</span> <span class="n">BudgetExceededError</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">tracker</span> <span class="o">=</span> <span class="n">CostTracker</span><span class="p">(</span><span class="n">budget</span><span class="o">=</span><span class="n">BudgetConfig</span><span class="p">(</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">max_cost_per_session</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">"100"</span><span class="p">),</span>  <span class="c1"># Fail if exceeded</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">warn_at_percentage</span><span class="o">=</span><span class="mf">80.0</span><span class="p">,</span>              <span class="c1"># Log a budget_warning from 80%</span>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">))</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">tracker</span><span class="o">.</span><span class="n">add_callback</span><span class="p">(</span><span class="n">my_alert</span><span class="p">)</span>            <span class="c1"># Called with every CostRecord</span>
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="k">with</span> <span class="n">tracker</span><span class="o">.</span><span class="n">track</span><span class="p">(</span><span class="s2">"expensive_tool"</span><span class="p">)</span> <span class="k">as</span> <span class="n">call</span><span class="p">:</span>
-<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">call_expensive_api</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>    <span class="n">call</span><span class="o">.</span><span class="n">set_tokens</span><span class="p">(</span><span class="n">input_tokens</span><span class="o">=</span><span class="mi">1200</span><span class="p">,</span> <span class="n">output_tokens</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">CostTracker</span><span class="p">,</span> <span class="n">BudgetConfig</span><span class="p">,</span> <span class="n">BudgetExceededError</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="n">tracker</span> <span class="o">=</span> <span class="n">CostTracker</span><span class="p">(</span><span class="n">budget</span><span class="o">=</span><span class="n">BudgetConfig</span><span class="p">(</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">max_cost_per_session</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">"100"</span><span class="p">),</span>  <span class="c1"># Fail if exceeded</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">warn_at_percentage</span><span class="o">=</span><span class="mf">80.0</span><span class="p">,</span>              <span class="c1"># Log a budget_warning from 80%</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="p">))</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="n">tracker</span><span class="o">.</span><span class="n">add_callback</span><span class="p">(</span><span class="n">my_alert</span><span class="p">)</span>            <span class="c1"># Called with every CostRecord</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="k">with</span> <span class="n">tracker</span><span class="o">.</span><span class="n">track</span><span class="p">(</span><span class="s2">"expensive_tool"</span><span class="p">)</span> <span class="k">as</span> <span class="n">call</span><span class="p">:</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">call_expensive_api</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="n">call</span><span class="o">.</span><span class="n">set_tokens</span><span class="p">(</span><span class="n">input_tokens</span><span class="o">=</span><span class="mi">1200</span><span class="p">,</span> <span class="n">output_tokens</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
 </code></pre></div>
 <p>The budget <code>@Airlock</code> itself checks before a call runs is the per-model-tier one,
 <code>SecurityPolicy(model_tier_budget=...)</code>, with each call tagged through <code>AirlockContext</code>
@@ -3679,25 +3832,25 @@ metadata rather than its arguments. See the <a href="../../api/policy/">Policy A
 <p>Configure automatic retry with backoff. <code>Airlock</code> takes no retry argument: <code>RetryPolicy</code>
 is its own decorator. Stack it under <code>@Airlock</code>, so it retries the tool body and never a
 call Airlock has already rejected.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">Airlock</span><span class="p">,</span> <span class="n">RetryPolicy</span><span class="p">,</span> <span class="n">RetryConfig</span><span class="p">,</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">FAST_RETRY</span><span class="p">,</span> <span class="n">STANDARD_RETRY</span><span class="p">,</span> <span class="n">PATIENT_RETRY</span><span class="p">,</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="p">)</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="c1"># Predefined configs</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="nd">@Airlock</span><span class="p">()</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="nd">@RetryPolicy</span><span class="p">(</span><span class="n">STANDARD_RETRY</span><span class="p">)</span>  <span class="c1"># 3 retries, 1s base delay</span>
-<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">flaky_api_call</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span> <span class="o">...</span>
-<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>
-<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="c1"># Custom policy</span>
-<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">RetryPolicy</span><span class="p">(</span><span class="n">RetryConfig</span><span class="p">(</span>
-<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>    <span class="n">max_retries</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>            <span class="c1"># Retries after the first attempt</span>
-<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>    <span class="n">base_delay</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
-<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>    <span class="n">max_delay</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span>
-<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>    <span class="n">exponential_base</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
-<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>    <span class="n">jitter</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a>    <span class="n">retryable_exceptions</span><span class="o">=</span><span class="p">(</span><span class="ne">ConnectionError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">),</span>
-<a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a><span class="p">))</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="n">Airlock</span><span class="p">,</span> <span class="n">RetryPolicy</span><span class="p">,</span> <span class="n">RetryConfig</span><span class="p">,</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">FAST_RETRY</span><span class="p">,</span> <span class="n">STANDARD_RETRY</span><span class="p">,</span> <span class="n">PATIENT_RETRY</span><span class="p">,</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="p">)</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="c1"># Predefined configs</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="nd">@Airlock</span><span class="p">()</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="nd">@RetryPolicy</span><span class="p">(</span><span class="n">STANDARD_RETRY</span><span class="p">)</span>  <span class="c1"># 3 retries, 1s base delay</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">flaky_api_call</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span> <span class="o">...</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="c1"># Custom policy</span>
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">RetryPolicy</span><span class="p">(</span><span class="n">RetryConfig</span><span class="p">(</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>    <span class="n">max_retries</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>            <span class="c1"># Retries after the first attempt</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>    <span class="n">base_delay</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+<a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a>    <span class="n">max_delay</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span>
+<a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a>    <span class="n">exponential_base</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+<a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a>    <span class="n">jitter</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a>    <span class="n">retryable_exceptions</span><span class="o">=</span><span class="p">(</span><span class="ne">ConnectionError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">),</span>
+<a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a><span class="p">))</span>
 </code></pre></div>
 <p>When the retries run out, <code>RetryExhaustedError</code> is raised.</p>
 <h2 id="masking-strategies">Masking Strategies<a class="headerlink" href="#masking-strategies" title="Permanent link">&para;</a></h2>
@@ -3705,12 +3858,12 @@ call Airlock has already rejected.</p>
 password, private key and connection string, <code>TYPE_ONLY</code> for IFSC, <code>PARTIAL</code> for the rest.
 <code>AirlockConfig</code> has no strategy setting. To choose one, run the standalone sanitizer with
 a <code>mask_config</code> mapping; a type left out of the mapping is masked <code>FULL</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskingStrategy</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">sanitize_output</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_output</span><span class="p">(</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="s2">"john@example.com"</span><span class="p">,</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">mask_config</span><span class="o">=</span><span class="p">{</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">EMAIL</span><span class="p">:</span> <span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">PARTIAL</span><span class="p">},</span>  <span class="c1"># Show partial data</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskingStrategy</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">sanitize_output</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_output</span><span class="p">(</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="s2">"john@example.com"</span><span class="p">,</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">mask_config</span><span class="o">=</span><span class="p">{</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">EMAIL</span><span class="p">:</span> <span class="n">MaskingStrategy</span><span class="o">.</span><span class="n">PARTIAL</span><span class="p">},</span>  <span class="c1"># Show partial data</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="p">)</span>
 </code></pre></div>
 <p>Available strategies:</p>
 <table>
@@ -3748,13 +3901,13 @@ a <code>mask_config</code> mapping; a type left out of the mapping is masked <co
 <p><code>AirlockConfig</code> selects types by group only: <code>mask_pii</code>, <code>mask_secrets</code> and <code>pii_locales</code>.
 To mask specific types, call the standalone <code>mask_sensitive_data</code>, or use
 <code>WorkspacePIIConfig(enabled_types=...)</code> (see <a href="#workspace-configuration">Workspace Configuration</a>):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">mask_sensitive_data</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">masked</span><span class="p">,</span> <span class="n">detections</span> <span class="o">=</span> <span class="n">mask_sensitive_data</span><span class="p">(</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="s2">"john@example.com, SSN 123-45-6789"</span><span class="p">,</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">types</span><span class="o">=</span><span class="p">[</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">SSN</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">CREDIT_CARD</span><span class="p">],</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="p">)</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1"># masked == "john@example.com, SSN [REDACTED]"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">mask_sensitive_data</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="n">masked</span><span class="p">,</span> <span class="n">detections</span> <span class="o">=</span> <span class="n">mask_sensitive_data</span><span class="p">(</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="s2">"john@example.com, SSN 123-45-6789"</span><span class="p">,</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="n">types</span><span class="o">=</span><span class="p">[</span><span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">SSN</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="o">.</span><span class="n">CREDIT_CARD</span><span class="p">],</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="p">)</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># masked == "john@example.com, SSN [REDACTED]"</span>
 </code></pre></div>
 <p>Available types:</p>
 <p><strong>Standard</strong> (<code>mask_pii=True</code>):
@@ -3779,54 +3932,54 @@ To mask specific types, call the standalone <code>mask_sensitive_data</code>, or
 - <code>INDIA_MOBILE</code> - Mobile numbers with a <code>+91</code>, <code>91</code> or <code>0</code> prefix</p>
 <h2 id="opentelemetry-observability-v040">OpenTelemetry Observability (V0.4.0)<a class="headerlink" href="#opentelemetry-observability-v040" title="Permanent link">&para;</a></h2>
 <p>Configure enterprise-grade monitoring:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">configure_observability</span><span class="p">,</span> <span class="n">OpenTelemetryProvider</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">configure_observability</span><span class="p">(</span><span class="n">OpenTelemetryProvider</span><span class="p">(</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="n">service_name</span><span class="o">=</span><span class="s2">"my-agent-service"</span><span class="p">,</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">endpoint</span><span class="o">=</span><span class="s2">"http://otel-collector:4317"</span><span class="p">,</span>  <span class="c1"># Optional</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="p">))</span>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>
-<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="c1"># Use observe() context manager</span>
-<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">observe</span>
-<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>
-<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="k">with</span> <span class="n">observe</span><span class="p">(</span><span class="s2">"my_operation"</span><span class="p">,</span> <span class="n">tool_name</span><span class="o">=</span><span class="s2">"my_tool"</span><span class="p">)</span> <span class="k">as</span> <span class="n">span</span><span class="p">:</span>
-<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    <span class="n">span</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">"key"</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">)</span>
-<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">do_work</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">configure_observability</span><span class="p">,</span> <span class="n">OpenTelemetryProvider</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="n">configure_observability</span><span class="p">(</span><span class="n">OpenTelemetryProvider</span><span class="p">(</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="n">service_name</span><span class="o">=</span><span class="s2">"my-agent-service"</span><span class="p">,</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="n">endpoint</span><span class="o">=</span><span class="s2">"http://otel-collector:4317"</span><span class="p">,</span>  <span class="c1"># Optional</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="p">))</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="c1"># Use observe() context manager</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">observe</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="k">with</span> <span class="n">observe</span><span class="p">(</span><span class="s2">"my_operation"</span><span class="p">,</span> <span class="n">tool_name</span><span class="o">=</span><span class="s2">"my_tool"</span><span class="p">)</span> <span class="k">as</span> <span class="n">span</span><span class="p">:</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>    <span class="n">span</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">"key"</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">)</span>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">do_work</span><span class="p">()</span>
 </code></pre></div>
 <h2 id="workspace-configuration">Workspace Configuration<a class="headerlink" href="#workspace-configuration" title="Permanent link">&para;</a></h2>
 <p>For multi-tenant applications:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkspacePIIConfig</span><span class="p">,</span> <span class="n">sanitize_with_workspace_config</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">"enterprise-acme"</span><span class="p">,</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="n">allow_email_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">"acme.com"</span><span class="p">],</span>  <span class="c1"># Don't mask internal emails</span>
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>    <span class="n">mask_email_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">"competitor.com"</span><span class="p">],</span>  <span class="c1"># Mask only these; other emails stay</span>
-<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="n">custom_patterns</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>        <span class="s2">"employee_id"</span><span class="p">:</span> <span class="sa">r</span><span class="s2">"EMP-\d</span><span class="si">{6}</span><span class="s2">"</span><span class="p">,</span>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="p">},</span>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="p">)</span>
-<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>
-<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_with_workspace_config</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>  <span class="c1"># masked text: result.content</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkspacePIIConfig</span><span class="p">,</span> <span class="n">sanitize_with_workspace_config</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">WorkspacePIIConfig</span><span class="p">(</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>    <span class="n">workspace_id</span><span class="o">=</span><span class="s2">"enterprise-acme"</span><span class="p">,</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>    <span class="n">allow_email_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">"acme.com"</span><span class="p">],</span>  <span class="c1"># Don't mask internal emails</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>    <span class="n">mask_email_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">"competitor.com"</span><span class="p">],</span>  <span class="c1"># Mask only these; other emails stay</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>    <span class="n">custom_patterns</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>        <span class="s2">"employee_id"</span><span class="p">:</span> <span class="sa">r</span><span class="s2">"EMP-\d</span><span class="si">{6}</span><span class="s2">"</span><span class="p">,</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>    <span class="p">},</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="p">)</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_with_workspace_config</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>  <span class="c1"># masked text: result.content</span>
 </code></pre></div>
 <h2 id="error-hooks">Error Hooks<a class="headerlink" href="#error-hooks" title="Permanent link">&para;</a></h2>
 <p>Register callbacks for monitoring:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValidationError</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">log_validation_error</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="n">ValidationError</span><span class="p">):</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Validation failed for </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>
-<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">log_blocked</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
-<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Blocked </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>
-<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">log_rate_limit</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">retry_after</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Rate limited </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">, retry in </span><span class="si">{</span><span class="n">retry_after</span><span class="si">}</span><span class="s2">s"</span><span class="p">)</span>
-<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>
-<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>    <span class="n">on_validation_error</span><span class="o">=</span><span class="n">log_validation_error</span><span class="p">,</span>
-<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>    <span class="n">on_blocked</span><span class="o">=</span><span class="n">log_blocked</span><span class="p">,</span>
-<a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a>    <span class="n">on_rate_limit</span><span class="o">=</span><span class="n">log_rate_limit</span><span class="p">,</span>
-<a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">AirlockConfig</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValidationError</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">log_validation_error</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="n">ValidationError</span><span class="p">):</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Validation failed for </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">log_blocked</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Blocked </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">log_rate_limit</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">retry_after</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Rate limited </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">, retry in </span><span class="si">{</span><span class="n">retry_after</span><span class="si">}</span><span class="s2">s"</span><span class="p">)</span>
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
+<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a>    <span class="n">on_validation_error</span><span class="o">=</span><span class="n">log_validation_error</span><span class="p">,</span>
+<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a>    <span class="n">on_blocked</span><span class="o">=</span><span class="n">log_blocked</span><span class="p">,</span>
+<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a>    <span class="n">on_rate_limit</span><span class="o">=</span><span class="n">log_rate_limit</span><span class="p">,</span>
+<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a><span class="p">)</span>
 </code></pre></div>
 
 

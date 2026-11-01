@@ -1034,6 +1034,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#filesystem-paths-and-the-open-that-follows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filesystem Paths and the Open That Follows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#unknown-arguments-mode-v040" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3455,6 +3466,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#filesystem-paths-and-the-open-that-follows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filesystem Paths and the Open That Follows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#unknown-arguments-mode-v040" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3725,13 +3747,58 @@ forbade egress, so allowlists and <code>block_dns</code> were ignored, and only 
 <li>A task the tool leaves running after it returns is checked only while some airgap is
   still open in the process.</li>
 <li>A name on <code>allowed_hosts</code> admits the addresses it resolves to, for that call, internal
-  ones included: keeping a tool off internal addresses is the job of <code>EndpointPolicy</code> and
-  the SSRF egress guard. A lookup the allowlist did not check admits nothing, and an empty
-  host, which reaches this machine, is refused under a host allowlist (<code>http://:8080/</code>
-  reached a local service until 0.10.28).</li>
+  ones included, unless <code>block_private_ips=True</code>, which refuses a loopback, private,
+  link-local or metadata address at every connect and datagram (redirect hops and rebinds
+  included; <code>allowed_private_ips</code> exempts named addresses). <code>EndpointPolicy</code> and the SSRF
+  egress guard check the argument URLs before the call. A lookup the allowlist did not check
+  admits nothing, and an empty host, which reaches this machine, is refused under a host
+  allowlist (<code>http://:8080/</code> reached a local service until 0.10.28).</li>
 <li>A Unix-domain socket has a path, not a host: <code>allow_egress=False</code> refuses it, and a host
   or port allowlist does not apply to it.</li>
 </ul>
+<h2 id="filesystem-paths-and-the-open-that-follows">Filesystem Paths and the Open That Follows<a class="headerlink" href="#filesystem-paths-and-the-open-that-follows" title="Permanent link">&para;</a></h2>
+<p>With <code>AirlockConfig(filesystem_policy=FilesystemPolicy(...))</code>, step 3 checks every path the
+call's arguments carry: it must resolve inside <code>allowed_roots</code>, match no <code>deny_patterns</code>,
+and, with <code>allow_symlinks=False</code> (the default), go through no symlink. Since 0.10.29 that
+includes the ancestors of a file that does not exist yet, so on macOS a path under <code>/tmp</code> or
+<code>/var</code> (both symlinks into <code>/private</code>) is refused whether or not the file exists: pass the
+resolved path.</p>
+<p>That check is not atomic. <code>validate_path</code> checks a path as it resolves when the check runs
+and holds nothing open, so a component swapped between the check and the tool's own
+<code>open()</code> (a directory replaced by a symlink to somewhere outside the root,
+GHSA-52hc-jp32-qrr3) is followed by that <code>open()</code>. Two settings close or narrow the window:</p>
+<ul>
+<li><strong><code>open_contained</code> and <code>open_contained_file</code>.</strong> The tool opens through them instead of
+  <code>open()</code>. They run the same checks, then walk the checked path from the allowed root one
+  directory at a time (<code>os.open(..., dir_fd=...)</code> with <code>O_NOFOLLOW</code>) and open the leaf with
+  <code>O_NOFOLLOW</code>. A component that is a symlink by the time it is opened is refused as
+  <code>symlink_detected</code>, so the tool opens what was checked or nothing, whatever
+  <code>allow_symlinks</code> says (a policy that allows symlinks has them resolved at check time, and
+  the walk follows the path they resolved to). Hard links and mount points are not
+  symlinks, and the walk does not detect them.</li>
+<li><strong><code>FilesystemPolicy(bind_resolved_paths=True)</code>.</strong> The tool receives the absolute path each
+  top-level <code>str</code> or <code>pathlib</code> argument resolved to when it was checked, not the value as
+  passed, so a relative path, or a <code>~</code> the tool would expand, opens what was checked. Nested
+  values (in a list, a dict or a model) are passed as given, and so are a <code>file:</code> URI and
+  an <code>os.PathLike</code> that is not a <code>pathlib</code> path. This binds the path; it does not make the
+  open atomic.</li>
+</ul>
+<p><code>open_contained</code> needs <code>os.open</code> and <code>os.stat</code> with <code>dir_fd</code>, and <code>O_NOFOLLOW</code>: Linux, macOS
+and the BSDs have them. Where they are missing (Windows), it raises <code>PathValidationError</code>
+with <code>violation_type="atomic_open_unsupported"</code> rather than fall back to the racy open.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">FilesystemPolicy</span><span class="p">,</span> <span class="n">open_contained</span><span class="p">,</span> <span class="n">open_contained_file</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">FilesystemPolicy</span><span class="p">(</span><span class="n">allowed_roots</span><span class="o">=</span><span class="p">[</span><span class="n">Path</span><span class="p">(</span><span class="s2">"/srv/app/data"</span><span class="p">)])</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="k">with</span> <span class="n">open_contained_file</span><span class="p">(</span><span class="s2">"/srv/app/data/reports/out.md"</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="n">handle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"report"</span><span class="p">)</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="n">fd</span> <span class="o">=</span> <span class="n">open_contained</span><span class="p">(</span><span class="s2">"/srv/app/data/reports/out.md"</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">O_RDONLY</span><span class="p">)</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="n">os</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">)</span>
+</code></pre></div>
 <h2 id="unknown-arguments-mode-v040">Unknown Arguments Mode (V0.4.0)<a class="headerlink" href="#unknown-arguments-mode-v040" title="Permanent link">&para;</a></h2>
 <p>The <code>UnknownArgsMode</code> enum replaces the boolean <code>strict_mode</code>:</p>
 <table>
@@ -3763,23 +3830,23 @@ forbade egress, so allowlists and <code>block_dns</code> were ignored, and only 
 <p><code>STRIP_AND_LOG</code> is the default. Set the mode on <code>AirlockConfig</code>, or with the
 <code>AIRLOCK_UNKNOWN_ARGS</code> environment variable, which overrides it: every <code>AirlockConfig</code> reads
 it when it is created, and the default config is created when <code>agent_airlock</code> is imported.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">PRODUCTION_MODE</span><span class="p">,</span> <span class="n">STAGING_MODE</span><span class="p">,</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="c1"># Using predefined modes</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">unknown_args</span><span class="o">=</span><span class="n">PRODUCTION_MODE</span><span class="p">))</span>  <span class="c1"># UnknownArgsMode.BLOCK</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">prod_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span> <span class="o">...</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">unknown_args</span><span class="o">=</span><span class="n">STAGING_MODE</span><span class="p">))</span>  <span class="c1"># UnknownArgsMode.STRIP_AND_LOG</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">staging_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span> <span class="o">...</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">PRODUCTION_MODE</span><span class="p">,</span> <span class="n">STAGING_MODE</span><span class="p">,</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="c1"># Using predefined modes</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">unknown_args</span><span class="o">=</span><span class="n">PRODUCTION_MODE</span><span class="p">))</span>  <span class="c1"># UnknownArgsMode.BLOCK</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">prod_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span> <span class="o">...</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">AirlockConfig</span><span class="p">(</span><span class="n">unknown_args</span><span class="o">=</span><span class="n">STAGING_MODE</span><span class="p">))</span>  <span class="c1"># UnknownArgsMode.STRIP_AND_LOG</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">staging_tool</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span> <span class="o">...</span>
 </code></pre></div>
 <h2 id="response-types">Response Types<a class="headerlink" href="#response-types" title="Permanent link">&para;</a></h2>
 <h3 id="success-response">Success Response<a class="headerlink" href="#success-response" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">my_tool</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="c1"># Returns: 10 (the actual function result)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">my_tool</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="c1"># Returns: 10 (the actual function result)</span>
 </code></pre></div>
 <h3 id="blocked-response">Blocked Response<a class="headerlink" href="#blocked-response" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">my_tool</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s2">"five"</span><span class="p">)</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="c1"># Returns a dict: {"success": False, "status": "blocked", "block_reason": "validation_error", ...}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">my_tool</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s2">"five"</span><span class="p">)</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1"># Returns a dict: {"success": False, "status": "blocked", "block_reason": "validation_error", ...}</span>
 </code></pre></div>
 <p>The blocked response is an <code>AirlockResponse</code> returned as a dict. It contains:
 - <code>success</code>: <code>False</code>
