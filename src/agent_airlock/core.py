@@ -114,6 +114,7 @@ from .cost_tracking import (
     UnknownTierError,
     get_global_tracker,
 )
+from .data_flow import DataFlowPolicy, TaintEntry, flow_tags, output_provenance
 from .exceptions import AirlockError
 from .filesystem import PathValidationError, validate_path
 from .honeypot import (
@@ -170,11 +171,38 @@ class _ApprovalAsk:
     """What step 2 waits on when a call escalates: the approver, the request it is asked,
     and the deadline (``escalation_timeout_seconds``). The pre-execution steps yield one
     and are sent back the :class:`~agent_airlock.oversight._ApproverOutcome`, so the sync
-    path answers it in a worker thread and the async path without blocking the loop."""
+    path answers it in a worker thread and the async path without blocking the loop.
+    Step 2.4 yields one too, under ``DataFlowPolicy(serialize_batch=True)``: a sink's wait
+    for its run's untrusted sources, whose answer it does not read (V0.10.29)."""
 
     approver: Callable[[Any], Any]
     request: Any
     timeout: float
+
+
+def _begin_source(
+    wrapper: Callable[..., Any], func_name: str, context: AirlockContext[Any]
+) -> None:
+    """Count an admitted ``@source(trust="untrusted")`` call as running in its run."""
+    source_tag, _ = flow_tags(wrapper)
+    if source_tag is not None and source_tag.trust == "untrusted":
+        entry = TaintEntry(tool=func_name, kind=source_tag.kind)
+        context._flow_ticket = context._flow.begin_source(entry)
+
+
+def _provenance_metadata(context: AirlockContext[Any] | None) -> dict[str, Any] | None:
+    """The success envelope's metadata: the output's provenance tag, when it has one."""
+    tag = context._provenance if context is not None else None
+    return {"provenance": tag} if tag is not None else None
+
+
+async def _let_batch_start(_request: Any) -> None:
+    """Yield to the event loop once, so the other calls of a sink's batch reach step 2.4.
+
+    ``asyncio.gather`` schedules every call of a batch before any runs; a source queued
+    behind the sink counts itself as running when its turn comes, before its first await.
+    """
+    await asyncio.sleep(0)
 
 
 def _drive(steps: Generator[_ApprovalAsk, _ApproverOutcome, _T]) -> _T:
@@ -1306,6 +1334,7 @@ def _share_run_state(context: AirlockContext[Any]) -> AirlockContext[Any] | None
         return None
     context.untrusted_reinvocation_count = run.untrusted_reinvocation_count
     context._authorized_once = run._authorized_once
+    context._flow = run._flow
     context.metadata = {**run.metadata, **context.metadata}
     return run
 
@@ -1737,6 +1766,23 @@ class Airlock:
                 context._refused_at = "2:policy"
                 return kwargs, start_time, context, policy_error, None, None
 
+            # Step 2.4: Source-to-sink data flow (V0.10.29, pydantic/pydantic-ai#11756). A
+            # @sink call in a run an @source(trust="untrusted") call has tainted is refused
+            # or escalated under the resolved policy's data_flow_policy; an untrusted source
+            # is counted as running from here until it ends, whatever its own policy says.
+            flow_error = yield from self._check_data_flow(
+                wrapper,
+                func_name,
+                resolved_policy,
+                context,
+                run_context=run_context,
+                call=call,
+                is_async=is_async,
+            )
+            if flow_error is not None:
+                context._refused_at = "2.4:data_flow"
+                return kwargs, start_time, context, flow_error, None, None
+
             # Step 2.5: Behavioral tool-call sequence guard (V0.8.12).
             # Runs after the standard policy check so a denied tool never
             # gets recorded in the sequence trace in the first place.
@@ -1877,6 +1923,11 @@ class Airlock:
                 context._refused_at = "2:approval_binding"
                 return kwargs, start_time, context, changed_error, None, None
 
+            # Step 2.4's other half: an untrusted source every gate admitted counts as running
+            # in its run until the call ends (_end_source), so a serialize_batch sink waits for
+            # it. Begun here, not at 2.4, so a refusal in between leaves nothing to release;
+            # no await sits between the two, so the batch sees the same order.
+            _begin_source(wrapper, func_name, context)
             return cleaned_kwargs, start_time, context, None, budget_estimate, resolved_policy
 
         def _post_execution(
@@ -1971,6 +2022,12 @@ class Airlock:
                 is_async=is_async,
             )
 
+            # V0.10.29: the output's provenance, on the audit record and the envelope.
+            if context is not None:
+                context._provenance = output_provenance(
+                    flow_tags(wrapper)[0], context._flow.sources()
+                )
+
             # Audit log successful call
             audit_logger.log(
                 tool_name=func_name,
@@ -1986,6 +2043,7 @@ class Airlock:
                 standing_grant=context._standing_grant if context else None,
                 stripped_args=context._stripped_args if context else None,
                 requested_args=context._requested_args if context else None,
+                provenance=context._provenance if context else None,
             )
 
             # V0.8.6 camouflage-resistant guard: tool output flowing back
@@ -2059,6 +2117,13 @@ class Airlock:
                 )
                 return None if refusal is not None else _decision_unrecorded(func_name)
             return None
+
+        def _end_source(context: AirlockContext[Any] | None, *, ran: bool) -> None:
+            """End an untrusted source call's run of step 2.4: taint the run when it reached
+            execution (returned or raised), and stop counting it as running either way."""
+            ticket = context._flow_ticket if context is not None else None
+            if ticket is not None:
+                ticket.finish(ran=ran)
 
         def _settle(
             func_name: str,
@@ -2185,6 +2250,7 @@ class Airlock:
                     error_response = error_response or unrecorded
 
                 if error_response is not None:
+                    _end_source(context, ran=False)
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
                         block_reason = (
@@ -2304,6 +2370,7 @@ class Airlock:
                         await asyncio.to_thread(_settle, func_name, context, "raised", e)
                     return _handle_error(func_name, e, start_time, cleaned_kwargs, context)
                 finally:
+                    _end_source(context, ran=True)
                     reset_context(token)
 
                 try:
@@ -2326,7 +2393,9 @@ class Airlock:
 
                 if self.return_dict:
                     return AirlockResponse.success_response(
-                        result, warnings=warnings or None
+                        result,
+                        warnings=warnings or None,
+                        metadata=_provenance_metadata(context),
                     ).to_dict()
 
                 return result
@@ -2353,6 +2422,7 @@ class Airlock:
                     error_response = error_response or unrecorded
 
                 if error_response is not None:
+                    _end_source(context, ran=False)
                     # Check for honeypot response before returning error
                     if should_use_honeypot(self.config.honeypot_config):
                         block_reason = (
@@ -2461,6 +2531,7 @@ class Airlock:
                     _settle(func_name, context, "raised", e)
                     return _handle_error(func_name, e, start_time, cleaned_kwargs, context)
                 finally:
+                    _end_source(context, ran=True)
                     reset_context(token)
 
                 try:
@@ -2481,7 +2552,9 @@ class Airlock:
 
                 if self.return_dict:
                     return AirlockResponse.success_response(
-                        result, warnings=warnings or None
+                        result,
+                        warnings=warnings or None,
+                        metadata=_provenance_metadata(context),
                     ).to_dict()
 
                 return result
@@ -3517,6 +3590,128 @@ class Airlock:
             {"path": path, "violation_type": violation_type},
         )
         return response
+
+    def _check_data_flow(
+        self,
+        wrapper: Callable[..., Any],
+        func_name: str,
+        policy: SecurityPolicy | None,
+        context: AirlockContext[Any],
+        *,
+        run_context: AirlockContext[Any] | None,
+        call: _BoundCall,
+        is_async: bool,
+    ) -> Generator[_ApprovalAsk, _ApproverOutcome, AirlockResponse | None]:
+        """Step 2.4: gate a sink called in a tainted run.
+
+        The gate is the sink's policy's: a source taints its run whatever policy guards the
+        source (``_begin_source``), since a run's tools are often guarded by different
+        ``@Airlock`` configs.
+
+        Returns:
+            A refusal for a sink its policy's ``data_flow_policy`` does not admit, else None.
+        """
+        _, sink_tag = flow_tags(wrapper)
+        if sink_tag is None or policy is None or policy.data_flow_policy is None:
+            return None
+        return (
+            yield from self._gate_sink(
+                func_name,
+                policy,
+                policy.data_flow_policy,
+                context,
+                run_context=run_context,
+                call=call,
+                is_async=is_async,
+            )
+        )
+
+    def _gate_sink(
+        self,
+        func_name: str,
+        policy: SecurityPolicy,
+        flow_policy: DataFlowPolicy,
+        context: AirlockContext[Any],
+        *,
+        run_context: AirlockContext[Any] | None,
+        call: _BoundCall,
+        is_async: bool,
+    ) -> Generator[_ApprovalAsk, _ApproverOutcome, AirlockResponse | None]:
+        """Refuse or escalate a sink called after an untrusted source completed in its run.
+
+        Under ``serialize_batch`` the sink first lets the other calls of its batch reach this
+        step (async path) and waits for the run's sources still running; one still running
+        when the wait ends counts as having tainted the run. A sink in no run is refused,
+        since there is no taint to read.
+        """
+        if run_context is None:
+            return self._data_flow_refusal(
+                func_name,
+                ViolationType.SINK_OUTSIDE_RUN,
+                f"'{func_name}' acts outward and this call belongs to no run, so what the run "
+                "has read cannot be checked. Make the agent's calls inside "
+                "`with AirlockContext(agent_id=...)`, or pass an AirlockContext as the run "
+                "wrapper's `context`.",
+                (),
+            )
+        flow, still_running = context._flow, 0
+        if flow_policy.serialize_batch:
+            wait = flow_policy.batch_wait_seconds
+            if is_async:
+                yield _ApprovalAsk(approver=_let_batch_start, request=None, timeout=wait)
+            if flow.running():
+                yield _ApprovalAsk(
+                    approver=lambda _request: flow.wait_quiet(wait), request=None, timeout=wait
+                )
+            still_running = flow.running()
+        sources = flow.sources()
+        if not sources and not still_running:
+            return None
+        kinds = sorted({entry.kind for entry in sources}) + (
+            ["a source still running"] if still_running else []
+        )
+        reason = (
+            f"'{func_name}' acts outward, and this run has read untrusted content "
+            f"({', '.join(kinds)}) since its taint was last cleared"
+        )
+        if flow_policy.on_sink_after_source == "escalate":
+            escalation = PolicyEscalation(
+                f"Tool '{func_name}' requires approval: {reason}",
+                tool_name=func_name,
+                reason=reason,
+                rule="data_flow",
+            )
+            return (
+                yield from self._resolve_escalation(
+                    policy, func_name, escalation, context=context, call=call
+                )
+            )
+        return self._data_flow_refusal(
+            func_name, ViolationType.SINK_AFTER_UNTRUSTED_SOURCE, reason, sources
+        )
+
+    def _data_flow_refusal(
+        self,
+        func_name: str,
+        violation: ViolationType,
+        reason: str,
+        sources: tuple[TaintEntry, ...],
+    ) -> AirlockResponse:
+        """A step 2.4 refusal, logged and passed to ``on_blocked`` with the run's taint."""
+        taint = [f"{entry.tool}:{entry.kind}" for entry in sources]
+        logger.warning(
+            "data_flow_blocked", function=func_name, violation_type=violation.value, taint=taint
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            reason,
+            {"violation_type": violation.value, "taint": taint},
+        )
+        return handle_policy_violation(
+            func_name, policy_name="DataFlowPolicy", reason=reason, violation_type=violation.value
+        )
 
     def _check_sequence_guard(
         self,

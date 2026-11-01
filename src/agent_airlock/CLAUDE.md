@@ -128,6 +128,14 @@ src/agent_airlock/
    it names a different agent than the call does) and merges that context's metadata under
    its own, so a policy with `reauth_on_untrusted_reinvocation` refuses a call that belongs
    to no run
+   - 2.4 source-to-sink data flow (V0.10.29, `data_flow.py`, off until the sink's policy
+     sets `data_flow_policy`): a `@sink` call in a run that an `@source(trust="untrusted")`
+     call has tainted is refused or escalated (rule `data_flow`), and one in no run is
+     refused. The taint is `context._flow`, shared by `_share_run_state`: a source taints
+     whatever policy guards it, counted as running from the end of `_pre_execution`
+     (`_begin_source`) until the wrapper's execution `finally` or refusal branch
+     (`_end_source`). `serialize_batch` waits through a yielded `_ApprovalAsk`, so an async
+     sink never blocks the loop
    - 2.5 behavioral tool-call sequence guard
    - 2.6 action-time contradiction gate
    - 2.7 unsafe-deserialization content guard; its `require_authenticated_transport` reads

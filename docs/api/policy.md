@@ -44,6 +44,7 @@ class SecurityPolicy:
     action_contradiction_gate: ActionContradictionGate | None = None
     deserialization_guard: UnsafeDeserializationGuard | None = None
     tool_arg_sink_guard: ToolArgSinkGuard | None = None
+    data_flow_policy: DataFlowPolicy | None = None  # V0.10.29
     trace_redaction: TraceRedactionPolicy | None = None
     reauth_on_untrusted_reinvocation: bool = False
     untrusted_reinvocation_threshold: int = 1
@@ -71,6 +72,7 @@ class SecurityPolicy:
 | `sequence_guard`, `action_contradiction_gate`, `deserialization_guard` | | Optional guards run after the policy check |
 | `tool_arg_sink_guard` | `ToolArgSinkGuard \| None` | Refuses shell syntax in named (or all) string arguments, anything but a bare version in installer arguments, and a function name its allowlist (or the default denylist) does not admit in dispatch arguments (step 2.75). See [Shell and installer arguments](../guide/shell-and-installer-arguments.md) and [Dispatch arguments](../guide/dispatch-arguments.md) |
 | `reauth_on_untrusted_reinvocation`, `untrusted_reinvocation_threshold` | `bool`, `int` | Once a tool's output has flowed back into the model `threshold` times in a run, the next call to it needs `authorize_once(tool)` on the run's `AirlockContext`. The count lives on that context, so a call that belongs to no run is refused: one with no `AirlockContext` passed in and none set around it, or whose surrounding context names a different agent |
+| `data_flow_policy` | `DataFlowPolicy \| None` | Refuses (`deny`, the default) or escalates (`escalate`) a call of an `@sink` tool made after an `@source(trust="untrusted")` call completed in the same run, until the host calls `clear_taint()` on the run's context (step 2.4). A sink called outside any run is refused. See [Sources and sinks](../guide/data-flow.md) |
 | `trace_redaction` | `TraceRedactionPolicy \| None` | Redacts traces sent to a non-local sink |
 | `stdio_mode` | `str` | How STDIO subprocess launches are allowed: `"allowlist"`, `"manifest_only"` or `"disabled"` |
 

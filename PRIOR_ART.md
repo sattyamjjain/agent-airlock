@@ -119,6 +119,48 @@ absence is on the record instead of being left for a reader to notice.
 
 ---
 
+## CaMeL: prompt injections defeated by design (arXiv:2503.18813)
+
+| | |
+|---|---|
+| **Title** | Defeating Prompt Injections by Design |
+| **Authors** | Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan, Jamie Hayes, Nicholas Carlini, Daniel Fabian, Christoph Kern, Chongyang Shi, Andreas Terzis, Florian Tramèr |
+| **Submitted** | 24 March 2025 (revised 24 June 2025) |
+| **Link** | <https://arxiv.org/abs/2503.18813> |
+
+### What it does
+
+CaMeL puts a layer around the model that extracts the control flow and data flow from the
+trusted user's query, so data the agent retrieves later cannot change what the program
+does. It attaches capabilities to values and checks security policies when a tool is
+called, so private data does not leave through a flow the policy forbids. On AgentDojo the
+authors report 77% of tasks solved with provable security, against 84% for the same system
+undefended. Those figures are theirs, paraphrased here from the abstract.
+
+### What this library takes from it
+
+The 0.10.29 source-to-sink gate ([`docs/guide/data-flow.md`](./docs/guide/data-flow.md))
+borrows the stance: gate outward actions by where the data came from, deterministically,
+whether or not anything detected an injection. A `@sink` call made after an
+`@source(trust="untrusted")` call in the same run is refused or escalated.
+
+### Where the two do different jobs
+
+CaMeL tracks which values reach which tool argument, through an interpreter that runs the
+plan the model wrote. This library has no interpreter and no per-value capabilities: it
+keeps one taint per run, and tags tools rather than values. So it gates every sink after
+any untrusted source in the run, including a sink whose arguments carry nothing from that
+source, and it needs the host to clear the taint after review. CaMeL can admit such a call;
+this gate cannot tell it apart.
+
+### What this library has NOT measured against it
+
+**There is no head-to-head here either.** Nobody has run the source-to-sink gate on
+AgentDojo, so there is no utility figure for it and no security figure to set beside
+CaMeL's 77%. How many benign tasks the coarser run-level taint refuses is unmeasured.
+
+---
+
 ## Why this paper is not in the OWASP coverage matrix
 
 [`docs/owasp-agentic-2026-coverage.md`](./docs/owasp-agentic-2026-coverage.md) was the
