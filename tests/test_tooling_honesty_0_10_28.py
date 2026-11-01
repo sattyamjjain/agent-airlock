@@ -55,9 +55,13 @@ EXTRA_BACKED_STEP = "Assert the extra-backed tests are not silently skipped"
 EXTRA_BACKED_FILES = (
     "tests/test_redis_rate_limit.py",
     "tests/kill_switch/test_kill_switch_wiring.py",
+    "tests/scan/test_mcp_tool_annotations.py",
     "tests/test_mcp_integration_0_10_18.py",
     "tests/test_identity.py",
+    "tests/test_effect_guard_0_10_29.py",
     "tests/test_attested_admission.py",
+    "tests/test_result_masking_0_10_29.py",
+    "tests/test_mcp_tool_pins_0_10_29.py",
 )
 
 
@@ -97,7 +101,7 @@ def _extra_backed_gate() -> str:
 
 
 def _run_throwaway_suite(tmp_path: Path, files: dict[str, str]) -> Path:
-    """Run real pytest over ``files`` the way the step runs its five, return the log."""
+    """Run real pytest over ``files`` the way the step runs its files, return the log."""
     for name, body in files.items():
         (tmp_path / name).write_text(body, encoding="utf-8")
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
@@ -152,7 +156,7 @@ class TestTheExtraBackedStepRunsTheTests:
         """The step's shell, without the comment above it."""
         return _ci_step(EXTRA_BACKED_STEP).split("run: |\n", 1)[1]
 
-    def test_it_runs_the_five_files_instead_of_collecting_them(self) -> None:
+    def test_it_runs_the_files_instead_of_collecting_them(self) -> None:
         script = self._script()
         assert "--collect-only" not in script
         assert "set -o pipefail" in script, "pytest's own exit code must fail the step"

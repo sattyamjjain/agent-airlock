@@ -126,6 +126,7 @@ def create_secure_mcp_server(
     *,
     config: AirlockConfig | None = None,
     default_policy: SecurityPolicy | None = None,
+    pin_guard: ToolDefinitionPinGuard | None = None,  # V0.10.29
 ) -> tuple[Any, Callable[..., Any]]:
     """
     Create a FastMCP server with pre-configured Airlock security.
@@ -134,6 +135,7 @@ def create_secure_mcp_server(
         name: Server name
         config: Default Airlock configuration
         default_policy: Default security policy for all tools
+        pin_guard: Pins for the server's own tools
 
     Returns:
         Tuple of (FastMCP instance, secure_tool decorator)
@@ -148,6 +150,12 @@ Use it bare (`@secure`) or with keyword overrides: `sandbox`, `policy` (replaces
 `default_policy` for that tool), `tool_name` and `tool_description`. Only tools registered
 through it are guarded; the factory installs nothing server-wide, so a plain `@mcp.tool`
 on the returned server runs without Airlock.
+
+With `pin_guard`, the server refuses to start while one of its tools is unpinned or
+drifted, lists only the tools the pins admit, and refuses a call of any other. That part
+is server-wide: it covers a plain `@mcp.tool` too. `tool_definitions(server)` returns the
+definitions to approve, and `check_server_tools(server, guard)` runs the startup check on
+its own. See [Tool-definition pins](../guide/tool-definition-pins.md).
 
 ### Example
 

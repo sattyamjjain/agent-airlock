@@ -99,6 +99,7 @@ nav:
     - Tool output trust: guide/tool-output-trust.md
     - At-most-once dispatch: guide/effect-guard.md
     - Secrets in tool arguments: guide/argument-secrets.md
+    - Tool-definition pins: guide/tool-definition-pins.md
   - API Reference:
     - Airlock Decorator: api/airlock.md
     - Configuration: api/config.md
