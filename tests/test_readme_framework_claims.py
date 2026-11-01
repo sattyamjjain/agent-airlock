@@ -38,6 +38,7 @@ _README = _REPO / "README.md"
 #: ``"__init__.py" in README``, which every future package would satisfy vacuously.
 _ADAPTER_SHIPPED_MODULES: tuple[tuple[str, str], ...] = (
     ("integrations/langchain.py", "langchain.py"),
+    ("integrations/langgraph.py", "integrations/langgraph.py"),
     ("integrations/langgraph_toolnode_compat.py", "langgraph_toolnode_compat.py"),
     ("integrations/openai_guardrails.py", "openai_guardrails.py"),
     ("integrations/anthropic.py", "anthropic.py"),

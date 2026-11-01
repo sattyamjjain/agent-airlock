@@ -185,8 +185,8 @@ under `src/agent_airlock/integrations/` handles framework-specific glue — sign
 preservation, tool-registry rewrites, request-shape adapters. **Example-only** means the
 decorator works out of the box with no adapter.
 
-**Adapter-shipped (12):** LangChain (`integrations/langchain.py`),
-LangGraph (`integrations/langgraph_toolnode_compat.py`),
+**Adapter-shipped (13):** LangChain (`integrations/langchain.py`),
+LangGraph (`integrations/langgraph.py` at the ToolNode, `integrations/langgraph_toolnode_compat.py`),
 OpenAI Agents SDK (`integrations/openai_guardrails.py`),
 Anthropic Messages API (`integrations/anthropic.py`),
 Anthropic Claude Agent SDK (`integrations/anthropic_claude_agent_sdk.py`, v0.6.1+),
