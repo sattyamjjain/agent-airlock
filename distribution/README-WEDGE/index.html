@@ -3076,7 +3076,7 @@ copy stays consistent. <strong>Not a runtime feature — this directory is copy 
 submissions only.</strong></p>
 <h2 id="the-one-liner-canonical">The one-liner (canonical)<a class="headerlink" href="#the-one-liner-canonical" title="Permanent link">&para;</a></h2>
 <blockquote>
-<p><strong>in-process least-privilege for AI tool calls, deny-by-default, per-CVE presets.</strong></p>
+<p><strong>in-process least-privilege for AI tool calls, strict argument validation, per-CVE presets.</strong></p>
 </blockquote>
 <p>Lead with <strong>least-privilege / type-checker / contract layer for tool calls</strong>.
 Do <strong>not</strong> call it a "firewall" (crowded term; collides with an existing WAF
@@ -3086,11 +3086,11 @@ per-argument angle).</p>
 <p>One factual sentence, reused verbatim across every list:</p>
 <blockquote>
 <p><strong>agent-airlock</strong> — in-process least-privilege decorator for AI tool calls;
-deny-by-default, PII masking, per-CVE presets, 7,999 tests.</p>
+strict argument validation, PII masking, per-CVE presets, 9,294 tests.</p>
 <p>[!NOTE]
 <strong>Refresh the test count</strong> to the current README <strong>TEST-BADGE</strong> value at the
-moment you submit each PR (badge is regenerated every release). As of v0.8.84
-it is <strong>7,999</strong>.</p>
+moment you submit each PR (badge is regenerated every release). As of v0.10.29
+it is <strong>9,294</strong>.</p>
 </blockquote>
 <h2 id="pypi-description-already-on-message">PyPI description (already on-message)<a class="headerlink" href="#pypi-description-already-on-message" title="Permanent link">&para;</a></h2>
 <p>The <code>[project].description</code> in <code>pyproject.toml</code> already reflects this wedge:</p>
@@ -3104,8 +3104,12 @@ and self-healing retries for MCP servers and agent frameworks.</p>
 <ul>
 <li><strong>in-process</strong> — the check runs at the <code>@Airlock</code> decorator seam, in the tool
   process. No sidecar, no model call, microsecond overhead.</li>
-<li><strong>least-privilege / deny-by-default</strong> — a <code>SecurityPolicy</code> allow-lists exactly
-  the tools/args a task needs; everything else is refused.</li>
+<li><strong>least-privilege</strong> — a <code>SecurityPolicy</code> allow-lists exactly the tools/args a
+  task needs; with <code>default_deny=True</code> everything else is refused. It is opt-in: an
+  empty allowlist without it allows every tool.</li>
+<li><strong>strict argument validation</strong> — Pydantic strict mode at the call boundary: a
+  wrong-typed argument is refused with fix hints before the tool runs, and ghost
+  arguments are stripped or refused.</li>
 <li><strong>per-CVE presets</strong> — curated, opt-in policy bundles that track named MCP CVEs
   and spec SEPs (composed from existing primitives, Pydantic-only core).</li>
 <li><strong>PII masking</strong> — output sanitizer with 13 PII types incl. India DPDP
