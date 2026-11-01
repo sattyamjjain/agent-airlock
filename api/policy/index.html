@@ -1235,6 +1235,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/effect-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    At-most-once dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3393,21 +3421,22 @@
 <a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="n">escalation_timeout_seconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">300.0</span>
 <a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>    <span class="n">standing_grants</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StandingGrant</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
 <a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>    <span class="n">approval_ledger</span><span class="p">:</span> <span class="n">ApprovalLedger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>
-<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>    <span class="c1"># Budgets and guards, all off by default</span>
-<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>    <span class="n">model_tier_budget</span><span class="p">:</span> <span class="n">ModelTierBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>    <span class="n">amplification_budget</span><span class="p">:</span> <span class="n">AmplificationBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>    <span class="n">sequence_guard</span><span class="p">:</span> <span class="n">SequenceGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>    <span class="n">action_contradiction_gate</span><span class="p">:</span> <span class="n">ActionContradictionGate</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>    <span class="n">deserialization_guard</span><span class="p">:</span> <span class="n">UnsafeDeserializationGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>    <span class="n">tool_arg_sink_guard</span><span class="p">:</span> <span class="n">ToolArgSinkGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>    <span class="n">data_flow_policy</span><span class="p">:</span> <span class="n">DataFlowPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
-<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>    <span class="n">run_guard</span><span class="p">:</span> <span class="n">RunGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
-<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>    <span class="n">shell_command_policy</span><span class="p">:</span> <span class="n">ShellCommandPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
-<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>    <span class="n">trace_redaction</span><span class="p">:</span> <span class="n">TraceRedactionPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>    <span class="n">reauth_on_untrusted_reinvocation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>    <span class="n">untrusted_reinvocation_threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
-<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>    <span class="n">stdio_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"allowlist"</span><span class="p">,</span> <span class="s2">"manifest_only"</span><span class="p">,</span> <span class="s2">"disabled"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"allowlist"</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>    <span class="n">effect_guard</span><span class="p">:</span> <span class="n">EffectGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>    <span class="c1"># Budgets and guards, all off by default</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>    <span class="n">model_tier_budget</span><span class="p">:</span> <span class="n">ModelTierBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>    <span class="n">amplification_budget</span><span class="p">:</span> <span class="n">AmplificationBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>    <span class="n">sequence_guard</span><span class="p">:</span> <span class="n">SequenceGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>    <span class="n">action_contradiction_gate</span><span class="p">:</span> <span class="n">ActionContradictionGate</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>    <span class="n">deserialization_guard</span><span class="p">:</span> <span class="n">UnsafeDeserializationGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>    <span class="n">tool_arg_sink_guard</span><span class="p">:</span> <span class="n">ToolArgSinkGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>    <span class="n">data_flow_policy</span><span class="p">:</span> <span class="n">DataFlowPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
+<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>    <span class="n">run_guard</span><span class="p">:</span> <span class="n">RunGuard</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
+<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>    <span class="n">shell_command_policy</span><span class="p">:</span> <span class="n">ShellCommandPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># V0.10.29</span>
+<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>    <span class="n">trace_redaction</span><span class="p">:</span> <span class="n">TraceRedactionPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>    <span class="n">reauth_on_untrusted_reinvocation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>    <span class="n">untrusted_reinvocation_threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>    <span class="n">stdio_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"allowlist"</span><span class="p">,</span> <span class="s2">"manifest_only"</span><span class="p">,</span> <span class="s2">"disabled"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"allowlist"</span>
 </code></pre></div>
 <h3 id="attributes">Attributes<a class="headerlink" href="#attributes" title="Permanent link">&para;</a></h3>
 <table>
@@ -3478,6 +3507,11 @@
 <td><code>approval_ledger</code></td>
 <td><code>ApprovalLedger \| None</code></td>
 <td>Approvals recorded ahead of a call, each claimed by exactly one call, before the approver is asked. See <a href="../../guide/bound-approvals/">Approvals bound to the call</a></td>
+</tr>
+<tr>
+<td><code>effect_guard</code></td>
+<td><code>EffectGuard \| None</code></td>
+<td>Runs each call to a tool that is not <code>@reversibility("reversible")</code> at most once, keyed on the <code>tool_call_id</code> the host puts on the call's context: a replay of a committed call returns the stored value, one of a pending or unknown call is refused (<code>effect_status_unknown</code>). See <a href="../../guide/effect-guard/">At-most-once dispatch</a></td>
 </tr>
 <tr>
 <td><code>model_tier_budget</code></td>
