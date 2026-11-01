@@ -1523,6 +1523,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#check-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check Order
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3228,6 +3239,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#check-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check Order
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3669,6 +3691,27 @@
 </tr>
 </tbody>
 </table>
+<h3 id="check-order">Check Order<a class="headerlink" href="#check-order" title="Permanent link">&para;</a></h3>
+<p><code>SecurityPolicy.check()</code> runs its checks in this order, and the first that fails refuses
+the call:</p>
+<ol>
+<li>Agent identity (<code>require_agent_id</code>, <code>allowed_roles</code>)</li>
+<li>The deny list (<code>denied_tools</code>), which wins over the allowlist</li>
+<li>The allowlist (<code>allowed_tools</code>), or the default when it is empty</li>
+<li>The time window (<code>time_restrictions</code>)</li>
+<li>The rate limit (<code>rate_limits</code>)</li>
+<li>Escalation (<code>escalate_tools</code>), last, so a denied tool is never softened into "ask a
+   human"</li>
+</ol>
+<p><strong>An empty allowlist.</strong> With the default <code>default_deny=False</code>, an empty <code>allowed_tools</code>
+allows every tool that is not denied, and the policy warns once (a <code>FutureWarning</code>, since
+0.10.29) that it does: the default changes in a future minor release. Say what you mean:
+<code>allowed_tools=["*"]</code> allows every tool and stays quiet, and <code>default_deny=True</code> makes the
+empty allowlist deny every tool. <code>STRICT_POLICY</code> does not restrict tool names: it has no
+allowlist, so it requires an identity and limits rates but admits any tool.</p>
+<p><strong>Rate limits.</strong> Only the most specific matching pattern applies, so a <code>"*"</code> ceiling stops
+applying to a tool that has its own pattern: with <code>{"*": "3/hour", "search_*": "100/hour"}</code>,
+<code>search_web</code> gets 100 an hour, not 3.</p>
 <h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">SecurityPolicy</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
@@ -3710,13 +3753,15 @@
 <h3 id="permissive_policy">PERMISSIVE_POLICY<a class="headerlink" href="#permissive_policy" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">PERMISSIVE_POLICY</span>
 </code></pre></div>
-<p>An empty <code>SecurityPolicy()</code>: allows every tool, with no rate limit.</p>
+<p><code>SecurityPolicy(allowed_tools=["*"])</code>: allows every tool, with no rate limit. Until 0.10.29
+it was an empty <code>SecurityPolicy()</code>, which allows the same tools but now warns.</p>
 <h3 id="strict_policy">STRICT_POLICY<a class="headerlink" href="#strict_policy" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">STRICT_POLICY</span>
 </code></pre></div>
 <p>Requires an agent identity, limits every tool to 100 calls an hour, and applies a
 capability policy that grants <code>FILESYSTEM_READ</code>, <code>NETWORK_HTTPS</code> and <code>DATABASE_READ</code> and
-denies <code>PROCESS_SHELL</code> and <code>FILESYSTEM_DELETE</code>. It also turns on trace redaction.</p>
+denies <code>PROCESS_SHELL</code> and <code>FILESYSTEM_DELETE</code>. It also turns on trace redaction. It has
+no allowlist, so it does not restrict which tools run.</p>
 <h3 id="read_only_policy">READ_ONLY_POLICY<a class="headerlink" href="#read_only_policy" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">READ_ONLY_POLICY</span>
 </code></pre></div>
