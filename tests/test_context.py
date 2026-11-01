@@ -499,7 +499,10 @@ class TestDynamicPolicyResolution:
         assert isinstance(result, dict)
         assert result.get("success") is False
         assert result.get("status") == "blocked"
-        assert "Resolver failed" in str(result.get("error", ""))
+        # Since 0.10.29 the model reads that the resolver failed and the exception's type;
+        # its message goes to the log, masked (it can hold a connection string or a key).
+        assert "policy resolver failed (ValueError)" in str(result.get("error", ""))
+        assert "Resolver failed!" not in str(result)
 
     def test_static_policy_still_works(self) -> None:
         """Test that static SecurityPolicy still works."""

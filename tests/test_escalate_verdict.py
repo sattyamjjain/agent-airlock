@@ -31,7 +31,7 @@ import dataclasses
 
 import pytest
 
-from agent_airlock import Airlock, SecurityPolicy
+from agent_airlock import Airlock, AirlockConfig, SecurityPolicy
 from agent_airlock.oversight import (
     InProcessRecordedApprover,
     OversightRequest,
@@ -100,12 +100,20 @@ class TestEscalationWithNoApproverBlocks:
         assert "no approver" in result["error"].lower()
 
     def test_the_reason_and_the_rule_reach_the_operator(self) -> None:
-        """1c bullet 2: the human must see why, and which rule did it."""
+        """1c bullet 2: the human must see why, and which rule did it.
+
+        Since 0.10.29 the rule (an escalate_tools glob) reaches the operator through
+        on_blocked and the audit record's rule_id, not the refusal the model reads.
+        """
+        seen: list[dict[str, object]] = []
         policy = SecurityPolicy(
             escalate_tools={"wire_*": "wires always need a second pair of eyes"}
         )
 
-        @Airlock(policy=policy)
+        @Airlock(
+            policy=policy,
+            config=AirlockConfig(on_blocked=lambda name, reason, details: seen.append(details)),
+        )
         def wire_transfer() -> str:
             return "wired"
 
@@ -113,7 +121,8 @@ class TestEscalationWithNoApproverBlocks:
         blob = str(result)
 
         assert "wires always need a second pair of eyes" in blob, "the reason was dropped"
-        assert "wire_*" in blob, "the escalating rule was not identified"
+        assert "wire_*" not in blob, "the model read the escalating rule"
+        assert seen and seen[0]["rule"] == "wire_*", "the escalating rule was not identified"
 
 
 class TestEscalationIsDistinguishableFromAllowAndDeny:
@@ -233,7 +242,10 @@ class TestApproverPathRoutesThroughTheExistingPrimitive:
 
         result = pay()
         assert result["success"] is False
-        assert "slack is down" in result["metadata"]["detail"]
+        # The exception's type reaches the model; its message (a transport's words) only
+        # the masked log, since 0.10.29.
+        assert "RuntimeError" in result["metadata"]["detail"]
+        assert "slack is down" not in str(result)
 
     def test_a_mismatched_request_id_blocks(self) -> None:
         """An approver answering a different request has not answered this one."""

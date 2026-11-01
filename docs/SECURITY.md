@@ -401,11 +401,17 @@ A call to `delete_records` refused by a `denied_tools=["delete_*"]` policy:
   "args_preview": {"table": "'users'", "where": "'id=1'"},
   "result_type": "None",
   "result_preview": "BLOCKED",
-  "error": "AIRLOCK_BLOCK: Policy violation for 'delete_records'. Tool 'delete_records' is denied by policy"
+  "error": "AIRLOCK_BLOCK: Policy violation for 'delete_records'. Tool 'delete_records' is denied by policy",
+  "rule_id": "delete_*",
+  "policy_layer": "policy"
 }
 ```
 
-Fields with no value are left out. `agent_id` and `session_id` come from the context a run
+Fields with no value are left out. A refusal's record names the rule that refused it
+(`rule_id`: a deny or escalation pattern, a violation type, else the block reason) and the
+call-path layer it sits in (`policy_layer`), since 0.10.29. The refusal the model reads
+carries neither: a deny or escalation pattern is the operator's, and quoting it helps a
+search for a name the pattern misses. `agent_id` and `session_id` come from the context a run
 wrapper carries as the tool's first argument (an object model JSON cannot have built, such
 as a framework's run context; see [Agent Identity](guide/policy.md#agent-identity)), or,
 when the call has none, from one set around it with `with AirlockContext(...)`. Argument
@@ -415,6 +421,13 @@ before it is cut to length, so an email address or key given in any argument is 
 written as-is. Until 0.10.20 only the names were checked. `result_preview` is masked the
 same way, whatever `sanitize_output` is set to; until 0.10.28 it held the raw text with
 `sanitize_output=False`, or for a result returned unmasked (a model, a dataclass).
+
+The refusal the model reads holds no argument value either: a validation error names the
+field and the type it got (`input_type`), not the value, and a policy resolver or approver
+that raised is named by its exception type, its message going only to the log. Log lines
+that carry an argument value (a refused path or URL) write it masked the same way and cut
+to 200 characters. Until 0.10.29 a validation refusal returned `repr(value)`, so a key sent
+to the wrong argument came back to the model unmasked.
 
 ### Log Destinations
 

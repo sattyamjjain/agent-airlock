@@ -265,6 +265,14 @@ def authority_has_differential(url: str) -> bool:
     return _AUTHORITY_DIFFERENTIAL.search(authority) is not None
 
 
+def _logged(value: str) -> str:
+    """``value`` masked and cut to length for a log line (``audit.masked_for_log``): a URL
+    can carry a token, and until 0.10.29 it was logged as given."""
+    from .audit import masked_for_log
+
+    return masked_for_log(value)
+
+
 def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
     """Validate a URL against an endpoint policy.
 
@@ -318,8 +326,8 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
     if authority_has_differential(url):
         logger.warning(
             "endpoint_blocked",
-            url=url,
-            hostname=hostname,
+            url=_logged(url),
+            hostname=_logged(hostname),
             reason="malformed_authority",
         )
         raise NetworkBlockedError(
@@ -334,8 +342,8 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
         if _matches_endpoint_pattern(hostname, pattern):
             logger.warning(
                 "endpoint_blocked",
-                url=url,
-                hostname=hostname,
+                url=_logged(url),
+                hostname=_logged(hostname),
                 pattern=pattern,
                 reason="blocked_pattern",
             )
@@ -354,8 +362,8 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
     if not policy.allow_metadata_urls and hostname in _METADATA_HOSTS:
         logger.warning(
             "endpoint_blocked",
-            url=url,
-            hostname=hostname,
+            url=_logged(url),
+            hostname=_logged(hostname),
             reason="metadata_url",
         )
         raise NetworkBlockedError(
@@ -369,8 +377,8 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
     if not policy.allow_private_ips and _is_private_ip(hostname):
         logger.warning(
             "endpoint_blocked",
-            url=url,
-            hostname=hostname,
+            url=_logged(url),
+            hostname=_logged(hostname),
             reason="private_ip",
         )
         raise NetworkBlockedError(
@@ -397,8 +405,8 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
                 return  # Allowed
         logger.warning(
             "endpoint_blocked",
-            url=url,
-            hostname=hostname,
+            url=_logged(url),
+            hostname=_logged(hostname),
             reason="not_in_allowlist",
             allowed_endpoints=policy.allowed_endpoints,
         )

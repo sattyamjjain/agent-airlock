@@ -165,7 +165,9 @@ class TestAirlockPolicyResolutionError:
         result = my_func(x=5)
         assert isinstance(result, dict)
         assert result["success"] is False
-        assert "Policy resolution failed" in result.get("error", "")
+        # The type reaches the model, the message only the (masked) log, since 0.10.29.
+        assert "the policy resolver failed (Exception)" in result.get("error", "")
+        assert "Resolver failed" not in str(result)
 
 
 class TestAirlockUnexpectedErrors:
