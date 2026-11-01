@@ -1,0 +1,19 @@
+mem0#7283 P2 · 11 条可复跑一致性套件 (MGP-7283)
+Copyright 2026 chenhz01 (正明 / 善伦)
+
+本产物为对 GitHub issue mem0ai/mem0#7283 的第三方独立验证套件。
+它不是 mem0 项目的一部分，不隶属 mem0ai，也不代表 mem0 维护者立场。
+
+取证来源（本工作区）：
+  - mem0-7283-p2-复现.md        （子代理实跑：真实 NLI + 真实 MiniLM，本地 Qdrant）
+  - 独立验证-mem0-7283报告核验.md（fresh-eyes agent 对抗性核验，7 项断言）
+  - mem0_main_tree.txt          （mem0 main 全量 git tree，1842 文件）
+  - probe_stdout.txt            （mem0-7283-p2-probe.py 实测输出）
+  - 单1-成稿-mem0-7283.md        （待发回帖成稿，含 11 条红线自查）
+
+许可证：代码 Apache-2.0（LICENSE）｜规范 CC BY 4.0（LICENSE-SPEC）
+双许可五件套：LICENSE / LICENSE-SPEC / NOTICE / README 许可段 / 文件 SPDX 头。
+
+总判定（2026-10-21 取证）：P2 = PART PASS。
+  组件层 PASS（真实模型复现通过）；
+  「mem0 的 P2 已修复」命题 FAIL（修复不在主仓、未合并、未发布）。

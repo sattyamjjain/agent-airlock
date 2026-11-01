@@ -93,6 +93,10 @@ class BlockReason(str, Enum):
     # not run again (EffectGuard).
     EFFECT_STATUS_UNKNOWN = "effect_status_unknown"
 
+    # V0.10.29: a tool argument carried a secret or personal data (ArgumentSecretGuard).
+    # The refusal names the argument and the kind of data, never the value.
+    ARGUMENT_SECRET = "argument_secret"  # nosec B105 - enum value name, not a credential
+
 
 #: Whether a refusal with this block reason can pass on a retry, when the reason alone
 #: says. A rate limit says only with its reset time, so handle_rate_limit sets it, and a
@@ -109,6 +113,7 @@ _RETRYABLE: dict[BlockReason, bool] = {
     BlockReason.EFFECT_STATUS_UNKNOWN: False,
     BlockReason.VALIDATION_ERROR: True,
     BlockReason.TOOL_ARG_SINK: True,
+    BlockReason.ARGUMENT_SECRET: True,
 }
 
 
@@ -626,6 +631,36 @@ def handle_effect_status_unknown(
             "If it was not, make a new tool call, which carries a new tool_call_id",
         ],
         metadata={"function": func_name, "effect_status": status},
+    )
+
+
+def handle_argument_secret(
+    func_name: str,
+    *,
+    argument: str | None,
+    kinds: tuple[str, ...],
+    detail: str,
+) -> AirlockResponse:
+    """Create a response for a call whose arguments carry a secret or personal data.
+
+    Args:
+        func_name: Name of the tool.
+        argument: The argument, or its nested place, that carried the data.
+        kinds: The kinds of data found (``api_key``, ``email``, ...), never the value.
+        detail: The guard's reason, which names no value.
+
+    Returns:
+        AirlockResponse naming the argument and the kinds of data.
+    """
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.ARGUMENT_SECRET,
+        error=f"AIRLOCK_BLOCK: Tool '{func_name}' blocked by ArgumentSecretGuard: {detail}",
+        fix_hints=[
+            "Leave secrets and personal data out of tool arguments; they reach the tool "
+            "and whatever it stores",
+            "If the tool needs a credential, it should read it from its own configuration",
+        ],
+        metadata={"function": func_name, "argument": argument, "kinds": list(kinds)},
     )
 
 

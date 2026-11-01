@@ -378,14 +378,15 @@ class TestIndiaPiiMaskOutput:
         assert "[REDACTED]" in out
         assert VALID_AADHAAR_NUMBERS[0][-4:] not in out
 
-    def test_hash_strategy_emits_sha_prefix(self) -> None:
+    def test_hash_strategy_emits_an_hmac_tag(self) -> None:
+        """0.10.29: a keyed HMAC tag; the unkeyed sha256 could be reversed by enumeration."""
         out, _ = mask_sensitive_data(
             "PAN: ABCPE1234F",
             [SensitiveDataType.PAN],
             mask_config={SensitiveDataType.PAN: MaskingStrategy.HASH},
             pii_locales=["in"],
         )
-        assert "[SHA256:" in out
+        assert "[HMAC:" in out
         assert "ABCPE1234F" not in out
 
 

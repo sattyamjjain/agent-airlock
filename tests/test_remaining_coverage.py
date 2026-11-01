@@ -964,8 +964,11 @@ class TestSanitizerMissingPattern:
         """
         from agent_airlock.sanitizer import PATTERNS, SensitiveDataType
 
-        # Just verify all types have patterns
+        # Every regex detector has a pattern. ENV_DUMP (0.10.29) is structural: it counts
+        # secret-named entries (_env_dump_detections) rather than matching one regex.
         for data_type in SensitiveDataType:
+            if data_type is SensitiveDataType.ENV_DUMP:
+                continue
             assert data_type in PATTERNS, f"Missing pattern for {data_type}"
 
 

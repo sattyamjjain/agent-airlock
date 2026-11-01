@@ -828,6 +828,17 @@ def _effect_status_unknown(env: _Env) -> Any:
         return tool()
 
 
+def _argument_secret(env: _Env) -> Any:
+    """A memory write whose argument carries a credential."""
+    from agent_airlock.argument_secret_guard import ArgumentSecretGuard
+
+    @Airlock(policy=SecurityPolicy(argument_secret_guard=ArgumentSecretGuard()))
+    def tool(fact: str) -> str:
+        return "ran"
+
+    return tool(fact="export DB_PASSWORD=hunter2-prod")
+
+
 def _kill_switch(env: _Env) -> Any:
     env.monkeypatch.setattr(core_module, "_kill_switch_frozen", lambda: True)
     env.monkeypatch.setattr(core_module, "_kill_switch_get", lambda: None)
@@ -989,6 +1000,7 @@ _REFUSALS: list[tuple[str, Callable[[_Env], Any], BlockReason]] = [
     ("startup-hook", _startup_hook, BlockReason.STARTUP_HOOK),
     ("output-unreadable", _output_unreadable, BlockReason.OUTPUT_UNREADABLE),
     ("tool-arg-sink", _tool_arg_sink, BlockReason.TOOL_ARG_SINK),
+    ("argument-secret", _argument_secret, BlockReason.ARGUMENT_SECRET),
     ("amplification", _amplification_unconfigured, BlockReason.AMPLIFICATION_EXCEEDED),
     ("handle-not-issued", _handle_not_issued, BlockReason.HANDLE_NOT_ISSUED),
     ("handle-wrong-issuer", _handle_wrong_issuer, BlockReason.HANDLE_WRONG_ISSUER),

@@ -34,6 +34,7 @@ from .exceptions import AirlockError
 if TYPE_CHECKING:
     from .action_contradiction_gate import ActionContradictionGate
     from .approvals import ApprovalLedger
+    from .argument_secret_guard import ArgumentSecretGuard
     from .capabilities import CapabilityPolicy
     from .cost_tracking import (
         BudgetEstimate,
@@ -545,6 +546,13 @@ class SecurityPolicy:
     # default (None preserves prior behavior exactly). See
     # :class:`agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
     tool_arg_sink_guard: ToolArgSinkGuard | None = None
+    # V0.10.29 secrets and personal data in tool arguments. When set, the @Airlock seam
+    # runs the guard as Step 2.76, right after the shell-syntax screen: every string
+    # argument goes through the sanitizer's secret and PII detectors, and a finding refuses
+    # the call (argument_secret) or, in mask mode, masks a top-level keyword string. OFF by
+    # default (None preserves prior behavior exactly). See
+    # :class:`agent_airlock.argument_secret_guard.ArgumentSecretGuard`.
+    argument_secret_guard: ArgumentSecretGuard | None = None
     # V0.8.24 trace-redaction + per-tenant watermark policy (RedAct-style).
     # When set and ``enabled``, traces/receipts emitted to a NON-LOCAL sink
     # are redacted (protected fields localized + rewritten to keep

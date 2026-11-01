@@ -1,0 +1,268 @@
+{
+ "subject": "mem0#7283 P2 · bypass-probe corpus (MGP-7283-C1)",
+ "generated_at": "2026-10-31T19:48:49+08:00",
+ "gate_under_test": "DataAlchmesit/MiniEval-pro@feat/secrets-guard",
+ "api": "minieval_pro.scorers.secrets_guard.check_secrets()",
+ "counts": {
+  "bypass": 21,
+  "caught": 2,
+  "clean": 2,
+  "fp": 0
+ },
+ "cases": [
+  {
+   "id": "B01",
+   "category": "G1-structured-keys",
+   "text": "Config saved: {\"password\": \"hunter2\"}",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "label 后跟引号闭合，正则要求 label 与分隔符相邻"
+  },
+  {
+   "id": "B02",
+   "category": "G1-structured-keys-caught",
+   "text": "{\"api_key\" : \"sk-live-abc123456789xyz\"}",
+   "expected_verdict": "REJECT",
+   "current_has_secret": true,
+   "current_kinds": [
+    "openai_key"
+   ],
+   "current_status": "CAUGHT",
+   "why": "实测 CAUGHT：openai_key token 模式兜住（sk- 前缀）。JSON 形状缺口只对**非 token 形状**的值成立（对照 B01）"
+  },
+  {
+   "id": "B03",
+   "category": "G1-structured-keys-caught",
+   "text": "export DB_PASSWORD=hunter2-prod",
+   "expected_verdict": "REJECT",
+   "current_has_secret": true,
+   "current_kinds": [
+    "password_or_secret"
+   ],
+   "current_status": "CAUGHT",
+   "why": "实测 CAUGHT：label 的可选前缀组 ([a-z]+[ _-])? 意外覆盖了 DB_ 前缀。env 形式整体已被覆盖"
+  },
+  {
+   "id": "B04",
+   "category": "G2-plain-passphrase",
+   "text": "The wifi password is correcthorsebatterystaple",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "无数字无符号且非引号值 → not secret-looking"
+  },
+  {
+   "id": "B05",
+   "category": "G2-plain-passphrase",
+   "text": "master password is hunter",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "同上；hunter 长度 6 但无符号"
+  },
+  {
+   "id": "B06",
+   "category": "G3-token-case",
+   "text": "env: akiaj77d7jjd8dkdkd9911",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "aws_access_key 正则大小写敏感，小写变体漏检"
+  },
+  {
+   "id": "B07",
+   "category": "G3-token-case",
+   "text": "GHO_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "github_token 正则只认小写 gho_/ghp_"
+  },
+  {
+   "id": "B08",
+   "category": "G3-token-case",
+   "text": "XOXB-1234567890-abcdef",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "slack 正则只认小写 xox"
+  },
+  {
+   "id": "B09",
+   "category": "G4-label-gaps",
+   "text": "The passphrase is violet-tunnel-77",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "passphrase 不在 label 白名单"
+  },
+  {
+   "id": "B10",
+   "category": "G4-label-gaps",
+   "text": "private key (raw, no PEM header): MIIEpAIBAAKCAQEA7f4k",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "无 BEGIN 块且 private key 不在 label 白名单"
+  },
+  {
+   "id": "B11",
+   "category": "G4-label-gaps",
+   "text": "encryption key: j8#kL2$vQ9",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "encryption key 不在 label 白名单"
+  },
+  {
+   "id": "B12",
+   "category": "G5-encoded",
+   "text": "aGVsbG8gd29ybGQ= stored in env var",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "base64 裸值无 label；仅因旧值含符号被偶然命中的类别"
+  },
+  {
+   "id": "B13",
+   "category": "G5-encoded",
+   "text": "export ENC_KEY=0xAF3B91C7",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "ENC_KEY 不在 label 白名单"
+  },
+  {
+   "id": "B14",
+   "category": "G5-encoded",
+   "text": "Authorization: Basic YWRtaW46aHVudGVyMg==",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "Basic 凭据不在 token 模式（Bearer 才在）"
+  },
+  {
+   "id": "B15",
+   "category": "G6-bare-value",
+   "text": "hunter2-prod is what I set everywhere",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "值先行、label 后置的口语序"
+  },
+  {
+   "id": "B16",
+   "category": "G6-bare-value",
+   "text": "server creds: admin / hunter2-prod",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "creds（缩写）不在 label 白名单"
+  },
+  {
+   "id": "B17",
+   "category": "G7-possession-form",
+   "text": "password's value is hunter2",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "所有格 's 后接名词再接 is，分隔符被隔开"
+  },
+  {
+   "id": "B18",
+   "category": "G7-yaml-multiline",
+   "text": "password:\n  violettunnelhall",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "YAML 换行缩进被 \\s* 吞掉后 label 仍可匹配，但值纯字母无数字符号 → not secret-looking（G2 形状缺口在 YAML 形态下的变体；值若加引号、含数字或含连字符则会被逮——连字符也算符号）"
+  },
+  {
+   "id": "B19",
+   "category": "G7-code-call",
+   "text": "db.set_password(\"hunter2-prod\")",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "代码调用形态，label 与值被函数名隔开"
+  },
+  {
+   "id": "B20",
+   "category": "G8-non-english",
+   "text": "密码是 hunter2-prod",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "label 正则仅英文"
+  },
+  {
+   "id": "B21",
+   "category": "G8-non-english",
+   "text": "contraseña: t!ger-2024",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "同上"
+  },
+  {
+   "id": "B22",
+   "category": "AUTHOR-STATED",
+   "text": "the wifi password is blue",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "纯字母短值；作者 10-19 自述局限，我方复现确认"
+  },
+  {
+   "id": "B23",
+   "category": "AUTHOR-STATED",
+   "text": "her credit card number is 4111 1111 1111 1111",
+   "expected_verdict": "REJECT",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "BYPASS",
+   "why": "卡号不在范围；作者自述，语料收录供扩展参考"
+  },
+  {
+   "id": "P01",
+   "category": "CONTROL-clean",
+   "text": "I forgot my password again",
+   "expected_verdict": "STORE",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "CLEAN_OK",
+   "why": "无 secret 值，必须放行"
+  },
+  {
+   "id": "P02",
+   "category": "CONTROL-clean",
+   "text": "The password policy requires 12 characters",
+   "expected_verdict": "STORE",
+   "current_has_secret": false,
+   "current_kinds": [],
+   "current_status": "CLEAN_OK",
+   "why": "policy 描述，无 secret 值"
+  }
+ ]
+}

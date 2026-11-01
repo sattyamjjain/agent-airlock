@@ -147,6 +147,7 @@ from .self_heal import (
     AirlockResponse,
     BlockReason,
     handle_amplification_exceeded,
+    handle_argument_secret,
     handle_budget_exceeded,
     handle_capability_denied,
     handle_effect_status_unknown,
@@ -283,6 +284,23 @@ class _BoundCall:
     def fresh_digest(self) -> str | None:
         """The digest worked out again from the values as they are now."""
         return self._digest_of(self._bind())
+
+    def replace(self, apply: Callable[[], None]) -> None:
+        """Change the values the tool will get (``apply``: step 2.76's masking), then work
+        the arguments and their digest out again, so the later steps and the decision
+        record read what the tool runs with. An approval moves onto the new digest only
+        when the values were still the ones it approved: one changed while the approver
+        was deciding is still refused."""
+        approval = self.approval
+        unchanged = approval is not None and self.fresh_digest() == approval[0]
+        apply()
+        self._arguments = None
+        self._digest = None
+        self._digested = False
+        if approval is not None and unchanged:
+            digest = self.fresh_digest()
+            if digest is not None:
+                self.approval = (digest, approval[1])
 
     @staticmethod
     def _digest_of(arguments: Mapping[str, Any]) -> str | None:
@@ -829,6 +847,7 @@ def _sanitize_tool_output(
         "mask_pii": config.mask_pii,
         "mask_secrets": config.mask_secrets,
         "pii_locales": config.pii_locales or None,
+        "strip_hidden_html": config.strip_hidden_html,
     }
     if isinstance(result, str):
         max_chars = config.max_output_chars if config.max_output_chars > 0 else None
@@ -1997,7 +2016,7 @@ class Airlock:
                 context._refused_at = "2.6:contradiction_gate"
                 return kwargs, start_time, context, acg_error, None, None
 
-            # Steps 2.7, 2.75, 3 and 5 read argument values. Until 0.10.24 they read only
+            # Steps 2.7, 2.75, 2.76, 3 and 5 read argument values. Until 0.10.24 they read only
             # keyword arguments, and only str values, so a positional argument, a list of
             # paths, a pathlib.Path or a URL object walked past all three. They now read
             # every argument the call passes (`_arg_walk`), bound once and only when one of
@@ -2055,6 +2074,21 @@ class Airlock:
                 context._refused_at = "2.75:tool_arg_sinks"
                 return arguments, start_time, context, sink_error, None, None
 
+            # Step 2.76: Secrets and personal data in tool arguments (V0.10.29). Arguments
+            # are model output: a key or a password in one reaches the tool, and a memory
+            # tool stores it for every later run (BerriAI/litellm#46454, mem0ai/mem0#7283).
+            # Inert when policy.argument_secret_guard is None. In mask mode a masked
+            # keyword string replaces the original for the later gates and the tool.
+            secret_error = self._check_argument_secrets(
+                func_name=func_name,
+                resolved_policy=resolved_policy,
+                arguments=arguments,
+                kwargs=cleaned_kwargs,
+                call=call,
+            )
+            if secret_error is not None:
+                context._refused_at = "2.76:argument_secrets"
+                return arguments, start_time, context, secret_error, None, None
             # Step 2.77: shell commands (V0.10.29, langchain-ai/langchain#40197). An agent
             # shell tool's command, followed through its wrappers, is allowed, escalated or
             # refused by the resolved policy's shell_command_policy rules.
@@ -4079,12 +4113,13 @@ class Airlock:
         )
 
     def _reads_argument_values(self, func_name: str, resolved_policy: Any) -> bool:
-        """Whether a gate that reads argument values (steps 2.7, 2.75, 3, 5) is on."""
+        """Whether a gate that reads argument values (steps 2.7, 2.75, 2.76, 3, 5) is on."""
         return (
             self.config.filesystem_policy is not None
             or func_name in self.config.endpoint_policies
             or getattr(resolved_policy, "deserialization_guard", None) is not None
             or getattr(resolved_policy, "tool_arg_sink_guard", None) is not None
+            or getattr(resolved_policy, "argument_secret_guard", None) is not None
         )
 
     def _validate_filesystem_paths(
@@ -4687,6 +4722,58 @@ class Airlock:
             },
         )
         return response
+
+    def _check_argument_secrets(
+        self,
+        *,
+        func_name: str,
+        resolved_policy: SecurityPolicy | None,
+        arguments: dict[str, Any],
+        kwargs: dict[str, Any],
+        call: _BoundCall,
+    ) -> AirlockResponse | None:
+        """Secrets and personal data in tool arguments (Step 2.76, V0.10.29).
+
+        Calls ``policy.argument_secret_guard.evaluate(arguments)`` when the guard applies
+        to this tool. A finding refuses the call, naming the argument and the kind of data;
+        in ``mask`` mode a top-level keyword string is masked in ``kwargs`` and
+        ``arguments`` instead, so the tool and the later gates see the masked value, and
+        ``call`` is bound again from them (``_BoundCall.replace``).
+        """
+        guard = getattr(resolved_policy, "argument_secret_guard", None)
+        if guard is None or not guard.applies_to(func_name):
+            return None
+        decision = guard.evaluate(arguments, keywords=kwargs)
+        if decision.allowed:
+
+            def mask() -> None:
+                for name, value in decision.masked.items():
+                    kwargs[name] = arguments[name] = value
+
+            if decision.masked:
+                call.replace(mask)
+                logger.info(
+                    "airlock_argument_secret_masked",
+                    function=func_name,
+                    arguments=sorted(decision.masked),
+                )
+            return None
+        logger.warning(
+            "airlock_argument_secret_block",
+            function=func_name,
+            argument=decision.argument,
+            kinds=list(decision.kinds),
+        )
+        self._safe_invoke_callback(
+            self.config.on_blocked,
+            "on_blocked",
+            func_name,
+            decision.detail,
+            {"violation_type": "argument_secret", "argument": decision.argument},
+        )
+        return handle_argument_secret(
+            func_name, argument=decision.argument, kinds=decision.kinds, detail=decision.detail
+        )
 
     def _check_tool_arg_sinks(
         self,

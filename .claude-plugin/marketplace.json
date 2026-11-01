@@ -11,7 +11,7 @@
       "Stops hallucinated tool arguments before Pydantic ever sees them",
       "Pydantic V2 strict validation + self-healing fix_hints for LLM retry",
       "Sandboxes dangerous execution in E2B, Docker, or local (opt-in)",
-      "Output sanitization: 17 PII / secret types (6 of them India-locale, opt-in), 4 masking strategies",
+      "Output sanitization: 18 PII / secret types (6 of them India-locale, opt-in), 4 masking strategies",
       "RBAC + rate limits + time windows + capability gating",
       "CVE regression suite reproducing disclosed MCP-adjacent CVE / advisory patterns (2025-2026), catalogued at docs/cves/index.md",
       "OAuth 2.1 + PKCE S256 + RFC 8707 validators for MCP 2025-11-25",

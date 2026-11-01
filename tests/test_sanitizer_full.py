@@ -29,8 +29,9 @@ class TestMaskValueStrategies:
     def test_hash_masking(self) -> None:
         """Test HASH masking strategy."""
         result = _mask_value("test@example.com", SensitiveDataType.EMAIL, MaskingStrategy.HASH)
-        assert result.startswith("[SHA256:")
-        assert result.endswith("...]")
+        # 0.10.29: an HMAC tag of 16 hex characters, was "[SHA256:" and 8 of them.
+        assert result.startswith("[HMAC:")
+        assert len(result) == len("[HMAC:]") + 16
 
     def test_partial_masking_short_value(self) -> None:
         """Test PARTIAL masking for short values."""

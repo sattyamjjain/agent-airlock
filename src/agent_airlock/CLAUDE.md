@@ -57,7 +57,7 @@ src/agent_airlock/
 │                      agent_airlock.sandbox
 ├── _arg_walk.py       names positional arguments by parameter and walks what they hold
 │                      (containers, the tool's own models) for the value gates
-│                      (2.7, 2.75, 3, 5)
+│                      (2.7, 2.75, 2.76, 3, 5)
 │
 ├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
@@ -172,6 +172,13 @@ src/agent_airlock/
      only so), or with an empty allowlist not matched case-folded by
      `DEFAULT_DISPATCH_DENY`; the refusal shows the name, never the deny pattern. The field
      is stored as a hashable read-only `_DispatchNames`, so the frozen guard stays hashable
+   - 2.76 secrets and personal data in arguments (V0.10.29, `argument_secret_guard.py`, off
+     until the policy sets `argument_secret_guard`): the sanitizer's detectors over every
+     string argument, nested ones and mapping keys included. `block` refuses
+     (`argument_secret`, naming the argument and the kind of data, never the value);
+     `mask` masks a top-level keyword string in place through `_BoundCall.replace`, so the
+     later steps, the decision record and an approval read the masked value, and refuses
+     what it cannot mask (a positional or nested value)
    - 2.77 shell commands (V0.10.29, `shell_command_policy.py`, off until the policy sets
      `shell_command_policy`): `command_args` split by a POSIX quoting scanner (`_Line`;
      shlex returns a quoted `';'` and the operator alike), each command followed through
@@ -197,7 +204,7 @@ src/agent_airlock/
      `lease_scope`, and names no lease target
 5. Endpoint policy validation
 
-   Steps 2.7, 2.75, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
+   Steps 2.7, 2.75, 2.76, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
    by parameter name (`*args` under the parameter's own name; a `**kwargs` key never hides
    a same-named positional-only or `*args` value), down through mappings (every key too,
    URL objects, tuples and frozensets included), sequences, sets and mapping views, and into

@@ -24,6 +24,7 @@ class AirlockConfig:
     mask_secrets: bool = True
     sanitize_output: bool = True
     pii_locales: list[str] = field(default_factory=list)
+    strip_hidden_html: bool = False
 
     # Audit
     enable_audit_log: bool = True
@@ -78,6 +79,7 @@ class AirlockConfig:
 | `mask_pii` | `bool` | `True` | Mask PII in outputs |
 | `mask_secrets` | `bool` | `True` | Mask secrets in outputs |
 | `pii_locales` | `list[str]` | `[]` | `["in"]` adds the India PII types |
+| `strip_hidden_html` | `bool` | `False` | Remove the HTML a person cannot see (inline-styled out of view, `hidden`, comments) from a string result before it is masked. See [Hidden HTML](../guide/sanitization.md#hidden-html) |
 | `max_output_chars` | `int` | `20000` | Truncate string results at this many characters; `0` means no limit |
 | `max_output_tokens` | `int` | `5000` | Deprecated, removal in v1.0.0: nothing has ever truncated on it (it is read from `AIRLOCK_MAX_OUTPUT_TOKENS` too); any other value warns |
 
@@ -170,7 +172,7 @@ from agent_airlock import MaskingStrategy
 | `FULL` | `john@example.com` | `[REDACTED]` |
 | `PARTIAL` | `john@example.com` | `j***@example.com` |
 | `TYPE_ONLY` | `john@example.com` | `[EMAIL]` |
-| `HASH` | `john@example.com` | `[SHA256:855f96e9...]` |
+| `HASH` | `john@example.com` | `[HMAC:3f9a8c2e1b7d4065]` (keyed per request) |
 
 `@Airlock` uses a fixed default per type: `FULL` for SSN, password, private key and
 connection string, `TYPE_ONLY` for IFSC, `PARTIAL` for the rest. To choose, call the
