@@ -1,4 +1,4 @@
-# Adapter table — source of truth for the 38 bypass targets
+# Adapter table — source of truth for the 39 bypass targets
 
 This table is the human-readable map; `adapters/registry.py` is the executable
 one, and `tests/test_adaptive_redteam_adapters.py` drives every row's
@@ -27,12 +27,13 @@ triage under the plan's severity rubric; a physical-sink bypass is ground truth.
 **Seeds**: 10 for the value gates and the RCE / SSRF / path / deserialization /
 spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 
-## 38 bypass targets
+## 39 bypass targets
 
 | target | mode | module | entry point | sink | forbidden verdicts | sentinel | seeds |
 |---|---|---|---|---|---|---|---|
 | `argv_guard` | C | `mcp_spec/argv_guard.py` | `enforce_argv_array(argv)` | spawn | (raises) | `concatenated-argv` | 10 |
 | `bind_address_guard` | C | `mcp_spec/bind_address_guard.py` | `validate_bind_address(addr, cfg)` | bind | (raises) | `public-bind` | 5 |
+| `code_sandbox_bridge_guard` | C | `mcp_spec/code_sandbox_bridge_guard.py` | `CodeSandboxBridgeGuard.evaluate` | sandbox_bridge | deny_bridge | `sandbox-host-bridge` | 10 |
 | `codegen_delimiter_guard` | C | `mcp_spec/codegen_delimiter_guard.py` | `CodegenDelimiterInjectionGuard.evaluate` | codegen | deny_newline_into_code, deny_quote_breakout, deny_triple_quote | `delimiter-breakout` | 10 |
 | `config_path_guard` | C | `mcp_spec/config_path_guard.py` | `ConfigPathGuard.evaluate` | filesystem | block | `config-path-traversal` | 10 |
 | `description_manifest_guard` | C | `mcp_spec/description_manifest_guard.py` | `DescriptionManifestGuard.evaluate` | manifest | deny_inconsistent, deny_unknown_tool | `described-arg-not-in-manifest` | 5 |
@@ -70,7 +71,7 @@ spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 | `ssrf_egress_guard` | C | `ssrf_egress_guard.py` | `SSRFEgressGuard.check_url` | egress | deny_link_local, deny_loopback, deny_metadata, deny_private_rfc1918 | `169.254.169.254` | 10 |
 | `tool_output_trust_guard` | C | `tool_output_trust_guard.py` | `ToolOutputTrustGuard.inspect` | tool_output | fenced_command, imperative_command, override_directive, tool_call_shaped | `injected-directive` | 5 |
 
-## Value-gate adapters (anchored by the oracle; not among the 38)
+## Value-gate adapters (anchored by the oracle; not among the 39)
 
 | target | mode | module | entry point | sink | forbidden verdicts | sentinel | seeds |
 |---|---|---|---|---|---|---|---|
@@ -81,10 +82,10 @@ spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 ## Mode counts
 
 - **Mode A (policy field):** 3 — `sequence_guard`, `action_contradiction_gate`
-  (both in the 38), plus `deserialization_guard` (value gate).
+  (both in the 39), plus `deserialization_guard` (value gate).
 - **Mode B (config gate):** 2 — `filesystem`, `endpoint` (both value gates).
-- **Mode C (standalone):** 36 — the remaining 36 of the 38 bypass targets.
-- **Total registered:** 41 (38 bypass targets + 3 value-gate adapters).
+- **Mode C (standalone):** 37 — the remaining 37 of the 39 bypass targets.
+- **Total registered:** 42 (39 bypass targets + 3 value-gate adapters).
 
 Regenerate the rows above with `benchmarks/adaptive_redteam/` imported and
 `get_registry()` (the helper lives in the repo history under

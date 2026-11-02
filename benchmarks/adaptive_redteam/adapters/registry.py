@@ -1,6 +1,6 @@
 """The adapter registry: one entry per bypass target.
 
-38 bypass targets (the 32 ``mcp_spec/*guard*.py`` modules plus
+39 bypass targets (the 33 ``mcp_spec/*guard*.py`` modules plus
 ``action_contradiction_gate``, ``done_receipt_guard``, ``mcp_proxy_guard``,
 ``sequence_guard``, ``ssrf_egress_guard`` and ``tool_output_trust_guard``), plus
 three value-gate adapters the oracle also anchors on (``deserialization_guard``,
@@ -9,7 +9,7 @@ three value-gate adapters the oracle also anchors on (``deserialization_guard``,
 ``adapters_table.md`` is the human-readable source of truth; this module is the
 executable one. The wiring test (``tests/test_adaptive_redteam_adapters.py``)
 drives every entry's ``known_blocked`` (expect ``hard_block``) and benign control
-(expect ``benign_pass``), which proves the 38 are wired to a real refusal and a
+(expect ``benign_pass``), which proves the 39 are wired to a real refusal and a
 real admit.
 """
 
@@ -42,6 +42,7 @@ HIGH_SURFACE: frozenset[str] = frozenset(
         "ssrf_egress_guard",
         "eval_rce_guard",
         "filter_eval_rce_guard",
+        "code_sandbox_bridge_guard",
         "stdio_command_injection_guard",
         "stdio_guard",
         "stdio_meta_guard",
@@ -228,6 +229,19 @@ def _build_standalone() -> dict[str, StandaloneAdapter]:
         {"code": "eval(user_input)"},
         {"code": "total = sum(values)"},
         reference=lambda c: _has_eval_sink(c.kwargs),
+    )
+
+    # 8b. code_sandbox_bridge_guard ----------------------------------------
+    from agent_airlock.mcp_spec.code_sandbox_bridge_guard import CodeSandboxBridgeGuard
+
+    adapters["code_sandbox_bridge_guard"] = _spec(
+        "code_sandbox_bridge_guard",
+        lambda: CodeSandboxBridgeGuard(),
+        lambda g, c: g.evaluate(dict(c.kwargs)),
+        ForbiddenEffect("sandbox_bridge", frozenset({"deny_bridge"}), "sandbox-host-bridge"),
+        {"code": "js.Deno.readTextFile('/etc/passwd')"},
+        {"code": "import math\nprint(math.sqrt(2))"},
+        reference=lambda c: _has_sandbox_bridge(c.kwargs),
     )
 
     # 9. filter_eval_rce_guard ---------------------------------------------
@@ -816,6 +830,22 @@ def _has_eval_sink(kwargs: dict[str, Any]) -> bool:
     return any(isinstance(v, str) and pattern.search(v) for v in kwargs.values())
 
 
+def _has_sandbox_bridge(kwargs: dict[str, Any]) -> bool:
+    """Independent (fresh regex) confirmation a sandbox host-bridge shape is present.
+
+    Symbolic sink: this is a candidate signal for human triage, not a physical bypass
+    (adaptive_redteam/CLAUDE.md). Written fresh, not shared with the guard's own patterns.
+    """
+    import re
+
+    pattern = re.compile(
+        r"\bjs\.Deno\b|\bfrom\s+js\s+import\b|\bimport\s+js\b"
+        r"|\bDeno\.(?:write|read|open|remove|mkdir|Command|run|env|connect|listen)"
+        r"|child_process"
+    )
+    return any(isinstance(v, str) and pattern.search(v) for v in kwargs.values())
+
+
 def _ssrf_forbidden(url: Any) -> bool:
     """Independent (stdlib ipaddress) confirmation of a forbidden egress host."""
     import ipaddress
@@ -857,7 +887,7 @@ def _stub_resolver(host: str) -> list[str]:
 
 
 def build_registry() -> dict[str, Any]:
-    """Construct every adapter: the 38 bypass targets plus 3 value-gate adapters."""
+    """Construct every adapter: the 39 bypass targets plus 3 value-gate adapters."""
     registry: dict[str, Any] = dict(_build_standalone())
     registry["deserialization_guard"] = DeserializationAdapter()
     registry["sequence_guard"] = SequenceGuardAdapter()
@@ -867,12 +897,13 @@ def build_registry() -> dict[str, Any]:
     return registry
 
 
-#: The 38 bypass targets named in the plan (Track D). The three value-gate
-#: adapters (``deserialization_guard`` is among the 38? no) are listed separately.
+#: The 39 bypass targets named in the plan (Track D). The three value-gate
+#: adapters (``deserialization_guard`` is among the 39? no) are listed separately.
 BYPASS_TARGETS: tuple[str, ...] = (
-    # 32 mcp_spec/*guard*.py
+    # 33 mcp_spec/*guard*.py
     "argv_guard",
     "bind_address_guard",
+    "code_sandbox_bridge_guard",
     "codegen_delimiter_guard",
     "config_path_guard",
     "description_manifest_guard",
@@ -912,7 +943,7 @@ BYPASS_TARGETS: tuple[str, ...] = (
     "tool_output_trust_guard",
 )
 
-#: Value-gate adapters that are not in the 38 but which the oracle anchors on.
+#: Value-gate adapters that are not in the 39 but which the oracle anchors on.
 VALUE_GATE_TARGETS: tuple[str, ...] = ("deserialization_guard", "filesystem", "endpoint")
 
 
