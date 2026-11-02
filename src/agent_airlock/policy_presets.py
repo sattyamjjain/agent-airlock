@@ -2509,6 +2509,117 @@ def mcp_calc_server_bundle_defaults_2026_05_15(
     }
 
 
+# Tool-name patterns for the code-execution tool class: a tool that forwards a
+# model-written ``code`` argument into a runtime. Operators extend via
+# ``extra_tool_name_patterns`` on the factory below.
+_CODE_EXECUTION_TOOL_NAME_PATTERNS: tuple[str, ...] = (
+    "generate_prefab_ui",
+    "run_python",
+    "execute_python",
+    "execute_code",
+    "code_interpreter",
+    "run_code",
+)
+
+
+@preset
+def code_sandbox_bridge_defaults(
+    *,
+    extra_bridges: frozenset[str] = frozenset(),
+    extra_tool_name_patterns: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Refuse code-tool arguments that reach the sandbox host runtime (v0.10.31+).
+
+    CVE-2026-120338 (CNA JFrog, NVD 2026-11-01, CVSS 3.1 10.0, CWE-94/269/693): a
+    generative-UI tool ran caller-supplied Python inside a Pyodide-on-Deno
+    sandbox whose host API was reachable from the sandboxed code and whose Deno
+    process held read, write and network permission, so the code read and wrote
+    files as the server user and persisted by writing a ``.pth`` into the server
+    virtualenv. The remote path is an MCP tool (``generate_prefab_ui``) that
+    forwards its ``code`` argument into the sandbox; on an unauthenticated
+    server any client can call it.
+
+    This preset turns on
+    :class:`~agent_airlock.mcp_spec.code_sandbox_bridge_guard.CodeSandboxBridgeGuard`,
+    scoped at the policy layer to the code-execution tool class
+    (``generate_prefab_ui``, ``run_python``, ``execute_python``,
+    ``execute_code``, ``code_interpreter``, ``run_code``). **Every bridge group
+    denies** — the Pyodide-to-JS proxy (``from js import`` / ``import js`` /
+    ``js.Deno`` / ``pyodide.ffi`` / ``pyodide.code``), the Deno host API calls,
+    and the Node ``child_process`` bridges — because legitimate code sent to a
+    generative-UI tool is Python and Prefab components only: the sandbox ships
+    the standard library plus the UI package and nothing reaches ``js``, so a
+    ``js`` import in that argument is an escape, not a feature.
+
+    Honest framing: this is a syntax-shape screen, the second defence at the
+    argument seam. It does not catch a bridge assembled at run time inside the
+    sandbox, and it is not a substitute for upgrading the sandbox runtime so the
+    host API is unreachable and its permissions are revoked before untrusted
+    code runs (how CVE-2026-120338 was fixed upstream). Recommended alongside:
+    ``AirlockConfig(startup_hook_check="warn")`` on any process that hosts a
+    code-execution tool, so a persistence file written through another path is
+    caught at the next process start, and the default :class:`SafePath` deny
+    list, which refuses ``.pth`` writes into site directories.
+
+    Args:
+        extra_bridges: Additional host-bridge spellings to refuse, each matched
+            as a literal substring.
+        extra_tool_name_patterns: Additional tool-name patterns on top of the
+            curated code-execution class set.
+
+    Returns:
+        ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
+        ``default_action`` / ``advisory_url`` / ``cves`` keys, plus:
+
+        - ``guard`` — the
+          :class:`~agent_airlock.mcp_spec.code_sandbox_bridge_guard.CodeSandboxBridgeGuard`.
+        - ``tool_name_patterns`` — the code-execution tool class this applies to.
+        - ``owasp`` — ``"MCP05"``; ``cwe`` — ``("CWE-94", "CWE-269", "CWE-693")``.
+        - ``recommended_config`` — ``{"startup_hook_check": "warn"}``.
+
+    Raises:
+        TypeError: ``extra_bridges`` is not a frozenset, or
+            ``extra_tool_name_patterns`` is not a tuple.
+
+    Usage::
+
+        from agent_airlock.policy_presets import code_sandbox_bridge_defaults
+
+        preset = code_sandbox_bridge_defaults()
+        guard = preset["guard"]
+        guard.evaluate({"code": "import js\\njs.Deno.readTextFile('/etc/passwd')"}).allowed
+        # False
+
+    Primary source:
+      https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-120338
+    """
+    from .mcp_spec.code_sandbox_bridge_guard import CodeSandboxBridgeGuard
+
+    if not isinstance(extra_bridges, frozenset):
+        raise TypeError(
+            f"extra_bridges must be a frozenset[str]; got {type(extra_bridges).__name__}"
+        )
+    if not isinstance(extra_tool_name_patterns, tuple):
+        raise TypeError(
+            "extra_tool_name_patterns must be a tuple of str; got "
+            f"{type(extra_tool_name_patterns).__name__}"
+        )
+
+    guard = CodeSandboxBridgeGuard(extra_bridges=extra_bridges)
+    return {
+        "preset_id": "code_sandbox_bridge",
+        "severity": "critical",
+        "default_action": "deny",
+        "advisory_url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-120338",
+        "cves": ("CVE-2026-120338",),
+        "guard": guard,
+        "tool_name_patterns": _CODE_EXECUTION_TOOL_NAME_PATTERNS + extra_tool_name_patterns,
+        "owasp": "MCP05",
+        "cwe": ("CWE-94", "CWE-269", "CWE-693"),
+        "recommended_config": {"startup_hook_check": "warn"},
+    }
+
+
 @preset
 def metis_inspired_corpus_block_rate_regression_defaults_2026_05_18(
     *,
@@ -6340,6 +6451,7 @@ __all__ = [
     "stdio_guard_eval_defaults_2026_05_15",
     "mcp_inspector_exposure_guard_defaults",
     "mcp_calc_server_bundle_defaults_2026_05_15",
+    "code_sandbox_bridge_defaults",
     "openapi_doc_drift_guard_defaults",
     "metis_inspired_corpus_block_rate_regression_defaults_2026_05_18",
     "stainless_provenance_probe_defaults",

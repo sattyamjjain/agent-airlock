@@ -75,7 +75,7 @@ Everything except validation is off by default.
 | **Authorize** | RBAC · token-bucket rate limits · time windows · per-model-tier cost budgets · capability gating |
 | **Isolate** | Filesystem path validation · network egress control · sandboxed execution (`sandbox=True` runs on E2B; Docker, Modal and local backends are called directly) |
 | **Sanitize** | PII and secret masking, including opt-in Indic PII · output truncation · JSON-Lines audit log |
-| **MCP guards** | Per-CVE guards for stdio injection, OAuth, DNS rebinding, SSRF, eval-RCE, WebSocket origin and task lifecycle — tracking MCP spec revision `2026-07-28` |
+| **MCP guards** | Per-CVE guards for stdio injection, OAuth, DNS rebinding, SSRF, eval-RCE, code-sandbox host-bridge, WebSocket origin and task lifecycle — tracking MCP spec revision `2026-07-28` |
 
 ### Token audience and startup hooks
 
@@ -257,7 +257,7 @@ Against the **MCP Top-10**. Evidence is compressed here; each row's full justifi
 | **MCP02 Privilege Escalation via Scope Creep** | `require_agent_id` preset, capability gating, `CredentialScope`, runtime capability-union deny at grant time | Full |
 | **MCP03 Tool Poisoning** | Ghost-arg rejection, `SafePath` / `SafeURL`, `mcp_description_manifest_guard`, `install_*` deny | Full |
 | **MCP04 Software Supply Chain Attacks & Dependency Tampering** | `stdio_guard_ox_defaults()` (Ox 2026-04-16 advisory), `download_plugin_*` / `fetch_plugin_*` deny | Full |
-| **MCP05 Command Injection & Execution** | `stdio_guard` shell-metachar and deny-pattern rules, `exec_*` / `run_*` / `system_*` deny, sandbox for `DANGEROUS` | Full |
+| **MCP05 Command Injection & Execution** | `stdio_guard` shell-metachar and deny-pattern rules, `exec_*` / `run_*` / `system_*` deny, `CodeSandboxBridgeGuard` for code-tool sandbox escapes, sandbox for `DANGEROUS` | Full |
 | **MCP06 Intent Flow Subversion** | `ToolOutputTrustGuard` envelopes injected-instruction output; `@requires_human_oversight` gates high-value actions | Partial |
 | **MCP07 Insufficient Authentication & Authorization** | OAuth 2.1 + PKCE S256 helpers, `iss` mix-up validation, header/body routing integrity, unsigned-`_meta` trust boundary, step-up scope guard, Tasks lifecycle and admission guards. Transport-level auth remains server-side | Partial |
 | **MCP08 Lack of Audit and Telemetry** | JSON-Lines audit log, OpenTelemetry export, spans and metrics | Full |

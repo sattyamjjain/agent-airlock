@@ -400,3 +400,65 @@ class TestTrailingDotAndSpaceFold:
 
         with pytest.raises(ValidationError):
             PathModel(path="/repo/.mcp.json.")
+
+
+class TestPythonStartupHookDeny:
+    """The default validator refuses Python startup hooks (CVE-2026-120338 persistence)."""
+
+    @pytest.mark.parametrize(
+        ("path", "pattern"),
+        [
+            ("/srv/app/.venv/lib/python3.12/site-packages/evil.pth", "*/site-packages/*.pth"),
+            ("/usr/lib/python3/dist-packages/x.pth", "*/dist-packages/*.pth"),
+            ("C:\\venv\\Lib\\site-packages\\x.pth", "*/site-packages/*.pth"),
+            (
+                "/home/u/.local/lib/python3.12/site-packages/x.pth",
+                "*/site-packages/*.pth",
+            ),
+            (
+                "/srv/app/.venv/lib/python3.12/site-packages/sitecustomize.py",
+                "sitecustomize.py",
+            ),
+            ("/srv/app/usercustomize.py", "usercustomize.py"),
+            # Trailing-dot form: Windows opens evil.pth, so the fold catches it.
+            ("/srv/app/.venv/lib/python3.12/site-packages/evil.pth.", "*/site-packages/*.pth"),
+        ],
+    )
+    def test_startup_hook_refused(self, path: str, pattern: str) -> None:
+        with pytest.raises(SafePathValidationError) as exc_info:
+            SafePathValidator()(path)
+        assert exc_info.value.pattern == pattern
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            # A PyTorch checkpoint outside a site dir is a *.pth that must stay allowed.
+            "/app/models/resnet50.pth",
+            "/app/checkpoints/epoch_3.pth",
+            "/app/src/site_customize_notes.md",
+            "/app/data/sitecustomize_report.txt",
+        ],
+    )
+    def test_model_and_lookalike_files_allowed(self, path: str) -> None:
+        assert SafePathValidator()(path) == Path(path)
+
+    def test_startup_hooks_in_the_persistence_list(self) -> None:
+        from agent_airlock.safe_types import PERSISTENCE_DENY_PATTERNS
+
+        for pattern in (
+            "*/site-packages/*.pth",
+            "*/dist-packages/*.pth",
+            "sitecustomize.py",
+            "usercustomize.py",
+        ):
+            assert pattern in PERSISTENCE_DENY_PATTERNS
+            assert pattern in DEFAULT_PATH_DENY_PATTERNS
+
+    def test_empty_deny_patterns_allows_startup_hooks(self) -> None:
+        validator = SafePathValidator(deny_patterns=[])
+        for path in (
+            "/srv/app/.venv/lib/python3.12/site-packages/evil.pth",
+            "/srv/app/usercustomize.py",
+            "/app/models/resnet50.pth",
+        ):
+            assert validator(path) == Path(path)

@@ -311,6 +311,14 @@ from .mcp_spec.bind_address_guard import (
     UnauthenticatedPublicBindError,
 )
 
+# V0.10.31 — Code-sandbox host-bridge guard (CVE-2026-120338 anchor).
+from .mcp_spec.code_sandbox_bridge_guard import (
+    BridgeGroup,
+    CodeSandboxBridgeDecision,
+    CodeSandboxBridgeGuard,
+    CodeSandboxBridgeVerdict,
+)
+
 # V0.8.21 — Codegen string-delimiter-injection guard (CVE-2026-11393).
 from .mcp_spec.codegen_delimiter_guard import (
     CodegenDelimiterDecision,
@@ -939,6 +947,10 @@ __all__ = [
     "EvalRCEDecision",
     "EvalRCEGuard",
     "EvalRCEVerdict",
+    "BridgeGroup",
+    "CodeSandboxBridgeDecision",
+    "CodeSandboxBridgeGuard",
+    "CodeSandboxBridgeVerdict",
     # V0.8.0 — MCP Inspector exposure guard (CVE-2026-23744 runtime extension)
     "DEFAULT_INSPECTOR_PORTS",
     "InspectorExposureDecision",
