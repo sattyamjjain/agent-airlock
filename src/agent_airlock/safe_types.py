@@ -133,6 +133,16 @@ PERSISTENCE_DENY_PATTERNS = [
     "authorized_keys2",
     "authorized_keys/*",
     "*/authorized_keys/*",
+    # Python startup hooks (V0.10.31). Python runs every .pth line beginning "import " in a
+    # site directory at interpreter start, and imports sitecustomize / usercustomize if they
+    # are importable, so a write to one of these persists code at the next Python start
+    # (the CVE-2026-120338 persistence step, which dropped a .pth into the server venv). .pth
+    # is scoped to site directories on purpose: a PyTorch checkpoint is commonly named
+    # *.pth, and a model-file write under some other directory must stay allowed.
+    "*/site-packages/*.pth",
+    "*/dist-packages/*.pth",
+    "sitecustomize.py",
+    "usercustomize.py",
 ]
 
 # Files a coding agent or an IDE reads as something to run: an MCP server's launch command,

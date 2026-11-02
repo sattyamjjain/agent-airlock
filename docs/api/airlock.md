@@ -363,7 +363,12 @@ system files. Since 0.10.30 the defaults also hold two lists you can import on t
   launchd jobs (`Library/LaunchAgents`, `Library/LaunchDaemons`), the crontab spools and
   `/etc/cron.*`, systemd unit directories (system and `~/.config/systemd/user`), the Windows
   Startup folders, shell start files (`.bashrc`, `.bash_profile`, `.profile`, `.zshrc`,
-  `.zprofile`, `.zshenv`, `config.fish` and the rest) and `authorized_keys` wherever it is.
+  `.zprofile`, `.zshenv`, `config.fish` and the rest), `authorized_keys` wherever it is, and
+  (since 0.10.31) the Python startup hooks: a `.pth` file under a `site-packages` or
+  `dist-packages` directory, `sitecustomize.py` and `usercustomize.py`. Python runs an
+  `import` line in a site `.pth` at every interpreter start, so a write there persists code
+  (the CVE-2026-120338 step). `.pth` is scoped to site directories on purpose: a PyTorch
+  checkpoint is also named `*.pth`, and a model-file write elsewhere stays allowed.
 - `AGENT_CONFIG_DENY_PATTERNS`: files a coding agent or IDE reads as something to run.
   `.mcp.json`, `~/.claude.json`, `.claude/settings.json`, `.claude/settings.local.json`,
   `.cursor/mcp.json`, `.vscode/mcp.json`, `.vscode/tasks.json`, `~/.gitconfig` and
