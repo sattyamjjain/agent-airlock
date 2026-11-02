@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.31] - 2026-11-02
+
+A code-execution tool whose sandbox leaves a host bridge reachable is the
+CVE-2026-120338 class: caller-supplied Python in a Pyodide-on-Deno sandbox read
+and wrote files as the server user and persisted by writing a `.pth` into the
+server venv. Two second-defences at the argument seam (#447). Neither is a
+substitute for upgrading the sandbox runtime; a bridge assembled at run time
+inside the sandbox is out of a syntax-shape screen's reach.
+
+### Added
+
+- `CodeSandboxBridgeGuard` and `code_sandbox_bridge_defaults()`: refuse a code-execution tool's argument when it reaches out of its sandbox to the host runtime (`from js import` / `import js` / `js.Deno` / `pyodide.ffi` / `pyodide.code`, the `Deno.*` filesystem, process and network calls, the Node `child_process` bridges). CVE-2026-120338 (CNA JFrog, CVSS 3.1 10.0, CWE-94/269/693): a generative-UI tool ran caller-supplied Python in a Pyodide-on-Deno sandbox whose host API was reachable and whose Deno process held read, write and network permission. The preset scopes the guard to the code-execution tool class (`generate_prefab_ui`, `run_python`, `execute_python`, `execute_code`, `code_interpreter`, `run_code`) and recommends `AirlockConfig(startup_hook_check="warn")`. Walks string arguments like `EvalRCEGuard`, refusing input it cannot fully inspect.
+
+### Changed
+
+- The default `SafePath` validator refuses Python startup hooks: a `.pth` file under a `site-packages` or `dist-packages` directory, `sitecustomize.py` and `usercustomize.py` (`PERSISTENCE_DENY_PATTERNS`). Python runs an `import` line in a site `.pth` at every interpreter start, the CVE-2026-120338 persistence step. `.pth` is scoped to site directories so a PyTorch checkpoint named `*.pth` elsewhere stays allowed. Pass `deny_patterns=` to opt out.
+
 ## [0.10.30] - 2026-11-01
 
 The default `SafePath` validator refuses the paths an agent writes to persist or to change
