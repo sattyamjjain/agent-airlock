@@ -191,7 +191,7 @@ import anywhere here fails the job.
 **Internal:** `.._log` and `..exceptions` in most modules, `..observability` in a few; every
 other parent-package import (`..policy`, `..attest.receipt`, `..scan.schema`,
 `..ssrf_egress_guard`, `..validator`, `..cost_tracking`, `..sanitizer`, `..audit`,
-`..safe_types`) is used by one or two modules, several of them function-local or
+`..safe_types`, `.._url_paths`) is used by one or two modules, several of them function-local or
 `TYPE_CHECKING`-only (`grep -n 'from \.\.' src/agent_airlock/mcp_spec/*.py` recounts them).
 `oauth.py` imports `safe_types` at module level for two private constants; `safe_types`
 imports nothing from this package, so that cannot become a cycle.

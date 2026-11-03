@@ -58,6 +58,9 @@ src/agent_airlock/
 ├── _arg_walk.py       names positional arguments by parameter and walks what they hold
 │                      (containers, the tool's own models) for the value gates
 │                      (2.7, 2.75, 2.76, 3, 5)
+├── _url_paths.py      `normalize_url_path`: resolves `.` / `..` segments (and `%2e`
+│                      spellings, `;` path parameters when asked); imports nothing, shared
+│                      by `network.py` (step 5) and `mcp_spec/oidc_publish_window_guard.py`
 │
 ├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
@@ -208,8 +211,10 @@ src/agent_airlock/
    decimal, hex, octal, short and IPv6-transition forms) meets the private and metadata
    checks, and a hostname that passes `allowed_endpoints` is then resolved
    (`resolve_hostnames`, `resolver`) and refused on an internal or missing answer; a name
-   the allowlist refuses is never looked up. Redirects and rebinds inside the tool are the
-   airgap's, with `NetworkPolicy(block_private_ips=True)`
+   the allowlist refuses is never looked up. `EndpointPolicy.allowed_url_prefixes` (empty
+   means no path scope) adds a last check on scheme, host, port and the path resolved by
+   `_url_paths`, and refuses `%2f`, `%5c`, `\` and NUL in the path. Redirects and rebinds
+   inside the tool are the airgap's, with `NetworkPolicy(block_private_ips=True)`
 
    Steps 2.7, 2.75, 2.76, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
    by parameter name (`*args` under the parameter's own name; a `**kwargs` key never hides
