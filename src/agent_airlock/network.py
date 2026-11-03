@@ -59,6 +59,7 @@ from dataclasses import dataclass, field
 from typing import Any, NoReturn
 
 from ._log import structlog
+from ._url_paths import normalize_url_path
 from .safe_types import _CANONICAL_METADATA_IPS, _default_host_resolver, metadata_ip_candidates
 
 logger = structlog.get_logger("agent-airlock.network")
@@ -169,6 +170,15 @@ class EndpointPolicy:
     resolve_hostnames: bool = True
     deny_on_resolution_failure: bool = True
     resolver: Callable[[str], list[str]] | None = None
+    allowed_url_prefixes: list[str] = field(default_factory=list)
+    """Path-scoped allowlist. Each entry is ``scheme://host[:port]/path/``. Empty (the
+    default) means no path scope, today's behaviour. When non-empty, a URL is refused
+    unless one entry matches: scheme and host equal (host lower-cased), port equal after
+    the scheme's default (80/443) is filled in, and the URL's path, with its dot segments
+    and servlet path parameters (``..;``, ``%2e%2e;x``) resolved, starts with the entry's
+    path at a segment boundary (``/v1/tools/`` admits ``/v1/tools/run``, not
+    ``/v1/toolsx``). A path holding ``%2f``, ``%5c``, a backslash or ``%00`` is refused
+    outright, since no single reading of it exists (CVE-2026-120492)."""
 
 
 # Cloud metadata IPs/hosts to block
@@ -392,6 +402,78 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
         )
 
     _check_resolved(url, hostname, policy)
+
+    # Path scope runs last: host, blocked-pattern, private and metadata checks have all
+    # passed, so a refusal here is purely about the path being outside every prefix.
+    if policy.allowed_url_prefixes:
+        _check_url_prefix(url, hostname, policy)
+
+
+#: Encodings of a path separator or a NUL that a server and this parser read differently,
+#: so no single reading of the path exists. Matched case-insensitively (``%2F`` == ``%2f``).
+_AMBIGUOUS_PATH_TOKENS = ("%2f", "%5c", "\\", "%00")
+
+
+def _url_scheme_host_port(url: str) -> tuple[str, str, int | None]:
+    """``(scheme, host, port)`` for a URL or a prefix entry, host lower-cased.
+
+    The port is the explicit one, else the scheme's default (80/443), else None.
+    """
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    scheme = (parts.scheme or "").lower()
+    host = (parts.hostname or "").lower()
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    if port is None:
+        port = {"http": 80, "https": 443}.get(scheme)
+    return scheme, host, port
+
+
+def _check_url_prefix(url: str, hostname: str, policy: EndpointPolicy) -> None:
+    """Refuse a URL whose scheme/host/port/path matches no ``allowed_url_prefixes`` entry."""
+    from urllib.parse import urlsplit
+
+    raw_path = urlsplit(url).path
+    lowered = raw_path.lower()
+    for token in _AMBIGUOUS_PATH_TOKENS:
+        if token in lowered:
+            _refuse_endpoint(
+                url,
+                hostname,
+                "ambiguous_path_encoding",
+                f"URL path carries {token!r}, which a server and the allowlist read "
+                "differently; no single reading exists",
+                token=token,
+            )
+
+    scheme, host, port = _url_scheme_host_port(url)
+    resolved_path = normalize_url_path(raw_path, strip_path_params=True)
+
+    closest: str | None = None
+    for entry in policy.allowed_url_prefixes:
+        e_scheme, e_host, e_port = _url_scheme_host_port(entry)
+        e_path = normalize_url_path(urlsplit(entry).path, strip_path_params=True)
+        # The prefix core is the entry path without its trailing slash; a URL path matches
+        # when it equals the core or sits under it at a segment boundary.
+        core = e_path.rstrip("/")
+        path_ok = resolved_path == core or resolved_path.startswith(core + "/")
+        if path_ok:
+            closest = entry  # a path match is the most informative "closest" to report
+        if e_scheme == scheme and e_host == host and e_port == port and path_ok:
+            return
+    _refuse_endpoint(
+        url,
+        hostname,
+        "outside_url_prefix",
+        "URL is outside every allowed path prefix",
+        resolved_path=resolved_path,
+        closest=closest,
+        allowed_url_prefixes=policy.allowed_url_prefixes,
+    )
 
 
 def _endpoint_hostname(url: str) -> str:
