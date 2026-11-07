@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.34] - 2026-11-07
+
+`EvalRCEGuard` was a name denylist of the shape CVE-2026-123783 broke in Skyvern: it refused a
+string argument only when it saw an eval-family call.
+
+### Security
+
+- `EvalRCEGuard` refuses arguments that build or fetch a Python code object (`CodeType`, `FunctionType`, `LambdaType`, `__code__`, `co_code`, `gi_code`/`cr_code`/`ag_code`/`f_code`, `marshal.loads`); CVE-2026-123783 regression fixture. A payload that called no eval-family function could take a code object, swap its bytecode with `.replace(co_code=...)` or build one with `types.CodeType(...)`, and call the result, and all of them passed. Closing the class also takes `.codeobj`, `.replace(co_*=)`, `codeop`, `compile_command`, `source_to_code`, `gc.get_referents`, `inspect.getmembers`, `iscode` and `sys.monitoring`, since `type(c)(...)` needs no name once any code object is in hand. The refusal is `DENY_EVAL_SINK` with `matched_sink="code_object"`, on by default, and `extra_sinks` cannot turn it off. A string that assembles a name at runtime through something other than `getattr(` still passes: the defence for that is isolation, and the docs say so. `CodeType` and `FunctionType` match as whole words anywhere, so a string argument holding JSON with a `"CodeType"` key is refused too.
+- `EvalRCEGuard` reads identifiers the way Python does (NFKC, PEP 3131). `ｅｘｅｃ('x')` in fullwidth letters runs `exec` and matched no sink.
+
+### Fixed
+
+- `EvalRCEGuard` exempted a whole string once any `parse_expr` call in it pinned `local_dict=` or `global_dict=`, so `parse_expr(x); parse_expr("1", local_dict={})` passed, and a pin inside a string literal counted. Each call now needs its own pin. The same pattern was quadratic: 1 MB of `parse_expr(` held the guard for about six minutes.
+
 ## [0.10.33] - 2026-11-07
 
 Two gaps measured on 0.10.31: a metadata document could name any issuer, and a valid base64

@@ -131,6 +131,13 @@ preset, and
   PowerShell. Both models set `hide_input_in_errors`, so the error text names the field and
   the character's class, never the URL; `errors()` still carries the input. Extra fields
   (`extra="allow"`) are not screened.
+- **`EvalRCEGuard`'s code-object screen is not a sink** (`_CODE_OBJECT_ROUTES`, CVE-2026-123783
+  class). `DEFAULT_EVAL_SINKS` stays as it is: the presets copy it, a test pins it, and its
+  call-shape regex would miss an alias or an attribute. The refusal is `DENY_EVAL_SINK` with
+  `matched_sink="code_object"`, so the red-team `ForbiddenEffect` and any caller on that verdict
+  keep refusing. A name common elsewhere is matched with its module (`tar.getmembers()`,
+  `gc.collect()` pass), and every gap is bounded so a long argument stays linear. The guard
+  reads the NFKC form, as Python does an identifier.
 - **A fetched metadata document goes through `from_discovery`** (RFC 8414 section 3.3): the
   constructor has no URL and stays as it was, so it parses any issuer, and that value as
   `expected_issuer` defeats the `iss` check. `issuer_from_discovery_url` reads the raw string

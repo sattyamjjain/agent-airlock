@@ -22,6 +22,8 @@ https://nvd.nist.gov/vuln/detail/CVE-2026-44717
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from agent_airlock.mcp_spec.eval_rce_guard import (
@@ -111,6 +113,61 @@ class TestParseExprWithPinnedLocalDictAllowed:
         assert decision.allowed is True
 
 
+class TestEachParseExprCallNeedsItsOwnPin:
+    """Until 0.10.34 one pinned call anywhere exempted the whole string."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "parse_expr(user_input); parse_expr('1', local_dict={})",
+            "parse_expr('1', local_dict={}); parse_expr(user_input)",
+            "parse_expr(a, local_dict={})\nx = 1\nsympy.parse_expr(b)",
+            # A pin in a string literal pins nothing.
+            "parse_expr('x local_dict=1')",
+            'parse_expr("global_dict = 1")',
+            # Past the end of the call's own argument list.
+            "parse_expr(x) or y(local_dict={})",
+            "parse_expr(f(x), local_dict={})",
+            # Too long to read as one call.
+            "parse_expr(" + "a" * 2000 + ", local_dict={})",
+        ],
+    )
+    def test_an_unpinned_call_is_refused(self, text: str) -> None:
+        decision = EvalRCEGuard().evaluate({"expression": text})
+        assert decision.allowed is False, text
+        assert decision.matched_sink == "parse_expr"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "parse_expr(a, local_dict={}); parse_expr(b, global_dict={})",
+            'parse_expr("a + b", local_dict={})',
+            "parse_expr('a + b', global_dict=safe)",
+            "parse_expr(\n    source,\n    local_dict={},\n)",
+            "sympy.parsing.sympy_parser.parse_expr(s, local_dict={})",
+            "parse_expr (s, local_dict = {})",
+        ],
+    )
+    def test_every_call_pinned_is_allowed(self, text: str) -> None:
+        assert EvalRCEGuard().evaluate({"expression": text}).allowed is True, text
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("parse_expr(" * 90_000, id="unpinned-calls"),
+            pytest.param("parse_expr(" + "'a' " * 240_000, id="one-long-call"),
+            pytest.param(
+                ("parse_expr(" + "a" * 1000 + ", local_dict={}) ") * 1000, id="pinned-calls"
+            ),
+        ],
+    )
+    def test_a_long_argument_does_not_stall_the_guard(self, text: str) -> None:
+        """1 MB of ``parse_expr(`` took about six minutes on 0.10.31."""
+        started = time.perf_counter()
+        EvalRCEGuard().evaluate({"expression": text})
+        assert time.perf_counter() - started < 20
+
+
 class TestVulnerablePackageDenylist:
     """A registered vulnerable package import path is denied at evaluation."""
 
@@ -182,6 +239,186 @@ class TestFactoryShape:
 
         config = stdio_guard_eval_defaults_2026_05_15(extra_sinks=frozenset({"runpy.run_path"}))
         assert "runpy.run_path" in config["extra_sinks"]
+
+
+class TestCodeObjectScreen:
+    """CVE-2026-123783's class: a string that builds or fetches a Python code object."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # The dunder, anywhere, quoted included.
+            "f.__code__",
+            'vars(f)["__code__"]',
+            "'__code__'",
+            "f.__code__ = g",
+            # Attribute access, with whatever may follow the dot.
+            "c.co_code",
+            "g.gi_code",
+            "c.cr_code",
+            "a.ag_code",
+            "frame.f_code",
+            "dis.Bytecode(f).codeobj",
+            "g . gi_code",
+            "g  .gi_code",
+            "(g.\n    gi_code)",
+            "g.\\\n    gi_code",
+            "(g. # the attribute follows\n    gi_code)",
+            # The types, called or not.
+            "types.CodeType(0, 0)",
+            "CT = types.CodeType",
+            "from types import CodeType",
+            "types.FunctionType(c, {})",
+            "F = FunctionType",
+            "types.LambdaType(c, {})",
+            "L = LambdaType",
+            # code.replace.
+            "c.replace(co_code=b'')",
+            "c.replace( co_consts = (42,) )",
+            'c.replace(**{"co_code": b""})',
+            # marshal, by name or by alias.
+            'marshal.loads(b"")',
+            "marshal.load(handle)",
+            "marshal . loads (b'')",
+            "L = marshal.loads",
+            "from marshal import loads",
+            "import marshal as m",
+            "import os, marshal",
+            "x = 1; import marshal",
+            'importlib.import_module("marshal")',
+            "sys.modules['marshal']",
+            'pkgutil.resolve_name("marshal:loads")',
+            # Compilers not spelled compile(.
+            "codeop.Compile()",
+            'code.compile_command("42")',
+            'InspectLoader.source_to_code("42")',
+            "importlib._bootstrap_external._compile_bytecode(b'')",
+            "dis._get_code_object(f)",
+            # Walkers that hand one over unnamed.
+            "gc.get_referents(f)",
+            "from gc import get_referents as r",
+            "g.get_referents(f)",
+            "inspect.getmembers(f)",
+            "inspect . getmembers(f)",
+            "getmembers_static(f)",
+            "from inspect import getmembers",
+            "import inspect as i",
+            "inspect.iscode(v)",
+            "sys.monitoring.register_callback(1, 1, print)",
+            "from sys import monitoring",
+            "s.monitoring.register_callback(1, 1, print)",
+        ],
+    )
+    def test_each_spelling_is_refused(self, text: str) -> None:
+        decision = EvalRCEGuard().evaluate({"code": text})
+        assert decision.allowed is False, text
+        assert decision.verdict == EvalRCEVerdict.DENY_EVAL_SINK
+        assert decision.matched_sink == "code_object"
+        assert "builds or fetches a Python code object (CVE-2026-123783 class)" in decision.detail
+        assert decision.matched_package is None
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # Word boundaries, as in _compile_sink_pattern.
+            "decode__",
+            "x__code__",
+            "__code__x",
+            "MyCodeTypeHelper",
+            "CodeTypes are documented in the data model",
+            "CodeType_x",
+            "MyFunctionTypes",
+            "LambdaTypeX",
+            # The bare words an attribute needs a dot for.
+            "the f code is 7",
+            "status_code = 200",
+            "print(response.status_code)",
+            "self.ref_code",
+            "co_code = 'ACME'",
+            "f_code = 7",
+            # Common names matched only with their module.
+            "names = tar.getmembers()",
+            "gc.collect()",
+            "import gc",
+            "import gc as g",
+            "from gc import collect",
+            "gc.get_objects()",
+            "gc.get_referrers(x)",
+            "import inspect",
+            "bucket.get_objects()",
+            "api.get_referrers()",
+            "monitoring.enabled = True",
+            # Other uses of the same words.
+            "the fire marshal signed it",
+            "we marshal the arguments first",
+            "json.Marshal(v)",
+            'text.replace("a", "b")',
+            "text.replace(old, new)",
+            "dataclasses.replace(obj, co_code=1)",
+            "row._replace(co_code=1)",
+            "compile_commands.json",
+            "code = loader.get_code()",
+            "codeops = 1",
+        ],
+    )
+    def test_ordinary_text_passes(self, text: str) -> None:
+        assert EvalRCEGuard().evaluate({"code": text}).allowed is True, text
+
+    def test_extra_sinks_cannot_turn_it_off(self) -> None:
+        guard = EvalRCEGuard(extra_sinks=frozenset({"runpy.run_path"}))
+        assert guard.evaluate({"code": "CT = types.CodeType"}).matched_sink == "code_object"
+
+    def test_a_sink_is_reported_first(self) -> None:
+        """The screen runs after the sink loop, so the existing reports do not change."""
+        decision = EvalRCEGuard().evaluate({"code": "exec(f.__code__)"})
+        assert decision.matched_sink == "exec"
+
+    def test_a_pinned_parse_expr_does_not_hide_a_code_object(self) -> None:
+        decision = EvalRCEGuard().evaluate({"code": "parse_expr(s, local_dict={}); f.__code__"})
+        assert decision.matched_sink == "code_object"
+
+    def test_the_refusal_names_the_route(self) -> None:
+        decision = EvalRCEGuard().evaluate({"code": "CT = types.CodeType"})
+        assert "CodeType, FunctionType or LambdaType" in decision.detail
+
+    def test_the_names_stay_out_of_the_sink_set(self) -> None:
+        """The presets copy that set, and its call-shape regex would miss an alias."""
+        assert not {"CodeType", "FunctionType", "LambdaType", "code_object"} & DEFAULT_EVAL_SINKS
+
+
+class TestIdentifiersPythonFoldsToAscii:
+    """PEP 3131: Python reads an identifier in NFKC, so fullwidth letters spell the same name."""
+
+    @pytest.mark.parametrize(
+        ("text", "sink"),
+        [
+            ("ｅｘｅｃ('x = 1')", "exec"),
+            ("ｅｖａｌ('1')", "eval"),
+            ("𝐞𝐯𝐚𝐥('1')", "eval"),
+            ("__ｉｍｐｏｒｔ__('os')", "__import__"),
+            ("ｇｅｔａｔｔｒ(f, 'x')", "getattr"),
+            ("ｐａｒｓｅ＿ｅｘｐｒ(s)", "parse_expr"),
+            ("f.__ｃｏｄｅ__", "code_object"),
+            ("g.ｇｉ＿ｃｏｄｅ", "code_object"),
+            ("types.ＣｏｄｅＴｙｐｅ", "code_object"),
+            ("ｍａｒｓｈａｌ.ｌｏａｄｓ(b'')", "code_object"),
+        ],
+    )
+    def test_the_guard_reads_them_the_way_python_does(self, text: str, sink: str) -> None:
+        decision = EvalRCEGuard().evaluate({"code": text})
+        assert decision.allowed is False, text
+        assert decision.matched_sink == sink
+
+    def test_a_pinned_parse_expr_in_fullwidth_stays_exempt(self) -> None:
+        assert (
+            EvalRCEGuard()
+            .evaluate({"code": "ｐａｒｓｅ_ｅｘｐｒ(s, ｌｏｃａｌ_ｄｉｃｔ={})"})
+            .allowed
+            is True
+        )
+
+    def test_non_ascii_text_with_no_such_name_passes(self) -> None:
+        assert EvalRCEGuard().evaluate({"code": "résumé 日本語 ｅｘａｍｐｌｅ"}).allowed is True
 
 
 class TestBadConstruction:
