@@ -1,10 +1,10 @@
 """Shared URL-path normalization: resolve ``.`` / ``..`` dot segments.
 
-Both the npm publish-window guard and the endpoint path-scope allowlist need to
-resolve a URL path the way a server would before comparing it, so a ``..`` (or
-its percent-encoded or path-parameter spellings) cannot step outside a prefix
-the caller believes it checked. The logic lives here so the two callers cannot
-drift apart.
+The npm publish-window guard and the endpoint path-scope allowlist need to resolve
+a URL path the way a server would before comparing it, so a ``..`` (or its
+percent-encoded or path-parameter spellings) cannot step outside a prefix the
+caller believes it checked, and ``oauth.issuer_from_discovery_url`` refuses a path
+it would change. The logic lives here so the callers cannot drift apart.
 """
 
 from __future__ import annotations

@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.33] - 2026-11-07
+
+Two gaps measured on 0.10.31: a metadata document could name any issuer, and a valid base64
+`Mcp-Name` was refused while a malformed one got the wrong reason.
+
+### Changed
+
+- A plain `Mcp-Name` a header cannot carry is refused as `malformed_name_header`, even when it matches the body: a character outside visible ASCII, space and tab, or whitespace at either end. A client must encode those, and the spec lists invalid characters as a validation failure. A plain value shaped like the encoded form is read as encoded, as the spec has it, so a literal `=?base64?ZWNobw==?=` no longer matches a body name spelled the same way. The audit event gains `header_name_decoded` beside the raw `header_name`.
+
+### Fixed
+
+- Metadata issuer checked against the discovery URL (RFC 8414 section 3.3). `AuthorizationServerMetadata` takes no URL, so a document naming `https://decoy.example.net` parsed with no error, and `validate_authorization_response_iss` then passed with `metadata.issuer` as `expected_issuer`: once the unchecked issuer is the expected value, the `iss` check cannot catch the mix-up. New: `AuthorizationServerMetadata.from_discovery(document, *, discovery_url)`, `validate_metadata_issuer(metadata, *, discovery_url)` and `issuer_from_discovery_url(url)`, which inverts each well-known form on MCP 2026-07-28's discovery page. The constructor is unchanged, so a caller has to move to `from_discovery` to get the check. The comparison forgives trailing slashes, through the normalizer the `iss` check uses, and nothing else. `docs/guide/oauth-issuer.md` says which URL to pass and what the check does not decide.
+- `Mcp-Name` base64 form decoded, malformed form refused with its own reason. `validate_header_body_integrity` compared the raw header, so `=?base64?ZWNobw==?=` for a tool named `echo` was refused as `name_mismatch`, and so was `=?base64?\xe9?=`. It now decodes the value before comparing, and a payload that is not base64, not canonical or not strict UTF-8 is refused as `malformed_name_header` (new).
+
 ## [0.10.32] - 2026-11-07
 
 Four places a guard read past what it was handed: a JSON-RPC id's type, a listing's later
