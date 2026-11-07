@@ -83,6 +83,18 @@ class TestPolicyPresetsReexports:
     regresses it.
     """
 
+class TestToolListingHelpers:
+    """The client-side listing helpers export from their own module, as guards here do."""
+
+    NAMES = ("admit_tools_list", "list_tools_pinned", "list_all_tools_pinned")
+
+    def test_each_resolves_and_is_in_dunder_all(self) -> None:
+        module = importlib.import_module("agent_airlock.mcp_spec.tool_definition_pin_guard")
+        for name in self.NAMES:
+            assert callable(getattr(module, name)), name
+            assert name in module.__all__, f"{name!r} missing from __all__"
+
+
     EXPECTED_FACTORIES = (
         # v0.5.0 presets
         "gtg_1002_defense_policy",
