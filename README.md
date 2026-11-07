@@ -243,7 +243,7 @@ generated from a YAML source and byte-diffed in CI.
 | **ASI06 Memory & Context Poisoning** | Auto-memory provenance, cross-tenant isolation, conversation tracking | Partial |
 | **ASI07 Insecure Inter-Agent Communication** | A2A guard, MCP proxy guard, transport validation | Partial |
 | **ASI08 Cascading Failures** | Circuit breaker, retry policy, amplification budget | Full |
-| **ASI09 Human-Agent Trust Exploitation** | Human-oversight decorator, elicitation guard, honeypot deception | Partial |
+| **ASI09 Human-Agent Trust Exploitation** | Human-oversight decorator, elicitation guard and request window (JSON-RPC `7` and `"7"` are two requests), honeypot deception | Partial |
 | **ASI10 Rogue Agents** | Audit telemetry, anomaly detector, kill switch — **no quarantine primitive** | Monitor-only |
 
 ### MCP-specific mapping
