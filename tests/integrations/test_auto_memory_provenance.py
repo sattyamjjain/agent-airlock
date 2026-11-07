@@ -19,10 +19,15 @@ import pytest
 
 from agent_airlock.exceptions import AirlockError
 from agent_airlock.integrations.claude_auto_memory import (
+    AutoMemoryAccessPolicy,
+    AutoMemoryCrossTenantError,
+    AutoMemoryTenantIdError,
     MemoryChainTooDeepError,
     MemoryEntry,
     MemoryProvenanceError,
     consolidate_memory,
+    guarded_read,
+    guarded_write,
     sign_memory_entry,
     verify_memory_entry,
 )
@@ -118,6 +123,137 @@ class TestOTelAttribute:
             assert name == "airlock.auto_memory.consolidate"
             assert attrs["chain_depth"] == 2
             assert attrs["tenant_id"] == "acct-42"
+
+
+#: Ids with no single root of their own under ``/memory/``. ``""`` has the root ``/memory//``,
+#: which no tenant owns; ``"a/b"`` has ``/memory/a/b/``, inside tenant ``"a"``'s root, so ``"a"``
+#: passes the scope check for ``"a/b"``'s notes; ``".."`` has ``/memory/../``, above them all.
+REFUSED_TENANT_IDS = [
+    "",
+    "  ",
+    "\t",
+    "\n",
+    " ",
+    "/",
+    "a/b",
+    "/a",
+    "a/",
+    "a\\b",
+    "\\",
+    "a\x00",
+    "\x00",
+    ".",
+    "..",
+    " .. ",
+    "...",
+    ". .",
+]
+
+
+class TestATenantIdHasToNameATenant:
+    """0.10.32: ``AutoMemoryAccessPolicy(tenant_id="")`` was accepted.
+
+    Its root is ``/memory//``, so ``/memory//x.md`` passed the scope check and landed in a root
+    no tenant owns. agno-agi/agno#11422 raises the neighbouring case, where a missing user id
+    reaches every user's memories.
+    """
+
+    @pytest.mark.parametrize("tenant_id", REFUSED_TENANT_IDS)
+    def test_refused_at_construction(self, tenant_id: str) -> None:
+        with pytest.raises(AutoMemoryTenantIdError) as exc:
+            AutoMemoryAccessPolicy(tenant_id=tenant_id)
+        assert exc.value.tenant_id == tenant_id
+        assert exc.value.reason
+
+    @pytest.mark.parametrize("tenant_id", REFUSED_TENANT_IDS)
+    def test_refused_by_consolidate_memory(self, tenant_id: str) -> None:
+        with pytest.raises(AutoMemoryTenantIdError):
+            consolidate_memory(
+                tenant_id=tenant_id,
+                path=f"/memory/{tenant_id}/x.md",
+                content="c",
+                source_session_ids=["s1"],
+            )
+
+    @pytest.mark.parametrize("tenant_id", [None, 7, b"acct-42", ["acct-42"]])
+    def test_a_non_string_is_refused_not_stringified(self, tenant_id: object) -> None:
+        with pytest.raises(AutoMemoryTenantIdError, match="string"):
+            AutoMemoryAccessPolicy(tenant_id=tenant_id)  # type: ignore[arg-type]
+        with pytest.raises(AutoMemoryTenantIdError, match="string"):
+            consolidate_memory(
+                tenant_id=tenant_id,  # type: ignore[arg-type]
+                path="/memory/None/x.md",
+                content="c",
+                source_session_ids=[],
+            )
+
+    @pytest.mark.parametrize(
+        "tenant_id", ["acct-42", "t", "a.b", "..a", "a..", "acct 42", "ACME_1"]
+    )
+    def test_a_tenant_that_names_itself_is_allowed_as_today(self, tenant_id: str) -> None:
+        policy = AutoMemoryAccessPolicy(tenant_id=tenant_id)
+        path = f"/memory/{tenant_id}/x.md"
+        assert guarded_read(policy, path, lambda _p: b"ok") == b"ok"
+        guarded_write(policy, path, "ok", lambda _p, _c: None)
+        entry = consolidate_memory(tenant_id, path, "c", ["s1"])
+        assert (entry.tenant_id, entry.path) == (tenant_id, path)
+
+    def test_the_policy_is_positional_as_before(self) -> None:
+        assert AutoMemoryAccessPolicy("t1").tenant_id == "t1"
+
+    def test_an_id_set_after_construction_cannot_reach_the_scope_check(self) -> None:
+        """The dataclass is mutable, and a shared policy reassigned per request is plausible."""
+        policy = AutoMemoryAccessPolicy(tenant_id="acct-42")
+        policy.tenant_id = ""
+        with pytest.raises(AutoMemoryTenantIdError):
+            guarded_read(policy, "/memory//x.md", lambda _p: b"never")
+        with pytest.raises(AutoMemoryTenantIdError):
+            guarded_write(policy, "/memory//x.md", "never", lambda _p, _c: None)
+
+    def test_the_refusal_is_an_airlock_error(self) -> None:
+        with pytest.raises(AirlockError):
+            AutoMemoryAccessPolicy(tenant_id="")
+
+    def test_the_refusal_shows_control_characters_escaped(self) -> None:
+        with pytest.raises(AutoMemoryTenantIdError) as exc:
+            AutoMemoryAccessPolicy(tenant_id="a\x00")
+        assert "\x00" not in str(exc.value)
+        assert "a\\x00" in str(exc.value)
+
+
+class TestConsolidateMemoryChecksItsPath:
+    """0.10.32: the docstring said the path must start with the tenant's root; nothing checked,
+    so a signed entry could be minted for tenant A at a path inside tenant B."""
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/memory/other/x.md",
+            "/memory//x.md",
+            "/memory/acct-42-evil/x.md",
+            "/memory/acct-42/../other/x.md",
+            "/memory/acct-42/x\x00.md",
+            "x.md",
+            "",
+        ],
+    )
+    def test_a_path_outside_the_tenants_root_signs_nothing(self, path: str) -> None:
+        with (
+            patch("agent_airlock.integrations.claude_auto_memory.sign_memory_entry") as sign,
+            pytest.raises(AutoMemoryCrossTenantError) as exc,
+        ):
+            consolidate_memory("acct-42", path, "c", ["s1"])
+        sign.assert_not_called()
+        assert exc.value.tenant_id == "acct-42"
+        assert exc.value.attempted_path == path
+
+    @pytest.mark.parametrize("path", [None, 7, b"/memory/acct-42/x.md"])
+    def test_a_path_that_is_not_a_string_is_refused_not_a_crash(self, path: object) -> None:
+        with pytest.raises(AutoMemoryCrossTenantError):
+            consolidate_memory("acct-42", path, "c", ["s1"])  # type: ignore[arg-type]
+        policy = AutoMemoryAccessPolicy(tenant_id="acct-42")
+        with pytest.raises(AutoMemoryCrossTenantError):
+            guarded_read(policy, path, lambda _p: b"never")  # type: ignore[arg-type]
 
 
 class TestErrorHierarchy:

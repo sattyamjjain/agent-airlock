@@ -72,7 +72,9 @@ as they were. On every call:
    itself:
    - `AutoMemoryAccessPolicy` + `guarded_read` / `guarded_write` —
      per-tenant scope, byte quota, redaction-on-write. Call them yourself;
-     the adapter wraps no memory access.
+     the adapter wraps no memory access. A tenant id has to name one
+     directory under `/memory/`: an empty or path-like id raises
+     `AutoMemoryTenantIdError` at construction.
    - `build_task_budget_headers` + `build_output_config` — the Messages
      API task budget, `output_config={"task_budget": {"type": "tokens",
      "total": N, "remaining": M}}` with the `task-budgets-2026-03-13` beta

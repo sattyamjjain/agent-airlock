@@ -250,6 +250,7 @@ from .integrations.anthropic_claude_agent_sdk import (
 from .integrations.claude_auto_memory import (
     AutoMemoryCrossTenantError,
     AutoMemoryQuotaError,
+    AutoMemoryTenantIdError,
     MemoryChainTooDeepError,
     MemoryProvenanceError,
 )
@@ -782,7 +783,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.10.31"
+__version__ = "0.10.32"
 
 __all__ = [
     # Core
@@ -1058,6 +1059,7 @@ __all__ = [
     "sign_identity",
     "verify_identity",
     "AutoMemoryQuotaError",
+    "AutoMemoryTenantIdError",
     "HighValueActionBlocked",
     "LANUnauthMCPServerBlocked",
     "MCPCommandMutationDetected",
