@@ -3636,15 +3636,17 @@ setting: they belong to <code>SecurityPolicy(rate_limits=...)</code>.</p>
 <a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="n">allowed_endpoints</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"api.company.com"</span><span class="p">]</span>
 <a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a><span class="n">resolve_hostnames</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">          </span><span class="c1"># default: resolve an admitted name, refuse internal answers</span>
 <a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="n">deny_on_resolution_failure</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="c1"># default: refuse a name that does not resolve</span>
-<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>
-<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a><span class="c1"># V0.3.0 Honeypot</span>
-<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a><span class="k">[airlock.honeypot]</span>
-<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a><span class="n">strategy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"honeypot"</span>
-<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a><span class="n">fake_delay_ms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span>
-<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a>
-<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a><span class="c1"># V0.10.27 startup hooks you know, by file name</span>
-<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a><span class="k">[airlock.startup_hook_allowlist]</span>
-<a id="__codelineno-4-42" name="__codelineno-4-42" href="#__codelineno-4-42"></a><span class="s2">"distutils-precedence.pth"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&lt;the file's sha256, 64 hex characters&gt;"</span>
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a><span class="c1"># Optional path scope: only these scheme://host[:port]/path/ prefixes (default: no scope)</span>
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a><span class="n">allowed_url_prefixes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"https://api.company.com/v1/tools/"</span><span class="p">]</span>
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a><span class="c1"># V0.3.0 Honeypot</span>
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a><span class="k">[airlock.honeypot]</span>
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a><span class="n">strategy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"honeypot"</span>
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a><span class="n">fake_delay_ms</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span>
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a>
+<a id="__codelineno-4-42" name="__codelineno-4-42" href="#__codelineno-4-42"></a><span class="c1"># V0.10.27 startup hooks you know, by file name</span>
+<a id="__codelineno-4-43" name="__codelineno-4-43" href="#__codelineno-4-43"></a><span class="k">[airlock.startup_hook_allowlist]</span>
+<a id="__codelineno-4-44" name="__codelineno-4-44" href="#__codelineno-4-44"></a><span class="s2">"distutils-precedence.pth"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&lt;the file's sha256, 64 hex characters&gt;"</span>
 </code></pre></div>
 <p>The token-audience and startup-hook keys are described in
 <a href="../../guide/token-audience-and-startup-hooks/">Token audience and startup hooks</a>.</p>
@@ -3704,21 +3706,36 @@ policy would admit are looked up, so a name it refuses is never sent to DNS.</p>
 <p>That lookup adds the resolver's latency to each call with a hostname URL. An allowlisted
 name that resolves to an internal service needs <code>allow_private_ips=True</code>, and a test that
 allowlists a made-up name needs <code>resolver=</code> (a function from a hostname to its addresses) or
-<code>resolve_hostnames=False</code>.</p>
+<code>resolve_hostnames=False</code>. The escape hatch is for private ranges, not a rebind to metadata:
+an <code>allowed_endpoints</code> host (and, for <code>SSRFEgressGuard</code>, an <code>allow_internal_hosts</code> host) that
+resolves to a cloud metadata address is refused unless <code>allow_metadata_urls=True</code>.</p>
+<p><code>allowed_url_prefixes</code> scopes the allowlist to a path, not just a host (CVE-2026-120492): an
+operator who wants only <code>https://api.example.com/v1/tools/</code> lists that, and a URL is refused
+unless one entry matches on scheme, host and port and the URL's path, with its dot segments
+and servlet path parameters resolved, stays under the entry's path at a segment boundary. So
+<code>/v1/tools/..;/admin</code> and <code>/v1/tools/%2e%2e;x/admin</code>, which a servlet container collapses to
+<code>/v1/admin</code>, are refused, and a path carrying <code>%2f</code>, <code>%5c</code>, a backslash or <code>%00</code> is refused
+outright. An empty list (the default) keeps host-only behaviour. The host, blocked-pattern,
+private and metadata checks all run before the path check.</p>
 <p><code>NetworkPolicy(block_private_ips=True)</code> refuses the same internal addresses inside the network
 airgap, at every connect and datagram the tool makes during the call. <code>allowed_hosts</code> does not
 exempt an address from it; <code>allowed_private_ips</code> does (a local egress proxy, a sidecar).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">AirlockConfig</span><span class="p">,</span> <span class="n">EndpointPolicy</span><span class="p">,</span> <span class="n">NetworkPolicy</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">AirlockConfig</span><span class="p">(</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">endpoint_policies</span><span class="o">=</span><span class="p">{</span><span class="s2">"fetch"</span><span class="p">:</span> <span class="n">EndpointPolicy</span><span class="p">(</span><span class="n">allowed_endpoints</span><span class="o">=</span><span class="p">[</span><span class="s2">"api.example.com"</span><span class="p">])},</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">network_policy</span><span class="o">=</span><span class="n">NetworkPolicy</span><span class="p">(</span><span class="n">block_private_ips</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">allowed_private_ips</span><span class="o">=</span><span class="p">[</span><span class="s2">"127.0.0.1"</span><span class="p">]),</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">)</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">return</span> <span class="n">url</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">endpoint_policies</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="s2">"fetch"</span><span class="p">:</span> <span class="n">EndpointPolicy</span><span class="p">(</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>            <span class="n">allowed_endpoints</span><span class="o">=</span><span class="p">[</span><span class="s2">"api.example.com"</span><span class="p">],</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>            <span class="n">allowed_url_prefixes</span><span class="o">=</span><span class="p">[</span><span class="s2">"https://api.example.com/v1/tools/"</span><span class="p">],</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>        <span class="p">)</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="p">},</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="n">network_policy</span><span class="o">=</span><span class="n">NetworkPolicy</span><span class="p">(</span><span class="n">block_private_ips</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">allowed_private_ips</span><span class="o">=</span><span class="p">[</span><span class="s2">"127.0.0.1"</span><span class="p">]),</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="p">)</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>    <span class="k">return</span> <span class="n">url</span>
 </code></pre></div>
 <h3 id="what-the-call-path-checks-cannot-see">What the call-path checks cannot see<a class="headerlink" href="#what-the-call-path-checks-cannot-see" title="Permanent link">&para;</a></h3>
 <ul>
