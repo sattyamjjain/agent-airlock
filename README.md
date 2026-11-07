@@ -73,7 +73,7 @@ Everything except validation is off by default.
 |---|---|
 | **Validate** | Pydantic V2 strict mode · ghost-argument stripping · self-healing `fix_hints` |
 | **Authorize** | RBAC · token-bucket rate limits · time windows · per-model-tier cost budgets · capability gating |
-| **Isolate** | Filesystem path validation · network egress control · sandboxed execution (`sandbox=True` runs on E2B; Docker, Modal and local backends are called directly) |
+| **Isolate** | Filesystem path validation · network egress control (host and path-prefix allowlists; an allowlisted host that resolves to the metadata address is refused) · sandboxed execution (`sandbox=True` runs on E2B; Docker, Modal and local backends are called directly) |
 | **Sanitize** | PII and secret masking, including opt-in Indic PII · output truncation · JSON-Lines audit log |
 | **MCP guards** | Per-CVE guards for stdio injection, OAuth, DNS rebinding, SSRF, eval-RCE, code-sandbox host-bridge, WebSocket origin and task lifecycle — tracking MCP spec revision `2026-07-28` |
 

@@ -371,3 +371,50 @@ class TestAirgapPrivateConnect:
             assert _airgapped(policy, lambda: _fetch(f"http://127.0.0.1:{outer}/")) == (
                 "internal secret"
             )
+
+
+class TestAllowlistedEndpointCannotRebindToMetadata:
+    """Step 6 refuses an ``allowed_endpoints`` host that resolves to the metadata address.
+
+    An allowlisted hostname is still resolved (``resolve_hostnames`` default on), and an
+    internal or metadata answer is refused with ``allow_metadata_urls`` / ``allow_private_ips``
+    False. This pins the egress-allowlist half of the same class the SSRFEgressGuard fix
+    closes: an allowlist the DNS answer can step outside of.
+    """
+
+    def test_allowlisted_host_resolving_to_metadata_is_denied(self) -> None:
+        policy = EndpointPolicy(
+            allowed_endpoints=["mcp.example.test"],
+            resolver=lambda h: ["169.254.169.254"],
+        )
+        assert _reason("https://mcp.example.test/x", policy) == "metadata_url"
+
+    def test_allowlisted_host_resolving_to_ipv6_metadata_is_denied(self) -> None:
+        policy = EndpointPolicy(
+            allowed_endpoints=["mcp.example.test"],
+            resolver=lambda h: ["fd00:ec2::254"],
+        )
+        assert _reason("https://mcp.example.test/x", policy) == "metadata_url"
+
+    def test_allowlisted_host_resolving_to_private_is_denied(self) -> None:
+        policy = EndpointPolicy(
+            allowed_endpoints=["mcp.example.test"],
+            resolver=lambda h: ["10.0.0.5"],
+        )
+        assert _reason("https://mcp.example.test/x", policy) == "private_ip"
+
+    def test_allowlisted_host_resolving_to_public_is_admitted(self) -> None:
+        policy = EndpointPolicy(
+            allowed_endpoints=["mcp.example.test"],
+            resolver=lambda h: ["93.184.216.34"],
+        )
+        assert _reason("https://mcp.example.test/x", policy) == "admitted"
+
+    def test_metadata_allowed_when_operator_opts_in(self) -> None:
+        policy = EndpointPolicy(
+            allowed_endpoints=["mcp.example.test"],
+            resolver=lambda h: ["169.254.169.254"],
+            allow_metadata_urls=True,
+            allow_private_ips=True,
+        )
+        assert _reason("https://mcp.example.test/x", policy) == "admitted"

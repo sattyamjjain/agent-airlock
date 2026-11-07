@@ -183,6 +183,17 @@ def _decode_literal_ip(host: str) -> tuple[_IPv4 | _IPv6, str] | None:
     return ipaddress.IPv4Address(packed), _classify_ipv4_encoding(stripped)
 
 
+#: Cloud metadata addresses as parsed objects, so a resolved address is compared
+#: canonically (``fd00:ec2:0:0:0:0:0:254`` == ``fd00:ec2::254``). The IPv6 one is the
+#: address network.py's ``_METADATA_HOSTS`` lists; the IPv4 ones are ``_METADATA_IPS``.
+_METADATA_IP_OBJS = frozenset(ipaddress.ip_address(a) for a in (*_METADATA_IPS, "fd00:ec2::254"))
+
+
+def _is_metadata_ip(ip: _IPv4 | _IPv6) -> bool:
+    """True iff ``ip`` is a cloud metadata (IMDS) address, compared canonically."""
+    return ip in _METADATA_IP_OBJS
+
+
 def _blocked_reason(ip: _IPv4 | _IPv6) -> tuple[SSRFEgressVerdict, str] | None:
     """Classify ``ip`` against the blocked egress ranges; ``None`` if public."""
     if str(ip) in _METADATA_IPS:
@@ -308,8 +319,16 @@ class SSRFEgressGuard:
             )
 
         host_l = host.strip().lower()
-        # Explicit operator escape hatch — the written host is trusted.
+        # Explicit operator escape hatch — the written host is trusted. The hatch is for
+        # private ranges; it must not open the metadata address by rebinding. A metadata
+        # IP literal the operator wrote in the allowlist itself stays allowed (they named
+        # it); a *name* on the allowlist is resolved first and refused if any address is
+        # the metadata address (CVE-2026-120492 class).
         if host_l in self._allow_hosts:
+            if _decode_literal_ip(host) is None:
+                metadata = self._allowlisted_host_resolves_to_metadata(host)
+                if metadata is not None:
+                    return metadata
             return SSRFEgressDecision(
                 allowed=True,
                 verdict=SSRFEgressVerdict.ALLOW_HOST_ALLOWLISTED,
@@ -412,6 +431,60 @@ class SSRFEgressGuard:
         except ValueError:
             return None
         return parsed.hostname
+
+    def _allowlisted_host_resolves_to_metadata(self, host: str) -> SSRFEgressDecision | None:
+        """For a *name* on the allowlist, refuse if it resolves to the metadata address.
+
+        Returns a ``DENY_METADATA`` decision when any resolved address is the cloud
+        metadata address (IPv4 IMDS or the IPv6 ``fd00:ec2::254``); ``None`` when every
+        address is something else (the caller then keeps ``ALLOW_HOST_ALLOWLISTED`` — the
+        escape hatch is for private ranges). A resolution failure keeps the allow, with an
+        explain line, since the hatch named this host explicitly.
+        """
+        try:
+            addrs = self._resolver(host)
+        except (OSError, ValueError) as exc:
+            return SSRFEgressDecision(
+                allowed=True,
+                verdict=SSRFEgressVerdict.ALLOW_HOST_ALLOWLISTED,
+                host=host,
+                explain=[
+                    "rule=allow_host_allowlisted: operator-trusted host",
+                    f"resolved_ip=<none> (host {host!r} did not resolve: {exc})",
+                    "encoding=dns",
+                ],
+            )
+        for addr in addrs:
+            decoded = _decode_literal_ip(addr)
+            if decoded is None:
+                continue
+            ip, _enc = decoded
+            if _is_metadata_ip(ip):
+                logger.warning(
+                    "ssrf_egress_allowlisted_host_rebind_metadata",
+                    host=host,
+                    resolved_ip=str(ip),
+                    advisory=self._advisory,
+                )
+                return SSRFEgressDecision(
+                    allowed=False,
+                    verdict=SSRFEgressVerdict.DENY_METADATA,
+                    host=host,
+                    resolved_ip=str(ip),
+                    encoding="dns",
+                    explain=[
+                        f"rule=deny_metadata: host {host!r} is allowlisted but resolved to "
+                        "the cloud metadata (IMDS) address — the allowlist is for private "
+                        "ranges, not a rebind to metadata",
+                        f"resolved_ip={ip} (from allowlisted host {host!r})",
+                        "encoding=dns",
+                    ],
+                    fix_hints=self._hints(
+                        "Remove this host from the internal-host allowlist, or pin it to a "
+                        "fixed non-metadata address."
+                    ),
+                )
+        return None
 
     def _deny(
         self,

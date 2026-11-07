@@ -204,3 +204,72 @@ class TestPreset:
     def test_preset_allowlist_passes_internal(self) -> None:
         p = ssrf_egress_guard_defaults(allow_internal_hosts=["10.1.2.3"])
         assert p["check"]("http://10.1.2.3/") is None
+
+
+class TestAllowlistedHostCannotRebindToMetadata:
+    """The internal-host escape hatch is for private ranges, not a rebind to metadata.
+
+    Extends the rebinding coverage above: a *name* on ``allow_internal_hosts`` is
+    resolved, and if any address is the cloud metadata address the egress is denied
+    (``DENY_METADATA``), even though the written host is allowlisted. Other internal
+    addresses keep ``ALLOW_HOST_ALLOWLISTED`` (that is what the hatch is for), a
+    resolution failure keeps the allow, and a metadata IP literal the operator wrote in
+    the allowlist itself stays allowed.
+    """
+
+    def test_name_resolving_to_metadata_is_denied(self) -> None:
+        guard = SSRFEgressGuard(
+            allow_internal_hosts=["mcp.example.com"],
+            resolver=lambda h: ["169.254.169.254"],
+        )
+        d = guard.check_url("http://mcp.example.com/latest/meta-data/")
+        assert not d.allowed
+        assert d.verdict is SSRFEgressVerdict.DENY_METADATA
+        assert any("allowlisted" in line for line in d.explain)
+
+    def test_mixed_addresses_with_metadata_is_denied(self) -> None:
+        guard = SSRFEgressGuard(
+            allow_internal_hosts=["mcp.example.com"],
+            resolver=lambda h: ["10.0.0.5", "169.254.169.254"],
+        )
+        d = guard.check_url("http://mcp.example.com/x")
+        assert not d.allowed
+        assert d.verdict is SSRFEgressVerdict.DENY_METADATA
+
+    def test_ipv6_metadata_is_denied(self) -> None:
+        guard = SSRFEgressGuard(
+            allow_internal_hosts=["mcp.example.com"],
+            resolver=lambda h: ["fd00:ec2:0:0:0:0:0:254"],
+        )
+        d = guard.check_url("http://mcp.example.com/x")
+        assert not d.allowed
+        assert d.verdict is SSRFEgressVerdict.DENY_METADATA
+
+    @pytest.mark.parametrize("addr", ["10.0.0.5", "198.18.0.7"])
+    def test_other_internal_address_keeps_allowlist(self, addr: str) -> None:
+        guard = SSRFEgressGuard(
+            allow_internal_hosts=["mcp.example.com"],
+            resolver=lambda h: [addr],
+        )
+        d = guard.check_url("http://mcp.example.com/x")
+        assert d.allowed
+        assert d.verdict is SSRFEgressVerdict.ALLOW_HOST_ALLOWLISTED
+
+    def test_resolution_failure_keeps_allowlist(self) -> None:
+        guard = SSRFEgressGuard(
+            allow_internal_hosts=["mcp.example.com"],
+            resolver=lambda h: (_ for _ in ()).throw(OSError("nxdomain")),
+        )
+        d = guard.check_url("http://mcp.example.com/x")
+        assert d.allowed
+        assert d.verdict is SSRFEgressVerdict.ALLOW_HOST_ALLOWLISTED
+
+    def test_metadata_literal_in_allowlist_stays_allowed(self) -> None:
+        # The operator named the metadata address itself; it is not a rebind.
+        guard = SSRFEgressGuard(
+            allow_internal_hosts=["169.254.169.254"],
+            resolver=lambda h: (_ for _ in ()).throw(OSError("no dns")),
+        )
+        d = guard.check_url("http://169.254.169.254/latest/meta-data/")
+        assert d.allowed
+        assert d.verdict is SSRFEgressVerdict.ALLOW_HOST_ALLOWLISTED

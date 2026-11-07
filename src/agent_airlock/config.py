@@ -657,6 +657,7 @@ def _parse_endpoint_policies(data: dict[str, Any]) -> dict[str, EndpointPolicy]:
                 allow_metadata_urls=bool(tool_data.get("allow_metadata_urls", False)),
                 resolve_hostnames=bool(tool_data.get("resolve_hostnames", True)),
                 deny_on_resolution_failure=bool(tool_data.get("deny_on_resolution_failure", True)),
+                allowed_url_prefixes=list(tool_data.get("allowed_url_prefixes", [])),
             )
     return policies
 

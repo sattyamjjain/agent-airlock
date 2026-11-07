@@ -97,6 +97,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from .._log import structlog
+from .._url_paths import normalize_url_path
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oidc_publish_window_guard")
 
@@ -173,11 +174,6 @@ def _split_spec(spec: str) -> tuple[str, str | None]:
 #: ``name@<url>`` / ``alias@<url>``, as a remote tarball (npm-package-arg ``type: remote``).
 _SPEC_URL_RE = re.compile(r"https?://", re.IGNORECASE)
 
-#: Path segments the WHATWG URL parser (Node's ``new URL()``, which npm uses) reads as
-#: ``.`` and ``..``, percent-encoded dots included.
-_SINGLE_DOT_SEGMENTS = frozenset({".", "%2e"})
-_DOUBLE_DOT_SEGMENTS = frozenset({"..", ".%2e", "%2e.", "%2e%2e"})
-
 
 def _spec_url(spec: str) -> str | None:
     """The URL a package spec installs from (``<url>``, ``name@<url>``), or None."""
@@ -209,18 +205,10 @@ def _normalised_path(path: str) -> str:
     Node's ``new URL()`` resolves ``.`` and ``..`` (and their percent-encoded spellings)
     before the registry sees the path, so ``/@tanstack/x/../history/-/...`` fetches
     ``@tanstack/history``. Empty segments are dropped as well, which can only refuse more.
+    The shared resolver (``.._url_paths``) is called with ``strip_path_params`` off: npm
+    has no servlet path parameters, so its behaviour is unchanged.
     """
-    segments: list[str] = []
-    for segment in path.split("/"):
-        folded = segment.lower()
-        if not segment or folded in _SINGLE_DOT_SEGMENTS:
-            continue
-        if folded in _DOUBLE_DOT_SEGMENTS:
-            if segments:
-                segments.pop()
-            continue
-        segments.append(segment)
-    return "/" + "/".join(segments)
+    return normalize_url_path(path)
 
 
 def _texts(value: object) -> list[str] | None:
