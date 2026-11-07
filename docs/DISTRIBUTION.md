@@ -65,7 +65,7 @@ link-first posts). Lead with the problem, not the project.
    stripping, deny-by-default tool/capability scope, self-healing error the
    model retries against. Zero new network hop.
 4. **The benchmark — and the honest part.** On a shared 210-call corpus it
-   blocks 100% / 0% false-positive at ~2µs/decision. **But** that's a
+   blocks 100% / 0% false-positive at ~3µs/decision. **But** that's a
    *self-curated* corpus (coverage baseline, not an adaptive-attacker score),
    and I did **not** re-run LlamaFirewall/Invariant — they're model-in-the-loop,
    so I cite their published scope instead of inventing a number. The finding
