@@ -94,6 +94,44 @@ class TestRedirectURI:
         with pytest.raises(RedirectURIError):
             validate_redirect_uri("")
 
+    @pytest.mark.parametrize(
+        "uri",
+        [
+            "https://app.example/cb#frag",
+            "http://localhost:8080/cb#frag",
+            "http://127.0.0.1:8080/#/cb",
+            "http://[::1]:8080/cb#frag",
+            "https://app.example/cb?state=1#frag",
+            "https://app.example#frag",
+            # urlparse reports no fragment for these two: a parsed.fragment test passes them.
+            "https://app.example/cb#",
+            "https://app.example/cb?state=1#",
+        ],
+    )
+    def test_rejects_a_fragment_rfc_6749_3_1_2(self, uri: str) -> None:
+        """ "The endpoint URI MUST NOT include a fragment component." See
+        modelcontextprotocol/typescript-sdk#3142 for the same gap in a registration handler."""
+        with pytest.raises(RedirectURIError, match=r"RFC 6749 section 3\.1\.2"):
+            validate_redirect_uri(uri)
+
+    def test_the_refusal_does_not_echo_the_fragment(self) -> None:
+        with pytest.raises(RedirectURIError) as exc:
+            validate_redirect_uri("https://app.example/cb#access_token=abc123")
+        assert "abc123" not in str(exc.value)
+
+    @pytest.mark.parametrize(
+        "uri",
+        [
+            "https://app.example/cb",
+            "http://127.0.0.1:8080/cb",
+            "https://app.example/cb?state=1",
+            # An escaped '#' is a path character, not a fragment delimiter (RFC 3986 section 2.2).
+            "https://app.example/cb%23frag",
+        ],
+    )
+    def test_a_uri_with_no_fragment_still_passes(self, uri: str) -> None:
+        validate_redirect_uri(uri)
+
 
 # =============================================================================
 # Authorization header parsing

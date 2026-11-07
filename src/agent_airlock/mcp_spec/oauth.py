@@ -15,7 +15,8 @@ Key normative requirements enforced:
   the client MUST refuse to proceed. `AuthorizationServerMetadata` enforces
   this at parse time.
 - **Redirect URIs MUST be either `localhost`/`127.0.0.1` or HTTPS** (spec
-  §"Communication Security"). `validate_redirect_uri` rejects anything else.
+  §"Communication Security") **and carry no fragment** (RFC 6749 section 3.1.2).
+  `validate_redirect_uri` rejects anything else.
 - **Access tokens MUST be Authorization: Bearer** — no query-string tokens,
   no other schemes (spec §"Access Token Usage"). `parse_authorization_header`
   rejects non-Bearer and `parse_www_authenticate_header` parses the
@@ -133,6 +134,11 @@ def validate_redirect_uri(uri: str) -> None:
     Per spec: "All redirect URIs MUST be either `localhost` or use HTTPS."
     We accept 127.0.0.1 and [::1] as equivalents; we reject `http://` for
     any other host.
+
+    Per RFC 6749 section 3.1.2: "The endpoint URI MUST NOT include a fragment
+    component." An empty one counts: `urlparse` reports no fragment for a bare
+    trailing `#`, so the URI itself is what is read. An escaped `%23` is a path
+    character, not a fragment. The refusal does not echo the fragment.
     """
     if not isinstance(uri, str):
         raise RedirectURIError(f"redirect_uri must be a str, got {type(uri).__name__}")
@@ -143,6 +149,11 @@ def validate_redirect_uri(uri: str) -> None:
         parsed = urlparse(uri)
     except ValueError as e:
         raise RedirectURIError(f"redirect_uri is not a valid URI: {e}") from e
+
+    if "#" in uri:
+        raise RedirectURIError(
+            "redirect_uri must not include a fragment component (RFC 6749 section 3.1.2)"
+        )
 
     if parsed.scheme not in ("http", "https"):
         raise RedirectURIError(f"redirect_uri must use http or https scheme, got {parsed.scheme!r}")

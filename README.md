@@ -259,7 +259,7 @@ Against the **MCP Top-10**. Evidence is compressed here; each row's full justifi
 | **MCP04 Software Supply Chain Attacks & Dependency Tampering** | `stdio_guard_ox_defaults()` (Ox 2026-04-16 advisory), `download_plugin_*` / `fetch_plugin_*` deny | Full |
 | **MCP05 Command Injection & Execution** | `stdio_guard` shell-metachar and deny-pattern rules, `exec_*` / `run_*` / `system_*` deny, `CodeSandboxBridgeGuard` for code-tool sandbox escapes, sandbox for `DANGEROUS` | Full |
 | **MCP06 Intent Flow Subversion** | `ToolOutputTrustGuard` envelopes injected-instruction output; `@requires_human_oversight` gates high-value actions | Partial |
-| **MCP07 Insufficient Authentication & Authorization** | OAuth 2.1 + PKCE S256 helpers, `iss` mix-up validation, header/body routing integrity, unsigned-`_meta` trust boundary, step-up scope guard, Tasks lifecycle and admission guards. Transport-level auth remains server-side | Partial |
+| **MCP07 Insufficient Authentication & Authorization** | OAuth 2.1 + PKCE S256 helpers (a redirect URI with a fragment is refused, RFC 6749 section 3.1.2), `iss` mix-up validation, header/body routing integrity, unsigned-`_meta` trust boundary, step-up scope guard, Tasks lifecycle and admission guards. Transport-level auth remains server-side | Partial |
 | **MCP08 Lack of Audit and Telemetry** | JSON-Lines audit log, OpenTelemetry export, spans and metrics | Full |
 | **MCP09 Shadow MCP Servers** | Attested tool-server admission, LAN unauthenticated-MCP guard | Partial |
 | **MCP10 Context Injection & Over-Sharing** | PII and secret sanitizer, workspace-scoped config, `ToolOutputTrustGuard` untrusted-data envelope | Full |
