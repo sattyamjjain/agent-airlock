@@ -341,7 +341,10 @@ class TestTheSanityCheckRespectsIncompleteCells:
         assert rows, "no per-harness rows in the shipped RESULTS.md"
         for name, done, total in rows:
             line = next(row for row in md.splitlines() if row.startswith(f"- `{name}`:"))
-            if done == total:
+            if total == "0":
+                # 0 == 0 is not finishing every cell: the 2026-11-03 cursor-agent errored on all.
+                assert "measured nothing" in line, name
+            elif done == total:
                 assert "choice not to run the planted script" in line, name
             else:
                 assert f"rests on the **{done}** cells" in line, name

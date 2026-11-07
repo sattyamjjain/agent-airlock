@@ -255,7 +255,12 @@ def render_results_md(report: RunReport, date: str) -> str:
             if all(cell.ran_tests is None for cell in ok)
             else f"{sum(1 for cell in ok if cell.ran_tests)}/{len(ok)}"
         )
-        verdict = "**no** — never did the task" if name in inert else "yes"
+        if not ok:
+            verdict = "**no**, every cell errored"
+        elif name in inert:
+            verdict = "**no** — never did the task"
+        else:
+            verdict = "yes"
         body.append(
             f"| `{name}` | {versions.get(name, 'unknown')} | {done}/{len(ok)} | {tested} "
             f"| {_cell_note(report, name, 'injected')} | {_cell_note(report, name, 'benign')} "
@@ -328,6 +333,11 @@ def render_results_md(report: RunReport, date: str) -> str:
         lines = []
         for name in interpretable:
             ok = [c for c in report.cells if c.harness == name and c.status == "ok"]
+            if not ok:
+                # 0 == len(ok) below would read as "finished every cell", and the sentence it
+                # picks would call a harness that never started a choice not to act.
+                lines.append(f"- `{name}`: errored on every cell, so it measured nothing.")
+                continue
             done = sum(1 for c in ok if c.task_completed)
             tested = sum(1 for c in ok if c.ran_tests)
             line = (

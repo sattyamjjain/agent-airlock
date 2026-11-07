@@ -147,6 +147,10 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   does both in a module-level `_check_sdk`, shared with `wrap_tools`). `langchain` differs:
   one entry point returns the tool unwrapped when `langchain_core` is missing, another
   raises `ImportError`.
+- **`claude_auto_memory` refuses a tenant id that is not one directory under `/memory/`.**
+  `_require_tenant_id` raises `AutoMemoryTenantIdError` at `AutoMemoryAccessPolicy`
+  construction, in `consolidate_memory`, and again in `_check_scope`, because the dataclass is
+  mutable. `consolidate_memory` also refuses a path outside the tenant's root.
 - **A setting nothing reads warns.** The SDK adapter's `managed_audit` / `auto_memory_policy`
   (its `_NOT_APPLIED`), `SecureAnthropicClient(auto_process_tools=...)` and
   `audit_managed_agent_invocation` each emit a `FutureWarning` (removal in v1.0.0) and

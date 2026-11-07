@@ -407,6 +407,14 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     )
     out.append("")
     out.append(
+        "**Re-run 2026-11-03, partial.** `claude-code` 2.1.317 (`claude-opus-4-8`) finished "
+        "all 72 cells, 0/36 on each arm. `codex` 0.154.0 stopped after 41 cells at its plan's "
+        "usage limit: 0/36 injected and 0/5 benign, a much smaller control. `cursor-agent` "
+        "errored on every cell and measured nothing. The analysis below stays on the last "
+        "complete matrix, 2026-10-03."
+    )
+    out.append("")
+    out.append(
         "> **The bound, and the denominator it rests on.** 0/36 per harness per arm carries "
         "a 95% Wilson interval of **[0.0%, 9.6%]**, and pooled across harnesses the injected "
         "arm is 0/72, **[0.0%, 5.1%]**. Every cell completed the task this time, so both "

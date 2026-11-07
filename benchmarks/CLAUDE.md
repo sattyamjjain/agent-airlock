@@ -39,7 +39,8 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   claude-code cell without one. A CLI that exits
   non-zero before any observable work is an `error` cell, never a non-action, and a resumed
   checkpoint re-runs every `error` cell and any cell recorded under a different model or
-  auth method (`--allow-any-auth` widens the latter).
+  auth method (`--allow-any-auth` widens the latter). A harness whose every cell errored
+  renders as "measured nothing", never as a 0 of 0 that reads as finishing every cell.
 - **`vs_gateway/`** — airlock measured live against a gateway column replayed from
   `gateway_measurement.json`, which only `gateway_harness/regen.py` rewrites.
 - **`mcp_conformance/run.py`** — runs the `mcp_spec.conformance` cases; exits 1 on a failure.
@@ -94,7 +95,9 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   or re-render is not one, so hand-fix a generated file rather than regenerate it under an
   old date. Dates are UTC, the day `check_benchmark_freshness.py` reads; every harness that
   takes `--date` defaults it to the UTC day, so a run after midnight IST still stamps the
-  day before.
+  day before. A partial run keeps its date only with its scope stated inline wherever the
+  claim appears: the README row, `docs/benchmarks/index.md`, `BENCHMARK.md` (via
+  `scripts/generate_benchmark.py`), `SECURITY.md` and the long-form page.
 - **Written to survive a hostile read.** `bench(...)` commits publish adversarial results
   under `benchmarks/`: a null result ships as a null result, a re-run that comes back
   weaker ships weaker, a broken harness is fixed before its output is quoted, an expiring

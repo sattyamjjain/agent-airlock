@@ -68,6 +68,8 @@ class AutoMemoryAccessPolicy:
     Attributes:
         tenant_id: The tenant this session belongs to. All reads and
             writes must reference paths under ``/memory/{tenant_id}/``.
+            It has to name one directory there: an empty or path-like id
+            raises :class:`AutoMemoryTenantIdError` at construction.
         allowed_paths: Optional extra per-path allow-list WITHIN the
             tenant scope. Empty means "any path under the tenant root".
         max_read_bytes_per_call: Reject reads larger than this. Default
@@ -83,6 +85,24 @@ class AutoMemoryAccessPolicy:
     max_read_bytes_per_call: int = 64_000
     forbid_cross_tenant: bool = True
     redact_on_write: bool = True
+
+    def __post_init__(self) -> None:
+        _require_tenant_id(self.tenant_id)
+
+
+class AutoMemoryTenantIdError(AirlockError):
+    """Raised when a tenant id does not name exactly one directory under ``/memory/``.
+
+    Attributes:
+        tenant_id: The id that was refused.
+        reason: Why, in words safe to log.
+    """
+
+    def __init__(self, *, tenant_id: object, reason: str) -> None:
+        self.tenant_id = tenant_id
+        self.reason = reason
+        shown = repr(tenant_id) if isinstance(tenant_id, str) else type(tenant_id).__name__
+        super().__init__(f"auto-memory tenant id {shown} refused: {reason}")
 
 
 class AutoMemoryCrossTenantError(AirlockError):
@@ -239,9 +259,16 @@ def consolidate_memory(
             exceed this length. Default 8.
 
     Raises:
+        AutoMemoryTenantIdError: ``tenant_id`` does not name a tenant.
+        AutoMemoryCrossTenantError: ``path`` is outside the tenant's root.
+            Until 0.10.32 nothing checked it, so an entry could be signed
+            for one tenant at a path inside another's root.
         MemoryChainTooDeepError: Chain length exceeds the limit.
         MemoryProvenanceError: Signing key is unavailable.
     """
+    _require_tenant_id(tenant_id)
+    if _escapes_tenant_root(tenant_id, path):
+        raise AutoMemoryCrossTenantError(tenant_id=tenant_id, attempted_path=path)
     if len(source_session_ids) > max_chain_depth:
         raise MemoryChainTooDeepError(depth=len(source_session_ids), limit=max_chain_depth)
 
@@ -274,6 +301,30 @@ def consolidate_memory(
     return entry
 
 
+def _require_tenant_id(tenant_id: object) -> None:
+    """Refuse a tenant id that does not name exactly one directory under ``/memory/``.
+
+    Until 0.10.32 ``""`` was accepted: its root is ``/memory//``, which no tenant owns, so
+    ``/memory//x.md`` passed the scope check. The path-like ids matter as much. Tenant
+    ``"a/b"`` has the root ``/memory/a/b/``, inside tenant ``"a"``'s root, so ``"a"`` passes
+    the scope check for ``"a/b"``'s notes; ``"."`` and ``".."`` have roots holding every
+    tenant's. With these refused, no tenant's root contains another's.
+
+    Raises:
+        AutoMemoryTenantIdError: The id is not a string, is empty, is only dots and
+            whitespace, or holds a ``/``, a ``\\`` or a NUL.
+    """
+    if not isinstance(tenant_id, str):
+        reason = f"a tenant id is a string, not {type(tenant_id).__name__}"
+    elif not tenant_id.replace(".", "").strip():
+        reason = "it is empty, or only dots and whitespace, so it names no directory"
+    elif any(separator in tenant_id for separator in ("/", "\\", "\x00")):
+        reason = "it holds a path separator or a NUL, so its root is not one directory"
+    else:
+        return
+    raise AutoMemoryTenantIdError(tenant_id=tenant_id, reason=reason)
+
+
 def _tenant_root(tenant_id: str) -> str:
     return f"/memory/{tenant_id}/"
 
@@ -284,8 +335,11 @@ def _escapes_tenant_root(tenant_id: str, path: str) -> bool:
     Until 0.10.24 the check was a bare prefix test, so ``/memory/<tenant>/../<other>/x``
     passed and reached another tenant's notes. A ``..`` segment (``/`` or ``\\`` separated)
     or a NUL is refused outright: no memory path needs one, and a backend may resolve it
-    differently than a normaliser would. The prefix test itself is unchanged.
+    differently than a normaliser would. The prefix test itself is unchanged. A path that
+    is not a string cannot be read as under the root, so it escapes it.
     """
+    if not isinstance(path, str):
+        return True
     segments = path.replace("\\", "/").split("/")
     if ".." in segments or "\x00" in path:
         return True
@@ -293,6 +347,8 @@ def _escapes_tenant_root(tenant_id: str, path: str) -> bool:
 
 
 def _check_scope(policy: AutoMemoryAccessPolicy, path: str) -> None:
+    # Again here, because the dataclass is mutable and construction is not the last word.
+    _require_tenant_id(policy.tenant_id)
     if policy.forbid_cross_tenant and _escapes_tenant_root(policy.tenant_id, path):
         raise AutoMemoryCrossTenantError(
             tenant_id=policy.tenant_id,
@@ -419,6 +475,7 @@ __all__ = [
     "AutoMemoryAccessPolicy",
     "AutoMemoryCrossTenantError",
     "AutoMemoryQuotaError",
+    "AutoMemoryTenantIdError",
     "guarded_read",
     "guarded_write",
 ]

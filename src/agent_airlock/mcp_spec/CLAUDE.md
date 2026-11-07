@@ -131,6 +131,14 @@ preset, and
   PowerShell. Both models set `hide_input_in_errors`, so the error text names the field and
   the character's class, never the URL; `errors()` still carries the input. Extra fields
   (`extra="allow"`) are not screened.
+- **`tools/list` paging differs by SDK line.** mcp 2.x's result has `next_cursor` and no
+  `nextCursor` (FastMCP 4 adds a `nextCursor` to it that warns on each read); mcp 1.x's has
+  only `nextCursor`. `ClientSession.list_tools` takes `params=` (and on 1.x a deprecated
+  `cursor=`), `mcp.Client.list_tools` and FastMCP's `Client.list_tools_mcp` take `cursor=`.
+  `tool_definition_pin_guard._cursor_attribute` and `_ask_for_page` hold that, and a page read
+  the wrong way ends the listing at page 1 with no error. CI resolves only the newest SDK
+  (`TestAHostileListingOverTheRealSdk`), so check `mcp==1.30.0`, the pin's floor, in a scratch
+  venv when touching them.
 - **Report a field, a variable name or a digest, never an `env` value.** `audit_config_diff`
   compares the values of code-loading variables and `McpConfigPinSet` hashes them, yet a
   diff refusal says only that `env` changed (`MCPCommandMutationDetected.fields`), a pin

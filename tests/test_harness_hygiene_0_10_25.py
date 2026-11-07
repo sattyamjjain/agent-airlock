@@ -376,10 +376,13 @@ class TestTheReproduceLine:
         assert line, "no Reproduce line in RESULTS.md"
         assert " --run " in line.group(1)
         cli.build_parser().parse_args(_reproduce_args(line.group(1)))
-        assert (
-            "claude-code ran its CLI default; this run recorded neither its model nor its auth"
-            in md
-        )
+        # A run that left claude-code on its CLI default has to say so, since the line cannot.
+        # One that pinned it (2026-11-03 on) carries the model on the line itself.
+        if "--model claude-code=" not in line.group(1):
+            assert (
+                "claude-code ran its CLI default; this run recorded neither its model nor its auth"
+                in md
+            )
 
     def test_the_docs_page_line(self) -> None:
         doc = (ROOT / "docs" / "benchmarks" / "injection-multi-harness.md").read_text(

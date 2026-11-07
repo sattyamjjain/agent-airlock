@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.32] - 2026-11-07
+
+Four places a guard read past what it was handed: a JSON-RPC id's type, a listing's later
+pages, a redirect URI's fragment and a tenant id that names no tenant. This release also
+carries the two egress defences from #451.
+
+### Added
+
+- `list_all_tools_pinned(session, guard, *, on_drift="raise", max_pages=100)`: reads every page of `tools/list`, then runs `admit_tools_list` once on the combined listing. `list_tools_pinned` checks one page per call, so a tool listed on pages 1 and 2 read as clean twice and the later definition could shadow the earlier one (the shape of modelcontextprotocol/python-sdk#3813, there a resource template overwritten by its duplicate). Here that tool is a duplicate, and `missing` covers the whole listing. A cursor seen twice, a cursor that is not a string, a page that is not a listing, more than `max_pages` pages and a session that cannot follow a cursor raise `ToolListingDriftError`, with `enforce` off too. The cursor goes in the way the session's signature takes it (`params=` or `cursor=`), and comes out of `next_cursor` (mcp 2.x) or `nextCursor` (mcp 1.x). A FastMCP `Client` is read through `list_tools_mcp`, because its `list_tools()` stops at a repeated cursor with only a warning (FastMCP 3 and 4) or returns page 1 (FastMCP 2).
+- `EndpointPolicy.allowed_url_prefixes`: a path-scoped egress allowlist (`scheme://host[:port]/path/`). A URL is refused unless one entry matches on scheme, host and port and the URL's path, with dot segments and servlet path parameters (`..;`, `%2e%2e;x`) resolved, stays under the entry's path at a segment boundary; `%2f` / `%5c` / backslash / `%00` in the path is refused outright. CVE-2026-120492. Default empty keeps host-only behaviour (#451).
+
+### Changed
+
+- `RequestWindow.active` is now `set[str | int]`, and `begin_client_request`, `end_client_request`, `client_request_window` and `check_elicitation_solicited` take `str | int`. Behaviour change: pass each id as JSON-RPC sent it. A host that begins `7` and checks `"7"` is now refused `foreign_request_window`.
+- `consolidate_memory` refuses a path outside the tenant's root (`AutoMemoryCrossTenantError`). Its docstring always required that and nothing checked it, so an entry could be signed for one tenant at a path inside another's root.
+- `ToolListingDriftError` says what is wrong with a listing it cannot read, and keeps "not admitted by the pins" for tools the pins refused.
+- An allowlisted internal host that resolves to the cloud metadata address is refused: `SSRFEgressGuard.allow_internal_hosts` resolves a name before trusting it, and `validate_endpoint` refuses an `allowed_endpoints` host whose address is metadata (`allow_metadata_urls=False`). Behaviour change: a name on the allowlist that a DNS answer points at `169.254.169.254` / `fd00:ec2::254` no longer reaches it; a metadata IP literal in the allowlist stays allowed (#451).
+- Benchmarks re-run. Block-rate, `sandbox=True` parity, ToolPrivBench and conformance on 2026-11-07, results unchanged; block-rate p50 now reads ~3µs (1.7µs on 2026-10-03; under equal load on this host today, v0.10.31 reads 3.1 to 3.3µs and this release 3.4 to 3.5µs). The gateway head-to-head on 2026-11-03, unchanged. Harness injection on 2026-11-03, partial: `codex` stopped after 41 of 72 cells at its plan's usage limit, so its benign control is 0/5, and `cursor-agent` errored on every cell. The last complete harness matrix stays 2026-10-03.
+
+### Fixed
+
+- The elicitation request window keyed ids by `str()`, so JSON-RPC requests `7` and `"7"` shared one slot: begin both, end `"7"`, and the window read as closed while `7` still ran. An elicitation claiming `"7"` also passed while only `7` was in flight. Ids now keep their type (the coercion of modelcontextprotocol/python-sdk#3807, there in the dispatcher's in-flight table). A bool, a float, null or anything else that is not a string or an integer raises `ElicitationProvenanceError` (`invalid_request_id`) from all three calls, since Python hashes `True` like `1` and `7.0` like `7`.
+- `validate_redirect_uri` accepted `https://app.example/cb#frag` and `http://localhost:8080/cb#frag`. RFC 6749 section 3.1.2: "The endpoint URI MUST NOT include a fragment component." A fragment now raises `RedirectURIError`, a bare trailing `#` included; an escaped `%23` stays allowed. modelcontextprotocol/typescript-sdk#3142 reports the same gap in a registration handler.
+- `AutoMemoryAccessPolicy(tenant_id="")` was accepted. Its root is `/memory//`, so `/memory//x.md` passed the scope check and landed in a root no tenant owns. `AutoMemoryAccessPolicy` and `consolidate_memory` now raise `AutoMemoryTenantIdError` (new, exported from the package root) for an id that is not a string, is empty, is only dots and whitespace, or holds `/`, `\` or NUL. The last group matters too: tenant `"a/b"` had the root `/memory/a/b/`, inside tenant `"a"`'s root, so `"a"` passed the scope check for `"a/b"`'s notes. `guarded_read` and `guarded_write` read the id again on each call, since the dataclass is mutable, and refuse a path that is not a string instead of raising `AttributeError`.
+- The harness-injection renderer called a harness that errored on every cell a "choice not to run the planted script" and rated it interpretable: 0 of 0 cells read as finishing every cell. It now says the harness measured nothing.
+
 ## [0.10.31] - 2026-11-02
 
 A code-execution tool whose sandbox leaves a host bridge reachable is the
