@@ -13,9 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.32] - 2026-11-07
 
-Four places a guard read past what it was handed: a JSON-RPC id's type, a listing's later
-pages, a redirect URI's fragment and a tenant id that names no tenant. This release also
-carries the two egress defences from #451.
+Places a guard read past what it was handed: a JSON-RPC id's type, a listing's later
+pages, a redirect URI's fragment, a tenant id that names no tenant, a metadata
+document's issuer and an encoded `Mcp-Name`. This release also carries the two egress
+defences from #451.
 
 ### Added
 
@@ -29,12 +30,15 @@ carries the two egress defences from #451.
 - `ToolListingDriftError` says what is wrong with a listing it cannot read, and keeps "not admitted by the pins" for tools the pins refused.
 - An allowlisted internal host that resolves to the cloud metadata address is refused: `SSRFEgressGuard.allow_internal_hosts` resolves a name before trusting it, and `validate_endpoint` refuses an `allowed_endpoints` host whose address is metadata (`allow_metadata_urls=False`). Behaviour change: a name on the allowlist that a DNS answer points at `169.254.169.254` / `fd00:ec2::254` no longer reaches it; a metadata IP literal in the allowlist stays allowed (#451).
 - Benchmarks re-run. Block-rate, `sandbox=True` parity, ToolPrivBench and conformance on 2026-11-07, results unchanged; block-rate p50 now reads ~3µs (1.7µs on 2026-10-03; under equal load on this host today, v0.10.31 reads 3.1 to 3.3µs and this release 3.4 to 3.5µs). The gateway head-to-head on 2026-11-03, unchanged. Harness injection on 2026-11-03, partial: `codex` stopped after 41 of 72 cells at its plan's usage limit, so its benign control is 0/5, and `cursor-agent` errored on every cell. The last complete harness matrix stays 2026-10-03.
+- A plain `Mcp-Name` a header cannot carry is refused as `malformed_name_header`, even when it matches the body: a character outside visible ASCII, space and tab, or whitespace at either end. A client must encode those, and the spec lists invalid characters as a validation failure. A plain value shaped like the encoded form is read as encoded, as the spec has it, so a literal `=?base64?ZWNobw==?=` no longer matches a body name spelled the same way. The audit event gains `header_name_decoded` beside the raw `header_name`.
 
 ### Fixed
 
 - The elicitation request window keyed ids by `str()`, so JSON-RPC requests `7` and `"7"` shared one slot: begin both, end `"7"`, and the window read as closed while `7` still ran. An elicitation claiming `"7"` also passed while only `7` was in flight. Ids now keep their type (the coercion of modelcontextprotocol/python-sdk#3807, there in the dispatcher's in-flight table). A bool, a float, null or anything else that is not a string or an integer raises `ElicitationProvenanceError` (`invalid_request_id`) from all three calls, since Python hashes `True` like `1` and `7.0` like `7`.
 - `validate_redirect_uri` accepted `https://app.example/cb#frag` and `http://localhost:8080/cb#frag`. RFC 6749 section 3.1.2: "The endpoint URI MUST NOT include a fragment component." A fragment now raises `RedirectURIError`, a bare trailing `#` included; an escaped `%23` stays allowed. modelcontextprotocol/typescript-sdk#3142 reports the same gap in a registration handler.
 - `AutoMemoryAccessPolicy(tenant_id="")` was accepted. Its root is `/memory//`, so `/memory//x.md` passed the scope check and landed in a root no tenant owns. `AutoMemoryAccessPolicy` and `consolidate_memory` now raise `AutoMemoryTenantIdError` (new, exported from the package root) for an id that is not a string, is empty, is only dots and whitespace, or holds `/`, `\` or NUL. The last group matters too: tenant `"a/b"` had the root `/memory/a/b/`, inside tenant `"a"`'s root, so `"a"` passed the scope check for `"a/b"`'s notes. `guarded_read` and `guarded_write` read the id again on each call, since the dataclass is mutable, and refuse a path that is not a string instead of raising `AttributeError`.
+- Metadata issuer checked against the discovery URL (RFC 8414 section 3.3). `AuthorizationServerMetadata` takes no URL, so a document naming `https://decoy.example.net` parsed with no error, and `validate_authorization_response_iss` then passed with `metadata.issuer` as `expected_issuer`: once the unchecked issuer is the expected value, the `iss` check cannot catch the mix-up. New: `AuthorizationServerMetadata.from_discovery(document, *, discovery_url)`, `validate_metadata_issuer(metadata, *, discovery_url)` and `issuer_from_discovery_url(url)`, which inverts each well-known form on MCP 2026-07-28's discovery page. The constructor is unchanged, so a caller has to move to `from_discovery` to get the check. The comparison forgives trailing slashes, through the normalizer the `iss` check uses, and nothing else. `docs/guide/oauth-issuer.md` says which URL to pass and what the check does not decide.
+- `Mcp-Name` base64 form decoded, malformed form refused with its own reason. `validate_header_body_integrity` compared the raw header, so `=?base64?ZWNobw==?=` for a tool named `echo` was refused as `name_mismatch`, and so was `=?base64?\xe9?=`. It now decodes the value before comparing, and a payload that is not base64, not canonical or not strict UTF-8 is refused as `malformed_name_header` (new).
 - The harness-injection renderer called a harness that errored on every cell a "choice not to run the planted script" and rated it interpretable: 0 of 0 cells read as finishing every cell. It now says the harness measured nothing.
 
 ## [0.10.31] - 2026-11-02

@@ -60,7 +60,8 @@ src/agent_airlock/
 │                      (2.7, 2.75, 2.76, 3, 5)
 ├── _url_paths.py      `normalize_url_path`: resolves `.` / `..` segments (and `%2e`
 │                      spellings, `;` path parameters when asked); imports nothing, shared
-│                      by `network.py` (step 5) and `mcp_spec/oidc_publish_window_guard.py`
+│                      by `network.py` (step 5), `mcp_spec/oidc_publish_window_guard.py` and
+│                      `mcp_spec/oauth.py`
 │
 ├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,

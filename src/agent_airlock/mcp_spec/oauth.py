@@ -32,6 +32,10 @@ Key normative requirements enforced:
   `ProtectedResourceMetadata` must be https (plain http only on a loopback host) and may not
   hold a character a URL must percent-encode or `$(`: CVE-2026-119025's `open` ran such an
   `authorization_endpoint` through PowerShell.
+- **A discovered issuer is bound to the URL it was fetched from** (RFC 8414 section 3.3, MCP
+  2026-07-28 "Authorization Server Metadata Discovery"). The constructor takes no URL, so
+  `AuthorizationServerMetadata.from_discovery` is the way to read a fetched document: it
+  refuses one whose `issuer` is not the identifier its well-known URL was built from.
 
 DPoP is **intentionally not implemented**: per the spec page retrieved
 2026-04-18 it is listed only as a SEP draft and not a normative
@@ -52,6 +56,7 @@ from urllib.parse import parse_qs, urlparse, urlsplit
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from .._log import structlog
+from .._url_paths import normalize_url_path
 from ..safe_types import _SHELL_SUBSTITUTION, _URL_MUST_BE_ENCODED
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oauth")
@@ -460,6 +465,9 @@ class AuthorizationServerMetadata(BaseModel):
     (`_screen_metadata_url`, CVE-2026-119025). A validation error's text never repeats the
     input (`hide_input_in_errors`); `ValidationError.errors()` still carries it unless
     called with `include_input=False`. Extra fields are kept as given and not screened.
+
+    The constructor is given no URL, so a document naming any issuer parses. Read a document
+    you fetched with :meth:`from_discovery`, which binds its issuer to the URL it came from.
     """
 
     model_config = ConfigDict(strict=True, extra="allow", hide_input_in_errors=True)
@@ -487,6 +495,30 @@ class AuthorizationServerMetadata(BaseModel):
                 f"PKCE S256; code_challenge_methods_supported={v!r}"
             )
         return v
+
+    @classmethod
+    def from_discovery(
+        cls, document: dict[str, Any], *, discovery_url: str
+    ) -> AuthorizationServerMetadata:
+        """Parse a document fetched from ``discovery_url``, then check its issuer against it.
+
+        Args:
+            document: The metadata document, decoded from JSON.
+            discovery_url: The well-known URL the client built and requested. Never the
+                address a redirect ended on (``response.url``): the document at the end of
+                an open redirect names that address, so it would pass.
+
+        Returns:
+            The parsed metadata, whose ``issuer`` has passed :func:`validate_metadata_issuer`.
+
+        Raises:
+            pydantic.ValidationError: The document does not parse.
+            IssuerMismatchError: ``issuer`` is not the identifier ``discovery_url`` was built
+                from, or ``discovery_url`` is not a well-known metadata URL.
+        """
+        metadata = cls.model_validate(document)
+        validate_metadata_issuer(metadata, discovery_url=discovery_url)
+        return metadata
 
 
 class ProtectedResourceMetadata(BaseModel):
@@ -619,12 +651,12 @@ def validate_access_token_audience(
 
 
 # =============================================================================
-# Authorization-response issuer (`iss`) validation — RFC 9207 / SEP-2468
+# Issuer validation — RFC 8414 section 3.3, RFC 9207 / SEP-2468
 # =============================================================================
 
 
 class IssuerMismatchError(ValueError):
-    """Raised when an OAuth authorization response fails `iss` validation.
+    """Raised when a metadata document's issuer or an authorization response's `iss` is refused.
 
     RFC 9207 defines the `iss` authorization-response parameter so a client can
     detect an authorization-server **mix-up attack** — an attacker replaying an
@@ -632,6 +664,10 @@ class IssuerMismatchError(ValueError):
     (final 2026-07-28 spec) requires MCP clients to validate `iss` against the
     authorization server they initiated the flow with. This guard is
     deny-by-default: a missing (when required) or mismatched `iss` is refused.
+
+    That check is only as good as the issuer it compares with, so RFC 8414 section 3.3 comes
+    first: a metadata document whose `issuer` is not the identifier its well-known URL was
+    built from must not be used (:func:`validate_metadata_issuer`).
     """
 
 
@@ -639,6 +675,146 @@ def _normalize_issuer(value: str) -> str:
     # RFC 8414 issuer identifiers carry no trailing slash; normalize it away so
     # a superficial difference does not falsely reject a legitimate response.
     return value.strip().rstrip("/")
+
+
+#: The path segment every RFC 8414 and OpenID Connect Discovery metadata URL holds.
+_WELL_KNOWN_SEGMENT = ".well-known"
+
+#: The suffixes MCP 2026-07-28's discovery page has a client try inserted between the host and
+#: the issuer's path.
+_INSERTED_WELL_KNOWN_SUFFIXES = frozenset({"oauth-authorization-server", "openid-configuration"})
+
+#: The one suffix that page has a client try appended to the issuer's path (RFC 8414 section 5).
+_APPENDED_WELL_KNOWN_SUFFIX = "openid-configuration"
+
+
+def _screen_issuer_url(field_name: str, value: Any) -> str:
+    """``value`` screened like a metadata URL, each refusal an :class:`IssuerMismatchError`.
+
+    ``_normalize_issuer`` strips whitespace, and the screen stops only ASCII whitespace, so an
+    outer no-break space is refused here: the comparison may forgive trailing slashes and
+    nothing else.
+    """
+    if not isinstance(value, str):
+        raise IssuerMismatchError(f"{field_name} is a {type(value).__name__}, not a string")
+    try:
+        _screen_metadata_url(field_name, value)
+    except ValueError as exc:
+        raise IssuerMismatchError(str(exc)) from None
+    if value != value.strip():
+        raise IssuerMismatchError(f"{field_name} has whitespace around it")
+    return value
+
+
+def _issuer_path_segments(path: str) -> list[str]:
+    """The issuer's path segments, read back out of a well-known URL's path.
+
+    Raises:
+        IssuerMismatchError: The path has no ``.well-known`` segment, has two, or has it in a
+            form MCP discovery does not use (``oauth-authorization-server`` appended to a
+            path, a segment after an appended suffix, an unknown suffix).
+    """
+    segments = path.removesuffix("/").split("/")[1:]
+    if _WELL_KNOWN_SEGMENT not in segments:
+        raise IssuerMismatchError("discovery_url has no /.well-known/ path segment")
+    if segments.count(_WELL_KNOWN_SEGMENT) > 1:
+        raise IssuerMismatchError(
+            "discovery_url has more than one /.well-known/ path segment, so more than one "
+            "issuer could have built it"
+        )
+    position = segments.index(_WELL_KNOWN_SEGMENT)
+    suffix = segments[position + 1] if position + 1 < len(segments) else None
+    if position == 0 and suffix in _INSERTED_WELL_KNOWN_SUFFIXES:
+        return segments[2:]
+    if position == len(segments) - 2 and suffix == _APPENDED_WELL_KNOWN_SUFFIX:
+        return segments[:position]
+    raise IssuerMismatchError(
+        "discovery_url's /.well-known/ segment is in no form MCP discovery uses: "
+        "oauth-authorization-server or openid-configuration after the host, or "
+        "openid-configuration at the end of the path"
+    )
+
+
+def issuer_from_discovery_url(url: str) -> str:
+    """The issuer identifier a well-known metadata URL was built from.
+
+    Inverts each form on MCP 2026-07-28's discovery page, for issuer ``https://as.example``
+    or ``https://as.example/tenant1``::
+
+        /.well-known/oauth-authorization-server[/tenant1]  ->  [/tenant1]
+        /.well-known/openid-configuration[/tenant1]        ->  [/tenant1]
+        [/tenant1]/.well-known/openid-configuration        ->  [/tenant1]
+
+    The scheme, host and port come back as written, with no case folding and no default port
+    dropped, since RFC 8414 compares issuers as strings. A terminating ``/`` on the URL is
+    read as absent: RFC 8414 section 3.1 removes one before building it.
+
+    Args:
+        url: The well-known URL the client built.
+
+    Returns:
+        The issuer identifier, with no trailing slash.
+
+    Raises:
+        IssuerMismatchError: ``url`` is not a string, fails the metadata URL screen, or holds a
+            query, a fragment or userinfo (RFC 8414 section 2 gives an issuer none of them), a
+            port that is not one, an empty or dot segment, or a path parameter. Or its path is
+            in none of the forms above, ``oauth-authorization-server`` appended to a path and
+            two well-known segments included. The message names the problem, never the URL.
+    """
+    _screen_issuer_url("discovery_url", url)
+    if "?" in url or "#" in url:
+        raise IssuerMismatchError("discovery_url holds a query or a fragment")
+    parts = urlsplit(url)
+    if "@" in parts.netloc:
+        raise IssuerMismatchError("discovery_url holds userinfo")
+    try:
+        _ = parts.port
+    except ValueError:
+        raise IssuerMismatchError("discovery_url has a port that is not a valid port") from None
+    issuer_segments = _issuer_path_segments(parts.path)
+    # Dot and empty segments, %2e spellings and ..; included: the server resolves those before
+    # it answers, so the URL would name one issuer here and fetch from another.
+    if normalize_url_path(parts.path, strip_path_params=True) != parts.path.removesuffix("/"):
+        raise IssuerMismatchError(
+            "discovery_url's path holds an empty or dot segment, or a path parameter"
+        )
+    origin = url[: len(url) - len(parts.path)]
+    return origin + "".join(f"/{segment}" for segment in issuer_segments)
+
+
+def validate_metadata_issuer(metadata: AuthorizationServerMetadata, *, discovery_url: str) -> None:
+    """Refuse metadata whose issuer is not the one its discovery URL was built from.
+
+    RFC 8414 section 3.3 and MCP 2026-07-28's discovery page: a document whose ``issuer``
+    differs from the identifier its well-known URL was built from must not be used. This
+    binds a document to a URL. Choosing which authorization server to trust is the client's
+    (RFC 9728 ``authorization_servers``), and a document a server serves about itself at its
+    own well-known URL passes.
+
+    The comparison goes through ``_normalize_issuer``, as the ``iss`` check's does, so the two
+    cannot disagree. That forgives trailing slashes, which RFC 8414 does not: its word is
+    "identical", and MCP 2026-07-28's authorization page rules out trailing-slash
+    normalization for ``iss``.
+
+    Args:
+        metadata: The parsed metadata document.
+        discovery_url: The well-known URL the client built and requested. Never the address
+            a redirect ended on (``response.url``): the document at the end of an open
+            redirect names that address, so it would pass.
+
+    Raises:
+        IssuerMismatchError: The issuer differs, ``metadata`` has no readable issuer, or
+            ``discovery_url`` is refused by :func:`issuer_from_discovery_url`. The message
+            names the field, never either URL.
+    """
+    expected = issuer_from_discovery_url(discovery_url)
+    issuer = _screen_issuer_url("issuer", getattr(metadata, "issuer", None))
+    if _normalize_issuer(issuer) != _normalize_issuer(expected):
+        raise IssuerMismatchError(
+            "metadata issuer is not the issuer discovery_url was built from, so this metadata "
+            "must not be used (RFC 8414 section 3.3)"
+        )
 
 
 def _unreadable_params(params: Any) -> IssuerMismatchError:
@@ -723,8 +899,11 @@ def validate_authorization_response_iss(
             list of ``(key, value)`` pairs, or a raw query string
             (``"code=…&state=…&iss=…"``, ``str`` or ``bytes``).
         expected_issuer: The issuer identifier of the authorization server the
-            client initiated the flow with (e.g. from the discovered
-            :class:`AuthorizationServerMetadata.issuer`).
+            client initiated the flow with: the server identifier the client was
+            configured with, or an issuer that passed :func:`validate_metadata_issuer`
+            (:meth:`AuthorizationServerMetadata.from_discovery` runs it). Never a raw
+            ``metadata.issuer``: a document can name any issuer, and once that value is
+            the expected one this check cannot catch the mix-up.
         require_iss: When True (default, deny-by-default) a response with no
             `iss` is refused — the mix-up defence only holds if the parameter is
             actually present. Set False only for a documented legacy server that
@@ -789,7 +968,9 @@ __all__ = [
     # Token audience
     "TokenAudienceError",
     "validate_access_token_audience",
-    # RFC 9207 / SEP-2468 authorization-response issuer
+    # RFC 8414 section 3.3 metadata issuer, RFC 9207 / SEP-2468 authorization-response issuer
     "IssuerMismatchError",
+    "issuer_from_discovery_url",
+    "validate_metadata_issuer",
     "validate_authorization_response_iss",
 ]

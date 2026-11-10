@@ -5244,7 +5244,10 @@ def mcp_spec_2026_07_defaults(*, expected_issuer: str | None = None) -> dict[str
 
     Args:
         expected_issuer: The authorization server issuer identifier to bind the
-            ``iss`` check to. If omitted here, pass it per call as
+            ``iss`` check to: the identifier the client was configured with, or an
+            issuer that passed
+            :func:`agent_airlock.mcp_spec.oauth.validate_metadata_issuer`, never a raw
+            ``metadata.issuer``. If omitted here, pass it per call as
             ``check_oauth_response(params, expected_issuer=...)``.
 
     Returns:
@@ -5434,7 +5437,8 @@ def mcp_spec_2026_07_header_integrity_defaults(
 
     - **``check_request(request)``** — asserts both routing headers are present
       and that ``Mcp-Method`` / ``Mcp-Name`` match the body's method / operation
-      name. **Fail-closed (deny)** on any missing header or header/body
+      name, an encoded ``=?base64?...?=`` ``Mcp-Name`` being decoded first.
+      **Fail-closed (deny)** on any missing or malformed header or header/body
       disagreement, raising
       :class:`~agent_airlock.mcp_spec.header_integrity.HeaderBodyMismatchError`,
       which carries a structured ``audit_event`` mapping for the audit log.

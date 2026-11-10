@@ -114,4 +114,6 @@ it does not replace the server's own mint-time checks.
 - [MCP conformance scope](../interop/CONFORMANCE-SCOPE.md) — what airlock's conformance run
   does and does not claim.
 - `mcp_stateless_conformance_2026_07_defaults` — the SEP-2567 / SEP-2575 stateless preset.
-- `mcp_spec_2026_07_header_integrity_defaults` — the SEP-2243 header/body integrity preset.
+- `mcp_spec_2026_07_header_integrity_defaults` — the SEP-2243 header/body integrity preset. It
+  decodes an encoded `=?base64?...?=` `Mcp-Name` before comparing it with the body, and refuses
+  a malformed one, or a plain value a header cannot carry, as `malformed_name_header`.

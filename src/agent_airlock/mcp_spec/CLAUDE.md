@@ -131,6 +131,18 @@ preset, and
   PowerShell. Both models set `hide_input_in_errors`, so the error text names the field and
   the character's class, never the URL; `errors()` still carries the input. Extra fields
   (`extra="allow"`) are not screened.
+- **A fetched metadata document goes through `from_discovery`** (RFC 8414 section 3.3): the
+  constructor has no URL and stays as it was, so it parses any issuer, and that value as
+  `expected_issuer` defeats the `iss` check. `issuer_from_discovery_url` reads the raw string
+  back, so nothing is case-folded and no default port dropped. The comparison shares
+  `_normalize_issuer` with the `iss` check, which is looser than the RFC and the MCP page by
+  trailing slashes; `_screen_issuer_url` refuses the outer Unicode whitespace it would also
+  strip, so slashes are all it forgives. Pass the URL the client built, never `response.url`.
+- **`Mcp-Name` is compared decoded, and `Mcp-Method` raw** (`_decode_name_header`). A plain
+  value shaped like `=?base64?...?=` is read as encoded, since a client must encode one. The
+  check runs on any request carrying the header, not only name-bearing methods. `b64decode` on
+  a non-ASCII `str` raises plain `ValueError`, not `binascii.Error` (python-sdk #3817), so catch
+  `ValueError`. `Mcp-Param-*` values are not read here at all.
 - **`tools/list` paging differs by SDK line.** mcp 2.x's result has `next_cursor` and no
   `nextCursor` (FastMCP 4 adds a `nextCursor` to it that warns on each read); mcp 1.x's has
   only `nextCursor`. `ClientSession.list_tools` takes `params=` (and on 1.x a deprecated
@@ -201,8 +213,8 @@ other parent-package import (`..policy`, `..attest.receipt`, `..scan.schema`,
 `..ssrf_egress_guard`, `..validator`, `..cost_tracking`, `..sanitizer`, `..audit`,
 `..safe_types`, `.._url_paths`) is used by one or two modules, several of them function-local or
 `TYPE_CHECKING`-only (`grep -n 'from \.\.' src/agent_airlock/mcp_spec/*.py` recounts them).
-`oauth.py` imports `safe_types` at module level for two private constants; `safe_types`
-imports nothing from this package, so that cannot become a cycle.
+`oauth.py` imports `safe_types` at module level for two private constants, and `_url_paths`;
+neither imports anything from this package, so that cannot become a cycle.
 
 **Nothing here imports `..policy_presets`**, at module level or inside a function — the
 `from agent_airlock.policy_presets import ..._defaults` lines in docstrings are `Usage::`

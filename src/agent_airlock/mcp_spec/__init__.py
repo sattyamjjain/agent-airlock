@@ -43,13 +43,16 @@ from __future__ import annotations
 from ._versions import PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS
 from .oauth import (
     AuthorizationServerMetadata,
+    IssuerMismatchError,
     ProtectedResourceMetadata,
     canonicalize_resource_uri,
     generate_pkce_challenge,
     generate_pkce_verifier,
+    issuer_from_discovery_url,
     parse_authorization_header,
     parse_www_authenticate_header,
     validate_access_token_audience,
+    validate_metadata_issuer,
     validate_pkce_pair,
     validate_redirect_uri,
 )
@@ -85,13 +88,16 @@ __all__ = [
     "SUPPORTED_PROTOCOL_VERSIONS",
     # oauth
     "AuthorizationServerMetadata",
+    "IssuerMismatchError",
     "ProtectedResourceMetadata",
     "canonicalize_resource_uri",
     "generate_pkce_challenge",
     "generate_pkce_verifier",
+    "issuer_from_discovery_url",
     "parse_authorization_header",
     "parse_www_authenticate_header",
     "validate_access_token_audience",
+    "validate_metadata_issuer",
     "validate_pkce_pair",
     "validate_redirect_uri",
     # tasks
