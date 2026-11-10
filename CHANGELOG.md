@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
-## [0.10.32] - 2026-11-07
+## [0.10.32] - 2026-11-10
 
 Places a guard read past what it was handed: a JSON-RPC id's type, a listing's later
 pages, a redirect URI's fragment, a tenant id that names no tenant, a metadata document's
