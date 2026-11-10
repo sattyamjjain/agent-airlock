@@ -3123,9 +3123,9 @@ strict-type layer is not exercised here. Each response's status (<code>calls</co
 <code>malformed</code>, <code>empty</code>) and every parse repair are counted in the accounting table; nothing is
 dropped.</p>
 <!-- MCPTOX-REPLAY:BEGIN -->
-<h3 id="replay-measured-2026-10-17-utc">Replay, measured 2026-10-17 (UTC)<a class="headerlink" href="#replay-measured-2026-10-17-utc" title="Permanent link">&para;</a></h3>
+<h3 id="replay-measured-2026-11-10-utc">Replay, measured 2026-11-10 (UTC)<a class="headerlink" href="#replay-measured-2026-11-10-utc" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Host: Linux 7.0.14-linuxkit (canonical Linux host), Python 3.12.15; agent-airlock 0.10.25 at <code>74048af5a98e</code>.</li>
+<li>Host: Linux 7.0.14-linuxkit (canonical Linux host), Python 3.12.15; agent-airlock 0.10.32 at <code>f492a33de26b</code>.</li>
 <li>Filesystem gate checks <code>~</code> paths in their expanded form: yes.</li>
 <li>Data: MCPTox <code>response_all.json</code> at <code>f85189f9ad12</code>, sha256 <code>79a90049be931c59...</code>, verified before scoring.</li>
 <li>LP labels: blind commit <code>5e856c228a0c</code>; <code>lp_labels.py</code> sha256 <code>e1476ddc206ed09a...</code> (matches the blind commit's).</li>
@@ -4668,6 +4668,16 @@ from different ids are never pooled.</p>
   replay figures have not been re-derived since they were published; nothing recomputes
   the fresh summary. The blocks stay as published. A run from here on commits its summary
   beside its block.</li>
+<li><strong>Noted 2026-11-10 (UTC): the replay block now has its summary.</strong> The replay was re-run
+  on 2026-11-10 in a <code>python:3.12-slim</code> container (<code>Linux 7.0.14-linuxkit</code>) against
+  0.10.32 at <code>f492a33de26b</code>, and every figure in the block reproduced the 2026-10-17 block
+  exactly; only its date and version line changed. <code>replay_summary.json</code> is committed beside
+  it, and <code>tests/test_mcptox_published.py</code> passed 8 of 8 in that container with the data
+  cached, its first run against a committed summary. CI still skips it, having no copy of
+  the data. The 2026-10-16 fresh blocks still have no <code>fresh_summary.json</code>, and nothing pins
+  their figures. Re-scoring both stored runs with <code>fresh --score</code> that day (free; without
+  <code>--write</code>, which would append a new block) gave the published direct-execution refusals
+  under G: Haiku 74/74, Sonnet 42/42, Opus 26/26.</li>
 </ul>
 
 
