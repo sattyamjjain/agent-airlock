@@ -41,14 +41,17 @@ _ADAPTER_SHIPPED_MODULES: tuple[tuple[str, str], ...] = (
     ("integrations/langgraph.py", "integrations/langgraph.py"),
     ("integrations/langgraph_toolnode_compat.py", "langgraph_toolnode_compat.py"),
     ("integrations/openai_guardrails.py", "openai_guardrails.py"),
+    ("integrations/openai_agents.py", "integrations/openai_agents.py"),
     ("integrations/anthropic.py", "anthropic.py"),
     ("integrations/anthropic_claude_agent_sdk.py", "anthropic_claude_agent_sdk.py"),
     ("integrations/smolagents_wrapper.py", "smolagents_wrapper.py"),
     ("integrations/gemini3_tool_shape_adapter.py", "gemini3_tool_shape_adapter.py"),
     ("integrations/gpt5_5_tool_shape_adapter.py", "gpt5_5_tool_shape_adapter.py"),
     ("integrations/pydantic_ai.py", "pydantic_ai.py"),
+    ("integrations/pydantic_ai_approvals.py", "pydantic_ai_approvals.py"),
     ("integrations/crewai.py", "crewai.py"),
     ("integrations/google_adk.py", "google_adk.py"),
+    ("integrations/google_adk_plugin.py", "google_adk_plugin.py"),
     ("mcp/__init__.py", "agent_airlock/mcp"),
 )
 
