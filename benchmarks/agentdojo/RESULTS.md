@@ -213,6 +213,20 @@ widening.
 
 <!-- CROSS-MODEL-RUNS: append newest below; never edit dated blocks -->
 
+### 2026-11-10 · deterministic bound only (no model, no API key, no cost)
+
+Re-ran `python -m benchmarks.agentdojo.run` with no `--model` on 2026-11-10 (UTC), against
+the released agent-airlock 0.10.32 and `agentdojo 0.1.35`. Result 1 reproduced **exactly**:
+
+```
+Result 1 (deterministic, no model): 524/609 pairs blocked = 86.0%, out of 949 attacked pairs; 340 pairs have no tool-call target the policy can check (workspace injection_task_6-13; travel injection_task_6)
+```
+
+Each suite's pairs, blocks and union match Result 1's table (workspace 222/240, union 1/6;
+banking 102/144, 0/9; travel 114/120, 2/6; slack 86/105, 1/5), and ghost-argument BLOCK
+again decides none of the 524. Nothing model-in-the-loop was re-run: the newest model block
+is still 2026-10-16.
+
 ### 2026-10-16 · cross-model (claude-haiku-5-5, claude-sonnet-5-5)
 
 `agentdojo 0.1.35`, attack `tool_knowledge` (AgentDojo's fixed template, not an adaptive

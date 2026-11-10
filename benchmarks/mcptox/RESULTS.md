@@ -56,9 +56,9 @@ strict-type layer is not exercised here. Each response's status (`calls`, `no_ca
 dropped.
 
 <!-- MCPTOX-REPLAY:BEGIN -->
-### Replay, measured 2026-10-17 (UTC)
+### Replay, measured 2026-11-10 (UTC)
 
-- Host: Linux 7.0.14-linuxkit (canonical Linux host), Python 3.12.15; agent-airlock 0.10.25 at `74048af5a98e`.
+- Host: Linux 7.0.14-linuxkit (canonical Linux host), Python 3.12.15; agent-airlock 0.10.32 at `f492a33de26b`.
 - Filesystem gate checks `~` paths in their expanded form: yes.
 - Data: MCPTox `response_all.json` at `f85189f9ad12`, sha256 `79a90049be931c59...`, verified before scoring.
 - LP labels: blind commit `5e856c228a0c`; `lp_labels.py` sha256 `e1476ddc206ed09a...` (matches the blind commit's).
@@ -404,3 +404,13 @@ Requests that did not succeed, by requested model: none.
   replay figures have not been re-derived since they were published; nothing recomputes
   the fresh summary. The blocks stay as published. A run from here on commits its summary
   beside its block.
+- **Noted 2026-11-10 (UTC): the replay block now has its summary.** The replay was re-run
+  on 2026-11-10 in a `python:3.12-slim` container (`Linux 7.0.14-linuxkit`) against
+  0.10.32 at `f492a33de26b`, and every figure in the block reproduced the 2026-10-17 block
+  exactly; only its date and version line changed. `replay_summary.json` is committed beside
+  it, and `tests/test_mcptox_published.py` passed 8 of 8 in that container with the data
+  cached, its first run against a committed summary. CI still skips it, having no copy of
+  the data. The 2026-10-16 fresh blocks still have no `fresh_summary.json`, and nothing pins
+  their figures. Re-scoring both stored runs with `fresh --score` that day (free; without
+  `--write`, which would append a new block) gave the published direct-execution refusals
+  under G: Haiku 74/74, Sonnet 42/42, Opus 26/26.
