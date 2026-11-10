@@ -20,6 +20,11 @@ runtime evaluator) but **different syntax shapes**:
   argument. Plus a versioned denylist of known-vulnerable MCP server
   packages.
 
+Since 0.10.32 it also refuses a string that builds or fetches a Python code object
+(CVE-2026-123783 class). A payload that calls none of the sinks above can take a function's
+code object, swap its bytecode with ``.replace(co_code=...)`` or build one with
+``types.CodeType(...)``, and call the result.
+
 Why structural (no SDK import)
 ------------------------------
 Regex pass over string values + tuple membership for the package
@@ -27,25 +32,43 @@ denylist. No ``sympy`` / ``mcp-calculate-server`` dep loaded.
 
 Honest scope
 ------------
-- The guard is a **syntax-shape detector**. It catches the disclosed
-  CVE class and the obvious obfuscation variants (whitespace before
-  the open-paren, namespace prefix on ``parse_expr``). A determined
-  attacker who controls the surrounding context can sometimes hide
-  the sink behind an indirection (``locals()["eval"](...)``). That
-  variant is named explicitly via ``extra_sinks``.
+- The guard is a **syntax-shape detector**: it reads a string and never runs it. It catches
+  the disclosed CVE classes and the obvious obfuscation variants: whitespace before the
+  open-paren, a namespace prefix on ``parse_expr``, an alias at the line that takes it, a line
+  break or comment after a dot, and identifiers in characters Python folds to ASCII when it
+  parses them (NFKC, PEP 3131).
+- **Code objects are covered where a name can be read.** ``__code__`` anywhere; attribute
+  access to ``co_code``, ``gi_code``, ``cr_code``, ``ag_code``, ``f_code`` and ``codeobj``;
+  ``CodeType``, ``FunctionType`` and ``LambdaType`` as whole words, called or not;
+  ``.replace(co_...=)``; ``marshal``'s loaders; the compilers that are not spelled
+  ``compile(`` (``codeop``, ``compile_command``, ``source_to_code``); and the walkers that
+  hand one over unnamed (``gc.get_referents``, ``inspect.getmembers``, ``iscode``,
+  ``sys.monitoring``). The screen is on by default and ``extra_sinks``, which only
+  adds, cannot turn it off.
+- **What still passes.** A string that assembles a name at runtime through something other
+  than ``getattr(``: ``f.__getattribute__("__co" + "de__")``, or a sink behind an indirection
+  such as ``locals()["eval"](...)``. A module that runs source text without naming a sink
+  (``timeit``, ``runpy``, ``pdb``, ``code.InteractiveInterpreter``), and ``loader.get_code``,
+  too generic a name to refuse. ``ctypes``, which reaches the C API. ``extra_sinks`` can name
+  an indirection or a runner you know of, but no list of names closes this. **Isolation is the
+  defence for all of it**: run the code in a ``sandbox.py`` backend, and treat this guard as
+  the check at the argument, not as a sandbox.
 - ``parse_expr`` is allowed when a pinned ``local_dict=`` /
-  ``global_dict=`` kwarg appears in the same string — that's the
-  upstream-patched safe form per CVE-2026-44717.
+  ``global_dict=`` kwarg appears in the same call — that's the
+  upstream-patched safe form per CVE-2026-44717. Every call in the
+  string needs its own.
 
 Primary source
 --------------
 https://nvd.nist.gov/vuln/detail/CVE-2026-44717
+https://nvd.nist.gov/vuln/detail/CVE-2026-123783
 """
 
 from __future__ import annotations
 
 import enum
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -67,6 +90,70 @@ DEFAULT_EVAL_SINKS: frozenset[str] = frozenset(
         "parse_expr",
     }
 )
+
+
+# What may sit between a dot and the attribute it selects: whitespace, a line continuation, or
+# a comment inside brackets. Bounded, like every gap below, so a long argument cannot make a
+# pattern quadratic.
+_AFTER_DOT = r"\.(?:\s|\\\n|#[^\n]{0,200}\n)*"
+
+# The rest of one import statement.
+_IN_IMPORT = r"[^\n;#]{0,200}"
+
+
+#: Every spelling that builds or fetches a Python code object (CVE-2026-123783 class), each with
+#: the words a refusal names it by. Not in :data:`DEFAULT_EVAL_SINKS`: that set's call-shape
+#: regex would miss an alias or an attribute. Whole words only, so ``decode__`` and
+#: ``MyCodeTypeHelper`` pass. A module-level name that is common elsewhere is matched only with
+#: its module: ``tar.getmembers()`` is ordinary code. ``gc`` has one route, ``get_referents``: code
+#: objects are not tracked by the collector, so ``gc.get_objects()`` holds none.
+_CODE_OBJECT_ROUTES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("__code__", re.compile(r"\b__code__\b")),
+    (
+        "an attribute holding a code object",
+        re.compile(rf"{_AFTER_DOT}(?:co_code|gi_code|cr_code|ag_code|f_code|codeobj)\b"),
+    ),
+    (
+        "CodeType, FunctionType or LambdaType",
+        re.compile(r"\b(?:CodeType|FunctionType|LambdaType)\b"),
+    ),
+    (
+        "a code object's replace()",
+        re.compile(r"\breplace\s*\(\s*(?:\*\*\s*\{\s*['\"])?co_[a-z]+\b"),
+    ),
+    (
+        "marshal",
+        re.compile(
+            r"\bmarshal\s*[.:]\s*loads?\b"
+            r"|\bfrom\s+marshal\s+import\b"
+            rf"|\bimport\b{_IN_IMPORT}\bmarshal\b"
+            r"|['\"]marshal['\"]"
+        ),
+    ),
+    (
+        "a compiler not spelled compile(",
+        re.compile(
+            r"\b(?:codeop|compile_command|source_to_code|_compile_bytecode|_get_code_object)\b"
+        ),
+    ),
+    (
+        "a walker that hands over a code object unnamed",
+        re.compile(
+            r"\bget_referents\b"
+            r"|\binspect\s*\.\s*getmembers\b"
+            rf"|\bfrom\s+inspect\s+import\b{_IN_IMPORT}\bgetmembers\b"
+            r"|\bimport\s+inspect\s+as\b"
+            r"|\bgetmembers_static\b"
+            r"|\biscode\b"
+            r"|\bsys\s*\.\s*monitoring\b"
+            rf"|\bfrom\s+sys\s+import\b{_IN_IMPORT}\bmonitoring\b"
+            r"|\bmonitoring\s*\.\s*register_callback\b"
+        ),
+    ),
+)
+
+#: The ``matched_sink`` of a refusal from :data:`_CODE_OBJECT_ROUTES`.
+_CODE_OBJECT_SINK = "code_object"
 
 
 # Known-vulnerable MCP server package + version pairs from public
@@ -114,11 +201,27 @@ def _compile_sink_pattern(sink: str) -> re.Pattern[str]:
 # ``parse_expr`` is the special case: caller may pin ``local_dict=``
 # or ``global_dict=`` in the same call to mitigate, per the
 # CVE-2026-44717 patch. We detect both and exempt the call when the
-# pin appears within the same parenthesised argument list.
+# pin appears within the same parenthesised argument list, outside a
+# string literal. Matched at each call by ``_sink_fires``: until 0.10.32
+# it was searched for, so one pinned call exempted the whole string,
+# ``parse_expr(x); parse_expr("1", local_dict={})`` included, a pin
+# inside a string counted, and the unbounded gap made a long argument
+# quadratic (1 MB of ``parse_expr(`` took minutes). An argument list too
+# long for the bounds is refused.
 _PARSE_EXPR_PINNED_RE = re.compile(
-    r"parse_expr\s*\([^)]*\b(?:local_dict|global_dict)\s*=",
+    r"""parse_expr\s*\((?:[^)'"]|'[^'\n]{0,1024}'|"[^"\n]{0,1024}"){0,1024}?"""
+    r"""\b(?:local_dict|global_dict)\s*=""",
     re.MULTILINE | re.DOTALL,
 )
+
+
+def _sink_fires(sink: str, pattern: re.Pattern[str], text: str) -> bool:
+    """Whether ``text`` calls ``sink``. A ``parse_expr`` call counts unless it pins its own dict."""
+    if sink != "parse_expr":
+        return pattern.search(text) is not None
+    return any(
+        _PARSE_EXPR_PINNED_RE.match(text, call.start()) is None for call in pattern.finditer(text)
+    )
 
 
 #: Nesting deeper than this is refused rather than walked. A guard that stopped looking at
@@ -144,11 +247,13 @@ class EvalRCEDecision:
     composition.
 
     Attributes:
-        allowed: True iff no eval-sink or vulnerable-package match.
-        verdict: Stable :class:`EvalRCEVerdict` value.
+        allowed: True iff no eval-sink, code-object or vulnerable-package match.
+        verdict: Stable :class:`EvalRCEVerdict` value. A code-object refusal is
+            ``DENY_EVAL_SINK``, so a caller that handles that verdict refuses it too.
         detail: Free-form explanation.
         matched_sink: Sink label (``eval`` / ``parse_expr`` / etc.)
-            that fired, or ``None`` for a package or uninspectable deny.
+            that fired, ``code_object`` for the code-object screen, or
+            ``None`` for a package or uninspectable deny.
         matched_package: Package name from the vulnerable-package
             denylist, or ``None`` for a sink or uninspectable deny.
     """
@@ -161,13 +266,14 @@ class EvalRCEDecision:
 
 
 class EvalRCEGuard:
-    """Fail-closed gate on bare-eval sinks and known-vulnerable packages.
+    """Fail-closed gate on bare-eval sinks, code objects and known-vulnerable packages.
 
     Args:
         extra_sinks: Frozenset of additional sink labels to detect on
             top of :data:`DEFAULT_EVAL_SINKS`. Each label must be a
             valid Python identifier (the regex looks for
-            ``[<ns>.]<label>(`` shape).
+            ``[<ns>.]<label>(`` shape). It only adds: the code-object screen
+            always runs.
         extra_vulnerable_packages: Additional ``(package, version)``
             pairs to deny on top of :data:`DEFAULT_VULNERABLE_PACKAGES`.
 
@@ -324,13 +430,16 @@ class EvalRCEGuard:
         )
 
     def _inspect_value(self, *, field: str, value: str) -> EvalRCEDecision | None:
-        """Return a deny decision if any sink fires on ``value``."""
+        """Return a deny decision if a sink or a code-object route fires on ``value``.
+
+        Both read the NFKC form, which is how Python reads an identifier (PEP 3131). Until
+        0.10.32 ``ｅｘｅｃ('x')`` in fullwidth letters ran ``exec`` and matched no sink.
+        """
+        text = unicodedata.normalize("NFKC", value)
         for sink, pattern in self._patterns.items():
-            if not pattern.search(value):
-                continue
             # ``parse_expr`` exemption: pinned local_dict / global_dict
             # is the CVE-2026-44717 patch shape — safe.
-            if sink == "parse_expr" and _PARSE_EXPR_PINNED_RE.search(value):
+            if not _sink_fires(sink, pattern, text):
                 continue
             logger.warning(
                 "eval_rce_sink_match",
@@ -345,6 +454,29 @@ class EvalRCEGuard:
                     f"field {field!r} contains a bare-eval sink {sink!r} (CVE-2026-44717 class)"
                 ),
                 matched_sink=sink,
+                matched_package=None,
+            )
+        return self._screen_code_objects(field=field, text=text, value=value)
+
+    def _screen_code_objects(self, *, field: str, text: str, value: str) -> EvalRCEDecision | None:
+        """Return a deny decision if ``text`` builds or fetches a Python code object."""
+        for route, pattern in _CODE_OBJECT_ROUTES:
+            if not pattern.search(text):
+                continue
+            logger.warning(
+                "eval_rce_code_object",
+                route=route,
+                field=field,
+                snippet=value[:64],
+            )
+            return EvalRCEDecision(
+                allowed=False,
+                verdict=EvalRCEVerdict.DENY_EVAL_SINK,
+                detail=(
+                    f"field {field!r} names {route}, so it builds or fetches a Python code "
+                    "object (CVE-2026-123783 class)"
+                ),
+                matched_sink=_CODE_OBJECT_SINK,
                 matched_package=None,
             )
         return None

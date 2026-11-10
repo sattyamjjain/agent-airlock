@@ -15,8 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Places a guard read past what it was handed: a JSON-RPC id's type, a listing's later
 pages, a redirect URI's fragment, a tenant id that names no tenant, a metadata
-document's issuer and an encoded `Mcp-Name`. This release also carries the two egress
-defences from #451.
+document's issuer and an encoded `Mcp-Name`. `EvalRCEGuard` also refuses a string that
+builds or fetches a Python code object (CVE-2026-123783 class). This release also carries
+the two egress defences from #451.
+
+### Security
+
+- `EvalRCEGuard` refuses arguments that build or fetch a Python code object (`CodeType`, `FunctionType`, `LambdaType`, `__code__`, `co_code`, `gi_code`/`cr_code`/`ag_code`/`f_code`, `marshal.loads`); CVE-2026-123783 regression fixture. A payload that called no eval-family function could take a code object, swap its bytecode with `.replace(co_code=...)` or build one with `types.CodeType(...)`, and call the result, and all of them passed. Closing the class also takes `.codeobj`, `.replace(co_*=)`, `codeop`, `compile_command`, `source_to_code`, `gc.get_referents`, `inspect.getmembers`, `iscode` and `sys.monitoring`, since `type(c)(...)` needs no name once any code object is in hand. The refusal is `DENY_EVAL_SINK` with `matched_sink="code_object"`, on by default, and `extra_sinks` cannot turn it off. A string that assembles a name at runtime through something other than `getattr(` still passes: the defence for that is isolation, and the docs say so. `CodeType` and `FunctionType` match as whole words anywhere, so a string argument holding JSON with a `"CodeType"` key is refused too.
+- `EvalRCEGuard` reads identifiers the way Python does (NFKC, PEP 3131). `ｅｘｅｃ('x')` in fullwidth letters runs `exec` and matched no sink.
 
 ### Added
 
@@ -39,6 +45,7 @@ defences from #451.
 - `AutoMemoryAccessPolicy(tenant_id="")` was accepted. Its root is `/memory//`, so `/memory//x.md` passed the scope check and landed in a root no tenant owns. `AutoMemoryAccessPolicy` and `consolidate_memory` now raise `AutoMemoryTenantIdError` (new, exported from the package root) for an id that is not a string, is empty, is only dots and whitespace, or holds `/`, `\` or NUL. The last group matters too: tenant `"a/b"` had the root `/memory/a/b/`, inside tenant `"a"`'s root, so `"a"` passed the scope check for `"a/b"`'s notes. `guarded_read` and `guarded_write` read the id again on each call, since the dataclass is mutable, and refuse a path that is not a string instead of raising `AttributeError`.
 - Metadata issuer checked against the discovery URL (RFC 8414 section 3.3). `AuthorizationServerMetadata` takes no URL, so a document naming `https://decoy.example.net` parsed with no error, and `validate_authorization_response_iss` then passed with `metadata.issuer` as `expected_issuer`: once the unchecked issuer is the expected value, the `iss` check cannot catch the mix-up. New: `AuthorizationServerMetadata.from_discovery(document, *, discovery_url)`, `validate_metadata_issuer(metadata, *, discovery_url)` and `issuer_from_discovery_url(url)`, which inverts each well-known form on MCP 2026-07-28's discovery page. The constructor is unchanged, so a caller has to move to `from_discovery` to get the check. The comparison forgives trailing slashes, through the normalizer the `iss` check uses, and nothing else. `docs/guide/oauth-issuer.md` says which URL to pass and what the check does not decide.
 - `Mcp-Name` base64 form decoded, malformed form refused with its own reason. `validate_header_body_integrity` compared the raw header, so `=?base64?ZWNobw==?=` for a tool named `echo` was refused as `name_mismatch`, and so was `=?base64?\xe9?=`. It now decodes the value before comparing, and a payload that is not base64, not canonical or not strict UTF-8 is refused as `malformed_name_header` (new).
+- `EvalRCEGuard` exempted a whole string once any `parse_expr` call in it pinned `local_dict=` or `global_dict=`, so `parse_expr(x); parse_expr("1", local_dict={})` passed, and a pin inside a string literal counted. Each call now needs its own pin. The same pattern was quadratic: 1 MB of `parse_expr(` held the guard for about six minutes.
 - The harness-injection renderer called a harness that errored on every cell a "choice not to run the planted script" and rated it interpretable: 0 of 0 cells read as finishing every cell. It now says the harness measured nothing.
 
 ## [0.10.31] - 2026-11-02

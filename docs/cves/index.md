@@ -49,6 +49,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-111451](#cve-2026-111451) | Wheels CLI MCP tool arguments reach deploy shells, file paths and generated CFML | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
+| [CVE-2026-123783](#cve-2026-123783) | Skyvern script sandbox: functions rebuilt from raw bytecode with ``types.CodeType`` | 8.8 (HIGH) — AV:N/AC:L/PR:L/UI:N, CWE-184 | Partial |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
 | [CVE-2026-19753](#cve-2026-19753) | mcp-rdf-explorer explore_url takes an attacker-supplied URL into SSRF | 7.3 (HIGH) — CWE-918 | Strong |
 | [CVE-2026-21520](#cve-2026-21520) | Capsule ShareLeak / PipeLeak | 7.5 (HIGH) | — |
@@ -699,6 +700,43 @@ server (file reads, command execution, database access). Fixed in 0.25.0 with
 an ``--allowed-hosts`` flag alongside ``--allowed-origins``, warning when
 
 <a id="cve-2026-11624"></a>
+
+### CVE-2026-123783
+
+**Skyvern script sandbox: functions rebuilt from raw bytecode with ``types.CodeType``**
+
+- **CVSS:** 8.8 (HIGH) — AV:N/AC:L/PR:L/UI:N, CWE-184
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-123783](https://nvd.nist.gov/vuln/detail/CVE-2026-123783)
+- **Advisory:** [https://www.vulncheck.com/advisories/skyvern-through-1.0.56-script-sandbox-bypass-via-types-codetype-bytecode](https://www.vulncheck.com/advisories/skyvern-through-1.0.56-script-sandbox-bypass-via-types-codetype-bytecode)
+- **Regression test:** [`tests/cves/test_cve_2026_123783_skyvern_codetype.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_123783_skyvern_codetype.py)
+
+**Vulnerability**
+
+"Skyvern through 1.0.56 contains a sandbox bypass vulnerability that allows authenticated
+users to execute code by reconstructing functions from raw bytecode with types.CodeType.
+Attackers can deploy scripts that evade the is_safe_script_code AST denylist and import
+blocked modules such as subprocess or socket to run code in the Skyvern server process."
+Fixed in 1.0.57 by commit 31a64c1a (Skyvern-AI/skyvern#8937), which adds ``CodeType``,
+``FunctionType`` and ``LambdaType`` to the blocked attributes, and ``sys`` and ``types`` to
+the blocked imports.
+
+**Airlock mitigation**
+
+**In scope:** a code-tool argument escaping the restriction the tool declares, the
+documented shape in ``docs/cve-triage.md`` ("Code injection into an interpreter sink"), and
+the same split as CVE-2026-53710. **Out of scope:** Skyvern's own AST denylist, which is
+upstream's to fix, and the authenticated-user precondition: this guard's whole input is the
+call's arguments, so it cannot see who sent them.
+
+``EvalRCEGuard`` had the shape of the bug: it refused a string argument only when it saw
+an eval-family call. These payloads call none, so on 0.10.31 routes a to p were all
+allowed. Observed against ``v0.10.31`` while writing this module: ``allowed=True`` for
+every payload in the fixture, and for ``exec`` in fullwidth letters. The guard now screens
+for the code object itself, on by default. Skyvern's fix names three of the routes; the
+fixture covers the rest of the class, in its own routes g to p.
+
+<a id="cve-2026-123783"></a>
 
 ### CVE-2026-19591
 
