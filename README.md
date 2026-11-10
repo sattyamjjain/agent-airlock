@@ -167,14 +167,14 @@ fails the release if any row drifts past 30 days.
 
 | Benchmark | Result | Reproduce |
 |---|---|---|
-| **Cross-tool block-rate** · 210 tool calls | **100% blocked (106/106) · 0% false-positive (0/104) · p50 ~3µs**<sup>1</sup> | `python -m benchmarks.blockrate` · _re-run 2026-11-07_ · [results](benchmarks/blockrate/RESULTS.md) |
-| **`sandbox=True` dispatch** · contract parity | **4/4 annotated-contract probes refused on the sandbox path · 204/204 verdicts agree with the local path**<sup>2</sup> | `python -m benchmarks.blockrate` · _re-run 2026-11-07_ · [results](benchmarks/blockrate/RESULTS.md#sandboxtrue-dispatch-arm) |
-| **Least-privilege** · ToolPrivBench, 100 scenarios (subset) | **100% over-privileged blocked · 100% low-privileged allowed** · OPUR 100% → 0% | `python -m benchmarks.toolprivbench` · _re-run 2026-11-07_ · [results](benchmarks/toolprivbench/RESULTS.md) |
+| **Cross-tool block-rate** · 210 tool calls | **100% blocked (106/106) · 0% false-positive (0/104) · p50 ~3µs**<sup>1</sup> | `python -m benchmarks.blockrate` · _re-run 2026-11-10_ · [results](benchmarks/blockrate/RESULTS.md) |
+| **`sandbox=True` dispatch** · contract parity | **4/4 annotated-contract probes refused on the sandbox path · 204/204 verdicts agree with the local path**<sup>2</sup> | `python -m benchmarks.blockrate` · _re-run 2026-11-10_ · [results](benchmarks/blockrate/RESULTS.md#sandboxtrue-dispatch-arm) |
+| **Least-privilege** · ToolPrivBench, 100 scenarios (subset) | **100% over-privileged blocked · 100% low-privileged allowed** · OPUR 100% → 0% | `python -m benchmarks.toolprivbench` · _re-run 2026-11-10_ · [results](benchmarks/toolprivbench/RESULTS.md) |
 | **Indirect prompt injection** · AgentDojo, all 4 suites | **86.0% of injection→target tool-calls blocked** (deterministic bound)<sup>3</sup> | `python -m benchmarks.agentdojo.run` · _re-run 2026-11-10_ · [results](benchmarks/agentdojo/RESULTS.md) |
 | **Tool poisoning** · MCPTox, 1,348 cases | **Direct execution of the poisoned tool refused 100% under the G (tool allowlist) and LP tiers**<sup>4</sup> | `python -m benchmarks.mcptox replay` · _re-run 2026-11-10_ · [results](benchmarks/mcptox/RESULTS.md) |
 | **vs. native MCP gateway** · 12 malformed payloads | **airlock 12/12 blocked · Docker MCP Gateway 0/12** · 0% false-positive on both | `python -m benchmarks.vs_gateway` · _re-measured live 2026-11-03_ · [results](benchmarks/vs_gateway/RESULTS.md) |
 | **Prompt injection across agent harnesses** | **A null result, published as one.** `claude-code` and `codex` each acted on the planted script **0/36**, and ignored the benign twin too (`claude-code` 0/36, `codex` 0/5 before its plan's usage limit stopped it), so this is indifference to the channel, not detection | `python -m benchmarks.harness_injection` · _re-run 2026-11-03_ · [results](benchmarks/harness_injection/RESULTS.md) |
-| **MCP spec conformance** · `@modelcontextprotocol/conformance` | Wire-path validators, outcome published in full. **Not a full MCP server/client conformance pass** — airlock is a request validator, not a server | `python -m benchmarks.mcp_conformance.run` · _re-run 2026-11-07_ · [results](benchmarks/mcp_conformance/RESULTS.md) |
+| **MCP spec conformance** · `@modelcontextprotocol/conformance` | Wire-path validators, outcome published in full. **Not a full MCP server/client conformance pass** — airlock is a request validator, not a server | `python -m benchmarks.mcp_conformance.run` · _re-run 2026-11-10_ · [results](benchmarks/mcp_conformance/RESULTS.md) |
 
 **Table notes**
 
