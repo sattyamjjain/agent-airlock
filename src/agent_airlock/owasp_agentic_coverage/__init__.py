@@ -1,14 +1,18 @@
 """Published OWASP coverage matrices (v0.5.9+).
 
-Two dated, machine-readable matrices tie each OWASP risk ID to a specific guard
+Three dated, machine-readable matrices tie each OWASP risk ID to a specific guard
 module / preset / test, so a coverage claim is **evidence, not prose**:
 
 * :data:`COVERAGE_PATH` (``coverage.yaml``) — the **OWASP LLM Top-10 2026** risks
   (LLM01-LLM10).
 * ``agentic_coverage.yaml`` — the **OWASP Agentic Top-10 2026** risks
   (ASI01-ASI10), rendered to ``docs/owasp-agentic-2026-coverage.md``.
+* ``mcp_top10_coverage.yaml`` — the **OWASP MCP Top 10** (beta) risks (MCP01-MCP10),
+  per control the README's MCP table names, rendered to
+  ``docs/owasp-mcp-top-10-coverage.md`` by :mod:`.mcp_top10` (:func:`load_mcp_coverage`,
+  :func:`render_mcp_page`).
 
-Both are parsed by :func:`load_coverage` (which takes an optional ``path``). A CI
+The first two are parsed by :func:`load_coverage` (which takes an optional ``path``). A CI
 gate (``docs/security/owasp-coverage-gate-ci.yml.sample``) fails on:
 
 * Any risk with no guard module mapping.
@@ -33,6 +37,8 @@ Reference
 
 from __future__ import annotations
 
+from .mcp_top10 import McpControl, McpCoverage, McpRisk, load_mcp_coverage
+from .mcp_top10 import render_page as render_mcp_page
 from .render import (
     Coverage,
     CoverageEntry,
@@ -44,7 +50,12 @@ from .render import (
 __all__ = [
     "Coverage",
     "CoverageEntry",
+    "McpControl",
+    "McpCoverage",
+    "McpRisk",
     "load_coverage",
+    "load_mcp_coverage",
     "render_json",
     "render_markdown",
+    "render_mcp_page",
 ]

@@ -269,21 +269,22 @@ generated from a YAML source and byte-diffed in CI.
 
 ### MCP-specific mapping
 
-Against the **MCP Top-10**. No generated page backs this table the way one backs the table
-above; a test pins only its ten titles.
+Against the **MCP Top-10**. Each row's evidence (modules, presets, tests, where each
+control runs) is in [`docs/owasp-mcp-top-10-coverage.md`](docs/owasp-mcp-top-10-coverage.md),
+generated from YAML and byte-diffed in CI.
 
 | Risk | Primary controls | Coverage |
 |---|---|---|
 | **MCP01 Token Mismanagement & Secret Exposure** | `MCPProxyGuard` rejects passthrough headers and enforces audience; `ArgumentSecretGuard` refuses secrets in arguments; sanitizer masks secrets in tool output | Partial |
-| **MCP02 Privilege Escalation via Scope Creep** | `SecurityPolicy(require_agent_id=True)`, capability gating, `CredentialScope`, runtime capability-union deny at grant time | Full |
-| **MCP03 Tool Poisoning** | Ghost-arg rejection, `SafePath` / `SafeURL`, `mcp_description_manifest_guard_defaults()`, `install_*` deny | Full |
-| **MCP04 Software Supply Chain Attacks & Dependency Tampering** | `stdio_guard_ox_defaults()` (Ox 2026-04-16 advisory), `download_plugin_*` / `fetch_plugin_*` deny | Full |
-| **MCP05 Command Injection & Execution** | `stdio_guard` shell-metachar and deny-pattern rules, `ToolArgSinkGuard` and `ShellCommandPolicy` on arguments, `exec_*` / `run_*` / `system_*` deny, `CodeSandboxBridgeGuard` for code-tool sandbox escapes, sandbox for `DANGEROUS` | Full |
+| **MCP02 Privilege Escalation via Scope Creep** | `SecurityPolicy(require_agent_id=True)`, capability gating, `CredentialScope`, runtime capability-union deny at grant time | Partial |
+| **MCP03 Tool Poisoning** | Ghost-arg rejection, `SafePath` / `SafeURL`, `mcp_description_manifest_guard_defaults()`, `install_*` deny | Partial |
+| **MCP04 Software Supply Chain Attacks & Dependency Tampering** | `stdio_guard_ox_defaults()` (Ox 2026-04-16 advisory), `download_plugin_*` / `fetch_plugin_*` deny | Partial |
+| **MCP05 Command Injection & Execution** | `stdio_guard` shell-metachar and deny-pattern rules, `ToolArgSinkGuard` and `ShellCommandPolicy` on arguments, `exec_*` / `run_*` / `system_*` deny, `CodeSandboxBridgeGuard` for code-tool sandbox escapes, E2B sandbox (`sandbox=True`) | Full |
 | **MCP06 Intent Flow Subversion** | `ToolOutputTrustGuard` envelopes injected-instruction output; `@requires_human_oversight` gates high-value actions | Partial |
 | **MCP07 Insufficient Authentication & Authorization** | OAuth 2.1 + PKCE S256 helpers (a redirect URI with a fragment is refused, RFC 6749 section 3.1.2), `iss` mix-up validation, issuer and `resource` in discovered metadata bound to the URLs the client asked for (RFC 8414 and RFC 9728 section 3.3), header/body routing integrity, unsigned-`_meta` trust boundary, step-up scope guard, Tasks lifecycle and admission guards. Transport-level auth remains server-side | Partial |
-| **MCP08 Lack of Audit and Telemetry** | JSON-Lines audit log, hash-chained decision log, OpenTelemetry export, spans and metrics | Full |
+| **MCP08 Lack of Audit and Telemetry** | JSON-Lines audit log, hash-chained decision log, OpenTelemetry export, spans and metrics | Partial |
 | **MCP09 Shadow MCP Servers** | Attested tool-server admission, LAN unauthenticated-MCP guard | Partial |
-| **MCP10 Context Injection & Over-Sharing** | PII and secret sanitizer, workspace-scoped config, `ToolOutputTrustGuard` untrusted-data envelope | Full |
+| **MCP10 Context Injection & Over-Sharing** | PII and secret sanitizer, workspace-scoped config, `ToolOutputTrustGuard` untrusted-data envelope | Partial |
 
 ## CLI
 
