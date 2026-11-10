@@ -1,0 +1,93 @@
+{
+  "$schema": "Payloads for CVE-2026-123783 (Skyvern, CWE-184). Each one is a small script that builds a harmless function returning 42 through one route to a Python code object, and leaves 42 in `result`. None runs a command or opens a socket. Routes a to f are the work order's; g to p close the class. In f, `b\"<code object bytes>\"` stands for marshal.dumps of a code object, which differs by Python version; the test fills it in for the running interpreter. `benign` holds strings the guard must allow.",
+  "disclosed_at": "2026-11-06",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-123783",
+    "vulncheck": "https://www.vulncheck.com/advisories/skyvern-through-1.0.56-script-sandbox-bypass-via-types-codetype-bytecode",
+    "fix_commit": "https://github.com/Skyvern-AI/skyvern/commit/31a64c1a4b5dfaf1e76a7164845e10f2d68248dc"
+  },
+  "payloads": [
+    {
+      "route": "a_codetype_built_from_another_functions_fields",
+      "code": "import sys\nimport types\n\ndef source():\n    return 42\n\nc = source.__code__\nif sys.version_info >= (3, 11):\n    rebuilt = types.CodeType(c.co_argcount, c.co_posonlyargcount, c.co_kwonlyargcount, c.co_nlocals, c.co_stacksize, c.co_flags, c.co_code, c.co_consts, c.co_names, c.co_varnames, c.co_filename, c.co_name, c.co_qualname, c.co_firstlineno, c.co_linetable, c.co_exceptiontable, c.co_freevars, c.co_cellvars)\nelse:\n    rebuilt = types.CodeType(c.co_argcount, c.co_posonlyargcount, c.co_kwonlyargcount, c.co_nlocals, c.co_stacksize, c.co_flags, c.co_code, c.co_consts, c.co_names, c.co_varnames, c.co_filename, c.co_name, c.co_firstlineno, c.co_linetable, c.co_freevars, c.co_cellvars)\nresult = type(source)(rebuilt, {})()\n"
+    },
+    {
+      "route": "b_bytecode_swapped_with_replace",
+      "code": "def f(a=42):\n    return None\n\ndef g(a=42):\n    return a\n\nf.__code__ = f.__code__.replace(co_code=g.__code__.co_code)\nresult = f()\n"
+    },
+    {
+      "route": "c_codetype_taken_under_an_alias",
+      "code": "import sys\nimport types\n\nCT = types.CodeType\n\ndef source():\n    return 42\n\nc = source.__code__\nif sys.version_info >= (3, 11):\n    rebuilt = CT(c.co_argcount, c.co_posonlyargcount, c.co_kwonlyargcount, c.co_nlocals, c.co_stacksize, c.co_flags, c.co_code, c.co_consts, c.co_names, c.co_varnames, c.co_filename, c.co_name, c.co_qualname, c.co_firstlineno, c.co_linetable, c.co_exceptiontable, c.co_freevars, c.co_cellvars)\nelse:\n    rebuilt = CT(c.co_argcount, c.co_posonlyargcount, c.co_kwonlyargcount, c.co_nlocals, c.co_stacksize, c.co_flags, c.co_code, c.co_consts, c.co_names, c.co_varnames, c.co_filename, c.co_name, c.co_firstlineno, c.co_linetable, c.co_freevars, c.co_cellvars)\nresult = type(source)(rebuilt, {})()\n"
+    },
+    {
+      "route": "d_function_type",
+      "code": "import types\n\ndef source():\n    return 42\n\nresult = types.FunctionType(source.__code__, {})()\n"
+    },
+    {
+      "route": "e_generator_gi_code",
+      "code": "def gen():\n    yield 42\n\ncode = gen().gi_code\nresult = next(type(gen)(code, {})())\n"
+    },
+    {
+      "route": "f_marshal_loads",
+      "code": "import marshal\n\nrebuilt = marshal.loads(b\"<code object bytes>\")\nresult = type(lambda: 0)(rebuilt, {})()\n"
+    },
+    {
+      "route": "g_coroutine_cr_code",
+      "code": "async def coro():\n    return 42\n\nfirst = coro()\ncode = first.cr_code\nfirst.close()\nsecond = type(coro)(code, {})()\ntry:\n    second.send(None)\nexcept StopIteration as stop:\n    result = stop.value\n"
+    },
+    {
+      "route": "h_async_generator_ag_code",
+      "code": "async def agen():\n    yield 42\n\ncode = agen().ag_code\ntry:\n    type(agen)(code, {})().__anext__().send(None)\nexcept StopIteration as stop:\n    result = stop.value\n"
+    },
+    {
+      "route": "i_frame_f_code",
+      "code": "import sys\n\ndef source(again=True):\n    return sys._getframe().f_code if again else 42\n\nresult = type(source)(source(), {\"sys\": sys}, None, (False,))()\n"
+    },
+    {
+      "route": "j_a_comment_after_the_dot",
+      "code": "def gen():\n    yield 42\n\ncode = (gen(). # the attribute follows\n    gi_code)\nresult = next(type(gen)(code, {})())\n"
+    },
+    {
+      "route": "k_fullwidth_letters_python_folds_to_ascii",
+      "code": "def source():\n    return 42\n\nresult = type(source)(source.__ｃｏｄｅ__, {})()\n"
+    },
+    {
+      "route": "l_dis_bytecode_codeobj",
+      "code": "import dis\n\ndef source():\n    return 42\n\nresult = type(source)(dis.Bytecode(source).codeobj, {})()\n"
+    },
+    {
+      "route": "m_codeop_compile_command",
+      "code": "import codeop\n\nresult = type(lambda: 0)(codeop.compile_command(\"42\", \"<x>\", \"eval\"), {})()\n"
+    },
+    {
+      "route": "n_inspect_loader_source_to_code",
+      "code": "from importlib.abc import InspectLoader\n\nnamespace = {}\ntype(lambda: 0)(InspectLoader.source_to_code(\"r = 42\"), namespace)()\nresult = namespace[\"r\"]\n"
+    },
+    {
+      "route": "o_gc_get_referents",
+      "code": "import gc\n\ndef source():\n    return 42\n\nfound = gc.get_referents(source)\ncode = [o for o in found if type(o).__name__ == \"code\"][0]\nresult = type(source)(code, {})()\n"
+    },
+    {
+      "route": "p_inspect_getmembers",
+      "code": "import inspect\n\ndef source():\n    return 42\n\nfound = inspect.getmembers(source)\ncode = [v for _, v in found if type(v).__name__ == \"code\"][0]\nresult = type(source)(code, {})()\n"
+    }
+  ],
+  "benign": [
+    "decode the response",
+    "CodeTypes are documented in the data model",
+    "status_code = 200",
+    "the f code is 7",
+    "decode__",
+    "MyCodeTypeHelper",
+    "co_code = 'ACME'",
+    "print(response.status_code)",
+    "text.replace(\"a\", \"b\")",
+    "compile_commands.json",
+    "import gc\ngc.collect()",
+    "names = tar.getmembers()",
+    "the fire marshal signed it",
+    "we marshal the arguments first",
+    "code = loader.get_code()",
+    "total = sum(values)"
+  ]
+}

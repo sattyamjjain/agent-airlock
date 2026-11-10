@@ -2,26 +2,35 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
+from agent_airlock import mcp_spec
 from agent_airlock.mcp_spec.oauth import (
     PKCE_VERIFIER_MAX_LEN,
     PKCE_VERIFIER_MIN_LEN,
     AuthorizationServerMetadata,
     BearerHeaderError,
+    IssuerMismatchError,
     PKCEError,
     ProtectedResourceMetadata,
     RedirectURIError,
+    ResourceMismatchError,
     ResourceURIError,
     TokenAudienceError,
     canonicalize_resource_uri,
     generate_pkce_challenge,
     generate_pkce_verifier,
+    issuer_from_discovery_url,
     parse_authorization_header,
     parse_www_authenticate_header,
     validate_access_token_audience,
+    validate_authorization_response_iss,
+    validate_metadata_issuer,
     validate_pkce_pair,
+    validate_protected_resource,
     validate_redirect_uri,
 )
 
@@ -93,6 +102,44 @@ class TestRedirectURI:
     def test_rejects_empty(self) -> None:
         with pytest.raises(RedirectURIError):
             validate_redirect_uri("")
+
+    @pytest.mark.parametrize(
+        "uri",
+        [
+            "https://app.example/cb#frag",
+            "http://localhost:8080/cb#frag",
+            "http://127.0.0.1:8080/#/cb",
+            "http://[::1]:8080/cb#frag",
+            "https://app.example/cb?state=1#frag",
+            "https://app.example#frag",
+            # urlparse reports no fragment for these two: a parsed.fragment test passes them.
+            "https://app.example/cb#",
+            "https://app.example/cb?state=1#",
+        ],
+    )
+    def test_rejects_a_fragment_rfc_6749_3_1_2(self, uri: str) -> None:
+        """ "The endpoint URI MUST NOT include a fragment component." See
+        modelcontextprotocol/typescript-sdk#3142 for the same gap in a registration handler."""
+        with pytest.raises(RedirectURIError, match=r"RFC 6749 section 3\.1\.2"):
+            validate_redirect_uri(uri)
+
+    def test_the_refusal_does_not_echo_the_fragment(self) -> None:
+        with pytest.raises(RedirectURIError) as exc:
+            validate_redirect_uri("https://app.example/cb#access_token=abc123")
+        assert "abc123" not in str(exc.value)
+
+    @pytest.mark.parametrize(
+        "uri",
+        [
+            "https://app.example/cb",
+            "http://127.0.0.1:8080/cb",
+            "https://app.example/cb?state=1",
+            # An escaped '#' is a path character, not a fragment delimiter (RFC 3986 section 2.2).
+            "https://app.example/cb%23frag",
+        ],
+    )
+    def test_a_uri_with_no_fragment_still_passes(self, uri: str) -> None:
+        validate_redirect_uri(uri)
 
 
 # =============================================================================
@@ -401,6 +448,566 @@ class TestMetadataUrlScreen:
                 resource="https://mcp.example.com/mcp",
                 authorization_servers=["http://auth.example.com"],
             )
+
+
+# =============================================================================
+# RFC 8414 section 3.3: a metadata issuer is bound to its discovery URL
+# =============================================================================
+
+_OAUTH_PATH = "/.well-known/oauth-authorization-server"
+_OPENID_PATH = "/.well-known/openid-configuration"
+_AS = "https://as.example"
+_DECOY = "https://decoy.example.net"
+
+
+def _document(issuer: str) -> dict[str, Any]:
+    """A metadata document naming ``issuer``, complete enough to parse."""
+    return {
+        "issuer": issuer,
+        "authorization_endpoint": f"{_AS}/authorize",
+        "token_endpoint": f"{_AS}/token",
+        "code_challenge_methods_supported": ["S256"],
+    }
+
+
+class TestIssuerFromDiscoveryUrl:
+    """Each well-known form on MCP 2026-07-28's discovery page, inverted."""
+
+    @pytest.mark.parametrize(
+        ("url", "issuer"),
+        [
+            (f"{_AS}{_OAUTH_PATH}", _AS),
+            (f"{_AS}{_OAUTH_PATH}/tenant1", f"{_AS}/tenant1"),
+            (f"{_AS}{_OAUTH_PATH}/a/b", f"{_AS}/a/b"),
+            (f"{_AS}{_OPENID_PATH}", _AS),
+            (f"{_AS}{_OPENID_PATH}/tenant1", f"{_AS}/tenant1"),
+            (f"{_AS}/tenant1{_OPENID_PATH}", f"{_AS}/tenant1"),
+            (f"{_AS}/a/b{_OPENID_PATH}", f"{_AS}/a/b"),
+            (f"https://as.example:8443{_OAUTH_PATH}", "https://as.example:8443"),
+            (f"http://localhost:3000{_OAUTH_PATH}", "http://localhost:3000"),
+            (f"http://[::1]:3000{_OAUTH_PATH}/t", "http://[::1]:3000/t"),
+        ],
+    )
+    def test_each_form_inverts(self, url: str, issuer: str) -> None:
+        assert issuer_from_discovery_url(url) == issuer
+
+    @pytest.mark.parametrize(
+        ("url", "issuer"),
+        [
+            (f"https://AS.example{_OAUTH_PATH}", "https://AS.example"),
+            (f"https://as.example:443{_OAUTH_PATH}", "https://as.example:443"),
+        ],
+    )
+    def test_the_origin_comes_back_as_written(self, url: str, issuer: str) -> None:
+        """RFC 8414 compares issuers as strings: no case folding, no default port dropped."""
+        assert issuer_from_discovery_url(url) == issuer
+
+    @pytest.mark.parametrize(
+        ("url", "issuer"),
+        [
+            (f"{_AS}{_OAUTH_PATH}/", _AS),
+            (f"{_AS}{_OAUTH_PATH}/tenant1/", f"{_AS}/tenant1"),
+            (f"{_AS}/tenant1{_OPENID_PATH}/", f"{_AS}/tenant1"),
+        ],
+    )
+    def test_a_terminating_slash_is_read_as_absent(self, url: str, issuer: str) -> None:
+        assert issuer_from_discovery_url(url) == issuer
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            # No well-known segment.
+            _AS,
+            f"{_AS}/",
+            f"{_AS}/tenant1",
+            f"{_AS}/authorize",
+            f"{_AS}/.WELL-KNOWN/oauth-authorization-server",
+            f"{_AS}/%2ewell-known/oauth-authorization-server",
+            # A well-known segment in no form MCP discovery uses.
+            f"{_AS}/.well-known",
+            f"{_AS}/.well-known/",
+            f"{_AS}/.well-known/oauth-protected-resource",
+            f"{_AS}/tenant1{_OAUTH_PATH}",
+            f"{_AS}/a{_OPENID_PATH}/b",
+            # More than one issuer could have built these.
+            f"{_AS}{_OAUTH_PATH}{_OPENID_PATH}",
+            f"{_AS}{_OPENID_PATH}{_OPENID_PATH}",
+            # RFC 8414 section 2: an issuer has no query, fragment or userinfo.
+            f"{_AS}{_OAUTH_PATH}?x=1",
+            f"{_AS}{_OAUTH_PATH}?",
+            f"{_AS}{_OAUTH_PATH}#x",
+            f"{_AS}{_OAUTH_PATH}#",
+            f"{_DECOY}/?u={_OAUTH_PATH}",
+            f"{_DECOY}/#{_OAUTH_PATH}",
+            f"https://as.example@decoy.example.net{_OAUTH_PATH}",
+            # A port that is not one.
+            f"https://as.example:notaport{_OAUTH_PATH}",
+            f"https://as.example:99999{_OAUTH_PATH}",
+            # The server resolves these before it answers.
+            f"{_AS}{_OAUTH_PATH}/../x",
+            f"{_AS}/a/..{_OPENID_PATH}",
+            f"{_AS}/.{_OPENID_PATH}",
+            f"{_AS}{_OAUTH_PATH}/%2e%2e/x",
+            f"{_AS}{_OAUTH_PATH}/%2E%2E/x",
+            f"{_AS}/a/..;{_OPENID_PATH}",
+            f"{_AS}{_OAUTH_PATH}/a;x=1",
+            # Empty segments.
+            f"{_AS}/{_OPENID_PATH}",
+            f"{_AS}{_OAUTH_PATH}//x",
+            f"{_AS}{_OAUTH_PATH}/x//",
+            # The metadata URL screen, and whitespace it does not stop.
+            f"http://as.example{_OAUTH_PATH}",
+            f"ftp://as.example{_OAUTH_PATH}",
+            f"{_AS}{_OAUTH_PATH}/$(id)",
+            f"{_AS}{_OAUTH_PATH}/a b",
+            f"{_AS}{_OAUTH_PATH} ",
+        ],
+    )
+    def test_anything_else_is_refused_without_repeating_the_url(self, url: str) -> None:
+        with pytest.raises(IssuerMismatchError) as exc:
+            issuer_from_discovery_url(url)
+        assert "discovery_url" in str(exc.value)
+        assert "as.example" not in str(exc.value)
+        assert "decoy" not in str(exc.value)
+        assert exc.value.__suppress_context__ or exc.value.__context__ is None
+
+    @pytest.mark.parametrize("url", [None, 7, f"{_AS}{_OAUTH_PATH}".encode(), [f"{_AS}"]])
+    def test_a_url_that_is_not_a_string_is_refused(self, url: Any) -> None:
+        with pytest.raises(IssuerMismatchError, match="not a string"):
+            issuer_from_discovery_url(url)
+
+
+class TestFromDiscovery:
+    def test_a_decoy_issuer_at_the_real_servers_url_is_refused(self) -> None:
+        with pytest.raises(IssuerMismatchError, match="RFC 8414 section 3.3"):
+            AuthorizationServerMetadata.from_discovery(
+                _document(_DECOY), discovery_url=f"{_AS}{_OAUTH_PATH}"
+            )
+
+    def test_the_mcp_pages_own_example_is_refused(self) -> None:
+        """A document at attacker.example naming honest.example, the page's MUST-reject case."""
+        with pytest.raises(IssuerMismatchError):
+            AuthorizationServerMetadata.from_discovery(
+                _document("https://honest.example"),
+                discovery_url=f"https://attacker.example{_OAUTH_PATH}",
+            )
+
+    @pytest.mark.parametrize(
+        ("issuer", "url"),
+        [
+            (_AS, f"{_AS}{_OAUTH_PATH}"),
+            (_AS, f"{_AS}{_OPENID_PATH}"),
+            (f"{_AS}/tenant1", f"{_AS}{_OAUTH_PATH}/tenant1"),
+            (f"{_AS}/tenant1", f"{_AS}{_OPENID_PATH}/tenant1"),
+            (f"{_AS}/tenant1", f"{_AS}/tenant1{_OPENID_PATH}"),
+        ],
+    )
+    def test_the_matching_issuer_passes(self, issuer: str, url: str) -> None:
+        metadata = AuthorizationServerMetadata.from_discovery(_document(issuer), discovery_url=url)
+        assert isinstance(metadata, AuthorizationServerMetadata)
+        assert metadata.issuer == issuer
+
+    @pytest.mark.parametrize(
+        ("issuer", "url"),
+        [
+            (f"{_AS}/", f"{_AS}{_OAUTH_PATH}"),
+            (_AS, f"{_AS}{_OAUTH_PATH}/"),
+            (f"{_AS}/tenant1/", f"{_AS}{_OAUTH_PATH}/tenant1"),
+            (f"{_AS}/tenant1", f"{_AS}{_OAUTH_PATH}/tenant1/"),
+            (f"{_AS}/tenant1/", f"{_AS}/tenant1{_OPENID_PATH}"),
+        ],
+    )
+    def test_a_trailing_slash_on_one_side_passes(self, issuer: str, url: str) -> None:
+        AuthorizationServerMetadata.from_discovery(_document(issuer), discovery_url=url)
+
+    @pytest.mark.parametrize(
+        ("issuer", "url"),
+        [
+            (f"{_AS}/tenant2", f"{_AS}{_OAUTH_PATH}/tenant1"),
+            (f"{_AS}/tenant1", f"{_AS}{_OAUTH_PATH}"),
+            (_AS, f"{_AS}{_OAUTH_PATH}/tenant1"),
+            (_AS, f"{_AS}/tenant1{_OPENID_PATH}"),
+            (f"{_AS}/tenant1/x", f"{_AS}{_OAUTH_PATH}/tenant1"),
+            ("https://as.example:8443", f"{_AS}{_OAUTH_PATH}"),
+            (_AS, f"https://as.example:443{_OAUTH_PATH}"),
+            ("https://AS.example", f"{_AS}{_OAUTH_PATH}"),
+            ("http://localhost", f"https://localhost{_OAUTH_PATH}"),
+            ("https://as.example.decoy.example.net", f"{_AS}{_OAUTH_PATH}"),
+            ("https://as.example?x=1", f"{_AS}{_OAUTH_PATH}"),
+            ("https://as.example#x", f"{_AS}{_OAUTH_PATH}"),
+            ("https://user@as.example", f"{_AS}{_OAUTH_PATH}"),
+        ],
+    )
+    def test_any_other_difference_is_refused(self, issuer: str, url: str) -> None:
+        """A tenant, a port, case: only trailing slashes are forgiven."""
+        with pytest.raises(IssuerMismatchError):
+            AuthorizationServerMetadata.from_discovery(_document(issuer), discovery_url=url)
+
+    @pytest.mark.parametrize("space", [" ", "　", " "])
+    def test_whitespace_the_screen_does_not_stop_is_not_forgiven(self, space: str) -> None:
+        """`_normalize_issuer` strips it, so the document parses and only this refuses it."""
+        with pytest.raises(IssuerMismatchError, match="whitespace"):
+            AuthorizationServerMetadata.from_discovery(
+                _document(f"{_AS}{space}"), discovery_url=f"{_AS}{_OAUTH_PATH}"
+            )
+
+    def test_the_error_text_holds_neither_url(self) -> None:
+        with pytest.raises(IssuerMismatchError) as exc:
+            AuthorizationServerMetadata.from_discovery(
+                _document(_DECOY), discovery_url=f"{_AS}{_OAUTH_PATH}"
+            )
+        for text in (str(exc.value), repr(exc.value)):
+            assert "as.example" not in text
+            assert "decoy" not in text
+        assert "issuer" in str(exc.value)
+
+    def test_a_url_with_no_well_known_segment_is_refused(self) -> None:
+        with pytest.raises(IssuerMismatchError, match="no /.well-known/ path segment"):
+            AuthorizationServerMetadata.from_discovery(_document(_AS), discovery_url=_AS)
+
+    def test_a_document_that_does_not_parse_stays_a_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            AuthorizationServerMetadata.from_discovery(
+                {"issuer": _AS}, discovery_url=f"{_AS}{_OAUTH_PATH}"
+            )
+        with pytest.raises(ValidationError):
+            AuthorizationServerMetadata.from_discovery(
+                _document(f"{_AS}/$(id)"), discovery_url=f"{_AS}{_OAUTH_PATH}"
+            )
+
+    @pytest.mark.parametrize("document", [None, "{}", [], 7])
+    def test_a_document_that_is_not_an_object_is_refused(self, document: Any) -> None:
+        with pytest.raises(ValidationError):
+            AuthorizationServerMetadata.from_discovery(
+                document, discovery_url=f"{_AS}{_OAUTH_PATH}"
+            )
+
+    def test_the_rest_of_the_document_is_kept(self) -> None:
+        document = {**_document(_AS), "scopes_supported": ["files:read"]}
+        metadata = AuthorizationServerMetadata.from_discovery(
+            document, discovery_url=f"{_AS}{_OAUTH_PATH}"
+        )
+        assert metadata.token_endpoint == f"{_AS}/token"
+        assert metadata.model_extra == {"scopes_supported": ["files:read"]}
+
+    def test_the_plain_constructor_stays_as_it_was(self) -> None:
+        """No URL, no check: a current caller keeps working, and the docs say which to use."""
+        assert AuthorizationServerMetadata(**_document(_DECOY)).issuer == _DECOY
+
+
+class TestValidateMetadataIssuer:
+    def test_it_takes_parsed_metadata(self) -> None:
+        metadata = AuthorizationServerMetadata(**_document(_AS))
+        assert validate_metadata_issuer(metadata, discovery_url=f"{_AS}{_OAUTH_PATH}") is None
+        with pytest.raises(IssuerMismatchError):
+            validate_metadata_issuer(metadata, discovery_url=f"{_DECOY}{_OAUTH_PATH}")
+
+    @pytest.mark.parametrize("issuer", [f" {_AS}", f"{_AS}\n", f"{_AS}$(id)", "", None, 7])
+    def test_an_issuer_changed_after_parsing_is_screened_again(self, issuer: Any) -> None:
+        """A model is not frozen, and `_normalize_issuer` would strip the first two."""
+        metadata = AuthorizationServerMetadata(**_document(_AS))
+        metadata.issuer = issuer
+        with pytest.raises(IssuerMismatchError):
+            validate_metadata_issuer(metadata, discovery_url=f"{_AS}{_OAUTH_PATH}")
+
+    @pytest.mark.parametrize("metadata", [None, _document(_AS), _AS, object()])
+    def test_something_with_no_issuer_attribute_is_refused(self, metadata: Any) -> None:
+        with pytest.raises(IssuerMismatchError, match="issuer is a"):
+            validate_metadata_issuer(metadata, discovery_url=f"{_AS}{_OAUTH_PATH}")
+
+
+class TestTheMixUpEndToEnd:
+    """RFC 9207's check compares with an expected issuer. These pin where that value comes from."""
+
+    @staticmethod
+    def _flow(document: dict[str, Any], *, url: str, iss: str, reached: list[str]) -> None:
+        metadata = AuthorizationServerMetadata.from_discovery(document, discovery_url=url)
+        reached.append(metadata.issuer)
+        validate_authorization_response_iss({"iss": iss}, expected_issuer=metadata.issuer)
+
+    def test_the_iss_check_alone_cannot_catch_it(self) -> None:
+        """The gap: a raw `metadata.issuer` as the expected value passes the decoy's own `iss`."""
+        metadata = AuthorizationServerMetadata(**_document(_DECOY))
+        validate_authorization_response_iss({"iss": _DECOY}, expected_issuer=metadata.issuer)
+
+    def test_a_refused_document_never_reaches_the_iss_check(self) -> None:
+        reached: list[str] = []
+        with pytest.raises(IssuerMismatchError, match="RFC 8414 section 3.3"):
+            self._flow(_document(_DECOY), url=f"{_AS}{_OAUTH_PATH}", iss=_DECOY, reached=reached)
+        assert reached == []
+
+    def test_an_accepted_issuer_still_refuses_another_servers_response(self) -> None:
+        reached: list[str] = []
+        with pytest.raises(IssuerMismatchError, match="mix-up"):
+            self._flow(_document(_AS), url=f"{_AS}{_OAUTH_PATH}", iss=_DECOY, reached=reached)
+        assert reached == [_AS]
+
+    def test_the_whole_flow_passes_for_the_real_server(self) -> None:
+        reached: list[str] = []
+        self._flow(_document(_AS), url=f"{_AS}{_OAUTH_PATH}", iss=_AS, reached=reached)
+        assert reached == [_AS]
+
+    @pytest.mark.parametrize(
+        ("issuer", "iss"), [(f"{_AS}/", _AS), (_AS, f"{_AS}/"), (f"{_AS}/", f"{_AS}/")]
+    )
+    def test_the_two_checks_agree_about_a_trailing_slash(self, issuer: str, iss: str) -> None:
+        self._flow(_document(issuer), url=f"{_AS}{_OAUTH_PATH}", iss=iss, reached=[])
+
+
+class TestIssuerExports:
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("IssuerMismatchError", IssuerMismatchError),
+            ("issuer_from_discovery_url", issuer_from_discovery_url),
+            ("validate_metadata_issuer", validate_metadata_issuer),
+        ],
+    )
+    def test_the_protocol_surface_names_them(self, name: str, value: Any) -> None:
+        assert name in mcp_spec.__all__
+        assert getattr(mcp_spec, name) is value
+
+
+# =============================================================================
+# RFC 9728 section 3.3: protected resource metadata names the server asked for
+# =============================================================================
+
+_MCP = "https://mcp.example.com"
+_MCP_A = "https://mcp-a.example.com/mcp"
+_MCP_B = "https://mcp-b.example.com/mcp"
+
+
+def _prm(resource: Any) -> dict[str, Any]:
+    """A protected resource metadata document naming ``resource``, complete enough to parse."""
+    return {"resource": resource, "authorization_servers": ["https://auth.example.com"]}
+
+
+def _refusal_text(exc: BaseException) -> str:
+    return f"{exc} {exc!r}"
+
+
+class TestProtectedResourceFromDiscovery:
+    def test_another_server_on_the_same_authorization_server_is_refused(self) -> None:
+        """CVE-2026-123272 / CVE-2026-123271: the document names a server the client never asked for."""
+        with pytest.raises(ResourceMismatchError, match="RFC 9728 section 3.3") as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(_MCP_B), resource_url=_MCP_A)
+        assert "mcp-a" not in _refusal_text(exc.value)
+        assert "mcp-b" not in _refusal_text(exc.value)
+
+    @pytest.mark.parametrize(
+        ("resource_url", "resource"),
+        [
+            pytest.param(f"{_MCP}/mcp", f"{_MCP}/admin/mcp", id="same-host-other-path"),
+            pytest.param(f"{_MCP}/mcp", _MCP, id="the-origin-for-a-server-with-a-path"),
+            pytest.param(_MCP, f"{_MCP}/mcp", id="a-path-for-a-server-at-the-root"),
+            pytest.param(f"{_MCP}/mcp", f"{_MCP}/mcpx", id="a-longer-segment"),
+            pytest.param(_MCP, "https://mcp.example.com:8443", id="other-port"),
+            pytest.param("https://mcp.example.com:8443", _MCP, id="port-dropped"),
+            pytest.param(_MCP, "https://mcp.example.com.evil.example", id="suffix-host"),
+            pytest.param(f"{_MCP}/m?tenant=a", f"{_MCP}/m?tenant=b", id="other-query"),
+            pytest.param(f"{_MCP}/m", f"{_MCP}/m?tenant=a", id="query-added"),
+            pytest.param(
+                "http://localhost:3000/mcp", "http://127.0.0.1:3000/mcp", id="another-loopback-name"
+            ),
+        ],
+    )
+    def test_any_other_server_is_refused(self, resource_url: str, resource: str) -> None:
+        with pytest.raises(ResourceMismatchError, match="RFC 9728 section 3.3"):
+            ProtectedResourceMetadata.from_discovery(_prm(resource), resource_url=resource_url)
+
+    @pytest.mark.parametrize(
+        "resource",
+        [
+            pytest.param("http://mcp.example.com", id="plain-http"),
+            pytest.param("ftp://mcp.example.com", id="another-scheme"),
+        ],
+    )
+    def test_another_scheme_is_refused(self, resource: str) -> None:
+        with pytest.raises(ResourceMismatchError) as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(resource), resource_url=_MCP)
+        assert "mcp.example.com" not in _refusal_text(exc.value)
+
+    @pytest.mark.parametrize(
+        ("resource_url", "resource"),
+        [
+            pytest.param(_MCP, f"{_MCP}/", id="root-slash"),
+            pytest.param(f"{_MCP}/", _MCP, id="root-slash-on-the-url"),
+            pytest.param(_MCP, "https://mcp.example.com:443", id="default-port"),
+            pytest.param("https://mcp.example.com:443/", _MCP, id="default-port-on-the-url"),
+            pytest.param(_MCP, "HTTPS://MCP.Example.com", id="scheme-and-host-case"),
+            pytest.param(f"{_MCP}/mcp", f"{_MCP}/mcp/", id="trailing-slash-on-a-path"),
+            pytest.param(
+                "http://localhost:3000/mcp", "http://localhost:3000/mcp", id="loopback-http"
+            ),
+        ],
+    )
+    def test_what_the_token_audience_check_forgives_passes(
+        self, resource_url: str, resource: str
+    ) -> None:
+        metadata = ProtectedResourceMetadata.from_discovery(
+            _prm(resource), resource_url=resource_url
+        )
+        assert metadata.resource == resource
+
+    @pytest.mark.parametrize(
+        "resource",
+        [
+            pytest.param(f"{_MCP}#fragment", id="fragment"),
+            pytest.param("", id="empty"),
+            pytest.param(f" {_MCP}", id="leading-space"),
+            pytest.param(f"{_MCP}\n", id="trailing-newline"),
+            pytest.param(f"{_MCP} ", id="trailing-no-break-space"),
+            pytest.param("mcp.example.com", id="no-scheme"),
+            pytest.param("https://", id="no-host"),
+            pytest.param("https://mcp.example.com:notaport", id="bad-port"),
+            pytest.param("https://user@mcp.example.com", id="userinfo"),
+            pytest.param("https://mcp.example.com/$(id)", id="shell-substitution"),
+            pytest.param("https://mcp.example.com/a b", id="unencoded-space"),
+        ],
+    )
+    def test_a_resource_that_is_not_a_server_uri_is_refused(self, resource: str) -> None:
+        with pytest.raises(ResourceMismatchError) as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(resource), resource_url=_MCP)
+        assert "mcp.example.com" not in _refusal_text(exc.value)
+        assert "resource" in str(exc.value)
+        assert exc.value.__suppress_context__ or exc.value.__context__ is None
+
+    @pytest.mark.parametrize("resource", [7, None, [_MCP], {"url": _MCP}])
+    def test_a_resource_that_is_not_a_string_is_refused_at_parse(self, resource: Any) -> None:
+        with pytest.raises(ValidationError) as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(resource), resource_url=_MCP)
+        assert "mcp.example.com" not in str(exc.value)
+
+    @pytest.mark.parametrize(
+        "resource_url",
+        [
+            pytest.param("", id="empty"),
+            pytest.param(f" {_MCP}", id="leading-space"),
+            pytest.param("mcp.example.com", id="no-scheme"),
+            pytest.param(f"{_MCP}#fragment", id="fragment"),
+            pytest.param("https://user@mcp.example.com", id="userinfo"),
+            pytest.param(None, id="none"),
+            pytest.param(b"https://mcp.example.com", id="bytes"),
+        ],
+    )
+    def test_a_resource_url_that_is_not_a_server_uri_is_refused(self, resource_url: Any) -> None:
+        with pytest.raises(ResourceMismatchError, match="resource_url") as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(_MCP), resource_url=resource_url)
+        assert "mcp.example.com" not in _refusal_text(exc.value)
+
+    def test_a_document_that_does_not_parse_stays_a_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            ProtectedResourceMetadata.from_discovery({"resource": _MCP}, resource_url=_MCP)
+        with pytest.raises(ValidationError):
+            ProtectedResourceMetadata.from_discovery(
+                {"resource": _MCP, "authorization_servers": ["http://auth.example.com"]},
+                resource_url=_MCP,
+            )
+
+    @pytest.mark.parametrize("document", [None, "{}", [], 7])
+    def test_a_document_that_is_not_an_object_is_refused(self, document: Any) -> None:
+        with pytest.raises(ValidationError):
+            ProtectedResourceMetadata.from_discovery(document, resource_url=_MCP)
+
+    def test_a_matching_document_returns_the_parsed_model(self) -> None:
+        document = {**_prm(_MCP_A), "scopes_supported": ["files:read"], "jwks_uri": f"{_MCP}/j"}
+        metadata = ProtectedResourceMetadata.from_discovery(document, resource_url=_MCP_A)
+        assert isinstance(metadata, ProtectedResourceMetadata)
+        assert metadata.resource == _MCP_A
+        assert metadata.authorization_servers == ["https://auth.example.com"]
+        assert metadata.scopes_supported == ["files:read"]
+        assert metadata.model_extra == {"jwks_uri": f"{_MCP}/j"}
+
+    def test_the_plain_constructor_stays_as_it_was(self) -> None:
+        """No URL, no check: a current caller keeps working, and the docs say which to use."""
+        assert ProtectedResourceMetadata(**_prm(_MCP_B)).resource == _MCP_B
+
+
+class TestValidateProtectedResource:
+    def test_it_takes_parsed_metadata(self) -> None:
+        metadata = ProtectedResourceMetadata(**_prm(_MCP_A))
+        assert validate_protected_resource(metadata, resource_url=_MCP_A) is None
+        with pytest.raises(ResourceMismatchError):
+            validate_protected_resource(metadata, resource_url=_MCP_B)
+
+    @pytest.mark.parametrize("resource", [7, None, "", f" {_MCP_A}", f"{_MCP_A}#x", _MCP_B])
+    def test_a_resource_changed_after_parsing_is_checked_again(self, resource: Any) -> None:
+        """A model is not frozen."""
+        metadata = ProtectedResourceMetadata(**_prm(_MCP_A))
+        metadata.resource = resource
+        with pytest.raises(ResourceMismatchError):
+            validate_protected_resource(metadata, resource_url=_MCP_A)
+
+    @pytest.mark.parametrize("metadata", [None, _prm(_MCP_A), _MCP_A, object()])
+    def test_something_with_no_resource_attribute_is_refused(self, metadata: Any) -> None:
+        with pytest.raises(ResourceMismatchError, match="resource is a"):
+            validate_protected_resource(metadata, resource_url=_MCP_A)
+
+    def test_the_root_well_known_fallback_compares_with_the_origin(self) -> None:
+        """RFC 9728 section 3.3: the identifier the metadata URL was built from, here the origin."""
+        at_root = ProtectedResourceMetadata(**_prm(_MCP))
+        validate_protected_resource(at_root, resource_url=_MCP)
+        with pytest.raises(ResourceMismatchError):
+            validate_protected_resource(at_root, resource_url=f"{_MCP}/mcp")
+
+
+class TestTheResourceAndAudienceChecksAgree:
+    """The comparison uses the token audience check's key, so a token minted for a resource
+    this accepts is one the MCP server it names would accept, and the other way round."""
+
+    @pytest.mark.parametrize(
+        ("resource_url", "resource"),
+        [
+            (_MCP_A, _MCP_B),
+            (f"{_MCP}/mcp", f"{_MCP}/admin/mcp"),
+            (_MCP, "https://mcp.example.com:8443"),
+            (_MCP, f"{_MCP}/"),
+            (_MCP, "https://mcp.example.com:443"),
+            (_MCP, "HTTPS://MCP.Example.com"),
+            (f"{_MCP}/mcp", f"{_MCP}/mcp/"),
+            (f"{_MCP}/m?tenant=a", f"{_MCP}/m?tenant=b"),
+        ],
+    )
+    def test_both_reach_the_same_verdict(self, resource_url: str, resource: str) -> None:
+        try:
+            validate_protected_resource(
+                ProtectedResourceMetadata(**_prm(resource)), resource_url=resource_url
+            )
+            resource_ok = True
+        except ResourceMismatchError:
+            resource_ok = False
+        try:
+            validate_access_token_audience({"aud": resource}, expected_audience=resource_url)
+            audience_ok = True
+        except TokenAudienceError:
+            audience_ok = False
+        assert resource_ok is audience_ok
+
+    def test_a_token_minted_for_the_named_resource_is_refused_by_the_server_asked_for(
+        self,
+    ) -> None:
+        """Why the binding matters: the token the CVE's flow mints fails the real server's
+        audience check, so the only place it works is the server the document named."""
+        with pytest.raises(TokenAudienceError):
+            validate_access_token_audience({"aud": _MCP_B}, expected_audience=_MCP_A)
+        validate_access_token_audience({"aud": _MCP_B}, expected_audience=_MCP_B)
+
+
+class TestResourceExports:
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("ResourceMismatchError", ResourceMismatchError),
+            ("validate_protected_resource", validate_protected_resource),
+            ("ProtectedResourceMetadata", ProtectedResourceMetadata),
+        ],
+    )
+    def test_the_protocol_surface_names_them(self, name: str, value: Any) -> None:
+        assert name in mcp_spec.__all__
+        assert getattr(mcp_spec, name) is value
+
+    def test_the_error_is_a_value_error_like_the_rest_of_the_module(self) -> None:
+        assert issubclass(ResourceMismatchError, ValueError)
 
 
 # =============================================================================

@@ -54,6 +54,15 @@ class TestTopLevelErrorReexports:
 
         assert AutoMemoryQuotaError is Canonical
 
+    def test_auto_memory_tenant_id_error(self) -> None:
+        from agent_airlock import AutoMemoryTenantIdError
+        from agent_airlock.integrations.claude_auto_memory import (
+            AutoMemoryTenantIdError as Canonical,
+        )
+
+        assert AutoMemoryTenantIdError is Canonical
+        assert "AutoMemoryTenantIdError" in importlib.import_module("agent_airlock").__all__
+
     def test_high_value_action_blocked(self) -> None:
         from agent_airlock import HighValueActionBlocked
         from agent_airlock.policy_presets import HighValueActionBlocked as Canonical
@@ -72,6 +81,18 @@ class TestTopLevelErrorReexports:
             "HighValueActionBlocked",
         ]:
             assert name in agent_airlock.__all__, f"{name!r} missing from __all__"
+
+
+class TestToolListingHelpers:
+    """The client-side listing helpers export from their own module, as guards here do."""
+
+    NAMES = ("admit_tools_list", "list_tools_pinned", "list_all_tools_pinned")
+
+    def test_each_resolves_and_is_in_dunder_all(self) -> None:
+        module = importlib.import_module("agent_airlock.mcp_spec.tool_definition_pin_guard")
+        for name in self.NAMES:
+            assert callable(getattr(module, name)), name
+            assert name in module.__all__, f"{name!r} missing from __all__"
 
 
 class TestPolicyPresetsReexports:

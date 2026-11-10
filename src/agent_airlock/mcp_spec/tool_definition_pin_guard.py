@@ -54,7 +54,11 @@ an earlier release is a version 1 digest: :meth:`ToolDefinitionPinGuard.pin` loa
 that appears after approval is refused rather than learned, and
 :func:`admit_tools_list` is the client-side call to make on every listing, whether or not
 the server sent ``notifications/tools/list_changed``: a new listing is a ceiling to check,
-not a refresh to adopt.
+not a refresh to adopt. :func:`list_all_tools_pinned` (0.10.32) reads every page of a
+paginated server first and judges them once as one listing, so a tool listed on two pages
+is a duplicate rather than two clean pages (the shape of
+modelcontextprotocol/python-sdk#3813, there a resource template overwritten by its
+duplicate).
 
 What this does not do
 ---------------------
@@ -65,12 +69,14 @@ It does not tell you whether the *original* definition was honest — that is
 
 from __future__ import annotations
 
+import contextlib
 import enum
 import hashlib
 import inspect
 import json
 import re
-from collections.abc import Iterable, Mapping
+from collections import Counter
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -87,6 +93,7 @@ __all__ = [
     "ToolListingDriftError",
     "admit_tools_list",
     "canonical_digest",
+    "list_all_tools_pinned",
     "list_tools_pinned",
 ]
 
@@ -509,7 +516,7 @@ class ToolDefinitionPinGuard:
             return ToolListingDecision.unreadable(type(tools).__name__)
         decisions = tuple(self._judge(item) for item in items)
         names = [decision.tool_name for decision in decisions]
-        duplicates = tuple(sorted({name for name in names if names.count(name) > 1}))
+        duplicates = tuple(sorted(name for name, count in Counter(names).items() if count > 1))
         admitted = frozenset(
             d.tool_name for d in decisions if d.allowed and d.tool_name not in duplicates
         )
@@ -617,7 +624,8 @@ class ToolListingDecision:
 
 
 class ToolListingDriftError(AirlockError):
-    """Raised when a ``tools/list`` result carries a tool the pins do not admit.
+    """Raised when a ``tools/list`` result carries a tool the pins do not admit, or cannot be
+    read as a listing at all (``decision.detail`` says why).
 
     Attributes:
         decision: The listing decision that triggered the refusal.
@@ -625,8 +633,16 @@ class ToolListingDriftError(AirlockError):
 
     def __init__(self, decision: ToolListingDecision) -> None:
         self.decision = decision
-        refused = ", ".join(decision.refused) or decision.detail or "unknown"
-        super().__init__(f"tools/list refused: not admitted by the pins: {refused}")
+        if decision.refused or not decision.detail:
+            refused = ", ".join(decision.refused) or "unknown"
+            super().__init__(f"tools/list refused: not admitted by the pins: {refused}")
+        else:
+            super().__init__(f"tools/list refused: {decision.detail}")
+
+
+def _check_on_drift(on_drift: object) -> None:
+    if on_drift not in ("raise", "filter"):
+        raise ValueError(f"on_drift must be 'raise' or 'filter', got {on_drift!r}")
 
 
 def admit_tools_list(
@@ -656,8 +672,7 @@ def admit_tools_list(
             be read as a listing at all.
         ValueError: ``on_drift`` is neither ``"raise"`` nor ``"filter"``.
     """
-    if on_drift not in ("raise", "filter"):
-        raise ValueError(f"on_drift must be 'raise' or 'filter', got {on_drift!r}")
+    _check_on_drift(on_drift)
     decision = guard.check_listing(result)
     if not guard.enforce:
         return result
@@ -693,9 +708,161 @@ async def list_tools_pinned(
 
     ``session`` is anything with a ``list_tools()`` method, sync or async: the MCP SDK's
     ``ClientSession`` or a FastMCP ``Client``. A paginated server lists one page per call;
-    each page is checked on its own, so a duplicate split across pages is not caught.
+    each page is checked on its own, so a duplicate split across pages is not caught and
+    ``missing`` counts the tools on other pages. Use :func:`list_all_tools_pinned` for a
+    server that paginates.
     """
     result = session.list_tools()
     if inspect.isawaitable(result):
         result = await result
     return admit_tools_list(guard, result, on_drift=on_drift)
+
+
+def _cursor_attribute(page: Any) -> str:
+    """The attribute a result object keeps its cursor in.
+
+    mcp 2.x has ``next_cursor`` and no ``nextCursor``, so a reader of the wire spelling alone
+    ends every listing at page 1 without a word; mcp 1.x has only ``nextCursor``. FastMCP 4
+    adds a ``nextCursor`` to mcp 2.x's result that warns on each read, so ``next_cursor`` is
+    asked for first and ``nextCursor`` is touched only where it is the real field.
+    """
+    return "next_cursor" if hasattr(page, "next_cursor") else "nextCursor"
+
+
+def _next_cursor(page: Any) -> Any:
+    """The cursor ``page`` carries, or None."""
+    if isinstance(page, Mapping):
+        cursor = page.get("nextCursor")
+        return page.get("next_cursor") if cursor is None else cursor
+    return getattr(page, _cursor_attribute(page), None)
+
+
+def _listing_refused(detail: str) -> ToolListingDriftError:
+    return ToolListingDriftError(ToolListingDecision(allowed=False, detail=detail))
+
+
+def _paginated_params(cursor: str) -> Any:
+    """The SDK's ``PaginatedRequestParams`` for ``cursor``, or its wire form with no SDK."""
+    try:
+        from mcp.types import PaginatedRequestParams
+    except ImportError:
+        return {"cursor": cursor}
+    return PaginatedRequestParams(cursor=cursor)
+
+
+def _ask_for_page(list_page: Callable[..., Any], cursor: str | None) -> Any:
+    """Call ``list_page`` for the page at ``cursor``, the way its signature takes a cursor.
+
+    ``ClientSession.list_tools`` takes ``params=`` (mcp 1.x also takes a deprecated
+    ``cursor=``, 2.x only ``params=``); ``mcp.Client.list_tools`` and FastMCP's
+    ``Client.list_tools_mcp`` take ``cursor=``. A call that takes neither cannot read past
+    page 1, and that page is not the whole listing, so it is refused.
+    """
+    if cursor is None:
+        return list_page()
+    parameters: Mapping[str, inspect.Parameter] = {}
+    with contextlib.suppress(TypeError, ValueError):  # no signature: nothing says it takes one
+        parameters = inspect.signature(list_page).parameters
+    takes_keywords = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values())
+    if "params" in parameters or takes_keywords:
+        return list_page(params=_paginated_params(cursor))
+    if "cursor" in parameters:
+        return list_page(cursor=cursor)
+    raise _listing_refused("the server sent a cursor and this session cannot follow one")
+
+
+async def _read_every_page(list_page: Callable[..., Any], max_pages: int) -> tuple[Any, list[Any]]:
+    """The first page and the tools of every page, following each cursor to the end."""
+    first: Any = None
+    tools: list[Any] = []
+    seen: set[str] = set()
+    cursor: str | None = None
+    for number in range(1, max_pages + 1):
+        page = _ask_for_page(list_page, cursor)
+        if inspect.isawaitable(page):
+            page = await page
+        items = _listing_items(page)
+        if items is None:
+            raise ToolListingDriftError(ToolListingDecision.unreadable(type(page).__name__))
+        if number == 1:
+            first = page
+        tools.extend(items)
+        following = _next_cursor(page)
+        if following is None:
+            return first, tools
+        if not isinstance(following, str):
+            kind = type(following).__name__
+            raise _listing_refused(f"a tools/list cursor is a string, not {kind}")
+        if not following:
+            return first, tools
+        if following in seen:
+            raise _listing_refused(f"page {number} repeated a cursor: the listing never ends")
+        seen.add(following)
+        cursor = following
+    pages = f"{max_pages} page" if max_pages == 1 else f"{max_pages} pages"
+    raise _listing_refused(f"the listing did not end within {pages} (max_pages)")
+
+
+def _as_one_listing(first: Any, tools: list[Any]) -> Any:
+    """``first`` in its own shape, holding ``tools`` and no cursor: the listing is whole."""
+    if isinstance(first, Mapping):
+        rest = {key: first[key] for key in first if key not in ("nextCursor", "next_cursor")}
+        return {**rest, "tools": tools}
+    if hasattr(first, "tools") and callable(getattr(first, "model_copy", None)):
+        cursor = _cursor_attribute(first)
+        cleared = {cursor: None} if hasattr(first, cursor) else {}
+        return first.model_copy(update={**cleared, "tools": tools})
+    return tools
+
+
+async def list_all_tools_pinned(
+    session: Any,
+    guard: ToolDefinitionPinGuard,
+    *,
+    on_drift: Literal["raise", "filter"] = "raise",
+    max_pages: int = 100,
+) -> Any:
+    """Read every page of ``tools/list``, then judge them once as one listing (0.10.32).
+
+    :func:`list_tools_pinned` checks one page per call, so a tool listed on two pages reads
+    as two clean pages and the later definition can shadow the earlier one. Here the pages
+    are collected first and :func:`admit_tools_list` runs once on all of them, so that tool
+    is a duplicate and ``missing`` is judged against the whole listing.
+
+    ``session`` is sync or async: the MCP SDK's ``ClientSession`` or ``Client``, or a FastMCP
+    ``Client``, or anything whose ``list_tools`` takes ``params=`` or ``cursor=``. A FastMCP
+    ``Client`` is read through ``list_tools_mcp``, because its ``list_tools()`` flattens the
+    pages itself: FastMCP 3 and 4 stop at a repeated cursor with only a warning, and FastMCP
+    2 returns page 1 and drops the cursor. FastMCP 2's page call takes no cursor either, so
+    a server that pages raises here; pass ``client.session`` instead. A session that hands
+    back a bare list has no cursor to follow, and the list is taken as the whole listing.
+
+    Args:
+        session: Where to read the listing from.
+        guard: The pins the client approved.
+        on_drift: ``"raise"`` refuses the whole listing; ``"filter"`` drops the tools the
+            pins do not admit, every copy of a duplicate included, and returns the rest.
+        max_pages: The most pages to read. The page past it is never requested.
+
+    Returns:
+        Every admitted tool, in the shape of the first page with no cursor left on it: a
+        mapping or a pydantic model stays one, and anything else, or a FastMCP ``Client``'s
+        listing, is the list ``list_tools()`` would return. With ``guard.enforce`` off, every
+        tool listed, in that same shape.
+
+    Raises:
+        ToolListingDriftError: The listing is refused under ``on_drift="raise"``. Also, in
+            every mode and with ``enforce`` off, when there is no whole listing to judge: a
+            page that is not a listing, a cursor that is not a string or was already seen,
+            more than ``max_pages`` pages, or a session that cannot follow a cursor. An empty
+            cursor ends the listing; nothing past it is read, so nothing past it is admitted.
+        ValueError: ``on_drift`` is neither ``"raise"`` nor ``"filter"``, or ``max_pages`` is
+            not a positive integer. Both are checked before the server is asked.
+    """
+    _check_on_drift(on_drift)
+    if type(max_pages) is not int or max_pages < 1:
+        raise ValueError(f"max_pages must be a positive integer, got {max_pages!r}")
+    page_call = getattr(session, "list_tools_mcp", None)
+    first, tools = await _read_every_page(page_call or session.list_tools, max_pages)
+    listing = tools if page_call else _as_one_listing(first, tools)
+    return admit_tools_list(guard, listing, on_drift=on_drift)

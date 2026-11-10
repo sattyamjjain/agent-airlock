@@ -17,6 +17,12 @@ no asymmetry left to test, and neither harness's zero can be read as resistance.
 2026-09-20 `codex` finished only 52 of 72, its zero rested on 24 of 36, and its bound was
 13.8%.
 
+**The 2026-11-03 re-run is partial, and found the same zeros.** `claude-code` 2.1.317 (model
+`claude-opus-4-8`) finished all 72 cells, 0/36 on each arm. `codex` 0.154.0 (`gpt-6-astra`)
+stopped after 41 cells at its plan's usage limit: 0/36 injected, and 0/5 benign, a much smaller
+control than the 36 cells below. `cursor-agent` errored on every cell and measured nothing. The
+analysis on this page stays on the last complete matrix, 2026-10-03.
+
 **`codex` ran on a pinned model, and its first pass measured nothing.** This machine's `codex`
 was configured for `gpt-6.1-sol`, which is refused for a ChatGPT account, so on the first pass
 every `codex` cell exited before it started. Those 72 cells were discarded, not scored, and
@@ -24,7 +30,8 @@ every `codex` cell exited before it started. Those 72 cells were discarded, not 
 The plan's usage limit stopped that re-run after 35 cells; the remaining 37, the whole
 benign arm among them, ran after the limit reset the same day (UTC).
 
-- **Run date:** 2026-10-03 · **Cells:** 144/144 measured, no exclusions
+- **Last complete matrix:** 2026-10-03 · **Cells:** 144/144 measured, no exclusions
+- **Last run:** 2026-11-03, partial (below) · **Cells:** 113 measured, 103 errored and excluded
 - **Reproduce:** `python -m benchmarks.harness_injection --run --trials 18 --write --checkpoint ckpt.json --model codex=gpt-6-astra`
 - **Raw table and full caveats:** [`benchmarks/harness_injection/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md)
 - **Not run in CI:** it drives third-party coding agents against an injection-seeded

@@ -18,6 +18,12 @@ observability hook (:func:`agent_airlock.observability.track_event`) — no new 
 new dependency — and integrates with the ``@observe`` / call seam via the
 :func:`client_request_window` context manager the operator wraps a client request in.
 
+A request is named by its JSON-RPC id as the wire sent it, so ``7`` and ``"7"`` are two
+requests. Until 0.10.32 ids were keyed by ``str()``, so both shared one slot: ending ``"7"``
+closed the window while ``7`` still ran, and an elicitation claiming ``"7"`` passed while only
+``7`` was in flight (the coercion of modelcontextprotocol/python-sdk#3807, there in the
+dispatcher's in-flight table).
+
 Deny-by-default; stdlib only, Pydantic-only core, in-process (not a proxy).
 
 References:
@@ -54,10 +60,11 @@ class RequestWindow:
     """The client-initiated requests currently in flight (one per server / session).
 
     A provenance *window* is open while any client request is active; a server-initiated
-    elicitation is only solicited while the window is open.
+    elicitation is only solicited while the window is open. ``active`` holds each id as
+    JSON-RPC sent it, a string or an integer.
     """
 
-    active: set[str] = field(default_factory=set)
+    active: set[str | int] = field(default_factory=set)
 
     @property
     def is_open(self) -> bool:
@@ -83,22 +90,35 @@ def new_request_window() -> RequestWindow:
     return RequestWindow()
 
 
-def begin_client_request(window: RequestWindow, request_id: str) -> None:
-    """Open the window for a client-initiated request (call at request start)."""
-    window.active.add(str(request_id))
+def begin_client_request(window: RequestWindow, request_id: str | int) -> None:
+    """Open the window for a client-initiated request (call at request start).
+
+    Raises:
+        ElicitationProvenanceError: ``request_id`` is not a string or an integer.
+    """
+    window.active.add(_checked_request_id(request_id))
 
 
-def end_client_request(window: RequestWindow, request_id: str) -> None:
-    """Close a client-initiated request (call at request end)."""
-    window.active.discard(str(request_id))
+def end_client_request(window: RequestWindow, request_id: str | int) -> None:
+    """Close a client-initiated request (call at request end).
+
+    Raises:
+        ElicitationProvenanceError: ``request_id`` is not a string or an integer. ``True``
+            must not close request ``1``, which ``set.discard`` would do.
+    """
+    window.active.discard(_checked_request_id(request_id))
 
 
 @contextmanager
-def client_request_window(window: RequestWindow, request_id: str) -> Iterator[None]:
+def client_request_window(window: RequestWindow, request_id: str | int) -> Iterator[None]:
     """Context manager marking an active client-initiated request window.
 
     Wrap the handling of a client request in this (alongside ``@observe``); server
     elicitations raised inside the ``with`` are solicited, those raised outside are not.
+
+    Raises:
+        ElicitationProvenanceError: ``request_id`` is not a string or an integer; the body
+            does not run.
     """
     begin_client_request(window, request_id)
     try:
@@ -107,8 +127,32 @@ def client_request_window(window: RequestWindow, request_id: str) -> Iterator[No
         end_client_request(window, request_id)
 
 
+def _checked_request_id(request_id: object, *, server_origin: str = "") -> str | int:
+    """``request_id`` if MCP allows it as an id: a string or an integer.
+
+    A bool or a float is refused because Python hashes ``True`` like ``1`` and ``7.0`` like
+    ``7``, so either would land in that integer's slot in the window's set. MCP forbids a
+    null id, and any other type is not an id at all.
+    """
+    if isinstance(request_id, str | int) and not isinstance(request_id, bool):
+        return request_id
+    kind = type(request_id).__name__
+    raise _refuse(
+        "invalid_request_id",
+        f"a JSON-RPC request id is a string or an integer, not {kind}",
+        server_origin=server_origin,
+        request_id=None,
+        request_id_type=kind,
+    )
+
+
 def _refuse(
-    reason: str, message: str, *, server_origin: str, request_id: str | None
+    reason: str,
+    message: str,
+    *,
+    server_origin: str,
+    request_id: str | int | None,
+    request_id_type: str | None = None,
 ) -> ElicitationProvenanceError:
     audit: dict[str, Any] = {
         "event": "mcp.elicitation_provenance.refuse",
@@ -116,6 +160,9 @@ def _refuse(
         "server_origin": server_origin,
         "request_id": request_id,
     }
+    if request_id_type is not None:
+        # A refused id is reported by its type: it may have no safe repr or JSON form.
+        audit["request_id_type"] = request_id_type
     track_event(_DECISION_EVENT, dict(audit))
     logger.warning(
         "elicitation_provenance_blocked",
@@ -129,35 +176,38 @@ def _refuse(
 def check_elicitation_solicited(
     window: RequestWindow,
     *,
-    request_id: str | None = None,
+    request_id: str | int | None = None,
     server_origin: str = "",
 ) -> None:
     """Refuse a server-initiated elicitation that is not within an active client request.
 
     Args:
         window: The per-server request window.
-        request_id: If given, the client request the elicitation claims to belong to —
-            it must be one currently in flight.
+        request_id: If given, the client request the elicitation claims to belong to, as
+            JSON-RPC sent it: it must be one currently in flight, of the same type.
         server_origin: A short id of the originating server, for the audit record.
 
     Raises:
-        ElicitationProvenanceError: if no client request is in flight (unsolicited), or
-            the referenced ``request_id`` is not an active window (foreign). The error
-            carries a structured ``audit_event``.
+        ElicitationProvenanceError: if ``request_id`` is not a string or an integer, no
+            client request is in flight (unsolicited), or the referenced ``request_id`` is
+            not an active window (foreign). The error carries a structured ``audit_event``.
     """
+    claimed = None
+    if request_id is not None:
+        claimed = _checked_request_id(request_id, server_origin=server_origin)
     if not window.is_open:
         raise _refuse(
             "unsolicited_elicitation",
             "server-initiated elicitation raised with no active client request — "
             "unsolicited server→client requests are invalid (SEP-2260)",
             server_origin=server_origin,
-            request_id=request_id,
+            request_id=claimed,
         )
-    if request_id is not None and str(request_id) not in window.active:
+    if claimed is not None and claimed not in window.active:
         raise _refuse(
             "foreign_request_window",
-            f"server-initiated elicitation references request {request_id!r} that is not "
+            f"server-initiated elicitation references request {claimed!r} that is not "
             "in flight — refusing (SEP-2260)",
             server_origin=server_origin,
-            request_id=request_id,
+            request_id=claimed,
         )

@@ -59,7 +59,9 @@ What CI runs — `ci.yml` jobs, on PRs and pushes to `main`:
 
 `publish.yml` (on a published release) adds `check_benchmark_freshness.py --release`,
 `check_registry_parity.py --distance-only`, a GitHub-description drift check and
-`twine check`. The upload authenticates through PyPI Trusted Publishing (OIDC), so the job
+`twine check`. The freshness gate age-checks every marker, `last verified` included, though its
+failure message offers that marker as a way out for a row that cannot be re-run: plan a release
+around a fresh run. The upload authenticates through PyPI Trusted Publishing (OIDC), so the job
 needs `id-token: write` and there is no PyPI token to add back. Its gate steps run before
 it installs anything (it later installs only `build` and `twine`), so any script it runs
 must stay stdlib-only. `cve-watcher.yml` polls NVD on a schedule, diffs against the ledger
@@ -120,6 +122,11 @@ absolute-link rule is an authoring rule.
   (`tests/test_readme_shape.py`, #180: line and word ceilings, code in the first screenful,
   no table of contents), and its framework and version-pin claims are gated too; long-form
   material belongs in `docs/`.
+- **`refresh_malware_blast.py`** is maintainer-run and uses the network (GitHub's
+  `/advisories?type=malware` for npm and pip, `GITHUB_TOKEN` for the authenticated rate
+  limit). No workflow or test runs it. The full feed is over 100,000 advisories, so the
+  shipped snapshot is a window by publish date (`--since`); its `published_since` field
+  says which. Not by update date: GitHub re-touches old malware advisories in bulk.
 - **`smoke_*.py`** build the wheel, install it into a throwaway `.smoke-<name>-venv/`
   (network needed) and drive one guard or preset through the installed package (in
   `smoke_explain.py`, the `airlock-explain` console script), which an editable-tree unit

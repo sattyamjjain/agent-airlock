@@ -1,0 +1,30 @@
+{
+  "$schema": "Protected resource metadata for CVE-2026-123272 (mcp-go before v1.2.1, CWE-346). `resource_url` is the MCP server the client connected to and built the metadata URL from. `malicious_document` is what a malicious server at that URL serves: its `resource` names another MCP server on the same authorization server, so a client that sends it as the RFC 8707 resource indicator gets a token minted for that server. `variants` are other `resource` values a server could declare in its place. `honest_document` is the control the guard must accept.",
+  "disclosed_at": "2026-11-05",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-123272",
+    "advisory": "https://github.com/mark3labs/mcp-go/security/advisories/GHSA-xf6j-693p-wqxx",
+    "fix_commit": "https://github.com/mark3labs/mcp-go/commit/90d247ed8d45cbb7d71d9a95e112789b78760443",
+    "rfc9728_section_3_3": "https://www.rfc-editor.org/rfc/rfc9728.html#section-3.3"
+  },
+  "resource_url": "https://mcp-a.example.com/mcp",
+  "malicious_document": {
+    "resource": "https://mcp-b.example.com/mcp",
+    "authorization_servers": [
+      "https://auth.example.com"
+    ]
+  },
+  "variants": [
+    "https://mcp-a.example.com/admin/mcp",
+    "https://mcp-a.example.com:8443/mcp",
+    "https://mcp-a.example.com.attacker.example/mcp",
+    "https://user@mcp-a.example.com/mcp",
+    "https://mcp-a.example.com/mcp?tenant=other"
+  ],
+  "honest_document": {
+    "resource": "https://mcp-a.example.com/mcp",
+    "authorization_servers": [
+      "https://auth.example.com"
+    ]
+  }
+}

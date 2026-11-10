@@ -60,7 +60,8 @@ src/agent_airlock/
 │                      (2.7, 2.75, 2.76, 3, 5)
 ├── _url_paths.py      `normalize_url_path`: resolves `.` / `..` segments (and `%2e`
 │                      spellings, `;` path parameters when asked); imports nothing, shared
-│                      by `network.py` (step 5) and `mcp_spec/oidc_publish_window_guard.py`
+│                      by `network.py` (step 5), `mcp_spec/oidc_publish_window_guard.py` and
+│                      `mcp_spec/oauth.py`
 │
 ├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
@@ -373,7 +374,10 @@ kill switch, the startup-hook check and the budgets are operational controls.
   lists the kept June pricing loader and one preset's provenance path). Superseded
   snapshots stay in `data/`: the 2026-06 pricing one with a loader, the 2026-09 one without,
   and the 2026-05-11 OIDC blast list, superseded in 0.10.28 by a snapshot copied from
-  GHSA-g7cv-rxg3-hmpx.
+  GHSA-g7cv-rxg3-hmpx. The malware advisory snapshot is the exception: `scripts/refresh_malware_blast.py`
+  writes `data/malware_blast_<YYYY_MM_DD>.json` and `load_malware_blast_snapshot` reads the
+  newest by name, so a refresh adds a file and repoints nothing; delete the previous one
+  only after the new one has shipped.
   `cost_tracking.DEFAULT_PRICING` is the undated in-process fallback, so a price refresh
   edits it too; `tests/test_budget_pricing_0_10_24.py` fails when it lacks a model the
   current snapshot prices.

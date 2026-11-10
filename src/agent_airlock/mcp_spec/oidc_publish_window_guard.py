@@ -24,6 +24,14 @@ loadable via :func:`load_blast_list_from_2026_05_11`, which is named for the
 incident, not the snapshot. Operators regenerate when new entries are
 confirmed (see ``docs/policies/npm-oidc-publish-window-guard.md``).
 
+A second source (v0.10.32): GitHub's and OSV's malware advisories, read offline by
+:mod:`agent_airlock.mcp_spec.malware_advisory_feed` from a dated snapshot
+(``data/malware_blast_<YYYY_MM_DD>.json``, refreshed by
+``scripts/refresh_malware_blast.py``). An advisory that names exact versions adds pairs; one
+that calls every version malicious adds a whole package, passed as ``blocked_packages``, and
+a package argument or tarball URL naming it is refused whatever the version, or with none.
+The preset unions both sources; a guard built directly gets only what it is given.
+
 Why structural (no SDK import)
 ------------------------------
 Pure-data preset: the blast list is a frozenset of
@@ -72,8 +80,15 @@ Honest scope
   three PyPI rows appear in neither source it cited. The current snapshot
   is copied from the GitHub advisory's affected-version table.
 - The wider Mini Shai-Hulud wave (Mistral, UiPath and other npm scopes,
-  per Aikido) is not in the list; pass those pairs as a caller-supplied
-  ``blast_list`` from their own advisories.
+  per Aikido) is not in the incident list; the malware advisory snapshot carries what
+  GitHub flagged as malware up to its date, and nothing published after it.
+- A whole-package entry has no version to narrow it, so it is matched in one ecosystem: the
+  one the argument's syntax names (a pip specifier such as ``==``, ``>=`` or ``[extra]`` is
+  PyPI; ``@scope/name``, ``name@version``, an ``npm:`` alias or a tarball URL is npm), else
+  the one ``installs_from`` names. npm malware squats real PyPI names (``pydantic``,
+  ``typing-extensions``, ``uvicorn`` and hundreds more), so a guard that read a bare name in
+  both would refuse them for a pip tool; ``installs_from`` is therefore required with
+  ``blocked_packages``. Pairs still match in either ecosystem, as they always have.
 
 Primary sources
 ---------------
@@ -181,6 +196,48 @@ def _spec_url(spec: str) -> str | None:
     return spec[match.start() :].strip() if match is not None else None
 
 
+#: Characters that end a PyPI project name in a PEP 508 requirement: a version specifier,
+#: an extra, a marker or a direct reference.
+_PEP508_NAME_END_RE = re.compile(r"[\s<>=!~;\[(,@]")
+
+#: ``_kind`` spellings of PyPI; anything else is read as npm, as ``blast_list`` reads it.
+_PYPI_SPELLINGS = frozenset({"pypi", "pip"})
+
+
+def _kind(ecosystem: str) -> str:
+    """``pypi`` or ``npm``: the index a whole-package entry or an advisory id is kept under."""
+    return "pypi" if ecosystem.strip().lower() in _PYPI_SPELLINGS else "npm"
+
+
+def _spec_kinds(spec: str) -> tuple[str, ...] | None:
+    """The ecosystem a package spec's own syntax names, or None for a bare name."""
+    text = spec.strip()
+    lowered = text.lower()
+    if text.startswith("@") or "@npm:" in lowered or lowered.startswith("npm:"):
+        return ("npm",)
+    if any(token in text for token in ("==", "~=", "!=", ">=", "<=", "[", ";", " @ ")):
+        return ("pypi",)
+    if re.search(r"[^@\s]@[^@\s]", text):
+        return ("npm",)  # name@version: pip spells a pin "==", and a URL " @ "
+    return None
+
+
+#: ``installs_from`` values, and the ecosystems a bare name is then read in.
+_INSTALLS_FROM: Mapping[str, tuple[str, ...]] = {
+    "npm": ("npm",),
+    "pypi": ("pypi",),
+    "pip": ("pypi",),
+    "any": ("npm", "pypi"),
+}
+
+
+def _spec_names(spec: str) -> list[str]:
+    """The package names a spec can install: as npm splits it, and as PEP 508 does."""
+    npm_name, _ = _split_spec(spec)
+    pep508_name = _PEP508_NAME_END_RE.split(spec.strip(), maxsplit=1)[0]
+    return [name for name in dict.fromkeys((npm_name, pep508_name)) if name]
+
+
 def _version_target(name: str, version: str) -> tuple[str, str]:
     """The package and version a ``version`` field installs, beside package ``name``.
 
@@ -231,6 +288,14 @@ def _texts(value: object) -> list[str] | None:
             return None
         out.append(item)
     return out
+
+
+def _is_str_tuple(value: object, length: int) -> bool:
+    return (
+        isinstance(value, tuple)
+        and len(value) == length
+        and all(isinstance(part, str) for part in value)
+    )
 
 
 class OIDCPublishWindowVerdict(str, enum.Enum):
@@ -315,16 +380,34 @@ class OIDCPublishWindowGuard:
             the gate denies. Empty (default) allows everything — the
             factory in :mod:`agent_airlock.policy_presets` is the
             recommended entrypoint that loads the curated fixture.
+        blocked_packages: Frozenset of ``(ecosystem, name)`` tuples whose every version is
+            denied, and a request naming no version too (malware advisories that call every
+            release malicious). Empty by default, which leaves the guard as it was.
+        advisories: ``(ecosystem, name)`` to the advisory id a deny message names, as
+            :class:`~agent_airlock.mcp_spec.malware_advisory_feed.MalwareBlastList` keeps it.
+        installs_from: The registry the guarded tool installs from: ``"npm"``, ``"pypi"``
+            or ``"any"``. Required with ``blocked_packages``. A bare name (``{"package":
+            "x", "version": "1.0"}``) says nothing about its ecosystem, and npm malware
+            squats real PyPI names (``pydantic`` and ``typing-extensions`` among them), so
+            only the operator can say which list a bare name is checked against. A spec whose
+            syntax names an ecosystem (``x==1.0`` is PyPI, ``@scope/x`` or ``x@1.0`` npm, a
+            tarball URL npm) is read there whatever this says. Pairs are not affected.
 
     Raises:
-        TypeError: ``blast_list`` is not a frozenset, or any entry is
-            not a 3-tuple of strings.
+        TypeError: ``blast_list`` or ``blocked_packages`` is not a frozenset, an entry is
+            not a tuple of strings of the right length, or ``advisories`` is not a mapping
+            from ``(ecosystem, name)`` to a string.
+        ValueError: ``blocked_packages`` is given without ``installs_from``, or
+            ``installs_from`` is not one of its values.
     """
 
     def __init__(
         self,
         *,
         blast_list: frozenset[tuple[str, str, str]] = frozenset(),
+        blocked_packages: frozenset[tuple[str, str]] = frozenset(),
+        advisories: Mapping[tuple[str, str], str] | None = None,
+        installs_from: str | None = None,
     ) -> None:
         if not isinstance(blast_list, frozenset):
             raise TypeError(
@@ -353,6 +436,43 @@ class OIDCPublishWindowGuard:
                 name,
                 version,
             )
+        if not isinstance(blocked_packages, frozenset):
+            raise TypeError(
+                "blocked_packages must be a frozenset[tuple[str,str]]; "
+                f"got {type(blocked_packages).__name__}"
+            )
+        # (kind, normalised name) -> the entry as listed.
+        self._blocked: dict[tuple[str, str], tuple[str, str]] = {}
+        for package in blocked_packages:
+            if not _is_str_tuple(package, 2):
+                raise TypeError(
+                    f"blocked_packages entries must be 2-tuples of str (ecosystem, name); "
+                    f"got {package!r}"
+                )
+            kind = _kind(package[0])
+            self._blocked[(kind, _normalise_name(kind, package[1]))] = package
+        if advisories is not None and not isinstance(advisories, Mapping):
+            raise TypeError(f"advisories must be a mapping; got {type(advisories).__name__}")
+        if installs_from is not None and (
+            not isinstance(installs_from, str) or installs_from.lower() not in _INSTALLS_FROM
+        ):
+            raise ValueError(f"installs_from must be 'npm', 'pypi' or 'any'; got {installs_from!r}")
+        if blocked_packages and installs_from is None:
+            raise ValueError(
+                "blocked_packages needs installs_from: 'npm', 'pypi' or 'any'. A bare package "
+                "name does not say which registry it is for, and npm malware squats real PyPI "
+                "names, so the guard cannot choose for you"
+            )
+        self._bare_kinds = _INSTALLS_FROM[installs_from.lower()] if installs_from else ()
+        self._advisories: dict[tuple[str, str], str] = {}
+        for key, advisory in (advisories or {}).items():
+            if not _is_str_tuple(key, 2) or not isinstance(advisory, str):
+                raise TypeError(
+                    "advisories must map (ecosystem, name) 2-tuples of str to a str; "
+                    f"got {key!r}: {advisory!r}"
+                )
+            kind = _kind(key[0])
+            self._advisories[(kind, _normalise_name(kind, key[1]))] = advisory
 
     def evaluate(self, args: Mapping[str, Any] | None) -> OIDCPublishWindowDecision:
         """Decide whether the call args target a blast-list entry.
@@ -398,7 +518,19 @@ class OIDCPublishWindowGuard:
                 target, target_version = _version_target(name, version)
                 entry = self._lookup(target, target_version)
                 if entry is not None:
-                    return self._deny_pair(entry, spec, version)
+                    return self._deny_pair(entry, spec, version, self._advisory_for(entry))
+            # 1b) A package every version of which is malicious, whatever version is asked.
+            requested = embedded or (versions[0] if versions else None)
+            for candidate in _spec_names(spec):
+                blocked = self._blocked_entry(candidate, _spec_kinds(spec) or self._bare_kinds)
+                if blocked is not None:
+                    return self._deny_package(blocked, spec, requested, "package")
+            for version in versions:
+                target, _ = _version_target(name, version)
+                if target != name:
+                    blocked = self._blocked_entry(target, ("npm",))
+                    if blocked is not None:
+                        return self._deny_package(blocked, spec, version, "package")
 
         # 2) Registry tarball URL pointing at a blast-list pair.
         urls = _texts(args.get("url"))
@@ -419,6 +551,19 @@ class OIDCPublishWindowGuard:
             if entry is not None:
                 return entry
         return None
+
+    def _blocked_entry(self, name: str, kinds: tuple[str, ...]) -> tuple[str, str] | None:
+        """The whole-package entry ``name`` spells in one of ``kinds``, or None."""
+        for kind in kinds:
+            entry = self._blocked.get((kind, _normalise_name(kind, name)))
+            if entry is not None:
+                return entry
+        return None
+
+    def _advisory_for(self, entry: tuple[str, ...]) -> str | None:
+        """The advisory id kept for an entry's ``(ecosystem, name)``, or None."""
+        kind = _kind(entry[0])
+        return self._advisories.get((kind, _normalise_name(kind, entry[1])))
 
     def _inspect_tarball_url(self, url: str) -> OIDCPublishWindowDecision | None:
         """Return a deny decision if the URL targets a blast-list pair.
@@ -449,6 +594,7 @@ class OIDCPublishWindowGuard:
         pkg = match.group("pkg")
         listed = self._index.get(("npm", _normalise_name("npm", pkg)), {})
         tail = match.group("tail").lower()
+        blocked = self._blocked_entry(pkg, ("npm",))
         for entry in listed.values():
             ecosystem, name, blast_version = entry
             if not tail.endswith(f"-{blast_version.lower()}.tgz"):
@@ -458,19 +604,21 @@ class OIDCPublishWindowGuard:
                 package=name,
                 version=blast_version,
                 url=url,
-                incident="tanstack-oidc-blast-2026-05-11",
+                incident=self._advisory_for(entry) or "tanstack-oidc-blast-2026-05-11",
             )
             return OIDCPublishWindowDecision(
                 allowed=False,
                 verdict=OIDCPublishWindowVerdict.DENY_BLAST_LIST_TARBALL_URL,
                 detail=(
-                    f"tarball URL targets {name}@{blast_version}, which is on the "
-                    "tanstack-oidc-blast-2026-05-11 blast list"
+                    f"tarball URL targets {name}@{blast_version}, which is on "
+                    f"{self._list_name(self._advisory_for(entry))}"
                 ),
                 matched_ecosystem=ecosystem,
                 matched_package=name,
                 matched_version=blast_version,
             )
+        if blocked is not None:
+            return self._deny_package(blocked, url, None, "tarball URL")
         return None
 
     @staticmethod
@@ -493,8 +641,15 @@ class OIDCPublishWindowGuard:
         )
 
     @staticmethod
+    def _list_name(advisory: str | None) -> str:
+        """What a deny message calls the list: the advisory when known, else the incident."""
+        if advisory:
+            return f"the malware blast list ({advisory})"
+        return "the tanstack-oidc-blast-2026-05-11 blast list"
+
+    @classmethod
     def _deny_pair(
-        entry: tuple[str, str, str], spec: str, version: str
+        cls, entry: tuple[str, str, str], spec: str, version: str, advisory: str | None = None
     ) -> OIDCPublishWindowDecision:
         ecosystem, name, blast_version = entry
         logger.warning(
@@ -504,18 +659,50 @@ class OIDCPublishWindowGuard:
             version=blast_version,
             requested_package=spec,
             requested_version=version,
-            incident="tanstack-oidc-blast-2026-05-11",
+            incident=advisory or "tanstack-oidc-blast-2026-05-11",
         )
         return OIDCPublishWindowDecision(
             allowed=False,
             verdict=OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR,
             detail=(
                 f"package {name!r} version {blast_version!r} (requested as {spec!r} / "
-                f"{version!r}) is on the tanstack-oidc-blast-2026-05-11 blast list"
+                f"{version!r}) is on {cls._list_name(advisory)}"
             ),
             matched_ecosystem=ecosystem,
             matched_package=name,
             matched_version=blast_version,
+        )
+
+    def _deny_package(
+        self, entry: tuple[str, str], requested: str, version: str | None, what: str
+    ) -> OIDCPublishWindowDecision:
+        """Refuse a package every version of which is malicious; ``matched_version`` is None."""
+        ecosystem, name = entry
+        advisory = self._advisory_for(entry)
+        logger.warning(
+            "oidc_publish_window_blocked_package",
+            ecosystem=ecosystem,
+            package=name,
+            requested=requested,
+            requested_version=version,
+            incident=advisory or "malware-blast-list",
+        )
+        asked = f" version {version!r}" if version else " with no version"
+        verdict = (
+            OIDCPublishWindowVerdict.DENY_BLAST_LIST_TARBALL_URL
+            if what == "tarball URL"
+            else OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR
+        )
+        return OIDCPublishWindowDecision(
+            allowed=False,
+            verdict=verdict,
+            detail=(
+                f"{what} {requested!r} asks for {ecosystem} package {name!r}{asked}; every "
+                f"version of it is on {self._list_name(advisory)}"
+            ),
+            matched_ecosystem=ecosystem,
+            matched_package=name,
+            matched_version=None,
         )
 
     @staticmethod

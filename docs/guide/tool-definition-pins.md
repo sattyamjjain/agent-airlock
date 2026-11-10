@@ -78,8 +78,41 @@ tools = await list_tools_pinned(session, guard, on_drift="filter")  # keeps the 
 pins do not admit are dropped, and a listing that cannot be read raises anyway. With the
 guard's `enforce` off, the listing comes back unchanged.
 
-A paginated server lists one page per call. Each page is checked on its own, so a tool
-listed on two pages is not caught as a duplicate.
+A paginated server lists one page per call, and `list_tools_pinned` checks each page on its
+own. A tool listed on two pages reads as clean twice, and `missing` counts the tools on the
+other pages. For a server that paginates, use `list_all_tools_pinned`:
+
+```python
+from agent_airlock.mcp_spec.tool_definition_pin_guard import list_all_tools_pinned
+
+tools = await list_all_tools_pinned(session, guard)  # reads every page, judges them once
+tools = await list_all_tools_pinned(session, guard, on_drift="filter", max_pages=20)
+```
+
+It follows each cursor, collects the tools and runs `admit_tools_list` once on all of them,
+so a tool on two pages is a duplicate, and `missing` covers the whole listing. The result
+has the first page's shape with no cursor left on it. With `on_drift="filter"`, every copy
+of a duplicate is dropped.
+
+These raise `ToolListingDriftError` in every mode, with `enforce` off too, because there is
+no whole listing to judge: a cursor seen twice, a cursor that is not a string, a page that
+is not a listing, more than `max_pages` pages (100 by default, and the page past it is never
+requested), and a session that cannot follow a cursor. An empty cursor ends the listing;
+nothing past it is read, so nothing past it is admitted.
+
+The SDKs differ, and it handles each of them:
+
+| Session | How it pages | Comes back as |
+| --- | --- | --- |
+| `ClientSession`, mcp 2.x | `params=`, result has `next_cursor` | `ListToolsResult` |
+| `ClientSession`, mcp 1.x | `params=`, result has `nextCursor` | `ListToolsResult` |
+| `mcp.Client`, mcp 2.x | `cursor=`, result has `next_cursor` | `ListToolsResult` |
+| FastMCP `Client` 3 and 4 | `list_tools_mcp(cursor=...)` | a list, as `list_tools()` gives |
+
+FastMCP's own `list_tools()` flattens the pages, so it is not used here: versions 3 and 4 stop
+at a repeated cursor with only a warning, and version 2 returns page 1 and drops the cursor.
+Version 2's page call takes no cursor either, so on a server that pages it raises. Pass
+`client.session` instead.
 
 ## On a FastMCP server
 

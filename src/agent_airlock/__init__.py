@@ -250,6 +250,7 @@ from .integrations.anthropic_claude_agent_sdk import (
 from .integrations.claude_auto_memory import (
     AutoMemoryCrossTenantError,
     AutoMemoryQuotaError,
+    AutoMemoryTenantIdError,
     MemoryChainTooDeepError,
     MemoryProvenanceError,
 )
@@ -389,6 +390,13 @@ from .mcp_spec.loopback_spawn_guard import (
     LoopbackSessionSpawnGuard,
     LoopbackSpawnDecision,
     LoopbackSpawnVerdict,
+)
+
+# V0.10.32 — malware advisories (GitHub, OSV) read offline into the publish-window guard.
+from .mcp_spec.malware_advisory_feed import (
+    MalwareBlastList,
+    load_blast_list_from_advisories,
+    load_malware_blast_snapshot,
 )
 from .mcp_spec.manifest_only_mode import (
     ManifestNotRegisteredError,
@@ -782,7 +790,7 @@ from .vaccine import (
 )
 from .validator import GhostArgumentError
 
-__version__ = "0.10.31"
+__version__ = "0.10.32"
 
 __all__ = [
     # Core
@@ -936,6 +944,10 @@ __all__ = [
     "OIDCPublishWindowGuard",
     "OIDCPublishWindowVerdict",
     "load_blast_list_from_2026_05_11",
+    # V0.10.32 — malware advisories read offline into the publish-window guard
+    "MalwareBlastList",
+    "load_blast_list_from_advisories",
+    "load_malware_blast_snapshot",
     # V0.7.6 — MCP STDIO command-injection guard (HelpNetSecurity 2026-05-05)
     "DEFAULT_SHELL_METACHARS",
     "StdioCommandInjectionDecision",
@@ -1058,6 +1070,7 @@ __all__ = [
     "sign_identity",
     "verify_identity",
     "AutoMemoryQuotaError",
+    "AutoMemoryTenantIdError",
     "HighValueActionBlocked",
     "LANUnauthMCPServerBlocked",
     "MCPCommandMutationDetected",

@@ -41,6 +41,18 @@ check compared the body with itself while the edge routed the real header. The f
 form (headers merged into the top level, no ``headers`` mapping) still works; two
 spellings there that disagree are refused too.
 
+``Mcp-Name`` can arrive encoded. A name a header cannot carry plainly travels as
+``=?base64?<payload>?=``, the spec's "Value Encoding" section requires a server to decode it
+before comparing it with the body, and a client must also encode a plain value shaped like
+that, so any value of that shape is read as encoded. The payload must be base64, canonical
+(re-encoding gives the same text) and strict UTF-8, or the request is refused as
+``malformed_name_header``. So is a plain value a header cannot carry: anything but visible
+ASCII, space and tab, or whitespace at either end (the same section, and "a header value
+contains invalid characters" among its validation failures). The audit event keeps the raw
+value in ``header_name`` beside the decoded one in ``header_name_decoded``. ``Mcp-Method``
+has no encoded form. Until 0.10.32 the raw value was compared, so a valid client was refused
+and a malformed one got the wrong reason (``name_mismatch``).
+
 References:
     - MCP 2026-07-28 specification (final).
     - SEP-2243 — ``Mcp-Method`` / ``Mcp-Name`` routing headers + header/body
@@ -49,6 +61,7 @@ References:
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping
 from typing import Any
 
@@ -71,6 +84,10 @@ NAME_HEADER = "Mcp-Name"
 #: ``Mcp-Method`` but no ``Mcp-Name``, so requiring the name header on them is
 #: stricter than spec.
 NAME_BEARING_METHODS = frozenset({"tools/call", "resources/read", "prompts/get"})
+
+#: The markers of an encoded ``Mcp-Name``, exactly as the spec spells them (case-sensitive).
+_ENCODED_PREFIX = "=?base64?"
+_ENCODED_SUFFIX = "?="
 
 
 class HeaderBodyMismatchError(ValueError):
@@ -207,6 +224,61 @@ def _header_value(
     return value
 
 
+def _decode_encoded_name(value: str, name: str) -> str:
+    """The name inside an ``=?base64?<payload>?=`` value.
+
+    Raises:
+        _Refusal: ``malformed_name_header`` when the payload is not base64, is not canonical
+            or is not strict UTF-8. A value too short to hold both markers has no payload.
+    """
+    form = f"{name!r} is in the =?base64?...?= form, but its payload"
+    if len(value) < len(_ENCODED_PREFIX) + len(_ENCODED_SUFFIX):
+        raise _Refusal("malformed_name_header", f"{form} is missing (SEP-2243)")
+    payload = value[len(_ENCODED_PREFIX) : -len(_ENCODED_SUFFIX)]
+    try:
+        # Not only binascii.Error: a non-ASCII str raises plain ValueError (python-sdk #3817).
+        decoded = base64.b64decode(payload, validate=True)
+    except ValueError:
+        raise _Refusal("malformed_name_header", f"{form} is not base64 (SEP-2243)") from None
+    if base64.b64encode(decoded).decode("ascii") != payload:
+        raise _Refusal("malformed_name_header", f"{form} is not canonical base64 (SEP-2243)")
+    try:
+        return decoded.decode("utf-8")
+    except UnicodeDecodeError:
+        raise _Refusal("malformed_name_header", f"{form} is not UTF-8 (SEP-2243)") from None
+
+
+def _decode_name_header(value: Any, name: str = NAME_HEADER) -> Any:
+    """The operation name ``Mcp-Name`` carries, for comparing with the body.
+
+    A value in the sentinel form (it starts with ``=?base64?`` and ends with ``?=``) is
+    decoded. Any other value is returned as it is, the very object passed in, a value that is
+    not a string included: comparing it refuses it.
+
+    Raises:
+        _Refusal: ``malformed_name_header`` when the sentinel form does not decode, or when a
+            plain value holds a character a header cannot carry or whitespace at either end,
+            which a client must have encoded.
+    """
+    if not isinstance(value, str):
+        return value
+    if value.startswith(_ENCODED_PREFIX) and value.endswith(_ENCODED_SUFFIX):
+        return _decode_encoded_name(value, name)
+    if not all(char == "\t" or " " <= char <= "~" for char in value):
+        raise _Refusal(
+            "malformed_name_header",
+            f"{name!r} holds a character a plain header value cannot carry, so it must use "
+            "the =?base64?...?= form (SEP-2243)",
+        )
+    if value != value.strip(" \t"):
+        raise _Refusal(
+            "malformed_name_header",
+            f"{name!r} has whitespace at one end, so it must use the =?base64?...?= form "
+            "(SEP-2243)",
+        )
+    return value
+
+
 def _body_method(request: Mapping[str, Any]) -> Any:
     """The JSON-RPC method the body actually invokes."""
     return request.get("method")
@@ -264,8 +336,13 @@ def _reject(
     body_method: Any,
     header_name: Any,
     body_name: Any,
+    header_name_decoded: Any = None,
 ) -> HeaderBodyMismatchError:
-    """Build the structured-audit-carrying rejection error."""
+    """Build the structured-audit-carrying rejection error.
+
+    ``header_name`` is the raw value; ``header_name_decoded`` is what it decodes to, the same
+    value when it is plain, and None when it is absent, malformed or not reached.
+    """
     audit_event = {
         "event": "mcp.header_integrity.reject",
         "spec": "SEP-2243",
@@ -273,6 +350,7 @@ def _reject(
         "header_method": header_method,
         "body_method": body_method,
         "header_name": header_name,
+        "header_name_decoded": header_name_decoded,
         "body_name": body_name,
     }
     return HeaderBodyMismatchError(message, audit_event)
@@ -280,13 +358,13 @@ def _reject(
 
 def _read_request(
     request: Any, *, method_header: str, name_header: str
-) -> tuple[Any, Any, Any, Any]:
-    """``(header_method, body_method, header_name, body_name)`` of ``request``.
+) -> tuple[Any, Any, Any, Any, Any]:
+    """``(header_method, body_method, header_name, header_name_decoded, body_name)``.
 
     Raises:
         HeaderBodyMismatchError: The request, its ``headers`` or a name-bearing method's
-            ``params`` cannot be read, or a routing header is spelled twice (or as a body
-            member) with values that disagree.
+            ``params`` cannot be read, a routing header is spelled twice (or as a body
+            member) with values that disagree, or the name header is malformed.
     """
     if not isinstance(request, Mapping):
         raise _reject(
@@ -301,6 +379,7 @@ def _read_request(
     body_method = _body_method(request)
     header_method: Any = None
     header_name: Any = None
+    decoded_name: Any = None
     try:
         top_pairs = list(request.items())
         raw_headers = request.get("headers")
@@ -308,8 +387,11 @@ def _read_request(
         header_method = _header_value(
             top_pairs, header_pairs, method_header, "conflicting_method_header"
         )
+        # Spellings are compared raw above: a client has no reason to send one name two ways.
         header_name = _header_value(top_pairs, header_pairs, name_header, "conflicting_name_header")
-        return header_method, body_method, header_name, _body_name(request, body_method)
+        decoded_name = _decode_name_header(header_name, name_header)
+        body_name = _body_name(request, body_method)
+        return header_method, body_method, header_name, decoded_name, body_name
     except _Refusal as refusal:
         if refusal.reason == "conflicting_method_header":
             header_method = refusal.header_value
@@ -321,6 +403,7 @@ def _read_request(
             header_method=header_method,
             body_method=body_method,
             header_name=header_name,
+            header_name_decoded=decoded_name,
             body_name=None,
         )
         if refusal.conflicting_values is not None:
@@ -345,14 +428,19 @@ def validate_header_body_integrity(
         method_header: Header carrying the JSON-RPC method (default ``Mcp-Method``).
         name_header: Header carrying the operation name (default ``Mcp-Name``).
 
+    An encoded ``Mcp-Name`` (``=?base64?<payload>?=``) is decoded before it is compared.
+
     Raises:
         HeaderBodyMismatchError: If a required routing header is absent/empty, if a
             header disagrees with the corresponding body field, if a header is spelled
-            twice (or as a body member) with values that disagree, or if the request,
-            its ``headers`` or a name-bearing method's ``params`` cannot be read. The
-            raised error carries a structured ``audit_event`` mapping.
+            twice (or as a body member) with values that disagree, if the name header is
+            malformed (``malformed_name_header``: an encoded form that does not decode, or
+            a plain value a header cannot carry), or if the request, its ``headers`` or a
+            name-bearing method's ``params`` cannot be read. The raised error carries a
+            structured ``audit_event`` mapping, with the raw name in ``header_name`` and
+            the decoded one in ``header_name_decoded``.
     """
-    header_method, body_method, header_name, body_name = _read_request(
+    header_method, body_method, header_name, decoded_name, body_name = _read_request(
         request, method_header=method_header, name_header=name_header
     )
 
@@ -369,11 +457,13 @@ def validate_header_body_integrity(
             header_method=header_method,
             body_method=body_method,
             header_name=header_name,
+            header_name_decoded=decoded_name,
             body_name=body_name,
         )
     name_required = isinstance(body_method, str) and body_method in NAME_BEARING_METHODS
+    # The decoded value: an encoded empty name (``=?base64??=``) names nothing either.
     if name_required and (
-        header_name is None or (isinstance(header_name, str) and not header_name)
+        decoded_name is None or (isinstance(decoded_name, str) and not decoded_name)
     ):
         raise _reject(
             "missing_name_header",
@@ -382,6 +472,7 @@ def validate_header_body_integrity(
             header_method=header_method,
             body_method=body_method,
             header_name=header_name,
+            header_name_decoded=decoded_name,
             body_name=body_name,
         )
 
@@ -395,14 +486,18 @@ def validate_header_body_integrity(
             header_method=header_method,
             body_method=body_method,
             header_name=header_name,
+            header_name_decoded=decoded_name,
             body_name=body_name,
         )
-    if body_name is not None and not _same(header_name, body_name):
+    if body_name is not None and not _same(decoded_name, body_name):
+        decoded = "" if decoded_name is header_name else f" (decoded {decoded_name!r})"
         raise _reject(
             "name_mismatch",
-            f"{name_header!r}={header_name!r} disagrees with body name {body_name!r} (SEP-2243)",
+            f"{name_header!r}={header_name!r}{decoded} disagrees with body name {body_name!r} "
+            "(SEP-2243)",
             header_method=header_method,
             body_method=body_method,
             header_name=header_name,
+            header_name_decoded=decoded_name,
             body_name=body_name,
         )

@@ -9,7 +9,9 @@ audit event.
 
 from __future__ import annotations
 
+import base64
 import inspect
+from typing import Any
 
 import pytest
 
@@ -150,6 +152,277 @@ class TestNameHeaderScopedToNameBearingMethods:
         }
         with pytest.raises(HeaderBodyMismatchError):
             validate_header_body_integrity(req)
+
+
+def _call_named(body_name: Any, header: Any) -> dict[str, Any]:
+    """A tools/call for ``body_name`` whose ``Mcp-Name`` header carries ``header``."""
+    return {
+        "method": "tools/call",
+        "params": {"name": body_name, "arguments": {}},
+        "headers": {"Mcp-Method": "tools/call", "Mcp-Name": header},
+    }
+
+
+def _encoded(text: str) -> str:
+    return "=?base64?" + base64.b64encode(text.encode("utf-8")).decode("ascii") + "?="
+
+
+def _refused(request: Any, **kwargs: Any) -> dict[str, Any]:
+    """The audit event of the refusal ``request`` must get."""
+    with pytest.raises(HeaderBodyMismatchError) as exc:
+        validate_header_body_integrity(request, **kwargs)
+    return exc.value.audit_event
+
+
+class TestEncodedNameHeader:
+    """The spec's "Value Encoding": a server decodes an encoded Mcp-Name, then compares it.
+
+    python-sdk #3817 opened on the malformed side of this. On 0.10.31 a valid client was
+    refused as `name_mismatch`, and a malformed one got that same reason.
+    """
+
+    def test_a_plain_name_is_still_allowed(self) -> None:
+        assert validate_header_body_integrity(_call_named("echo", "echo")) is None
+
+    def test_the_encoded_form_of_the_body_name_is_allowed(self) -> None:
+        assert validate_header_body_integrity(_call_named("echo", "=?base64?ZWNobw==?=")) is None
+
+    def test_a_non_ascii_name_is_allowed_encoded(self) -> None:
+        assert validate_header_body_integrity(_call_named("écho", _encoded("écho"))) is None
+
+    def test_the_encoded_form_of_another_name_is_a_mismatch(self) -> None:
+        event = _refused(_call_named("other", "=?base64?ZWNobw==?="))
+        assert event["reason"] == "name_mismatch"
+
+    @pytest.mark.parametrize(
+        ("name", "header"),
+        [
+            ("Hello, 世界", "=?base64?SGVsbG8sIOS4lueVjA==?="),
+            (" padded ", "=?base64?IHBhZGRlZCA=?="),
+            ("line1\nline2", "=?base64?bGluZTEKbGluZTI=?="),
+            ("=?base64?literal?=", "=?base64?PT9iYXNlNjQ/bGl0ZXJhbD89?="),
+        ],
+    )
+    def test_the_specs_encoding_examples_are_allowed(self, name: str, header: str) -> None:
+        assert validate_header_body_integrity(_call_named(name, header)) is None
+
+    @pytest.mark.parametrize(
+        ("method", "params"),
+        [
+            ("resources/read", {"uri": "file:///ré sumé.txt"}),
+            ("prompts/get", {"name": "résumé"}),
+        ],
+    )
+    def test_each_name_bearing_method_decodes(self, method: str, params: dict[str, str]) -> None:
+        name = next(iter(params.values()))
+        request = {
+            "method": method,
+            "params": params,
+            "headers": {"Mcp-Method": method, "Mcp-Name": _encoded(name)},
+        }
+        assert validate_header_body_integrity(request) is None
+
+    def test_a_plain_value_shaped_like_the_form_is_read_as_encoded(self) -> None:
+        """A client must encode such a value. On 0.10.31 this pair matched as raw strings."""
+        literal = "=?base64?ZWNobw==?="
+        event = _refused(_call_named(literal, literal))
+        assert event["reason"] == "name_mismatch"
+        assert event["header_name_decoded"] == "echo"
+
+    def test_that_literal_name_is_allowed_once_encoded(self) -> None:
+        literal = "=?base64?ZWNobw==?="
+        assert validate_header_body_integrity(_call_named(literal, _encoded(literal))) is None
+
+    @pytest.mark.parametrize(
+        "header", ["=?BASE64?ZWNobw==?=", "=?base64?ZWNobw==", "base64?ZWNobw==?="]
+    )
+    def test_markers_that_are_not_exact_are_not_the_form(self, header: str) -> None:
+        """They are case-sensitive and must appear exactly, so this is a plain value."""
+        event = _refused(_call_named("echo", header))
+        assert event["reason"] == "name_mismatch"
+        assert event["header_name_decoded"] == header
+
+    def test_comparison_is_by_code_point(self) -> None:
+        """No Unicode normalization: é composed and decomposed are different names."""
+        event = _refused(_call_named("écho", _encoded("écho")))
+        assert event["reason"] == "name_mismatch"
+
+    def test_mcp_method_has_no_encoded_form(self) -> None:
+        """Only Mcp-Name and Mcp-Param-* permit the encoding."""
+        request = _call_named("echo", "echo")
+        request["headers"]["Mcp-Method"] = _encoded("tools/call")
+        assert _refused(request)["reason"] == "method_mismatch"
+
+    def test_an_encoded_header_on_a_method_with_no_name_is_not_compared(self) -> None:
+        request = {
+            "method": "tools/list",
+            "headers": {"Mcp-Method": "tools/list", "Mcp-Name": "=?base64?ZWNobw==?="},
+        }
+        assert validate_header_body_integrity(request) is None
+
+    def test_a_flattened_request_decodes(self) -> None:
+        request = {
+            "method": "tools/call",
+            "name": "echo",
+            "Mcp-Method": "tools/call",
+            "Mcp-Name": "=?base64?ZWNobw==?=",
+        }
+        assert validate_header_body_integrity(request) is None
+
+    def test_an_asgi_pair_list_decodes(self) -> None:
+        request = {
+            "method": "tools/call",
+            "params": {"name": "echo"},
+            "headers": [(b"mcp-method", b"tools/call"), (b"mcp-name", b"=?base64?ZWNobw==?=")],
+        }
+        assert validate_header_body_integrity(request) is None
+
+    def test_a_renamed_header_decodes_too(self) -> None:
+        request = {
+            "method": "tools/call",
+            "params": {"name": "echo"},
+            "headers": {"Mcp-Method": "tools/call", "X-Op": "=?base64?ZWNobw==?="},
+        }
+        assert validate_header_body_integrity(request, name_header="X-Op") is None
+
+    def test_the_preset_decodes(self) -> None:
+        check = mcp_spec_2026_07_header_integrity_defaults()["check_request"]
+        assert check(_call_named("echo", "=?base64?ZWNobw==?=")) is None
+        with pytest.raises(HeaderBodyMismatchError) as exc:
+            check(_call_named("echo", "=?base64?\xe9?="))
+        assert exc.value.audit_event["reason"] == "malformed_name_header"
+
+
+class TestMalformedNameHeader:
+    @pytest.mark.parametrize(
+        "header",
+        [
+            pytest.param("=?base64?\xe9?=", id="non-ascii-payload"),
+            pytest.param("=?base64?ZWNobw=?=", id="short-padding"),
+            pytest.param("=?base64?ZWNobw?=", id="no-padding"),
+            pytest.param("=?base64?ZWNobw===?=", id="extra-padding"),
+            pytest.param("=?base64?ZWNobx==?=", id="non-canonical-trailing-bits"),
+            pytest.param("=?base64?/w==?=", id="bytes-not-utf8"),
+            pytest.param("=?base64?7aCA?=", id="utf8-surrogate"),
+            pytest.param("=?base64?wK8=?=", id="utf8-overlong"),
+            pytest.param("=?base64?ZWN obw==?=", id="space-in-payload"),
+            pytest.param("=?base64?ZWNo\nbw==?=", id="newline-in-payload"),
+            pytest.param("=?base64?-_-_?=", id="urlsafe-alphabet"),
+            pytest.param("=?base64?====?=", id="only-padding"),
+            pytest.param("=?base64?ZWNobw==?=?=", id="suffix-twice"),
+            pytest.param("=?base64?=", id="markers-overlap"),
+        ],
+    )
+    def test_it_is_refused_with_its_own_reason(self, header: str) -> None:
+        event = _refused(_call_named("echo", header))
+        assert event["reason"] == "malformed_name_header"
+        assert event["header_name"] == header
+        assert event["header_name_decoded"] is None
+
+    def test_a_header_given_as_bytes_gets_the_same_reason(self) -> None:
+        """#3817: on the SDK the same corrupt header is a 400 or a 500 by argument type."""
+        request = {
+            "method": "tools/call",
+            "params": {"name": "echo"},
+            "headers": [(b"mcp-method", b"tools/call"), (b"mcp-name", b"=?base64?\xe9?=")],
+        }
+        assert _refused(request)["reason"] == "malformed_name_header"
+
+    def test_it_is_refused_on_a_method_that_needs_no_name(self) -> None:
+        """An edge may route on the header whatever the method, so it is never read past."""
+        request = {
+            "method": "tools/list",
+            "headers": {"Mcp-Method": "tools/list", "Mcp-Name": "=?base64?\xe9?="},
+        }
+        assert _refused(request)["reason"] == "malformed_name_header"
+
+    @pytest.mark.parametrize("body_name", ["", "echo"])
+    def test_an_encoded_empty_name_is_a_missing_name(self, body_name: str) -> None:
+        """As a plain empty header is: equality with an empty body name must not admit it."""
+        event = _refused(_call_named(body_name, "=?base64??="))
+        assert event["reason"] == "missing_name_header"
+        assert event["header_name"] == "=?base64??="
+        assert event["header_name_decoded"] == ""
+
+    def test_two_spellings_are_compared_raw(self) -> None:
+        request = _call_named("echo", "echo")
+        request["headers"]["mcp-name"] = "=?base64?ZWNobw==?="
+        assert _refused(request)["reason"] == "conflicting_name_header"
+
+    def test_a_body_member_cannot_shadow_an_encoded_header(self) -> None:
+        request = _call_named("echo", "=?base64?ZWNobw==?=")
+        request["mcp-name"] = "echo"
+        assert _refused(request)["reason"] == "conflicting_name_header"
+
+
+class TestPlainNameHeaderValue:
+    """The spec lists a value holding invalid characters as a validation failure."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            pytest.param("écho", id="non-ascii"),
+            pytest.param("日本語", id="non-latin"),
+            pytest.param("echo\x00", id="nul"),
+            pytest.param("echo\nX-Other: 1", id="newline"),
+            pytest.param("echo\x7f", id="del"),
+            pytest.param(" echo", id="leading-space"),
+            pytest.param("echo ", id="trailing-space"),
+            pytest.param("\techo", id="leading-tab"),
+        ],
+    )
+    def test_a_value_a_client_must_encode_is_refused_even_when_it_matches(self, name: str) -> None:
+        event = _refused(_call_named(name, name))
+        assert event["reason"] == "malformed_name_header"
+        assert event["header_name"] == name
+
+    @pytest.mark.parametrize("name", ["a b", "a\tb", "file:///a b.txt", "~!@#$%^&*()", "a=?b"])
+    def test_a_value_a_header_can_carry_is_allowed(self, name: str) -> None:
+        assert validate_header_body_integrity(_call_named(name, name)) is None
+
+    @pytest.mark.parametrize("value", [["echo"], 7, {"name": "echo"}])
+    def test_a_value_that_is_not_a_string_is_a_mismatch(self, value: Any) -> None:
+        event = _refused(_call_named("echo", value))
+        assert event["reason"] == "name_mismatch"
+        assert event["header_name"] == value
+        assert event["header_name_decoded"] == value
+
+
+class TestNameHeaderAuditEvent:
+    def test_the_raw_value_sits_beside_the_decoded_one(self) -> None:
+        with pytest.raises(HeaderBodyMismatchError) as exc:
+            validate_header_body_integrity(_call_named("other", "=?base64?ZWNobw==?="))
+        event = exc.value.audit_event
+        assert event["header_name"] == "=?base64?ZWNobw==?="
+        assert event["header_name_decoded"] == "echo"
+        assert event["body_name"] == "other"
+        assert "=?base64?ZWNobw==?=" in str(exc.value)
+        assert "decoded 'echo'" in str(exc.value)
+
+    def test_a_plain_mismatch_reads_as_it_did(self) -> None:
+        with pytest.raises(HeaderBodyMismatchError) as exc:
+            validate_header_body_integrity(_call_named("other", "echo"))
+        assert exc.value.audit_event["header_name"] == "echo"
+        assert exc.value.audit_event["header_name_decoded"] == "echo"
+        assert "decoded" not in str(exc.value)
+        assert str(exc.value) == ("'Mcp-Name'='echo' disagrees with body name 'other' (SEP-2243)")
+
+    def test_a_refusal_after_decoding_keeps_the_decoded_name(self) -> None:
+        request = {
+            "method": "resources/read",
+            "params": {"uri": "file:///a", "name": "file:///b"},
+            "headers": {"Mcp-Method": "resources/read", "Mcp-Name": _encoded("file:///a")},
+        }
+        event = _refused(request)
+        assert event["reason"] == "ambiguous_body_name"
+        assert event["header_name_decoded"] == "file:///a"
+
+    def test_an_absent_header_decodes_to_nothing(self) -> None:
+        request = _call_named("echo", "echo")
+        del request["headers"]["Mcp-Name"]
+        event = _refused(request)
+        assert event["header_name"] is None
+        assert event["header_name_decoded"] is None
 
 
 class TestPresetMetadata:

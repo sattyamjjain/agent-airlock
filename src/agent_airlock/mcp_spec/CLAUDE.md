@@ -130,7 +130,43 @@ preset, and
   (no DNS lookup): CVE-2026-119025's `open` ran such an `authorization_endpoint` through
   PowerShell. Both models set `hide_input_in_errors`, so the error text names the field and
   the character's class, never the URL; `errors()` still carries the input. Extra fields
-  (`extra="allow"`) are not screened.
+  (`extra="allow"`) are not screened. Neither constructor binds a document to a URL:
+  `ProtectedResourceMetadata.from_discovery` checks `resource` against the server URL the client
+  asked for (RFC 9728 section 3.3, CVE-2026-123272) through `_audience_key`, so it and the token
+  audience check compare alike.
+- **`EvalRCEGuard`'s code-object screen is not a sink** (`_CODE_OBJECT_ROUTES`, CVE-2026-123783
+  class). `DEFAULT_EVAL_SINKS` stays as it is: the presets copy it, a test pins it, and its
+  call-shape regex would miss an alias or an attribute. The refusal is `DENY_EVAL_SINK` with
+  `matched_sink="code_object"`, so the red-team `ForbiddenEffect` and any caller on that verdict
+  keep refusing. A name common elsewhere is matched with its module (`tar.getmembers()`,
+  `gc.collect()` pass), and every gap is bounded so a long argument stays linear. The guard
+  reads the NFKC form, as Python does an identifier.
+- **A fetched metadata document goes through `from_discovery`** (RFC 8414 section 3.3): the
+  constructor has no URL and stays as it was, so it parses any issuer, and that value as
+  `expected_issuer` defeats the `iss` check. `issuer_from_discovery_url` reads the raw string
+  back, so nothing is case-folded and no default port dropped. The comparison shares
+  `_normalize_issuer` with the `iss` check, which is looser than the RFC and the MCP page by
+  trailing slashes; `_screen_issuer_url` refuses the outer Unicode whitespace it would also
+  strip, so slashes are all it forgives. Pass the URL the client built, never `response.url`.
+- **`Mcp-Name` is compared decoded, and `Mcp-Method` raw** (`_decode_name_header`). A plain
+  value shaped like `=?base64?...?=` is read as encoded, since a client must encode one. The
+  check runs on any request carrying the header, not only name-bearing methods. `b64decode` on
+  a non-ASCII `str` raises plain `ValueError`, not `binascii.Error` (python-sdk #3817), so catch
+  `ValueError`. `Mcp-Param-*` values are not read here at all.
+- **`malware_advisory_feed` reads a document by its keys, never by file name**, and makes no
+  network call. An OSV record is malware only when its id is `MAL-*` or it carries CWE-506: a
+  reviewed GHSA in OSV form lists vulnerable, not malicious, versions, so it is skipped. A
+  whole package (`blocked_packages` in `OIDCPublishWindowGuard`) has no version to narrow
+  it, so it is matched in the ecosystem the argument's syntax names (`_spec_kinds`), while
+  pairs keep matching in either ecosystem as before.
+- **`tools/list` paging differs by SDK line.** mcp 2.x's result has `next_cursor` and no
+  `nextCursor` (FastMCP 4 adds a `nextCursor` to it that warns on each read); mcp 1.x's has
+  only `nextCursor`. `ClientSession.list_tools` takes `params=` (and on 1.x a deprecated
+  `cursor=`), `mcp.Client.list_tools` and FastMCP's `Client.list_tools_mcp` take `cursor=`.
+  `tool_definition_pin_guard._cursor_attribute` and `_ask_for_page` hold that, and a page read
+  the wrong way ends the listing at page 1 with no error. CI resolves only the newest SDK
+  (`TestAHostileListingOverTheRealSdk`), so check `mcp==1.30.0`, the pin's floor, in a scratch
+  venv when touching them.
 - **Report a field, a variable name or a digest, never an `env` value.** `audit_config_diff`
   compares the values of code-loading variables and `McpConfigPinSet` hashes them, yet a
   diff refusal says only that `env` changed (`MCPCommandMutationDetected.fields`), a pin
@@ -193,8 +229,8 @@ other parent-package import (`..policy`, `..attest.receipt`, `..scan.schema`,
 `..ssrf_egress_guard`, `..validator`, `..cost_tracking`, `..sanitizer`, `..audit`,
 `..safe_types`, `.._url_paths`) is used by one or two modules, several of them function-local or
 `TYPE_CHECKING`-only (`grep -n 'from \.\.' src/agent_airlock/mcp_spec/*.py` recounts them).
-`oauth.py` imports `safe_types` at module level for two private constants; `safe_types`
-imports nothing from this package, so that cannot become a cycle.
+`oauth.py` imports `safe_types` at module level for two private constants, and `_url_paths`;
+neither imports anything from this package, so that cannot become a cycle.
 
 **Nothing here imports `..policy_presets`**, at module level or inside a function — the
 `from agent_airlock.policy_presets import ..._defaults` lines in docstrings are `Usage::`

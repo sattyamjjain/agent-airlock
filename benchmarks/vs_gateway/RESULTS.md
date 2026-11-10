@@ -12,7 +12,7 @@ column replays a **recorded live measurement** of a Docker MCP Gateway
 (`benchmarks/vs_gateway/gateway_measurement.json`); regenerate it with
 `benchmarks/vs_gateway/gateway_harness/` (needs a Docker daemon).
 
-## The number (re-measured live 2026-10-03)
+## The number (re-measured live 2026-11-03)
 
 Identical corpus: **12 malformed tool-call payloads + 3 benign controls**, sent
 through both layers.
@@ -23,15 +23,15 @@ through both layers.
 | **Docker MCP Gateway v2.0.1** (native, transport/identity) | **0 / 12** | 0 / 3 |
 
 **Contract-layer gap: airlock blocks 12/12 malformed payloads that the native
-gateway forwards to the backend.** Airlock p50 ≈ 0.03 ms/decision on the 2026-10-03 run
-(0.030–0.032 ms over four runs; earlier runs measured ≈ 0.08 ms).
+gateway forwards to the backend.** Airlock p50 ≈ 0.05 ms/decision on the 2026-11-03 run
+(0.030–0.051 ms across runs; earlier runs measured ≈ 0.08 ms).
 
 ### Which gateway build this is, and what has moved since
 
-Re-measured **2026-10-03** against a live gateway: `docker mcp` CLI plugin **v0.43.3**,
-gateway image version **2.0.1**, Docker engine **29.8.0**, the toolchain the installed
+Re-measured **2026-11-03** against a live gateway: `docker mcp` CLI plugin **v0.43.3**,
+gateway image version **2.0.1**, Docker engine **29.8.1**, the toolchain the installed
 Docker Desktop ships. Same **0 / 12** as every earlier run (2026-07-16, 2026-08-17,
-2026-09-12), so the finding is reproduced, not inherited.
+2026-09-12, 2026-10-03), so the finding is reproduced, not inherited.
 
 Stated precisely, because a competitive claim against a moving target decays: Docker Hub's
 `docker/mcp-gateway` has a newer pinned tag, **v0.44.1** (2026-09-23), than the **v0.43.3**
@@ -46,6 +46,15 @@ bumped plugin is a one-command job — `python -m benchmarks.vs_gateway.gateway_
 Both layers are correct on the 3 benign controls (0 false positives) — the
 gateway is not "blocking nothing because it's broken"; it forwards *everything*,
 malformed or not, because payload-contract validation is not its job.
+
+## 2026-11-03 — re-measured live, unchanged
+
+**Result: unchanged.** Gateway 0/12 malformed payloads blocked, airlock 12/12, 0/3
+benign false positives on both. All 15 per-payload records in
+`gateway_measurement.json` are identical to 2026-10-03; only the Docker engine moved
+(29.8.0 to 29.8.1). The first regen that day returned BLOCK for all 15 (benign controls
+included) because the echo backend image was not built; the three benign controls
+forwarding (PASS) is the sanity check that the re-run is valid.
 
 ## 2026-10-03 — re-measured live, unchanged
 
