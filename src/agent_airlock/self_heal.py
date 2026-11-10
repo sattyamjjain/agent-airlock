@@ -600,6 +600,42 @@ def handle_capability_denied(
     )
 
 
+def handle_capability_needs_sandbox(
+    func_name: str, *, capabilities: Sequence[str]
+) -> AirlockResponse:
+    """Create a response for a tool whose capabilities the policy grants only inside a sandbox.
+
+    ``CapabilityPolicy.require_sandbox_for`` names the capabilities that may run only in a
+    sandbox. Until 0.10.33 the call path never read it (only ``airlock scan-tools`` did), so a
+    tool requiring one ran in-process. The refusal is about where the tool runs, so the hints
+    say that no argument change helps.
+
+    Args:
+        func_name: Name of the function that was blocked.
+        capabilities: The tool's capabilities that the policy requires a sandbox for.
+
+    Returns:
+        AirlockResponse with ``block_reason=CAPABILITY_DENIED``.
+    """
+    named = ", ".join(capabilities)
+    return AirlockResponse.blocked_response(
+        reason=BlockReason.CAPABILITY_DENIED,
+        error=(
+            f"AIRLOCK_BLOCK: Tool '{func_name}' requires {named}, which the policy allows only "
+            "in a sandbox, and this tool is not sandboxed"
+        ),
+        fix_hints=[
+            f"This tool needs {named}, which may run only with sandbox=True",
+            "Changing the arguments will not help: the refusal is about where the tool runs",
+            "Use a tool that does not need these capabilities, or tell the user",
+        ],
+        metadata={
+            "function": func_name,
+            "sandbox_required_capabilities": list(capabilities),
+        },
+    )
+
+
 def handle_effect_status_unknown(
     func_name: str,
     *,

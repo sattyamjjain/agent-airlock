@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import enum
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -262,13 +263,22 @@ class CodeSandboxBridgeGuard:
         return None
 
     def _inspect_value(self, *, field: str, value: str) -> CodeSandboxBridgeDecision | None:
-        """Return a deny decision if any bridge primitive fires on ``value``."""
-        for label, group, pattern in self._primitives:
-            if pattern.search(value):
-                return self._deny_bridge(field, label, group)
-        for label, pattern in self._extra:
-            if pattern.search(value):
-                return self._deny_bridge(field, label, BridgeGroup.EXTRA)
+        """Return a deny decision if any bridge primitive fires on ``value``.
+
+        The NFKC form is read as well as the text as written. Python folds an identifier to
+        NFKC (PEP 3131), so until 0.10.33 ``from ｊｓ import Deno`` in fullwidth letters
+        imported ``js`` and matched nothing. Python does not fold keywords, so the import
+        keywords themselves still have to be ASCII to run.
+        """
+        folded = unicodedata.normalize("NFKC", value)
+        texts = (value,) if folded == value else (value, folded)
+        for text in texts:
+            for label, group, pattern in self._primitives:
+                if pattern.search(text):
+                    return self._deny_bridge(field, label, group)
+            for label, pattern in self._extra:
+                if pattern.search(text):
+                    return self._deny_bridge(field, label, BridgeGroup.EXTRA)
         return None
 
     def _deny_bridge(

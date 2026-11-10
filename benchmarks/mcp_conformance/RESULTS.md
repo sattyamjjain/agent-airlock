@@ -1,6 +1,6 @@
 # MCP conformance — agent-airlock (spec 2026-07-28)
 
-Last run: **2026-11-07**, a clean re-run against 0.10.32 with all 22 cases passing. The
+Last run: **2026-11-10**, a clean re-run against the 0.10.33 branch with all 22 cases passing. The
 2026-09-08 re-run is recorded in commit `c04d297`, which moved the README marker; this line
 still said 2026-08-10 until v0.10.10.
 The cases below were last rewritten on 2026-08-10, when the three 2026-08-05 divergence

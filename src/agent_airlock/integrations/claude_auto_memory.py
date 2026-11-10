@@ -46,10 +46,12 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
+from urllib.parse import unquote
 
 from .._log import structlog
 from ..exceptions import AirlockError
@@ -310,9 +312,16 @@ def _require_tenant_id(tenant_id: object) -> None:
     the scope check for ``"a/b"``'s notes; ``"."`` and ``".."`` have roots holding every
     tenant's. With these refused, no tenant's root contains another's.
 
+    Until 0.10.33 three more shapes passed, each of which a store can read as another
+    tenant's directory: ``"a."`` and ``"a "`` (Windows and SMB strip a trailing dot or
+    space, so the root is ``a``'s), ``"a%2fb"`` (a store that percent-decodes paths reads
+    ``a/b``, inside ``a``'s root), and a control character. Ids that differ only in case
+    still collide on a case-insensitive store: that one is the operator's to rule out.
+
     Raises:
         AutoMemoryTenantIdError: The id is not a string, is empty, is only dots and
-            whitespace, or holds a ``/``, a ``\\`` or a NUL.
+            whitespace, holds a ``/``, a ``\\``, a ``%`` or a control character, or
+            starts or ends with whitespace or ends with a dot.
     """
     if not isinstance(tenant_id, str):
         reason = f"a tenant id is a string, not {type(tenant_id).__name__}"
@@ -320,6 +329,15 @@ def _require_tenant_id(tenant_id: object) -> None:
         reason = "it is empty, or only dots and whitespace, so it names no directory"
     elif any(separator in tenant_id for separator in ("/", "\\", "\x00")):
         reason = "it holds a path separator or a NUL, so its root is not one directory"
+    elif "%" in tenant_id:
+        reason = "it holds a %, which a store that percent-decodes paths reads as another name"
+    elif any(ord(char) < 32 or ord(char) == 127 for char in tenant_id):
+        reason = "it holds a control character"
+    elif tenant_id != tenant_id.strip() or tenant_id.endswith("."):
+        reason = (
+            "it starts or ends with whitespace or ends with a dot, which some stores strip, "
+            "so it can name another tenant's directory"
+        )
     else:
         return
     raise AutoMemoryTenantIdError(tenant_id=tenant_id, reason=reason)
@@ -337,13 +355,39 @@ def _escapes_tenant_root(tenant_id: str, path: str) -> bool:
     or a NUL is refused outright: no memory path needs one, and a backend may resolve it
     differently than a normaliser would. The prefix test itself is unchanged. A path that
     is not a string cannot be read as under the root, so it escapes it.
+
+    Until 0.10.33 the segments were read only as written, so ``/memory/a/%2e%2e/b/x`` passed
+    and a store that percent-decodes paths resolved it into ``b``'s root. Each decoded form
+    is read too (to :data:`_MAX_DECODE_ROUNDS`, so ``%252e`` counts), and an encoded ``/``
+    or ``\\`` is refused, since decoding it adds a separator the prefix test never saw.
     """
     if not isinstance(path, str):
         return True
-    segments = path.replace("\\", "/").split("/")
-    if ".." in segments or "\x00" in path:
+    forms = _decoded_forms(path)
+    if forms is None or _ENCODED_SEPARATOR.search(path):
         return True
+    for form in forms:
+        segments = form.replace("\\", "/").split("/")
+        if ".." in segments or "\x00" in form:
+            return True
     return not path.startswith(_tenant_root(tenant_id))
+
+
+#: How many rounds of percent-decoding a memory path is read through; one that still
+#: changes after this many is refused rather than read.
+_MAX_DECODE_ROUNDS = 4
+_ENCODED_SEPARATOR = re.compile(r"%(?:2f|5c)", re.IGNORECASE)
+
+
+def _decoded_forms(path: str) -> list[str] | None:
+    """``path`` and each percent-decoded form of it, or None if it never stops changing."""
+    forms = [path]
+    for _ in range(_MAX_DECODE_ROUNDS):
+        decoded = unquote(forms[-1])
+        if decoded == forms[-1]:
+            return forms
+        forms.append(decoded)
+    return None
 
 
 def _check_scope(policy: AutoMemoryAccessPolicy, path: str) -> None:

@@ -1,12 +1,12 @@
 # Cross-tool block-rate comparison — results
 
-Last run: **2026-11-07**. Corpus: **210** tool calls.
+Last run: **2026-11-10**. Corpus: **210** tool calls.
 
 ## Headline
 
 - agent-airlock block-rate (malicious blocked): **100.0%**
 - agent-airlock false-positive rate (benign blocked): **0.0%**
-- Per-decision latency: **p50 0.0031 ms**, **p95 0.0289 ms** (in-process, no model call, no network)
+- Per-decision latency: **p50 0.0031 ms**, **p95 0.0379 ms** (in-process, no model call, no network)
 
 The latency line is why this is a different layer from model-in-the-loop guardrails: a deny-by-default policy / argument guard decides in microseconds with no model inference, no API round-trip, and a deterministic verdict.
 

@@ -11,6 +11,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.33] - 2026-11-10
+
+Closes the checks noticed while shipping 0.10.29 to 0.10.32 that read less than they were
+handed, enforces a capability setting the call path never read, and backs the README's
+MCP Top-10 table with a generated evidence page. Five of its "Full" labels did not hold up
+against the code and now read "Partial".
+
+### Security
+
+- `CapabilityPolicy.require_sandbox_for` is enforced on the call path. It was read only by `airlock scan-tools`, so a tool requiring a granted capability in that set (`DANGEROUS` by default: `PROCESS_SHELL`, `FILESYSTEM_DELETE`, `NETWORK_ARBITRARY`) ran in-process. Step 4 now refuses it unless the `Airlock` runs with `sandbox=True`: `capability_denied`, with `sandbox_required_capabilities` in the metadata. A policy with `require_sandbox_for=Capability.NONE` runs as before.
+- `Mcp-Param-{Name}` headers are checked against the arguments they mirror. `validate_header_body_integrity(request, input_schema=...)` takes the called tool's `inputSchema` and, per the 2026-07-28 Streamable HTTP page, requires the header exactly when the argument has a value, decodes the `=?base64?...?=` form, and compares integers numerically (`param_mismatch`, `missing_param_header`, `malformed_param_header`). A schema whose `x-mcp-header` annotation the spec makes invalid is refused (`invalid_param_schema`); an unrecognised `Mcp-Param-*` header is ignored. The audit event names the header, never its value. The header-integrity preset's `check_request(request, input_schema)` passes it through. Without `input_schema` nothing changes.
+- `EvalRCEGuard`'s `getattr` sink missed the same primitive under other spellings: `__getattribute__(`, `operator.attrgetter(` and `inspect.getattr_static(` are refused as `getattr`. The CVE-2026-123783 module had pinned `f.__getattribute__(...)` as a blind spot; it moves to the refused tests.
+- `CodeSandboxBridgeGuard` reads the NFKC form as well as the text as written. Python folds identifiers (PEP 3131), so `from ｊｓ import window` imported `js` and matched nothing. `FilterEvalRCEGuard` needs no change: Python does not fold keywords such as `lambda`.
+- The auto-memory scope check reads each percent-decoded form of a path (four rounds; a path still decoding after that is refused), so `/memory/a/%2e%2e/b/x` no longer reaches tenant `b` in a store that decodes, and an encoded `/` or `\` is refused. Tenant ids a store can read as another tenant's directory are refused (`AutoMemoryTenantIdError`): a trailing dot (`a.`, `a..`) or space, leading whitespace, a `%` and control characters. 0.10.32's test listed `a..` as allowed.
+- `CIMDGuard` pinned whatever `redirect_uris` a client document held. Each entry now passes `validate_redirect_uri` before a document is approved or checked, and a document whose field is empty or not a list is `deny_malformed`.
+- `validate_redirect_uri` accepted URIs with no host (`https:///cb`, `https:cb`); they are refused.
+
+### Added
+
+- `AuthorizationServerMetadata.discovery_url`: the URL `from_discovery` bound the issuer to, `None` for a constructed document. `validate_authorization_response_iss(..., expected_issuer=metadata)` accepts the metadata itself and refuses one nothing bound; a string is read as before.
+- A generated evidence page for the README's MCP Top-10 table, `docs/owasp-mcp-top-10-coverage.md`, built from `src/agent_airlock/owasp_agentic_coverage/mcp_top10_coverage.yaml` (module, preset, test file and where each control runs) and byte-diffed by `tests/owasp_agentic_coverage/test_mcp_top10_coverage.py`, which also checks every named module, preset, step, callable and config switch resolves. Both OWASP pages are in the docs nav.
+
+### Changed
+
+- MCP Top-10 labels: MCP02, MCP03, MCP04, MCP08 and MCP10 drop from Full to Partial. Each relied on helpers the `@Airlock` wrapper never calls (`CredentialScope`, `MCPProxyGuard`, the description manifest, OpenTelemetry export, `WorkspacePIIConfig`) or on part of the risk outside the tool-call boundary. MCP05 named "sandbox for `DANGEROUS`"; it names the E2B sandbox (`sandbox=True`).
+- Preset OWASP tags against the current OWASP MCP Top 10: `untrusted_tool_output_defaults` MCP08 to MCP06 (prompt injection via contextual payloads); `mcp_schema_2020_12_contract_defaults` MCP08 to MCP03 and `dns_rebinding_safe_url_defaults` MCP06 to MCP05, the nearest categories (the page names neither JSON Schema nor SSRF).
+- The OWASP Agentic matrix re-verified on 2026-11-10: no mapped module changed since 2026-11-03, and a fresh block-rate run reproduced every slot.
+- Benchmarks re-run on 2026-11-10, not re-dated: the AgentDojo bound (524/609 = 86.0%, every suite identical) and the MCPTox replay (every figure identical; `replay_summary.json` committed beside its block for the first time, and `tests/test_mcptox_published.py` passed 8/8 in a Linux container) (#462); block-rate (100% / 0%, p50 0.0031 ms), `sandbox=True` parity, ToolPrivBench and conformance (22/22). The gateway and harness rows stay 2026-11-03.
+- README synced with the code (#462): a new "Irreversible actions" section (approvals bound to the call, the approval ledgers, `EffectGuard`, the contradiction gate, and what none of it can do), and 19 claims an audit found false or stale corrected, among them "Everything except validation is off by default" (sanitising and the audit log are on), "Validation overhead ~3µs" (that is the policy check, now labelled so), the `gpt_5_5_spud_agent_defaults` preset name and the `airlock doctor` description. The adapter count is modules (16) for 12 frameworks.
+- `CITATION.cff` cites 0.10.32 (#462).
+
+### Fixed
+
+- `create_secure_mcp_server(pin_guard=...)` raised `AttributeError` on FastMCP 2.x, which `[mcp]` allows: 2.x has `get_tools()` and no `list_tools`, and its `get_tool` raises `NotFoundError`. Both shapes are read; verified against fastmcp 2.14.7.
+- The benchmark freshness gate told a stale row to move to `_last verified <old date>_`, which it then refused again. Its message now says no marker exempts a row.
+- `benchmarks/vs_gateway/gateway_harness/regen.py` wrote a run whose benign controls the gateway refused (the echo image unbuilt) as a measurement; it refuses to write one.
+- Docstrings that claimed more than the code: `owasp_mcp_top_10_2026_policy` listed `download_*` (it denies `download_plugin_*` and `load_extension_*`), and `audit_otel` showed `AirlockConfig(audit_otel_enabled=True)`, which is never applied; it shows `OTelAuditExporter`.
+- Test isolation: CLI tests left structlog configured against a closed capsys stream, so a later test that logged at ERROR failed with "I/O operation on closed file", depending on order. An autouse fixture restores the configuration after each test (#462).
+
+### CVE triage
+
+- **CVE-2026-117558, -117559, -117560, -117561, -117567, -117569 and -117573** (ai-sdlc `repo`, DroidMind, ATXP, sf-mcp, esp-mcp, Kali-GPT, hagent `args`; #384, #385, #386, #387, #388, #390, #391): in scope; `ToolArgSinkGuard` (0.10.28) already refuses the metacharacter forms, and `tool_arg_sink_defaults` claims them. Seven second-defence fixtures that pin where the guard stops (option-shaped values, `$NAME`) (#463).
+- **CVE-2026-117568** (mcp-ffmpeg `videoPath` / `outputDir`, no triage issue): in scope, partial; `$()` and backticks are refused by default, the closing double quote only with `extra_metachars={'"'}`, which the preset cannot set. A second-defence fixture (#463).
+- **CVE-2026-59176** (functype-mcp-server `version` into `pnpm add`, #395): in scope; `ToolArgSinkGuard(installer_args=...)` refuses every package alias, and the shell screen alone does not. A second-defence fixture; the complete fix is upstream in 1.4.4 (#463).
+- **CVE-2026-119050** (Agno PandasTools `getattr`, no triage issue: the watcher drops the record): in scope, partial; `dispatch_args` (0.10.29) refuses `read_pickle` and the other readers under an allowlist or the default denylist, which still admits `query`. A second-defence fixture (#463).
+- **CVE-2026-119025** (`open` on Windows and WSL, #399): in scope, partial; the OAuth metadata URL screen (0.10.29) and `SafeURL` refuse `$(` in a discovery URL; `open` itself and extra metadata fields are out of reach. A second-defence fixture; the complete fix is upstream in `open` 11.0.0 (#463).
+- **CVE-2026-118378** (Tabularis `describe_table` `table_name`, #393): in scope, partial; strict validation refuses the stacked statement only when the tool declares an identifier shape, a `table_name: str` gets no protection, and the read-only bypass is Tabularis's own. A second-defence fixture; the complete fix is upstream in 0.28.0 (#463).
+- The catalog counts 73 regression modules and 73 distinct CVEs (65 with a row of their own, 8 in umbrella modules) (#463).
+
 ## [0.10.32] - 2026-11-10
 
 Places a guard read past what it was handed: a JSON-RPC id's type, a listing's later

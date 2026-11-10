@@ -116,6 +116,11 @@ nav:
   - Commerce Adapters: adapters.md
   - CVE Catalog: cves/index.md
   - CVE Triage Rule: cve-triage.md
+  # Both pages are generated from YAML under src/agent_airlock/owasp_agentic_coverage/ and
+  # byte-diffed by tests/owasp_agentic_coverage/; edit the YAML, never the page.
+  - OWASP Coverage:
+    - Agentic Top 10: owasp-agentic-2026-coverage.md
+    - MCP Top 10: owasp-mcp-top-10-coverage.md
   # Every file under docs/benchmarks/ must appear below. mkdocs publishes a page
   # whether or not it is in nav, so three of these built and were reachable only
   # by direct URL for months, with nothing linking to them. That gap is now a

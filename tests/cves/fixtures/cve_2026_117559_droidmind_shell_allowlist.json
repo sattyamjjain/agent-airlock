@@ -1,0 +1,27 @@
+{
+  "$schema": "Tool calls for CVE-2026-117559 (DroidMind through 0.4.0, CWE-78). NVD names Device.run_shell() and Device.list_directory() but no argument; `android_shell`'s `command` and `list_directory`'s `path` are the server's own names (docs/guide/shell-and-installer-arguments.md), and `serial` is the device they act on. Each `payloads` entry hides a blocked command (`reboot`) inside an allowlisted one with $(...) or backtick substitution, or chains it, with the argument, token and verdict ToolArgSinkGuard reports. Every value is an inert string: nothing reaches a device or a shell. `benign` holds calls the guard must run; `passes_by_design` holds values outside the guard's job.",
+  "disclosed_at": "2026-10-27",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-117559",
+    "advisory": "https://www.vulncheck.com/advisories/droidmind-through-0.4.0-command-injection-via-shell-allowlist-bypass",
+    "upstream_issue": "https://github.com/hyperb1iss/droidmind/issues/17",
+    "vulnerable_code": "https://github.com/hyperb1iss/droidmind/blob/v0.4.0/droidmind/security.py#L338-L402",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/385"
+  },
+  "payloads": [
+    {"id": "substitution-in-an-allowlisted-command", "tool": "android_shell", "arguments": {"serial": "emulator-5554", "command": "ls /sdcard/$(reboot)"}, "argument": "command", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "backtick-in-an-allowlisted-command", "tool": "android_shell", "arguments": {"serial": "emulator-5554", "command": "ls `reboot`"}, "argument": "command", "token": "`", "verdict": "deny_shell_metachar"},
+    {"id": "chained-after-an-allowlisted-command", "tool": "android_shell", "arguments": {"serial": "emulator-5554", "command": "ls /sdcard; reboot"}, "argument": "command", "token": ";", "verdict": "deny_shell_metachar"},
+    {"id": "substitution-in-a-directory", "tool": "list_directory", "arguments": {"serial": "emulator-5554", "path": "/sdcard/$(reboot)"}, "argument": "path", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "backtick-in-a-directory", "tool": "list_directory", "arguments": {"serial": "emulator-5554", "path": "/sdcard/`reboot`"}, "argument": "path", "token": "`", "verdict": "deny_shell_metachar"}
+  ],
+  "benign": [
+    {"id": "list-storage", "tool": "android_shell", "arguments": {"serial": "emulator-5554", "command": "ls /sdcard"}},
+    {"id": "read-a-property", "tool": "android_shell", "arguments": {"serial": "emulator-5554", "command": "getprop ro.build.version.release"}},
+    {"id": "list-a-directory", "tool": "list_directory", "arguments": {"serial": "emulator-5554", "path": "/sdcard/DCIM"}}
+  ],
+  "passes_by_design": [
+    {"id": "a-blocked-command-on-its-own", "tool": "android_shell", "arguments": {"serial": "emulator-5554", "command": "reboot"}, "why": "which commands may run is DroidMind's allowlist; this guard reads shell syntax"},
+    {"id": "variable-reference", "tool": "android_shell", "arguments": {"serial": "emulator-5554", "command": "ls $EXTERNAL_STORAGE"}, "why": "$NAME expansion is left out of the default set"}
+  ]
+}

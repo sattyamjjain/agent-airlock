@@ -46,8 +46,9 @@ Honest scope
   ``sys.monitoring``). The screen is on by default and ``extra_sinks``, which only
   adds, cannot turn it off.
 - **What still passes.** A string that assembles a name at runtime through something other
-  than ``getattr(``: ``f.__getattribute__("__co" + "de__")``, or a sink behind an indirection
-  such as ``locals()["eval"](...)``. A module that runs source text without naming a sink
+  than the ``getattr`` family (``getattr(``, ``__getattribute__(``, ``attrgetter(``,
+  ``getattr_static(``, all refused since 0.10.33): ``type(f).__dict__["__co" + "de__"]``, or a
+  sink behind an indirection such as ``locals()["eval"](...)``. A module that runs source text without naming a sink
   (``timeit``, ``runpy``, ``pdb``, ``code.InteractiveInterpreter``), and ``loader.get_code``,
   too generic a name to refuse. ``ctypes``, which reaches the C API. ``extra_sinks`` can name
   an indirection or a runner you know of, but no list of names closes this. **Isolation is the
@@ -192,10 +193,20 @@ def _compile_sink_pattern(sink: str) -> re.Pattern[str]:
     # word-prefixed name (``xeval(``) and a longer identifier (``parse_expression(``), and the
     # namespaced form (``sympy.eval(``) still matches on the sink's own boundary.
     # Adaptive red-team wave 2 (v0.10.25).
+    spellings = _SINK_SPELLINGS.get(sink, (sink,))
     return re.compile(
-        rf"\b{re.escape(sink)}\s*\(",
+        rf"\b(?:{'|'.join(re.escape(spelling) for spelling in spellings)})\s*\(",
         re.MULTILINE,
     )
+
+
+#: Other names a sink label answers to, each the same primitive under another spelling. Until
+#: 0.10.33 ``getattr`` matched only ``getattr(``, so ``f.__getattribute__("__co" + "de__")``,
+#: ``operator.attrgetter(...)`` and ``inspect.getattr_static(...)`` fetched an attribute by a
+#: name assembled at run time and passed.
+_SINK_SPELLINGS: dict[str, tuple[str, ...]] = {
+    "getattr": ("getattr", "getattr_static", "__getattribute__", "attrgetter"),
+}
 
 
 # ``parse_expr`` is the special case: caller may pin ``local_dict=``

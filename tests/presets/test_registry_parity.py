@@ -35,8 +35,10 @@ from agent_airlock.policy_presets import _PRESET_REGISTRY
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: ``policy_presets.<name>`` as written in prose.
-_PRESET_REFERENCE = re.compile(r"policy_presets\.([a-z_][a-z_0-9]*)")
+#: ``policy_presets.<name>`` as written in prose. Not a file name: the generated
+#: ``docs/owasp-mcp-top-10-coverage.md`` cites ``tests/test_policy_presets.py`` as evidence,
+#: which is no reference to a preset named ``py``.
+_PRESET_REFERENCE = re.compile(r"policy_presets\.(?!py\b)([a-z_][a-z_0-9]*)")
 
 
 def _registered() -> set[str]:
@@ -98,6 +100,10 @@ class TestDocumentedPresetsResolve:
     def test_documentation_references_at_least_one_preset(self) -> None:
         """If the regex stops matching, the rest of this class would pass vacuously."""
         assert _referenced_presets(), "no policy_presets.<name> references found in README/docs"
+
+    def test_a_file_name_is_not_a_preset_reference(self) -> None:
+        text = "`tests/test_policy_presets.py` and `policy_presets.stdio_guard_ox_defaults()`"
+        assert _PRESET_REFERENCE.findall(text) == ["stdio_guard_ox_defaults"]
 
     def test_every_documented_preset_exists(self) -> None:
         referenced = _referenced_presets()

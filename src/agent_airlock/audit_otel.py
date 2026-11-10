@@ -3,11 +3,13 @@
 Exports audit events to OpenTelemetry for enterprise observability.
 Integrates with Datadog, Splunk, Grafana, and other OTEL-compatible backends.
 
-Usage:
-    config = AirlockConfig(
-        audit_otel_enabled=True,
-        audit_otel_endpoint="http://otel-collector:4317",
-    )
+Usage: build the exporter and hand it each record yourself; ``@Airlock`` does not export
+to it. ``AirlockConfig(audit_otel_enabled=...)`` and ``audit_otel_endpoint`` are never
+applied (``config._NOT_APPLIED``: setting either warns), so an example that set them, as
+this one did until 0.10.33, exported nothing::
+
+    exporter = OTelAuditExporter(endpoint="http://otel-collector:4317")
+    exporter.export(record)  # an EnhancedAuditRecord
 
 The OTel exporter creates spans for each tool call with:
     - Tool name, status, and duration

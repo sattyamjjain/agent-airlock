@@ -1,0 +1,38 @@
+{
+  "$schema": "Discovery metadata for CVE-2026-119025 (open 7.2.0 before 11.0.0, CWE-78). `open` passed a URL unescaped to `powershell -EncodedCommand` on Windows and WSL, and NVD names an OAuth authorization_endpoint from a malicious MCP server as such a URL. `document` is an RFC 8414 authorization server metadata document for `discovery_url`. Each `payloads` entry replaces one URL field a client follows with a value carrying the $(...) subexpression NVD names, or a character a URL must percent-encode that ends or escapes a quoted string, with the phrase the refusal names it by. Every value is an inert string: nothing is opened and `calc` is never run. `benign` holds URLs the screen must accept; `unscreened_extra_fields` holds a document field the model keeps but does not screen.",
+  "disclosed_at": "2026-10-29",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-119025",
+    "advisory": "https://www.vulncheck.com/advisories/open-7.2.0-before-11.0.0-os-command-injection-via-powershell-on-windows",
+    "mcp_inspector_advisory": "https://github.com/modelcontextprotocol/inspector/security/advisories/GHSA-q978-78c7-phqw",
+    "fix_commit": "https://github.com/sindresorhus/open/commit/274d70446bf38a7b7d50b214dd3962ef8ea9320d",
+    "fixed_release": "https://github.com/sindresorhus/open/releases/tag/v11.0.0",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/399"
+  },
+  "discovery_url": "https://auth.example.test/.well-known/oauth-authorization-server",
+  "document": {
+    "issuer": "https://auth.example.test",
+    "authorization_endpoint": "https://auth.example.test/authorize",
+    "token_endpoint": "https://auth.example.test/token",
+    "code_challenge_methods_supported": ["S256"]
+  },
+  "payloads": [
+    {"id": "authorization-endpoint-subexpression-in-query", "field": "authorization_endpoint", "value": "https://auth.example.test/authorize?x=$(calc)", "named": "a shell command substitution"},
+    {"id": "authorization-endpoint-subexpression-in-path", "field": "authorization_endpoint", "value": "https://auth.example.test/$(calc)/authorize", "named": "a shell command substitution"},
+    {"id": "authorization-endpoint-closing-quote", "field": "authorization_endpoint", "value": "https://auth.example.test/authorize\"calc", "named": "a double quote"},
+    {"id": "authorization-endpoint-backtick", "field": "authorization_endpoint", "value": "https://auth.example.test/authorize`calc", "named": "a backtick"},
+    {"id": "token-endpoint-subexpression", "field": "token_endpoint", "value": "https://auth.example.test/token?x=$(calc)", "named": "a shell command substitution"},
+    {"id": "registration-endpoint-subexpression", "field": "registration_endpoint", "value": "https://auth.example.test/register?x=$(calc)", "named": "a shell command substitution"},
+    {"id": "issuer-subexpression", "field": "issuer", "value": "https://auth.example.test/$(calc)", "named": "a shell command substitution"}
+  ],
+  "authorization_server_payload": "https://auth.example.test/$(calc)",
+  "benign": [
+    "https://auth.example.test/authorize",
+    "https://auth.example.test/authorize?response_type=code&client_id=abc",
+    "https://auth.example.test/authorize?x=%24(calc)",
+    "http://localhost:3000/authorize"
+  ],
+  "unscreened_extra_fields": {
+    "service_documentation": "https://auth.example.test/docs?x=$(calc)"
+  }
+}

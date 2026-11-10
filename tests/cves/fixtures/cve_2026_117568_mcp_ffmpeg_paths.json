@@ -1,0 +1,26 @@
+{
+  "$schema": "Tool calls for CVE-2026-117568 (mcp-ffmpeg through 1.0.5, CWE-78). NVD names the tools resize-video, extract-audio and get-video-info and their `videoPath` and `outputDir` values, which break out of the child_process.exec command string. `payloads` hold the $() and backtick forms, which ToolArgSinkGuard's default set refuses; `quote_breakouts` hold the closing double quote NVD also names, which the default set admits and `extra_metachars={'\"'}` refuses. Each refused entry names the argument, token and verdict. Every value is an inert string: `id` is never run and no file is transcoded. `benign` holds calls the guard must run.",
+  "disclosed_at": "2026-10-27",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-117568",
+    "advisory": "https://www.vulncheck.com/advisories/mcp-ffmpeg-through-1.0.5-os-command-injection-via-videopath-and-outputdir",
+    "upstream_issue": "https://github.com/bitscorp-mcp/mcp-ffmpeg/issues/8",
+    "vulnerable_code": "https://github.com/bitscorp-mcp/mcp-ffmpeg/blob/2ec04e44850cc5ee5354c40643be8bc91c218654/src/mcp-ffmpeg.ts#L184"
+  },
+  "payloads": [
+    {"id": "resize-video-path-substitution", "tool": "resize_video", "arguments": {"videoPath": "/media/clip$(id).mp4", "outputDir": "/tmp/out"}, "argument": "videoPath", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "resize-output-dir-backtick", "tool": "resize_video", "arguments": {"videoPath": "/media/clip.mp4", "outputDir": "/tmp/`id`"}, "argument": "outputDir", "token": "`", "verdict": "deny_shell_metachar"},
+    {"id": "extract-audio-path-backtick", "tool": "extract_audio", "arguments": {"videoPath": "/media/`id`.mp4", "outputDir": "/tmp/out"}, "argument": "videoPath", "token": "`", "verdict": "deny_shell_metachar"},
+    {"id": "extract-audio-output-dir-substitution", "tool": "extract_audio", "arguments": {"videoPath": "/media/clip.mp4", "outputDir": "/tmp/$(id)"}, "argument": "outputDir", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "video-info-path-substitution", "tool": "get_video_info", "arguments": {"videoPath": "/media/clip$(id).mp4"}, "argument": "videoPath", "token": "$(", "verdict": "deny_shell_metachar"}
+  ],
+  "quote_breakouts": [
+    {"id": "resize-video-path-closing-quote", "tool": "resize_video", "arguments": {"videoPath": "/media/clip.mp4\" -y \"/tmp/x", "outputDir": "/tmp/out"}, "argument": "videoPath", "token": "\"", "verdict": "deny_shell_metachar"},
+    {"id": "extract-audio-output-dir-closing-quote", "tool": "extract_audio", "arguments": {"videoPath": "/media/clip.mp4", "outputDir": "/tmp/out\" -y \"/tmp/x"}, "argument": "outputDir", "token": "\"", "verdict": "deny_shell_metachar"}
+  ],
+  "benign": [
+    {"id": "resize", "tool": "resize_video", "arguments": {"videoPath": "/media/clip.mp4", "outputDir": "/tmp/out"}},
+    {"id": "extract", "tool": "extract_audio", "arguments": {"videoPath": "/media/holiday 2026/clip.mov", "outputDir": "/tmp/audio"}},
+    {"id": "info", "tool": "get_video_info", "arguments": {"videoPath": "/media/clip.mp4"}}
+  ]
+}

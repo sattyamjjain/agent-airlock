@@ -305,10 +305,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {label}: last run {date.isoformat()} ({age}d ago)", file=sys.stderr)
             print(f"      re-run:  {howto}", file=sys.stderr)
         print(
-            "\nRe-run it and update the date, or — if it genuinely cannot be re-run — say so "
-            "in that benchmark's RESULTS.md naming the reason and the last date it actually "
-            "ran, then move the README marker to '_last verified <that date>_'. Do not leave "
-            "a dated claim standing without a fresh run behind it.",
+            "\nRe-run it and move the marker to the run's date. No marker exempts a row: "
+            "'_last verified_' is age-checked like the others, so re-labelling an old date "
+            "fails the same way. If a row cannot be re-run before this release, either the "
+            "release waits for the run, or the row leaves the README and "
+            "docs/benchmarks/index.md (and BENCHMARKS here) and that benchmark's RESULTS.md "
+            "says why and when it last ran. Do not leave a dated claim standing without a "
+            "fresh run behind it.",
             file=sys.stderr,
         )
         return 1

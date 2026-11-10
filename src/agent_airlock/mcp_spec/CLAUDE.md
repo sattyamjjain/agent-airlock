@@ -152,7 +152,10 @@ preset, and
   value shaped like `=?base64?...?=` is read as encoded, since a client must encode one. The
   check runs on any request carrying the header, not only name-bearing methods. `b64decode` on
   a non-ASCII `str` raises plain `ValueError`, not `binascii.Error` (python-sdk #3817), so catch
-  `ValueError`. `Mcp-Param-*` values are not read here at all.
+  `ValueError`. `Mcp-Param-*` headers are checked only when the caller passes the tool's
+  `inputSchema` (`input_schema=`, 0.10.33): the schema's `x-mcp-header` annotations say which
+  arguments are mirrored, an annotation the spec makes invalid refuses the request, and an
+  unrecognised `Mcp-Param-*` header is ignored. The audit event names the header, never its value.
 - **`malware_advisory_feed` reads a document by its keys, never by file name**, and makes no
   network call. An OSV record is malware only when its id is `MAL-*` or it carries CWE-506: a
   reviewed GHSA in OSV form lists vulnerable, not malicious, versions, so it is skipped. A

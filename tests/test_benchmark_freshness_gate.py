@@ -100,6 +100,16 @@ class TestTheGateFiresWhenItShould:
         main(["--release"])
         assert "regen" in capsys.readouterr().err, "the failure did not say how to re-run"
 
+    def test_the_failure_offers_no_marker_as_a_way_out(self, patched_readme, capsys) -> None:
+        """Until 0.10.33 it said to move a stale row to '_last verified <old date>_', which the
+        gate then refused again: every marker is age-checked."""
+        patched_readme(_readme_with(_today() - _dt.timedelta(days=90)))
+
+        main(["--release"])
+        err = capsys.readouterr().err
+        assert "No marker exempts a row" in err
+        assert "move the README marker to '_last verified" not in err
+
     def test_default_mode_fails_on_a_missing_date(self, patched_readme, capsys) -> None:
         patched_readme(_readme_with(_today(), drop_marker_for="benchmarks.blockrate"))
 

@@ -1,0 +1,26 @@
+{
+  "$schema": "Tool calls for CVE-2026-117560 (ATXP Gemini CLI extension through 1.0.0, CWE-78). NVD names runAtxp() and the parameters `message_id`, `subject` and `query`, not the tools that take them, so `atxp_tool` is a placeholder holding all three. Each `payloads` entry is a $() or backtick substitution of the kind NVD says planted email or SMS content can steer an agent into writing, with the argument, token and verdict ToolArgSinkGuard reports. Every value is an inert string: `id` is never run. `benign` holds calls the guard must run; `passes_by_design` holds values the guard's documented scope admits.",
+  "disclosed_at": "2026-10-27",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-117560",
+    "advisory": "https://www.vulncheck.com/advisories/atxp-gemini-cli-extension-through-1.0.0-os-command-injection-via-mcp-tools",
+    "upstream_issue": "https://github.com/atxp-dev/atxp/issues/15",
+    "vulnerable_code": "https://github.com/atxp-dev/atxp/blob/4e88b0282b51ae7c22ea1b6ca4476a39298299ff/src/server.ts#L28-L40",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/386"
+  },
+  "payloads": [
+    {"id": "message-id-substitution", "tool": "atxp_tool", "arguments": {"message_id": "msg-42$(id)"}, "argument": "message_id", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "subject-backtick", "tool": "atxp_tool", "arguments": {"subject": "Invoice `id`"}, "argument": "subject", "token": "`", "verdict": "deny_shell_metachar"},
+    {"id": "subject-substitution", "tool": "atxp_tool", "arguments": {"subject": "Invoice $(id)"}, "argument": "subject", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "query-substitution", "tool": "atxp_tool", "arguments": {"query": "from:billing $(id)"}, "argument": "query", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "query-backtick", "tool": "atxp_tool", "arguments": {"query": "from:billing `id`"}, "argument": "query", "token": "`", "verdict": "deny_shell_metachar"}
+  ],
+  "benign": [
+    {"id": "read-a-message", "tool": "atxp_tool", "arguments": {"message_id": "msg-42"}},
+    {"id": "a-subject", "tool": "atxp_tool", "arguments": {"subject": "Invoice for October"}},
+    {"id": "a-search", "tool": "atxp_tool", "arguments": {"query": "from:billing subject:invoice"}}
+  ],
+  "passes_by_design": [
+    {"id": "variable-reference", "tool": "atxp_tool", "arguments": {"subject": "Price in $USD"}, "why": "$NAME expansion is left out of the default set"}
+  ]
+}
