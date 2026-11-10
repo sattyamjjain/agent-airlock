@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -1300,6 +1300,34 @@
     
   
     Tool-definition pins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/oauth-issuer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OAuth metadata binding
   
 
     
@@ -3039,6 +3067,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#refreshing-from-malware-advisories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refreshing from malware advisories
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#decision-shape" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3142,6 +3181,69 @@ regex.</p>
 returns the recommended config dict (preset_id, severity,
 default_action, advisory_url, ghsa_url, blast_list pre-loaded from the
 current dated snapshot, <code>data/oidc_publish_blast_2026_10_28.json</code>).</p>
+<p>Since 0.10.32 it also carries the malware advisory snapshot (below): its exact releases are
+added to <code>blast_list</code>, and <code>blocked_packages</code>, <code>advisories</code> and <code>malware_feed_as_of</code> come back
+beside it. <code>include_malware_feed=False</code> leaves it out, and an explicit <code>blast_list</code> still
+replaces the pairs. Build the guard from all three:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">OIDCPublishWindowGuard</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">npm_oidc_publish_window_guard_defaults</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">npm_oidc_publish_window_guard_defaults</span><span class="p">(</span><span class="n">installs_from</span><span class="o">=</span><span class="s2">"npm"</span><span class="p">)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">OIDCPublishWindowGuard</span><span class="p">(</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">blast_list</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"blast_list"</span><span class="p">],</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">blocked_packages</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"blocked_packages"</span><span class="p">],</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">advisories</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"advisories"</span><span class="p">],</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">installs_from</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"installs_from"</span><span class="p">],</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="p">)</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">decision</span> <span class="o">=</span> <span class="n">guard</span><span class="o">.</span><span class="n">evaluate</span><span class="p">({</span><span class="s2">"package"</span><span class="p">:</span> <span class="s2">"@ethersphere/bee-js@13.3.0"</span><span class="p">})</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="c1"># decision.allowed is False; decision.detail names GHSA-hh7j-5m3j-23pf</span>
+</code></pre></div>
+<h2 id="refreshing-from-malware-advisories">Refreshing from malware advisories<a class="headerlink" href="#refreshing-from-malware-advisories" title="Permanent link">&para;</a></h2>
+<p>The incident list covers one incident. GitHub's advisory database and OSV publish malicious
+npm and PyPI packages every day, and until 0.10.32 none of them reached the guard until
+someone edited a JSON file.</p>
+<ul>
+<li><code>scripts/refresh_malware_blast.py</code> (maintainer-run, the only part that uses the network)
+  pages through <code>GET https://api.github.com/advisories?type=malware</code> for <code>npm</code> and <code>pip</code>, can
+  also read an osv.dev <code>all.zip</code> already on disk (<code>--osv-zip</code>), and writes
+  <code>src/agent_airlock/data/malware_blast_&lt;YYYY_MM_DD&gt;.json</code>. Set <code>GITHUB_TOKEN</code> for the
+  authenticated rate limit. <code>--since YYYY-MM-DD</code> limits it to advisories published since
+  then. It filters on the publish date because GitHub re-touches old malware advisories in
+  bulk, so an update-date window is most of the feed.</li>
+<li>The shipped snapshot, <code>malware_blast_2026_11_10.json</code>, holds advisories published since
+  2026-10-11: 1,485 advisories, 2,772 entries (2,101 exact releases, 671 whole packages),
+  315 KB. The whole feed is 121,888 malware advisories, mostly from three waves (July,
+  August and September 2026); a snapshot of the last 90 days alone is 87,842 entries and
+  9.8 MB, takes about 0.7 s and 73 MB to load, and adds that much to the repository at every
+  refresh. npm takes most flagged packages down, so old entries mostly guard releases the
+  registry no longer serves, though a caching proxy can still serve them. Run the script with
+  an earlier <code>--since</code> if yours does.</li>
+<li><code>load_malware_blast_snapshot()</code> reads the newest snapshot the install ships, offline;
+  <code>load_blast_list_from_advisories(paths)</code> reads advisory files you supply.</li>
+<li>An advisory that names exact versions adds pairs. One that calls every version malicious
+  (<code>&gt; 0</code>, which most GitHub malware advisories use, <code>&gt;= 0</code>, an empty range, or OSV
+  <code>introduced: "0"</code> with no versions list) adds a whole package: any version is refused, and so
+  is a request with no version.</li>
+<li>A whole package has no version to narrow it, so it is matched in one ecosystem: the one the
+  argument's syntax names (a pip specifier such as <code>==</code>, <code>&gt;=</code> or <code>[extra]</code> is PyPI;
+  <code>@scope/name</code>, <code>name@1.2.3</code>, <code>npm:</code> or a tarball URL is npm), else the one <code>installs_from</code>
+  names. <code>installs_from</code> (<code>"npm"</code>, <code>"pypi"</code> or <code>"any"</code>) is required with <code>blocked_packages</code>:
+  npm malware squats real PyPI names. Across GitHub's whole malware feed on 2026-11-10, 589 npm
+  whole-package names were also PyPI projects, 82 of them in PyPI's top 15,000, among them
+  <code>typing-extensions</code>, <code>pydantic</code>, <code>python-dotenv</code>, <code>uvicorn</code> and <code>gunicorn</code>. A pip tool on a
+  guard that read bare names in both registries would refuse them all. Pairs still match in
+  either ecosystem; among PyPI's top 2,000 projects one npm malware pair equals a real release
+  (<code>asgiref</code> 1.0).</li>
+<li>Skipped, and counted in the snapshot's <code>skipped</code> and <code>skipped_by_reason</code>: another ecosystem, a range such as
+  <code>&lt; 2.0.0</code> (the advisory does not say which releases inside it are malicious), and an OSV
+  record that is not malware (a reviewed GHSA vulnerability: reading its affected versions as
+  malicious would block safe releases). An OSV record counts as malware when its id is
+  <code>MAL-*</code> or it carries CWE-506. Withdrawn advisories are left out.</li>
+<li>A malformed document stops the refresh with the file and field named; nothing is written
+  from a partial read.</li>
+</ul>
+<p>The snapshot is only as current as its date (<code>malware_feed_as_of</code>). A package flagged after it
+passes until the next refresh.</p>
 <h2 id="decision-shape">Decision shape<a class="headerlink" href="#decision-shape" title="Permanent link">&para;</a></h2>
 <p><code>evaluate(args)</code> returns <code>OIDCPublishWindowDecision</code> mirroring
 <code>AllowlistVerdict</code> / <code>OutcomesRubricDecision</code> / <code>FilterEvalRCEDecision</code>
@@ -3291,7 +3393,7 @@ current dated snapshot, <code>data/oidc_publish_blast_2026_10_28.json</code>).</
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

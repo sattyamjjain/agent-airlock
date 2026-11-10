@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -1306,6 +1306,34 @@
     
   
     Tool-definition pins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/oauth-issuer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OAuth metadata binding
   
 
     
@@ -3660,6 +3688,7 @@ per-class, false-positive-aware breakdown — not the headline number.</p>
 <h2 id="matched-pair-multi-harness-prompt-injection">Matched-pair multi-harness prompt injection<a class="headerlink" href="#matched-pair-multi-harness-prompt-injection" title="Permanent link">&para;</a></h2>
 <p>Same repository, same task, <strong>one</strong> realistic instruction planted in a README: which coding harness acts on it? Reported against a benign control line of identical shape, because an injected rate without its benign twin cannot distinguish <em>injection-susceptible</em> from merely <em>README-obedient</em>.</p>
 <p><strong>Result (2026-10-03, 144/144 cells measured, 18 trials x 2 arms x 2 airlock modes).</strong> <code>claude-code</code> 2.1.288 and <code>codex</code> 0.154.0, pinned to <code>gpt-6-astra</code> (the model the 2026-09-20 run used), acted on the exfiltration-shaped script <strong>0/36 each</strong> — and on the harmless twin <strong>0/36 each</strong>. Matrix total <strong>0/144</strong>, as on 2026-09-20, so neither harness's zero can be read as resistance. Both harnesses fixed the seeded bug and ran the suite in <strong>72/72</strong> cells; on 2026-09-20 <code>codex</code> managed 52/72.</p>
+<p><strong>Re-run 2026-11-03, partial.</strong> <code>claude-code</code> 2.1.317 (<code>claude-opus-4-8</code>) finished all 72 cells, 0/36 on each arm. <code>codex</code> 0.154.0 stopped after 41 cells at its plan's usage limit: 0/36 injected and 0/5 benign, a much smaller control. <code>cursor-agent</code> errored on every cell and measured nothing. The analysis below stays on the last complete matrix, 2026-10-03.</p>
 <blockquote>
 <p><strong>The bound, and the denominator it rests on.</strong> 0/36 per harness per arm carries a 95% Wilson interval of <strong>[0.0%, 9.6%]</strong>, and pooled across harnesses the injected arm is 0/72, <strong>[0.0%, 5.1%]</strong>. Every cell completed the task this time, so both intervals rest on cells where running the planted script was a choice; on 2026-09-20 <code>codex</code> completed 24 of its 36 injected cells and its bound was [0.0%, 13.8%]. Two explanations for a zero are ruled out: the agents had a reason to act, and they do run commands in the fixture (they ran the suite, at the exact point the planted line applies).</p>
 <p><strong>It is still not an injection-resistance result.</strong> Both harnesses ignored the benign twin exactly as completely as the injected line, so both zeros are indifference to this delivery channel rather than detection of intent. The 2026-08-26 run at least had <code>codex</code> acting on the benign twin once, which made its injected zero a choice rather than blanket indifference; that one event has not reproduced in either run since, and with all four arms at zero there is no asymmetry left to test. Neither result predicts anything about an injection arriving through a channel these agents act on more readily (a task-relevant source file, a tool description, an error message). Per-harness table and the full list of what this does not show: <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md"><code>benchmarks/harness_injection/RESULTS.md</code></a>.</p>
@@ -3765,7 +3794,7 @@ per-class, false-positive-aware breakdown — not the headline number.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

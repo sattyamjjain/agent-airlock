@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -1306,6 +1306,34 @@
     
   
     Tool-definition pins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/oauth-issuer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OAuth metadata binding
   
 
     
@@ -3161,20 +3189,20 @@ than omitted — four of the ten OWASP Agentic slots are in that state.</p>
 <tbody>
 <tr>
 <td><strong>Cross-tool block rate</strong> · 210 tool calls</td>
-<td>100% blocked (106/106, 95% CI 96.5–100%) · 0% false-positive (0/104, 95% CI 0–3.6%) · p50 ~2µs · <em>6 of 10 OWASP ASI slots measured; ASI07–ASI10 are n=0</em></td>
-<td>2026-10-03</td>
+<td>100% blocked (106/106, 95% CI 96.5–100%) · 0% false-positive (0/104, 95% CI 0–3.6%) · p50 ~3µs · <em>6 of 10 OWASP ASI slots measured; ASI07–ASI10 are n=0</em></td>
+<td>2026-11-07</td>
 <td><a href="blockrate/">Cross-tool block rate results</a></td>
 </tr>
 <tr>
 <td><strong><code>sandbox=True</code> dispatch</strong> · contract parity</td>
 <td>4/4 annotated-contract probes refused on the sandbox path (0/4 before v0.10.6) · 204/204 verdicts agree with the local path, 100 policy items admitted and 100 refused on both. The 2026-09-16 run's 204/204 was vacuous: every policy item was refused on both paths</td>
-<td>2026-10-03</td>
+<td>2026-11-07</td>
 <td><a href="blockrate/#sandboxtrue-dispatch-arm">Sandbox dispatch parity arm</a></td>
 </tr>
 <tr>
 <td><strong>Least-privilege</strong> · ToolPrivBench, 100 scenarios</td>
 <td>100% over-privileged blocked · 100% low-privileged allowed · OPUR 100% → 0%</td>
-<td>2026-10-03</td>
+<td>2026-11-07</td>
 <td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/toolprivbench/RESULTS.md">ToolPrivBench results on GitHub</a></td>
 </tr>
 <tr>
@@ -3192,19 +3220,19 @@ than omitted — four of the ten OWASP Agentic slots are in that state.</p>
 <tr>
 <td><strong>vs. native MCP gateway</strong> · 12 malformed payloads</td>
 <td>airlock 12/12 blocked · Docker MCP Gateway 0/12 · 0% false-positive on both</td>
-<td>2026-10-03</td>
+<td>2026-11-03</td>
 <td><a href="vs-native-mcp-gateway/">Native MCP gateway head-to-head</a></td>
 </tr>
 <tr>
 <td><strong>Prompt injection across agent harnesses</strong></td>
-<td>A null result, published as one. <code>claude-code</code> and <code>codex</code> each acted on the planted script 0/36, and ignored the benign twin just as completely, so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made <code>codex</code>'s zero a choice did not reproduce. Both harnesses finished all 72 of their cells (<code>codex</code> after its plan's usage limit paused it at 35)</td>
-<td>2026-10-03</td>
+<td>A null result, published as one. <code>claude-code</code> and <code>codex</code> each acted on the planted script 0/36, and ignored the benign twin too (<code>claude-code</code> 0/36, <code>codex</code> 0/5), so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made <code>codex</code>'s zero a choice did not reproduce. <code>claude-code</code> (model <code>claude-opus-4-8</code>) finished all 72 of its cells; <code>codex</code> ran 41 before its plan's usage limit stopped it; <code>cursor-agent</code> errored on every cell and is not measured (113 cells measured, 103 errored cells excluded from the denominator). The last complete matrix is 2026-10-03, 144/144 cells</td>
+<td>2026-11-03</td>
 <td><a href="injection-multi-harness/">Multi-harness prompt injection</a></td>
 </tr>
 <tr>
 <td><strong>MCP spec conformance</strong> · <code>@modelcontextprotocol/conformance</code></td>
 <td>Run against the wire-path validators, outcome published in full. Not a full MCP server/client conformance pass — airlock is a request validator, not a server, so it does not claim one</td>
-<td>2026-10-03</td>
+<td>2026-11-07</td>
 <td><a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/mcp_conformance/RESULTS.md">MCP conformance results on GitHub</a></td>
 </tr>
 </tbody>
@@ -3334,7 +3362,7 @@ before it is spent.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

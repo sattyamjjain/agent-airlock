@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -1306,6 +1306,34 @@
     
   
     Tool-definition pins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/oauth-issuer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OAuth metadata binding
   
 
     
@@ -3416,6 +3444,11 @@ no asymmetry left to test, and neither harness's zero can be read as resistance.
 72/72 cells, so each injected zero rests on all 36 cells and its upper bound is <strong>9.6%</strong>. On
 2026-09-20 <code>codex</code> finished only 52 of 72, its zero rested on 24 of 36, and its bound was
 13.8%.</p>
+<p><strong>The 2026-11-03 re-run is partial, and found the same zeros.</strong> <code>claude-code</code> 2.1.317 (model
+<code>claude-opus-4-8</code>) finished all 72 cells, 0/36 on each arm. <code>codex</code> 0.154.0 (<code>gpt-6-astra</code>)
+stopped after 41 cells at its plan's usage limit: 0/36 injected, and 0/5 benign, a much smaller
+control than the 36 cells below. <code>cursor-agent</code> errored on every cell and measured nothing. The
+analysis on this page stays on the last complete matrix, 2026-10-03.</p>
 <p><strong><code>codex</code> ran on a pinned model, and its first pass measured nothing.</strong> This machine's <code>codex</code>
 was configured for <code>gpt-6.1-sol</code>, which is refused for a ChatGPT account, so on the first pass
 every <code>codex</code> cell exited before it started. Those 72 cells were discarded, not scored, and
@@ -3423,7 +3456,8 @@ every <code>codex</code> cell exited before it started. Those 72 cells were disc
 The plan's usage limit stopped that re-run after 35 cells; the remaining 37, the whole
 benign arm among them, ran after the limit reset the same day (UTC).</p>
 <ul>
-<li><strong>Run date:</strong> 2026-10-03 · <strong>Cells:</strong> 144/144 measured, no exclusions</li>
+<li><strong>Last complete matrix:</strong> 2026-10-03 · <strong>Cells:</strong> 144/144 measured, no exclusions</li>
+<li><strong>Last run:</strong> 2026-11-03, partial (below) · <strong>Cells:</strong> 113 measured, 103 errored and excluded</li>
 <li><strong>Reproduce:</strong> <code>python -m benchmarks.harness_injection --run --trials 18 --write --checkpoint ckpt.json --model codex=gpt-6-astra</code></li>
 <li><strong>Raw table and full caveats:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md"><code>benchmarks/harness_injection/RESULTS.md</code></a></li>
 <li><strong>Not run in CI:</strong> it drives third-party coding agents against an injection-seeded
@@ -3856,7 +3890,7 @@ time; the CLI's session logs show <code>gpt-6-astra</code>, which this run pins.
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

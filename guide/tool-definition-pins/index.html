@@ -16,14 +16,14 @@
         <link rel="prev" href="../argument-secrets/">
       
       
-        <link rel="next" href="../../api/airlock/">
+        <link rel="next" href="../oauth-issuer/">
       
       
         
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -1419,6 +1419,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../oauth-issuer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OAuth metadata binding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -3256,21 +3284,72 @@ a ceiling to check against the pins, not a refresh to adopt.</p>
 <code>Client</code>) and returns the result in its own shape. With <code>on_drift="filter"</code>, the tools the
 pins do not admit are dropped, and a listing that cannot be read raises anyway. With the
 guard's <code>enforce</code> off, the listing comes back unchanged.</p>
-<p>A paginated server lists one page per call. Each page is checked on its own, so a tool
-listed on two pages is not caught as a duplicate.</p>
-<h2 id="on-a-fastmcp-server">On a FastMCP server<a class="headerlink" href="#on-a-fastmcp-server" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_secure_mcp_server</span><span class="p">,</span> <span class="n">tool_definitions</span>
+<p>A paginated server lists one page per call, and <code>list_tools_pinned</code> checks each page on its
+own. A tool listed on two pages reads as clean twice, and <code>missing</code> counts the tools on the
+other pages. For a server that paginates, use <code>list_all_tools_pinned</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.mcp_spec.tool_definition_pin_guard</span><span class="w"> </span><span class="kn">import</span> <span class="n">list_all_tools_pinned</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">ToolDefinitionPinGuard</span><span class="p">()</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">mcp</span><span class="p">,</span> <span class="n">secure</span> <span class="o">=</span> <span class="n">create_secure_mcp_server</span><span class="p">(</span><span class="s2">"Reports"</span><span class="p">,</span> <span class="n">pin_guard</span><span class="o">=</span><span class="n">guard</span><span class="p">)</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nd">@secure</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">send_report</span><span class="p">(</span><span class="n">recipient</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="o">...</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># At review time: approve what the server serves, and store guard.pins.</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="k">for</span> <span class="n">definition</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">tool_definitions</span><span class="p">(</span><span class="n">mcp</span><span class="p">):</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="n">guard</span><span class="o">.</span><span class="n">approve</span><span class="p">(</span><span class="n">definition</span><span class="p">)</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">tools</span> <span class="o">=</span> <span class="k">await</span> <span class="n">list_all_tools_pinned</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">guard</span><span class="p">)</span>  <span class="c1"># reads every page, judges them once</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">tools</span> <span class="o">=</span> <span class="k">await</span> <span class="n">list_all_tools_pinned</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">guard</span><span class="p">,</span> <span class="n">on_drift</span><span class="o">=</span><span class="s2">"filter"</span><span class="p">,</span> <span class="n">max_pages</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+</code></pre></div>
+<p>It follows each cursor, collects the tools and runs <code>admit_tools_list</code> once on all of them,
+so a tool on two pages is a duplicate, and <code>missing</code> covers the whole listing. The result
+has the first page's shape with no cursor left on it. With <code>on_drift="filter"</code>, every copy
+of a duplicate is dropped.</p>
+<p>These raise <code>ToolListingDriftError</code> in every mode, with <code>enforce</code> off too, because there is
+no whole listing to judge: a cursor seen twice, a cursor that is not a string, a page that
+is not a listing, more than <code>max_pages</code> pages (100 by default, and the page past it is never
+requested), and a session that cannot follow a cursor. An empty cursor ends the listing;
+nothing past it is read, so nothing past it is admitted.</p>
+<p>The SDKs differ, and it handles each of them:</p>
+<table>
+<thead>
+<tr>
+<th>Session</th>
+<th>How it pages</th>
+<th>Comes back as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ClientSession</code>, mcp 2.x</td>
+<td><code>params=</code>, result has <code>next_cursor</code></td>
+<td><code>ListToolsResult</code></td>
+</tr>
+<tr>
+<td><code>ClientSession</code>, mcp 1.x</td>
+<td><code>params=</code>, result has <code>nextCursor</code></td>
+<td><code>ListToolsResult</code></td>
+</tr>
+<tr>
+<td><code>mcp.Client</code>, mcp 2.x</td>
+<td><code>cursor=</code>, result has <code>next_cursor</code></td>
+<td><code>ListToolsResult</code></td>
+</tr>
+<tr>
+<td>FastMCP <code>Client</code> 3 and 4</td>
+<td><code>list_tools_mcp(cursor=...)</code></td>
+<td>a list, as <code>list_tools()</code> gives</td>
+</tr>
+</tbody>
+</table>
+<p>FastMCP's own <code>list_tools()</code> flattens the pages, so it is not used here: versions 3 and 4 stop
+at a repeated cursor with only a warning, and version 2 returns page 1 and drops the cursor.
+Version 2's page call takes no cursor either, so on a server that pages it raises. Pass
+<code>client.session</code> instead.</p>
+<h2 id="on-a-fastmcp-server">On a FastMCP server<a class="headerlink" href="#on-a-fastmcp-server" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_secure_mcp_server</span><span class="p">,</span> <span class="n">tool_definitions</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">ToolDefinitionPinGuard</span><span class="p">()</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">mcp</span><span class="p">,</span> <span class="n">secure</span> <span class="o">=</span> <span class="n">create_secure_mcp_server</span><span class="p">(</span><span class="s2">"Reports"</span><span class="p">,</span> <span class="n">pin_guard</span><span class="o">=</span><span class="n">guard</span><span class="p">)</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nd">@secure</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">send_report</span><span class="p">(</span><span class="n">recipient</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="o">...</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="c1"># At review time: approve what the server serves, and store guard.pins.</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="k">for</span> <span class="n">definition</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">tool_definitions</span><span class="p">(</span><span class="n">mcp</span><span class="p">):</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="n">guard</span><span class="o">.</span><span class="n">approve</span><span class="p">(</span><span class="n">definition</span><span class="p">)</span>
 </code></pre></div>
 <p>With <code>pin_guard</code> set, the server:</p>
 <ul>
@@ -3373,7 +3452,7 @@ With the guard's <code>enforce</code> off, the server only logs what it would re
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

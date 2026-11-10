@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -1319,6 +1319,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/oauth-issuer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OAuth metadata binding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2025,6 +2053,39 @@
     <span class="md-ellipsis">
       
         CVE-2026-11624
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-123271" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-123271
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-123272" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-123272
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-123783" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-123783
       
     </span>
   </a>
@@ -3864,6 +3925,39 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cve-2026-123271" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-123271
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-123272" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-123272
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cve-2026-123783" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CVE-2026-123783
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cve-2026-19591" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4406,6 +4500,24 @@ catalog and the tests stay in lockstep.</p>
 <td>MCP HTTP-transport Origin/Host DNS-rebinding</td>
 <td>9.4</td>
 <td>—</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-123271">CVE-2026-123271</a></td>
+<td>ChatCLI MCP OAuth: a server-supplied resource used as the resource indicator</td>
+<td>8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346</td>
+<td>Partial</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-123272">CVE-2026-123272</a></td>
+<td>mcp-go OAuth: protected resource metadata names another server's resource</td>
+<td>8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346</td>
+<td>Partial</td>
+</tr>
+<tr>
+<td><a href="#cve-2026-123783">CVE-2026-123783</a></td>
+<td>Skyvern script sandbox: functions rebuilt from raw bytecode with <code>types.CodeType</code></td>
+<td>8.8 (HIGH) — AV:N/AC:L/PR:L/UI:N, CWE-184</td>
+<td>Partial</td>
 </tr>
 <tr>
 <td><a href="#cve-2026-19591">CVE-2026-19591</a></td>
@@ -5158,6 +5270,94 @@ visits can DNS-rebind to <code>127.0.0.1</code> and script MCP tool calls at the
 server (file reads, command execution, database access). Fixed in 0.25.0 with
 an <code>--allowed-hosts</code> flag alongside <code>--allowed-origins</code>, warning when</p>
 <p><a id="cve-2026-11624"></a></p>
+<h3 id="cve-2026-123271">CVE-2026-123271<a class="headerlink" href="#cve-2026-123271" title="Permanent link">&para;</a></h3>
+<p><strong>ChatCLI MCP OAuth: a server-supplied resource used as the resource indicator</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-123271">https://nvd.nist.gov/vuln/detail/CVE-2026-123271</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/diillson/chatcli/security/advisories/GHSA-95vg-3r9c-2v5q">https://github.com/diillson/chatcli/security/advisories/GHSA-95vg-3r9c-2v5q</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_123271_chatcli_prm_resource.py"><code>tests/cves/test_cve_2026_123271_chatcli_prm_resource.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>"ChatCLI before v1.215.2 contains an improper validation vulnerability in the MCP OAuth
+login flow that uses server-supplied Protected Resource Metadata as the resource indicator
+without checking it matches the configured server URL. A malicious MCP server can declare
+another resource on the same authorization server, obtain the user's bearer token for it,
+and replay that token against the other resource." Fixed in v1.215.2 by commit 951fe24b,
+which refuses metadata that names another resource and always requests the token for the
+configured server.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>The same class as CVE-2026-123272 in mcp-go, which has its own module. RFC 9728 section 3.3
+says a protected resource metadata document whose <code>resource</code> is not the identifier the
+client built the metadata URL from must not be used, and
+<code>ProtectedResourceMetadata.from_discovery</code> refuses it. <strong>Out of reach:</strong> ChatCLI's own
+login flow, which does not call airlock, and the client's choice of RFC 8707 <code>resource</code>
+parameter. ChatCLI's fix sends the configured server URL whatever the metadata says, and a
+client using airlock should do the same.</p>
+<p>Observed against <code>v0.10.31</code> while writing this module: <code>ProtectedResourceMetadata</code>
+parsed the malicious document with no error, and there was no <code>from_discovery</code>.</p>
+<p><a id="cve-2026-123271"></a></p>
+<h3 id="cve-2026-123272">CVE-2026-123272<a class="headerlink" href="#cve-2026-123272" title="Permanent link">&para;</a></h3>
+<p><strong>mcp-go OAuth: protected resource metadata names another server's resource</strong></p>
+<ul>
+<li><strong>CVSS:</strong> 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-123272">https://nvd.nist.gov/vuln/detail/CVE-2026-123272</a></li>
+<li><strong>Advisory:</strong> <a href="https://github.com/mark3labs/mcp-go/security/advisories/GHSA-xf6j-693p-wqxx">https://github.com/mark3labs/mcp-go/security/advisories/GHSA-xf6j-693p-wqxx</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_123272_mcp_go_prm_resource.py"><code>tests/cves/test_cve_2026_123272_mcp_go_prm_resource.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>"Mark3labs mcp-go before v1.2.1 contains an improper validation vulnerability in
+OAuthHandler.fetchServerMetadata that allows malicious MCP servers to obtain tokens for other
+resources by declaring arbitrary resources in well-known metadata. Attackers can declare a
+different MCP server as the RFC 8707 resource indicator, causing the authorization server to
+mint tokens the attacker replays against that resource." Fixed in v1.2.1 by commit 90d247ed
+(mark3labs/mcp-go#1053), which checks the declared resource against the server the client
+addressed. On the well-known path it also accepts a resource that is a segment-aware prefix
+of that URL; the check below accepts only the same server.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p>RFC 9728 section 3.3: the <code>resource</code> a protected resource metadata document returns must
+be the resource identifier the client built the metadata URL from, or the document must not
+be used. <code>ProtectedResourceMetadata.from_discovery</code> and <code>validate_protected_resource</code>
+are that check, so a client that reads the document through them refuses this one. <strong>Out of
+reach:</strong> mcp-go's own OAuth handler, which does not call airlock, and the client's choice of
+RFC 8707 <code>resource</code> parameter: send the MCP server's own URL there whatever the document
+says. The plain constructor still parses any <code>resource</code>, which <code>TestDocumentedLimit</code>
+pins.</p>
+<p>Observed against <code>v0.10.31</code> while writing this module: <code>ProtectedResourceMetadata</code>
+parsed the malicious document with no error, and there was no <code>from_discovery</code>.</p>
+<p><a id="cve-2026-123272"></a></p>
+<h3 id="cve-2026-123783">CVE-2026-123783<a class="headerlink" href="#cve-2026-123783" title="Permanent link">&para;</a></h3>
+<p><strong>Skyvern script sandbox: functions rebuilt from raw bytecode with <code>types.CodeType</code></strong></p>
+<ul>
+<li><strong>CVSS:</strong> 8.8 (HIGH) — AV:N/AC:L/PR:L/UI:N, CWE-184</li>
+<li><strong>Airlock fit:</strong> partial</li>
+<li><strong>NVD:</strong> <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-123783">https://nvd.nist.gov/vuln/detail/CVE-2026-123783</a></li>
+<li><strong>Advisory:</strong> <a href="https://www.vulncheck.com/advisories/skyvern-through-1.0.56-script-sandbox-bypass-via-types-codetype-bytecode">https://www.vulncheck.com/advisories/skyvern-through-1.0.56-script-sandbox-bypass-via-types-codetype-bytecode</a></li>
+<li><strong>Regression test:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_123783_skyvern_codetype.py"><code>tests/cves/test_cve_2026_123783_skyvern_codetype.py</code></a></li>
+</ul>
+<p><strong>Vulnerability</strong></p>
+<p>"Skyvern through 1.0.56 contains a sandbox bypass vulnerability that allows authenticated
+users to execute code by reconstructing functions from raw bytecode with types.CodeType.
+Attackers can deploy scripts that evade the is_safe_script_code AST denylist and import
+blocked modules such as subprocess or socket to run code in the Skyvern server process."
+Fixed in 1.0.57 by commit 31a64c1a (Skyvern-AI/skyvern#8937), which adds <code>CodeType</code>,
+<code>FunctionType</code> and <code>LambdaType</code> to the blocked attributes, and <code>sys</code> and <code>types</code> to
+the blocked imports.</p>
+<p><strong>Airlock mitigation</strong></p>
+<p><strong>In scope:</strong> a code-tool argument escaping the restriction the tool declares, the
+documented shape in <code>docs/cve-triage.md</code> ("Code injection into an interpreter sink"), and
+the same split as CVE-2026-53710. <strong>Out of scope:</strong> Skyvern's own AST denylist, which is
+upstream's to fix, and the authenticated-user precondition: this guard's whole input is the
+call's arguments, so it cannot see who sent them.</p>
+<p><code>EvalRCEGuard</code> had the shape of the bug: it refused a string argument only when it saw
+an eval-family call. These payloads call none, so on 0.10.31 routes a to p were all
+allowed. Observed against <code>v0.10.31</code> while writing this module: <code>allowed=True</code> for
+every payload in the fixture, and for <code>exec</code> in fullwidth letters. The guard now screens
+for the code object itself, on by default. Skyvern's fix names three of the routes; the
+fixture covers the rest of the class, in its own routes g to p.</p>
+<p><a id="cve-2026-123783"></a></p>
 <h3 id="cve-2026-19591">CVE-2026-19591<a class="headerlink" href="#cve-2026-19591" title="Permanent link">&para;</a></h3>
 <p><strong>Codex command-safety parser disagreed with PowerShell about <code>--%</code></strong></p>
 <ul>
@@ -6102,7 +6302,7 @@ survives the auth hole; one that does not, does not.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

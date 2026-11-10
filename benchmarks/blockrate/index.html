@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -1306,6 +1306,34 @@
     
   
     Tool-definition pins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/oauth-issuer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OAuth metadata binding
   
 
     
@@ -3039,12 +3067,12 @@ the file carries the date of the run that produced them rather than being
 re-rendered on each docs build.</p>
 </div>
 <h1 id="cross-tool-block-rate-comparison-results">Cross-tool block-rate comparison — results<a class="headerlink" href="#cross-tool-block-rate-comparison-results" title="Permanent link">&para;</a></h1>
-<p>Last run: <strong>2026-10-03</strong>. Corpus: <strong>210</strong> tool calls.</p>
+<p>Last run: <strong>2026-11-07</strong>. Corpus: <strong>210</strong> tool calls.</p>
 <h2 id="headline">Headline<a class="headerlink" href="#headline" title="Permanent link">&para;</a></h2>
 <ul>
 <li>agent-airlock block-rate (malicious blocked): <strong>100.0%</strong></li>
 <li>agent-airlock false-positive rate (benign blocked): <strong>0.0%</strong></li>
-<li>Per-decision latency: <strong>p50 0.0017 ms</strong>, <strong>p95 0.0208 ms</strong> (in-process, no model call, no network)</li>
+<li>Per-decision latency: <strong>p50 0.0031 ms</strong>, <strong>p95 0.0289 ms</strong> (in-process, no model call, no network)</li>
 </ul>
 <p>The latency line is why this is a different layer from model-in-the-loop guardrails: a deny-by-default policy / argument guard decides in microseconds with no model inference, no API round-trip, and a deterministic verdict.</p>
 <h2 id="cross-tool-block-rate-comparison">Cross-tool block-rate comparison<a class="headerlink" href="#cross-tool-block-rate-comparison" title="Permanent link">&para;</a></h2>
@@ -3251,7 +3279,7 @@ re-rendered on each docs build.</p>
 </tr>
 <tr>
 <td><strong>Isolation backend execution</strong></td>
-<td><em>not run — no E2B backend in this runner; <code>@Airlock(sandbox=True)</code> dispatches only to E2B</em></td>
+<td><em>not run — no E2B backend here (e2b-code-interpreter not installed); <code>@Airlock(sandbox=True)</code> dispatches only to E2B</em></td>
 <td>❌ no</td>
 </tr>
 </tbody>
@@ -3393,7 +3421,7 @@ re-rendered on each docs build.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>
