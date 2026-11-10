@@ -49,6 +49,8 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-111451](#cve-2026-111451) | Wheels CLI MCP tool arguments reach deploy shells, file paths and generated CFML | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
+| [CVE-2026-123271](#cve-2026-123271) | ChatCLI MCP OAuth: a server-supplied resource used as the resource indicator | 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346 | Partial |
+| [CVE-2026-123272](#cve-2026-123272) | mcp-go OAuth: protected resource metadata names another server's resource | 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346 | Partial |
 | [CVE-2026-123783](#cve-2026-123783) | Skyvern script sandbox: functions rebuilt from raw bytecode with ``types.CodeType`` | 8.8 (HIGH) — AV:N/AC:L/PR:L/UI:N, CWE-184 | Partial |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
 | [CVE-2026-19753](#cve-2026-19753) | mcp-rdf-explorer explore_url takes an attacker-supplied URL into SSRF | 7.3 (HIGH) — CWE-918 | Strong |
@@ -700,6 +702,78 @@ server (file reads, command execution, database access). Fixed in 0.25.0 with
 an ``--allowed-hosts`` flag alongside ``--allowed-origins``, warning when
 
 <a id="cve-2026-11624"></a>
+
+### CVE-2026-123271
+
+**ChatCLI MCP OAuth: a server-supplied resource used as the resource indicator**
+
+- **CVSS:** 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-123271](https://nvd.nist.gov/vuln/detail/CVE-2026-123271)
+- **Advisory:** [https://github.com/diillson/chatcli/security/advisories/GHSA-95vg-3r9c-2v5q](https://github.com/diillson/chatcli/security/advisories/GHSA-95vg-3r9c-2v5q)
+- **Regression test:** [`tests/cves/test_cve_2026_123271_chatcli_prm_resource.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_123271_chatcli_prm_resource.py)
+
+**Vulnerability**
+
+"ChatCLI before v1.215.2 contains an improper validation vulnerability in the MCP OAuth
+login flow that uses server-supplied Protected Resource Metadata as the resource indicator
+without checking it matches the configured server URL. A malicious MCP server can declare
+another resource on the same authorization server, obtain the user's bearer token for it,
+and replay that token against the other resource." Fixed in v1.215.2 by commit 951fe24b,
+which refuses metadata that names another resource and always requests the token for the
+configured server.
+
+**Airlock mitigation**
+
+The same class as CVE-2026-123272 in mcp-go, which has its own module. RFC 9728 section 3.3
+says a protected resource metadata document whose ``resource`` is not the identifier the
+client built the metadata URL from must not be used, and
+``ProtectedResourceMetadata.from_discovery`` refuses it. **Out of reach:** ChatCLI's own
+login flow, which does not call airlock, and the client's choice of RFC 8707 ``resource``
+parameter. ChatCLI's fix sends the configured server URL whatever the metadata says, and a
+client using airlock should do the same.
+
+Observed against ``v0.10.31`` while writing this module: ``ProtectedResourceMetadata``
+parsed the malicious document with no error, and there was no ``from_discovery``.
+
+<a id="cve-2026-123271"></a>
+
+### CVE-2026-123272
+
+**mcp-go OAuth: protected resource metadata names another server's resource**
+
+- **CVSS:** 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-123272](https://nvd.nist.gov/vuln/detail/CVE-2026-123272)
+- **Advisory:** [https://github.com/mark3labs/mcp-go/security/advisories/GHSA-xf6j-693p-wqxx](https://github.com/mark3labs/mcp-go/security/advisories/GHSA-xf6j-693p-wqxx)
+- **Regression test:** [`tests/cves/test_cve_2026_123272_mcp_go_prm_resource.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_123272_mcp_go_prm_resource.py)
+
+**Vulnerability**
+
+"Mark3labs mcp-go before v1.2.1 contains an improper validation vulnerability in
+OAuthHandler.fetchServerMetadata that allows malicious MCP servers to obtain tokens for other
+resources by declaring arbitrary resources in well-known metadata. Attackers can declare a
+different MCP server as the RFC 8707 resource indicator, causing the authorization server to
+mint tokens the attacker replays against that resource." Fixed in v1.2.1 by commit 90d247ed
+(mark3labs/mcp-go#1053), which checks the declared resource against the server the client
+addressed. On the well-known path it also accepts a resource that is a segment-aware prefix
+of that URL; the check below accepts only the same server.
+
+**Airlock mitigation**
+
+RFC 9728 section 3.3: the ``resource`` a protected resource metadata document returns must
+be the resource identifier the client built the metadata URL from, or the document must not
+be used. ``ProtectedResourceMetadata.from_discovery`` and ``validate_protected_resource``
+are that check, so a client that reads the document through them refuses this one. **Out of
+reach:** mcp-go's own OAuth handler, which does not call airlock, and the client's choice of
+RFC 8707 ``resource`` parameter: send the MCP server's own URL there whatever the document
+says. The plain constructor still parses any ``resource``, which ``TestDocumentedLimit``
+pins.
+
+Observed against ``v0.10.31`` while writing this module: ``ProtectedResourceMetadata``
+parsed the malicious document with no error, and there was no ``from_discovery``.
+
+<a id="cve-2026-123272"></a>
 
 ### CVE-2026-123783
 

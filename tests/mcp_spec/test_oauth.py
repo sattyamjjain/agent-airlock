@@ -17,6 +17,7 @@ from agent_airlock.mcp_spec.oauth import (
     PKCEError,
     ProtectedResourceMetadata,
     RedirectURIError,
+    ResourceMismatchError,
     ResourceURIError,
     TokenAudienceError,
     canonicalize_resource_uri,
@@ -29,6 +30,7 @@ from agent_airlock.mcp_spec.oauth import (
     validate_authorization_response_iss,
     validate_metadata_issuer,
     validate_pkce_pair,
+    validate_protected_resource,
     validate_redirect_uri,
 )
 
@@ -764,6 +766,248 @@ class TestIssuerExports:
     def test_the_protocol_surface_names_them(self, name: str, value: Any) -> None:
         assert name in mcp_spec.__all__
         assert getattr(mcp_spec, name) is value
+
+
+# =============================================================================
+# RFC 9728 section 3.3: protected resource metadata names the server asked for
+# =============================================================================
+
+_MCP = "https://mcp.example.com"
+_MCP_A = "https://mcp-a.example.com/mcp"
+_MCP_B = "https://mcp-b.example.com/mcp"
+
+
+def _prm(resource: Any) -> dict[str, Any]:
+    """A protected resource metadata document naming ``resource``, complete enough to parse."""
+    return {"resource": resource, "authorization_servers": ["https://auth.example.com"]}
+
+
+def _refusal_text(exc: BaseException) -> str:
+    return f"{exc} {exc!r}"
+
+
+class TestProtectedResourceFromDiscovery:
+    def test_another_server_on_the_same_authorization_server_is_refused(self) -> None:
+        """CVE-2026-123272 / CVE-2026-123271: the document names a server the client never asked for."""
+        with pytest.raises(ResourceMismatchError, match="RFC 9728 section 3.3") as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(_MCP_B), resource_url=_MCP_A)
+        assert "mcp-a" not in _refusal_text(exc.value)
+        assert "mcp-b" not in _refusal_text(exc.value)
+
+    @pytest.mark.parametrize(
+        ("resource_url", "resource"),
+        [
+            pytest.param(f"{_MCP}/mcp", f"{_MCP}/admin/mcp", id="same-host-other-path"),
+            pytest.param(f"{_MCP}/mcp", _MCP, id="the-origin-for-a-server-with-a-path"),
+            pytest.param(_MCP, f"{_MCP}/mcp", id="a-path-for-a-server-at-the-root"),
+            pytest.param(f"{_MCP}/mcp", f"{_MCP}/mcpx", id="a-longer-segment"),
+            pytest.param(_MCP, "https://mcp.example.com:8443", id="other-port"),
+            pytest.param("https://mcp.example.com:8443", _MCP, id="port-dropped"),
+            pytest.param(_MCP, "https://mcp.example.com.evil.example", id="suffix-host"),
+            pytest.param(f"{_MCP}/m?tenant=a", f"{_MCP}/m?tenant=b", id="other-query"),
+            pytest.param(f"{_MCP}/m", f"{_MCP}/m?tenant=a", id="query-added"),
+            pytest.param(
+                "http://localhost:3000/mcp", "http://127.0.0.1:3000/mcp", id="another-loopback-name"
+            ),
+        ],
+    )
+    def test_any_other_server_is_refused(self, resource_url: str, resource: str) -> None:
+        with pytest.raises(ResourceMismatchError, match="RFC 9728 section 3.3"):
+            ProtectedResourceMetadata.from_discovery(_prm(resource), resource_url=resource_url)
+
+    @pytest.mark.parametrize(
+        "resource",
+        [
+            pytest.param("http://mcp.example.com", id="plain-http"),
+            pytest.param("ftp://mcp.example.com", id="another-scheme"),
+        ],
+    )
+    def test_another_scheme_is_refused(self, resource: str) -> None:
+        with pytest.raises(ResourceMismatchError) as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(resource), resource_url=_MCP)
+        assert "mcp.example.com" not in _refusal_text(exc.value)
+
+    @pytest.mark.parametrize(
+        ("resource_url", "resource"),
+        [
+            pytest.param(_MCP, f"{_MCP}/", id="root-slash"),
+            pytest.param(f"{_MCP}/", _MCP, id="root-slash-on-the-url"),
+            pytest.param(_MCP, "https://mcp.example.com:443", id="default-port"),
+            pytest.param("https://mcp.example.com:443/", _MCP, id="default-port-on-the-url"),
+            pytest.param(_MCP, "HTTPS://MCP.Example.com", id="scheme-and-host-case"),
+            pytest.param(f"{_MCP}/mcp", f"{_MCP}/mcp/", id="trailing-slash-on-a-path"),
+            pytest.param(
+                "http://localhost:3000/mcp", "http://localhost:3000/mcp", id="loopback-http"
+            ),
+        ],
+    )
+    def test_what_the_token_audience_check_forgives_passes(
+        self, resource_url: str, resource: str
+    ) -> None:
+        metadata = ProtectedResourceMetadata.from_discovery(
+            _prm(resource), resource_url=resource_url
+        )
+        assert metadata.resource == resource
+
+    @pytest.mark.parametrize(
+        "resource",
+        [
+            pytest.param(f"{_MCP}#fragment", id="fragment"),
+            pytest.param("", id="empty"),
+            pytest.param(f" {_MCP}", id="leading-space"),
+            pytest.param(f"{_MCP}\n", id="trailing-newline"),
+            pytest.param(f"{_MCP} ", id="trailing-no-break-space"),
+            pytest.param("mcp.example.com", id="no-scheme"),
+            pytest.param("https://", id="no-host"),
+            pytest.param("https://mcp.example.com:notaport", id="bad-port"),
+            pytest.param("https://user@mcp.example.com", id="userinfo"),
+            pytest.param("https://mcp.example.com/$(id)", id="shell-substitution"),
+            pytest.param("https://mcp.example.com/a b", id="unencoded-space"),
+        ],
+    )
+    def test_a_resource_that_is_not_a_server_uri_is_refused(self, resource: str) -> None:
+        with pytest.raises(ResourceMismatchError) as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(resource), resource_url=_MCP)
+        assert "mcp.example.com" not in _refusal_text(exc.value)
+        assert "resource" in str(exc.value)
+        assert exc.value.__suppress_context__ or exc.value.__context__ is None
+
+    @pytest.mark.parametrize("resource", [7, None, [_MCP], {"url": _MCP}])
+    def test_a_resource_that_is_not_a_string_is_refused_at_parse(self, resource: Any) -> None:
+        with pytest.raises(ValidationError) as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(resource), resource_url=_MCP)
+        assert "mcp.example.com" not in str(exc.value)
+
+    @pytest.mark.parametrize(
+        "resource_url",
+        [
+            pytest.param("", id="empty"),
+            pytest.param(f" {_MCP}", id="leading-space"),
+            pytest.param("mcp.example.com", id="no-scheme"),
+            pytest.param(f"{_MCP}#fragment", id="fragment"),
+            pytest.param("https://user@mcp.example.com", id="userinfo"),
+            pytest.param(None, id="none"),
+            pytest.param(b"https://mcp.example.com", id="bytes"),
+        ],
+    )
+    def test_a_resource_url_that_is_not_a_server_uri_is_refused(self, resource_url: Any) -> None:
+        with pytest.raises(ResourceMismatchError, match="resource_url") as exc:
+            ProtectedResourceMetadata.from_discovery(_prm(_MCP), resource_url=resource_url)
+        assert "mcp.example.com" not in _refusal_text(exc.value)
+
+    def test_a_document_that_does_not_parse_stays_a_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            ProtectedResourceMetadata.from_discovery({"resource": _MCP}, resource_url=_MCP)
+        with pytest.raises(ValidationError):
+            ProtectedResourceMetadata.from_discovery(
+                {"resource": _MCP, "authorization_servers": ["http://auth.example.com"]},
+                resource_url=_MCP,
+            )
+
+    @pytest.mark.parametrize("document", [None, "{}", [], 7])
+    def test_a_document_that_is_not_an_object_is_refused(self, document: Any) -> None:
+        with pytest.raises(ValidationError):
+            ProtectedResourceMetadata.from_discovery(document, resource_url=_MCP)
+
+    def test_a_matching_document_returns_the_parsed_model(self) -> None:
+        document = {**_prm(_MCP_A), "scopes_supported": ["files:read"], "jwks_uri": f"{_MCP}/j"}
+        metadata = ProtectedResourceMetadata.from_discovery(document, resource_url=_MCP_A)
+        assert isinstance(metadata, ProtectedResourceMetadata)
+        assert metadata.resource == _MCP_A
+        assert metadata.authorization_servers == ["https://auth.example.com"]
+        assert metadata.scopes_supported == ["files:read"]
+        assert metadata.model_extra == {"jwks_uri": f"{_MCP}/j"}
+
+    def test_the_plain_constructor_stays_as_it_was(self) -> None:
+        """No URL, no check: a current caller keeps working, and the docs say which to use."""
+        assert ProtectedResourceMetadata(**_prm(_MCP_B)).resource == _MCP_B
+
+
+class TestValidateProtectedResource:
+    def test_it_takes_parsed_metadata(self) -> None:
+        metadata = ProtectedResourceMetadata(**_prm(_MCP_A))
+        assert validate_protected_resource(metadata, resource_url=_MCP_A) is None
+        with pytest.raises(ResourceMismatchError):
+            validate_protected_resource(metadata, resource_url=_MCP_B)
+
+    @pytest.mark.parametrize("resource", [7, None, "", f" {_MCP_A}", f"{_MCP_A}#x", _MCP_B])
+    def test_a_resource_changed_after_parsing_is_checked_again(self, resource: Any) -> None:
+        """A model is not frozen."""
+        metadata = ProtectedResourceMetadata(**_prm(_MCP_A))
+        metadata.resource = resource
+        with pytest.raises(ResourceMismatchError):
+            validate_protected_resource(metadata, resource_url=_MCP_A)
+
+    @pytest.mark.parametrize("metadata", [None, _prm(_MCP_A), _MCP_A, object()])
+    def test_something_with_no_resource_attribute_is_refused(self, metadata: Any) -> None:
+        with pytest.raises(ResourceMismatchError, match="resource is a"):
+            validate_protected_resource(metadata, resource_url=_MCP_A)
+
+    def test_the_root_well_known_fallback_compares_with_the_origin(self) -> None:
+        """RFC 9728 section 3.3: the identifier the metadata URL was built from, here the origin."""
+        at_root = ProtectedResourceMetadata(**_prm(_MCP))
+        validate_protected_resource(at_root, resource_url=_MCP)
+        with pytest.raises(ResourceMismatchError):
+            validate_protected_resource(at_root, resource_url=f"{_MCP}/mcp")
+
+
+class TestTheResourceAndAudienceChecksAgree:
+    """The comparison uses the token audience check's key, so a token minted for a resource
+    this accepts is one the MCP server it names would accept, and the other way round."""
+
+    @pytest.mark.parametrize(
+        ("resource_url", "resource"),
+        [
+            (_MCP_A, _MCP_B),
+            (f"{_MCP}/mcp", f"{_MCP}/admin/mcp"),
+            (_MCP, "https://mcp.example.com:8443"),
+            (_MCP, f"{_MCP}/"),
+            (_MCP, "https://mcp.example.com:443"),
+            (_MCP, "HTTPS://MCP.Example.com"),
+            (f"{_MCP}/mcp", f"{_MCP}/mcp/"),
+            (f"{_MCP}/m?tenant=a", f"{_MCP}/m?tenant=b"),
+        ],
+    )
+    def test_both_reach_the_same_verdict(self, resource_url: str, resource: str) -> None:
+        try:
+            validate_protected_resource(
+                ProtectedResourceMetadata(**_prm(resource)), resource_url=resource_url
+            )
+            resource_ok = True
+        except ResourceMismatchError:
+            resource_ok = False
+        try:
+            validate_access_token_audience({"aud": resource}, expected_audience=resource_url)
+            audience_ok = True
+        except TokenAudienceError:
+            audience_ok = False
+        assert resource_ok is audience_ok
+
+    def test_a_token_minted_for_the_named_resource_is_refused_by_the_server_asked_for(
+        self,
+    ) -> None:
+        """Why the binding matters: the token the CVE's flow mints fails the real server's
+        audience check, so the only place it works is the server the document named."""
+        with pytest.raises(TokenAudienceError):
+            validate_access_token_audience({"aud": _MCP_B}, expected_audience=_MCP_A)
+        validate_access_token_audience({"aud": _MCP_B}, expected_audience=_MCP_B)
+
+
+class TestResourceExports:
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("ResourceMismatchError", ResourceMismatchError),
+            ("validate_protected_resource", validate_protected_resource),
+            ("ProtectedResourceMetadata", ProtectedResourceMetadata),
+        ],
+    )
+    def test_the_protocol_surface_names_them(self, name: str, value: Any) -> None:
+        assert name in mcp_spec.__all__
+        assert getattr(mcp_spec, name) is value
+
+    def test_the_error_is_a_value_error_like_the_rest_of_the_module(self) -> None:
+        assert issubclass(ResourceMismatchError, ValueError)
 
 
 # =============================================================================

@@ -130,7 +130,10 @@ preset, and
   (no DNS lookup): CVE-2026-119025's `open` ran such an `authorization_endpoint` through
   PowerShell. Both models set `hide_input_in_errors`, so the error text names the field and
   the character's class, never the URL; `errors()` still carries the input. Extra fields
-  (`extra="allow"`) are not screened.
+  (`extra="allow"`) are not screened. Neither constructor binds a document to a URL:
+  `ProtectedResourceMetadata.from_discovery` checks `resource` against the server URL the client
+  asked for (RFC 9728 section 3.3, CVE-2026-123272) through `_audience_key`, so it and the token
+  audience check compare alike.
 - **`EvalRCEGuard`'s code-object screen is not a sink** (`_CODE_OBJECT_ROUTES`, CVE-2026-123783
   class). `DEFAULT_EVAL_SINKS` stays as it is: the presets copy it, a test pins it, and its
   call-shape regex would miss an alias or an attribute. The refusal is `DENY_EVAL_SINK` with

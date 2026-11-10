@@ -14,13 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.10.32] - 2026-11-07
 
 Places a guard read past what it was handed: a JSON-RPC id's type, a listing's later
-pages, a redirect URI's fragment, a tenant id that names no tenant, a metadata
-document's issuer and an encoded `Mcp-Name`. `EvalRCEGuard` also refuses a string that
-builds or fetches a Python code object (CVE-2026-123783 class). This release also carries
-the two egress defences from #451.
+pages, a redirect URI's fragment, a tenant id that names no tenant, a metadata document's
+issuer, a protected resource's `resource` and an encoded `Mcp-Name`. `EvalRCEGuard` also
+refuses a string that builds or fetches a Python code object (CVE-2026-123783 class). This
+release also carries the two egress defences from #451.
 
 ### Security
 
+- Protected resource metadata bound to the MCP server the client asked for (RFC 9728 section 3.3, CVE-2026-123272 in mcp-go and CVE-2026-123271 in ChatCLI). `ProtectedResourceMetadata` takes no URL, so a document whose `resource` named another MCP server on the same authorization server parsed with no error, and a client that sent that value as the RFC 8707 resource indicator got a token minted for the other server. New: `ProtectedResourceMetadata.from_discovery(document, *, resource_url)`, `validate_protected_resource(metadata, *, resource_url)` and `ResourceMismatchError`. The comparison uses the token audience check's key, so a trailing slash, a default port and case in the scheme and host are forgiven and nothing else is; a `resource` must also pass the metadata URL screen and hold no userinfo. The constructor is unchanged, so a client has to move to `from_discovery` to get the check, and it should send the MCP server's own URL as the `resource` parameter whatever the document says. Regression fixtures for both CVEs.
 - `EvalRCEGuard` refuses arguments that build or fetch a Python code object (`CodeType`, `FunctionType`, `LambdaType`, `__code__`, `co_code`, `gi_code`/`cr_code`/`ag_code`/`f_code`, `marshal.loads`); CVE-2026-123783 regression fixture. A payload that called no eval-family function could take a code object, swap its bytecode with `.replace(co_code=...)` or build one with `types.CodeType(...)`, and call the result, and all of them passed. Closing the class also takes `.codeobj`, `.replace(co_*=)`, `codeop`, `compile_command`, `source_to_code`, `gc.get_referents`, `inspect.getmembers`, `iscode` and `sys.monitoring`, since `type(c)(...)` needs no name once any code object is in hand. The refusal is `DENY_EVAL_SINK` with `matched_sink="code_object"`, on by default, and `extra_sinks` cannot turn it off. A string that assembles a name at runtime through something other than `getattr(` still passes: the defence for that is isolation, and the docs say so. `CodeType` and `FunctionType` match as whole words anywhere, so a string argument holding JSON with a `"CodeType"` key is refused too.
 - `EvalRCEGuard` reads identifiers the way Python does (NFKC, PEP 3131). `ｅｘｅｃ('x')` in fullwidth letters runs `exec` and matched no sink.
 

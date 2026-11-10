@@ -45,6 +45,7 @@ from .oauth import (
     AuthorizationServerMetadata,
     IssuerMismatchError,
     ProtectedResourceMetadata,
+    ResourceMismatchError,
     canonicalize_resource_uri,
     generate_pkce_challenge,
     generate_pkce_verifier,
@@ -54,6 +55,7 @@ from .oauth import (
     validate_access_token_audience,
     validate_metadata_issuer,
     validate_pkce_pair,
+    validate_protected_resource,
     validate_redirect_uri,
 )
 from .tasks import (
@@ -90,6 +92,7 @@ __all__ = [
     "AuthorizationServerMetadata",
     "IssuerMismatchError",
     "ProtectedResourceMetadata",
+    "ResourceMismatchError",
     "canonicalize_resource_uri",
     "generate_pkce_challenge",
     "generate_pkce_verifier",
@@ -99,6 +102,7 @@ __all__ = [
     "validate_access_token_audience",
     "validate_metadata_issuer",
     "validate_pkce_pair",
+    "validate_protected_resource",
     "validate_redirect_uri",
     # tasks
     "Task",

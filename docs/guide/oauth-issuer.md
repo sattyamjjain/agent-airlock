@@ -1,10 +1,11 @@
-# Binding a discovered issuer to its URL
+# Binding discovered OAuth metadata to its URL
 
 A client that discovers an authorization server reads a metadata document and uses the issuer
 it names. RFC 8414 section 3.3 says that issuer must be the identifier the well-known URL was
 built from, or the document must not be used. MCP 2026-07-28's
 [discovery page](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery)
-repeats the rule.
+repeats the rule. RFC 9728 section 3.3 says the same of a protected resource's `resource`,
+[below](#protected-resource-metadata).
 
 `AuthorizationServerMetadata` takes no URL, so its constructor cannot check that: a document
 naming any issuer parses. Read a document you fetched with `from_discovery`:
@@ -76,3 +77,44 @@ identifier or the resource's `authorization_servers` (RFC 9728), and the URL you
 come from that choice. The check earns its keep where discovery is not fully in the hands of the
 party the document names: an open redirect on the well-known path, a stale or cached document, or
 a resource server steering discovery.
+
+## Protected resource metadata
+
+Before it finds the authorization server, an MCP client reads the server's protected resource
+metadata (RFC 9728). RFC 9728 section 3.3 says the `resource` that document returns must be the
+resource identifier the client built the metadata URL from, or the document must not be used.
+Without that check a malicious MCP server names another server there, and a client that sends it
+as the RFC 8707 `resource` parameter gets a token minted for that server, which the malicious
+server then receives. That was CVE-2026-123272 in mcp-go and CVE-2026-123271 in ChatCLI.
+
+`ProtectedResourceMetadata` takes no URL either, so read a fetched document with its own
+`from_discovery`:
+
+```python
+from agent_airlock.mcp_spec import ProtectedResourceMetadata, ResourceMismatchError
+
+server_url = "https://mcp.example.com/mcp"
+document = {
+    "resource": "https://mcp.example.com/mcp",
+    "authorization_servers": ["https://as.example"],
+}
+
+try:
+    metadata = ProtectedResourceMetadata.from_discovery(document, resource_url=server_url)
+except ResourceMismatchError:
+    raise SystemExit("do not use this document")
+```
+
+Pass the MCP server URL you connected to: you built
+`/.well-known/oauth-protected-resource` from it, or followed a `resource_metadata` URL from that
+server's 401, where RFC 9728 has the request URL. After a fall back to the root well-known URL,
+the identifier is the server's origin, and a document there that names the server's full URL is
+refused. Never pass `response.url`.
+
+The comparison uses the token audience check's key, so on any two URLs both can read they
+agree: case in the scheme and host, a trailing slash and a default port are forgiven, and a different scheme, host,
+port, path or query is not. A `resource` must also pass the metadata URL screen and hold no
+userinfo. `validate_protected_resource` is the check on its own.
+
+Whatever the document says, send the MCP server's own canonical URL as the `resource` parameter,
+as the MCP authorization page requires. ChatCLI's fix does that.

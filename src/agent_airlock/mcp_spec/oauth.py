@@ -36,6 +36,9 @@ Key normative requirements enforced:
   2026-07-28 "Authorization Server Metadata Discovery"). The constructor takes no URL, so
   `AuthorizationServerMetadata.from_discovery` is the way to read a fetched document: it
   refuses one whose `issuer` is not the identifier its well-known URL was built from.
+  `ProtectedResourceMetadata.from_discovery` does the same for a protected resource's
+  `resource` (RFC 9728 section 3.3): a malicious MCP server that names another server there
+  gets a token minted for that server (CVE-2026-123272, CVE-2026-123271).
 
 DPoP is **intentionally not implemented**: per the spec page retrieved
 2026-04-18 it is listed only as a SEP draft and not a normative
@@ -528,6 +531,10 @@ class ProtectedResourceMetadata(BaseModel):
     `authorization_servers`. Each one is screened as it is parsed, as the
     `AuthorizationServerMetadata` URLs are (CVE-2026-119025), and a validation error's text
     never repeats the input.
+
+    The constructor is given no URL, so a document naming any resource parses. Read a document
+    you fetched with :meth:`from_discovery`, which binds its `resource` to the server you asked
+    for (RFC 9728 section 3.3).
     """
 
     model_config = ConfigDict(strict=True, extra="allow", hide_input_in_errors=True)
@@ -543,6 +550,33 @@ class ProtectedResourceMetadata(BaseModel):
         for index, url in enumerate(value):
             _screen_metadata_url(f"authorization_servers[{index}]", url)
         return value
+
+    @classmethod
+    def from_discovery(
+        cls, document: dict[str, Any], *, resource_url: str
+    ) -> ProtectedResourceMetadata:
+        """Parse a document fetched for ``resource_url``, then check its ``resource`` against it.
+
+        Args:
+            document: The metadata document, decoded from JSON.
+            resource_url: The resource identifier the client built the metadata URL from: the
+                MCP server URL it connected to (see :func:`validate_protected_resource`). Never
+                the address a redirect ended on (``response.url``): the document at the end of
+                an open redirect names that address, so it would pass.
+
+        Returns:
+            The parsed metadata, whose ``resource`` has passed
+            :func:`validate_protected_resource`.
+
+        Raises:
+            pydantic.ValidationError: The document does not parse, a ``resource`` that is not
+                a string included.
+            ResourceMismatchError: ``resource`` is not the server ``resource_url`` names, or
+                either one is not a resource URI.
+        """
+        metadata = cls.model_validate(document)
+        validate_protected_resource(metadata, resource_url=resource_url)
+        return metadata
 
 
 # =============================================================================
@@ -651,7 +685,8 @@ def validate_access_token_audience(
 
 
 # =============================================================================
-# Issuer validation — RFC 8414 section 3.3, RFC 9207 / SEP-2468
+# Discovery binding and issuer validation — RFC 8414 section 3.3, RFC 9728 section 3.3,
+# RFC 9207 / SEP-2468
 # =============================================================================
 
 
@@ -668,6 +703,18 @@ class IssuerMismatchError(ValueError):
     That check is only as good as the issuer it compares with, so RFC 8414 section 3.3 comes
     first: a metadata document whose `issuer` is not the identifier its well-known URL was
     built from must not be used (:func:`validate_metadata_issuer`).
+    """
+
+
+class ResourceMismatchError(ValueError):
+    """Raised when protected resource metadata names a resource the client did not ask for.
+
+    RFC 9728 section 3.3: the `resource` a protected resource metadata document returns must be
+    the resource identifier the client built the metadata URL from, or the document must not
+    be used. A client that took `resource` from the document as its RFC 8707 resource
+    indicator asked the authorization server for a token for whatever server the document
+    named, and handed that token to the server that served it (CVE-2026-123272 in mcp-go,
+    CVE-2026-123271 in ChatCLI). Raised by :func:`validate_protected_resource`.
     """
 
 
@@ -814,6 +861,81 @@ def validate_metadata_issuer(metadata: AuthorizationServerMetadata, *, discovery
         raise IssuerMismatchError(
             "metadata issuer is not the issuer discovery_url was built from, so this metadata "
             "must not be used (RFC 8414 section 3.3)"
+        )
+
+
+def _resource_key(field_name: str, value: Any, *, screen: bool) -> str:
+    """``value``'s token-audience comparison key, each refusal a :class:`ResourceMismatchError`.
+
+    ``screen`` runs the metadata URL screen too, for the value a server supplied. The messages
+    name the field, never the value.
+    """
+    if not isinstance(value, str):
+        raise ResourceMismatchError(f"{field_name} is a {type(value).__name__}, not a string")
+    if not value:
+        raise ResourceMismatchError(f"{field_name} is empty")
+    if value != value.strip():
+        raise ResourceMismatchError(f"{field_name} has whitespace around it")
+    if screen:
+        try:
+            _screen_metadata_url(field_name, value)
+        except ValueError as exc:
+            raise ResourceMismatchError(str(exc)) from None
+    try:
+        key = _audience_key(value)
+    except ResourceURIError:
+        raise ResourceMismatchError(
+            f"{field_name} is not a resource URI: it has no scheme or no host, a fragment, or "
+            "a port that is not one"
+        ) from None
+    # The canonical form drops userinfo, so two values that differ only there would compare
+    # equal while a client sent the one the server wrote.
+    if "@" in urlsplit(value).netloc:
+        raise ResourceMismatchError(f"{field_name} holds userinfo, which a resource URI does not")
+    return key
+
+
+def validate_protected_resource(metadata: ProtectedResourceMetadata, *, resource_url: str) -> None:
+    """Refuse protected resource metadata whose ``resource`` is not the server the client asked for.
+
+    RFC 9728 section 3.3: the ``resource`` a document returns must be the resource identifier
+    the client built the metadata URL from, or the document must not be used. Without the
+    check a malicious MCP server names another server there, a client that sends it as the
+    RFC 8707 ``resource`` parameter gets a token minted for that server, and the malicious one
+    receives it (CVE-2026-123272, CVE-2026-123271).
+
+    The comparison uses the token audience check's key (:func:`validate_access_token_audience`),
+    so the two cannot disagree: case in the scheme and host, a trailing slash and a default
+    port are forgiven, and any other difference in scheme, host, port, path or query is not.
+    RFC 9728 says "identical", so this is a little more lenient than the text. The server's
+    ``resource`` must also pass the metadata URL screen (https, or plain http on a loopback
+    host) and hold no userinfo.
+
+    Whatever the document says, send the MCP server's own canonical URL as the RFC 8707
+    ``resource`` parameter, as the MCP 2026-07-28 authorization page requires.
+
+    Args:
+        metadata: The parsed metadata document.
+        resource_url: The resource identifier the client built the metadata URL from. That is
+            the MCP server URL it connected to when it requested
+            ``/.well-known/oauth-protected-resource`` with the server's path appended, or when
+            it followed a ``resource_metadata`` URL from that server's 401 (RFC 9728 has the
+            request URL then). After a fall back to the root well-known URL, it is the
+            server's origin, and a document there that names the server's full URL is refused.
+            Never the address a redirect ended on (``response.url``).
+
+    Raises:
+        ResourceMismatchError: ``resource`` names another server; ``metadata`` has no readable
+            ``resource``; or ``resource`` or ``resource_url`` is empty, has whitespace around
+            it, holds userinfo or is not a resource URI. ``resource`` is also refused when the
+            metadata URL screen refuses it. The message names the field, never either URL.
+    """
+    expected = _resource_key("resource_url", resource_url, screen=False)
+    resource = _resource_key("resource", getattr(metadata, "resource", None), screen=True)
+    if resource != expected:
+        raise ResourceMismatchError(
+            "metadata resource is not the server resource_url names, so this metadata must not "
+            "be used (RFC 9728 section 3.3)"
         )
 
 
@@ -968,9 +1090,12 @@ __all__ = [
     # Token audience
     "TokenAudienceError",
     "validate_access_token_audience",
-    # RFC 8414 section 3.3 metadata issuer, RFC 9207 / SEP-2468 authorization-response issuer
+    # RFC 8414 section 3.3 metadata issuer, RFC 9728 section 3.3 resource,
+    # RFC 9207 / SEP-2468 authorization-response issuer
     "IssuerMismatchError",
     "issuer_from_discovery_url",
     "validate_metadata_issuer",
+    "ResourceMismatchError",
+    "validate_protected_resource",
     "validate_authorization_response_iss",
 ]
