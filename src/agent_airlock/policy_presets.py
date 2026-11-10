@@ -2797,6 +2797,8 @@ def openapi_doc_drift_guard_defaults(
 def npm_oidc_publish_window_guard_defaults(
     *,
     blast_list: frozenset[tuple[str, str, str]] | None = None,
+    include_malware_feed: bool = True,
+    installs_from: str | None = None,
 ) -> dict[str, Any]:
     """Recommended config for the TanStack 2026-05-11 OIDC publish-window guard.
 
@@ -2816,14 +2818,41 @@ def npm_oidc_publish_window_guard_defaults(
     The list is a frozenset of ``(ecosystem, name, version)`` tuples.
     Operators on a non-default vocabulary can pass their own list.
 
+    Since 0.10.32 it also carries the malware advisory snapshot
+    (:func:`agent_airlock.mcp_spec.malware_advisory_feed.load_malware_blast_snapshot`): its
+    exact releases are unioned into ``blast_list``, and the packages whose every version is
+    malicious come back as ``blocked_packages``, with ``advisories`` naming the advisory for
+    each. Build the guard from all three::
+
+        cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm")
+        guard = OIDCPublishWindowGuard(
+            blast_list=cfg["blast_list"],
+            blocked_packages=cfg["blocked_packages"],
+            advisories=cfg["advisories"],
+            installs_from=cfg["installs_from"],
+        )
+
+    Args:
+        blast_list: Replaces the pairs (the incident list and the snapshot's). The
+            snapshot's whole packages still come back unless ``include_malware_feed`` is off.
+        include_malware_feed: False leaves the snapshot out: the incident list only, no
+            ``blocked_packages``.
+        installs_from: The registry the guarded tool installs from (``"npm"``, ``"pypi"`` or
+            ``"any"``), passed back for the guard, which requires it with
+            ``blocked_packages``: npm malware squats real PyPI names such as ``pydantic``, so
+            a bare package name has to be read in the registry the tool uses.
+
     Primary sources:
       https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
       https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
       https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised
       (the wider wave; its packages are not in the list)
     """
+    from .mcp_spec.malware_advisory_feed import MalwareBlastList, load_malware_blast_snapshot
     from .mcp_spec.oidc_publish_window_guard import load_blast_list_from_2026_05_11
 
+    feed = load_malware_blast_snapshot() if include_malware_feed else MalwareBlastList()
+    pairs = blast_list if blast_list is not None else load_blast_list_from_2026_05_11() | feed.pairs
     return {
         "preset_id": "npm_oidc_publish_window_guard_2026_05_11",
         "severity": "critical",
@@ -2834,7 +2863,11 @@ def npm_oidc_publish_window_guard_defaults(
             "https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised"
         ),
         "incident_id": "tanstack-oidc-blast-2026-05-11",
-        "blast_list": (blast_list if blast_list is not None else load_blast_list_from_2026_05_11()),
+        "blast_list": pairs,
+        "blocked_packages": feed.packages,
+        "advisories": dict(feed.advisories),
+        "malware_feed_as_of": feed.as_of,
+        "installs_from": installs_from,
     }
 
 

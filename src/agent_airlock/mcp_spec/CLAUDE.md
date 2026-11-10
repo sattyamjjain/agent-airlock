@@ -153,6 +153,12 @@ preset, and
   check runs on any request carrying the header, not only name-bearing methods. `b64decode` on
   a non-ASCII `str` raises plain `ValueError`, not `binascii.Error` (python-sdk #3817), so catch
   `ValueError`. `Mcp-Param-*` values are not read here at all.
+- **`malware_advisory_feed` reads a document by its keys, never by file name**, and makes no
+  network call. An OSV record is malware only when its id is `MAL-*` or it carries CWE-506: a
+  reviewed GHSA in OSV form lists vulnerable, not malicious, versions, so it is skipped. A
+  whole package (`blocked_packages` in `OIDCPublishWindowGuard`) has no version to narrow
+  it, so it is matched in the ecosystem the argument's syntax names (`_spec_kinds`), while
+  pairs keep matching in either ecosystem as before.
 - **`tools/list` paging differs by SDK line.** mcp 2.x's result has `next_cursor` and no
   `nextCursor` (FastMCP 4 adds a `nextCursor` to it that warns on each read); mcp 1.x's has
   only `nextCursor`. `ClientSession.list_tools` takes `params=` (and on 1.x a deprecated
