@@ -1,0 +1,26 @@
+{
+  "$schema": "Tool calls for CVE-2026-117567 (esp-mcp through commit 28afddf, CWE-78). NVD names the parameters `target`, `port`, `project_path` and `project_name`, which reach asyncio.create_subprocess_shell, but not the tools; `build_project` is a placeholder taking all four. Each `payloads` entry carries one shell token in one of them, with the argument, token and verdict ToolArgSinkGuard reports. Every value is an inert string: `id` is never run and no board is flashed. `benign` holds calls the guard must run; `passes_by_design` holds values the guard's documented scope admits.",
+  "disclosed_at": "2026-10-27",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-117567",
+    "advisory": "https://www.vulncheck.com/advisories/esp-mcp-through-commit-28afddf-os-command-injection-via-mcp-tool-parameters",
+    "upstream_issue": "https://github.com/horw/esp-mcp/issues/49",
+    "vulnerable_code": "https://github.com/horw/esp-mcp/blob/28afddf9ff41ada117bb45fd49b526d3bf89749e/main.py#L80",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/388"
+  },
+  "payloads": [
+    {"id": "target-semicolon", "tool": "build_project", "arguments": {"project_path": "/home/dev/blink", "project_name": "blink", "target": "esp32; id", "port": "/dev/ttyUSB0"}, "argument": "target", "token": ";", "verdict": "deny_shell_metachar"},
+    {"id": "port-and-list", "tool": "build_project", "arguments": {"project_path": "/home/dev/blink", "project_name": "blink", "target": "esp32", "port": "/dev/ttyUSB0 && id"}, "argument": "port", "token": "&&", "verdict": "deny_shell_metachar"},
+    {"id": "project-path-substitution", "tool": "build_project", "arguments": {"project_path": "/home/dev/$(id)", "project_name": "blink", "target": "esp32", "port": "/dev/ttyUSB0"}, "argument": "project_path", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "project-name-pipe", "tool": "build_project", "arguments": {"project_path": "/home/dev/blink", "project_name": "blink|id", "target": "esp32", "port": "/dev/ttyUSB0"}, "argument": "project_name", "token": "|", "verdict": "deny_shell_metachar"},
+    {"id": "target-backtick", "tool": "build_project", "arguments": {"project_path": "/home/dev/blink", "project_name": "blink", "target": "esp32`id`", "port": "/dev/ttyUSB0"}, "argument": "target", "token": "`", "verdict": "deny_shell_metachar"}
+  ],
+  "benign": [
+    {"id": "a-build", "tool": "build_project", "arguments": {"project_path": "/home/dev/blink", "project_name": "blink", "target": "esp32", "port": "/dev/ttyUSB0"}},
+    {"id": "another-chip", "tool": "build_project", "arguments": {"project_path": "/home/dev/hello_world", "project_name": "hello_world", "target": "esp32s3", "port": "COM3"}}
+  ],
+  "passes_by_design": [
+    {"id": "option-shaped", "tool": "build_project", "arguments": {"project_path": "/home/dev/blink", "project_name": "blink", "target": "esp32", "port": "--baud=921600"}, "why": "a value starting with '-' is option injection (CWE-88), not shell syntax"},
+    {"id": "variable-reference", "tool": "build_project", "arguments": {"project_path": "$IDF_PATH/examples/blink", "project_name": "blink", "target": "esp32", "port": "/dev/ttyUSB0"}, "why": "$NAME expansion is left out of the default set"}
+  ]
+}

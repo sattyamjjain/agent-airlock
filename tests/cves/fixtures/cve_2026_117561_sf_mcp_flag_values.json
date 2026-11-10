@@ -1,0 +1,27 @@
+{
+  "$schema": "Tool calls for CVE-2026-117561 (Codefriar sf-mcp through 1.3.2, CWE-78). sf-mcp's tools take Salesforce CLI flag names such as `target-org` and `query` and build `--<flag>=<value>` for execSync in executeSfCommand; `sf_data_query` is a placeholder tool taking them as **flags. Each `payloads` entry is a flag value holding a backtick, $() or another metacharacter escapeValue() leaves in place, with the argument, token and verdict ToolArgSinkGuard reports. Every value is an inert string: `id` is never run. `benign` holds calls the guard must run; `passes_by_design` holds values the guard's documented scope admits.",
+  "disclosed_at": "2026-10-27",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-117561",
+    "advisory": "https://www.vulncheck.com/advisories/sf-mcp-through-1.3.2-os-command-injection-via-salesforce-cli-flag-values",
+    "upstream_issue": "https://github.com/codefriar/sf-mcp/issues/17",
+    "vulnerable_code": "https://github.com/codefriar/sf-mcp/blob/beb103dced68962e0c069b62cb377286751d0103/src/utils.ts#L79-L90",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/387"
+  },
+  "payloads": [
+    {"id": "query-backtick", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test", "query": "SELECT Id FROM Account `id`"}, "argument": "query", "token": "`", "verdict": "deny_shell_metachar"},
+    {"id": "query-substitution", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test", "query": "SELECT Id FROM Account $(id)"}, "argument": "query", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "target-org-substitution", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test$(id)", "query": "SELECT Id FROM Account"}, "argument": "target-org", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "target-org-semicolon", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test; id", "query": "SELECT Id FROM Account"}, "argument": "target-org", "token": ";", "verdict": "deny_shell_metachar"},
+    {"id": "query-pipe", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test", "query": "SELECT Id FROM Account | id"}, "argument": "query", "token": "|", "verdict": "deny_shell_metachar"}
+  ],
+  "benign": [
+    {"id": "a-query", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test", "query": "SELECT Id FROM Account"}},
+    {"id": "a-quoted-literal", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test", "query": "SELECT Id FROM Account WHERE Name = 'Acme'"}},
+    {"id": "a-comparison", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test", "query": "SELECT Id FROM Opportunity WHERE Amount > 1000"}}
+  ],
+  "passes_by_design": [
+    {"id": "double-quote", "tool": "sf_data_query", "arguments": {"target-org": "dev@example.test", "query": "SELECT Id FROM Account WHERE Name = \"Acme\""}, "why": "quotes are left out of the default set; add them to extra_metachars"},
+    {"id": "variable-reference", "tool": "sf_data_query", "arguments": {"target-org": "$SF_ORG", "query": "SELECT Id FROM Account"}, "why": "$NAME expansion is left out of the default set"}
+  ]
+}

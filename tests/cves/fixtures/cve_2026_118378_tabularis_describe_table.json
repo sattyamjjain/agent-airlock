@@ -1,0 +1,23 @@
+{
+  "$schema": "Tool calls for CVE-2026-118378 (Tabularis before 0.28.0, CWE-89). `describe_table` is Tabularis's MCP tool; its `table_name` closed the quoted PRAGMA argument of the SQLite driver and appended stacked statements. Each `payloads` entry is such a value, reading, modifying or dropping data as NVD describes, or only closing the quote. Every value is an inert string: no database is opened and no SQL is executed. `benign` holds table names a tool declaring an identifier shape must admit; `refused_by_the_declared_shape` holds legal SQLite names that shape refuses.",
+  "disclosed_at": "2026-10-28",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-118378",
+    "advisory": "https://github.com/TabularisDB/tabularis/security/advisories/GHSA-xrx3-j98v-67x9",
+    "vulncheck": "https://www.vulncheck.com/advisories/tabularis-before-0.28.0-sql-injection-via-mcp-describe-table-table-name",
+    "vulnerable_code": "https://github.com/TabularisDB/tabularis/blob/804c4c3bb6fd8eaa2e36cbe49f6c0d58f373b5e9/src-tauri/src/drivers/sqlite/mod.rs#L92-L105",
+    "fix_commit": "https://github.com/TabularisDB/tabularis/commit/fd1bdbbae35e5367c32d1e7fe9c44cb1b6875d74",
+    "fixed_release": "https://github.com/TabularisDB/tabularis/releases/tag/v0.28.0",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/393"
+  },
+  "identifier_pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+  "payloads": [
+    {"id": "drop", "table_name": "users'); DROP TABLE users; --"},
+    {"id": "read", "table_name": "users'); SELECT * FROM api_keys; --"},
+    {"id": "modify", "table_name": "users'); UPDATE accounts SET role = 'admin'; --"},
+    {"id": "close-the-quote-only", "table_name": "users'--"},
+    {"id": "trailing-newline-then-stack", "table_name": "users\n'); DROP TABLE users; --"}
+  ],
+  "benign": ["users", "order_items", "_migrations", "Invoice2026"],
+  "refused_by_the_declared_shape": ["order items", "order-items", "1st_quarter"]
+}

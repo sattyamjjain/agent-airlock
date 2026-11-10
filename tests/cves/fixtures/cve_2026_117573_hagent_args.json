@@ -1,0 +1,28 @@
+{
+  "$schema": "Tool calls for CVE-2026-117573 (hagent through commit 761eec6, CWE-78). NVD names the `args` parameter of the hagent_arduino and hagent_esp32 tools, interpolated into arduino-cli and idf.py commands run with subprocess.run(shell=True); `command` is a placeholder name for the subcommand they take. Each `payloads` entry appends one shell token to an otherwise ordinary option string, with the argument, token and verdict ToolArgSinkGuard reports. Every value is an inert string: `id` is never run and nothing is compiled. `benign` holds calls the guard must run; `passes_by_design` holds values the guard's documented scope admits.",
+  "disclosed_at": "2026-10-27",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-117573",
+    "advisory": "https://www.vulncheck.com/advisories/hagent-through-commit-761eec6-os-command-injection-via-arduino-and-esp32-mcp-tools",
+    "upstream_issue": "https://github.com/masc-ucsc/hagent/issues/98",
+    "vulnerable_code_arduino": "https://github.com/masc-ucsc/hagent/blob/761eec627a1e6fb128a2a8ce9245aa595cc2f7af/hagent/mcp/mcp_arduino.py#L776",
+    "vulnerable_code_esp32": "https://github.com/masc-ucsc/hagent/blob/761eec627a1e6fb128a2a8ce9245aa595cc2f7af/hagent/mcp/mcp_esp32.py#L682",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/391"
+  },
+  "payloads": [
+    {"id": "arduino-and-list", "tool": "hagent_arduino", "arguments": {"command": "compile", "args": "--fqbn esp32:esp32:esp32 && id"}, "argument": "args", "token": "&&", "verdict": "deny_shell_metachar"},
+    {"id": "arduino-semicolon", "tool": "hagent_arduino", "arguments": {"command": "upload", "args": "--port /dev/ttyUSB0; id"}, "argument": "args", "token": ";", "verdict": "deny_shell_metachar"},
+    {"id": "arduino-substitution", "tool": "hagent_arduino", "arguments": {"command": "compile", "args": "--fqbn $(id)"}, "argument": "args", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "esp32-pipe", "tool": "hagent_esp32", "arguments": {"command": "build", "args": "-p /dev/ttyUSB0 | id"}, "argument": "args", "token": "|", "verdict": "deny_shell_metachar"},
+    {"id": "esp32-backtick", "tool": "hagent_esp32", "arguments": {"command": "flash", "args": "-b `id`"}, "argument": "args", "token": "`", "verdict": "deny_shell_metachar"}
+  ],
+  "benign": [
+    {"id": "arduino-compile", "tool": "hagent_arduino", "arguments": {"command": "compile", "args": "--fqbn esp32:esp32:esp32"}},
+    {"id": "arduino-upload", "tool": "hagent_arduino", "arguments": {"command": "upload", "args": "--port /dev/ttyUSB0 --fqbn arduino:avr:uno"}},
+    {"id": "esp32-flash", "tool": "hagent_esp32", "arguments": {"command": "flash", "args": "-p /dev/ttyUSB0 -b 460800"}}
+  ],
+  "passes_by_design": [
+    {"id": "another-option", "tool": "hagent_arduino", "arguments": {"command": "compile", "args": "--fqbn esp32:esp32:esp32 --build-property compiler.cpp.extra_flags=-DX"}, "why": "args holds options by design; an extra option is not shell syntax"},
+    {"id": "variable-reference", "tool": "hagent_esp32", "arguments": {"command": "build", "args": "-C $IDF_PATH/examples/blink"}, "why": "$NAME expansion is left out of the default set"}
+  ]
+}

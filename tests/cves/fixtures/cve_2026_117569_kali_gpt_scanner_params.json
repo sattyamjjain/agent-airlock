@@ -1,0 +1,30 @@
+{
+  "$schema": "Tool calls for CVE-2026-117569 (Kali-GPT through commit a608c74, CWE-78). NVD names execute_tool() in kali_gpt/tools/mcp_server.py and the scanner parameters `target`, `ports`, `domain`, `wordlist` and `url`, run through subprocess.run with shell=True; `tool` is the scanner the call selects. Each `payloads` entry carries one shell token in one of those parameters, with the argument, token and verdict ToolArgSinkGuard reports. Every value is an inert string: `id` is never run and nothing is scanned. `benign` holds calls the guard must run; `refused_although_well_formed` holds a legitimate URL the guard refuses because the server's shell would split it; `passes_by_design` holds values the guard's documented scope admits.",
+  "disclosed_at": "2026-10-27",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-117569",
+    "advisory": "https://www.vulncheck.com/advisories/kali-gpt-through-commit-a608c74-os-command-injection-via-mcp-scanner-tool-parameters",
+    "upstream_issue": "https://github.com/alishahid74/kali-gpt/issues/12",
+    "vulnerable_code": "https://github.com/alishahid74/kali-gpt/blob/a608c74e99910232dd208fee99de860458672b82/kali_gpt/tools/mcp_server.py#L229-L356",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/390"
+  },
+  "payloads": [
+    {"id": "target-semicolon", "tool": "execute_tool", "arguments": {"tool": "nmap", "target": "10.0.0.1; id"}, "argument": "target", "token": ";", "verdict": "deny_shell_metachar"},
+    {"id": "ports-pipe", "tool": "execute_tool", "arguments": {"tool": "nmap", "target": "10.0.0.1", "ports": "80,443 | id"}, "argument": "ports", "token": "|", "verdict": "deny_shell_metachar"},
+    {"id": "domain-substitution", "tool": "execute_tool", "arguments": {"tool": "dnsenum", "domain": "example.test$(id)"}, "argument": "domain", "token": "$(", "verdict": "deny_shell_metachar"},
+    {"id": "wordlist-backtick", "tool": "execute_tool", "arguments": {"tool": "gobuster", "url": "https://example.test", "wordlist": "/usr/share/wordlists/`id`.txt"}, "argument": "wordlist", "token": "`", "verdict": "deny_shell_metachar"},
+    {"id": "url-and-list", "tool": "execute_tool", "arguments": {"tool": "nikto", "url": "https://example.test/ && id"}, "argument": "url", "token": "&&", "verdict": "deny_shell_metachar"}
+  ],
+  "refused_although_well_formed": [
+    {"id": "url-query-string", "tool": "execute_tool", "arguments": {"tool": "nikto", "url": "https://example.test/?a=1&b=2"}, "argument": "url", "token": "&", "verdict": "deny_shell_metachar", "why": "a query string's '&' is URL syntax, and an unquoted shell=True command line splits on it"}
+  ],
+  "benign": [
+    {"id": "port-scan", "tool": "execute_tool", "arguments": {"tool": "nmap", "target": "10.0.0.1", "ports": "80,443"}},
+    {"id": "dns", "tool": "execute_tool", "arguments": {"tool": "dnsenum", "domain": "example.test"}},
+    {"id": "dir-brute", "tool": "execute_tool", "arguments": {"tool": "gobuster", "url": "https://example.test/login", "wordlist": "/usr/share/wordlists/dirb/common.txt"}}
+  ],
+  "passes_by_design": [
+    {"id": "option-shaped-target", "tool": "execute_tool", "arguments": {"tool": "nmap", "target": "-iL targets.txt"}, "why": "a value starting with '-' is option injection (CWE-88), not shell syntax"},
+    {"id": "variable-reference", "tool": "execute_tool", "arguments": {"tool": "gobuster", "url": "https://example.test", "wordlist": "$HOME/list.txt"}, "why": "$NAME expansion is left out of the default set"}
+  ]
+}

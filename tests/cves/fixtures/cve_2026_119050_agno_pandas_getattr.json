@@ -1,0 +1,31 @@
+{
+  "$schema": "Tool calls for CVE-2026-119050 (Agno through 3.1.11, CWE-470). Agno's PandasTools passes `create_using_function` to getattr(pandas, ...) in create_pandas_dataframe and `operation` to getattr(dataframe, ...) in run_dataframe_operation (docs/guide/dispatch-arguments.md). `allowlists` is the guide's allowlist for both arguments. Each `payloads` entry is a function name a prompt-injected agent could choose: read_pickle as NVD names it, other readers, a writer, and a dotted path. Each is refused under the allowlist and under the default denylist alike, with the argument, token and verdict ToolArgSinkGuard reports. Every value is an inert string: nothing is read, unpickled or called by name. `benign_with_allowlist` and `benign_with_denylist` hold calls each configuration must run.",
+  "disclosed_at": "2026-10-29",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-119050",
+    "advisory": "https://www.vulncheck.com/advisories/agno-through-3.1.11-code-execution-via-pandastools-unsafe-reflection",
+    "upstream_issue": "https://github.com/agno-agi/agno/issues/8699",
+    "vulnerable_code_create": "https://github.com/agno-agi/agno/blob/d9ab0a758286142e7d998ef313ee7504d7fd9453/libs/agno/agno/tools/pandas.py#L54",
+    "vulnerable_code_operation": "https://github.com/agno-agi/agno/blob/d9ab0a758286142e7d998ef313ee7504d7fd9453/libs/agno/agno/tools/pandas.py#L90"
+  },
+  "allowlists": {
+    "create_using_function": ["read_csv"],
+    "operation": ["head", "tail", "describe", "info"]
+  },
+  "payloads": [
+    {"id": "read-pickle", "tool": "create_pandas_dataframe", "arguments": {"dataframe_name": "frame", "create_using_function": "read_pickle", "function_parameters": {"filepath_or_buffer": "upload.pkl"}}, "argument": "create_using_function", "token": "read_pickle", "verdict": "deny_dispatch_name"},
+    {"id": "read-json", "tool": "create_pandas_dataframe", "arguments": {"dataframe_name": "frame", "create_using_function": "read_json", "function_parameters": {"path_or_buf": "notes.json"}}, "argument": "create_using_function", "token": "read_json", "verdict": "deny_dispatch_name"},
+    {"id": "read-parquet", "tool": "create_pandas_dataframe", "arguments": {"dataframe_name": "frame", "create_using_function": "read_parquet", "function_parameters": {"path": "table.parquet"}}, "argument": "create_using_function", "token": "read_parquet", "verdict": "deny_dispatch_name"},
+    {"id": "dotted-path", "tool": "create_pandas_dataframe", "arguments": {"dataframe_name": "frame", "create_using_function": "pandas.read_pickle", "function_parameters": {}}, "argument": "create_using_function", "token": "pandas.read_pickle", "verdict": "deny_dispatch_name"},
+    {"id": "to-pickle", "tool": "run_dataframe_operation", "arguments": {"dataframe_name": "frame", "operation": "to_pickle", "operation_parameters": {"path": "out.pkl"}}, "argument": "operation", "token": "to_pickle", "verdict": "deny_dispatch_name"},
+    {"id": "dunder", "tool": "run_dataframe_operation", "arguments": {"dataframe_name": "frame", "operation": "__class__", "operation_parameters": {}}, "argument": "operation", "token": "__class__", "verdict": "deny_dispatch_name"}
+  ],
+  "benign_with_allowlist": [
+    {"id": "read-csv", "tool": "create_pandas_dataframe", "arguments": {"dataframe_name": "sales", "create_using_function": "read_csv", "function_parameters": {"filepath_or_buffer": "sales.csv"}}},
+    {"id": "describe", "tool": "run_dataframe_operation", "arguments": {"dataframe_name": "sales", "operation": "describe", "operation_parameters": {}}}
+  ],
+  "benign_with_denylist": [
+    {"id": "constructor", "tool": "create_pandas_dataframe", "arguments": {"dataframe_name": "sales", "create_using_function": "DataFrame", "function_parameters": {"data": {"a": [1, 2]}}}},
+    {"id": "head", "tool": "run_dataframe_operation", "arguments": {"dataframe_name": "sales", "operation": "head", "operation_parameters": {"n": 5}}}
+  ]
+}

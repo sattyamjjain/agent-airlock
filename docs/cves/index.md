@@ -49,6 +49,17 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-111451](#cve-2026-111451) | Wheels CLI MCP tool arguments reach deploy shells, file paths and generated CFML | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H | Partial |
 | [CVE-2026-11393](#cve-2026-11393) | AgentCore CLI triple-quote codegen RCE | — | — |
 | [CVE-2026-11624](#cve-2026-11624) | MCP HTTP-transport Origin/Host DNS-rebinding | 9.4 | — |
+| [CVE-2026-117558](#cve-2026-117558) | ai-sdlc plugin MCP server: ``repo`` interpolated into ``gh issue view`` and ``gh pr view`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Strong |
+| [CVE-2026-117559](#cve-2026-117559) | DroidMind: shell command allowlist bypassed with ``$(...)`` or backtick substitution | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Strong |
+| [CVE-2026-117560](#cve-2026-117560) | ATXP Gemini CLI extension: ``$()`` or backticks in ``message_id``, ``subject`` or ``query`` reach ``runAtxp()`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Strong |
+| [CVE-2026-117561](#cve-2026-117561) | Codefriar sf-mcp: Salesforce CLI flag values reach ``execSync`` past ``escapeValue()`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Strong |
+| [CVE-2026-117567](#cve-2026-117567) | esp-mcp: ``target``, ``port``, ``project_path`` and ``project_name`` reach ``asyncio.create_subprocess_shell`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Strong |
+| [CVE-2026-117568](#cve-2026-117568) | mcp-ffmpeg: ``videoPath`` and ``outputDir`` break out of the ``child_process.exec`` string | 7.0 (HIGH) — CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Partial |
+| [CVE-2026-117569](#cve-2026-117569) | Kali-GPT: scanner parameters of ``execute_tool()`` run through ``subprocess.run`` with ``shell=True`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Strong |
+| [CVE-2026-117573](#cve-2026-117573) | hagent: ``args`` of ``hagent_arduino`` and ``hagent_esp32`` interpolated into ``arduino-cli`` and ``idf.py`` under ``shell=True`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Strong |
+| [CVE-2026-118378](#cve-2026-118378) | Tabularis SQLite driver: stacked statements through ``describe_table``'s ``table_name`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-89 | Partial |
+| [CVE-2026-119025](#cve-2026-119025) | open on Windows and WSL: a discovery-metadata ``authorization_endpoint`` with ``$(...)`` run through PowerShell | 7.5 (HIGH) — CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-78 | Partial |
+| [CVE-2026-119050](#cve-2026-119050) | Agno PandasTools: a model-chosen function name dispatched through ``getattr(pandas, ...)`` | 8.1 (HIGH) — CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-470 (CVSS 4.0: 9.2 CRITICAL) | Partial |
 | [CVE-2026-123271](#cve-2026-123271) | ChatCLI MCP OAuth: a server-supplied resource used as the resource indicator | 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346 | Partial |
 | [CVE-2026-123272](#cve-2026-123272) | mcp-go OAuth: protected resource metadata names another server's resource | 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346 | Partial |
 | [CVE-2026-123783](#cve-2026-123783) | Skyvern script sandbox: functions rebuilt from raw bytecode with ``types.CodeType`` | 8.8 (HIGH) — AV:N/AC:L/PR:L/UI:N, CWE-184 | Partial |
@@ -78,6 +89,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-53820](#cve-2026-53820) | OpenClaw exec-denylist bypass at MCP loopback spawn | 6.9 | — |
 | [CVE-2026-57124](#cve-2026-57124) | PraisonAI UI /api/mcp/connect spawns caller-chosen local commands | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-306 + CWE-78 | Partial |
 | [CVE-2026-57496](#cve-2026-57496) | NetLicensing MCP splices product_number into a REST path, no segment check | 9.6 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N | Partial |
+| [CVE-2026-59176](#cve-2026-59176) | functype-mcp-server: ``set_functype_version``'s ``version`` installs any package as functype through ``pnpm add`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-829 | Strong |
 | [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
 | [CVE-2026-75062](#cve-2026-75062) | Google langfun lf.query evaluates model-generated Python unsandboxed | 9.2 (CRITICAL) — CWE-95, CWE-1188 | Partial |
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
@@ -702,6 +714,434 @@ server (file reads, command execution, database access). Fixed in 0.25.0 with
 an ``--allowed-hosts`` flag alongside ``--allowed-origins``, warning when
 
 <a id="cve-2026-11624"></a>
+
+### CVE-2026-117558
+
+**ai-sdlc plugin MCP server: ``repo`` interpolated into ``gh issue view`` and ``gh pr view``**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-117558](https://nvd.nist.gov/vuln/detail/CVE-2026-117558)
+- **Advisory:** [https://www.vulncheck.com/advisories/ai-sdlc-mcp-server-through-0.31.2-command-injection-via-check-issue-and-check-pr-status](https://www.vulncheck.com/advisories/ai-sdlc-mcp-server-through-0.31.2-command-injection-via-check-issue-and-check-pr-status)
+- **Regression test:** [`tests/cves/test_cve_2026_117558_ai_sdlc_repo.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_117558_ai_sdlc_repo.py)
+
+**Vulnerability**
+
+"The ai-sdlc plugin MCP server through 0.31.2 contains an OS command injection
+vulnerability that allows attackers to execute commands by supplying shell metacharacters
+in the repo argument. The unvalidated repo value is interpolated into gh issue view or gh
+pr view commands run via execSync(), letting prompt-injected agents execute commands as
+the MCP server user." NVD names no fixed release (its range is "through 0.31.2"), and
+this module cites no upstream fix.
+
+**Airlock mitigation**
+
+**In scope:** shell syntax in a string argument a server splices into a command line,
+the "Command / argument injection into a spawn" shape in ``docs/cve-triage.md``.
+``ToolArgSinkGuard(shell_args={"repo"})`` reads ``repo`` at step 2.75 of ``@Airlock`` and
+refuses every token of ``DEFAULT_SHELL_METACHARS`` before the tool runs, and so does
+``tool_arg_sink_defaults(mode="deny")``, which claims this CVE. **Out of scope:** the
+``execSync`` string ai-sdlc builds, which is upstream's to fix: the guard reads the
+argument, not the command line. The guard is off until a policy sets it, and the preset
+starts in ``warn`` mode, which logs the finding and runs the call.
+
+An existing guard (0.10.28) already refuses the shape, so this is a second-defence
+fixture, not a new guard. ``TestDocumentedLimit`` pins what the guard's own docstring
+says passes: a value starting with ``-`` (option injection) and a bare ``$NAME``.
+Triage: #384.
+
+<a id="cve-2026-117558"></a>
+
+### CVE-2026-117559
+
+**DroidMind: shell command allowlist bypassed with ``$(...)`` or backtick substitution**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-117559](https://nvd.nist.gov/vuln/detail/CVE-2026-117559)
+- **Advisory:** [https://www.vulncheck.com/advisories/droidmind-through-0.4.0-command-injection-via-shell-allowlist-bypass](https://www.vulncheck.com/advisories/droidmind-through-0.4.0-command-injection-via-shell-allowlist-bypass)
+- **Regression test:** [`tests/cves/test_cve_2026_117559_droidmind_shell_allowlist.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_117559_droidmind_shell_allowlist.py)
+
+**Vulnerability**
+
+"DroidMind through 0.4.0 contains a command injection vulnerability that allows MCP
+clients to bypass the shell command allowlist by using $(...) or backtick substitution.
+Attackers, including prompt-injected agents, can inject commands through parameters
+interpolated into Device.run_shell() or unvalidated Device.list_directory() to run
+blocked commands such as reboot on connected Android devices." NVD names no fixed
+release (its range is "through 0.4.0"), and this module cites no upstream fix.
+
+**Airlock mitigation**
+
+**In scope:** substitution syntax in a string argument that reaches a device shell, the
+"Command / argument injection into a spawn" shape in ``docs/cve-triage.md``. NVD names
+no argument; ``android-shell``'s ``command`` and ``list_directory``'s ``path`` are the
+server's own (``docs/guide/shell-and-installer-arguments.md``).
+``ToolArgSinkGuard(shell_args={"command", "path"})`` refuses ``$(``, a backtick and every
+other ``DEFAULT_SHELL_METACHARS`` token at step 2.75, before the tool runs, and so does
+``tool_arg_sink_defaults(mode="deny")``, which claims this CVE. **Out of scope:** which
+commands DroidMind's allowlist admits. A blocked command sent on its own, ``reboot``,
+carries no shell syntax and passes this guard; refusing it is the allowlist's job (or a
+``ShellCommandPolicy`` rule's), and the substitution that smuggled it past the allowlist
+is what this guard refuses.
+
+An existing guard (0.10.28) already refuses the shape, so this is a second-defence
+fixture, not a new guard. Triage: #385.
+
+<a id="cve-2026-117559"></a>
+
+### CVE-2026-117560
+
+**ATXP Gemini CLI extension: ``$()`` or backticks in ``message_id``, ``subject`` or ``query`` reach ``runAtxp()``**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-117560](https://nvd.nist.gov/vuln/detail/CVE-2026-117560)
+- **Advisory:** [https://www.vulncheck.com/advisories/atxp-gemini-cli-extension-through-1.0.0-os-command-injection-via-mcp-tools](https://www.vulncheck.com/advisories/atxp-gemini-cli-extension-through-1.0.0-os-command-injection-via-mcp-tools)
+- **Regression test:** [`tests/cves/test_cve_2026_117560_atxp_tool_params.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_117560_atxp_tool_params.py)
+
+**Vulnerability**
+
+"ATXP Gemini CLI extension through 1.0.0 contains an OS command injection vulnerability
+in runAtxp() that allows attackers to execute shell commands through unsanitized MCP tool
+parameters. Attackers can plant instructions in email or SMS content to inject $() or
+backtick substitutions into parameters like message_id, subject, or query, running
+commands as the user." NVD names no fixed release (its range is "through 1.0.0"), and
+this module cites no upstream fix.
+
+**Airlock mitigation**
+
+**In scope:** substitution syntax in the string arguments NVD names, which reach a
+shell through ``runAtxp()``: the "Command / argument injection into a spawn" shape in
+``docs/cve-triage.md``. ``ToolArgSinkGuard(shell_args={"message_id", "subject",
+"query"})`` refuses ``$(``, a backtick and the other ``DEFAULT_SHELL_METACHARS`` tokens at
+step 2.75, before the tool runs, and so does ``tool_arg_sink_defaults(mode="deny")``,
+which claims this CVE. NVD names the parameters, not the tools, so ``atxp_tool`` here is a
+placeholder. **Out of scope:** the email or SMS content that steers the agent, which no
+tool argument carries until the agent writes it into one, and ``runAtxp()``'s command
+string, which is upstream's to fix.
+
+``subject`` and ``query`` look like free text, and with ``screen_all_str_args`` an
+operator opts free text out by name. ``TestDocumentedLimit`` pins that an opted-out
+``subject`` admits the payload: on this server it must be screened, not exempted.
+An existing guard (0.10.28) already refuses the shape, so this is a second-defence
+fixture, not a new guard. Triage: #386.
+
+<a id="cve-2026-117560"></a>
+
+### CVE-2026-117561
+
+**Codefriar sf-mcp: Salesforce CLI flag values reach ``execSync`` past ``escapeValue()``**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-117561](https://nvd.nist.gov/vuln/detail/CVE-2026-117561)
+- **Advisory:** [https://www.vulncheck.com/advisories/sf-mcp-through-1.3.2-os-command-injection-via-salesforce-cli-flag-values](https://www.vulncheck.com/advisories/sf-mcp-through-1.3.2-os-command-injection-via-salesforce-cli-flag-values)
+- **Regression test:** [`tests/cves/test_cve_2026_117561_sf_mcp_flag_values.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_117561_sf_mcp_flag_values.py)
+
+**Vulnerability**
+
+"Codefriar sf-mcp through 1.3.2 contains an OS command injection vulnerability that
+allows attackers to execute shell commands by supplying crafted Salesforce CLI tool flag
+values. Because escapeValue() in src/utils.ts fails to neutralize backticks, $()
+substitution, and other shell metacharacters, these values reach execSync in
+executeSfCommand and run as the MCP server user." NVD names no fixed release (its range
+is "through 1.3.2"), and this module cites no upstream fix.
+
+**Airlock mitigation**
+
+**In scope:** shell syntax in flag values a server splices into a command line, the
+"Command / argument injection into a spawn" shape in ``docs/cve-triage.md``. sf-mcp's
+tools take the CLI's own flag names (``target-org``, ``query``, ...) and build
+``--<flag>=<value>``, so the set of arguments is open-ended:
+``ToolArgSinkGuard(screen_all_str_args=True)`` screens every value, and every
+``**kwargs`` name too, for ``DEFAULT_SHELL_METACHARS`` at step 2.75, before the tool runs.
+``tool_arg_sink_defaults(mode="deny")`` is that configuration and claims this CVE.
+**Out of scope:** ``escapeValue()`` and the ``execSync`` string, which are upstream's to
+fix. ``sf_data_query`` is a placeholder tool.
+
+The default set leaves out quotes and ``$NAME`` expansion (the guard's ``Honest scope``),
+so a double-quoted SOQL literal and ``$SF_ORG`` pass; ``TestDocumentedLimit`` pins both.
+An existing guard (0.10.28) already refuses the shape, so this is a second-defence
+fixture, not a new guard. Triage: #387.
+
+<a id="cve-2026-117561"></a>
+
+### CVE-2026-117567
+
+**esp-mcp: ``target``, ``port``, ``project_path`` and ``project_name`` reach ``asyncio.create_subprocess_shell``**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-117567](https://nvd.nist.gov/vuln/detail/CVE-2026-117567)
+- **Advisory:** [https://www.vulncheck.com/advisories/esp-mcp-through-commit-28afddf-os-command-injection-via-mcp-tool-parameters](https://www.vulncheck.com/advisories/esp-mcp-through-commit-28afddf-os-command-injection-via-mcp-tool-parameters)
+- **Regression test:** [`tests/cves/test_cve_2026_117567_esp_mcp_build_params.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_117567_esp_mcp_build_params.py)
+
+**Vulnerability**
+
+"esp-mcp through commit 28afddf contains an OS command injection vulnerability that
+allows attackers to run arbitrary commands by supplying shell metacharacters in MCP tool
+parameters. Attackers influencing agent tool calls through prompt injection can inject
+metacharacters into target, port, project_path, or project_name values passed to
+asyncio.create_subprocess_shell, executing commands as the MCP server user." NVD names
+no fixed release (its range is "through commit 28afddf"), and this module cites no
+upstream fix.
+
+**Airlock mitigation**
+
+**In scope:** shell syntax in the four string arguments NVD names, which reach a shell
+through ``asyncio.create_subprocess_shell``: the "Command / argument injection into a
+spawn" shape in ``docs/cve-triage.md``. ``ToolArgSinkGuard(shell_args={"target", "port",
+"project_path", "project_name"})`` refuses every ``DEFAULT_SHELL_METACHARS`` token at
+step 2.75, before the tool runs, and so does ``tool_arg_sink_defaults(mode="deny")``,
+which claims this CVE. NVD names the parameters, not the tools, so ``build_project`` is
+a placeholder. **Out of scope:** the shell command line esp-mcp builds, which is
+upstream's to fix: a call through ``create_subprocess_exec`` with an argv list would not
+be exposed to these characters at all.
+
+``TestDocumentedLimit`` pins what the guard's ``Honest scope`` says passes: a value
+starting with ``-`` (option injection) and a bare ``$NAME``. An existing guard (0.10.28)
+already refuses the shape, so this is a second-defence fixture, not a new guard.
+Triage: #388.
+
+<a id="cve-2026-117567"></a>
+
+### CVE-2026-117568
+
+**mcp-ffmpeg: ``videoPath`` and ``outputDir`` break out of the ``child_process.exec`` string**
+
+- **CVSS:** 7.0 (HIGH) — CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-117568](https://nvd.nist.gov/vuln/detail/CVE-2026-117568)
+- **Advisory:** [https://www.vulncheck.com/advisories/mcp-ffmpeg-through-1.0.5-os-command-injection-via-videopath-and-outputdir](https://www.vulncheck.com/advisories/mcp-ffmpeg-through-1.0.5-os-command-injection-via-videopath-and-outputdir)
+- **Regression test:** [`tests/cves/test_cve_2026_117568_mcp_ffmpeg_paths.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_117568_mcp_ffmpeg_paths.py)
+
+**Vulnerability**
+
+"mcp-ffmpeg through 1.0.5 contains an OS command injection vulnerability that allows
+attackers to run shell commands by supplying crafted videoPath or outputDir values to
+the resize-video, extract-audio and get-video-info tools. Attackers can embed $(),
+backticks or a closing double quote in an existing file or directory name to break out
+of the child_process.exec command string and execute commands as the MCP server user."
+NVD names no fixed release (its range is "through 1.0.5"), and this module cites no
+upstream fix. No triage issue exists for this record, although the watcher reads it as
+a candidate (pinned in this module).
+
+**Airlock mitigation**
+
+**In scope:** shell syntax in the two path arguments NVD names, the "Command / argument
+injection into a spawn" shape in ``docs/cve-triage.md``.
+``ToolArgSinkGuard(shell_args={"videoPath", "outputDir"})`` refuses ``$(`` and a
+backtick at step 2.75, before any of the three tools runs, and so does
+``tool_arg_sink_defaults(mode="deny")``, which claims this CVE.
+
+**Why partial:** the third form NVD names, a closing double quote, is not in
+``DEFAULT_SHELL_METACHARS``. The guard's ``Honest scope`` says a quote that only closes
+the server's own quoting injects arguments (here ``-y`` and a second output path) rather
+than commands, and leaves quotes to the operator: ``extra_metachars={'"'}`` refuses it,
+and ``TestTheClosingQuote`` pins both halves. The preset takes no ``extra_metachars``, so in
+``deny`` mode it still admits the quote. **Out of scope:** the ``child_process.exec``
+string, which is upstream's to fix.
+
+An existing guard (0.10.28) already refuses the substitution forms, so this is a
+second-defence fixture, not a new guard.
+
+<a id="cve-2026-117568"></a>
+
+### CVE-2026-117569
+
+**Kali-GPT: scanner parameters of ``execute_tool()`` run through ``subprocess.run`` with ``shell=True``**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-117569](https://nvd.nist.gov/vuln/detail/CVE-2026-117569)
+- **Advisory:** [https://www.vulncheck.com/advisories/kali-gpt-through-commit-a608c74-os-command-injection-via-mcp-scanner-tool-parameters](https://www.vulncheck.com/advisories/kali-gpt-through-commit-a608c74-os-command-injection-via-mcp-scanner-tool-parameters)
+- **Regression test:** [`tests/cves/test_cve_2026_117569_kali_gpt_scanner_params.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_117569_kali_gpt_scanner_params.py)
+
+**Vulnerability**
+
+"Kali-GPT through commit a608c74 contains an OS command injection vulnerability in
+execute_tool() in kali_gpt/tools/mcp_server.py that allows MCP clients to run commands
+via unsanitized scanner parameters. Attackers or prompt-injected agents can embed shell
+metacharacters in parameters like target, ports, domain, wordlist, or url, executed via
+subprocess.run with shell=True as the MCP server user." NVD names no fixed release (its
+range is "through commit a608c74"), and this module cites no upstream fix.
+
+**Airlock mitigation**
+
+**In scope:** shell syntax in the five scanner parameters NVD names, the "Command /
+argument injection into a spawn" shape in ``docs/cve-triage.md``.
+``ToolArgSinkGuard(shell_args={"target", "ports", "domain", "wordlist", "url"})`` refuses
+every ``DEFAULT_SHELL_METACHARS`` token at step 2.75, before ``execute_tool`` runs, and
+so does ``tool_arg_sink_defaults(mode="deny")``, which claims this CVE. **Out of
+scope:** the ``shell=True`` command line Kali-GPT builds, which is upstream's to fix, and
+which scanner a call may select.
+
+Under ``shell=True`` an unquoted ``&`` is a separator, so a well-formed URL with a query
+string is refused too (``TestTheUrlParameter``): the cost of screening a URL that reaches
+a shell. A target starting with ``-`` is option injection (CWE-88), not shell syntax, and
+passes (``TestDocumentedLimit``). An existing guard (0.10.28) already refuses the shape,
+so this is a second-defence fixture, not a new guard. Triage: #390.
+
+<a id="cve-2026-117569"></a>
+
+### CVE-2026-117573
+
+**hagent: ``args`` of ``hagent_arduino`` and ``hagent_esp32`` interpolated into ``arduino-cli`` and ``idf.py`` under ``shell=True``**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-117573](https://nvd.nist.gov/vuln/detail/CVE-2026-117573)
+- **Advisory:** [https://www.vulncheck.com/advisories/hagent-through-commit-761eec6-os-command-injection-via-arduino-and-esp32-mcp-tools](https://www.vulncheck.com/advisories/hagent-through-commit-761eec6-os-command-injection-via-arduino-and-esp32-mcp-tools)
+- **Regression test:** [`tests/cves/test_cve_2026_117573_hagent_args.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_117573_hagent_args.py)
+
+**Vulnerability**
+
+"hagent through commit 761eec6 contains an OS command injection vulnerability that
+allows MCP clients to execute shell commands by injecting metacharacters into the args
+parameter of the hagent_arduino and hagent_esp32 tools. Attackers or prompt-injected
+agents can supply crafted args interpolated into arduino-cli and idf.py commands run with
+subprocess.run(shell=True) to execute commands as the MCP server user." NVD names no
+fixed release (its range is "through commit 761eec6"), and this module cites no upstream
+fix.
+
+**Airlock mitigation**
+
+**In scope:** shell syntax in the ``args`` string of both tools NVD names, the "Command
+/ argument injection into a spawn" shape in ``docs/cve-triage.md``.
+``ToolArgSinkGuard(shell_args={"args"})`` refuses every ``DEFAULT_SHELL_METACHARS``
+token at step 2.75, before either tool runs, and so does
+``tool_arg_sink_defaults(mode="deny")``, which claims this CVE. **Out of scope:** the
+``shell=True`` command line hagent builds, which is upstream's to fix.
+
+``args`` holds command-line options by design, so another option is not shell syntax
+and passes; which options ``arduino-cli`` or ``idf.py`` may take is the tool's contract,
+not this guard's (``TestDocumentedLimit``). An existing guard (0.10.28) already refuses
+the shape, so this is a second-defence fixture, not a new guard. Triage: #391.
+
+<a id="cve-2026-117573"></a>
+
+### CVE-2026-118378
+
+**Tabularis SQLite driver: stacked statements through ``describe_table``'s ``table_name``**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-89
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-118378](https://nvd.nist.gov/vuln/detail/CVE-2026-118378)
+- **Advisory:** [https://github.com/TabularisDB/tabularis/security/advisories/GHSA-xrx3-j98v-67x9](https://github.com/TabularisDB/tabularis/security/advisories/GHSA-xrx3-j98v-67x9)
+- **Regression test:** [`tests/cves/test_cve_2026_118378_tabularis_describe_table.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_118378_tabularis_describe_table.py)
+
+**Vulnerability**
+
+"Tabularis before 0.28.0 contains an SQL injection vulnerability in its SQLite driver
+that allows MCP clients to execute stacked statements by supplying a crafted table_name
+to the describe_table tool. Attackers, including AI agents steered by untrusted content,
+can close the quoted PRAGMA argument and append statements to read, modify, or drop
+SQLite data, bypassing read-only mode and write approval." Fixed in 0.28.0.
+
+**Airlock mitigation**
+
+**In scope:** a stacked SQL statement carried in the ``table_name`` argument of an MCP
+tool, the "carried in an argument" shape of ``docs/cve-triage.md``. agent-airlock has no
+SQL parser, so the defence is the strict-validation contract, the CVE-2025-68144 and
+CVE-2026-105793 primitive: a tool that declares its identifier argument as a constrained
+type, here ``Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")]``,
+has every payload in the fixture refused under ``@Airlock`` as ``validation_error``
+before the tool runs, while ``users`` is admitted. No guard and no preset.
+
+**Not covered.** A tool that declares ``table_name: str`` gets no protection: there is
+no SQL grammar here, and the payload passes strict validation as the string it is
+(``TestABareStrIsOutOfReach``). The declared shape is the tool author's, and it refuses
+legal SQLite names outside it, such as ``order items``. **Out of scope:** the read-only
+mode and write approval the stacked statement bypasses are Tabularis's own server logic,
+and the quoting of the ``PRAGMA`` argument is upstream's to fix, which 0.28.0 does.
+Triage: #393.
+
+<a id="cve-2026-118378"></a>
+
+### CVE-2026-119025
+
+**open on Windows and WSL: a discovery-metadata ``authorization_endpoint`` with ``$(...)`` run through PowerShell**
+
+- **CVSS:** 7.5 (HIGH) — CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-119025](https://nvd.nist.gov/vuln/detail/CVE-2026-119025)
+- **Advisory:** [https://www.vulncheck.com/advisories/open-7.2.0-before-11.0.0-os-command-injection-via-powershell-on-windows](https://www.vulncheck.com/advisories/open-7.2.0-before-11.0.0-os-command-injection-via-powershell-on-windows)
+- **Regression test:** [`tests/cves/test_cve_2026_119025_open_authorization_endpoint.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_119025_open_authorization_endpoint.py)
+
+**Vulnerability**
+
+"open 7.2.0 before 11.0.0 contains an OS command injection vulnerability that allows
+attackers to execute PowerShell code by supplying crafted URLs on Windows and WSL.
+Attackers can embed $(...) subexpressions in URLs, such as OAuth authorization_endpoint
+values from malicious MCP servers, which execute when index.js passes them unescaped to
+powershell -EncodedCommand." Fixed in open 11.0.0. NVD's references include the MCP
+Inspector advisory GHSA-q978-78c7-phqw, the MCP client that opened such an endpoint.
+
+**Airlock mitigation**
+
+**In scope:** the URL a malicious MCP server hands a client in its discovery metadata,
+before the client opens it. ``AuthorizationServerMetadata`` screens ``issuer`` and the
+authorization, token and registration endpoints as it parses them, and
+``ProtectedResourceMetadata`` screens each of its ``authorization_servers``
+(``mcp_spec/oauth.py``, ``_screen_metadata_url``, 0.10.29): ``$(`` and every character
+RFC 3986 never allows unencoded (a double quote, a backtick, a space, ...) are refused
+with a ``ValidationError`` that names the field and the character's class, never the
+URL. ``from_discovery`` parses through the same screen. On the ``@Airlock`` call path, a
+tool that takes the URL as an argument typed ``SafeURL`` refuses it at strict validation
+(``validation_error``).
+
+**Why partial, and what is out of scope:** ``open`` is a Node package and MCP Inspector
+a TypeScript client; neither calls airlock, and the fix is ``open`` 11.0.0. The screen
+covers only a document parsed through these models, and only the fields above: an
+extra field the model keeps (``extra="allow"``), such as RFC 8414's
+``service_documentation``, is not screened (``TestDocumentedLimit``). No preset claims
+this CVE: the screen needs none, it runs on every parse. An existing primitive already
+refuses the shape, so this is a second-defence fixture, not a new guard. Triage: #399.
+
+<a id="cve-2026-119025"></a>
+
+### CVE-2026-119050
+
+**Agno PandasTools: a model-chosen function name dispatched through ``getattr(pandas, ...)``**
+
+- **CVSS:** 8.1 (HIGH) — CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-470 (CVSS 4.0: 9.2 CRITICAL)
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-119050](https://nvd.nist.gov/vuln/detail/CVE-2026-119050)
+- **Advisory:** [https://www.vulncheck.com/advisories/agno-through-3.1.11-code-execution-via-pandastools-unsafe-reflection](https://www.vulncheck.com/advisories/agno-through-3.1.11-code-execution-via-pandastools-unsafe-reflection)
+- **Regression test:** [`tests/cves/test_cve_2026_119050_agno_pandas_getattr.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_119050_agno_pandas_getattr.py)
+
+**Vulnerability**
+
+"Agno through 3.1.11 contains an unsafe reflection vulnerability in PandasTools that
+allows attackers to invoke arbitrary pandas functions by supplying model-controlled
+function names to getattr(). Attackers can use prompt injection to make the agent call
+pandas.read_pickle on attacker-controlled paths for code execution, or call other
+readers to read local files." NVD names no fixed release (its range is "through
+3.1.11"), and none existed when ``docs/guide/dispatch-arguments.md`` was written
+(agno-agi/agno#8699). No triage issue exists: the watcher drops this record, since its
+text never names the MCP ecosystem (pinned in this module).
+
+**Airlock mitigation**
+
+**In scope:** an argument that names the function a tool calls, which reaches
+``getattr``: ``create_using_function`` in ``create_pandas_dataframe`` and ``operation``
+in ``run_dataframe_operation``. ``read_pickle`` is a plain identifier, so neither the
+shell screen nor the eval guards see it. ``ToolArgSinkGuard(dispatch_args=...)`` reads
+each as one name at step 2.75, before the tool runs: with an allowlist only the names it
+lists pass, and with an empty one ``DEFAULT_DISPATCH_DENY`` refuses private names,
+``*pickle*``, ``read_*``, ``to_*`` and the rest. Both configurations refuse every name in
+the fixture as ``deny_dispatch_name``. ``reflection_sink_defaults`` claims this CVE.
+
+**Why partial:** the default denylist is a backstop, not a contract. It cannot see what
+an admitted method does with its parameters: ``DataFrame.query`` evaluates an expression
+string and is admitted (``TestDocumentedLimit``); an allowlist of the operations a tool
+supports is the control. The guard reads a dispatch argument at the top level only, and
+never the reader's path in ``function_parameters``. **Out of scope:** Agno's own
+``getattr`` call, which is upstream's to fix. An existing guard (0.10.29) already refuses
+the shape, so this is a second-defence fixture, not a new guard.
+
+<a id="cve-2026-119050"></a>
 
 ### CVE-2026-123271
 
@@ -1517,6 +1957,49 @@ The complete fix is the upstream path-segment validation in 0.1.8. This is a
 second-defence regression fixture against an existing primitive, not a new guard.
 
 <a id="cve-2026-57496"></a>
+
+### CVE-2026-59176
+
+**functype-mcp-server: ``set_functype_version``'s ``version`` installs any package as functype through ``pnpm add``**
+
+- **CVSS:** 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-829
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-59176](https://nvd.nist.gov/vuln/detail/CVE-2026-59176)
+- **Advisory:** [https://github.com/jordanburke/functype/security/advisories/GHSA-wcjj-9m6g-2fr2](https://github.com/jordanburke/functype/security/advisories/GHSA-wcjj-9m6g-2fr2)
+- **Regression test:** [`tests/cves/test_cve_2026_59176_functype_version.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_59176_functype_version.py)
+
+**Vulnerability**
+
+"Prior to 1.4.4, the `set_functype_version` MCP tool in `functype-mcp-server` accepts an
+unconstrained `version` string using only `z.string()` validation in
+`packages/mcp-server/src/index.ts` and interpolates it into `functype@<version>` for
+`pnpm add`. Package-alias syntaxes such as `file:`, `npm:`, URLs, or paths can cause an
+arbitrary local or remote package to be installed as functype. Immediately afterward,
+`initDocsData(true)` in `packages/mcp-server/src/lib/docs/data.ts` resolves
+`functype/cli` and dynamically imports the newly installed module, executing
+attacker-controlled JavaScript with the MCP server process's privileges." The record
+goes on to say the tool is enabled by default without authentication in stdio mode, and
+that a prompt-injected assistant can be induced to invoke it. Fixed in 1.4.4.
+
+**Airlock mitigation**
+
+**In scope:** an argument the server hands a package installer, which must be a bare
+version and was not. ``ToolArgSinkGuard(installer_args={"version"})`` requires a PEP 440
+version or an npm semver at step 2.75 and refuses every alias NVD names (``file:``,
+``npm:``, a URL, a path) and their siblings (``github:``, ``git+``, whitespace) as
+``deny_not_a_version``, before the tool runs.
+``tool_arg_sink_defaults(installer_args={"version"}, mode="deny")`` does the same and
+claims this CVE. The argument has to be named: the preset's shell screen alone admits
+``file:../evil``, which carries no shell syntax (``TestDocumentedLimit``).
+
+**Out of scope:** the dynamic import of what was installed, the tool being enabled
+without authentication in stdio mode, and the ``httpStream`` transport's reach: all three
+are functype's, and 1.4.4 fixes the argument at the source. A range (``>=1.4.4``) and a
+dist-tag (``latest``) are not bare versions and are refused too; resolve them on the
+host. An existing guard (0.10.28) already refuses the shape, so this is a second-defence
+fixture, not a new guard. Triage: #395.
+
+<a id="cve-2026-59176"></a>
 
 ### CVE-2026-6980
 

