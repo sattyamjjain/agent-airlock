@@ -56,7 +56,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import parse_qs, urlparse, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, field_validator
 
 from .._log import structlog
 from .._url_paths import normalize_url_path
@@ -167,6 +167,12 @@ def validate_redirect_uri(uri: str) -> None:
         raise RedirectURIError(f"redirect_uri must use http or https scheme, got {parsed.scheme!r}")
 
     host = (parsed.hostname or "").lower()
+    if not host:
+        # ``https:///cb`` and ``https:cb`` parse with no network location, and until 0.10.33
+        # the https branch accepted them: a client resolving such a URI has no host to bind
+        # the code to, so it is not a redirect endpoint (RFC 6749 section 3.1.2 requires an
+        # absolute URI).
+        raise RedirectURIError("redirect_uri must name a host")
     is_loopback = host in ("localhost", "127.0.0.1", "::1")
 
     if parsed.scheme == "http" and not is_loopback:
@@ -470,10 +476,15 @@ class AuthorizationServerMetadata(BaseModel):
     called with `include_input=False`. Extra fields are kept as given and not screened.
 
     The constructor is given no URL, so a document naming any issuer parses. Read a document
-    you fetched with :meth:`from_discovery`, which binds its issuer to the URL it came from.
+    you fetched with :meth:`from_discovery`, which binds its issuer to the URL it came from
+    and records that URL as :attr:`discovery_url` (None for a constructed one). Pass the
+    metadata itself as ``expected_issuer`` to :func:`validate_authorization_response_iss`
+    and an unbound one is refused (since 0.10.33).
     """
 
     model_config = ConfigDict(strict=True, extra="allow", hide_input_in_errors=True)
+
+    _discovery_url: str | None = PrivateAttr(default=None)
 
     issuer: str
     authorization_endpoint: str
@@ -521,7 +532,13 @@ class AuthorizationServerMetadata(BaseModel):
         """
         metadata = cls.model_validate(document)
         validate_metadata_issuer(metadata, discovery_url=discovery_url)
+        metadata._discovery_url = discovery_url
         return metadata
+
+    @property
+    def discovery_url(self) -> str | None:
+        """The URL :meth:`from_discovery` bound the issuer to, or None if it was never bound."""
+        return self._discovery_url
 
 
 class ProtectedResourceMetadata(BaseModel):
@@ -1003,7 +1020,7 @@ def _iss_values(params: Any) -> list[Any]:
 def validate_authorization_response_iss(
     params: Mapping[str, Any] | str | bytes | Sequence[tuple[str, Any]],
     *,
-    expected_issuer: str,
+    expected_issuer: str | AuthorizationServerMetadata,
     require_iss: bool = True,
 ) -> None:
     """Validate the `iss` parameter on an OAuth authorization response (RFC 9207).
@@ -1025,7 +1042,10 @@ def validate_authorization_response_iss(
             configured with, or an issuer that passed :func:`validate_metadata_issuer`
             (:meth:`AuthorizationServerMetadata.from_discovery` runs it). Never a raw
             ``metadata.issuer``: a document can name any issuer, and once that value is
-            the expected one this check cannot catch the mix-up.
+            the expected one this check cannot catch the mix-up. Since 0.10.33 the
+            metadata object itself is accepted: its issuer is used when it was read with
+            :meth:`AuthorizationServerMetadata.from_discovery`, and a constructed one,
+            whose issuer nothing checked, is refused.
         require_iss: When True (default, deny-by-default) a response with no
             `iss` is refused — the mix-up defence only holds if the parameter is
             actually present. Set False only for a documented legacy server that
@@ -1038,7 +1058,15 @@ def validate_authorization_response_iss(
             ignored), or ``params`` is of no readable shape.
         ValueError: ``expected_issuer`` is empty.
     """
-    if not expected_issuer or not expected_issuer.strip():
+    if isinstance(expected_issuer, AuthorizationServerMetadata):
+        if expected_issuer.discovery_url is None:
+            raise IssuerMismatchError(
+                "expected_issuer is metadata built without from_discovery, so nothing bound "
+                "its issuer to a URL; read the document with "
+                "AuthorizationServerMetadata.from_discovery (RFC 8414 section 3.3)"
+            )
+        expected_issuer = expected_issuer.issuer
+    if not isinstance(expected_issuer, str) or not expected_issuer.strip():
         raise ValueError("expected_issuer must be a non-empty issuer identifier")
 
     values = _iss_values(params)

@@ -5475,6 +5475,9 @@ def mcp_spec_2026_07_header_integrity_defaults(
       disagreement, raising
       :class:`~agent_airlock.mcp_spec.header_integrity.HeaderBodyMismatchError`,
       which carries a structured ``audit_event`` mapping for the audit log.
+      Pass the called tool's ``inputSchema`` as ``check_request(request, input_schema)``
+      to check its ``Mcp-Param-{name}`` headers (``x-mcp-header``) against the arguments
+      too (since 0.10.33).
 
     Args:
         method_header: Header carrying the JSON-RPC method (default ``Mcp-Method``).
@@ -5496,9 +5499,14 @@ def mcp_spec_2026_07_header_integrity_defaults(
         validate_header_body_integrity,
     )
 
-    def _check_request(request: Mapping[str, Any]) -> None:
+    def _check_request(
+        request: Mapping[str, Any], input_schema: Mapping[str, Any] | None = None
+    ) -> None:
         validate_header_body_integrity(
-            request, method_header=method_header, name_header=name_header
+            request,
+            method_header=method_header,
+            name_header=name_header,
+            input_schema=input_schema,
         )
 
     return {

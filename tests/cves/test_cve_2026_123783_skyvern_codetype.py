@@ -159,10 +159,6 @@ class TestDocumentedLimit:
         "payload",
         [
             pytest.param(
-                'def f():\n    return 42\n\nc = f.__getattribute__("__co" + "de__")\n',
-                id="dunder-assembled-at-runtime",
-            ),
-            pytest.param(
                 'def f():\n    return 42\n\nc = type(f).__dict__["__co" + "de__"].__get__(f)\n',
                 id="dunder-assembled-through-the-type",
             ),
@@ -181,9 +177,20 @@ class TestDocumentedLimit:
         # not take this fixture as a claim that a denylist closes the class.
         assert EvalRCEGuard().evaluate({"code": payload}).allowed is True
 
-    def test_getattr_is_still_refused_as_the_sink_it_is(self) -> None:
-        # The docstring's limit is "through something other than getattr(".
-        decision = EvalRCEGuard().evaluate({"code": 'getattr(f, "__co" + "de__")'})
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            'getattr(f, "__co" + "de__")',
+            # Passed until 0.10.33: the same primitive under other spellings.
+            'def f():\n    return 42\n\nc = f.__getattribute__("__co" + "de__")\n',
+            'import operator\nc = operator.attrgetter("__co" + "de__")(f)\n',
+            'import inspect\nc = inspect.getattr_static(f, "__co" + "de__")\n',
+        ],
+    )
+    def test_the_getattr_family_is_refused_as_the_sink_it_is(self, payload: str) -> None:
+        # The docstring's limit is "through something other than the getattr family".
+        decision = EvalRCEGuard().evaluate({"code": payload})
+        assert decision.allowed is False
         assert decision.matched_sink == "getattr"
 
     def test_an_operator_can_name_a_runner_with_extra_sinks(self) -> None:

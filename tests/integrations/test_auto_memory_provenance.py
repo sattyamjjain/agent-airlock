@@ -188,7 +188,10 @@ class TestATenantIdHasToNameATenant:
             )
 
     @pytest.mark.parametrize(
-        "tenant_id", ["acct-42", "t", "a.b", "..a", "a..", "acct 42", "ACME_1"]
+        # "a.." was allowed here until 0.10.33: a trailing dot is stripped by some stores, so
+        # it now names tenant "a"'s directory and is refused (tests/test_fixes_0_10_33.py).
+        "tenant_id",
+        ["acct-42", "t", "a.b", "..a", "acct 42", "ACME_1"],
     )
     def test_a_tenant_that_names_itself_is_allowed_as_today(self, tenant_id: str) -> None:
         policy = AutoMemoryAccessPolicy(tenant_id=tenant_id)

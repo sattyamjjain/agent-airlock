@@ -405,6 +405,27 @@ def _resolution_invariant_error(client_id: str) -> CIMDDecision:
     )
 
 
+def _redirect_uris_problem(value: Any) -> str | None:
+    """Why a document's ``redirect_uris`` cannot be pinned, or None when every one is valid.
+
+    Until 0.10.33 the guard required the field to be present and pinned whatever it held, so
+    an approval could pin ``http://attacker.example/cb`` or a URI with a fragment, and every
+    later check compared against that pin. Each entry now passes
+    :func:`~agent_airlock.mcp_spec.oauth.validate_redirect_uri` before the document is
+    returned, so a malformed one is refused at approval and at every check.
+    """
+    from ..mcp_spec.oauth import RedirectURIError, validate_redirect_uri
+
+    if not isinstance(value, list) or not value:
+        return "must be a non-empty list of URIs"
+    for index, uri in enumerate(value):
+        try:
+            validate_redirect_uri(uri)
+        except RedirectURIError as exc:
+            return f"entry {index} is not a valid redirect URI ({exc})"
+    return None
+
+
 def _diff_fields(
     pinned: Mapping[str, str], observed: Mapping[str, str]
 ) -> tuple[CIMDFieldChange, ...]:
@@ -621,6 +642,19 @@ class CIMDGuard:
                     f"the URL it was served from ({client_id!r})"
                 ),
                 fix_hints=("Set client_id in the document to its own URL.",),
+            )
+
+        redirect_problem = _redirect_uris_problem(payload.get("redirect_uris"))
+        if redirect_problem is not None:
+            return None, CIMDDecision(
+                allowed=False,
+                verdict=CIMDVerdict.DENY_MALFORMED,
+                client_id=client_id,
+                reason=f"client_id document redirect_uris: {redirect_problem}",
+                fix_hints=(
+                    "List each redirect URI as an https URL with a host, or http on "
+                    "localhost, 127.0.0.1 or [::1], with no fragment.",
+                ),
             )
 
         canonical, fields = _canonicalise(payload)

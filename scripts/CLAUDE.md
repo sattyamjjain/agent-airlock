@@ -59,9 +59,9 @@ What CI runs — `ci.yml` jobs, on PRs and pushes to `main`:
 
 `publish.yml` (on a published release) adds `check_benchmark_freshness.py --release`,
 `check_registry_parity.py --distance-only`, a GitHub-description drift check and
-`twine check`. The freshness gate age-checks every marker, `last verified` included, though its
-failure message offers that marker as a way out for a row that cannot be re-run: plan a release
-around a fresh run. The upload authenticates through PyPI Trusted Publishing (OIDC), so the job
+`twine check`. The freshness gate age-checks every marker, `last verified` included, and its
+failure message says so (until 0.10.33 it offered that marker as a way out): plan a release
+around a fresh run, or take a row that cannot be re-run out of the README. The upload authenticates through PyPI Trusted Publishing (OIDC), so the job
 needs `id-token: write` and there is no PyPI token to add back. Its gate steps run before
 it installs anything (it later installs only `build` and `twine`), so any script it runs
 must stay stdlib-only. `cve-watcher.yml` polls NVD on a schedule, diffs against the ledger

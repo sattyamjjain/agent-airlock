@@ -23,6 +23,7 @@ import os
 import select
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from typing import Any
@@ -143,6 +144,19 @@ def _classify(resp: dict[str, Any]) -> str:
     return "BLOCK" if result.get("isError") else "PASS"
 
 
+def benign_controls_refused(records: dict[str, dict[str, str]]) -> list[str]:
+    """The benign controls the gateway refused, which a valid run has none of.
+
+    Until 0.10.33 a run whose backend never started (the echo image not built) recorded every
+    item as refused, benign controls included, and was written as a measurement.
+    """
+    return sorted(
+        item
+        for item, record in records.items()
+        if item.startswith("benign") and record.get("gateway_decision") != "PASS"
+    )
+
+
 def _version(cmd: list[str]) -> str:
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=15).stdout.strip()
@@ -207,6 +221,19 @@ def main() -> int:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+    refused = benign_controls_refused(records)
+    if refused or not records:
+        print(
+            "refusing to write the fixture: the gateway refused benign control(s) "
+            f"{', '.join(refused) or '(no records at all)'}. A benign control has no reason "
+            "to be refused, so the backend most likely never ran and this run measured "
+            "nothing. Build the echo image first: docker build -t "
+            "airlock-bench/echo-mcp:latest -f benchmarks/vs_gateway/gateway_harness/Dockerfile "
+            "benchmarks/vs_gateway/gateway_harness/",
+            file=sys.stderr,
+        )
+        return 1
 
     fixture = {
         "_comment": (

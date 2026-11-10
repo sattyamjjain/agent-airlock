@@ -62,13 +62,16 @@ References:
 from __future__ import annotations
 
 import base64
+import re
 from collections.abc import Mapping
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 __all__ = [
     "METHOD_HEADER",
     "NAME_BEARING_METHODS",
     "NAME_HEADER",
+    "PARAM_HEADER_PREFIX",
     "HeaderBodyMismatchError",
     "validate_header_body_integrity",
 ]
@@ -88,6 +91,18 @@ NAME_BEARING_METHODS = frozenset({"tools/call", "resources/read", "prompts/get"}
 #: The markers of an encoded ``Mcp-Name``, exactly as the spec spells them (case-sensitive).
 _ENCODED_PREFIX = "=?base64?"
 _ENCODED_SUFFIX = "?="
+
+#: A tool parameter annotated ``x-mcp-header: <name>`` is mirrored into ``Mcp-Param-<name>``.
+PARAM_HEADER_PREFIX = "Mcp-Param-"
+_PARAM_ANNOTATION = "x-mcp-header"
+#: RFC 9110 section 5.1 ``1*tchar``: what an ``x-mcp-header`` value must match.
+_TCHAR = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+#: ``x-mcp-header`` applies to these JSON Schema types only (``number`` is excluded).
+_PARAM_TYPES = frozenset({"integer", "string", "boolean"})
+#: The JavaScript safe-integer bound an annotated integer must stay within.
+_SAFE_INTEGER = 2**53 - 1
+#: How deep a schema is walked looking for annotations before it is refused unread.
+_MAX_SCHEMA_DEPTH = 64
 
 
 class HeaderBodyMismatchError(ValueError):
@@ -224,31 +239,34 @@ def _header_value(
     return value
 
 
-def _decode_encoded_name(value: str, name: str) -> str:
+def _decode_encoded_name(value: str, name: str, reason: str = "malformed_name_header") -> str:
     """The name inside an ``=?base64?<payload>?=`` value.
 
     Raises:
-        _Refusal: ``malformed_name_header`` when the payload is not base64, is not canonical
-            or is not strict UTF-8. A value too short to hold both markers has no payload.
+        _Refusal: ``reason`` (``malformed_name_header`` by default) when the payload is not
+            base64, is not canonical or is not strict UTF-8. A value too short to hold both
+            markers has no payload.
     """
     form = f"{name!r} is in the =?base64?...?= form, but its payload"
     if len(value) < len(_ENCODED_PREFIX) + len(_ENCODED_SUFFIX):
-        raise _Refusal("malformed_name_header", f"{form} is missing (SEP-2243)")
+        raise _Refusal(reason, f"{form} is missing (SEP-2243)")
     payload = value[len(_ENCODED_PREFIX) : -len(_ENCODED_SUFFIX)]
     try:
         # Not only binascii.Error: a non-ASCII str raises plain ValueError (python-sdk #3817).
         decoded = base64.b64decode(payload, validate=True)
     except ValueError:
-        raise _Refusal("malformed_name_header", f"{form} is not base64 (SEP-2243)") from None
+        raise _Refusal(reason, f"{form} is not base64 (SEP-2243)") from None
     if base64.b64encode(decoded).decode("ascii") != payload:
-        raise _Refusal("malformed_name_header", f"{form} is not canonical base64 (SEP-2243)")
+        raise _Refusal(reason, f"{form} is not canonical base64 (SEP-2243)")
     try:
         return decoded.decode("utf-8")
     except UnicodeDecodeError:
-        raise _Refusal("malformed_name_header", f"{form} is not UTF-8 (SEP-2243)") from None
+        raise _Refusal(reason, f"{form} is not UTF-8 (SEP-2243)") from None
 
 
-def _decode_name_header(value: Any, name: str = NAME_HEADER) -> Any:
+def _decode_name_header(
+    value: Any, name: str = NAME_HEADER, reason: str = "malformed_name_header"
+) -> Any:
     """The operation name ``Mcp-Name`` carries, for comparing with the body.
 
     A value in the sentinel form (it starts with ``=?base64?`` and ends with ``?=``) is
@@ -263,16 +281,16 @@ def _decode_name_header(value: Any, name: str = NAME_HEADER) -> Any:
     if not isinstance(value, str):
         return value
     if value.startswith(_ENCODED_PREFIX) and value.endswith(_ENCODED_SUFFIX):
-        return _decode_encoded_name(value, name)
+        return _decode_encoded_name(value, name, reason)
     if not all(char == "\t" or " " <= char <= "~" for char in value):
         raise _Refusal(
-            "malformed_name_header",
+            reason,
             f"{name!r} holds a character a plain header value cannot carry, so it must use "
             "the =?base64?...?= form (SEP-2243)",
         )
     if value != value.strip(" \t"):
         raise _Refusal(
-            "malformed_name_header",
+            reason,
             f"{name!r} has whitespace at one end, so it must use the =?base64?...?= form "
             "(SEP-2243)",
         )
@@ -411,11 +429,178 @@ def _read_request(
         raise error from None
 
 
+def _annotation_count(node: Any, depth: int = 0) -> int:
+    """How many ``x-mcp-header`` keys ``node`` holds anywhere, however reached.
+
+    Raises:
+        _Refusal: ``invalid_param_schema`` for a schema nested past the depth bound.
+    """
+    if depth > _MAX_SCHEMA_DEPTH:
+        raise _Refusal(
+            "invalid_param_schema",
+            "the tool's inputSchema is nested too deeply to read its x-mcp-header annotations",
+        )
+    if isinstance(node, Mapping):
+        own = 1 if _PARAM_ANNOTATION in node else 0
+        return own + sum(_annotation_count(child, depth + 1) for child in node.values())
+    if isinstance(node, list):
+        return sum(_annotation_count(child, depth + 1) for child in node)
+    return 0
+
+
+def _declared_type(prop: Mapping[str, Any]) -> str | None:
+    """The one primitive type an annotated property declares, or None if it is not one."""
+    declared = prop.get("type")
+    if isinstance(declared, list):
+        kinds = [kind for kind in declared if kind != "null"]
+        declared = kinds[0] if len(kinds) == 1 else None
+    return declared if isinstance(declared, str) and declared in _PARAM_TYPES else None
+
+
+def _param_annotations(schema: Any) -> dict[str, tuple[str, tuple[str, ...], str]]:
+    """``{lowercased header name: (x-mcp-header value, property path, type)}``.
+
+    Only properties reached through a chain of ``properties`` keys count (the spec's
+    statically reachable rule); an annotation anywhere else makes the definition invalid.
+
+    Raises:
+        _Refusal: ``invalid_param_schema`` for a schema the spec says a client must reject:
+            an annotation that is empty, not an RFC 9110 token, repeated (case-insensitive),
+            on a type other than integer, string or boolean, or not statically reachable.
+    """
+    if not isinstance(schema, Mapping):
+        raise _Refusal(
+            "invalid_param_schema",
+            f"the tool's inputSchema is a {type(schema).__name__}, not a mapping",
+        )
+    found: dict[str, tuple[str, tuple[str, ...], str]] = {}
+    stack: list[tuple[Mapping[str, Any], tuple[str, ...]]] = [(schema, ())]
+    while stack:
+        node, path = stack.pop()
+        properties = node.get("properties")
+        if not isinstance(properties, Mapping):
+            continue
+        for key, prop in properties.items():
+            if not isinstance(prop, Mapping):
+                continue
+            here = (*path, str(key))
+            if _PARAM_ANNOTATION in prop:
+                value = prop[_PARAM_ANNOTATION]
+                where = ".".join(here)
+                if not isinstance(value, str) or not _TCHAR.fullmatch(value):
+                    raise _Refusal(
+                        "invalid_param_schema",
+                        f"x-mcp-header on {where!r} is not an RFC 9110 token (SEP-2243)",
+                    )
+                if value.lower() in found:
+                    raise _Refusal(
+                        "invalid_param_schema",
+                        f"x-mcp-header {value!r} is used twice, ignoring case (SEP-2243)",
+                    )
+                kind = _declared_type(prop)
+                if kind is None:
+                    raise _Refusal(
+                        "invalid_param_schema",
+                        f"x-mcp-header on {where!r} needs type integer, string or boolean "
+                        "(SEP-2243)",
+                    )
+                found[value.lower()] = (value, here, kind)
+            stack.append((prop, here))
+    if _annotation_count(schema) != len(found):
+        raise _Refusal(
+            "invalid_param_schema",
+            "an x-mcp-header annotation is not reachable through properties alone (it sits "
+            "under items, a composition or conditional keyword, or $ref), so the tool "
+            "definition is invalid (SEP-2243)",
+        )
+    return found
+
+
+_ABSENT = object()
+
+
+def _argument_at(arguments: Any, path: tuple[str, ...]) -> Any:
+    """The call's argument at ``path``, or ``_ABSENT`` when there is none (or it is null)."""
+    node = arguments
+    for key in path:
+        if not isinstance(node, Mapping) or key not in node:
+            return _ABSENT
+        node = node[key]
+    return _ABSENT if node is None else node
+
+
+def _param_matches(decoded: str, body: Any, kind: str) -> bool:
+    """Whether a decoded ``Mcp-Param-*`` value carries the body's argument of type ``kind``."""
+    if kind == "string":
+        return isinstance(body, str) and decoded == body
+    if kind == "boolean":
+        return isinstance(body, bool) and decoded == ("true" if body else "false")
+    if isinstance(body, bool) or not isinstance(body, int) or abs(body) > _SAFE_INTEGER:
+        return False
+    try:
+        number = Decimal(decoded)
+    except InvalidOperation:
+        return False
+    # Compared numerically, as the spec asks: ``42.0`` carries ``42``.
+    return number.is_finite() and number == body
+
+
+def _check_param_headers(request: Mapping[str, Any], schema: Any) -> None:
+    """Refuse a ``tools/call`` whose ``Mcp-Param-*`` headers disagree with its arguments.
+
+    Raises:
+        _Refusal: ``invalid_param_schema``, ``missing_param_header``,
+            ``malformed_param_header``, ``conflicting_param_header`` or ``param_mismatch``,
+            carrying the header in ``header_value`` (never the value it holds).
+    """
+    annotations = _param_annotations(schema)
+    if not annotations:
+        return
+    params = request.get("params")
+    arguments = params.get("arguments") if isinstance(params, Mapping) else None
+    top_pairs = list(request.items())
+    raw_headers = request.get("headers")
+    header_pairs = None if raw_headers is None else _header_pairs(raw_headers)
+    for spelled, path, kind in annotations.values():
+        header = f"{PARAM_HEADER_PREFIX}{spelled}"
+        where = ".".join(path)
+        try:
+            raw = _header_value(top_pairs, header_pairs, header, "conflicting_param_header")
+        except _Refusal as refusal:
+            raise _Refusal(refusal.reason, refusal.message, header_value=header) from None
+        body = _argument_at(arguments, path)
+        if body is _ABSENT:
+            if raw is not None:
+                raise _Refusal(
+                    "param_mismatch",
+                    f"{header!r} is present but argument {where!r} is absent or null (SEP-2243)",
+                    header_value=header,
+                )
+            continue
+        if raw is None:
+            raise _Refusal(
+                "missing_param_header",
+                f"argument {where!r} has a value but its {header!r} header is absent (SEP-2243)",
+                header_value=header,
+            )
+        try:
+            decoded = _decode_name_header(_text(raw), header, "malformed_param_header")
+        except _Refusal as refusal:
+            raise _Refusal(refusal.reason, refusal.message, header_value=header) from None
+        if not isinstance(decoded, str) or not _param_matches(decoded, body, kind):
+            raise _Refusal(
+                "param_mismatch",
+                f"{header!r} disagrees with argument {where!r} (SEP-2243)",
+                header_value=header,
+            )
+
+
 def validate_header_body_integrity(
     request: Mapping[str, Any],
     *,
     method_header: str = METHOD_HEADER,
     name_header: str = NAME_HEADER,
+    input_schema: Mapping[str, Any] | None = None,
 ) -> None:
     """Reject a request whose SEP-2243 routing headers are missing or disagree with the body.
 
@@ -427,8 +612,15 @@ def validate_header_body_integrity(
             ``resources/read``; a top-level ``name`` in the flattened form).
         method_header: Header carrying the JSON-RPC method (default ``Mcp-Method``).
         name_header: Header carrying the operation name (default ``Mcp-Name``).
+        input_schema: The called tool's ``inputSchema``, for a ``tools/call``. When given,
+            every parameter it annotates with ``x-mcp-header`` is checked too: its
+            ``Mcp-Param-{name}`` header must be present exactly when the argument has a
+            value, decode, and carry that value (integers compared numerically). An
+            unrecognised ``Mcp-Param-*`` header is ignored, as the spec has servers do.
+            Since 0.10.33; until then ``Mcp-Param-*`` was not read at all.
 
-    An encoded ``Mcp-Name`` (``=?base64?<payload>?=``) is decoded before it is compared.
+    An encoded ``Mcp-Name`` or ``Mcp-Param-*`` value (``=?base64?<payload>?=``) is decoded
+    before it is compared.
 
     Raises:
         HeaderBodyMismatchError: If a required routing header is absent/empty, if a
@@ -501,3 +693,21 @@ def validate_header_body_integrity(
             header_name_decoded=decoded_name,
             body_name=body_name,
         )
+
+    # (c) Mcp-Param-{Name} (x-mcp-header). The schema says which arguments are mirrored.
+    if input_schema is not None and body_method == "tools/call":
+        try:
+            _check_param_headers(request, input_schema)
+        except _Refusal as refusal:
+            error = _reject(
+                refusal.reason,
+                refusal.message,
+                header_method=header_method,
+                body_method=body_method,
+                header_name=header_name,
+                header_name_decoded=decoded_name,
+                body_name=body_name,
+            )
+            # The header's name, never its value: a mirrored argument can be sensitive.
+            error.audit_event["param_header"] = refusal.header_value
+            raise error from None

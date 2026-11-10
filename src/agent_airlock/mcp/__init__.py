@@ -325,13 +325,50 @@ async def tool_definitions(server: Any) -> list[dict[str, Any]]:
     """The definitions a FastMCP server serves, one per tool name: the version a call of
     that name resolves to. Approve them into a ``ToolDefinitionPinGuard`` to pin the server's
     own tools, and keep ``guard.pins`` (V0.10.29)."""
-    names = sorted({tool.name for tool in await server.list_tools(run_middleware=False)})
+    names = sorted({tool.name for tool in await _server_tools(server)})
     definitions = []
     for tool_name in names:
-        tool = await server.get_tool(tool_name)
+        tool = await _server_tool(server, tool_name)
         if tool is not None:
             definitions.append(_wire_definition(tool))
     return definitions
+
+
+async def _server_tools(server: Any) -> list[Any]:
+    """Every tool a FastMCP server holds, without running its middleware.
+
+    FastMCP 3 and later have ``list_tools(run_middleware=False)``; FastMCP 2 has only
+    ``get_tools()``, a dict by name. ``[mcp]`` allows both, and until 0.10.33 ``pin_guard``
+    called the first alone, so a 2.x server raised ``AttributeError`` at startup.
+    """
+    list_tools = getattr(server, "list_tools", None)
+    if list_tools is not None:
+        return list(await list_tools(run_middleware=False))
+    get_tools = getattr(server, "get_tools", None)
+    if get_tools is not None:
+        return list((await get_tools()).values())
+    raise TypeError(
+        f"{type(server).__name__} has neither list_tools nor get_tools, so its tools cannot "
+        "be checked against their pins"
+    )
+
+
+async def _server_tool(server: Any, tool_name: str) -> Any:
+    """The tool a call of ``tool_name`` resolves to, or None when there is none.
+
+    FastMCP 3 and later return None for an unknown name; FastMCP 2 raises ``NotFoundError``.
+    """
+    not_found: tuple[type[BaseException], ...] = ()
+    try:
+        from fastmcp.exceptions import NotFoundError
+
+        not_found = (NotFoundError,)
+    except ImportError:  # pragma: no cover - every FastMCP the pin allows defines it
+        pass
+    try:
+        return await server.get_tool(tool_name)
+    except not_found:
+        return None
 
 
 async def check_server_tools(server: Any, guard: ToolDefinitionPinGuard) -> ToolListingDecision:
@@ -383,7 +420,7 @@ def _tool_pin_middleware(guard: ToolDefinitionPinGuard) -> Any:
         async def on_call_tool(self, context: Any, call_next: Any) -> Any:
             tool_name = context.message.name
             server = getattr(context.fastmcp_context, "fastmcp", None)
-            tool = await server.get_tool(tool_name) if server is not None else None
+            tool = await _server_tool(server, tool_name) if server is not None else None
             if tool is not None:
                 decision = guard.check(_wire_definition(tool))
                 if not decision.allowed and guard.enforce:
