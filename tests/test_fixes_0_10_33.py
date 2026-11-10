@@ -498,3 +498,65 @@ class TestTheGatewayRunNeedsItsBenignControls:
         records = json.loads(fixture.read_text(encoding="utf-8"))["records"]
         assert any(item.startswith("benign") for item in records)
         assert benign_controls_refused(records) == []
+
+
+# =============================================================================
+# CapabilityPolicy.require_sandbox_for is enforced on the call path
+# =============================================================================
+
+
+def _capability_tool(capability: Any, policy: Any, *, sandbox: bool = False) -> Any:
+    from agent_airlock import Airlock, SecurityPolicy
+    from agent_airlock.capabilities import requires
+
+    @Airlock(policy=SecurityPolicy(allowed_tools=["*"], capability_policy=policy), sandbox=sandbox)
+    @requires(capability)
+    def tool(target: str) -> str:
+        return f"ran {target}"
+
+    return tool
+
+
+class TestRequireSandboxForIsEnforced:
+    """Until 0.10.33 only `airlock scan-tools` read it: a granted dangerous tool ran in-process."""
+
+    def test_a_granted_dangerous_capability_is_refused_outside_a_sandbox(self) -> None:
+        from agent_airlock.capabilities import Capability, CapabilityPolicy
+
+        policy = CapabilityPolicy(granted=Capability.PROCESS_SHELL)
+        result = _capability_tool(Capability.PROCESS_SHELL, policy)(target="x")
+        assert isinstance(result, dict)
+        assert result["success"] is False
+        assert result["block_reason"] == "capability_denied"
+        assert "sandbox" in result["error"]
+        assert result["metadata"]["sandbox_required_capabilities"] == ["PROCESS_SHELL"]
+
+    def test_a_policy_that_asks_for_no_sandbox_runs_it_as_before(self) -> None:
+        from agent_airlock.capabilities import Capability, CapabilityPolicy
+
+        policy = CapabilityPolicy(
+            granted=Capability.PROCESS_SHELL, require_sandbox_for=Capability.NONE
+        )
+        assert _capability_tool(Capability.PROCESS_SHELL, policy)(target="x") == "ran x"
+
+    def test_a_capability_outside_the_set_runs_as_before(self) -> None:
+        from agent_airlock.capabilities import Capability, CapabilityPolicy
+
+        policy = CapabilityPolicy(granted=Capability.FILESYSTEM_READ)
+        assert _capability_tool(Capability.FILESYSTEM_READ, policy)(target="x") == "ran x"
+
+    def test_a_denied_capability_is_still_refused_as_denied(self) -> None:
+        from agent_airlock.capabilities import Capability, CapabilityPolicy
+
+        policy = CapabilityPolicy(denied=Capability.PROCESS_SHELL)
+        result = _capability_tool(Capability.PROCESS_SHELL, policy)(target="x")
+        assert result["block_reason"] == "capability_denied"
+        assert "sandbox_required_capabilities" not in result["metadata"]
+
+    def test_a_sandboxed_tool_passes_the_capability_step(self) -> None:
+        from agent_airlock.capabilities import Capability, CapabilityPolicy
+
+        policy = CapabilityPolicy(granted=Capability.PROCESS_SHELL)
+        result = _capability_tool(Capability.PROCESS_SHELL, policy, sandbox=True)(target="x")
+        # No E2B here, so it stops at dispatch: what matters is that step 4 let it through.
+        assert not (isinstance(result, dict) and result.get("block_reason") == "capability_denied")

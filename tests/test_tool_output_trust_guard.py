@@ -135,7 +135,9 @@ class TestPreset:
         assert p["preset_id"] == "untrusted_tool_output"
         assert p["severity"] == "high"
         assert p["default_action"] == "flag_and_envelope"
-        assert p["owasp"] == "MCP08"
+        # MCP06 (prompt injection via contextual payloads); MCP08 until 0.10.33, the
+        # audit-and-telemetry slot in the current OWASP MCP Top 10.
+        assert p["owasp"] == "MCP06"
         assert isinstance(p["guard"], ToolOutputTrustGuard)
 
     def test_named_constant_matches_factory(self) -> None:

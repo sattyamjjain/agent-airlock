@@ -151,6 +151,7 @@ from .self_heal import (
     handle_argument_secret,
     handle_budget_exceeded,
     handle_capability_denied,
+    handle_capability_needs_sandbox,
     handle_effect_status_unknown,
     handle_endpoint_violation,
     handle_escalation,
@@ -5428,6 +5429,20 @@ class Airlock:
                 function=func_name,
                 required=capabilities_to_list(required_caps),
             )
+            # ``require_sandbox_for`` names capabilities allowed only in a sandbox. Until
+            # 0.10.33 only ``airlock scan-tools`` read it, so a tool requiring one ran here
+            # unsandboxed.
+            if capability_policy.requires_sandbox(required_caps) and not self.sandbox:
+                needs = capabilities_to_list(capability_policy.require_sandbox_for & required_caps)
+                logger.warning("capability_requires_sandbox", function=func_name, required=needs)
+                self._safe_invoke_callback(
+                    self.config.on_blocked,
+                    "on_blocked",
+                    func_name,
+                    f"requires {', '.join(needs)} in a sandbox",
+                    {"required": str(required_caps), "sandbox_required": needs},
+                )
+                return handle_capability_needs_sandbox(func_name, capabilities=needs)
         except CapabilityDeniedError as e:
             logger.warning(
                 "capability_denied",

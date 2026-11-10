@@ -136,7 +136,9 @@ class TestPreset:
         assert p["preset_id"] == "dns_rebinding_safe_url"
         assert p["severity"] == "high"
         assert p["default_action"] == "deny"
-        assert p["owasp"] == "MCP06"
+        # MCP05 (outbound calls built from untrusted input) since 0.10.33; MCP06 is prompt
+        # injection via contextual payloads in the current OWASP MCP Top 10.
+        assert p["owasp"] == "MCP05"
         assert p["ghsa"] == (GHSA,)
         assert isinstance(p["guard"], SafeURLValidator)
 

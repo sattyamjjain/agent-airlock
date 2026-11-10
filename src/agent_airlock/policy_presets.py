@@ -316,10 +316,11 @@ def owasp_mcp_top_10_2026_policy() -> SecurityPolicy:
       anonymous or unbounded use.
     - MCP05: denies tool-name patterns commonly used to construct shell
       commands (`exec_*`, `run_*`, `system_*`).
-    - MCP03 / MCP04: denies `install_*`, `download_*`, `fetch_plugin_*`
-      tool-name patterns that are typical supply-chain vectors.
+    - MCP03 / MCP04: denies `install_*`, `download_plugin_*`, `fetch_plugin_*`
+      and `load_extension_*` tool-name patterns that are typical supply-chain vectors.
     - Capability gating: denies PROCESS_SHELL, FILESYSTEM_DELETE,
-      NETWORK_ARBITRARY; requires sandbox for DANGEROUS.
+      NETWORK_ARBITRARY; requires sandbox for DANGEROUS (enforced on the call path
+      since 0.10.33; until then only `airlock scan-tools` read it).
 
     This preset does NOT fix:
 
@@ -4966,7 +4967,7 @@ def dns_rebinding_safe_url_defaults(
         "default_action": "deny",
         "guard": guard,
         "check": _check,
-        "owasp": "MCP06",
+        "owasp": "MCP05",
         "ghsa": ("GHSA-mrvx-jmjw-vggc",),
         "advisory_url": advisory_url,
     }
@@ -5242,7 +5243,7 @@ def untrusted_tool_output_defaults(
         "default_action": "flag_and_envelope",
         "guard": guard,
         "check": _check,
-        "owasp": "MCP08",
+        "owasp": "MCP06",
         "advisory_url": advisory_url,
     }
 
@@ -5695,7 +5696,7 @@ def mcp_schema_2020_12_contract_defaults(
         "severity": "high",
         "default_action": "deny",
         "spec": "SEP-2106",
-        "owasp": "MCP08",
+        "owasp": "MCP03",
         "check_tool_schema": _check_tool_schema,
         "analyze": _analyze,
         "ref_guard": ref_guard,
