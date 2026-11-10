@@ -44,6 +44,12 @@ which `make test-badge` also counts as excluded: the docker-marked tests, `tests
   runs an example or script in a subprocess must pass `cwd=tmp_path` (or set
   `AIRLOCK_AUDIT_LOG_PATH` for the child) itself, or the child writes its audit log into the
   checkout. The same variable keeps an ad-hoc snippet's log out of the checkout.
+- **structlog's global config is restored after every test.** The autouse
+  `_structlog_config_does_not_leak` fixture in `tests/conftest.py` snapshots
+  `structlog.get_config()` and restores it, because the scan-tools, trace, corpus-bench and
+  negotiation-bench CLIs call `structlog.configure(...)` with a stderr logger factory that,
+  under `capsys`, binds a stream closed after the test (a later ERROR log then fails with
+  "I/O operation on closed file", order-dependent). It is a no-op without structlog.
 - **An `importorskip` needs a CI job that installs its dependency**, added in the same PR,
   and an extra-backed file joins the `test` job's step that runs those files and fails on
   any skip: a skipped module reads like a passing one in the summary line.

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_airlock._log import structlog
 from agent_airlock.audit import AuditLogger
 
 # A tool decorated with the default config writes its audit log to airlock_audit.json in
@@ -33,3 +34,21 @@ def _default_audit_log_outside_the_checkout() -> Iterator[None]:
     # Some tests clear AuditLogger._instances; register the redirect again for each test.
     _redirect_default_audit_log()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _structlog_config_does_not_leak() -> Iterator[None]:
+    # The scan-tools, trace, corpus-bench and negotiation-bench CLIs call structlog.configure
+    # with PrintLoggerFactory(file=sys.stderr), which binds whatever sys.stderr is at that
+    # moment: under capsys, a capture stream that is closed when the test ends. structlog's
+    # configuration is global, so the next test that logged at ERROR wrote to the closed
+    # stream and failed with "I/O operation on closed file" (seen running
+    # tests/test_scan_tools.py before tests/test_tooling_honesty_0_10_24.py). Put back
+    # whatever configuration the test started with.
+    get_config = getattr(structlog, "get_config", None)
+    if get_config is None:  # the stdlib shim of a bare install has no global configuration
+        yield
+        return
+    saved = get_config()
+    yield
+    structlog.configure(**saved)

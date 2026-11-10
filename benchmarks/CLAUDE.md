@@ -65,8 +65,10 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   re-scores stored outputs for free. Commit `replay_summary.json` (and `fresh`'s
   `fresh_summary.json`) with the block it rendered: `tests/test_mcptox_published.py`
   recomputes the summary on a host of the same OS with the data cached, and skips without
-  one. The 2026-10-17 replay block and the 2026-10-16 fresh blocks shipped without theirs
-  (noted in `RESULTS.md`), so that pin has never run against them.
+  one, so CI skips it; it passes in the README's container with the cache mounted. The
+  2026-11-10 replay block has its summary; the 2026-10-16 fresh blocks shipped without
+  theirs (noted in `RESULTS.md`), and nothing pins them. `--score` with `--write` appends a
+  new block rather than filling in an old one.
 - **`fix_hints/`** — `--round r1|r2`, `--pilot`, `--collect RUN_ID`, `--score RUN_ID`;
   nothing is sent without `--run`, which needs `--budget-usd`, a clean git tree and the key
   for that command only; raw results stay in the run store and `--write` appends a round

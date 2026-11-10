@@ -203,7 +203,7 @@ def _mcp_mapping_table() -> str:
     """The README 'MCP-specific mapping' table, from its heading to the next one."""
     body = README.read_text(encoding="utf-8")
     start = body.index("### MCP-specific mapping")
-    end = body.index("Use it directly", start)
+    end = body.index("\n## ", start)  # the table runs to the next section
     return body[start:end]
 
 
