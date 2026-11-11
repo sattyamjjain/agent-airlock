@@ -1,11 +1,12 @@
 # Adaptive red-team — results
 
-Campaign harness that drives harmless sentinels through agent-airlock's 39
+Campaign harness that drives harmless sentinels through agent-airlock's 40
 bypass-target guards (plus three value-gate adapters) to find fail-opens. No LLM
 judge: a `bypass` requires the guard to admit a candidate **and** an independent
 reference detector to confirm the forbidden shape reached a sentinel sink. The
-39th target, `code_sandbox_bridge_guard` (added with 0.10.31, CVE-2026-120338), is
-registered but **not yet run** (`n=0`); the waves below predate it. See
+39th target, `code_sandbox_bridge_guard` (added with 0.10.31, CVE-2026-120338), and the
+40th, `readonly_sql_guard` (added with 0.10.34, CVE-2026-125322), are registered but
+**not yet run** (`n=0`); the waves below predate both. See
 [`benchmarks/adaptive_redteam/README.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/adaptive_redteam/README.md)
 and the adapter map in
 [`adapters_table.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/adaptive_redteam/adapters_table.md).

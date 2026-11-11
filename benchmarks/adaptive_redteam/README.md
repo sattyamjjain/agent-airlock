@@ -1,7 +1,7 @@
 # adaptive_redteam — campaign harness against agent-airlock's own guards
 
 A supervised, multi-agent red-team campaign that drives **harmless sentinels**
-through agent-airlock's 39 bypass-target guards to find fail-opens. It is
+through agent-airlock's 40 bypass-target guards to find fail-opens. It is
 defensive hardening of the project's own code. It never authors, stores, or runs
 a working exploit, and it makes no network calls beyond `127.0.0.1`, no LLM
 calls, and no paid API calls.
@@ -22,7 +22,7 @@ Run from the repo root as `python -m benchmarks.adaptive_redteam.run_session`
   marker to an in-process list, a spawn-argv recorder, and a generic in-process
   marker list. Each run points `AIRLOCK_AUDIT_LOG_PATH` at a temp file, never the
   checkout.
-- **42 adapters** (`adapters/`): the 39 bypass targets plus three value-gate
+- **43 adapters** (`adapters/`): the 40 bypass targets plus three value-gate
   adapters the oracle anchors on (`deserialization_guard`, `filesystem`,
   `endpoint`). Modes A (policy field), B (config gate), C (standalone). The map is
   [`adapters_table.md`](adapters_table.md); the executable truth is

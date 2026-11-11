@@ -444,6 +444,13 @@ from .mcp_spec.pr_metadata_guard import (
     PRMetadataGuard,
     PRMetadataInjectionRejected,
 )
+
+# V0.10.34 — Read-only SQL guard for tool args (CVE-2026-125322 + CVE-2026-61789).
+from .mcp_spec.readonly_sql_guard import (
+    ReadOnlySQLDecision,
+    ReadOnlySQLGuard,
+    ReadOnlySQLVerdict,
+)
 from .mcp_spec.reasoning_replay_guard import (
     ReasoningReplayDecision,
     ReasoningReplayError,
@@ -939,6 +946,10 @@ __all__ = [
     "FilterEvalRCEDecision",
     "FilterEvalRCEGuard",
     "FilterEvalRCEVerdict",
+    # V0.10.34 — Read-only SQL guard for tool args (CVE-2026-125322 + CVE-2026-61789)
+    "ReadOnlySQLDecision",
+    "ReadOnlySQLGuard",
+    "ReadOnlySQLVerdict",
     # V0.7.6 — OIDC publish-window guard (TanStack postmortem 2026-05-11)
     "OIDCPublishWindowDecision",
     "OIDCPublishWindowGuard",
