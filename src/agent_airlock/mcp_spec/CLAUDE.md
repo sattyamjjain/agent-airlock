@@ -156,6 +156,17 @@ preset, and
   `inputSchema` (`input_schema=`, 0.10.33): the schema's `x-mcp-header` annotations say which
   arguments are mirrored, an annotation the spec makes invalid refuses the request, and an
   unrecognised `Mcp-Param-*` header is ignored. The audit event names the header, never its value.
+- **`ReadOnlySQLGuard` tokenises per dialect and keeps the union** (`_RULES`, CVE-2026-125322
+  and CVE-2026-61789). postgres nests `/* */` and reads dollar quotes and `E''` strings (`$`
+  continues a name, never starts one); mysql has `#` comments, `--` as a comment only before
+  whitespace or the end, backslash escapes, `"..."` as a string, and `/*!` and `/*M!` bodies as
+  code; sqlite has `[name]` and backtick names. `dialect="generic"` reads the value under all
+  three and refuses if ANY reading refuses: one merged ruleset fails open (`SELECT 1 # 2; DROP
+  TABLE t` is one statement on MySQL, two on PostgreSQL), so keep the union. Fragment fields
+  also refuse reading another table without `SELECT` (`TABLE name`, the `table_to_xml` family),
+  and a fragment key anywhere on the path wins over a statement key. Each keyword or function
+  list is one module-level frozenset (`_WRITE_KEYWORDS`, `_DANGEROUS_FUNCTIONS`, ...);
+  INSERT, REPLACE and TRUNCATE followed by `(` are functions, not writes.
 - **`malware_advisory_feed` reads a document by its keys, never by file name**, and makes no
   network call. An OSV record is malware only when its id is `MAL-*` or it carries CWE-506: a
   reviewed GHSA in OSV form lists vulnerable, not malicious, versions, so it is skipped. A

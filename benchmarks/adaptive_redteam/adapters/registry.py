@@ -1,6 +1,6 @@
 """The adapter registry: one entry per bypass target.
 
-39 bypass targets (the 33 ``mcp_spec/*guard*.py`` modules plus
+40 bypass targets (the 34 ``mcp_spec/*guard*.py`` modules plus
 ``action_contradiction_gate``, ``done_receipt_guard``, ``mcp_proxy_guard``,
 ``sequence_guard``, ``ssrf_egress_guard`` and ``tool_output_trust_guard``), plus
 three value-gate adapters the oracle also anchors on (``deserialization_guard``,
@@ -9,7 +9,7 @@ three value-gate adapters the oracle also anchors on (``deserialization_guard``,
 ``adapters_table.md`` is the human-readable source of truth; this module is the
 executable one. The wiring test (``tests/test_adaptive_redteam_adapters.py``)
 drives every entry's ``known_blocked`` (expect ``hard_block``) and benign control
-(expect ``benign_pass``), which proves the 39 are wired to a real refusal and a
+(expect ``benign_pass``), which proves the 40 are wired to a real refusal and a
 real admit.
 """
 
@@ -42,6 +42,7 @@ HIGH_SURFACE: frozenset[str] = frozenset(
         "ssrf_egress_guard",
         "eval_rce_guard",
         "filter_eval_rce_guard",
+        "readonly_sql_guard",
         "code_sandbox_bridge_guard",
         "stdio_command_injection_guard",
         "stdio_guard",
@@ -819,6 +820,30 @@ def _build_standalone() -> dict[str, StandaloneAdapter]:
         {"run_first": True, "check_passes": True},
     )
 
+    # 37. readonly_sql_guard ------------------------------------------------
+    from agent_airlock.mcp_spec.readonly_sql_guard import ReadOnlySQLGuard
+
+    adapters["readonly_sql_guard"] = _spec(
+        "readonly_sql_guard",
+        lambda: ReadOnlySQLGuard(),
+        lambda g, c: g.evaluate(dict(c.kwargs)),
+        ForbiddenEffect(
+            "sql",
+            frozenset(
+                {
+                    "deny_stacked_statement",
+                    "deny_write_statement",
+                    "deny_subquery_in_fragment",
+                    "deny_comment_in_fragment",
+                    "deny_dangerous_function",
+                }
+            ),
+            "readonly-sql",
+        ),
+        {"where": "1=1 AND (SELECT count(*) FROM users) > 0"},
+        {"where": "status = 'active'"},
+    )
+
     return adapters
 
 
@@ -887,7 +912,7 @@ def _stub_resolver(host: str) -> list[str]:
 
 
 def build_registry() -> dict[str, Any]:
-    """Construct every adapter: the 39 bypass targets plus 3 value-gate adapters."""
+    """Construct every adapter: the 40 bypass targets plus 3 value-gate adapters."""
     registry: dict[str, Any] = dict(_build_standalone())
     registry["deserialization_guard"] = DeserializationAdapter()
     registry["sequence_guard"] = SequenceGuardAdapter()
@@ -897,10 +922,10 @@ def build_registry() -> dict[str, Any]:
     return registry
 
 
-#: The 39 bypass targets named in the plan (Track D). The three value-gate
-#: adapters (``deserialization_guard`` is among the 39? no) are listed separately.
+#: The 40 bypass targets (Track D, plus each guard added since). The three value-gate
+#: adapters are listed separately.
 BYPASS_TARGETS: tuple[str, ...] = (
-    # 33 mcp_spec/*guard*.py
+    # 34 mcp_spec/*guard*.py
     "argv_guard",
     "bind_address_guard",
     "code_sandbox_bridge_guard",
@@ -919,6 +944,7 @@ BYPASS_TARGETS: tuple[str, ...] = (
     "oidc_publish_window_guard",
     "openapi_drift_guard",
     "pr_metadata_guard",
+    "readonly_sql_guard",
     "reasoning_replay_guard",
     "sampling_guard",
     "schema_ref_guard",
@@ -943,7 +969,7 @@ BYPASS_TARGETS: tuple[str, ...] = (
     "tool_output_trust_guard",
 )
 
-#: Value-gate adapters that are not in the 39 but which the oracle anchors on.
+#: Value-gate adapters that are not in the 40 but which the oracle anchors on.
 VALUE_GATE_TARGETS: tuple[str, ...] = ("deserialization_guard", "filesystem", "endpoint")
 
 

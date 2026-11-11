@@ -1,4 +1,4 @@
-# Adapter table — source of truth for the 39 bypass targets
+# Adapter table — source of truth for the 40 bypass targets
 
 This table is the human-readable map; `adapters/registry.py` is the executable
 one, and `tests/test_adaptive_redteam_adapters.py` drives every row's
@@ -27,7 +27,7 @@ triage under the plan's severity rubric; a physical-sink bypass is ground truth.
 **Seeds**: 10 for the value gates and the RCE / SSRF / path / deserialization /
 spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 
-## 39 bypass targets
+## 40 bypass targets
 
 | target | mode | module | entry point | sink | forbidden verdicts | sentinel | seeds |
 |---|---|---|---|---|---|---|---|
@@ -49,6 +49,7 @@ spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 | `oidc_publish_window_guard` | C | `mcp_spec/oidc_publish_window_guard.py` | `OIDCPublishWindowGuard.evaluate` | publish | deny_blast_list_pair, deny_blast_list_tarball_url | `blast-list-publish` | 5 |
 | `openapi_drift_guard` | C | `mcp_spec/openapi_drift_guard.py` | `OpenAPIDriftGuard.evaluate` | drift | deny_drift, deny_unknown_operation | `operation-drift` | 5 |
 | `pr_metadata_guard` | C | `mcp_spec/pr_metadata_guard.py` | `PRMetadataGuard.detect_imperatives` | pr_metadata | deny_imperative | `injected-imperative` | 5 |
+| `readonly_sql_guard` | C | `mcp_spec/readonly_sql_guard.py` | `ReadOnlySQLGuard.evaluate` | sql | deny_comment_in_fragment, deny_dangerous_function, deny_stacked_statement, deny_subquery_in_fragment, deny_write_statement | `readonly-sql` | 10 |
 | `reasoning_replay_guard` | C | `mcp_spec/reasoning_replay_guard.py` | `ReasoningReplayGuard.check_replay/bind` | reasoning | refuse_lease_mismatch, refuse_model_mismatch, refuse_session_mismatch, refuse_unbound | `unbound-replay` | 5 |
 | `sampling_guard` | C | `mcp_spec/sampling_guard.py` | `audit_sampling_request` | sampling | (raises) | `unconsented-sampling` | 5 |
 | `schema_ref_guard` | C | `mcp_spec/schema_ref_guard.py` | `SchemaRefGuard.check_ref` | schema_ref | deny_external_file, deny_external_http, deny_non_local, deny_relative_escape | `external-ref` | 5 |
@@ -71,7 +72,7 @@ spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 | `ssrf_egress_guard` | C | `ssrf_egress_guard.py` | `SSRFEgressGuard.check_url` | egress | deny_link_local, deny_loopback, deny_metadata, deny_private_rfc1918 | `169.254.169.254` | 10 |
 | `tool_output_trust_guard` | C | `tool_output_trust_guard.py` | `ToolOutputTrustGuard.inspect` | tool_output | fenced_command, imperative_command, override_directive, tool_call_shaped | `injected-directive` | 5 |
 
-## Value-gate adapters (anchored by the oracle; not among the 39)
+## Value-gate adapters (anchored by the oracle; not among the 40)
 
 | target | mode | module | entry point | sink | forbidden verdicts | sentinel | seeds |
 |---|---|---|---|---|---|---|---|
@@ -82,10 +83,10 @@ spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 ## Mode counts
 
 - **Mode A (policy field):** 3 — `sequence_guard`, `action_contradiction_gate`
-  (both in the 39), plus `deserialization_guard` (value gate).
+  (both in the 40), plus `deserialization_guard` (value gate).
 - **Mode B (config gate):** 2 — `filesystem`, `endpoint` (both value gates).
-- **Mode C (standalone):** 37 — the remaining 37 of the 39 bypass targets.
-- **Total registered:** 42 (39 bypass targets + 3 value-gate adapters).
+- **Mode C (standalone):** 38 — the remaining 38 of the 40 bypass targets.
+- **Total registered:** 43 (40 bypass targets + 3 value-gate adapters).
 
 Regenerate the rows above with `benchmarks/adaptive_redteam/` imported and
 `get_registry()` (the helper lives in the repo history under

@@ -3152,6 +3152,53 @@ def semantic_kernel_filter_eval_rce_2026_25592_26030_defaults(
 
 
 @preset
+def readonly_sql_tool_args_2026_125322_defaults(
+    *,
+    statement_fields: frozenset[str] | None = None,
+    fragment_fields: frozenset[str] | None = None,
+    dialect: str = "generic",
+) -> dict[str, Any]:
+    """Recommended config for the read-only SQL guard on database tools (v0.10.34+).
+
+    Two MCP database servers ran model-written SQL while promising read-only access:
+
+    - **CVE-2026-125322** (pgEdge Postgres MCP Server below 1.1.0): a subquery in the
+      ``where`` parameter of ``count_rows`` read tables the tool never named.
+    - **CVE-2026-61789** (bytebase DBHub below 0.22.6): the read-only check took every
+      ``--`` for a comment, so on MySQL and MariaDB a second statement ran.
+
+    This preset configures
+    :class:`agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard`: statement fields
+    must hold one read statement, fragment fields a clause that reads no other table and
+    carries no comment, ``;`` or ``UNION``. ``dialect="generic"`` reads each value as
+    MySQL, PostgreSQL and SQLite and refuses when any reading does. The arguments are
+    checked here, so a wrong field set or dialect raises before the dict is returned.
+
+    Primary source:
+      https://nvd.nist.gov/vuln/detail/CVE-2026-125322
+    """
+    from .mcp_spec.readonly_sql_guard import (
+        DEFAULT_FRAGMENT_FIELDS,
+        DEFAULT_STATEMENT_FIELDS,
+        ReadOnlySQLGuard,
+    )
+
+    statements = statement_fields if statement_fields is not None else DEFAULT_STATEMENT_FIELDS
+    fragments = fragment_fields if fragment_fields is not None else DEFAULT_FRAGMENT_FIELDS
+    ReadOnlySQLGuard(statement_fields=statements, fragment_fields=fragments, dialect=dialect)
+    return {
+        "preset_id": "readonly_sql_tool_args_2026_125322",
+        "severity": "medium",
+        "default_action": "deny",
+        "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-125322",
+        "cves": ("CVE-2026-125322", "CVE-2026-61789"),
+        "statement_fields": statements,
+        "fragment_fields": fragments,
+        "dialect": dialect,
+    }
+
+
+@preset
 def managed_agents_outcomes_2026_05_06_defaults(
     *,
     allowlist: frozenset[str] = frozenset(),
@@ -6492,6 +6539,7 @@ __all__ = [
     "mcp_config_path_traversal_cve_2026_31402",
     "managed_agents_outcomes_2026_05_06_defaults",
     "semantic_kernel_filter_eval_rce_2026_25592_26030_defaults",
+    "readonly_sql_tool_args_2026_125322_defaults",
     "npm_oidc_publish_window_guard_defaults",
     "mcp_stdio_command_injection_preset_defaults",
     "stdio_guard_eval_defaults_2026_05_15",

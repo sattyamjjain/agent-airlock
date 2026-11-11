@@ -1,6 +1,6 @@
 """Every registered adapter is wired to a real refusal and a real admit.
 
-For all 42 adapters (39 bypass targets + 3 value-gate), the known-blocked shape
+For all 43 adapters (40 bypass targets + 3 value-gate), the known-blocked shape
 must classify as ``hard_block`` and the benign control as ``benign_pass``. This is
 what proves the campaign actually drives each guard — not a stub.
 """
@@ -31,14 +31,14 @@ _NAMES = all_adapter_names()
 
 
 def test_registry_covers_all_38_bypass_targets() -> None:
-    assert len(BYPASS_TARGETS) == 39
-    assert len(set(BYPASS_TARGETS)) == 39
+    assert len(BYPASS_TARGETS) == 40
+    assert len(set(BYPASS_TARGETS)) == 40
     registry = get_registry()
     for name in BYPASS_TARGETS:
         assert name in registry, f"missing bypass target {name!r}"
     for name in VALUE_GATE_TARGETS:
         assert name in registry, f"missing value-gate adapter {name!r}"
-    assert len(registry) == 42
+    assert len(registry) == 43
 
 
 def test_mode_counts() -> None:
@@ -46,7 +46,7 @@ def test_mode_counts() -> None:
     modes = {"A": 0, "B": 0, "C": 0}
     for ad in registry.values():
         modes[ad.mode] += 1
-    assert modes == {"A": 3, "B": 2, "C": 37}
+    assert modes == {"A": 3, "B": 2, "C": 38}
 
 
 @pytest.mark.parametrize("name", _NAMES)
