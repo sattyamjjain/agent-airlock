@@ -3347,12 +3347,14 @@ someone edited a JSON file.</p>
   authenticated rate limit. <code>--since YYYY-MM-DD</code> limits it to advisories published since
   then. It filters on the publish date because GitHub re-touches old malware advisories in
   bulk, so an update-date window is most of the feed.</li>
-<li>The shipped snapshot, <code>malware_blast_2026_11_10.json</code>, holds advisories published since
-  2026-10-11: 1,485 advisories, 2,772 entries (2,101 exact releases, 671 whole packages),
-  315 KB. The whole feed is 121,888 malware advisories, mostly from three waves (July,
-  August and September 2026); a snapshot of the last 90 days alone is 87,842 entries and
-  9.8 MB, takes about 0.7 s and 73 MB to load, and adds that much to the repository at every
-  refresh. npm takes most flagged packages down, so old entries mostly guard releases the
+<li>The shipped snapshot, <code>malware_blast_2026_11_11.json</code>, holds advisories published since
+  2026-10-11: 1,548 advisories, 2,907 entries (2,190 exact releases, 717 whole packages),
+  330 KB. It replaces <code>malware_blast_2026_11_10.json</code> (1,485 advisories, 2,772 entries),
+  which stays in <code>data/</code> until the new one has shipped; the loader reads the newest. When
+  counted on 2026-11-10, the whole feed was 121,888 malware advisories, mostly from three
+  waves (July, August and September 2026); a snapshot of the last 90 days alone was 87,842
+  entries and 9.8 MB, took about 0.7 s and 73 MB to load, and would add that much to the
+  repository at every refresh. npm takes most flagged packages down, so old entries mostly guard releases the
   registry no longer serves, though a caching proxy can still serve them. Run the script with
   an earlier <code>--since</code> if yours does.</li>
 <li><code>load_malware_blast_snapshot()</code> reads the newest snapshot the install ships, offline;
