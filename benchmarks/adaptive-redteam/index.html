@@ -3223,12 +3223,13 @@ plateau-bounded candidate budget still leaves room for a bypass a human could
 find. Nulls publish as <code>0/n (≤ 3/n at 95%)</code>, with every denominator, run date and
 source SHA.</p>
 <h1 id="adaptive-red-team-results">Adaptive red-team — results<a class="headerlink" href="#adaptive-red-team-results" title="Permanent link">&para;</a></h1>
-<p>Campaign harness that drives harmless sentinels through agent-airlock's 39
+<p>Campaign harness that drives harmless sentinels through agent-airlock's 40
 bypass-target guards (plus three value-gate adapters) to find fail-opens. No LLM
 judge: a <code>bypass</code> requires the guard to admit a candidate <strong>and</strong> an independent
 reference detector to confirm the forbidden shape reached a sentinel sink. The
-39th target, <code>code_sandbox_bridge_guard</code> (added with 0.10.31, CVE-2026-120338), is
-registered but <strong>not yet run</strong> (<code>n=0</code>); the waves below predate it. See
+39th target, <code>code_sandbox_bridge_guard</code> (added with 0.10.31, CVE-2026-120338), and the
+40th, <code>readonly_sql_guard</code> (added with 0.10.34, CVE-2026-125322), are registered but
+<strong>not yet run</strong> (<code>n=0</code>); the waves below predate both. See
 <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/adaptive_redteam/README.md"><code>benchmarks/adaptive_redteam/README.md</code></a>
 and the adapter map in
 <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/adaptive_redteam/adapters_table.md"><code>adapters_table.md</code></a>.</p>
