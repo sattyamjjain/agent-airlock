@@ -190,8 +190,10 @@ src/agent_airlock/
      shlex returns a quoted `';'` and the operator alike), each command followed through
      the wrappers in `_WRAPPERS` / `_shell` / `_Interpreter` and git's `-c` keys; deny or
      ask rules match anywhere, allow rules only an innermost command; what cannot be
-     followed (substitution, inline code, stdin programs, unknown wrapper options,
-     dangerous `NAME=` assignments) is denied. Ask escalates (rule `shell_command`)
+     followed (substitution where a shell performs it, single-quoted text being text, but
+     any marker in a heredoc line or the words of a `_RUNS_ARGUMENTS_AS_SHELL` program;
+     inline code, stdin programs, unknown wrapper options, dangerous `NAME=` assignments)
+     is denied. Ask escalates (rule `shell_command`)
    - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one
      anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)

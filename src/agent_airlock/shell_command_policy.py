@@ -18,10 +18,13 @@ Wrappers followed: ``env``, ``xargs``, ``find -exec`` / ``-execdir`` / ``-ok`` /
 shells) ``-c``, ``python -c`` / ``-m``, ``node -e``, ``perl -e`` / ``-c``, ``sudo``,
 ``doas``, ``nohup``, ``timeout``, ``nice``, ``ionice``, ``watch``, ``stdbuf``, ``setsid``,
 ``chroot`` and ``busybox``. What the policy cannot follow is denied rather than guessed at:
-command substitution, inline code, a shell or interpreter reading its program from a pipe
-or stdin, an option a wrapper's parser does not know, an environment assignment that
-changes which program runs (``PATH=``, ``LD_PRELOAD=``, ``GIT_*``), and a git config key it
-cannot vouch for.
+command or process substitution where a shell performs it (unquoted, inside double quotes,
+in a line with a heredoc, in the text a followed wrapper runs, in the arguments of a
+program that runs them as shell text, :data:`_RUNS_ARGUMENTS_AS_SHELL`, and in a comment),
+inline code, a shell or interpreter reading its program from a pipe or stdin, an option a
+wrapper's parser does not know, an environment assignment that changes which program runs
+(``PATH=``, ``LD_PRELOAD=``, ``GIT_*``), and a git config key it cannot vouch for.
+Single-quoted text is text, as it is to the shell: ``grep '`' a.txt`` substitutes nothing.
 
 A rule is words, then options: ``git push --force`` matches a command whose program is
 ``git`` and whose next word is ``push`` (git's global options such as ``-C dir`` skipped),
@@ -56,10 +59,49 @@ _SYSTEM_DIRS = frozenset(
     | {"/opt/homebrew/bin"}
 )
 _SUBSTITUTIONS = ("`", "$(", "<(", ">(")
+_SUBSTITUTION = "it uses command or process substitution"
+#: Programs that run an argument as shell text, which ``_WRAPPERS`` does not follow to it:
+#: a marker anywhere in their words is refused, quoted or not, since the shell that reads
+#: the text substitutes it (``eval 'echo `id`'``, ``ssh host 'echo $(id)'``). ``trap`` and
+#: ``alias`` store text the shell runs later; ``sg``, ``tmux``, ``screen`` and ``parallel``
+#: pass it to ``sh -c`` or type it into a shell.
+_RUNS_ARGUMENTS_AS_SHELL = (
+    "eval",
+    "trap",
+    "alias",
+    "su",
+    "runuser",
+    "sg",
+    "ssh",
+    "script",
+    "flock",
+    "tmux",
+    "screen",
+    "parallel",
+)
 
 
 class _Unanalyzable(Exception):
     """A command the policy cannot follow to what it runs; it is denied."""
+
+
+def _refuse_substitution_in(words: Iterable[str]) -> None:
+    """Refuse a substitution marker anywhere in ``words``, quoted or not: for text a shell
+    the scanner never sees will read (a heredoc, ``eval``'s arguments)."""
+    if any(marker in word for word in words for marker in _SUBSTITUTIONS):
+        raise _Unanalyzable(_SUBSTITUTION)
+
+
+def _refuse_shell_text(argv: list[str]) -> None:
+    """Refuse a marker in the words a command no wrapper follows hands to a shell: those
+    after a program in :data:`_RUNS_ARGUMENTS_AS_SHELL`, or after a shell named past
+    ``argv[0]`` (``docker exec c sh -c '...'``). A shell at ``argv[0]`` that is a leaf runs
+    a script file, and its arguments are text."""
+    for position, word in enumerate(argv):
+        program = _program(word)
+        if program in _RUNS_ARGUMENTS_AS_SHELL or (position and program in _SHELLS):
+            _refuse_substitution_in(argv[position + 1 :])
+            return
 
 
 def _program(token: str) -> str:
@@ -86,6 +128,9 @@ def _is_assignment(token: str) -> bool:
 
 
 _OPERATOR_CHARS = "();<>|&"
+#: ``$(`` and a backtick start in a word; ``<(`` and ``>(`` in a run of operator characters.
+_WORD_MARKERS = tuple(m for m in _SUBSTITUTIONS if m[0] not in _OPERATOR_CHARS)
+_OPERATOR_MARKERS = tuple(m for m in _SUBSTITUTIONS if m[0] in _OPERATOR_CHARS)
 
 
 @dataclass
@@ -95,11 +140,16 @@ class _Line:
     :mod:`shlex` returns a quoted ``';'`` and an operator ``;`` as the same token, so
     ``find -exec rm {} \\;`` could not be told from two commands; this keeps them apart.
     ``expands`` is set when a word holds a ``$`` outside single quotes: its value is not
-    known until the shell runs it.
+    known until the shell runs it. A substitution is refused where the shell performs one:
+    a backtick or ``$(`` unquoted or inside double quotes (an escaped ``\\``` or ``\\$`` is
+    text), ``<(`` or ``>(`` unquoted, and a marker in a comment; inside single quotes it is
+    text. ``heredoc`` is set when ``<<`` appears outside quotes: the body is read by the
+    shell, which substitutes in it even inside single quotes.
     """
 
     tokens: list[tuple[str, bool]] = field(default_factory=list)  # (text, is_operator)
     expands: bool = False
+    heredoc: bool = False
 
     @classmethod
     def scan(cls, line: str) -> _Line:
@@ -133,6 +183,9 @@ class _Line:
                 (p for p in (line.find("\n", index), line.find("\r", index)) if p != -1),
                 default=len(line),
             )
+            # Refused as before 0.10.34: a shell that does not read `#` as a comment
+            # (interactive zsh) would run it.
+            _refuse_substitution_in([line[index:end]])
             return end
         if char in "\n\r":
             self.tokens.append((";", True))
@@ -141,7 +194,11 @@ class _Line:
             end = index
             while end < len(line) and line[end] in _OPERATOR_CHARS:
                 end += 1
-            self.tokens.append((line[index:end], True))
+            operator = line[index:end]
+            if any(marker in operator for marker in _OPERATOR_MARKERS):
+                raise _Unanalyzable(_SUBSTITUTION)
+            self.heredoc = self.heredoc or "<<" in operator
+            self.tokens.append((operator, True))
             return end
         return index + 1
 
@@ -161,6 +218,8 @@ class _Line:
             return end + 1
         if char == '"':
             return self._double_quoted(line, index + 1, word)
+        if any(line.startswith(marker, index) for marker in _WORD_MARKERS):
+            raise _Unanalyzable(_SUBSTITUTION)
         if char == "$":
             self.expands = True
         word.append(char)
@@ -176,6 +235,8 @@ class _Line:
                     word.append(line[index + 1])
                 index += 2
                 continue
+            if any(line.startswith(marker, index) for marker in _WORD_MARKERS):
+                raise _Unanalyzable(_SUBSTITUTION)
             if char == "$":
                 self.expands = True
             word.append(char)
@@ -186,9 +247,10 @@ class _Line:
 def _segments(line: str, walk: _Walk | None = None) -> list[list[str]]:
     """The commands of a shell line: split at ``;`` ``&&`` ``||`` ``|`` ``&``, newlines and
     parentheses, with redirections and leading ``NAME=value`` words taken out."""
-    if any(marker in line for marker in _SUBSTITUTIONS):
-        raise _Unanalyzable("it uses command or process substitution")
     scanned = _Line.scan(line)
+    if scanned.heredoc:
+        # `cat <<EOF` then `'`id`'` runs id: the shell reads the body, not this scanner.
+        _refuse_substitution_in([line])
     if walk is not None and scanned.expands:
         walk.expands = True
     segments: list[list[str]] = []
@@ -476,6 +538,9 @@ def _sudo(argv: list[str]) -> list[Inner]:
     if any(a in ("-i", "-s", "--login", "--shell") for a in args[: start - 1]):
         if not inner:
             raise _Unanalyzable("it opens a root shell")
+        # sudo escapes the words for the shell it runs, and how differs between sudo
+        # versions and sudo-rs (1.9 leaves `$` alone): a marker in them is refused.
+        _refuse_substitution_in(argv[start:])
         return [shlex.join(argv[start:])]
     return inner
 
@@ -855,6 +920,7 @@ class _Walk:
         wrapper = _wrapper(_program(argv[0]))
         inner = wrapper(argv) if wrapper is not None else []
         if not inner:
+            _refuse_shell_text(argv)
             self.leaves.append(argv)
         for item in [*inner, *launched]:
             for segment in _segments(item, self) if isinstance(item, str) else [item]:
