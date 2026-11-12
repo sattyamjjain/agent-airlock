@@ -18,12 +18,12 @@
   MCP server**, so it only belongs in a tools/clients/utilities section (if the
   list has one). If the list is servers-only, **do not submit** — use the
   awesome-mcp-security / awesome-llm-security lists instead.
-- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.10.33 = 10,725).
+- **Refresh the test count** to the current README TEST-BADGE at submission time (v0.10.34 = 10,869).
 
 ## Entry (list format)
 
 ```markdown
-- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) — in-process least-privilege decorator for AI tool calls; strict argument validation, PII masking, per-CVE presets, 10,725 tests.
+- [agent-airlock](https://github.com/sattyamjjain/agent-airlock) — in-process least-privilege decorator for AI tool calls; strict argument validation, PII masking, per-CVE presets, 10,869 tests.
 ```
 
 ## PR title
@@ -39,7 +39,7 @@ agent-airlock is a security/utility library for MCP tool calls (not a server):
 an @Airlock decorator that strict-validates tool arguments, strips
 ghost arguments, masks PII/secrets in output, and ships opt-in per-CVE and
 MCP-spec (SEP) presets. FastMCP integration via @secure_tool. Apache-2.0, Pydantic-only core,
-10,725 tests. Listed under Tools/Clients since it wraps servers rather than being
+10,869 tests. Listed under Tools/Clients since it wraps servers rather than being
 one.
 
 Repo: https://github.com/sattyamjjain/agent-airlock

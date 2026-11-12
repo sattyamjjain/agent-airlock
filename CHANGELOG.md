@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.34] - 2026-11-12
+
+Adds a read-only SQL check for database tool arguments, refreshes the malware advisory
+snapshot, and stops `ShellCommandPolicy` refusing a backtick inside single quotes.
+
+### Added
+
+- Read-only SQL guard for tool arguments (`ReadOnlySQLGuard`, CVE-2026-125322, CVE-2026-61789): statement fields must hold one read statement and fragment fields may not read another table, carry a comment or end the clause, tokenised per dialect (`postgres`, `mysql`, `sqlite`, or `generic`, which refuses when any of the three would). Preset `readonly_sql_tool_args_2026_125322_defaults`; docs in `docs/policies/readonly-sql-tool-args.md`. The adaptive red-team registry lists it as its 40th bypass target (43 adapters); `RESULTS.md` marks it not yet run.
+
+### Changed
+
+- Refreshed the malware advisory snapshot to `data/malware_blast_2026_11_11.json` (1,548 advisories published since 2026-10-11, 2,907 entries), adding GHSA-qwfq-cw9x-55x4 (`@lemili9804/mcp-weather-server` 1.0.3 and 1.0.6) and the rest published after the 2026-11-10 snapshot.
+
+### Fixed
+
+- `ShellCommandPolicy` no longer refuses a substitution marker inside single quotes (`` grep '`' a.txt ``, `` sed -n '/`/p' a.txt ``): it refuses one where a shell performs it (unquoted, in double quotes, in a heredoc line, in a comment, in the text a followed wrapper runs, and in the words of `eval`, `ssh`, `su` and the other programs that run them as shell text, `_RUNS_ARGUMENTS_AS_SHELL`). An argv list for one of those programs is now refused when its words carry a marker.
+
 ## [0.10.33] - 2026-11-10
 
 Closes the checks noticed while shipping 0.10.29 to 0.10.32 that read less than they were
