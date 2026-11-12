@@ -3456,7 +3456,15 @@ matches <code>git -C repo status</code>. A program is matched by its name only w
 or sits in a system directory (<code>/usr/bin/git</code>): <code>./git</code> is not <code>git</code>.</p>
 <p>What the policy cannot follow is refused, whatever the rules say:</p>
 <ul>
-<li>command or process substitution (<code>$(...)</code>, backticks, <code>&lt;(...)</code>);</li>
+<li>command or process substitution (<code>$(...)</code>, backticks, <code>&lt;(...)</code>, <code>&gt;(...)</code>) where the
+  shell performs it: unquoted, inside double quotes, in a line with a heredoc (<code>&lt;&lt;</code>), in
+  the text a followed wrapper runs (<code>bash -c</code>, <code>sudo -s</code>, <code>watch</code>, <code>find -exec sh -c</code>,
+  a <code>git -c</code> command key), and in the arguments of a program that runs them as shell
+  text (<code>eval</code>, <code>trap</code>, <code>alias</code>, <code>su</code>, <code>runuser</code>, <code>sg</code>, <code>ssh</code>, <code>script</code>, <code>flock</code>, <code>tmux</code>,
+  <code>screen</code>, <code>parallel</code>, or a shell named later in a command the policy does not follow,
+  such as <code>docker exec c sh -c</code>), and in a comment. Single-quoted text is text, as it is
+  to the shell, so <code>grep '`' a.txt</code> and <code>sed -n '/`/p' a.txt</code> are judged by the
+  rules like any other command;</li>
 <li>inline code: <code>python -c</code>, <code>node -e</code>, <code>perl -e</code> and <code>-c</code>, <code>ruby -e</code>;</li>
 <li>a shell or interpreter with no program to read but stdin or a terminal: <code>sh</code> in a pipe,
   <code>bash -s</code>, <code>sudo -i</code>, <code>doas -s</code>, <code>chroot</code> with no command;</li>
