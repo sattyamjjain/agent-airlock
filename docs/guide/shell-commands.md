@@ -54,7 +54,15 @@ or sits in a system directory (`/usr/bin/git`): `./git` is not `git`.
 
 What the policy cannot follow is refused, whatever the rules say:
 
-- command or process substitution (`$(...)`, backticks, `<(...)`);
+- command or process substitution (`$(...)`, backticks, `<(...)`, `>(...)`) where the
+  shell performs it: unquoted, inside double quotes, in a line with a heredoc (`<<`), in
+  the text a followed wrapper runs (`bash -c`, `sudo -s`, `watch`, `find -exec sh -c`,
+  a `git -c` command key), and in the arguments of a program that runs them as shell
+  text (`eval`, `trap`, `alias`, `su`, `runuser`, `sg`, `ssh`, `script`, `flock`, `tmux`,
+  `screen`, `parallel`, or a shell named later in a command the policy does not follow,
+  such as `docker exec c sh -c`), and in a comment. Single-quoted text is text, as it is
+  to the shell, so `` grep '`' a.txt `` and `` sed -n '/`/p' a.txt `` are judged by the
+  rules like any other command;
 - inline code: `python -c`, `node -e`, `perl -e` and `-c`, `ruby -e`;
 - a shell or interpreter with no program to read but stdin or a terminal: `sh` in a pipe,
   `bash -s`, `sudo -i`, `doas -s`, `chroot` with no command;
