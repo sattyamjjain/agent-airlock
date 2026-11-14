@@ -3406,6 +3406,10 @@ since <code>env</code> is harmless on its own.</p>
 <td>refused whatever the rules say</td>
 <td>a shell or interpreter reading its program from a pipe (<code>curl ... \| sh</code>), and the rest of what the policy cannot follow (below)</td>
 </tr>
+<tr>
+<td>denied by where it writes</td>
+<td>a redirection to a device or system path (<code>cat /dev/zero &gt; /dev/sda</code>, <code>ls &gt; /etc/cron.d/x</code>), the <code>redirect_deny</code> default (below)</td>
+</tr>
 </tbody>
 </table>
 <p>Anything else gets <code>default</code>, <code>ask</code> in the preset: the policy's approver decides, and with
@@ -3415,7 +3419,21 @@ on every file it searches.</p>
 <p>The command is split into words the way POSIX <code>sh</code> reads quoting, never by running a
 shell: <code>echo 'a; rm -rf /'</code> is one command, and <code>ls; rm -rf /</code> is two. A line is split at
 <code>;</code>, <code>&amp;&amp;</code>, <code>||</code>, <code>|</code>, <code>&amp;</code> and newlines, a <code>#</code> comment is dropped, and redirections are not
-words. Every command of the line is judged.</p>
+words. A run of operator characters is read as the operators a shell reads in it, so
+<code>ls ;&gt;x rm -rf /</code> is <code>ls</code>, then <code>rm -rf /</code> writing to <code>x</code>. Every command of the line is
+judged.</p>
+<p>Since 0.10.35 the policy also reads where a command writes. A redirection that writes
+(<code>&gt;</code>, <code>&gt;&gt;</code>, <code>&gt;|</code>, <code>&amp;&gt;</code>, <code>&amp;&gt;&gt;</code>, <code>&lt;&gt;</code>, and <code>&gt;&amp;</code> to a file) has its target checked against
+<code>redirect_deny</code> and <code>redirect_allow</code> (below), after the deny rules and whatever <code>default</code>
+is: with <code>echo</code> allowed, <code>echo x &gt;/dev/sda</code> is still denied. <code>2&gt;&amp;1</code>, <code>&gt;&amp;2</code> and <code>&gt;&amp;-</code> move
+or close a descriptor, and <code>&lt;</code>, <code>&lt;&lt;</code> and <code>&lt;&lt;&lt;</code> only read. An absolute target is read with
+<code>.</code> and <code>..</code> resolved, so <code>/tmp/../dev/sda</code> is <code>/dev/sda</code>. A target the shell decides
+when it runs (a <code>$</code> value, a glob, a brace expansion, <code>~user</code>) is asked about when the
+policy has an <code>ask</code> rule, and denied when it has none. Redirections in the line a wrapper
+runs (<code>sh -c</code>, <code>watch</code>, a <code>git -c</code> command key) are read the same way.</p>
+<p><code>find</code>'s write actions (<code>-delete</code>, <code>-fprint</code>, <code>-fprint0</code>, <code>-fprintf</code>, <code>-fls</code>) need an
+<code>allow</code> rule that names them: <code>find</code> admits <code>find . -name '*.py'</code> but not <code>find / -delete</code>,
+which <code>find -delete</code> admits. A <code>find</code> that also runs <code>-exec</code> is checked the same way.</p>
 <p>Wrappers are followed to the command they launch, and both are judged:</p>
 <table>
 <thead>
@@ -3527,6 +3545,16 @@ could not be followed. The decision record's layer is <code>2.77:shell_command</
 <td><code>()</code></td>
 <td>tool-name globs to apply it to; empty means every tool with one of <code>command_args</code></td>
 </tr>
+<tr>
+<td><code>redirect_deny</code></td>
+<td><code>/dev/*</code>, <code>/etc/*</code>, <code>/boot/*</code>, <code>/sys/*</code>, <code>/proc/*</code>, <code>/bin/*</code>, <code>/sbin/*</code>, <code>/usr/*</code>, <code>/lib/*</code>, <code>/lib64/*</code>, <code>/var/spool/cron/*</code>, <code>~/.ssh/*</code>, <code>~/.bashrc</code>, <code>~/.bash_profile</code>, <code>~/.profile</code>, <code>~/.zshrc</code></td>
+<td>globs (<code>fnmatchcase</code>, <code>*</code> crosses <code>/</code>) of paths a redirection may not write; <code>()</code> turns the redirection check off</td>
+</tr>
+<tr>
+<td><code>redirect_allow</code></td>
+<td><code>/dev/null</code>, <code>/dev/stdout</code>, <code>/dev/stderr</code>, <code>/dev/tty</code>, <code>/dev/fd/*</code></td>
+<td>globs under <code>redirect_deny</code> a redirection may still write</td>
+</tr>
 </tbody>
 </table>
 <h2 id="with-the-argument-screen">With the argument screen<a class="headerlink" href="#with-the-argument-screen" title="Permanent link">&para;</a></h2>
@@ -3542,6 +3570,16 @@ command.</p>
   (<code>python *</code>) admits any script it runs.</li>
 <li>A wrapper not in the table is judged as the command itself. Only <code>deny</code> and <code>ask</code> rules
   look past it.</li>
+<li>A program that writes to a path in its own arguments (<code>tee</code>, <code>dd of=</code>, <code>cp</code>, <code>install</code>,
+  <code>sed -i</code>) is judged by its rules, not by <code>redirect_deny</code>: deny those programs if where
+  they write matters.</li>
+<li>A relative redirection target is not resolved against a working directory, and a
+  symbolic link is not followed: <code>&gt; ../../etc/passwd</code> and <code>&gt; link-to-a-device</code> are judged
+  as written. Matching is case-sensitive, and the defaults name Linux paths: on macOS,
+  where <code>/etc</code> is <code>/private/etc</code> and the file system ignores case, add the paths you need
+  to <code>redirect_deny</code>.</li>
+<li>With <code>default="allow"</code>, a command no rule names is allowed: <code>find / -delete</code> included.
+  Add <code>find -delete</code> to <code>deny</code> in a deny-list policy.</li>
 </ul>
 
 
