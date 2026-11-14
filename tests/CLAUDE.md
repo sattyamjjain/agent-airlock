@@ -29,10 +29,20 @@ which `make test-badge` also counts as excluded: the docker-marked tests, `tests
   `tests/test_tooling_honesty_0_10_24.py` that run it against real pytest output, and a
   skipped one turns the job red.
 - **Release regression modules.** `fix(security):` and `fix(<area>):` commits close a path
-  where a check was skipped or a refusal failed open; since 0.10.16 most releases' fixes
-  land in regression modules named for the release
-  (`ls tests | grep -E '_[0-9]+_[0-9]+_[0-9]+\.py$'` lists them). 0.10.27 is the exception:
-  its tests are in `tests/mcp_spec/test_oauth.py` and `tests/test_token_audience_call_path.py`.
+  where a check was skipped or a refusal failed open; since 0.10.16 many releases' fixes
+  land in regression modules named for the release, some under a subdirectory such as
+  `tests/integrations/` (`find tests -name '*_0_[0-9]*_[0-9]*.py'` lists them). A release
+  whose fixes extend the touched area's own modules has none (0.10.27's are in
+  `tests/mcp_spec/test_oauth.py` and `tests/test_token_audience_call_path.py`, and most
+  later releases work this way): read its PR's diff rather than look for one.
+- **Two default-suite tests fail on the calendar.** `test_not_stale_on_ship_day` in
+  `tests/owasp_agentic_coverage/test_coverage_completeness.py` and
+  `test_mcp_top10_coverage.py` fail once any `last_verified` in `agentic_coverage.yaml` or
+  `mcp_top10_coverage.yaml` (`src/agent_airlock/owasp_agentic_coverage/`) is over 30 days
+  old (UTC), so CI's `test` job goes red on every PR with no code change. Re-verify each row
+  against the code before moving its date, then regenerate
+  `docs/owasp-agentic-2026-coverage.md` and `docs/owasp-mcp-top-10-coverage.md`, which are
+  byte-diffed against their render (each module's `test_doc_byte_matches_render` shows how).
 
 <!-- END AUTO-MANAGED -->
 

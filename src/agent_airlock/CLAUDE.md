@@ -28,9 +28,10 @@ The installed package: `@Airlock` (`core.py`, sync and async) and every layer it
   Model Armor scanner
 - Fleet-wide kill switch, checked before any other gate: one signed broadcast freezes; a
   reset needs votes from an M-of-N quorum of signer keys (`kill_switch/broadcast.py`)
-- Two checks before the arguments, both inert until configured: the OAuth token audience
-  of each call (`expected_token_audience`, CVE-2026-115413) and a startup-hook self-check
-  of the interpreter (`startup_hook_check`, `runtime/startup_hooks.py`)
+- Three checks before the arguments, all inert until configured: the OAuth token audience
+  of each call (`expected_token_audience`, CVE-2026-115413), a startup-hook self-check
+  of the interpreter (`startup_hook_check`, `runtime/startup_hooks.py`) and a run's halt
+  latch (`RunGuard`, `run_guard.py`)
 - `airlock` CLI — one dispatcher fronting every `cli/<name>.py`; the `_COMMANDS` table in
   `cli/__main__.py` (or `airlock --help`) is the authoritative subcommand list. It
   dispatches in space-form (`airlock scan-tools`), so flags are identical to the
@@ -50,7 +51,7 @@ src/agent_airlock/
 │                      fill gaps (see its docstring); airlock.toml is read only by the
 │                      explicit from_toml() / from_toml_if_exists(), never implicitly
 ├── exceptions.py      AirlockError base only; exception classes live where they're raised
-├── testing.py         state-reset helpers for test isolation
+├── testing.py         state-reset helpers for test isolation, and `assert_policy_covers`
 ├── _log.py            structlog-or-stdlib logging shim
 ├── _sandbox_errors.py sandbox exception classes shared by core.py, sandbox.py and
 │                      sandbox_backend.py, so core.py can raise them without importing
@@ -65,21 +66,25 @@ src/agent_airlock/
 │
 ├── VALIDATION   validator.py, unknown_args.py, safe_types.py, self_heal.py, handles.py
 ├── POLICY       policy.py, policy_presets.py, preset_loader.py, capabilities.py,
-│                oversight.py, identity.py, redis_rate_limit.py, amplification.py,
-│                delegation.py, lease_scope.py, nested_runs.py,
+│                oversight.py, approvals.py, identity.py, redis_rate_limit.py,
+│                amplification.py, delegation.py, lease_scope.py, nested_runs.py,
+│                run_guard.py, data_flow.py, effect_guard.py, policy_coverage.py,
 │                capability_caps/, policy_compiler/, budget/
 ├── EXECUTION    sandbox.py, sandbox_backend.py, streaming.py, context.py,
 │                conversation.py, runtime/; circuit_breaker.py and retry.py are
 │                exported helpers, not part of the @Airlock call path. In runtime/, only
 │                startup_hooks.py is on it (step 0.5)
-├── SANITIZE     sanitizer.py, audit.py, audit_otel.py, observability.py,
+├── SANITIZE     sanitizer.py, hidden_html.py, audit.py, audit_otel.py, observability.py,
 │                cost_tracking.py, trace_redaction.py
 ├── VACCINE      filesystem.py, network.py, honeypot.py, vaccine.py,
 │                camouflage_resistant.py, ssrf_egress_guard.py, sequence_guard.py,
 │                action_contradiction_gate.py, tool_output_trust_guard.py,
-│                done_receipt_guard.py, tool_arg_sink_guard.py
+│                done_receipt_guard.py, tool_arg_sink_guard.py, argument_secret_guard.py,
+│                shell_command_policy.py
 ├── mcp_spec/    per-CVE / per-spec-revision MCP guards — largest subpackage, own CLAUDE.md
-├── mcp/         FastMCP integration (MCPAirlock, secure_tool, create_secure_mcp_server) —
+├── mcp/         FastMCP integration (MCPAirlock, secure_tool, create_secure_mcp_server,
+│                whose `pin_guard` checks the server's own tools at startup and on every
+│                tools/list and tools/call) —
 │                a refusal raises FastMCP's ToolError (error result whatever the return
 │                type); plus cimd.py — pinned CIMD trust anchor, denies on drift — and
 │                permission_prompt.py, the `claude -p --permission-prompt-tool` server
@@ -101,7 +106,7 @@ src/agent_airlock/
 ```
 
 **Call flow through `@Airlock`** — `_pre_execution` gates, then execute, then
-`_post_execution`. Steps 0–6 match the `# Step N` comments in `core.py`:
+`_post_execution`. Steps 0–6.5 match the `# Step N` comments in `core.py`:
 
 0. Kill switch — a fleet freeze refuses before any gate looks at the arguments (the call's
    context is extracted and the call logged first; no gate runs)
@@ -148,7 +153,8 @@ src/agent_airlock/
      escalation to that policy's approver), then its `amplification_budget` counted; the
      tool's own policy is skipped when it is on the chain. `subset_problems` compares the
      fields a ceiling applies by rule (`_COMPARED`) and requires the rest (`_CARRIED`) to be
-     the parent's own object; a public field in neither set is refused
+     the parent's own object; a public field in none of them (`_IGNORED` holds the one
+     that cannot widen a policy) is refused
    - 2.3 loops in the run (V0.10.29, `run_guard`): `(tool, args digest)` history on the run;
      a block of 1 to `max_loop_period` calls repeated `loop_repeats` times refuses the call
      completing it (`loop_detected`), and the run's next trip halts it. A call under a run
@@ -198,11 +204,17 @@ src/agent_airlock/
      anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)
 3. Filesystem path validation. A violation is refused under `BlockStrategy.HONEYPOT` too
-   (the wrapper then answers with honeypot data); only `SOFT_BLOCK` logs and proceeds
+   (the wrapper then answers with honeypot data); only `SOFT_BLOCK` logs and proceeds.
+   With `FilesystemPolicy(bind_resolved_paths=True)` a top-level str / pathlib argument is
+   rebound (`_BoundCall.replace`) to the absolute path it resolved to, so later steps, the
+   decision record and an approval read what the tool will open; nested values pass as given
 4. Capability requirements, read from the wrapper `@Airlock` returned and the
    `__wrapped__` chain beneath it and combined, so `@requires` counts above or below
    `@Airlock`, through any decorator that keeps `__wrapped__` or copies attributes (one
-   that does neither hides the wrapper)
+   that does neither hides the wrapper). The capability policy is the resolved policy's,
+   else the config's; a required capability its `require_sandbox_for` names
+   (`Capability.DANGEROUS` by default) refuses (`capability_denied`) a tool not decorated
+   `sandbox=True`
    - 4.5 argument leases (V0.10.29, `lease_scope.py`): each `@lease_scoped(arg=...)`
      argument (found like `@requires`, above or below `@Airlock`; its default when the call
      leaves it out) must match, with `fnmatchcase`, the target of a lease the caller holds
@@ -216,7 +228,7 @@ src/agent_airlock/
    (`resolve_hostnames`, `resolver`) and refused on an internal or missing answer; a name
    the allowlist refuses is never looked up. `EndpointPolicy.allowed_url_prefixes` (empty
    means no path scope) adds a last check on scheme, host, port and the path resolved by
-   `_url_paths`, and refuses `%2f`, `%5c`, `\` and NUL in the path. Redirects and rebinds
+   `_url_paths`, and refuses `%2f`, `%5c`, `\` and `%00` in the path. Redirects and rebinds
    inside the tool are the airgap's, with `NetworkPolicy(block_private_ips=True)`
 
    Steps 2.7, 2.75, 2.76, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
@@ -247,14 +259,24 @@ src/agent_airlock/
    URI always, as a string or a URL object. A URL is any `scheme://` in any case, or a value
    under a URL-named key.
    Input nested deeper than 32 levels, or a container that contains itself, is refused by
-   whichever of the three gates reads it, in words that say so
+   whichever of those value gates reads it, in words that say so
 6. Per-model-tier budget check — the tier, token count and model id come from context
    metadata (`_call_metadata`), never from the tool's arguments, which the model writes.
    The worst case is priced at `model_id`'s row (a dated snapshot, `<key>-YYYYMMDD`, at
    its model's), an unlisted or non-string model id at the table's dearest row, and no
    `model_id` at the tracker's own model. A tag that cannot be read (a tier that is not a
    string, a token count that is not an integer of at least 0) refuses as
-   `budget_exceeded`
+   `budget_exceeded`. Then an approved call whose arguments changed while the approver
+   decided is refused (`_changed_since_approval`, layer `2:approval_binding`), and 0.7 is
+   checked again
+   - 6.5 at-most-once dispatch (V0.10.29, `effect_guard.py`, inert until the policy sets
+     `effect_guard`), the last gate, so a replay meets every gate first. Keyed on the
+     `tool_call_id` in context metadata, never an argument: a committed id returns its
+     stored result without running (audited `effect="replayed"`); a `pending` / `unknown`
+     one refuses as `effect_status_unknown` unless the tool is reversible; a non-reversible
+     call with no id (`require_tool_call_id`), a reused id, or an irreversible call naming
+     none of `target_args` is refused. `require_approval_for_irreversible` makes step 2
+     escalate an irreversible or untagged tool
 7. Execute (unnumbered in code) — Pydantic strict validation, reaching inside model,
    dataclass and TypedDict arguments passed as dicts, `*args` / `**kwargs` items annotated
    with one included (`validator._nested_strict_check`; an instance the caller already built
@@ -280,8 +302,13 @@ src/agent_airlock/
 8. `_post_execution` — when `sanitize_output` is on, sanitize output via
    `_sanitize_tool_output` (a string is masked and truncated; a dict, list, tuple, set or
    frozenset is masked value by value, keys included, and keeps its type, masked keys that
-   collide getting a ` (2)` suffix; any other object, top-level or nested, is
-   returned as-is and its detections reported as not masked, numbers no detector matches
+   collide getting a ` (2)` suffix; an MCP tool result (a pydantic model with `content` and
+   `structured_content` / `structuredContent`) is rebuilt with `model_copy`, its text
+   blocks, structured content and `_meta` masked (`_mask_mcp_result`); any other object,
+   top-level or nested, is returned as-is and its detections reported as not masked, or
+   refused as `output_unreadable` under `withhold_unmaskable_output`; with
+   `strip_hidden_html` each string loses its hidden HTML (`hidden_html.py`) before it is
+   masked; numbers no detector matches
    unread, bytes decoded and each value's first 100,000 characters read, a value whose
    `str()` raises reported as unreadable; a result too deep to
    rebuild is refused as `output_unreadable`, after the tool ran) → the tool-output trust
@@ -313,10 +340,11 @@ An admitted call whose entry cannot be written is refused as `policy_indetermina
 entry's `layer` is `context._refused_at`, which every refusal return in `_pre_execution`
 sets: a new gate's return must set it too, or `tests/test_decision_record_0_10_29.py` fails.
 
-The order is defense-in-depth — kill switch → startup hooks → token audience → ghost
-arguments → policy (and the 2.5–2.8 gates) → filesystem → capability → network → budget →
-strict validation and sandbox at execute. Most guard layers trace to a named advisory; the
-kill switch, the startup-hook check and the budgets are operational controls.
+The order is defense-in-depth — kill switch → startup hooks → token audience → halt latch →
+ghost arguments → policy (and the 2.1–2.8 gates) → filesystem → capability and leases →
+network → budget → at-most-once dispatch → strict validation and sandbox at execute. Most
+guard layers trace to a named advisory; the kill switch, the startup-hook check and the
+budgets are operational controls.
 
 <!-- END AUTO-MANAGED -->
 
@@ -327,9 +355,9 @@ kill switch, the startup-hook check and the budgets are operational controls.
   preserves `__signature__` / `__annotations__` so framework introspection still works.
 - **Caller identity.** `STRICT_POLICY` requires an agent identity: a run wrapper passed as
   the first positional argument (`ContextExtractor.run_wrapper` decides; the tool's own
-  model or dataclass never counts, and a bare `AirlockContext` passed as the first argument
-  is not read), or `with AirlockContext(agent_id=...)` around the call (`_caller_identity`
-  in `core.py`).
+  model or dataclass counts only when the context it carries is an `AirlockContext`, and a
+  bare `AirlockContext` passed as the first argument is not read), or
+  `with AirlockContext(agent_id=...)` around the call (`_caller_identity` in `core.py`).
 - **Context propagation.** `contextvars`-backed `AirlockContext`; `get_current_context()` is
   available inside the wrapped tool, and a policy may be a callable over that context for
   per-tenant / per-workspace rules.
@@ -400,9 +428,9 @@ kill switch, the startup-hook check and the budgets are operational controls.
   `capabilities.py` (a docstring) and `cli/doctor.py` (a detection regex) are text, not
   calls.
 - **Also by name** — `airlock attest` receipts (identity plus assume/guarantee
-  `LayerContract`); `SandboxPool` of single-use sandboxes, one pool per config, hiding cold
-  starts; `vaccinate()` monkeypatching third-party `@tool` decorators; honeypot deception
-  returning plausible fake success.
+  `LayerContract`); `SandboxPool` of single-use sandboxes, one pool per E2B key, timeout
+  and pool size, hiding cold starts; `vaccinate()` monkeypatching third-party `@tool`
+  decorators; honeypot deception returning plausible fake success.
 - New modules follow the layered structure: validation → policy → execution → sanitization.
   Keep security-relevant decisions observable via structured logging.
 

@@ -6,7 +6,8 @@
 **agent-airlock** — an in-process contract layer and type-checker for AI agent tool calls.
 It intercepts calls into MCP (Model Context Protocol) servers and agent frameworks,
 validates arguments strictly, applies policy, and sandboxes dangerous execution. The wedge
-is argument validation at the call boundary; every other layer wraps it and is opt-in
+is argument validation at the call boundary; every other layer wraps it. Output sanitising
+and the audit log are on by default (`AirlockConfig` defaults); the rest is opt-in
 (`SecurityPolicy(default_deny=True)` makes an empty allowlist deny every tool).
 
 **The installed core is Pydantic-only** (plus `tomli` on Python 3.10); everything else,
@@ -72,7 +73,8 @@ and marketplace manifests).
    names in string arguments → 2.76 secrets and personal data in arguments → 2.77 shell
    commands by rule → 2.8 per-run amplification budget
 3. Filesystem paths → 4. capability requirements → 4.5 argument leases → 5. endpoint policy
-   → 6. per-model-tier budget
+   → 6. per-model-tier budget → 0.7 again (a halt while the call waited) → 6.5 at-most-once
+   dispatch (`effect_guard`), last, so a replay meets every gate before a stored result
 7. Execute: Pydantic strict validation, then run locally or in the sandbox
 8. `_post_execution`: sanitize output, check it with the tool-output trust guard (when
    configured), audit log, mark untrusted output, reconcile cost
@@ -98,9 +100,10 @@ site through `pymdownx.snippets` includes under `docs/benchmarks/`: never copy t
   signature; `TypeVar` / `ParamSpec` / `@overload` for generics; `TYPE_CHECKING` guards for
   type-only imports.
 - **ruff**, line length 100, target `py310` (selected E, W, F, I, B, C4, UP, ARG, SIM;
-  ignored E501, SIM102, SIM103, B027). Keep `py310`: at `py311`, UP017, UP035, UP036 and
-  UP042 fire, and `make format`'s `ruff check --fix` would apply UP017 (`datetime.UTC`) and
-  UP035 (`typing.NotRequired`), both 3.11+, breaking 3.10
+  ignored E501, SIM102, SIM103, B027). Keep `py310`: at `py311`, UP017, UP035, UP036, UP041
+  and UP042 fire, and `make format`'s `ruff check --fix` would apply UP017 (`datetime.UTC`)
+  and UP035 (`typing.NotRequired`), both 3.11+, and UP041 (`except asyncio.TimeoutError` →
+  `TimeoutError`, a different class on 3.10, so a timeout falls through), breaking 3.10
   (`ruff check src/ --target-version py311 --select UP --statistics` shows them). Per-file
   `ARG` ignores (top-level `integrations/*.py`, `cli/*.py`, `anomaly.py`, tests with
   `SIM117`, examples with `F841`) cover interface signatures (callbacks, test stubs, demo
