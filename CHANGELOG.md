@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.35] - 2026-11-14
+
+`ShellCommandPolicy` now checks where a command writes: redirection targets, and `find`'s
+write actions. Also refreshes the malware advisory snapshot.
+
+### Fixed
+
+- `ShellCommandPolicy` read no redirection target, so with `echo` allowed `echo x >/dev/sda` was allowed, and the shipped `shell_command_defaults()` allowed `cat /dev/zero > /dev/sda` and `ls > /etc/cron.d/x` (generalbots/generalbots#2366). A redirection that writes (`>`, `>>`, `>|`, `&>`, `&>>`, `<>`, `>&` to a file) now has its target checked against two new settings, `redirect_deny` (devices, `/etc`, `/boot`, `/sys`, `/proc`, system binary and library directories, cron's spool, `~/.ssh` and the login-shell rc files) and `redirect_allow` (`/dev/null`, the process's own streams). It is checked after the deny rules and whatever `default` is, in the lines wrappers run too (`sh -c`, `watch`, `git -c` command keys), with `.` and `..` resolved in an absolute target. A target the shell decides when it runs (a `$` value, a glob, a brace expansion, `~user`) is asked about when the policy has an ask rule, and denied when it has none. `redirect_deny=()` turns the check off.
+- An allow rule for `find` admitted `find / -delete` and `find . -fprint /etc/cron.d/x` (generalbots/generalbots#2366). `find`'s write actions (`-delete`, `-fprint`, `-fprint0`, `-fprintf`, `-fls`) now need an allow rule that names them (`find -delete`), and a `find` that also runs `-exec` is checked the same way.
+- A run of operator characters was read as one token: `ls ;>x rm -rf /` was one `ls` command, allowed by an allow rule for `ls` while the shell runs `rm -rf /`. The run is now split into the operators a shell reads in it (`;` then `>`), and a redirection with no command (`ls; >/etc/passwd`) is checked.
+
+### Changed
+
+- An allow rule naming a bare `find` no longer admits `-delete`, `-fprint`, `-fprint0`, `-fprintf` or `-fls`: add `find -delete` (or the option you need) to `allow`. Deny and ask rules are unchanged; in a policy with `default="allow"`, a `find` no rule names is still allowed.
+- `ShellCommandPolicy.canonical()` carries `redirect_deny` and `redirect_allow`, so the policy digest of every `SecurityPolicy` with a shell policy changes.
+- Refreshed the malware advisory snapshot to `data/malware_blast_2026_11_14.json` (2,376 advisories published since 2026-10-11, 3,857 entries), adding GHSA-gm9f-q9rw-p3gm (`@rclaude/darwin-x64` 0.2.1), `zread_cli`, `depfix-ai`, `stackvane` and the rest published after the 2026-11-11 snapshot. Two advisories GitHub withdrew on 2026-11-13 (GHSA-gmhr-j769-j6qf, GHSA-2w7v-jwxh-w7wc) are no longer listed.
+
 ## [0.10.34] - 2026-11-12
 
 Adds a read-only SQL check for database tool arguments, refreshes the malware advisory
