@@ -90,7 +90,10 @@ what counts as in scope is in `docs/cve-triage.md`.
   reasoned refusal (#177). An in-scope CVE that an existing guard already refuses lands as
   a second-defence fixture, not a new guard (#226); a new guard is the recurring guard
   commit, `feat:` or `fix(...)` alike: one guard for one named advisory
-  (`mcp_spec/*_guard.py`), its preset defaults, and a regression test. A fixture PR is
+  (`mcp_spec/*_guard.py`), its preset defaults, and a regression test, usually beside the
+  guard (`tests/mcp_spec/`). There it reaches neither the catalog nor
+  `scripts/cve_watcher.py`'s `already_tracked()`, so the CVE has no row and is not counted
+  tracked until a `test_cve_*.py` module here replays it. A fixture PR is
   titled `test(cves): ...`; a refusal is `docs(triage): ...` and adds only a row to the
   out-of-scope table in `tests/cves/README.md` (#312). A CVE can be both, an out-of-scope
   half whose primitive an existing guard already refuses (`docs/cve-triage.md`): that one

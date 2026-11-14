@@ -5,12 +5,12 @@ Subtree conventions for the adaptive red-team campaign. These extend
 
 ## Scope and safety (load-bearing)
 
-- **Harmless sentinels only.** The campaign drives a canary file, a 127.0.0.1
-  listener, a `__reduce__` that appends a marker to an in-process list, and a
-  spawn-argv recorder. Never author, commit, or run a working exploit, a real
-  reverse shell, a real credential, or a payload that would do harm if the guard
-  let it through. A blocked candidate is a *shape* the guard refuses, not a live
-  attack.
+- **Harmless sentinels only.** The campaign drives an in-process marker list (the
+  pure validators' symbolic sink), a canary file, a 127.0.0.1 listener, a `__reduce__`
+  that appends a marker to an in-process list, and a spawn-argv recorder. Never author,
+  commit, or run a working exploit, a real reverse shell, a real credential, or a payload that would
+  do harm if the guard let it through. A blocked candidate is a *shape* the guard refuses, not a
+  live attack.
 - **No LLM judge, ever.** Ground truth is a sentinel reaching a sink plus an
   independent reference detector — not a model's opinion. Do not add a scoring
   path that asks a model whether something was a bypass.
@@ -68,6 +68,7 @@ Subtree conventions for the adaptive red-team campaign. These extend
 - `prompts/attacker.md` — the attack-session prompt skeleton.
 - `RESULTS.md` — dated aggregate output: status, results table, per-wave sections,
   Findings. A wave or seed that has not run stays "not yet run" (`n=0`).
+- `README.md` — campaign overview; repeats the target and adapter counts a new guard bumps.
 
 ## Notes
 

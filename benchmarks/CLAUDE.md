@@ -25,8 +25,11 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   blockrate's corpus. `--write` drops the hand-kept `## Re-runs` table from `RESULTS.md`.
 - **`agentdojo/run.py`** — a free deterministic bound and a paid `--model` pass (every paid
   run needs `--run`, `--budget-usd` and a new, empty `--logdir` outside the repo, because a
-  reused one silently replays stale trajectories, and is metered through `_claude`'s ledger
-  and budget guard), dated separately; `--out` appends
+  reused one silently replays stale trajectories; `--resume` continues a pass whose recorded
+  settings match). Only a Claude 5.x pass is reserved against `_claude`'s ledger and budget
+  guard; any other id runs through `run_legacy_pass`, metered by SDK cost hooks alone, its
+  `--budget-usd` compared only with the plan's low estimate before it starts. Dated
+  separately; `--out` appends
   the paid block below the `CROSS-MODEL-RUNS` marker and needs `--force` to repeat a heading
   (it appends another block; a dated block is never edited). **`agentdojo/replay_published.py`**
   replays AgentDojo's published Claude runs for free (`--fetch` is GitHub API calls plus
@@ -111,9 +114,9 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   ships with its benign control and every denominator; incumbents that were not executed
   are scope-claimed.
 - **Copies are hand-synced — grep the old figure repo-wide.** README, `docs/benchmarks/`,
-  `SECURITY.md`, `ROADMAP.md`, `demo/`, harness READMEs, and prose hard-coded in
-  `scripts/generate_benchmark.py` (re-render with `make benchmark`) and `blockrate/report.py`
-  all restate results.
+  `docs/DISTRIBUTION.md`, `SECURITY.md`, `ROADMAP.md`, `demo/`, harness READMEs, and prose
+  hard-coded in `scripts/generate_benchmark.py` (re-render with `make benchmark`) and
+  `blockrate/report.py` all restate results.
 - **Every file a `docs/benchmarks/` page snippet-includes emits absolute blob URLs**
   (`grep -rn -- '--8<--' docs/benchmarks/` lists them: `BENCHMARK.md` and the `RESULTS.md`
   of `blockrate`, `mcptox`, `fix_hints`, `adaptive_redteam`): each renders at its own path,

@@ -5,7 +5,8 @@
 
 The repo's claim gates and generators, run through `make` and CI: `check_*` claim gates,
 the generators behind `make benchmark` / `test-badge` / `check-cve-catalog`, `smoke_*`
-end-to-end drivers, `cve_watcher.py`, and `egress_bench.py` / `verify_corpus_manifest.py`
+end-to-end drivers, `cve_watcher.py`, the maintainer-run `refresh_malware_blast.py`, and
+`egress_bench.py` / `verify_corpus_manifest.py`
 behind `make egress-bench` / `verify-corpus`. Nothing here ships. A gate exists so that a
 claim drifting from the code fails CI instead of shipping (root `CLAUDE.md`, Git Insights).
 
@@ -124,9 +125,12 @@ absolute-link rule is an authoring rule.
   material belongs in `docs/`.
 - **`refresh_malware_blast.py`** is maintainer-run and uses the network (GitHub's
   `/advisories?type=malware` for npm and pip, `GITHUB_TOKEN` for the authenticated rate
-  limit). No workflow or test runs it. The full feed is over 100,000 advisories, so the
-  shipped snapshot is a window by publish date (`--since`); its `published_since` field
-  says which. Not by update date: GitHub re-touches old malware advisories in bulk.
+  limit). No workflow runs it and no test fetches with it, but
+  `tests/mcp_spec/test_malware_advisory_feed.py` imports its `_render`, `_first_page` and
+  `_get_once` offline: renaming them fails the suite. The full feed is over 100,000
+  advisories, so the shipped snapshot is a window by publish date (`--since`); its
+  `published_since` field says which. Not by update date: GitHub re-touches old malware advisories
+  in bulk.
 - **`smoke_*.py`** build the wheel, install it into a throwaway `.smoke-<name>-venv/`
   (network needed) and drive one guard or preset through the installed package (in
   `smoke_explain.py`, the `airlock-explain` console script), which an editable-tree unit

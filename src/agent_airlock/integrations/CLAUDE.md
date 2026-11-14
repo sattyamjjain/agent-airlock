@@ -5,9 +5,13 @@
 
 Adapters that put `@Airlock` in front of third-party agent SDKs' tools and normalise vendor
 tool-call payloads, plus helpers that sit beside them: the Managed Agents tool gate (reviews
-session events, wraps nothing), Messages API task budgets, Claude runtime hooks, commerce
-caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
-`../mcp/__init__.py` and framework vaccination in `../vaccine.py`; neither imports from here.
+session events, wraps nothing) and Outcomes-rubric gate (`managed_agents_outcomes_guard`),
+Messages API task budgets, Claude runtime hooks, model-tier classification (`model_tier`),
+commerce caps, log redaction, an IDE-scanner bridge, a Cloudflare Mesh header probe
+(`cloudflare_mesh_probe`) and a LangChain `tool_call_id` fixture migration
+(`lc_040_fixture_migration`). The FastMCP integration lives in `../mcp/` (with `cimd.py`
+and the `claude -p --permission-prompt-tool` server, `permission_prompt.py`) and framework
+vaccination in `../vaccine.py`; neither imports from here.
 
 <!-- END AUTO-MANAGED -->
 
@@ -112,21 +116,23 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   creation.
 - **`google_adk_plugin` (0.10.29) wraps no tool.** `AirlockAdkPlugin.__new__` builds a
   subclass on the installed ADK's `BasePlugin` (once per base), since ADK's `App` validates
-  `isinstance` and its plugin manager `getattr`s every callback. It names each invocation's
-  run (`AirlockContext(session_id="adk-invocation:<id>")`, set in `before_run_callback`
-  and unset in the same task's `after_run_callback`) and drops the run's entries through
-  `SecurityPolicy.reset_run`. ADK reports a non-abort `CancelledError` to no hook
-  (google/adk-python#7770), so `close()` and the guards' `max_sessions` LRUs are the
-  backstop; test it with a runner stand-in that calls the hooks as `_exec_with_plugin`
-  does.
+  `isinstance` and its plugin manager `getattr`s every callback. When nothing around the run
+  names a `session_id`, it names each invocation's run
+  (`AirlockContext(session_id="adk-invocation:<id>")`, set in `before_run_callback` and
+  unset in `after_run_callback` or `on_run_error_callback`) and drops that run's entries
+  through `SecurityPolicy.reset_run`; a run the host named is left to the host. ADK
+  reports a non-abort `CancelledError` to no hook (google/adk-python#7770), so `close()` and the
+  guards' `max_sessions` LRUs are the backstop; test it with a runner stand-in that calls the hooks
+  as `_exec_with_plugin` does.
 - **`adapters/`** holds the commerce adapters, which satisfy the `CommerceAdapter` Protocol in
   `agent_commerce_caps.py` (contract in `docs/adapters.md`). **`scanners/`** defines a
   `Scanner` Protocol and registry; nothing under `src/` registers a scanner.
 - **Exports.** `__init__.py` imports nothing, and its `__all__` is a partial list, not an
   index. The package root imports several modules here eagerly
   (`grep -n 'from .integrations' src/agent_airlock/__init__.py`), and they pull in
-  `_claude_sdk_tools`, `_tool_proxy` and `claude_task_budget`; the rest (`anthropic`,
-  `langchain`, `openai_guardrails`, `model_armor`, the shape adapters, ...) load only when
+  `_claude_sdk_tools`, `_tool_proxy`, `claude_task_budget` and `pydantic_ai_approvals`; the
+  rest (`anthropic`, `langchain`, `langgraph`, `openai_agents`, `openai_guardrails`,
+  `google_adk_plugin`, `model_armor`, the shape adapters, ...) load only when
   a test imports them. A module-level SDK import anywhere here fails the `bare-install`
   job, which imports every module (`scripts/check_bare_imports.py`, 0.10.26).
 
@@ -146,11 +152,15 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
   the import — and warns on versions outside `SUPPORTED_*_VERSIONS` (the Claude SDK adapter
   does both in a module-level `_check_sdk`, shared with `wrap_tools`). `langchain` differs:
   one entry point returns the tool unwrapped when `langchain_core` is missing, another
-  raises `ImportError`.
+  raises `ImportError`. So do the adapters that wrap no tool: `google_adk_plugin` raises
+  `GoogleADKMissingError`, while `openai_agents`, `openai_guardrails` and `langgraph`, which
+  have no extra, raise a plain `ImportError` when a helper runs without the SDK.
 - **`claude_auto_memory` refuses a tenant id that is not one directory under `/memory/`.**
   `_require_tenant_id` raises `AutoMemoryTenantIdError` at `AutoMemoryAccessPolicy`
   construction, in `consolidate_memory`, and again in `_check_scope`, because the dataclass is
-  mutable. `consolidate_memory` also refuses a path outside the tenant's root.
+  mutable. `consolidate_memory` also refuses a path outside the tenant's root. Memory paths
+  are read percent-decoded too (up to `_MAX_DECODE_ROUNDS`), and an encoded `/` or `\` is
+  refused.
 - **A setting nothing reads warns.** The SDK adapter's `managed_audit` / `auto_memory_policy`
   (its `_NOT_APPLIED`), `SecureAnthropicClient(auto_process_tools=...)` and
   `audit_managed_agent_invocation` each emit a `FutureWarning` (removal in v1.0.0) and
@@ -179,7 +189,11 @@ caps, log redaction, an IDE-scanner bridge. The FastMCP integration lives in
 - **A new framework adapter** also needs a row in `_ADAPTER_SHIPPED_MODULES`
   (`tests/test_readme_framework_claims.py`, kept by hand), the module named in the README's
   `Adapter-shipped (N)` paragraph with N bumped, and its doc page added to the `mkdocs.yml`
-  nav by hand — only `docs/benchmarks/` has a nav gate.
+  nav by hand — only `docs/benchmarks/` has a nav gate. A framework not yet in
+  `_arg_walk._FRAMEWORK_DISTRIBUTIONS` needs its top-level package and distribution names
+  there too: `is_framework_object` verifies a class against that distribution's RECORD, and
+  without the entry the value gates walk the framework's run-context dataclasses and
+  `ContextExtractor.run_wrapper` does not take them as a run wrapper.
 
 <!-- END AUTO-MANAGED -->
 
@@ -194,7 +208,7 @@ extra of their own (`opentelemetry-api` arrives transitively through `[mcp]`'s F
 `langchain` (`AgentMiddleware`) and `langchain_core.messages` (`ToolMessage`) are imported
 inside `langgraph.py`'s functions only. The OpenAI Agents SDK is
 imported only through `importlib.import_module`: inside `AirlockGuardrails.wrap_agent`, to
-build real `InputGuardrail` / `OutputGuardrail` objects, and by `openai_agents._sdk()` when
+build a real `OutputGuardrail` (the PII check), and by `openai_agents._sdk()` when
 one of its helpers is called.
 The grep hits for `from anthropic import` and `from agents import` in this tree are
 `Usage:` docstrings; the one real lazy `import anthropic` in the package is
@@ -203,10 +217,13 @@ The grep hits for `from anthropic import` and `from agents import` in this tree 
 **Internal:** `.._log` and `..exceptions` almost everywhere; `..core` / `..policy` wherever
 an `Airlock` is built (the decorator-style adapters import them as `agent_airlock.*`), and
 `..core` again in `claude_managed_agents` for `PATH_PARAM_NAMES` / `URL_PARAM_NAMES`;
-`..self_heal` in the three modules that render a refusal for a model (`anthropic`,
-`_claude_sdk_tools`, `claude_managed_agents`); `..filesystem`, `..kill_switch.registry` and
-`..network` only in `claude_managed_agents`, whose `..observability` import is
-function-local; `..sanitizer` and `..config` in a few modules each, `..capabilities` in
+`..self_heal` in the modules that render a refusal for a model (`anthropic`,
+`_claude_sdk_tools`, `claude_managed_agents`, `langgraph`, `openai_agents`); `..approvals`
+in the three approval paths (`langgraph`, `openai_agents`, `pydantic_ai_approvals`),
+`.._arg_walk` in those last two and `_tool_proxy`, `..context` in `openai_agents` and
+`google_adk_plugin`, `..nested_runs` in `openai_agents`; `..filesystem`,
+`..kill_switch.registry` and `..network` only in `claude_managed_agents`, whose `..observability`
+import is function-local; `..sanitizer` and `..config` in a few modules each, `..capabilities` in
 `model_tier` (`grep -rnE 'from (\.\.|agent_airlock\.)[a-z_]+' src/agent_airlock/integrations/*.py`
 recounts). `../policy_presets.py` imports from here only inside preset factories. Sibling
 imports are acyclic (`grep -rn '^\s*from \.[a-z_]' src/agent_airlock/integrations/`).

@@ -33,8 +33,9 @@ direction in new branches.
      `enforce_*` / `verify_*` / `admit_*`. This covers `transport`, `oauth` and the
      2026-07-28 spec validators (`meta_trust`, `statelessness`, `header_integrity`,
      `elicitation_provenance`, …), which the package docstring calls guards: they are
-     guards, just not triples. `tasks` holds only task-state models and `conformance` the
-     case runner. Four modules fit none of the three: `LANUnauthRCEGuard` and
+     guards, just not triples. `tasks` holds only task-state models, `conformance` the
+     case runner and `malware_advisory_feed` the offline loaders (`load_*`) that feed
+     `OIDCPublishWindowGuard`. Four modules fit none of the three: `LANUnauthRCEGuard` and
      `StdioMetaGuard` return frozen-dataclass verdicts (`Verdict`, `MetaVerdict`) with no
      `*Decision`, `PRMetadataGuard.sanitize()` returns a `SanitizedField`, and
      `manifest_only_mode` is a registry plus `launch_from_manifest`.
@@ -136,7 +137,9 @@ preset, and
   audience check compare alike.
 - **`EvalRCEGuard`'s code-object screen is not a sink** (`_CODE_OBJECT_ROUTES`, CVE-2026-123783
   class). `DEFAULT_EVAL_SINKS` stays as it is: the presets copy it, a test pins it, and its
-  call-shape regex would miss an alias or an attribute. The refusal is `DENY_EVAL_SINK` with
+  call-shape regex would miss an alias or an attribute. Another spelling of a listed sink goes
+  in `_SINK_SPELLINGS` (`getattr`'s: `__getattribute__`, `attrgetter`, `getattr_static`),
+  not in the set. The refusal is `DENY_EVAL_SINK` with
   `matched_sink="code_object"`, so the red-team `ForbiddenEffect` and any caller on that verdict
   keep refusing. A name common elsewhere is matched with its module (`tar.getmembers()`,
   `gc.collect()` pass), and every gap is bounded so a long argument stays linear. The guard
@@ -148,12 +151,15 @@ preset, and
   `_normalize_issuer` with the `iss` check, which is looser than the RFC and the MCP page by
   trailing slashes; `_screen_issuer_url` refuses the outer Unicode whitespace it would also
   strip, so slashes are all it forgives. Pass the URL the client built, never `response.url`.
+  `from_discovery` records that URL in the private `_discovery_url`, and
+  `validate_authorization_response_iss` accepts the metadata itself as `expected_issuer` only
+  when it is set: a new way to build a bound document must set it too.
 - **`Mcp-Name` is compared decoded, and `Mcp-Method` raw** (`_decode_name_header`). A plain
   value shaped like `=?base64?...?=` is read as encoded, since a client must encode one. The
   check runs on any request carrying the header, not only name-bearing methods. `b64decode` on
   a non-ASCII `str` raises plain `ValueError`, not `binascii.Error` (python-sdk #3817), so catch
-  `ValueError`. `Mcp-Param-*` headers are checked only when the caller passes the tool's
-  `inputSchema` (`input_schema=`, 0.10.33): the schema's `x-mcp-header` annotations say which
+  `ValueError`. `Mcp-Param-*` headers are checked only on a `tools/call` whose caller passes the
+  tool's `inputSchema` (`input_schema=`, 0.10.33): the schema's `x-mcp-header` annotations say which
   arguments are mirrored, an annotation the spec makes invalid refuses the request, and an
   unrecognised `Mcp-Param-*` header is ignored. The audit event names the header, never its value.
 - **`ReadOnlySQLGuard` tokenises per dialect and keeps the union** (`_RULES`, CVE-2026-125322
@@ -195,8 +201,12 @@ preset, and
   (`_legacy_fingerprint` in `tests/test_review_guards_0_10_28.py` recomputes the old
   payload); a field hashed for every spawn would change every stored digest. The
   code-loading names are `subprocess_arg_guard._DEFAULT_DANGEROUS_ENV_VARS`, which
-  `stdio_meta_guard` reads too: widening it changes the digest of any spawn that sets the
-  new name, and an import from that module needs `# nosec B404` (bandit matches its name).
+  `stdio_meta_guard` and `../shell_command_policy.py` (step 2.77's `NAME=` assignments) read
+  too: widening it changes the digest of any spawn that sets the new name and what step 2.77
+  denies, and an import from that module needs `# nosec B404` (bandit matches its name).
+  `ToolDefinitionPinGuard` versions its digest instead: a new pinned field is a new
+  `PIN_VERSIONS` entry and `CURRENT_PIN_VERSION`, and a stored digest keeps verifying under
+  the `pin_version` it was made at.
 - **A new guard also joins the red-team campaign by hand.** Add it to `BYPASS_TARGETS` and
   `build_registry` in `benchmarks/adaptive_redteam/adapters/registry.py` with a
   `known_blocked` shape its tests prove refused and a `benign_control` it admits, a row in
@@ -217,8 +227,9 @@ preset, and
 - **Tests:** CVE-numbered guards go in `tests/cves/test_cve_<yyyy>_<n>_<slug>.py`, guards
   for an advisory with no CVE id in `tests/cves/test_<slug>.py`, other guards in
   `tests/mcp_spec/test_<module>.py`, and the 2026-07-28 validators in
-  `tests/test_mcp_*_preset.py` (a few older CVE guards are tested only under
-  `tests/mcp_spec/`). `tests/cves/CLAUDE.md` holds the fixture and no-mock rules.
+  `tests/test_mcp_*_preset.py` (`config_path_guard`, `code_sandbox_bridge_guard` and
+  `readonly_sql_guard`, all CVE-numbered, are tested only under `tests/mcp_spec/`).
+  `tests/cves/CLAUDE.md` holds the fixture and no-mock rules.
 - A guard whose behaviour a unit test cannot show may also get a `scripts/smoke_*.py`
   driver, as `attested_admission` and the Flowise stdio preset have.
 
@@ -229,9 +240,11 @@ preset, and
 
 **External: only `oauth.py` and `tasks.py` import a third-party package (`pydantic`) at
 module level.** Importing any submodule still loads pydantic through the root package. The
-one other third-party use is `attested_admission.py`, which imports `cryptography`
-*lazily* inside its verifier functions behind the `[attested]` extra and raises a
-`RuntimeError` naming the extra when it is missing. That is the pattern to copy.
+other third-party uses are lazy: `attested_admission.py` imports `cryptography` inside its
+verifier functions behind the `[attested]` extra and raises a `RuntimeError` naming the
+extra when it is missing (the pattern to copy), and
+`tool_definition_pin_guard._paginated_params` imports `mcp.types`, sending the wire form
+`{"cursor": ...}` without it.
 `bare-install`'s first import step loads this subpackage through the package root and the
 preset factories `policy_presets` calls at import time (`NAME = factory()`), which misses
 `attested_admission`, `conformance`, `supply_chain` and `transcript_ingest_guard`; its
@@ -250,6 +263,13 @@ neither imports anything from this package, so that cannot become a cycle.
 `from agent_airlock.policy_presets import ..._defaults` lines in docstrings are `Usage::`
 examples. The dependency runs one way (presets import guards), and `_versions.py` stays a
 leaf so that never becomes a cycle. Keep both true.
+
+Code outside this package imports from it, so a change here reaches the call path: `core.py`
+step 0.6 (`oauth`), `../tool_arg_sink_guard.py` (step 2.75, `DEFAULT_SHELL_METACHARS`),
+`../shell_command_policy.py` (step 2.77), `../mcp/__init__.py` (`pin_guard`) and
+`../mcp/cimd.py` (`oauth.validate_redirect_uri`);
+`grep -rn 'from \.*mcp_spec\.' src/agent_airlock --include='*.py' | grep -v '^src/agent_airlock/mcp_spec/'`
+lists every importer.
 
 <!-- END AUTO-MANAGED -->
 
