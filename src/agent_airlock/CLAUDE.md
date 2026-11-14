@@ -193,13 +193,21 @@ src/agent_airlock/
      what it cannot mask (a positional or nested value)
    - 2.77 shell commands (V0.10.29, `shell_command_policy.py`, off until the policy sets
      `shell_command_policy`): `command_args` split by a POSIX quoting scanner (`_Line`;
-     shlex returns a quoted `';'` and the operator alike), each command followed through
+     shlex returns a quoted `';'` and the operator alike; a run of operator characters is
+     split as bash's lexer splits it, `_OPERATORS`), each command followed through
      the wrappers in `_WRAPPERS` / `_shell` / `_Interpreter` and git's `-c` keys; deny or
      ask rules match anywhere, allow rules only an innermost command; what cannot be
      followed (substitution where a shell performs it, single-quoted text being text, but
      any marker in a heredoc line or the words of a `_RUNS_ARGUMENTS_AS_SHELL` program;
      inline code, stdin programs, unknown wrapper options, dangerous `NAME=` assignments)
-     is denied. Ask escalates (rule `shell_command`)
+     is denied. Order in `_judge`: deny rules, then where the line writes (V0.10.35:
+     `_segments` records each writing redirection on `_Walk.writes`, wrapper lines
+     included; a target `redirect_deny` names and `redirect_allow` does not is denied
+     whatever `default` is, an undecided one, `$` / glob / brace / `~user`, asked about
+     with an ask rule else denied; `redirect_deny=()` turns it off), then ask rules, then
+     `_worst`. A command carrying a `_ACTION_OPTIONS` option (`find -delete`, `-fprint*`,
+     `-fls`) is admitted only by an allow rule naming it, a wrapper `find` too. Ask
+     escalates (rule `shell_command`)
    - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one
      anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)

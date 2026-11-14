@@ -25,6 +25,7 @@ def run_shell(command: str) -> str:
 | ask | `git push`, `git commit`, `sudo`, `doas` |
 | deny | a recursive `rm`, a force push (`--force`, `-f`, a `+refspec`), `find -delete`, `rg --pre` |
 | refused whatever the rules say | a shell or interpreter reading its program from a pipe (`curl ... \| sh`), and the rest of what the policy cannot follow (below) |
+| denied by where it writes | a redirection to a device or system path (`cat /dev/zero > /dev/sda`, `ls > /etc/cron.d/x`), the `redirect_deny` default (below) |
 
 Anything else gets `default`, `ask` in the preset: the policy's approver decides, and with
 no approver registered the call is refused. `rg --pre` is denied because it runs a command
@@ -35,7 +36,23 @@ on every file it searches.
 The command is split into words the way POSIX `sh` reads quoting, never by running a
 shell: `echo 'a; rm -rf /'` is one command, and `ls; rm -rf /` is two. A line is split at
 `;`, `&&`, `||`, `|`, `&` and newlines, a `#` comment is dropped, and redirections are not
-words. Every command of the line is judged.
+words. A run of operator characters is read as the operators a shell reads in it, so
+`ls ;>x rm -rf /` is `ls`, then `rm -rf /` writing to `x`. Every command of the line is
+judged.
+
+Since 0.10.35 the policy also reads where a command writes. A redirection that writes
+(`>`, `>>`, `>|`, `&>`, `&>>`, `<>`, and `>&` to a file) has its target checked against
+`redirect_deny` and `redirect_allow` (below), after the deny rules and whatever `default`
+is: with `echo` allowed, `echo x >/dev/sda` is still denied. `2>&1`, `>&2` and `>&-` move
+or close a descriptor, and `<`, `<<` and `<<<` only read. An absolute target is read with
+`.` and `..` resolved, so `/tmp/../dev/sda` is `/dev/sda`. A target the shell decides
+when it runs (a `$` value, a glob, a brace expansion, `~user`) is asked about when the
+policy has an `ask` rule, and denied when it has none. Redirections in the line a wrapper
+runs (`sh -c`, `watch`, a `git -c` command key) are read the same way.
+
+`find`'s write actions (`-delete`, `-fprint`, `-fprint0`, `-fprintf`, `-fls`) need an
+`allow` rule that names them: `find` admits `find . -name '*.py'` but not `find / -delete`,
+which `find -delete` admits. A `find` that also runs `-exec` is checked the same way.
 
 Wrappers are followed to the command they launch, and both are judged:
 
@@ -107,6 +124,8 @@ could not be followed. The decision record's layer is `2.77:shell_command`.
 | `default` | `"deny"` | the verdict for an innermost command no rule names |
 | `command_args` | `("command", "cmd")` | the arguments holding the command: a string is a shell line, a list of strings one command's argv |
 | `tools` | `()` | tool-name globs to apply it to; empty means every tool with one of `command_args` |
+| `redirect_deny` | `/dev/*`, `/etc/*`, `/boot/*`, `/sys/*`, `/proc/*`, `/bin/*`, `/sbin/*`, `/usr/*`, `/lib/*`, `/lib64/*`, `/var/spool/cron/*`, `~/.ssh/*`, `~/.bashrc`, `~/.bash_profile`, `~/.profile`, `~/.zshrc` | globs (`fnmatchcase`, `*` crosses `/`) of paths a redirection may not write; `()` turns the redirection check off |
+| `redirect_allow` | `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/tty`, `/dev/fd/*` | globs under `redirect_deny` a redirection may still write |
 
 ## With the argument screen
 
@@ -123,3 +142,13 @@ command.
   (`python *`) admits any script it runs.
 - A wrapper not in the table is judged as the command itself. Only `deny` and `ask` rules
   look past it.
+- A program that writes to a path in its own arguments (`tee`, `dd of=`, `cp`, `install`,
+  `sed -i`) is judged by its rules, not by `redirect_deny`: deny those programs if where
+  they write matters.
+- A relative redirection target is not resolved against a working directory, and a
+  symbolic link is not followed: `> ../../etc/passwd` and `> link-to-a-device` are judged
+  as written. Matching is case-sensitive, and the defaults name Linux paths: on macOS,
+  where `/etc` is `/private/etc` and the file system ignores case, add the paths you need
+  to `redirect_deny`.
+- With `default="allow"`, a command no rule names is allowed: `find / -delete` included.
+  Add `find -delete` to `deny` in a deny-list policy.

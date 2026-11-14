@@ -31,11 +31,23 @@ A rule is words, then options: ``git push --force`` matches a command whose prog
 with ``--force`` anywhere after. Each part is a case-sensitive glob, and a part starting
 with ``-`` or ``+`` (an option, a force refspec) may sit anywhere after the words.
 ``deny`` and ``ask`` rules also match a command an unknown wrapper puts later in the line.
+
+Where a command writes is read too (V0.10.35, generalbots/generalbots#2366). A
+redirection that writes (``>``, ``>>``, ``>|``, ``&>``, ``<>``, ``>&`` to a file) has its
+target checked against ``redirect_deny`` and ``redirect_allow``, whatever ``default`` is:
+``echo x >/dev/sda`` is denied though ``echo`` is allowed. A target the shell has not
+decided yet (a ``$`` value, a glob, ``~user``) is asked about or denied. ``find``'s write
+actions (``-delete``, ``-fprint``...) need an allow rule that names them, so an allow rule
+for ``find`` does not admit ``find / -delete``. A program that writes to a path in its own
+arguments (``tee``, ``dd of=``, ``cp``) is judged by its rules, not by ``redirect_deny``,
+and a relative target is not resolved against a working directory.
 """
 
 from __future__ import annotations
 
 import fnmatch
+import posixpath
+import re
 import shlex
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -131,6 +143,38 @@ _OPERATOR_CHARS = "();<>|&"
 #: ``$(`` and a backtick start in a word; ``<(`` and ``>(`` in a run of operator characters.
 _WORD_MARKERS = tuple(m for m in _SUBSTITUTIONS if m[0] not in _OPERATOR_CHARS)
 _OPERATOR_MARKERS = tuple(m for m in _SUBSTITUTIONS if m[0] in _OPERATOR_CHARS)
+#: The operators a shell reads in a run of operator characters, longest first, as bash's
+#: lexer takes them left to right: ``;>`` is ``;`` then ``>`` (until 0.10.35 the run was
+#: one token, read as a redirection, so ``ls ;>x rm -rf /`` was one ``ls`` command), and
+#: ``&>`` is one redirection.
+_OPERATORS = (
+    *("&>>", ";;&", "<<<"),
+    *("&&", "||", ";;", ";&", "|&", "<<", ">>", "<&", ">&", "<>", ">|", "&>"),
+    *("(", ")", ";", "&", "|", "<", ">"),
+)
+#: The target of ``>&`` that moves or closes a descriptor (``2>&1``, ``>&2-``, ``>&-``)
+#: rather than naming a file.
+_DESCRIPTOR = re.compile(r"\d+-?|-")
+
+
+def _split_operators(run: str) -> list[str]:
+    """``run`` (operator characters only) as the operators a shell reads in it."""
+    out: list[str] = []
+    index = 0
+    while index < len(run):
+        operator = next(o for o in _OPERATORS if run.startswith(o, index))
+        out.append(operator)
+        index += len(operator)
+    return out
+
+
+def _writes(operator: str, target: str) -> bool:
+    """Whether the redirection ``operator`` with ``target`` writes to a file. ``<``,
+    ``<<``, ``<<<`` and ``<&`` only read; ``>&2``, ``2>&1`` and ``>&-`` move or close a
+    descriptor."""
+    if ">" not in operator:
+        return False
+    return not (operator == ">&" and _DESCRIPTOR.fullmatch(target))
 
 
 @dataclass
@@ -194,11 +238,11 @@ class _Line:
             end = index
             while end < len(line) and line[end] in _OPERATOR_CHARS:
                 end += 1
-            operator = line[index:end]
-            if any(marker in operator for marker in _OPERATOR_MARKERS):
+            run = line[index:end]
+            if any(marker in run for marker in _OPERATOR_MARKERS):
                 raise _Unanalyzable(_SUBSTITUTION)
-            self.heredoc = self.heredoc or "<<" in operator
-            self.tokens.append((operator, True))
+            self.heredoc = self.heredoc or "<<" in run
+            self.tokens += [(operator, True) for operator in _split_operators(run)]
             return end
         return index + 1
 
@@ -246,7 +290,9 @@ class _Line:
 
 def _segments(line: str, walk: _Walk | None = None) -> list[list[str]]:
     """The commands of a shell line: split at ``;`` ``&&`` ``||`` ``|`` ``&``, newlines and
-    parentheses, with redirections and leading ``NAME=value`` words taken out."""
+    parentheses, with redirections and leading ``NAME=value`` words taken out. Each
+    redirection that writes is recorded on ``walk.writes`` with its target, a redirection
+    with no command (``ls; >/etc/passwd``) included."""
     scanned = _Line.scan(line)
     if scanned.heredoc:
         # `cat <<EOF` then `'`id`'` runs id: the shell reads the body, not this scanner.
@@ -255,21 +301,34 @@ def _segments(line: str, walk: _Walk | None = None) -> list[list[str]]:
         walk.expands = True
     segments: list[list[str]] = []
     current: list[str] = []
-    skip_next = False
+    writes: list[tuple[str, str]] = []  # this command's (operator, target)
+    redirect: str | None = None  # the operator whose target is the next word
     for text, is_operator in scanned.tokens:
-        if skip_next and not is_operator:
-            skip_next = False
+        if redirect is not None and not is_operator:
+            if _writes(redirect, text):
+                writes.append((redirect, text))
+            redirect = None
         elif is_operator and ("<" in text or ">" in text):
             if current and current[-1].isdigit():
                 current.pop()  # the file descriptor of `2>err`
-            skip_next = True  # the redirection's target
+            redirect = text
         elif is_operator:
+            _record_writes(current, writes, walk)
             segments.append(current)
-            current, skip_next = [], False
+            current, writes, redirect = [], [], None
         else:
             current.append(text)
+    _record_writes(current, writes, walk)
     segments.append(current)
     return [_command_words(segment) for segment in segments if segment]
+
+
+def _record_writes(segment: list[str], writes: list[tuple[str, str]], walk: _Walk | None) -> None:
+    """Put one command's writes on ``walk``, each with the command's program."""
+    if walk is None or not writes:
+        return
+    program = next((_program(word) for word in segment if not _is_assignment(word)), "")
+    walk.writes += [_Write(operator, target, program) for operator, target in writes]
 
 
 def _command_words(segment: list[str]) -> list[str]:
@@ -281,6 +340,64 @@ def _command_words(segment: list[str]) -> list[str]:
             raise _Unanalyzable(f"it sets {segment[index].split('=', 1)[0]}")
         index += 1
     return segment[index:]
+
+
+# --------------------------------------------------------------------------------- writes
+
+#: Where a redirection may not write: devices, system configuration and binaries, cron's
+#: spool, and the files a login shell runs. Globs, matched with ``fnmatchcase`` (``*``
+#: crosses ``/``) against the target after ``posixpath.normpath``.
+_DEFAULT_REDIRECT_DENY: tuple[str, ...] = (
+    *("/dev/*", "/etc/*", "/boot/*", "/sys/*", "/proc/*", "/bin/*", "/sbin/*", "/usr/*"),
+    *("/lib/*", "/lib64/*", "/var/spool/cron/*"),
+    *("~/.ssh/*", "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zshrc"),
+)
+#: Targets under ``redirect_deny`` a command may still write: the null device and the
+#: process's own streams.
+_DEFAULT_REDIRECT_ALLOW: tuple[str, ...] = (
+    *("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty", "/dev/fd/*"),
+)
+#: Options with which a program writes or deletes files itself. An allow rule naming the
+#: program admits a command carrying one only when the rule's option parts name it
+#: (``find -delete``); deny and ask rules are unchanged. To add a program, map the name
+#: ``_program`` reads it by to its options; options that launch a command belong in
+#: ``_WRAPPERS`` instead (``find -exec``).
+_ACTION_OPTIONS: dict[str, frozenset[str]] = {
+    "find": frozenset({"-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}),
+}
+#: Characters that leave a redirection target to the shell: a ``$`` value, a glob, a
+#: brace expansion (``/de{v..v}/sda``).
+_UNDECIDED_TARGET = frozenset("$*?[{")
+
+
+@dataclass(frozen=True)
+class _Write:
+    """A redirection that writes: its operator, target and the command's program."""
+
+    operator: str
+    target: str
+    program: str
+
+
+def _undecided(target: str) -> bool:
+    """Whether the shell decides ``target`` when it runs: a ``$`` value, a glob, a brace
+    expansion, or a tilde form other than ``~/...`` (``~root/x``, ``~+``)."""
+    if any(char in _UNDECIDED_TARGET for char in target):
+        return True
+    return target.startswith("~") and target != "~" and not target.startswith("~/")
+
+
+def _normalized_target(target: str) -> str:
+    """``target`` with ``.`` and ``..`` resolved (``/tmp/../dev/sda`` is ``/dev/sda``) and
+    a leading ``//`` read as ``/``, as Linux reads it."""
+    path = posixpath.normpath(target)
+    return "/" + path.lstrip("/") if path.startswith("//") else path
+
+
+def _actions(argv: list[str]) -> frozenset[str]:
+    """The :data:`_ACTION_OPTIONS` of ``argv``'s program that its words carry."""
+    options = _ACTION_OPTIONS.get(_program(argv[0])) if argv else None
+    return frozenset(word for word in argv[1:] if word in options) if options else frozenset()
 
 
 # -------------------------------------------------------------------------------- options
@@ -706,6 +823,12 @@ class _Rule:
             raise ValueError(f"shell rule {text!r} puts a word after an option")
         return cls(text, tuple(parts[:cut]), tuple(parts[cut:]))
 
+    def names(self, options: Iterable[str]) -> bool:
+        """Whether every one of ``options`` matches one of the rule's option parts."""
+        return all(
+            any(fnmatch.fnmatchcase(option, part) for part in self.anywhere) for option in options
+        )
+
     def matches(self, argv: list[str], *, anywhere: bool) -> bool:
         starts = range(len(argv)) if anywhere else range(min(1, len(argv)))
         return any(self._matches_at(argv, start) for start in starts)
@@ -767,6 +890,13 @@ class ShellCommandPolicy:
             list of strings one command's argv.
         tools: Tool-name globs the policy applies to; empty applies it to every tool that
             has one of ``command_args``.
+        redirect_deny: Globs of paths a redirection may not write to (``> /dev/sda``,
+            ``>> /etc/passwd``), checked after the deny rules and whatever ``default`` is.
+            A target the shell decides when it runs (a ``$`` value, a glob, ``~user``) is
+            asked about when the policy has an ask rule, else denied. ``()`` turns the
+            redirection check off, the unknown-target refusal included.
+        redirect_allow: Globs under ``redirect_deny`` a redirection may still write to
+            (``/dev/null``, the process's own streams).
     """
 
     allow: tuple[str, ...] = ()
@@ -775,6 +905,8 @@ class ShellCommandPolicy:
     default: ShellVerdict = "deny"
     command_args: tuple[str, ...] = ("command", "cmd")
     tools: tuple[str, ...] = ()
+    redirect_deny: tuple[str, ...] = _DEFAULT_REDIRECT_DENY
+    redirect_allow: tuple[str, ...] = _DEFAULT_REDIRECT_ALLOW
     _rules: dict[str, tuple[_Rule, ...]] = field(
         default_factory=dict, init=False, repr=False, compare=False
     )
@@ -786,7 +918,10 @@ class ShellCommandPolicy:
             ValueError: A rule that does not parse, an unknown ``default``, or a name
                 collection given as one string.
         """
-        for name in ("allow", "ask", "deny", "command_args", "tools"):
+        for name in (
+            *("allow", "ask", "deny", "command_args", "tools"),
+            *("redirect_deny", "redirect_allow"),
+        ):
             value = getattr(self, name)
             if isinstance(value, str) or not all(isinstance(item, str) for item in value):
                 raise ValueError(f"ShellCommandPolicy.{name} takes a tuple of strings")
@@ -808,6 +943,8 @@ class ShellCommandPolicy:
             "default": self.default,
             "command_args": list(self.command_args),
             "tools": list(self.tools),
+            "redirect_deny": list(self.redirect_deny),
+            "redirect_allow": list(self.redirect_allow),
         }
 
     def evaluate(self, arguments: Mapping[str, Any]) -> ShellCommandDecision | None:
@@ -831,19 +968,69 @@ class ShellCommandPolicy:
             )
 
     def _judge(self, walk: _Walk, argument: str) -> ShellCommandDecision:
-        for kind in ("deny", "ask"):
-            for rule in self._rules[kind]:
-                hit = next(
-                    (p for c in walk.everything if (p := rule.matched_program(c)) is not None),
-                    None,
+        """Deny rules, then where the command writes, then ask rules, then the innermost
+        commands (:meth:`_worst`)."""
+        for rule in self._rules["deny"]:
+            hit = self._first_match(rule, walk)
+            if hit is not None:
+                return ShellCommandDecision(
+                    "deny", argument, hit, rule.text, f"`{hit}` is not permitted"
                 )
-                if hit is not None and kind == "deny":
-                    return ShellCommandDecision(
-                        "deny", argument, hit, rule.text, f"`{hit}` is not permitted"
-                    )
-                if hit is not None:
-                    return self._worst(walk, argument, ask=(rule, hit))
-        return self._worst(walk, argument, ask=None)
+        redirect = self._redirect(walk, argument)
+        if redirect is not None and redirect.verdict == "deny":
+            return redirect
+        decision: ShellCommandDecision | None = None
+        for rule in self._rules["ask"]:
+            hit = self._first_match(rule, walk)
+            if hit is not None:
+                decision = self._worst(walk, argument, ask=(rule, hit))
+                break
+        if decision is None:
+            decision = self._worst(walk, argument, ask=None)
+        if redirect is not None and decision.verdict != "deny":
+            return redirect  # an undecided target, asked about
+        return decision
+
+    @staticmethod
+    def _first_match(rule: _Rule, walk: _Walk) -> str | None:
+        """The program of the first command in the line ``rule`` matches anywhere in."""
+        return next(
+            (p for c in walk.everything if (p := rule.matched_program(c)) is not None), None
+        )
+
+    def _redirect(self, walk: _Walk, argument: str) -> ShellCommandDecision | None:
+        """The verdict the line's writes come to, or None when none is refused or asked
+        about: a target ``redirect_deny`` names and ``redirect_allow`` does not is denied;
+        a target the shell decides when it runs is asked about with an ask rule in the
+        policy, else denied. Nothing is checked when ``redirect_deny`` is empty."""
+        if not self.redirect_deny:
+            return None
+        undecided: _Write | None = None
+        for write in walk.writes:
+            if _undecided(write.target):
+                undecided = undecided or write
+                continue
+            target = _normalized_target(write.target)
+            if any(fnmatch.fnmatchcase(target, glob) for glob in self.redirect_allow):
+                continue
+            glob = next((g for g in self.redirect_deny if fnmatch.fnmatchcase(target, g)), None)
+            if glob is not None:
+                return ShellCommandDecision(
+                    "deny",
+                    argument,
+                    write.program,
+                    f"redirect {glob}",
+                    "the command writes to a path it may not write",
+                )
+        if undecided is None:
+            return None
+        return ShellCommandDecision(
+            "ask" if self._rules["ask"] else "deny",
+            argument,
+            undecided.program,
+            "redirect (undecided target)",
+            "a redirection target is not known until the shell runs it",
+        )
 
     def _worst(
         self, walk: _Walk, argument: str, *, ask: tuple[_Rule, str] | None
@@ -851,17 +1038,27 @@ class ShellCommandPolicy:
         """The verdict an ask rule (if any) and the innermost commands come to: each is
         allowed by an allow rule, else asked about by an ask rule naming it, else
         ``default``. A line with a ``$`` expansion is admitted by no allow rule: its words
-        are not known yet."""
+        are not known yet. A command carrying one of its program's
+        :data:`_ACTION_OPTIONS` (``find -delete``) is judged here even when it is a
+        wrapper, and only an allow rule naming those options admits it."""
         verdict: ShellVerdict = "ask" if ask is not None else "allow"
         rule_text, program = (ask[0].text, ask[1]) if ask is not None else ("", "")
-        for leaf in walk.leaves:
-            allowed = (
+        unnamed: frozenset[str] = frozenset()  # the deciding command's unnamed actions
+        acting = [
+            command
+            for command in walk.everything
+            if _actions(command) and all(command is not leaf for leaf in walk.leaves)
+        ]
+        for leaf in [*walk.leaves, *acting]:
+            actions = _actions(leaf)
+            named = (
                 None
                 if walk.expands
                 else next(
                     (r for r in self._rules["allow"] if r.matches(leaf, anywhere=False)), None
                 )
             )
+            allowed = named if named is not None and named.names(actions) else None
             leaf_verdict: ShellVerdict = self.default
             if allowed is not None:
                 leaf_verdict = "allow"
@@ -869,6 +1066,7 @@ class ShellCommandPolicy:
                 leaf_verdict = "ask"  # an ask rule names it, so the default does not decide
             if _RANK[leaf_verdict] > _RANK[verdict]:
                 verdict, rule_text, program = leaf_verdict, "default", _program(leaf[0])
+                unnamed = actions if named is not None and allowed is None else frozenset()
             elif not rule_text and allowed is not None:
                 rule_text, program = allowed.text, _program(leaf[0])
         detail = {
@@ -876,6 +1074,9 @@ class ShellCommandPolicy:
             "ask": f"`{program}` needs approval",
             "deny": f"`{program}` is not on the list of permitted commands",
         }[verdict]
+        if unnamed and verdict != "allow":
+            options = ", ".join(f"`{o}`" for o in sorted(unnamed))
+            detail += f" ({options} needs an allow rule that names it)"
         if walk.expands and rule_text == "default":
             detail += " (a `$` value is not known until the shell runs it)"
         return ShellCommandDecision(verdict, argument, program, rule_text, detail)
@@ -883,11 +1084,13 @@ class ShellCommandPolicy:
 
 @dataclass
 class _Walk:
-    """Every command a line runs (wrappers and what they launch) and the innermost ones."""
+    """Every command a line runs (wrappers and what they launch), the innermost ones, and
+    the redirections that write, from the line and from the lines wrappers run."""
 
     everything: list[list[str]] = field(default_factory=list)
     leaves: list[list[str]] = field(default_factory=list)
     expands: bool = False
+    writes: list[_Write] = field(default_factory=list)
 
     @classmethod
     def of(cls, command: Any) -> _Walk:

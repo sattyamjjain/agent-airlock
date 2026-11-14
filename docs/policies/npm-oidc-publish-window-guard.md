@@ -97,10 +97,11 @@ someone edited a JSON file.
   authenticated rate limit. `--since YYYY-MM-DD` limits it to advisories published since
   then. It filters on the publish date because GitHub re-touches old malware advisories in
   bulk, so an update-date window is most of the feed.
-- The shipped snapshot, `malware_blast_2026_11_11.json`, holds advisories published since
-  2026-10-11: 1,548 advisories, 2,907 entries (2,190 exact releases, 717 whole packages),
-  330 KB. It replaces `malware_blast_2026_11_10.json` (1,485 advisories, 2,772 entries),
-  which stays in `data/` until the new one has shipped; the loader reads the newest. When
+- The shipped snapshot, `malware_blast_2026_11_14.json`, holds advisories published since
+  2026-10-11: 2,376 advisories, 3,857 entries (2,371 exact releases, 1,486 whole packages),
+  463 KB. It replaces `malware_blast_2026_11_11.json` (1,548 advisories, 2,907 entries);
+  the older files stay in `data/` and the loader reads the newest. Two advisories in the
+  older file were withdrawn by GitHub on 2026-11-13 and are not in the new one. When
   counted on 2026-11-10, the whole feed was 121,888 malware advisories, mostly from three
   waves (July, August and September 2026); a snapshot of the last 90 days alone was 87,842
   entries and 9.8 MB, took about 0.7 s and 73 MB to load, and would add that much to the

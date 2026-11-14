@@ -4707,7 +4707,9 @@ def shell_command_defaults(
     - ask before ``git push``, ``git commit``, ``sudo`` and ``doas``;
     - deny a recursive ``rm``, a force push (``--force``, ``-f``, ``+refspec``),
       ``find -delete`` and ``rg --pre`` (which runs a command on every file). A shell or
-      interpreter reading its program from a pipe is refused whatever the rules say.
+      interpreter reading its program from a pipe is refused whatever the rules say;
+    - deny a redirection that writes to a device or system path (``cat /dev/zero >
+      /dev/sda``, ``ls > /etc/cron.d/x``), the policy's ``redirect_deny`` default (v0.10.35).
 
     Anything else gets ``default``: ``ask`` sends it to the policy's approver, which is
     refused when none is registered.
