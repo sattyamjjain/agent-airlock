@@ -17,7 +17,7 @@
 **Test suite:** 10,969 tests · **Coverage:** 91.67% · **v0.10.35**<br>
 <sub>Coverage runs 10,950 of 10,969; the 19 excluded are 8 benchmark tests (not correctness tests), 5 docker-marked (need a daemon — they run in CI's `docker-sandbox` job, against the image built from the Dockerfile at the repo root) and 6 live API contract tests (need an Anthropic API key and spend API credit; `make test-live`).</sub>
 <!-- TEST-BADGE-END -->
-[Quickstart](#quickstart) · [Benchmarks](#benchmarks) · [Frameworks](#framework-support) · [Docs](https://sattyamjjain.github.io/agent-airlock/) · [How numbers are reported](#how-numbers-are-reported-here)
+[Quickstart](#quickstart) · [Benchmarks](#benchmarks) · [Limitations](#limitations) · [Frameworks](#framework-support) · [Docs](https://sattyamjjain.github.io/agent-airlock/) · [How numbers are reported](#how-numbers-are-reported-here)
 
 </div>
 
@@ -98,9 +98,6 @@ These stop a call that passes validation but should not run yet, or should not r
 - `ActionContradictionGate` holds back privileged tools once an operator-defined signal says
   the agent saw contradicting evidence. [Tests](tests/test_action_contradiction_gate.py).
 
-None of this undoes an action that already ran, and airlock ships no approval channel: you
-connect the approver to Slack, a ticket queue or a prompt.
-
 ### Token audience and startup hooks
 
 Two checks that run before any argument is read:
@@ -120,18 +117,9 @@ Details: [Token audience and startup hooks](docs/guide/token-audience-and-startu
 
 ### Shell and installer arguments
 
-Nine MCP server CVEs published on 27 and 28 October 2026 share one shape: a string argument
-of an ordinary tool reaches a shell or a package installer on the server.
-[CVE-2026-117558](https://nvd.nist.gov/vuln/detail/CVE-2026-117558) (ai-sdlc, `repo`),
-[CVE-2026-117559](https://nvd.nist.gov/vuln/detail/CVE-2026-117559) (DroidMind),
-[CVE-2026-117560](https://nvd.nist.gov/vuln/detail/CVE-2026-117560) (ATXP),
-[CVE-2026-117561](https://nvd.nist.gov/vuln/detail/CVE-2026-117561) (sf-mcp),
-[CVE-2026-117567](https://nvd.nist.gov/vuln/detail/CVE-2026-117567) (esp-mcp, `target`, `port`, `project_path`),
-[CVE-2026-117568](https://nvd.nist.gov/vuln/detail/CVE-2026-117568) (mcp-ffmpeg),
-[CVE-2026-117569](https://nvd.nist.gov/vuln/detail/CVE-2026-117569) (Kali-GPT),
-[CVE-2026-117573](https://nvd.nist.gov/vuln/detail/CVE-2026-117573) (hagent, `args`) and
-[CVE-2026-59176](https://nvd.nist.gov/vuln/detail/CVE-2026-59176) (functype-mcp-server,
-`version` into `pnpm add`). `ToolArgSinkGuard`, off by default, reads those arguments on
+[Nine MCP server CVEs](docs/guide/shell-and-installer-arguments.md#the-cves) published on 27
+and 28 October 2026 share one shape: a string argument of an ordinary tool reaches a shell or
+a package installer on the server. `ToolArgSinkGuard`, off by default, reads those arguments on
 the call path, before the call reaches a server that builds a command line:
 
 ```python
@@ -145,19 +133,14 @@ def check_issue(repo: str, version: str = "1.4.4") -> str:
     return f"checked {repo}"
 ```
 
-`repo="x; id"` is refused (`block_reason` `"tool_arg_sink"`), and so is a `version` that is
-not a bare PEP 440 or npm semver version: a URL, a path, `file:` or `npm:`, `pkg[extra]`.
-`screen_all_str_args=True` screens every argument except `free_text_args`;
-`policy_presets.tool_arg_sink_defaults()` does that in warn mode first. Details:
-[Shell and installer arguments](docs/guide/shell-and-installer-arguments.md).
+`repo="x; id"` is refused, and so is a `version` that is not a bare PEP 440 or npm semver
+version. Details: [Shell and installer arguments](docs/guide/shell-and-installer-arguments.md).
 
 `dispatch_args` covers an argument that names a function the tool then calls. Agno's
 PandasTools passed `read_pickle` to `getattr(pandas, ...)` that way
 ([CVE-2026-119050](https://nvd.nist.gov/vuln/detail/CVE-2026-119050)): no shell syntax for the
 check above to see. `ToolArgSinkGuard(dispatch_args={"operation": ("head", "describe")})`
-admits those names only; an empty allowlist refuses private names, `*pickle*`, `read_*`,
-`to_*`, `eval`, `exec` and their like. Preset: `policy_presets.reflection_sink_defaults(dispatch_args=...)`, warn mode first.
-Details: [Dispatch arguments](docs/guide/dispatch-arguments.md).
+admits those names only. Details: [Dispatch arguments](docs/guide/dispatch-arguments.md).
 
 ## Benchmarks
 
@@ -180,8 +163,8 @@ fails the release if any row drifts past 30 days.
 
 Every airlock arm in rows 1 to 6 runs a least-privilege `SecurityPolicy(default_deny=True)`
 with only the tools the task needs on its allowlist (row 1's argument items go to the guard
-chain, row 5's G0 tier is contract-only), not the library defaults, under which an empty
-allowlist allows every tool.
+chain, row 5's G0 tier is contract-only), not the library defaults
+([Limitations](#limitations)).
 
 1. 95% CI 96.5–100% (blocked) and 0–3.6% (false-positive); 6 of 10 OWASP ASI slots measured, ASI07–ASI10 are n=0.
 2. 0/4 before v0.10.6; 100 policy items admitted and 100 refused on both paths. The 2026-09-16 run's 200/200 policy parity was vacuous: every policy item was refused on both paths (corrected in the results). Isolation-backend execution _not run_ here: no E2B in the runner.
@@ -198,6 +181,23 @@ process that executes the tool, the only place the real Python arguments exist. 
 authenticates identity and transport and sandboxes the server, but it does not check a tool
 call's argument contract: live, a Docker MCP Gateway forwarded all 12 malformed payloads
 that airlock blocks (row 6 above).
+
+## Limitations
+
+- Airlock checks a call before it runs and cannot undo one that already ran. It ships no
+  approval channel: you connect the approver to Slack, a ticket queue or a prompt.
+- Under the library defaults an empty allowlist allows every tool
+  ([policy API](docs/api/policy.md#check-order)).
+- `EffectGuard`'s shipped store is per-process memory. It cannot tell a lost response from a
+  crash partway through, and no adapter sets `tool_call_id` yet
+  ([guide](docs/guide/effect-guard.md#what-it-does-not-do)).
+- A ledger approval binds to the tool and argument digest, not to an agent
+  ([guide](docs/guide/bound-approvals.md#what-this-does-not-do)).
+- No benchmark row uses an adaptive attacker ([`BENCHMARK.md`](BENCHMARK.md)).
+- ASI10 Rogue Agents is monitor-only, with no quarantine primitive
+  ([coverage](docs/owasp-agentic-2026-coverage.md)).
+
+Known gaps: [`ROADMAP.md`](ROADMAP.md).
 
 ## Framework support
 
@@ -324,8 +324,6 @@ gated by a test, or it is not made.**
 - Where no head-to-head exists, that is recorded rather than implied — see
   [**Prior art**](./PRIOR_ART.md), including arXiv:2608.18351, where the honest claim is
   complementarity and not superiority.
-
-Known gaps and their status: [`ROADMAP.md`](ROADMAP.md).
 
 ## Documentation
 
