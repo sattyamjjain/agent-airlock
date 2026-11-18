@@ -493,7 +493,7 @@ Available types:
 - `UPI_ID` - UPI identifiers
 - `IFSC` - Bank IFSC codes
 - `PERSONAL_NAME_DEVANAGARI` - Names in Devanagari script
-- `INDIA_MOBILE` - Mobile numbers with a `+91`, `91` or `0` prefix
+- `INDIA_MOBILE` - Mobile numbers with a `+91`, `91` or `0` prefix, written as one run or in 5-5 groups
 
 ## OpenTelemetry Observability (V0.4.0)
 

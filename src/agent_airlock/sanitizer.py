@@ -62,13 +62,17 @@ class MaskingStrategy(str, Enum):
 
 @dataclass
 class SanitizationResult:
-    """Result of sanitizing content."""
+    """Result of sanitizing content.
+
+    ``detections`` holds each match's original value, so it is left out of the repr
+    (V0.10.36): printing or logging a result showed the very values ``content`` masks.
+    """
 
     original_length: int
     sanitized_length: int
     content: str
     was_truncated: bool = False
-    detections: list[dict[str, Any]] = field(default_factory=list)
+    detections: list[dict[str, Any]] = field(default_factory=list, repr=False)
     detection_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -104,8 +108,17 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
         r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:@[A-Za-z0-9.-]+\.[A-Za-z]{2,})*\b",
         re.ASCII,
     ),
+    # The second alternative (V0.10.36) is an Indian mobile written in 5-5 groups after a
+    # +91 / 91 / trunk-0 prefix, the common written form: the first one only ever matched
+    # the 10 digits written as one run. It matches the digits after the prefix (fixed-width
+    # lookbehinds), as the first does for ``+91 9876543210``, so INDIA_MOBILE's span, which
+    # takes the prefix too, is the longer one and names the merged cluster under
+    # ``pii_locales=["in"]``. The first digit is read before the lookbehinds so that most
+    # positions fail on one character class: lookbehinds first made a 4 KB scan 3x slower.
     SensitiveDataType.PHONE: re.compile(
-        rf"\b(?:\+?1[-.{_WS}]?)?\(?[0-9]{{3}}\)?[-.{_WS}]?[0-9]{{3}}[-.{_WS}]?[0-9]{{4}}\b",
+        rf"\b(?:\+?1[-.{_WS}]?)?\(?[0-9]{{3}}\)?[-.{_WS}]?[0-9]{{3}}[-.{_WS}]?[0-9]{{4}}\b"
+        rf"|[6-9](?:(?<=(?<!\d)91[6-9])|(?<=(?<!\d)91[{_WS}-][6-9])|(?<=(?<!\d)0[6-9]))"
+        rf"\d{{4}}[{_WS}-]\d{{5}}(?!\d)",
         re.ASCII,
     ),
     SensitiveDataType.SSN: re.compile(rf"\b\d{{3}}[-{_WS}]?\d{{2}}[-{_WS}]?\d{{4}}\b", re.ASCII),
@@ -180,8 +193,10 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     # ``(4, 14)``, and overlap is all the old reverse-splice masker needed to
     # corrupt the text around them. Masking no longer depends on this property
     # either way — see :func:`merge_overlapping_detections`.
+    # One separator may split the 10 digits into 5-5 groups (V0.10.36), the common written
+    # form; a bare ``98765 43210`` with no prefix stays out, as two 5-digit numbers would.
     SensitiveDataType.INDIA_MOBILE: re.compile(
-        rf"(?<!\d)(?:\+?91[{_WS}-]?|0)[6-9]\d{{9}}(?!\d)", re.ASCII
+        rf"(?<!\d)(?:\+?91[{_WS}-]?|0)[6-9]\d{{4}}[{_WS}-]?\d{{5}}(?!\d)", re.ASCII
     ),
     # Secret Patterns
     SensitiveDataType.API_KEY: re.compile(
