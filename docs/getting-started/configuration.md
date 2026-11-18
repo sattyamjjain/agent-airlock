@@ -54,7 +54,7 @@ config = AirlockConfig(
     # Call-time checks (V0.10.27)
     expected_token_audience=None,  # this server's resource URI; checks each call's token aud
     token_audience_mode="warn",    # off / warn / deny, once an audience is set
-    startup_hook_check="off",      # off / warn / deny: .pth import lines, *customize modules
+    startup_hook_check="warn",     # off / warn / deny: .pth import lines, *customize modules
     startup_hook_allowlist={},     # {file name: sha256} of the startup hooks you know
 
     # Error Hooks

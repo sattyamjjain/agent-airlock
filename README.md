@@ -67,7 +67,8 @@ model gets a refusal it can act on instead of a traceback it cannot.
 ## What it does
 
 The decorator runs a fixed sequence of gates before your function and sanitises after it.
-Validation, output sanitising and the audit log are on by default; the rest is opt-in.
+Validation, output sanitising, the audit log and a startup-hook check are on by default; the
+rest is opt-in.
 
 | Layer | What it covers |
 |---|---|
@@ -100,7 +101,7 @@ These stop a call that passes validation but should not run yet, or should not r
 
 ### Token audience and startup hooks
 
-Two checks that run before any argument is read:
+Both run before any argument is read:
 
 - **Token audience.** `AirlockConfig(expected_token_audience="https://mcp.example.test")`
   checks the `aud` claim of the OAuth token behind every guarded call, read from the claims
@@ -108,19 +109,19 @@ Two checks that run before any argument is read:
   never from tool arguments. It warns by default; `token_audience_mode="deny"` refuses a
   token issued to another application, the bug in
   [CVE-2026-115413](https://github.com/awslabs/mcp/security/advisories/GHSA-4prq-p2x5-w9fh).
-- **Startup hooks.** `startup_hook_check="warn"` (or `"deny"`) lists the executable `.pth`
-  lines and `sitecustomize` / `usercustomize` of the running interpreter, once per process;
-  `deny` refuses every call its config guards while one is not on `startup_hook_allowlist`. Those
-  hooks ran before your code did, so this reports them; it cannot stop them.
+- **Startup hooks.** On by default (`startup_hook_check="warn"`): once per process, it lists
+  the interpreter's executable `.pth` lines and `sitecustomize` / `usercustomize`, passes
+  setuptools', virtualenv's and the interpreter's own, and warns about the rest; `"deny"`
+  refuses the calls its config guards while one is not allowlisted.
 
 Details: [Token audience and startup hooks](docs/guide/token-audience-and-startup-hooks.md).
 
 ### Shell and installer arguments
 
-[Nine MCP server CVEs](docs/guide/shell-and-installer-arguments.md#the-cves) published on 27
-and 28 October 2026 share one shape: a string argument of an ordinary tool reaches a shell or
-a package installer on the server. `ToolArgSinkGuard`, off by default, reads those arguments on
-the call path, before the call reaches a server that builds a command line:
+[Nine MCP server CVEs](docs/guide/shell-and-installer-arguments.md#the-cves) share one shape:
+a string argument of an ordinary tool reaches a shell or a package installer on the server.
+`ToolArgSinkGuard`, off by default, reads those arguments on the call path, before they reach
+a server that builds a command line:
 
 ```python
 from agent_airlock import Airlock, SecurityPolicy, ToolArgSinkGuard
@@ -193,6 +194,7 @@ that airlock blocks (row 6 above).
   ([guide](docs/guide/effect-guard.md#what-it-does-not-do)).
 - A ledger approval binds to the tool and argument digest, not to an agent
   ([guide](docs/guide/bound-approvals.md#what-this-does-not-do)).
+- The startup-hook check reports hooks that already ran; it cannot stop them.
 - No benchmark row uses an adaptive attacker ([`BENCHMARK.md`](BENCHMARK.md)).
 - ASI10 Rogue Agents is monitor-only, with no quarantine primitive
   ([coverage](docs/owasp-agentic-2026-coverage.md)).

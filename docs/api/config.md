@@ -59,7 +59,7 @@ class AirlockConfig:
     # Call-time checks (V0.10.27)
     expected_token_audience: str | None = None
     token_audience_mode: Literal["off", "warn", "deny"] = "warn"
-    startup_hook_check: Literal["off", "warn", "deny"] = "off"
+    startup_hook_check: Literal["off", "warn", "deny"] = "warn"
     startup_hook_allowlist: dict[str, str] = field(default_factory=dict)
 ```
 
@@ -131,7 +131,7 @@ or for picking individual types.
 |-----------|------|---------|-------------|
 | `expected_token_audience` | `str \| None` | `None` | This server's canonical resource URI. When set, every guarded call checks the `aud` claim of the claims the host put on its `AirlockContext` metadata under `access_token_claims` (CVE-2026-115413) |
 | `token_audience_mode` | `"off" \| "warn" \| "deny"` | `"warn"` | `warn` logs a wrong or missing audience and runs the call; `deny` refuses it |
-| `startup_hook_check` | `"off" \| "warn" \| "deny"` | `"off"` | Walks the interpreter's executable `.pth` lines and `sitecustomize` / `usercustomize` once per process; `deny` refuses every guarded call while one is not allowlisted |
+| `startup_hook_check` | `"off" \| "warn" \| "deny"` | `"warn"` (`"off"` before 0.10.36) | Walks the interpreter's executable `.pth` lines and `sitecustomize` / `usercustomize` once per process; hooks every install has (setuptools, virtualenv, an editable install, the interpreter's own) pass; `warn` logs each other hook and issues one `RuntimeWarning` per process, `deny` refuses every guarded call while one is not allowlisted |
 | `startup_hook_allowlist` | `dict[str, str]` | `{}` | `{file name: sha256}` of the startup hooks you know |
 
 A mode outside `off` / `warn` / `deny`, an audience that is not a resource URI and an

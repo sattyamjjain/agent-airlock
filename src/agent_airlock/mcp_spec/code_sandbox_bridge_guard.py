@@ -40,8 +40,9 @@ a name built from pieces, a base64 blob decoded and exec'd): a string the guard
 cannot see through is not a string it can screen. The real fix is to upgrade the
 sandbox runtime so the host API is not reachable and its permissions are
 revoked before untrusted code runs (CVE-2026-120338 was fixed that way). Pair
-this guard with ``AirlockConfig(startup_hook_check="warn")`` so a persistence
-file written through some other path is caught at the next process start, and
+this guard with ``AirlockConfig(startup_hook_check="warn")`` (the default since
+V0.10.36) so a persistence file written through some other path is caught at the next
+process start, and
 with the default :class:`SafePath` deny list, which now refuses ``.pth`` writes
 into site directories.
 

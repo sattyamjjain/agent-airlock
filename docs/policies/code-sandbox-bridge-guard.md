@@ -64,8 +64,9 @@ through is a string it cannot screen. The real fix is to upgrade the sandbox run
 host API is unreachable and its permissions are revoked before untrusted code runs — how
 CVE-2026-120338 was fixed upstream. Pair this guard with:
 
-- `AirlockConfig(startup_hook_check="warn")` on any process that hosts a code-execution
-  tool, so a persistence file written through another path is caught at the next start; and
+- `AirlockConfig(startup_hook_check="warn")`, the default since 0.10.36, on any process
+  that hosts a code-execution tool (leave it on), so a persistence file written through
+  another path is caught at the next start; and
 - the default [`SafePath`](../api/airlock.md) deny list, which refuses `.pth` writes into
   site directories and `sitecustomize.py` / `usercustomize.py`.
 
