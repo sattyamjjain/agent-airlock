@@ -6,9 +6,10 @@
 **agent-airlock** — an in-process contract layer and type-checker for AI agent tool calls.
 It intercepts calls into MCP (Model Context Protocol) servers and agent frameworks,
 validates arguments strictly, applies policy, and sandboxes dangerous execution. The wedge
-is argument validation at the call boundary; every other layer wraps it. Output sanitising
-and the audit log are on by default (`AirlockConfig` defaults); the rest is opt-in
-(`SecurityPolicy(default_deny=True)` makes an empty allowlist deny every tool).
+is argument validation at the call boundary; every other layer wraps it. Output sanitising,
+the audit log and (since 0.10.36, as `warn`) the startup-hook check are on by default
+(`AirlockConfig` defaults); the rest is opt-in (`SecurityPolicy(default_deny=True)` makes an
+empty allowlist deny every tool).
 
 **The installed core is Pydantic-only** (plus `tomli` on Python 3.10); everything else,
 structlog included, is an extra (`src/agent_airlock/_log.py` falls back to a stdlib shim).
@@ -64,8 +65,8 @@ and marketplace manifests).
 **Call flow through `@Airlock`** (`core.py`): `_pre_execution` gates, then execute, then
 `_post_execution`. The numbers match the `# Step N` comments in `core.py`:
 
-0. Kill switch → 0.5 startup-hook self-check → 0.6 OAuth token audience (both off until
-   configured) → 0.7 the run's halt latch
+0. Kill switch → 0.5 startup-hook self-check (`warn` by default since 0.10.36) → 0.6 OAuth
+   token audience (off until configured) → 0.7 the run's halt latch
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Policy and caller identity → 2.1 a delegated run's ceiling → 2.3 loops in the run → 2.4
    source-to-sink data flow → 2.5 tool-call sequence guard → 2.6 action-time contradiction

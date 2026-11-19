@@ -7,10 +7,15 @@ lists them; ``AirlockConfig(startup_hook_check=...)`` runs that walk once per pr
 the first guarded call and, under ``deny``, refuses every call that config guards while a
 hook is not allowlisted. Nothing here can stop a hook that already ran.
 
-Every hook in these tests lives in a temporary site directory and does nothing: the one
-executable line imports a module name that exists nowhere, and the customize modules are
-``pass``. ``site`` and ``sys.path`` are monkeypatched to that directory, so the walk never
-reads the real interpreter's site-packages.
+Every hook in these tests lives in a temporary site directory or under
+``tests/fixtures/startup_hooks/`` and does nothing: the one executable line imports a module
+name that exists nowhere, and the customize modules are ``pass``. ``site`` and ``sys.path``
+are monkeypatched to those directories, so the walk never reads the real interpreter's
+site-packages (``tests/conftest.py`` also keeps the host's own directories out of it).
+
+Since 0.10.36 the check is on by default as ``warn``, and hooks every install has
+(setuptools, virtualenv, a setuptools editable install, the interpreter's own customize
+module) are recognised as benign by their content, their place and who installed them.
 """
 
 from __future__ import annotations
@@ -18,9 +23,11 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import shutil
 import site
 import sys
-from collections.abc import Iterator
+import warnings
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -30,12 +37,20 @@ from agent_airlock import Airlock, AirlockConfig
 from agent_airlock.runtime import StartupHookKind, check_startup_hooks
 from agent_airlock.runtime import startup_hooks as hooks_module
 from agent_airlock.runtime.startup_hooks import (
+    KNOWN_INCIDENT_HOOKS,
+    SETUPTOOLS_DISTUTILS_PRECEDENCE_LINES,
     StartupHookReport,
     normalize_allowlist,
     process_startup_hook_report,
 )
 from agent_airlock.self_heal import BlockReason
 from agent_airlock.testing import reset_startup_hook_check
+
+# Every test that plants a hook and guards a call gets the one RuntimeWarning per process;
+# the tests that assert on it record it themselves.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:agent-airlock. this Python interpreter ran startup hooks:RuntimeWarning"
+)
 
 #: The one executable line used here. ``airlock_placeholder_noop`` is no module anywhere,
 #: and no test runs ``site`` over these files, so the line is only ever read.
@@ -459,12 +474,8 @@ class TestOnTheCallPath:
         monkeypatch.setattr(hooks_module, "_walk", no_walk)
         ran: list[str] = []
 
-        assert _guarded(AirlockConfig(), ran)() == "PLACEHOLDER"
         assert _guarded(AirlockConfig(startup_hook_check="off"), ran)() == "PLACEHOLDER"
-        assert ran == ["ran", "ran"]
-
-    def test_off_is_the_default(self) -> None:
-        assert AirlockConfig().startup_hook_check == "off"
+        assert ran == ["ran"]
 
     def test_nothing_walks_before_a_guarded_call_is_admitted(
         self, interp: _Interpreter, monkeypatch: pytest.MonkeyPatch
@@ -511,3 +522,502 @@ class TestReport:
         scanned = check_startup_hooks().scanned_dirs
 
         assert scanned == (str(interp.site), str(interp.user), str(interp.extra))
+
+
+# ---------------------------------------------------------------------------------------
+# 0.10.36: benign hooks, known incidents, warn by default
+# ---------------------------------------------------------------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures" / "startup_hooks"
+AGENT_FRAMEWORK_ADVISORY = "GHSA-764m-3ppc-5m73"
+
+
+def _record(directory: Path, distribution: str, *listed: str, editable: bool = False) -> None:
+    """Install ``distribution`` in ``directory`` as far as a RECORD says: it owns ``listed``."""
+    meta = directory / f"{distribution}.dist-info"
+    meta.mkdir()
+    (meta / "RECORD").write_text(
+        "".join(f"{path},sha256=PLACEHOLDER,1\n" for path in listed), encoding="utf-8"
+    )
+    if editable:
+        (meta / "direct_url.json").write_text(
+            json.dumps({"url": "file:///PLACEHOLDER", "dir_info": {"editable": True}}),
+            encoding="utf-8",
+        )
+
+
+def _copy(name: str, tmp_path: Path) -> Path:
+    return Path(shutil.copytree(FIXTURES / name, tmp_path / name))
+
+
+@pytest.fixture
+def walk(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None]]:
+    """Point the walk at fixture or temporary directories, as ``interp`` points it at one.
+
+    ``walk(*dirs, stdlib=dir)`` makes ``dirs`` the site directories and ``sys.path``, and
+    ``stdlib`` the interpreter's standard-library directory.
+    """
+
+    def point(*directories: str | Path, stdlib: str | Path | None = None) -> None:
+        paths = [str(FIXTURES / d) if isinstance(d, str) else str(d) for d in directories]
+        monkeypatch.setattr(site, "getsitepackages", lambda: list(paths))
+        monkeypatch.setattr(site, "getusersitepackages", lambda: str(FIXTURES / "no-user-site"))
+        monkeypatch.setattr(sys, "path", list(paths))
+        resolved = (
+            frozenset(
+                {hooks_module._key(str(FIXTURES / stdlib if isinstance(stdlib, str) else stdlib))}
+            )
+            if stdlib is not None
+            else frozenset()
+        )
+        monkeypatch.setattr(hooks_module, "_stdlib_dirs", lambda: resolved)
+        monkeypatch.delitem(sys.modules, "sitecustomize", raising=False)
+        monkeypatch.delitem(sys.modules, "usercustomize", raising=False)
+        importlib.invalidate_caches()
+        reset_startup_hook_check()
+
+    yield point
+    reset_startup_hook_check()
+
+
+def _runtime_warnings(caught: list[warnings.WarningMessage]) -> list[str]:
+    return [str(w.message) for w in caught if issubclass(w.category, RuntimeWarning)]
+
+
+class TestBenignHooks:
+    def test_the_setuptools_line_is_benign(self, walk: Callable[..., None]) -> None:
+        walk("setuptools")
+
+        report = check_startup_hooks()
+
+        assert report.clean
+        [hook] = report.benign
+        assert (hook.name, hook.recognized) == ("distutils-precedence.pth", "setuptools")
+        assert hook.to_dict()["recognized"] == "setuptools"
+
+    @pytest.mark.parametrize(
+        "line",
+        [line for _, line in SETUPTOOLS_DISTUTILS_PRECEDENCE_LINES],
+        ids=[versions for versions, _ in SETUPTOOLS_DISTUTILS_PRECEDENCE_LINES],
+    )
+    def test_every_line_setuptools_has_shipped_is_benign(
+        self, walk: Callable[..., None], tmp_path: Path, line: str
+    ) -> None:
+        home = _copy("setuptools", tmp_path)
+        (home / "distutils-precedence.pth").write_text(line + " \n", encoding="utf-8")
+        walk(home)
+
+        assert [h.recognized for h in check_startup_hooks().benign] == ["setuptools"]
+
+    def test_the_table_holds_the_line_setuptools_ships_today(self) -> None:
+        shipped = (FIXTURES / "setuptools" / "distutils-precedence.pth").read_text("utf-8")
+        latest = dict(SETUPTOOLS_DISTUTILS_PRECEDENCE_LINES)[
+            "50.0.0-50.0.3, 60.0.0-60.0.5, 60.2.0-84.2.1"
+        ]
+        assert shipped.strip() == latest
+
+    def test_another_line_under_the_setuptools_name_is_a_finding(
+        self, walk: Callable[..., None]
+    ) -> None:
+        walk("setuptools_line_replaced")
+
+        report = check_startup_hooks()
+
+        assert [f.name for f in report.findings] == ["distutils-precedence.pth"]
+        assert report.benign == ()
+
+    def test_a_line_added_after_the_setuptools_line_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("setuptools", tmp_path)
+        pth = home / "distutils-precedence.pth"
+        pth.write_text(pth.read_text("utf-8") + "import airlock_placeholder_noop\n", "utf-8")
+        walk(home)
+
+        assert [f.name for f in check_startup_hooks().findings] == ["distutils-precedence.pth"]
+
+    def test_the_setuptools_line_without_its_module_beside_it_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("setuptools", tmp_path)
+        shutil.rmtree(home / "_distutils_hack")
+        walk(home)
+
+        assert [f.name for f in check_startup_hooks().findings] == ["distutils-precedence.pth"]
+
+    def test_virtualenv_with_its_module_is_benign(self, walk: Callable[..., None]) -> None:
+        walk("virtualenv")
+
+        report = check_startup_hooks()
+
+        assert report.clean
+        assert [(h.name, h.recognized) for h in report.benign] == [
+            ("_virtualenv.pth", "virtualenv")
+        ]
+
+    def test_virtualenv_without_its_module_is_a_finding(self, walk: Callable[..., None]) -> None:
+        walk("virtualenv_without_module")
+
+        assert [f.name for f in check_startup_hooks().findings] == ["_virtualenv.pth"]
+
+    def test_an_editable_install_with_its_finder_is_benign(self, walk: Callable[..., None]) -> None:
+        walk("editable")
+
+        report = check_startup_hooks()
+
+        assert report.clean
+        assert [(h.name, h.recognized) for h in report.benign] == [
+            ("__editable__.demo-0.1.pth", "editable install")
+        ]
+
+    def test_an_editable_install_without_its_finder_is_a_finding(
+        self, walk: Callable[..., None]
+    ) -> None:
+        walk("editable_without_finder")
+
+        assert [f.name for f in check_startup_hooks().findings] == ["__editable__.demo-0.1.pth"]
+
+    def test_an_editable_pth_with_another_import_line_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("editable", tmp_path)
+        pth = home / "__editable__.demo-0.1.pth"
+        pth.write_text(pth.read_text("utf-8") + "\nimport airlock_placeholder_noop\n", "utf-8")
+        walk(home)
+
+        assert [f.name for f in check_startup_hooks().findings] == ["__editable__.demo-0.1.pth"]
+
+    def test_a_sitecustomize_in_the_stdlib_directory_is_benign(
+        self, walk: Callable[..., None]
+    ) -> None:
+        walk("stdlib", stdlib="stdlib")
+
+        report = check_startup_hooks()
+
+        assert report.clean
+        assert [(h.kind, h.recognized) for h in report.benign] == [
+            (StartupHookKind.SITECUSTOMIZE, "interpreter")
+        ]
+
+    def test_a_sitecustomize_in_a_site_directory_is_a_finding(
+        self, walk: Callable[..., None]
+    ) -> None:
+        walk("site_packages_customize", stdlib="stdlib")
+
+        [finding] = check_startup_hooks().findings
+        assert finding.kind is StartupHookKind.SITECUSTOMIZE
+        assert finding.recognized == ""
+
+    def test_every_benign_kind_together_is_clean(self, walk: Callable[..., None]) -> None:
+        walk("setuptools", "virtualenv", "editable", "stdlib", stdlib="stdlib")
+
+        report = check_startup_hooks()
+
+        assert report.clean
+        assert sorted(h.recognized for h in report.benign) == [
+            "editable install",
+            "interpreter",
+            "setuptools",
+            "virtualenv",
+        ]
+
+    def test_benign_hooks_are_logged_once_per_process_at_debug(
+        self, walk: Callable[..., None], events: _Events
+    ) -> None:
+        walk("setuptools", "virtualenv")
+
+        process_startup_hook_report()
+        process_startup_hook_report()
+
+        recognized = [
+            (level, fields["recognized"])
+            for level, event, fields in events.records
+            if event == "airlock_startup_hook_recognized"
+        ]
+        assert recognized == [("debug", "setuptools"), ("debug", "virtualenv")]
+        assert events.named("airlock_startup_hook_found") == []
+
+    def test_an_allowlist_entry_still_covers_a_hook_that_is_not_benign(
+        self, walk: Callable[..., None]
+    ) -> None:
+        walk("agent_framework_1_26_2")
+        pth = FIXTURES / "agent_framework_1_26_2" / "af_runtime_diag.pth"
+
+        report = check_startup_hooks({"af_runtime_diag.pth": _sha256(pth)})
+
+        assert report.clean
+        assert [h.name for h in report.allowlisted] == ["af_runtime_diag.pth"]
+
+
+class TestWhoInstalledTheHook:
+    """A benign hook's files must not be claimed by a distribution that does not write them.
+
+    pip lists every file it installs in the distribution's RECORD, so a wheel that ships a
+    hook named like a benign one, and the module it imports, is still found.
+    """
+
+    def test_a_wheel_shipping_virtualenvs_two_files_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("virtualenv", tmp_path)
+        _record(home, "placeholder_wheel-1.0", "_virtualenv.pth", "_virtualenv.py")
+        walk(home)
+
+        assert [f.name for f in check_startup_hooks().findings] == ["_virtualenv.pth"]
+
+    def test_the_setuptools_hook_claimed_by_setuptools_is_benign(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("setuptools", tmp_path)
+        _record(
+            home, "setuptools-84.2.1", "distutils-precedence.pth", "_distutils_hack/__init__.py"
+        )
+        walk(home)
+
+        assert [h.recognized for h in check_startup_hooks().benign] == ["setuptools"]
+
+    def test_the_setuptools_hook_claimed_by_another_wheel_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("setuptools", tmp_path)
+        _record(home, "placeholder_wheel-1.0", "distutils-precedence.pth")
+        walk(home)
+
+        assert [f.name for f in check_startup_hooks().findings] == ["distutils-precedence.pth"]
+
+    def test_a_distutils_hack_another_wheel_overwrote_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("setuptools", tmp_path)
+        _record(
+            home, "setuptools-84.2.1", "distutils-precedence.pth", "_distutils_hack/__init__.py"
+        )
+        _record(home, "placeholder_wheel-1.0", "_distutils_hack/__init__.py")
+        walk(home)
+
+        assert [f.name for f in check_startup_hooks().findings] == ["distutils-precedence.pth"]
+
+    def test_a_same_named_module_found_first_on_sys_path_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("setuptools", tmp_path)
+        earlier = tmp_path / "earlier"
+        earlier.mkdir()
+        (earlier / "_distutils_hack.py").write_text("pass\n", encoding="utf-8")
+        walk(earlier, home)
+
+        assert [f.name for f in check_startup_hooks().findings] == ["distutils-precedence.pth"]
+
+    def test_an_editable_pth_an_editable_install_claims_is_benign(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("editable", tmp_path)
+        _record(
+            home,
+            "demo-0.1",
+            "__editable__.demo-0.1.pth",
+            "__editable___demo_0_1_finder.py",
+            editable=True,
+        )
+        walk(home)
+
+        assert [h.recognized for h in check_startup_hooks().benign] == ["editable install"]
+
+    def test_an_editable_pth_a_wheel_from_an_index_claims_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("editable", tmp_path)
+        _record(home, "demo-0.1", "__editable__.demo-0.1.pth", "__editable___demo_0_1_finder.py")
+        walk(home)
+
+        assert [f.name for f in check_startup_hooks().findings] == ["__editable__.demo-0.1.pth"]
+
+    def test_a_stdlib_sitecustomize_a_wheel_installed_is_a_finding(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        # Outside a virtual environment a wheel's data files land under sys.prefix, which can
+        # be the standard-library directory; its RECORD, beside the package, names the file.
+        stdlib = _copy("stdlib", tmp_path)
+        site_packages = stdlib / "site-packages"
+        site_packages.mkdir()
+        _record(site_packages, "placeholder_wheel-1.0", "../sitecustomize.py")
+        walk(site_packages, stdlib, stdlib=stdlib)
+
+        [finding] = check_startup_hooks().findings
+        assert finding.kind is StartupHookKind.SITECUSTOMIZE
+
+
+class TestKnownIncidents:
+    def test_the_agent_framework_hook_names_are_listed(self) -> None:
+        assert dict(KNOWN_INCIDENT_HOOKS) == {
+            "af_runtime_diag.pth": AGENT_FRAMEWORK_ADVISORY,
+            "agent_framework_meta.pth": AGENT_FRAMEWORK_ADVISORY,
+        }
+
+    def test_af_runtime_diag_is_a_finding_that_carries_its_advisory(
+        self, walk: Callable[..., None]
+    ) -> None:
+        walk("agent_framework_1_26_2")
+
+        report = check_startup_hooks()
+
+        [finding] = report.findings
+        assert not report.clean
+        assert finding.known_incident == AGENT_FRAMEWORK_ADVISORY
+        assert finding.to_dict()["known_incident"] == AGENT_FRAMEWORK_ADVISORY
+
+    def test_a_hook_with_any_other_name_carries_no_advisory(self, interp: _Interpreter) -> None:
+        interp.write("x.pth", IMPORT_LINE)
+
+        [finding] = check_startup_hooks().findings
+
+        assert finding.known_incident == ""
+        assert "known_incident" not in finding.to_dict()
+
+    def test_it_is_logged_at_error_level(self, walk: Callable[..., None], events: _Events) -> None:
+        walk("agent_framework_1_26_2")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            _guarded(AirlockConfig(), [])()
+
+        [(level, _, fields)] = [r for r in events.records if r[1] == "airlock_startup_hook_found"]
+        assert level == "error"
+        assert fields["known_incident"] == AGENT_FRAMEWORK_ADVISORY
+
+    def test_the_deny_refusal_names_the_advisory(self, walk: Callable[..., None]) -> None:
+        walk("agent_framework_1_26_2")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            result = _guarded(AirlockConfig(startup_hook_check="deny"), [])()
+
+        [hook] = result["metadata"]["startup_hooks"]
+        assert hook["known_incident"] == AGENT_FRAMEWORK_ADVISORY
+
+
+class TestWarnByDefault:
+    def test_warn_is_the_default(self) -> None:
+        assert AirlockConfig().startup_hook_check == "warn"
+
+    def test_a_guarded_call_beside_only_benign_hooks_warns_nothing_and_runs(
+        self, walk: Callable[..., None], events: _Events
+    ) -> None:
+        walk("setuptools", "virtualenv", "editable", "stdlib", stdlib="stdlib")
+        ran: list[str] = []
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert _guarded(AirlockConfig(), ran)() == "PLACEHOLDER"
+
+        assert ran == ["ran"]
+        assert events.named("airlock_startup_hook_found") == []
+        assert _runtime_warnings(caught) == []
+
+    def test_af_runtime_diag_under_the_default_logs_once_warns_once_and_runs(
+        self, walk: Callable[..., None], events: _Events
+    ) -> None:
+        walk("agent_framework_1_26_2")
+        ran: list[str] = []
+        tool = _guarded(AirlockConfig(), ran)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert [tool(), tool()] == ["PLACEHOLDER", "PLACEHOLDER"]
+
+        assert ran == ["ran", "ran"]
+        [found] = events.named("airlock_startup_hook_found")
+        assert (found["mode"], found["known_incident"]) == ("warn", AGENT_FRAMEWORK_ADVISORY)
+        [message] = _runtime_warnings(caught)
+        assert "af_runtime_diag.pth" in message
+        assert AGENT_FRAMEWORK_ADVISORY in message
+        assert "cannot undo" in message
+
+    def test_deny_still_refuses_it(self, walk: Callable[..., None]) -> None:
+        walk("agent_framework_1_26_2")
+        ran: list[str] = []
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            result = _guarded(AirlockConfig(startup_hook_check="deny"), ran)()
+
+        assert result["block_reason"] == BlockReason.STARTUP_HOOK.value
+        assert ran == []
+
+    def test_off_does_not_walk_at_all(
+        self, walk: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        walk("agent_framework_1_26_2")
+
+        def no_walk() -> Any:
+            raise AssertionError("startup_hook_check='off' must not walk")
+
+        monkeypatch.setattr(hooks_module, "_walk", no_walk)
+        ran: list[str] = []
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert _guarded(AirlockConfig(startup_hook_check="off"), ran)() == "PLACEHOLDER"
+
+        assert ran == ["ran"]
+        assert _runtime_warnings(caught) == []
+
+    def test_under_w_error_the_first_guarded_call_raises_the_warning(
+        self, walk: Callable[..., None]
+    ) -> None:
+        # warnings.warn raises under an "error" filter, from inside the first guarded call,
+        # before the tool runs; the process has had its one warning, so the next call runs.
+        walk("agent_framework_1_26_2")
+        ran: list[str] = []
+        tool = _guarded(AirlockConfig(), ran)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            with pytest.raises(RuntimeWarning, match="af_runtime_diag.pth"):
+                tool()
+            assert ran == []
+            assert tool() == "PLACEHOLDER"
+
+        assert ran == ["ran"]
+
+    def test_reset_forgets_the_warning_too(self, walk: Callable[..., None]) -> None:
+        walk("agent_framework_1_26_2")
+        tool = _guarded(AirlockConfig(), [])
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            tool()
+            reset_startup_hook_check()
+            tool()
+
+        assert len(_runtime_warnings(caught)) == 2
+
+
+class TestAnUnreadableFileList:
+    def test_a_record_csv_cannot_read_leaves_the_hook_a_finding_and_does_not_raise(
+        self, walk: Callable[..., None], tmp_path: Path
+    ) -> None:
+        home = _copy("virtualenv", tmp_path)
+        meta = home / "placeholder_wheel-1.0.dist-info"
+        meta.mkdir()
+        (meta / "RECORD").write_bytes(b'"_virtualenv.pth\x00,sha256=PLACEHOLDER,1\n')
+        walk(home)
+
+        report = check_startup_hooks()
+
+        assert [f.name for f in report.findings] == ["_virtualenv.pth"]
+
+    def test_a_failure_reading_owners_leaves_every_hook_a_finding(
+        self, walk: Callable[..., None], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        walk("setuptools", "virtualenv")
+
+        def broken(*_: Any) -> Any:
+            raise OSError("PLACEHOLDER")
+
+        monkeypatch.setattr(hooks_module, "_claimants", broken)
+
+        assert sorted(f.name for f in check_startup_hooks().findings) == [
+            "_virtualenv.pth",
+            "distutils-precedence.pth",
+        ]

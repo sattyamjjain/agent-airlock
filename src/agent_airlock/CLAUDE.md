@@ -28,10 +28,11 @@ The installed package: `@Airlock` (`core.py`, sync and async) and every layer it
   Model Armor scanner
 - Fleet-wide kill switch, checked before any other gate: one signed broadcast freezes; a
   reset needs votes from an M-of-N quorum of signer keys (`kill_switch/broadcast.py`)
-- Three checks before the arguments, all inert until configured: the OAuth token audience
-  of each call (`expected_token_audience`, CVE-2026-115413), a startup-hook self-check
-  of the interpreter (`startup_hook_check`, `runtime/startup_hooks.py`) and a run's halt
-  latch (`RunGuard`, `run_guard.py`)
+- Three checks before the arguments: the OAuth token audience of each call
+  (`expected_token_audience`, CVE-2026-115413) and a run's halt latch (`RunGuard`,
+  `run_guard.py`), both inert until configured, and a startup-hook self-check of the
+  interpreter (`startup_hook_check`, `runtime/startup_hooks.py`), `warn` by default since
+  0.10.36
 - `airlock` CLI — one dispatcher fronting every `cli/<name>.py`; the `_COMMANDS` table in
   `cli/__main__.py` (or `airlock --help`) is the authoritative subcommand list. It
   dispatches in space-form (`airlock scan-tools`), so flags are identical to the
@@ -110,11 +111,19 @@ src/agent_airlock/
 
 0. Kill switch — a fleet freeze refuses before any gate looks at the arguments (the call's
    context is extracted and the call logged first; no gate runs)
-   - 0.5 startup-hook self-check (`startup_hook_check`, off by default): the walk
-     (`runtime/startup_hooks.py`) runs once per process, on the first call admitted with it
-     on; `deny` refuses every call guarded by a config that sets it while a hook is not on
-     `startup_hook_allowlist`, whose entries pin a hook file's bytes, not the modules its
-     `import` lines load
+   - 0.5 startup-hook self-check (`startup_hook_check`, `warn` by default since 0.10.36,
+     `off` before): the walk (`runtime/startup_hooks.py`) runs once per process, on the
+     first call admitted with it on. `_recognize` sets apart setuptools'
+     `distutils-precedence.pth` (content in `SETUPTOOLS_DISTUTILS_PRECEDENCE_LINES`),
+     virtualenv's, a setuptools editable install's and a customize module in the stdlib
+     directory as `benign`, by content and place, the imported module resolving beside the
+     hook, and `_claimants` (every `RECORD` in the walked directories) naming no other owner;
+     a finding named in `KNOWN_INCIDENT_HOOKS` carries its advisory and logs at error level.
+     `warn` logs each finding and issues one `RuntimeWarning` per process (raised from the
+     first guarded call under `-W error`); `deny` refuses every call guarded by a config
+     that sets it while a hook is not on `startup_hook_allowlist`, whose entries pin a hook
+     file's bytes, not the modules its `import` lines load. `tests/conftest.py` keeps the
+     host interpreter's own directories out of the walk
    - 0.6 OAuth token audience (`expected_token_audience`, inert until set, `warn` by
      default): the `aud` of the claims the host put on context metadata under
      `access_token_claims` (`_call_metadata`), never a tool argument; `deny` also refuses a

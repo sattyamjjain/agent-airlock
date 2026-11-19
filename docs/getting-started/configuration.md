@@ -54,7 +54,7 @@ config = AirlockConfig(
     # Call-time checks (V0.10.27)
     expected_token_audience=None,  # this server's resource URI; checks each call's token aud
     token_audience_mode="warn",    # off / warn / deny, once an audience is set
-    startup_hook_check="off",      # off / warn / deny: .pth import lines, *customize modules
+    startup_hook_check="warn",     # off / warn / deny: .pth import lines, *customize modules
     startup_hook_allowlist={},     # {file name: sha256} of the startup hooks you know
 
     # Error Hooks
@@ -493,7 +493,7 @@ Available types:
 - `UPI_ID` - UPI identifiers
 - `IFSC` - Bank IFSC codes
 - `PERSONAL_NAME_DEVANAGARI` - Names in Devanagari script
-- `INDIA_MOBILE` - Mobile numbers with a `+91`, `91` or `0` prefix
+- `INDIA_MOBILE` - Mobile numbers with a `+91`, `91` or `0` prefix, written as one run or in 5-5 groups
 
 ## OpenTelemetry Observability (V0.4.0)
 

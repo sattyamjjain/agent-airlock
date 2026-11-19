@@ -2558,9 +2558,10 @@ def code_sandbox_bridge_defaults(
     host API is unreachable and its permissions are revoked before untrusted
     code runs (how CVE-2026-120338 was fixed upstream). Recommended alongside:
     ``AirlockConfig(startup_hook_check="warn")`` on any process that hosts a
-    code-execution tool, so a persistence file written through another path is
-    caught at the next process start, and the default :class:`SafePath` deny
-    list, which refuses ``.pth`` writes into site directories.
+    code-execution tool (the default since V0.10.36; leave it on), so a persistence
+    file written through another path is caught at the next process start, and the
+    default :class:`SafePath` deny list, which refuses ``.pth`` writes into site
+    directories.
 
     Args:
         extra_bridges: Additional host-bridge spellings to refuse, each matched

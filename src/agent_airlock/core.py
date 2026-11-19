@@ -3337,12 +3337,14 @@ class Airlock:
     def _check_startup_hooks(self, func_name: str) -> AirlockResponse | None:
         """Refuse this config's calls in an interpreter running startup hooks it does not allow.
 
-        Off unless this decorator's ``AirlockConfig.startup_hook_check`` is ``warn`` or
-        ``deny``. The walk (``runtime.startup_hooks``) runs once per process, on the first
-        call admitted with the check on, and each hook it finds is logged once; each config
-        judges that one walk against its own ``startup_hook_allowlist``. ``deny`` then
-        refuses every call to a tool guarded by this config, naming the files. A tool
-        guarded by a config that does not set ``deny`` still runs in the same process. The
+        On unless this decorator's ``AirlockConfig.startup_hook_check`` is ``off`` (``warn``
+        is the default since V0.10.36). The walk (``runtime.startup_hooks``) runs once per
+        process, on the first call admitted with the check on; hooks every install has are
+        recognised and pass, each other hook is logged once and the process gets one
+        ``RuntimeWarning``; each config judges that one walk against its own
+        ``startup_hook_allowlist``. ``deny`` then refuses every call to a tool guarded by
+        this config, naming the files. A tool guarded by a config that does not set
+        ``deny`` still runs in the same process. The
         hooks ran before this did; the check reports them and keeps the tools this config
         guards from running beside them, nothing more.
 

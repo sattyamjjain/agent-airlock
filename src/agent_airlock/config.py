@@ -109,12 +109,15 @@ class AirlockConfig:
             nothing.
         token_audience_mode: ``warn`` (default) logs a wrong or missing audience and runs
             the call, ``deny`` refuses it, ``off`` skips the check.
-        startup_hook_check: ``off`` (default), ``warn`` or ``deny`` (V0.10.27). When on,
-            the first guarded call walks the interpreter's executable ``.pth`` lines and
-            ``sitecustomize`` / ``usercustomize`` once per process; ``warn`` logs each
-            hook found and ``deny`` refuses every call this config guards while one is
-            not allowlisted. A tool guarded by a config that leaves it ``off`` still runs
-            in the same process. It cannot stop a hook that has already run.
+        startup_hook_check: ``warn`` (default since V0.10.36; ``off`` before), ``deny`` or
+            ``off`` (V0.10.27). When on, the first guarded call walks the interpreter's
+            executable ``.pth`` lines and ``sitecustomize`` / ``usercustomize`` once per
+            process. Hooks every install has (setuptools, virtualenv, an editable install,
+            the interpreter's own customize module) are recognised and pass; ``warn`` logs
+            each other hook and issues one ``RuntimeWarning`` per process, and ``deny``
+            refuses every call this config guards while one is not allowlisted. A tool
+            guarded by a config set to ``off`` still runs in the same process. It cannot
+            stop a hook that has already run.
         startup_hook_allowlist: ``{file name: sha256}`` of the startup hooks you know. A
             ``.pth`` file's digest covers that file only, not the modules it imports.
     """
@@ -213,8 +216,9 @@ class AirlockConfig:
     expected_token_audience: str | None = None
     token_audience_mode: CheckMode = "warn"
 
-    # V0.10.27 the startup-hook self-check (runtime/startup_hooks.py); off by default.
-    startup_hook_check: CheckMode = "off"
+    # V0.10.27 the startup-hook self-check (runtime/startup_hooks.py); warn by default
+    # since V0.10.36 (off before).
+    startup_hook_check: CheckMode = "warn"
     startup_hook_allowlist: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

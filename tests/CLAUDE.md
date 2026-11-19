@@ -60,6 +60,12 @@ which `make test-badge` also counts as excluded: the docker-marked tests, `tests
   negotiation-bench CLIs call `structlog.configure(...)` with a stderr logger factory that,
   under `capsys`, binds a stream closed after the test (a later ERROR log then fails with
   "I/O operation on closed file", order-dependent). It is a no-op without structlog.
+- **The startup-hook walk skips the host interpreter's own hooks.** Since 0.10.36 every guarded
+  call walks startup hooks by default, so the autouse `_startup_hook_walk_sees_only_planted_hooks`
+  fixture patches `startup_hooks._directories` and `_customize_hook` to ignore the directories
+  the interpreter started with (`_HOST_DIRECTORIES`, e.g. coverage's `a1_coverage.pth` in CI).
+  Hooks planted in tmp or `tests/fixtures/startup_hooks/` dirs on `sys.path` are still walked;
+  that directory's `README.md` says what each case is.
 - **An `importorskip` needs a CI job that installs its dependency**, added in the same PR,
   and an extra-backed file joins the `test` job's step that runs those files and fails on
   any skip: a skipped module reads like a passing one in the summary line.

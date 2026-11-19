@@ -168,3 +168,74 @@ class TestAadhaarVsOrderNumber:
         result = sanitize_output(text, pii_locales=["in"])
         assert VALID_AADHAAR not in result.content  # Verhoeff-valid Aadhaar masked
         assert BENIGN_ORDER_NUMBER in result.content  # benign 12-digit untouched
+
+
+# ---------------------------------------------------------------------------
+# 0.10.36: a +91 mobile written in 5-5 groups
+# ---------------------------------------------------------------------------
+
+GROUPED = ["+91 98765 43210", "+91-98765-43210", "098765 43210"]
+
+
+class TestGroupedIndiaMobile:
+    """The 5-5 grouping is the common written form; until 0.10.36 neither detector saw it."""
+
+    @pytest.mark.parametrize("text", GROUPED)
+    def test_it_is_masked_under_the_in_locale_with_the_last_3_digits_shown(self, text: str) -> None:
+        result = sanitize_output(f"call {text} today", pii_locales=["in"])
+
+        assert result.content == "call +91-XXXXX-210 today"
+        [detection] = result.detections
+        assert detection["type"] == "india_mobile"
+
+    @pytest.mark.parametrize("text", GROUPED)
+    def test_it_is_masked_on_the_default_path_too(self, text: str) -> None:
+        result = sanitize_output(f"call {text} today")
+
+        assert "98765" not in result.content
+        assert "43210" not in result.content
+        assert result.content.endswith("210 today")
+
+    @pytest.mark.parametrize("text", ["+91 98765 43210", "+91 98765-43210", "+91 98765 43210"])
+    def test_one_separator_of_any_kind_is_allowed(self, text: str) -> None:
+        assert [t for (t, _) in _types(text)] == ["india_mobile", "phone"]
+
+    @pytest.mark.parametrize("text", ["+91 98765 4321", "+91 98765 432100"])
+    def test_nine_or_eleven_digits_are_not_a_mobile(self, text: str) -> None:
+        for locale in (("in",), None):
+            kinds = {t for (t, _) in _types(text, locale)}
+            assert not kinds & {"india_mobile", "phone"}, (text, locale, kinds)
+
+    def test_a_bare_5_5_number_with_no_prefix_is_out_of_scope(self) -> None:
+        # Two 5-digit numbers look the same; the prefix is what says it is a phone number.
+        assert _types("ref 98765 43210 ok") == []
+        assert sanitize_output("ref 98765 43210 ok", pii_locales=["in"]).content == (
+            "ref 98765 43210 ok"
+        )
+
+    def test_a_prefix_glued_to_a_longer_number_is_not_a_prefix(self) -> None:
+        assert _types("acct 591 98765 43210") == []
+
+    def test_two_separators_inside_a_group_are_not_a_mobile(self) -> None:
+        assert _types("+91 987 65 43210") == []
+
+
+class TestThePrintedResult:
+    """``print(sanitize_output(...))`` showed every masked value, in ``detections``."""
+
+    @pytest.mark.parametrize(
+        ("text", "secret"),
+        [
+            ("+91 98765 43210", "98765 43210"),
+            ("+91 9876543210", "9876543210"),
+            ("mail alice@example.com", "alice@example.com"),
+        ],
+    )
+    def test_the_repr_does_not_carry_the_masked_value(self, text: str, secret: str) -> None:
+        result = sanitize_output(text, pii_locales=["in"])
+
+        assert secret not in result.content
+        assert secret not in repr(result)
+        assert secret not in str(result)
+        assert result.detection_count == 1
+        assert result.detections, "the detections stay readable on the object"
