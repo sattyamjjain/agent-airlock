@@ -1107,6 +1107,28 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#hooks-every-install-has" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hooks every install has
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-incidents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known incidents
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#allowlist-and-modes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3367,6 +3389,28 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#hooks-every-install-has" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hooks every install has
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-incidents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known incidents
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#allowlist-and-modes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3415,7 +3459,8 @@
 
 <h1 id="token-audience-and-startup-hooks">Token audience and startup hooks<a class="headerlink" href="#token-audience-and-startup-hooks" title="Permanent link">&para;</a></h1>
 <p>Two checks added in 0.10.27. Both run before <code>@Airlock</code> reads any argument, right after
-the kill switch, and neither changes anything for a config that does not set it:</p>
+the kill switch. The token-audience check changes nothing for a config that does not set
+an audience; the startup-hook check is on by default as <code>"warn"</code> since 0.10.36:</p>
 <table>
 <thead>
 <tr>
@@ -3437,7 +3482,7 @@ the kill switch, and neither changes anything for a config that does not set it:
 </tr>
 <tr>
 <td><code>startup_hook_check</code></td>
-<td><code>"off"</code></td>
+<td><code>"warn"</code> (<code>"off"</code> before 0.10.36)</td>
 <td>executable <code>.pth</code> lines and <code>sitecustomize</code> / <code>usercustomize</code> in the running interpreter</td>
 </tr>
 <tr>
@@ -3561,8 +3606,15 @@ drops a <code>.pth</code> file persists: its line runs before the program it rid
 library included, so the check cannot stop them running and cannot undo what they did. It
 tells you the interpreter is not clean. Under <code>deny</code> it also keeps every tool guarded by a
 config that sets it, credential-bearing ones included, from running in that interpreter;
-a tool whose config leaves the check off still runs. Scanning packages when
+a tool whose config turns the check off still runs. Scanning packages when
 they are installed is not this library's job; use your dependency scanner for that.</p>
+<p>The case it was made the default for: agent-framework 1.26.1 and 1.26.2 on PyPI were
+malicious (<a href="https://github.com/advisories/GHSA-764m-3ppc-5m73">GHSA-764m-3ppc-5m73</a>,
+OpenSSF MAL-2026-20101). Each wheel added a <code>.pth</code> file, <code>agent_framework_meta.pth</code> in
+1.26.1 and <code>af_runtime_diag.pth</code> in 1.26.2, whose import line ran at every interpreter
+start and read secret-named environment variables, cloud credentials and CI tokens. Any
+agent host that installed it ran that before its own first line. A malware list helps only
+once an advisory exists; the hook is on disk from the first install.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_startup_hooks</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">report</span> <span class="o">=</span> <span class="n">check_startup_hooks</span><span class="p">()</span>
@@ -3575,14 +3627,81 @@ executable line, and finds <code>sitecustomize</code> and <code>usercustomize</c
 <code>importlib.util.find_spec</code>, which locates a module without running it. Each finding has a
 <code>path</code>, a <code>kind</code> (<code>pth</code>, <code>sitecustomize</code>, <code>usercustomize</code>) and the <code>sha256</code> of its
 content. A path-only <code>.pth</code> file is not a finding.</p>
+<h3 id="hooks-every-install-has">Hooks every install has<a class="headerlink" href="#hooks-every-install-has" title="Permanent link">&para;</a></h3>
+<p>Four kinds of hook are on most machines and are set apart as benign, in
+<code>report.benign</code>, with <code>recognized</code> saying which. They do not make the report unclean and
+are logged once per process at debug level (<code>airlock_startup_hook_recognized</code>). Each is
+recognised by its content and where it sits, never by its file name alone:</p>
+<table>
+<thead>
+<tr>
+<th>Hook</th>
+<th>Recognised when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>setuptools' <code>distutils-precedence.pth</code></td>
+<td>its content, stripped, is exactly a line setuptools has shipped (<code>SETUPTOOLS_DISTUTILS_PRECEDENCE_LINES</code>, read from every release from 49.3.0 to 84.2.1)</td>
+</tr>
+<tr>
+<td>virtualenv's <code>_virtualenv.pth</code></td>
+<td>its content is <code>import _virtualenv</code> and <code>_virtualenv.py</code> is beside it</td>
+</tr>
+<tr>
+<td>a setuptools editable install's <code>__editable__.&lt;name&gt;.pth</code></td>
+<td>every executable line is <code>import __editable___&lt;name&gt;_finder; __editable___&lt;name&gt;_finder.install()</code> and that finder module is beside it</td>
+</tr>
+<tr>
+<td><code>sitecustomize</code> / <code>usercustomize</code></td>
+<td>it sits directly in the interpreter's standard-library directory (Debian and Ubuntu ship one there)</td>
+</tr>
+</tbody>
+</table>
+<p>Two more conditions hold for all four, because a wheel could ship a file of the same name
+and content together with a module of its own:</p>
+<ul>
+<li>the module the line imports must resolve on <code>sys.path</code> to the file beside the hook, so a
+  same-named module found first elsewhere is not passed;</li>
+<li>no installed distribution's <code>RECORD</code> may claim the hook or that module, except the one
+  that writes it: only setuptools for setuptools' hook, only an editable install (its
+  <code>direct_url.json</code> says so) for an editable one, and nothing at all for virtualenv's and
+  the interpreter's, which pip never installs. Outside a virtual environment a wheel's
+  data files can reach the standard-library directory; its <code>RECORD</code> names them there.</li>
+</ul>
+<p>Reading those file lists is what the check costs: one read of each installed
+distribution's <code>RECORD</code>, once per process, and only when a hook looks benign.</p>
+<h3 id="known-incidents">Known incidents<a class="headerlink" href="#known-incidents" title="Permanent link">&para;</a></h3>
+<p>A hook whose file name a published advisory documents carries it: <code>finding.known_incident</code>
+(and <code>known_incident</code> in <code>to_dict()</code>, so in <code>metadata.startup_hooks</code> of a refusal), and its
+event is logged at error level. The table is <code>KNOWN_INCIDENT_HOOKS</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File name</th>
+<th>Advisory</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent_framework_meta.pth</code></td>
+<td>GHSA-764m-3ppc-5m73 (agent-framework 1.26.1)</td>
+</tr>
+<tr>
+<td><code>af_runtime_diag.pth</code></td>
+<td>GHSA-764m-3ppc-5m73 (agent-framework 1.26.2)</td>
+</tr>
+</tbody>
+</table>
+<p>A renamed copy is still a finding, just without the advisory id.</p>
 <p>It reports a hook whether or not this interpreter's start-up ran it: <code>python -S</code>, a user
 site the interpreter does not load, a <code>.pth</code> file <code>site</code> skips because it is hidden.
 Another interpreter on the same machine may run it.</p>
 <h3 id="allowlist-and-modes">Allowlist and modes<a class="headerlink" href="#allowlist-and-modes" title="Permanent link">&para;</a></h3>
-<p>Most environments carry hooks of their own. A virtualenv with this repo's <code>[dev]</code> extras
-has coverage's <code>a1_coverage.pth</code>; a long-lived interpreter adds setuptools'
-<code>distutils-precedence.pth</code> and the <code>-nspkg.pth</code> files of legacy namespace packages. List
-the ones you know by file name and SHA-256. A known name whose content has changed is a
+<p>Beyond the four above, many environments carry hooks of their own. A virtualenv with this
+repo's <code>[dev]</code> extras has coverage's <code>a1_coverage.pth</code>; a long-lived interpreter adds the
+<code>-nspkg.pth</code> files of legacy namespace packages. Both are findings. List the ones you know
+by file name and SHA-256. A known name whose content has changed is a
 finding again, and a key that is a path or a value that is not a SHA-256 digest raises
 <code>ValueError</code> rather than never matching. An entry pins the hook file's own bytes, not the
 modules its <code>import</code> lines load: <code>distutils-precedence.pth</code> imports <code>_distutils_hack</code>, and a
@@ -3604,21 +3723,21 @@ change to that module is not a finding, because the check does not hash it:</p>
 <thead>
 <tr>
 <th><code>startup_hook_check</code></th>
-<th>A hook no allowlist entry covers</th>
+<th>A hook that is neither benign nor allowlisted</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>"off"</code> (default)</td>
-<td>nothing is walked</td>
-</tr>
-<tr>
-<td><code>"warn"</code></td>
-<td>one structured <code>airlock_startup_hook_found</code> event per hook, then every call runs</td>
+<td><code>"warn"</code> (default since 0.10.36)</td>
+<td>one structured <code>airlock_startup_hook_found</code> event per hook and one <code>RuntimeWarning</code> per process, then every call runs</td>
 </tr>
 <tr>
 <td><code>"deny"</code></td>
-<td>every call guarded by a config with <code>"deny"</code> is refused, naming the files</td>
+<td>the same, and every call guarded by a config with <code>"deny"</code> is refused, naming the files</td>
+</tr>
+<tr>
+<td><code>"off"</code> (the default before 0.10.36)</td>
+<td>nothing is walked</td>
 </tr>
 </tbody>
 </table>
@@ -3626,6 +3745,12 @@ change to that module is not a finding, because the check does not hash it:</p>
 on; nothing is walked at import or when a function is decorated. Each hook is logged once,
 not on every call. A hook added after that walk is not seen until the process restarts;
 <code>check_startup_hooks()</code> itself walks every time it is called.</p>
+<p>The <code>RuntimeWarning</code> is there for a script that configures no logging. Under <code>-W error</code>
+(or <code>filterwarnings = ["error"]</code> in pytest), Python raises it instead: the first guarded
+call in the process raises <code>RuntimeWarning</code> before its tool runs, and later calls run. A
+test suite that treats warnings as errors and runs with coverage's <code>a1_coverage.pth</code>
+installed meets that on its first guarded call; allowlist the hook, or set
+<code>startup_hook_check="off"</code> for the tests.</p>
 <p>A refusal has <code>block_reason</code> <code>"startup_hook"</code>. The <code>error</code> names the files; their full
 paths and digests are in <code>metadata.startup_hooks</code> and the <code>on_blocked</code> reason.</p>
 <h2 id="toml">TOML<a class="headerlink" href="#toml" title="Permanent link">&para;</a></h2>

@@ -3789,7 +3789,7 @@
 <a id="__codelineno-1-46" name="__codelineno-1-46" href="#__codelineno-1-46"></a>    <span class="c1"># Call-time checks (V0.10.27)</span>
 <a id="__codelineno-1-47" name="__codelineno-1-47" href="#__codelineno-1-47"></a>    <span class="n">expected_token_audience</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-1-48" name="__codelineno-1-48" href="#__codelineno-1-48"></a>    <span class="n">token_audience_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"off"</span><span class="p">,</span> <span class="s2">"warn"</span><span class="p">,</span> <span class="s2">"deny"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"warn"</span>
-<a id="__codelineno-1-49" name="__codelineno-1-49" href="#__codelineno-1-49"></a>    <span class="n">startup_hook_check</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"off"</span><span class="p">,</span> <span class="s2">"warn"</span><span class="p">,</span> <span class="s2">"deny"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"off"</span>
+<a id="__codelineno-1-49" name="__codelineno-1-49" href="#__codelineno-1-49"></a>    <span class="n">startup_hook_check</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"off"</span><span class="p">,</span> <span class="s2">"warn"</span><span class="p">,</span> <span class="s2">"deny"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"warn"</span>
 <a id="__codelineno-1-50" name="__codelineno-1-50" href="#__codelineno-1-50"></a>    <span class="n">startup_hook_allowlist</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="attributes">Attributes<a class="headerlink" href="#attributes" title="Permanent link">&para;</a></h3>
@@ -4056,8 +4056,8 @@ or for picking individual types.</p>
 <tr>
 <td><code>startup_hook_check</code></td>
 <td><code>"off" \| "warn" \| "deny"</code></td>
-<td><code>"off"</code></td>
-<td>Walks the interpreter's executable <code>.pth</code> lines and <code>sitecustomize</code> / <code>usercustomize</code> once per process; <code>deny</code> refuses every guarded call while one is not allowlisted</td>
+<td><code>"warn"</code> (<code>"off"</code> before 0.10.36)</td>
+<td>Walks the interpreter's executable <code>.pth</code> lines and <code>sitecustomize</code> / <code>usercustomize</code> once per process; hooks every install has (setuptools, virtualenv, an editable install, the interpreter's own) pass; <code>warn</code> logs each other hook and issues one <code>RuntimeWarning</code> per process, <code>deny</code> refuses every guarded call while one is not allowlisted</td>
 </tr>
 <tr>
 <td><code>startup_hook_allowlist</code></td>
@@ -4204,7 +4204,7 @@ standalone sanitizer with a <code>mask_config</code> mapping. A type left out of
 </tr>
 <tr>
 <td><code>INDIA_MOBILE</code></td>
-<td>Mobile numbers with a <code>+91</code>, <code>91</code> or <code>0</code> prefix</td>
+<td>Mobile numbers with a <code>+91</code>, <code>91</code> or <code>0</code> prefix, written as one run or in 5-5 groups</td>
 </tr>
 </tbody>
 </table>

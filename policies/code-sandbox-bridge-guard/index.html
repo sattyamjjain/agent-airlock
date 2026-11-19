@@ -3287,8 +3287,9 @@ through is a string it cannot screen. The real fix is to upgrade the sandbox run
 host API is unreachable and its permissions are revoked before untrusted code runs — how
 CVE-2026-120338 was fixed upstream. Pair this guard with:</p>
 <ul>
-<li><code>AirlockConfig(startup_hook_check="warn")</code> on any process that hosts a code-execution
-  tool, so a persistence file written through another path is caught at the next start; and</li>
+<li><code>AirlockConfig(startup_hook_check="warn")</code>, the default since 0.10.36, on any process
+  that hosts a code-execution tool (leave it on), so a persistence file written through
+  another path is caught at the next start; and</li>
 <li>the default <a href="../../api/airlock/"><code>SafePath</code></a> deny list, which refuses <code>.pth</code> writes into
   site directories and <code>sitecustomize.py</code> / <code>usercustomize.py</code>.</li>
 </ul>
