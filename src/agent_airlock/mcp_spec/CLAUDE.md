@@ -172,7 +172,16 @@ preset, and
   also refuse reading another table without `SELECT` (`TABLE name`, the `table_to_xml` family),
   and a fragment key anywhere on the path wins over a statement key. Each keyword or function
   list is one module-level frozenset (`_WRITE_KEYWORDS`, `_DANGEROUS_FUNCTIONS`, ...);
-  INSERT, REPLACE and TRUNCATE followed by `(` are functions, not writes.
+  INSERT, REPLACE and TRUNCATE followed by `(` are functions, not writes. Since 0.10.36
+  (CVE-2026-63129) field names match after `_norm` (lower case, non-alphanumerics dropped)
+  unless `match_aliases=False`: fragments also by `_FRAGMENT_SUFFIXES`, statements only by
+  equality or `_STATEMENT_ALIASES` (never a suffix: `searchQuery` is plain text). Two more
+  roles: identifier fields (`DEFAULT_IDENTIFIER_FIELDS`, equality only) must hold a name
+  (`_name_problem`; quoted per `_name_quotes(readings)`, and a quoted body that would be
+  code in a dialect not taking that quote is refused), and row fields
+  (`DEFAULT_ROW_FIELDS`) have their mapping keys checked as names, values unread, refused
+  by position (`data.keys[0]`). The constructor's `_role` check raises when a configured
+  name would be read as another kind.
 - **`malware_advisory_feed` reads a document by its keys, never by file name**, and makes no
   network call. An OSV record is malware only when its id is `MAL-*` or it carries CWE-506: a
   reviewed GHSA in OSV form lists vulnerable, not malicious, versions, so it is skipped. A

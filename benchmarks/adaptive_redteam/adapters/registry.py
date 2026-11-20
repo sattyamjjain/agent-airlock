@@ -836,6 +836,7 @@ def _build_standalone() -> dict[str, StandaloneAdapter]:
                     "deny_subquery_in_fragment",
                     "deny_comment_in_fragment",
                     "deny_dangerous_function",
+                    "deny_not_an_identifier",
                 }
             ),
             "readonly-sql",

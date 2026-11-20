@@ -1,0 +1,56 @@
+{
+  "cve": "CVE-2026-63129",
+  "advisory": "https://github.com/advisories/GHSA-2m9m-6cr5-9x25",
+  "affected": "@connorbritain/mssql-mcp-server <=0.5.2, -core <=0.5.0, -reader and -writer <=0.4.2",
+  "note": "Argument dicts of the advisory's tool calls. 'allowed_before' is what ReadOnlySQLGuard().evaluate returned on c2a5df9d (0.10.35), measured 2026-11-19. 'verdict' and 'field' are the refusal now.",
+  "hostile": [
+    {
+      "tool": "pgEdge-style where (the field the guard already read)",
+      "args": {"where": "1=1; DROP TABLE x"},
+      "allowed_before": false,
+      "verdict": "deny_subquery_in_fragment",
+      "field": "where"
+    },
+    {
+      "tool": "update_data / delete_data",
+      "args": {"tableName": "t; DROP TABLE x--", "whereClause": "1=1; DROP TABLE x"},
+      "allowed_before": true,
+      "verdict": "deny_not_an_identifier",
+      "field": "tableName"
+    },
+    {
+      "tool": "list_databases (reader, READONLY=true)",
+      "args": {"stateFilter": "ONLINE'; EXEC xp_cmdshell 'whoami'--"},
+      "allowed_before": true,
+      "verdict": "deny_uninspectable",
+      "field": "stateFilter"
+    },
+    {
+      "tool": "a snake_case where clause",
+      "args": {"where_clause": "1=1 UNION SELECT password FROM users"},
+      "allowed_before": true,
+      "verdict": "deny_subquery_in_fragment",
+      "field": "where_clause"
+    },
+    {
+      "tool": "a table name carrying a clause",
+      "args": {"table_name": "users WHERE 1=1"},
+      "allowed_before": true,
+      "verdict": "deny_not_an_identifier",
+      "field": "table_name"
+    },
+    {
+      "tool": "insert_data (column names are the object keys)",
+      "args": {"tableName": "orders", "data": {"name; DROP TABLE x": 1}},
+      "allowed_before": true,
+      "verdict": "deny_not_an_identifier",
+      "field": "data.keys[0]"
+    }
+  ],
+  "benign": [
+    {"tool": "update_data", "args": {"tableName": "dbo.orders", "whereClause": "status = 'open'"}},
+    {"tool": "list_databases", "args": {"stateFilter": "ONLINE"}},
+    {"tool": "insert_data", "args": {"tableName": "orders", "data": {"name": "x", "qty": 2}}},
+    {"tool": "a search tool", "args": {"searchQuery": "cats and dogs"}}
+  ]
+}

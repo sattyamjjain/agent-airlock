@@ -6,6 +6,10 @@
 - CVE-2026-61789: bytebase DBHub below 0.22.6 took every ``--`` for a comment, while
   MySQL and MariaDB need whitespace after it, so a second statement ran.
   https://nvd.nist.gov/vuln/detail/CVE-2026-61789
+- CVE-2026-63129: @connorbritain/mssql-mcp-server 0.5.2 and below spliced ``tableName``,
+  ``whereClause``, ``insert_data``'s column keys and ``stateFilter`` into SQL; the guard
+  matched field names exactly and read none of them (v0.10.36 fix).
+  https://github.com/advisories/GHSA-2m9m-6cr5-9x25
 
 The guard only tokenises strings. No test opens a database or a socket, and nothing here
 depends on today's date.
@@ -13,13 +17,17 @@ depends on today's date.
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from agent_airlock.mcp_spec.readonly_sql_guard import (
     DEFAULT_FRAGMENT_FIELDS,
+    DEFAULT_IDENTIFIER_FIELDS,
+    DEFAULT_ROW_FIELDS,
     DEFAULT_STATEMENT_FIELDS,
     ReadOnlySQLDecision,
     ReadOnlySQLGuard,
@@ -387,10 +395,13 @@ class TestPreset:
             "severity": "medium",
             "default_action": "deny",
             "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-125322",
-            "cves": ("CVE-2026-125322", "CVE-2026-61789"),
+            "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129"),
             "statement_fields": DEFAULT_STATEMENT_FIELDS,
             "fragment_fields": DEFAULT_FRAGMENT_FIELDS,
+            "identifier_fields": DEFAULT_IDENTIFIER_FIELDS,
+            "row_fields": DEFAULT_ROW_FIELDS,
             "dialect": "generic",
+            "match_aliases": True,
         }
 
     def test_overrides_and_validation(self) -> None:
@@ -420,3 +431,243 @@ class TestPreset:
         for name in ("ReadOnlySQLGuard", "ReadOnlySQLDecision", "ReadOnlySQLVerdict"):
             assert name in agent_airlock.__all__
             assert getattr(agent_airlock, name) is globals()[name]
+
+
+_MSSQL_FIXTURE = json.loads(
+    (
+        Path(__file__).resolve().parent.parent
+        / "fixtures"
+        / "readonly_sql"
+        / "mssql_mcp_cve_2026_63129.json"
+    ).read_text(encoding="utf-8")
+)
+_HOSTILE = _MSSQL_FIXTURE["hostile"]
+_BENIGN = _MSSQL_FIXTURE["benign"]
+
+
+def _tool(case: dict[str, Any]) -> str:
+    return str(case["tool"])
+
+
+class TestCVE202663129Aliases:
+    """CVE-2026-63129: the mssql MCP server's fields, read under their own names.
+
+    https://github.com/advisories/GHSA-2m9m-6cr5-9x25
+    """
+
+    @pytest.mark.parametrize("case", _HOSTILE, ids=_tool)
+    def test_each_hostile_call_is_refused(self, case: dict[str, Any]) -> None:
+        decision = ReadOnlySQLGuard().evaluate(case["args"])
+        assert decision.allowed is False
+        assert decision.verdict.value == case["verdict"]
+        assert decision.matched_field == case["field"]
+
+    @pytest.mark.parametrize("case", _BENIGN, ids=_tool)
+    def test_each_benign_twin_is_allowed(self, case: dict[str, Any]) -> None:
+        assert ReadOnlySQLGuard().evaluate(case["args"]).verdict is V.ALLOW
+
+    @pytest.mark.parametrize(
+        "key", ["whereClause", "where_clause", "WHERE-CLAUSE", "stateFilter", "filterCondition"]
+    )
+    def test_an_aliased_fragment_reads_as_where_does(self, key: str) -> None:
+        for text in ("1=1; DROP TABLE x", "1=1 UNION SELECT 1", "id = 1 -- x", "status = 'a'"):
+            assert _verdict({key: text}) is _verdict({"where": text})
+
+    def test_order_by_and_having_aliases_are_fragments(self) -> None:
+        assert _verdict({"orderBy": "(SELECT pg_sleep(5))"}) is V.DENY_SUBQUERY_IN_FRAGMENT
+        assert _verdict({"havingClause": "count(*) > 1; DROP TABLE x"}) is not V.ALLOW
+
+    @pytest.mark.parametrize("key", ["sqlQuery", "SQL_STATEMENT", "rawSql", "query_text", "SQL"])
+    def test_statement_aliases_are_statements(self, key: str) -> None:
+        assert _verdict({key: "SELECT 1; DROP TABLE t"}) is V.DENY_STACKED_STATEMENT
+        assert _verdict({key: "SELECT name FROM t"}) is V.ALLOW
+
+    def test_a_search_query_is_not_read(self) -> None:
+        assert _verdict({"searchQuery": "cats and dogs; DROP TABLE x"}) is V.ALLOW
+        assert _verdict({"searchQuery": "cats and dogs"}) is V.ALLOW
+
+    @pytest.mark.parametrize("key", ["tableName", "TABLE_NAME", "table-name", "columnName"])
+    def test_identifier_aliases_are_names(self, key: str) -> None:
+        assert _verdict({key: "orders"}) is V.ALLOW
+        assert _verdict({key: "users WHERE 1=1"}) is V.DENY_NOT_AN_IDENTIFIER
+
+    def test_identifier_fields_never_match_by_suffix(self) -> None:
+        assert _verdict({"targetTable": "users WHERE 1=1"}) is V.ALLOW
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "orders",
+            "dbo.orders",
+            "sales.dbo.orders",
+            "_t$1",
+            "[Order Details]",
+            "[dbo].[orders]",
+            '"orders"',
+            "`orders`",
+            "dbo.[orders]",
+            "t.*",
+            "*",
+            "",
+        ],
+    )
+    def test_a_name_is_allowed(self, name: str) -> None:
+        assert _verdict({"table": name}) is V.ALLOW
+
+    @pytest.mark.parametrize(
+        ("name", "pattern"),
+        [
+            ("users WHERE 1=1", " "),
+            ("t; DROP TABLE x--", ";"),
+            ("a.b.c.d", "."),
+            ("orders.", "."),
+            (".orders", "."),
+            ("1orders", "1"),
+            ("orders\n", "\n"),
+            ("[a]b]", "b"),
+            ("[a;b]", ";"),
+            ("[a--b]", "--"),
+            ('"a""b"', '"'),
+            ("[a`b]", "`"),
+            ("[]", "empty quoted name"),
+            ("[orders", "["),
+            ("o'rders", "'"),
+        ],
+    )
+    def test_a_name_that_is_not_one_is_refused(self, name: str, pattern: str) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"table": name})
+        assert decision.verdict is V.DENY_NOT_AN_IDENTIFIER
+        assert decision.matched_field == "table"
+        assert decision.matched_pattern == pattern
+
+    @pytest.mark.parametrize(
+        ("dialect", "allowed"),
+        [
+            ("generic", {"[dbo].[orders]", '"orders"', "`orders`"}),
+            ("sqlite", {"[dbo].[orders]", '"orders"', "`orders`"}),
+            ("postgres", {'"orders"'}),
+            ("mysql", {"`orders`"}),
+        ],
+    )
+    def test_quoted_names_follow_the_dialect(self, dialect: str, allowed: set[str]) -> None:
+        for name in ("[dbo].[orders]", '"orders"', "`orders`"):
+            verdict = _verdict({"tableName": name}, dialect=dialect)
+            assert (verdict is V.ALLOW) is (name in allowed), (dialect, name)
+
+    def test_a_non_text_name_is_refused_and_none_names_nothing(self) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"column": 3})
+        assert decision.verdict is V.DENY_NOT_AN_IDENTIFIER
+        assert decision.matched_pattern == "int"
+        assert _verdict({"schema": None}) is V.ALLOW
+        assert _verdict({"schema": b"dbo"}) is V.ALLOW
+        assert _verdict({"schema": b"\xff"}) is V.DENY_UNINSPECTABLE
+
+    def test_a_list_of_names_is_read_item_by_item(self) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"columns": ["id", "name; DROP TABLE x"]})
+        assert decision.verdict is V.DENY_NOT_AN_IDENTIFIER
+        assert decision.matched_field == "columns[1]"
+        assert _verdict({"columns": ["id", "name", "dbo.orders.total"]}) is V.ALLOW
+
+    def test_a_column_definition_has_its_name_read(self) -> None:
+        columns = [{"name": "id", "type": "INT"}, {"name": "x; DROP TABLE y", "type": "INT"}]
+        decision = ReadOnlySQLGuard().evaluate({"tableName": "t", "columns": columns})
+        assert decision.verdict is V.DENY_NOT_AN_IDENTIFIER
+        assert decision.matched_field == "columns[1].name"
+        assert _verdict({"columns": [{"name": "id", "type": "INT PRIMARY KEY"}]}) is V.ALLOW
+
+    def test_a_row_key_that_is_not_a_name_is_refused(self) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"data": {"name; DROP TABLE x": 1}})
+        assert decision.verdict is V.DENY_NOT_AN_IDENTIFIER
+        assert decision.matched_field == "data.keys[0]"
+        assert "DROP" not in decision.detail
+
+    def test_every_row_in_a_list_has_its_keys_read(self) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"rows": [{"a": 1}, {"b": 2, "c d": 3}]})
+        assert decision.verdict is V.DENY_NOT_AN_IDENTIFIER
+        assert decision.matched_field == "rows[1].keys[1]"
+        assert _verdict({"records": [{"a": 1}, {"b": "x"}]}) is V.ALLOW
+        assert _verdict({"Values": {1: "x"}}) is V.DENY_NOT_AN_IDENTIFIER
+
+    def test_a_row_s_values_are_not_read(self) -> None:
+        assert _verdict({"data": {"note": "1=1; DROP TABLE x", "where": "x'--"}}) is V.ALLOW
+        assert _verdict({"values": [1, 2, "three"]}) is V.ALLOW
+        assert _verdict({"data": "plain text"}) is V.ALLOW
+
+    def test_the_refusal_never_repeats_the_name(self) -> None:
+        marker = "zz_name_marker_zz"
+        decision = ReadOnlySQLGuard().evaluate({"tableName": f"t; {marker}"})
+        assert decision.verdict is V.DENY_NOT_AN_IDENTIFIER
+        assert marker not in decision.detail
+        assert "'tableName'" in decision.detail
+
+    def test_match_aliases_off_with_no_name_fields_reproduces_0_10_35(self) -> None:
+        guard = ReadOnlySQLGuard(
+            match_aliases=False, identifier_fields=frozenset(), row_fields=frozenset()
+        )
+        for case in _HOSTILE:
+            assert guard.evaluate(case["args"]).allowed is case["allowed_before"], case["tool"]
+
+    def test_match_aliases_off_compares_names_exactly(self) -> None:
+        guard = ReadOnlySQLGuard(match_aliases=False)
+        assert guard.evaluate({"whereClause": "1=1; DROP TABLE x"}).allowed is True
+        assert guard.evaluate({"stateFilter": "x'--"}).allowed is True
+        assert guard.evaluate({"tableName": "users WHERE 1=1"}).allowed is True
+        assert guard.evaluate({"table_name": "users WHERE 1=1"}).verdict is (
+            V.DENY_NOT_AN_IDENTIFIER
+        )
+        assert guard.evaluate({"where": "1=1; DROP TABLE x"}).allowed is False
+
+    def test_identifier_and_row_defaults(self) -> None:
+        assert "table_name" in DEFAULT_IDENTIFIER_FIELDS
+        assert "columns" in DEFAULT_IDENTIFIER_FIELDS
+        assert "data" in DEFAULT_ROW_FIELDS
+        assert not DEFAULT_IDENTIFIER_FIELDS & DEFAULT_ROW_FIELDS
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"identifier_fields": {"table"}},
+            {"row_fields": ["data"]},
+            {"match_aliases": "yes"},
+        ],
+    )
+    def test_wrong_types_raise_type_error(self, kwargs: dict[str, Any]) -> None:
+        with pytest.raises(TypeError):
+            ReadOnlySQLGuard(**kwargs)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"fragment_fields": frozenset({"table"})},
+            {"identifier_fields": frozenset({"Data"})},
+            {"statement_fields": frozenset({"sqlFilter"})},
+            {"identifier_fields": frozenset({"sortClause"})},
+        ],
+    )
+    def test_a_name_read_as_two_kinds_raises(self, kwargs: dict[str, Any]) -> None:
+        with pytest.raises(ValueError, match="both"):
+            ReadOnlySQLGuard(**kwargs)
+
+    def test_a_name_that_normalises_to_nothing_raises(self) -> None:
+        with pytest.raises(ValueError, match="nothing"):
+            ReadOnlySQLGuard(fragment_fields=frozenset({"where", "__"}))
+        guard = ReadOnlySQLGuard(fragment_fields=frozenset({"where", "__"}), match_aliases=False)
+        assert guard.evaluate({"__": "1; DROP TABLE x"}).allowed is False
+
+    def test_the_preset_carries_the_new_fields(self) -> None:
+        from agent_airlock.policy_presets import readonly_sql_tool_args_2026_125322_defaults
+
+        config = readonly_sql_tool_args_2026_125322_defaults(match_aliases=False)
+        assert "CVE-2026-63129" in config["cves"]
+        assert config["match_aliases"] is False
+        guard = ReadOnlySQLGuard(
+            statement_fields=config["statement_fields"],
+            fragment_fields=config["fragment_fields"],
+            identifier_fields=config["identifier_fields"],
+            row_fields=config["row_fields"],
+            dialect=config["dialect"],
+            match_aliases=config["match_aliases"],
+        )
+        assert guard.evaluate({"whereClause": "1=1; DROP TABLE x"}).allowed is True
+        with pytest.raises(ValueError, match="both"):
+            readonly_sql_tool_args_2026_125322_defaults(identifier_fields=frozenset({"where"}))
