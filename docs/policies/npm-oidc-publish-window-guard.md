@@ -67,7 +67,8 @@ current dated snapshot, `data/oidc_publish_blast_2026_10_28.json`).
 Since 0.10.32 it also carries the malware advisory snapshot (below): its exact releases are
 added to `blast_list`, and `blocked_packages`, `advisories` and `malware_feed_as_of` come back
 beside it. `include_malware_feed=False` leaves it out, and an explicit `blast_list` still
-replaces the pairs. Build the guard from all three:
+replaces the pairs. Since 0.10.36 `rescoped_names` comes back too (see
+[Rescoped MCP malware names](#rescoped-mcp-malware-names)). Build the guard from all of them:
 
 ```python
 from agent_airlock import OIDCPublishWindowGuard
@@ -79,10 +80,64 @@ guard = OIDCPublishWindowGuard(
     blocked_packages=cfg["blocked_packages"],
     advisories=cfg["advisories"],
     installs_from=cfg["installs_from"],
+    rescoped_names=cfg["rescoped_names"],
 )
 decision = guard.evaluate({"package": "@ethersphere/bee-js@13.3.0"})
 # decision.allowed is False; decision.detail names GHSA-hh7j-5m3j-23pf
 ```
+
+## Rescoped MCP malware names
+
+A malicious MCP server is often published again under a fresh npm scope with the same package
+name. [GHSA-m5xq-h2p4-962g][m5xq] (2026-11-19, critical) is `@fdcasj_dfew/md-doc-mcp` 1.0.0
+and 1.0.1: advertised as a Markdown toolkit, its `index.js` queries Alibaba Cloud's instance
+metadata service when the module loads, before any MCP message, and the advisory ties it to the
+earlier `@ifasn` family. The 2026-11-14 snapshot already listed `@ifasn/md-doc-mcp`, `-mdd-`,
+`-mmd-`, `-mmdd-`, `-ms-doc-mcp` and `@rfewqa-fes/mnm-doc-mcp`, but the guard matched exact
+`@scope/name`, so each new scope passed until the next refresh.
+
+Since 0.10.36 the preset also returns `rescoped_names`, built by
+`rescoped_name_index(feed)`: every scoped npm name in the snapshot whose basename (the part
+after `@scope/`) names MCP, mapped to one listed full name and its advisory ids. A scoped npm
+name that the pair and whole-package lookups did not match, whose basename is in that index,
+and which is not itself listed, is refused at every version as `DENY_RESCOPED_MALWARE_NAME`:
+
+```python
+# With the 2026-11-14 snapshot, before any advisory named the new scope:
+decision = guard.evaluate({"package": "@fdcasj_dfew/md-doc-mcp@1.0.0"})
+# decision.verdict == OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME
+# decision.detail starts "@fdcasj_dfew/md-doc-mcp shares the basename of
+#   @ifasn/md-doc-mcp, GHSA-rvw8-22w3-342v"
+```
+
+The shipped 2026-11-20 snapshot lists `@fdcasj_dfew/md-doc-mcp` itself, so that call is now a
+`DENY_BLAST_LIST_PAIR`, and the next scope (`@newscope/md-doc-mcp`) is the one the rescope
+check refuses. Where several scopes list one basename, the index names the first in sorted
+order, so the refusal may cite another scope's advisory than the one you expect.
+
+The same test reads a registry tarball URL's package path. Only basenames with `mcp` as a whole
+word are indexed (`md-doc-mcp`, `mcp-weather-server`), never a generic one (`mcp`,
+`mcp-server`, `server-mcp`, `mcp-client`, `mcp-tools`, `mcp-cli`), so `@company/mcp` and
+`@modelcontextprotocol/sdk` pass. From the 2026-11-14 snapshot the index holds 11 basenames;
+from the 2026-11-20 one, 13.
+
+If you publish a package that shares a listed basename, put its full name on the guard's
+`rescope_allow`:
+
+```python
+guard = OIDCPublishWindowGuard(
+    blast_list=cfg["blast_list"],
+    blocked_packages=cfg["blocked_packages"],
+    advisories=cfg["advisories"],
+    installs_from=cfg["installs_from"],
+    rescoped_names=cfg["rescoped_names"],
+    rescope_allow=frozenset({"@yourco/md-doc-mcp"}),
+)
+```
+
+`npm_oidc_publish_window_guard_defaults(match_rescoped=False)` leaves `rescoped_names` empty,
+which is the guard as it was before 0.10.36. An unscoped copy (`md-doc-mcp`) or a copy under a
+new basename still passes until an advisory names it.
 
 ## Refreshing from malware advisories
 
@@ -97,11 +152,13 @@ someone edited a JSON file.
   authenticated rate limit. `--since YYYY-MM-DD` limits it to advisories published since
   then. It filters on the publish date because GitHub re-touches old malware advisories in
   bulk, so an update-date window is most of the feed.
-- The shipped snapshot, `malware_blast_2026_11_14.json`, holds advisories published since
-  2026-10-11: 2,376 advisories, 3,857 entries (2,371 exact releases, 1,486 whole packages),
-  463 KB. It replaces `malware_blast_2026_11_11.json` (1,548 advisories, 2,907 entries);
-  the older files stay in `data/` and the loader reads the newest. Two advisories in the
-  older file were withdrawn by GitHub on 2026-11-13 and are not in the new one. When
+- The shipped snapshot, `malware_blast_2026_11_20.json`, holds advisories published since
+  2026-10-11: 2,860 advisories, 4,450 entries (2,619 exact releases, 1,831 whole packages),
+  531 KB, among them GHSA-m5xq-h2p4-962g. It replaces `malware_blast_2026_11_14.json`
+  (2,376 advisories, 3,857 entries); the older files stay in `data/` and the loader reads
+  the newest. One advisory in the 2026-11-14 file, GHSA-q2mc-9hgr-vmx2
+  (`screenshot-desktop` 1.16.0), was withdrawn by GitHub on 2026-11-16 and is not in the
+  new one; two in the 2026-11-11 file were withdrawn on 2026-11-13. When
   counted on 2026-11-10, the whole feed was 121,888 malware advisories, mostly from three
   waves (July, August and September 2026); a snapshot of the last 90 days alone was 87,842
   entries and 9.8 MB, took about 0.7 s and 73 MB to load, and would add that much to the
@@ -146,6 +203,7 @@ passes until the next refresh.
 | `ALLOW` | no blast-list pattern matched |
 | `DENY_BLAST_LIST_PAIR` | `(package, version)` arg pair on the list |
 | `DENY_BLAST_LIST_TARBALL_URL` | npm-registry tarball URL targeting a blast pair |
+| `DENY_RESCOPED_MALWARE_NAME` | a scoped npm name sharing a listed MCP malware package's basename under another scope (0.10.36) |
 | `DENY_UNINSPECTABLE` | an argument shape the guard cannot read |
 
 ## Honest scope
@@ -177,5 +235,7 @@ passes until the next refresh.
 - [TanStack npm supply-chain compromise postmortem (2026-05-11)][postmortem] — 42 pkgs × 84 versions × 12M weekly DL blast radius
 - [GHSA-g7cv-rxg3-hmpx (CVE-2026-45321)][ghsa] — the affected-version table the shipped list is copied from
 - [Aikido — Mini Shai-Hulud Is Back (2026-05-11)](https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised) — the wider npm wave (Mistral, UiPath and other scopes); its packages are not in the list
+- [GHSA-m5xq-h2p4-962g (2026-11-19)][m5xq], `@fdcasj_dfew/md-doc-mcp`: the `@ifasn` MCP malware under a new scope, the reason for the rescoped-name check
 
 [ghsa]: https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
+[m5xq]: https://github.com/advisories/GHSA-m5xq-h2p4-962g

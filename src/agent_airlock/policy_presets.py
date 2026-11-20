@@ -2801,6 +2801,7 @@ def npm_oidc_publish_window_guard_defaults(
     blast_list: frozenset[tuple[str, str, str]] | None = None,
     include_malware_feed: bool = True,
     installs_from: str | None = None,
+    match_rescoped: bool = True,
 ) -> dict[str, Any]:
     """Recommended config for the TanStack 2026-05-11 OIDC publish-window guard.
 
@@ -2824,7 +2825,13 @@ def npm_oidc_publish_window_guard_defaults(
     (:func:`agent_airlock.mcp_spec.malware_advisory_feed.load_malware_blast_snapshot`): its
     exact releases are unioned into ``blast_list``, and the packages whose every version is
     malicious come back as ``blocked_packages``, with ``advisories`` naming the advisory for
-    each. Build the guard from all three::
+    each. Since 0.10.36 ``rescoped_names``
+    (:func:`agent_airlock.mcp_spec.malware_advisory_feed.rescoped_name_index`) indexes the
+    snapshot's scoped MCP package names by basename, so a listed MCP server republished under
+    another scope is refused before any advisory names it (GHSA-m5xq-h2p4-962g:
+    ``@fdcasj_dfew/md-doc-mcp``, the ``@ifasn/md-doc-mcp`` family under a new scope). A
+    legitimate package sharing a listed basename goes on the guard's ``rescope_allow``.
+    Build the guard from all of them::
 
         cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm")
         guard = OIDCPublishWindowGuard(
@@ -2832,6 +2839,8 @@ def npm_oidc_publish_window_guard_defaults(
             blocked_packages=cfg["blocked_packages"],
             advisories=cfg["advisories"],
             installs_from=cfg["installs_from"],
+            rescoped_names=cfg["rescoped_names"],
+            rescope_allow=frozenset({"@yourco/md-doc-mcp"}),  # only if you publish one
         )
 
     Args:
@@ -2843,17 +2852,26 @@ def npm_oidc_publish_window_guard_defaults(
             ``"any"``), passed back for the guard, which requires it with
             ``blocked_packages``: npm malware squats real PyPI names such as ``pydantic``, so
             a bare package name has to be read in the registry the tool uses.
+        match_rescoped: False leaves ``rescoped_names`` empty, so only exact listed names
+            are refused (the guard as it was before 0.10.36). Empty too when
+            ``include_malware_feed`` is off.
 
     Primary sources:
       https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
+      https://github.com/advisories/GHSA-m5xq-h2p4-962g (rescoped MCP malware names)
       https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
       https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised
       (the wider wave; its packages are not in the list)
     """
-    from .mcp_spec.malware_advisory_feed import MalwareBlastList, load_malware_blast_snapshot
+    from .mcp_spec.malware_advisory_feed import (
+        MalwareBlastList,
+        load_malware_blast_snapshot,
+        rescoped_name_index,
+    )
     from .mcp_spec.oidc_publish_window_guard import load_blast_list_from_2026_05_11
 
     feed = load_malware_blast_snapshot() if include_malware_feed else MalwareBlastList()
+    rescoped = rescoped_name_index(feed if match_rescoped else MalwareBlastList())
     pairs = blast_list if blast_list is not None else load_blast_list_from_2026_05_11() | feed.pairs
     return {
         "preset_id": "npm_oidc_publish_window_guard_2026_05_11",
@@ -2870,6 +2888,7 @@ def npm_oidc_publish_window_guard_defaults(
         "advisories": dict(feed.advisories),
         "malware_feed_as_of": feed.as_of,
         "installs_from": installs_from,
+        "rescoped_names": rescoped,
     }
 
 
@@ -3176,6 +3195,9 @@ def readonly_sql_tool_args_2026_125322_defaults(
       spliced into SQL Server statements. The guard now matches field aliases
       (``whereClause``, ``stateFilter``) and checks names as names (v0.10.36).
       https://github.com/advisories/GHSA-2m9m-6cr5-9x25
+    - **CVE-2026-77367** (Daptin): unauthenticated SQL injection through ``sort``. ``sort``,
+      ``sortBy``, ``orderBy`` and ``groupBy`` are read as fragments.
+      https://github.com/advisories/GHSA-hq2p-f2vj-v3cm
 
     This preset configures
     :class:`agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard`: statement fields
@@ -3214,7 +3236,7 @@ def readonly_sql_tool_args_2026_125322_defaults(
         "severity": "medium",
         "default_action": "deny",
         "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-125322",
-        "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129"),
+        "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367"),
         "statement_fields": statements,
         "fragment_fields": fragments,
         "identifier_fields": identifiers,

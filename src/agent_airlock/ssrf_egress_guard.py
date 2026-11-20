@@ -18,6 +18,11 @@ recognise but the OS resolver / HTTP client happily connects to:
 - DNS rebinding: a public-looking hostname whose A/AAAA record points at an
   internal address. The literal string is innocuous; only the **resolved IP**
   reveals the target.
+- Since 0.10.36: Alibaba Cloud's metadata address ``100.100.100.200``, the shared
+  address space ``100.64.0.0/10`` (RFC 6598, carrier-grade NAT, where that address
+  sits) and multicast (``224.0.0.0/4``, ``ff00::/8``). Python calls ``100.100.100.200``
+  neither private, global nor reserved, so no check above caught it, and the
+  ``@fdcasj_dfew/md-doc-mcp`` malware (GHSA-m5xq-h2p4-962g) queries it at load.
 
 This guard closes the class. It DENIES by default and FAILS CLOSED: every
 candidate target is reduced to its canonical IP(s) — decoding the alternate
@@ -53,6 +58,7 @@ from urllib.parse import urlparse
 from ._log import structlog
 from .exceptions import AirlockError
 from .network import authority_has_differential, is_blocked_ipv6_range
+from .safe_types import _CANONICAL_METADATA_IPS
 
 logger = structlog.get_logger("agent-airlock.ssrf_egress_guard")
 
@@ -61,9 +67,14 @@ logger = structlog.get_logger("agent-airlock.ssrf_egress_guard")
 # resolver via :func:`_default_resolver`.
 Resolver = Callable[[str], list[str]]
 
-# Cloud-metadata addresses, called out for a precise explain trace (they are
-# already inside 169.254.0.0/16 link-local, so they deny regardless).
-_METADATA_IPS = frozenset({"169.254.169.254", "169.254.169.253"})
+# Cloud-metadata addresses, called out for a precise explain trace. Single-sourced from
+# ``safe_types._CANONICAL_METADATA_IPS`` (V0.10.36), which ``NetworkPolicy`` reads too:
+# until then this list lacked Alibaba Cloud's 100.100.100.200, outside link-local.
+_METADATA_IPS = frozenset(str(ip) for ip in _CANONICAL_METADATA_IPS if ip.version == 4)
+
+#: RFC 6598 shared address space (carrier-grade NAT). Neither private nor global to
+#: Python, so it needs its own check.
+_SHARED_ADDRESS_SPACE = ipaddress.IPv4Network("100.64.0.0/10")
 
 _IPv4 = ipaddress.IPv4Address
 _IPv6 = ipaddress.IPv6Address
@@ -79,6 +90,8 @@ class SSRFEgressVerdict(str, enum.Enum):
     DENY_METADATA = "deny_metadata"
     DENY_UNSPECIFIED = "deny_unspecified"
     DENY_PRIVATE = "deny_private_rfc1918"
+    DENY_SHARED_ADDRESS = "deny_shared_address_cgnat"
+    DENY_MULTICAST = "deny_multicast"
     DENY_IPV6_INTERNAL = "deny_ipv6_internal"
     DENY_RESERVED = "deny_reserved"
     DENY_UNRESOLVABLE = "deny_unresolvable"
@@ -184,9 +197,9 @@ def _decode_literal_ip(host: str) -> tuple[_IPv4 | _IPv6, str] | None:
 
 
 #: Cloud metadata addresses as parsed objects, so a resolved address is compared
-#: canonically (``fd00:ec2:0:0:0:0:0:254`` == ``fd00:ec2::254``). The IPv6 one is the
-#: address network.py's ``_METADATA_HOSTS`` lists; the IPv4 ones are ``_METADATA_IPS``.
-_METADATA_IP_OBJS = frozenset(ipaddress.ip_address(a) for a in (*_METADATA_IPS, "fd00:ec2::254"))
+#: canonically (``fd00:ec2:0:0:0:0:0:254`` == ``fd00:ec2::254``): AWS, GCP and Azure
+#: IMDS, Alibaba Cloud's ``100.100.100.200`` and AWS's IPv6 ``fd00:ec2::254``.
+_METADATA_IP_OBJS = _CANONICAL_METADATA_IPS
 
 
 def _is_metadata_ip(ip: _IPv4 | _IPv6) -> bool:
@@ -208,6 +221,13 @@ def _blocked_reason(ip: _IPv4 | _IPv6) -> tuple[SSRFEgressVerdict, str] | None:
         return SSRFEgressVerdict.DENY_IPV6_INTERNAL, "internal IPv6 (ULA / mapped / NAT64 / 6to4)"
     if ip.is_private:
         return SSRFEgressVerdict.DENY_PRIVATE, "RFC1918 private (10/8, 172.16/12, 192.168/16)"
+    if isinstance(ip, ipaddress.IPv4Address) and ip in _SHARED_ADDRESS_SPACE:
+        return (
+            SSRFEgressVerdict.DENY_SHARED_ADDRESS,
+            "shared address space (100.64.0.0/10, carrier-grade NAT)",
+        )
+    if ip.is_multicast:
+        return SSRFEgressVerdict.DENY_MULTICAST, "multicast (224.0.0.0/4 or ff00::/8)"
     # IETF-reserved / not-yet-allocated space (e.g. IPv6 200::/7, 400::/6 … fe00::/9, or
     # IPv4 240.0.0.0/4) is not globally routable; where a target resolves into it, a fetch
     # is at best undefined and at worst a path to an internal listener. Deny it — the
@@ -231,8 +251,8 @@ class SSRFEgressGuard:
     Runs on every tool-call argument that resolves to a URL/host. Decodes
     alternate-encoding IP literals, resolves hostnames to their IP(s), and
     refuses any target in a loopback / link-local / metadata / unspecified
-    range or an RFC1918 private range not on ``allow_internal_hosts`` —
-    BEFORE the fetch executes.
+    range, an RFC1918 private range, the shared address space or a multicast range
+    not on ``allow_internal_hosts`` — BEFORE the fetch executes.
 
     Args:
         allow_internal_hosts: Hosts (literal hostname or IP string,

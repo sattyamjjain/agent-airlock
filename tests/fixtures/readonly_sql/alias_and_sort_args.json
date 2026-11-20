@@ -1,0 +1,20 @@
+{
+  "advisories": {
+    "CVE-2026-63129": "https://github.com/advisories/GHSA-2m9m-6cr5-9x25",
+    "CVE-2026-77367": "https://github.com/advisories/GHSA-hq2p-f2vj-v3cm"
+  },
+  "note": "Argument dicts for aliased and sort fields. 'allowed_before' is what ReadOnlySQLGuard().evaluate returned on ffdc4306 (0.10.35 code), measured 2026-11-20. 'verdict' and 'field' are the guard's answer now.",
+  "cases": [
+    {"args": {"sort": "name; DROP TABLE x--"}, "allowed_before": true, "verdict": "deny_subquery_in_fragment", "field": "sort"},
+    {"args": {"orderBy": "(SELECT pg_sleep(5))"}, "allowed_before": true, "verdict": "deny_subquery_in_fragment", "field": "orderBy"},
+    {"args": {"order_by": "(SELECT pg_sleep(5))"}, "allowed_before": false, "verdict": "deny_subquery_in_fragment", "field": "order_by"},
+    {"args": {"whereClause": "1=1; DROP TABLE x"}, "allowed_before": true, "verdict": "deny_subquery_in_fragment", "field": "whereClause"},
+    {"args": {"tableName": "t; DROP TABLE x--"}, "allowed_before": true, "verdict": "deny_not_an_identifier", "field": "tableName"},
+    {"args": {"table_name": "users WHERE 1=1"}, "allowed_before": true, "verdict": "deny_not_an_identifier", "field": "table_name"},
+    {"args": {"stateFilter": "ONLINE'; EXEC xp_cmdshell 'whoami'--"}, "allowed_before": true, "verdict": "deny_uninspectable", "field": "stateFilter"},
+    {"args": {"data": {"name; DROP TABLE x": 1}}, "allowed_before": true, "verdict": "deny_not_an_identifier", "field": "data.keys[0]"},
+    {"args": {"sort": "name ASC"}, "allowed_before": true, "verdict": "allow", "field": null},
+    {"args": {"tableName": "dbo.orders", "whereClause": "status = 'open'"}, "allowed_before": true, "verdict": "allow", "field": null},
+    {"args": {"searchQuery": "cats and dogs"}, "allowed_before": true, "verdict": "allow", "field": null}
+  ]
+}

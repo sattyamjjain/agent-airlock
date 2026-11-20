@@ -1,4 +1,4 @@
-# Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129)
+# Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129, CVE-2026-77367)
 
 `agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard` checks the SQL a model puts
 in a database tool's arguments before the tool runs it. Put it in front of any tool that
@@ -6,14 +6,14 @@ promises read-only access.
 
 ## Why
 
-Three MCP database servers ran model-written SQL, or spliced a model's text into SQL they
-built:
+Database servers ran model-written SQL, or spliced a model's text into SQL they built:
 
 | CVE | Server | What got through |
 |---|---|---|
 | [CVE-2026-125322](https://nvd.nist.gov/vuln/detail/CVE-2026-125322) (CWE-89) | pgEdge Postgres MCP Server below 1.1.0 | The `where` parameter of `count_rows` took a subquery on another table, so the row count leaked that table's contents one predicate at a time |
 | [CVE-2026-61789](https://nvd.nist.gov/vuln/detail/CVE-2026-61789) (CWE-436) | bytebase DBHub below 0.22.6 | The read-only check treated every `--` as a comment. MySQL and MariaDB need whitespace after it, so `--1` is two minus signs to them, and a second statement after it ran |
 | [CVE-2026-63129](https://github.com/advisories/GHSA-2m9m-6cr5-9x25) (CWE-89) | `@connorbritain/mssql-mcp-server` 0.5.2 and below (`-core` 0.5.0, `-reader` and `-writer` 0.4.2 and below; fixed in 0.6.0 / 0.5.0) | `tableName` and `whereClause` in `update_data` and `delete_data`, `insert_data`'s column keys, the DDL tools' names and the reader's `list_databases` `stateFilter` (reachable with `READONLY=true`) were spliced into SQL: stacked statements, and `xp_cmdshell` where it is enabled. Before 0.10.36 the guard matched field names exactly, so it read none of them |
+| [CVE-2026-77367](https://github.com/advisories/GHSA-hq2p-f2vj-v3cm) (CWE-89) | Daptin | Unauthenticated SQL injection through the `sort` parameter. `sort` was no field the guard read |
 
 The same two shapes apply to any server that splices a model's text into SQL or trusts a
 "read-only" check that tokenises differently from its database.
@@ -140,9 +140,11 @@ Servers spell the same field `whereClause`, `where_clause` or `WHERE-CLAUSE`. Wi
 normalisation: lower case, every character but `a-z` and `0-9` dropped, so all three are
 `whereclause`.
 
-- **Fragment**: the normalised name equals a configured fragment field's, or ends with
+- **Fragment**: the normalised name equals a configured fragment field's, ends with
   `where`, `clause`, `filter`, `condition`, `having` or `orderby` (`whereClause`,
-  `stateFilter`, `filterCondition`, `orderBy`).
+  `stateFilter`, `filterCondition`, `orderBy`), or is `sort`, `sortby`, `orderby` or
+  `groupby` (CVE-2026-77367's `sort`; `sort` is matched by equality, so `resort` is not).
+  `{"sort": "name ASC"}` passes; `{"sort": "name; DROP TABLE x--"}` does not.
 - **Statement**: the normalised name equals a configured statement field's, or is
   `sqlquery`, `sqlstatement`, `rawsql` or `querytext`. There is no suffix rule:
   `searchQuery` ends with `query` and holds plain text, so it is not read.
@@ -192,7 +194,7 @@ config = readonly_sql_tool_args_2026_125322_defaults(dialect="mysql")
 # config["preset_id"] == "readonly_sql_tool_args_2026_125322"
 # config["severity"] == "medium"
 # config["default_action"] == "deny"
-# config["cves"] == ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129")
+# config["cves"] == ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367")
 # config["identifier_fields"], config["row_fields"], config["match_aliases"] as above
 ```
 

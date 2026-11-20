@@ -397,6 +397,7 @@ from .mcp_spec.malware_advisory_feed import (
     MalwareBlastList,
     load_blast_list_from_advisories,
     load_malware_blast_snapshot,
+    rescoped_name_index,
 )
 from .mcp_spec.manifest_only_mode import (
     ManifestNotRegisteredError,
@@ -959,6 +960,7 @@ __all__ = [
     "MalwareBlastList",
     "load_blast_list_from_advisories",
     "load_malware_blast_snapshot",
+    "rescoped_name_index",
     # V0.7.6 — MCP STDIO command-injection guard (HelpNetSecurity 2026-05-05)
     "DEFAULT_SHELL_METACHARS",
     "StdioCommandInjectionDecision",

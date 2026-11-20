@@ -395,7 +395,7 @@ class TestPreset:
             "severity": "medium",
             "default_action": "deny",
             "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-125322",
-            "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129"),
+            "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367"),
             "statement_fields": DEFAULT_STATEMENT_FIELDS,
             "fragment_fields": DEFAULT_FRAGMENT_FIELDS,
             "identifier_fields": DEFAULT_IDENTIFIER_FIELDS,
@@ -671,3 +671,56 @@ class TestCVE202663129Aliases:
         assert guard.evaluate({"whereClause": "1=1; DROP TABLE x"}).allowed is True
         with pytest.raises(ValueError, match="both"):
             readonly_sql_tool_args_2026_125322_defaults(identifier_fields=frozenset({"where"}))
+
+
+_ALIAS_AND_SORT = json.loads(
+    (
+        Path(__file__).resolve().parent.parent
+        / "fixtures"
+        / "readonly_sql"
+        / "alias_and_sort_args.json"
+    ).read_text(encoding="utf-8")
+)["cases"]
+
+
+def _args_id(case: dict[str, Any]) -> str:
+    return json.dumps(case["args"], sort_keys=True)[:60]
+
+
+class TestAliasAndSortFields:
+    """CVE-2026-77367 (Daptin ``sort``) beside CVE-2026-63129's aliased fields.
+
+    https://github.com/advisories/GHSA-hq2p-f2vj-v3cm
+    """
+
+    @pytest.mark.parametrize("case", _ALIAS_AND_SORT, ids=_args_id)
+    def test_each_call_gets_its_recorded_verdict(self, case: dict[str, Any]) -> None:
+        decision = ReadOnlySQLGuard().evaluate(case["args"])
+        assert decision.verdict.value == case["verdict"]
+        assert decision.matched_field == case["field"]
+        assert decision.allowed is (case["verdict"] == "allow")
+
+    def test_the_0_10_35_reading_reproduces_the_recorded_results(self) -> None:
+        guard = ReadOnlySQLGuard(
+            match_aliases=False, identifier_fields=frozenset(), row_fields=frozenset()
+        )
+        for case in _ALIAS_AND_SORT:
+            assert guard.evaluate(case["args"]).allowed is case["allowed_before"], case["args"]
+
+    @pytest.mark.parametrize("key", ["sort", "Sort", "sortBy", "sort_by", "orderBy", "GROUP_BY"])
+    def test_a_sort_key_is_a_fragment(self, key: str) -> None:
+        assert _verdict({key: "name ASC, created_at DESC"}) is V.ALLOW
+        assert _verdict({key: "name; DROP TABLE x--"}) is not V.ALLOW
+        assert _verdict({key: "(SELECT pg_sleep(5))"}) is V.DENY_SUBQUERY_IN_FRAGMENT
+
+    def test_sort_is_matched_by_equality_not_suffix(self) -> None:
+        assert _verdict({"resort": "x; DROP TABLE y"}) is V.ALLOW
+
+    def test_match_aliases_off_leaves_sort_unread(self) -> None:
+        guard = ReadOnlySQLGuard(match_aliases=False)
+        assert guard.evaluate({"sort": "name; DROP TABLE x--"}).allowed is True
+
+    def test_the_preset_names_cve_2026_77367(self) -> None:
+        from agent_airlock.policy_presets import readonly_sql_tool_args_2026_125322_defaults
+
+        assert "CVE-2026-77367" in readonly_sql_tool_args_2026_125322_defaults()["cves"]
