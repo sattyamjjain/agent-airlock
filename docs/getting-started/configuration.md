@@ -482,8 +482,9 @@ Available types:
 **Secrets** (`mask_secrets=True`):
 - `API_KEY` - API keys (OpenAI, Anthropic, Google, GitHub, Slack formats)
 - `AWS_KEY` - AWS access keys
-- `PASSWORD` - Password patterns
+- `PASSWORD` - Values after a secret's label (`password=`, `"api_key": "..."`)
 - `JWT` - JSON Web Tokens
+- `BEARER_TOKEN` - The token after `Bearer` when it is not a JWT (since 0.10.36)
 - `CONNECTION_STRING` - Database connection strings
 - `PRIVATE_KEY` - Private key markers
 

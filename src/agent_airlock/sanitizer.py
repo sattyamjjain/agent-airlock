@@ -49,6 +49,9 @@ class SensitiveDataType(str, Enum):
     # V0.10.29: three or more secret-named KEY=VALUE lines or JSON keys (an environment
     # dump). Their values are masked whatever they look like.
     ENV_DUMP = "env_dump"
+    # V0.10.36: the token after ``Bearer`` (an Authorization header) that is not a JWT;
+    # a JWT keeps the JWT rule's partial mask.
+    BEARER_TOKEN = "bearer_token"  # nosec B105 - enum value name, not a token
 
 
 class MaskingStrategy(str, Enum):
@@ -91,6 +94,26 @@ class SanitizationResult:
 # separator a number may use is spelled out to stay as wide as it was (a no-break space
 # between the groups of a phone number or an Aadhaar).
 _WS = r"\s\x1c-\x1f\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000"
+
+#: Words that make a following ``token`` a page cursor (``nextPageToken``,
+#: ``continuation_token``, AWS's ``NextToken``), not a credential: masking one would stop an
+#: agent reading the next page of a listing.
+_PAGE_CURSOR_WORDS: tuple[str, ...] = ("page", "next", "continuation", "sync", "skip")
+
+#: The labels a secret's value follows, matched at the end of a longer name too
+#: (``client_secret``, ``OPENAI_API_KEY``, ``refreshToken``). Shared by the PASSWORD
+#: pattern and the mapping-key rule of :func:`sanitize_structured_report` (V0.10.36).
+_SECRET_LABEL = (
+    r"(?:password|passwd|pwd|secret|"
+    + "".join(f"(?<!{w})(?<!{w}_)(?<!{w}-)" for w in _PAGE_CURSOR_WORDS)
+    + r"token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)"
+)
+
+#: A mapping key that names a secret: one ending with a :data:`_SECRET_LABEL` label.
+_SECRET_KEY = re.compile(rf"(?i){_SECRET_LABEL}\Z")
+
+#: The fewest characters a labelled secret value has, as in the PASSWORD pattern.
+_SECRET_VALUE_MIN_CHARS = 8
 
 # Compiled regex patterns for sensitive data detection.
 #
@@ -226,8 +249,15 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     SensitiveDataType.AWS_KEY: re.compile(
         r"\b(?:(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}|(?i:akia)[0-9a-zA-Z]{16})\b", re.ASCII
     ),
+    # The value (8+ characters) after a secret's label and ``=`` or ``:``. The label may
+    # end a longer name (``client_secret``, ``OPENAI_API_KEY``, ``accessToken``) and be
+    # followed by its closing quote: until 0.10.36 the quote after a JSON key stopped the
+    # match, so ``{"password": "..."}`` and every dict result were returned unmasked. A
+    # quoted value is read to its closing quote (spaces and JSON escapes included).
+    # Group 1, 2 or 3 is the value; only it is masked, so the label stays.
     SensitiveDataType.PASSWORD: re.compile(
-        r"(?i)(?:password|passwd|pwd|secret|token)[\s]*[=:]\s*['\"]?([^\s'\"]{8,})['\"]?",
+        rf"(?i){_SECRET_LABEL}['\"]?\s*[=:]\s*"
+        r"(?:\"((?:[^\"\\\n]|\\.){8,})\"|'((?:[^'\\\n]|\\.){8,})'|['\"]?([^\s'\"]{8,})['\"]?)",
     ),
     # The whole PEM block, or the header and the base64 lines after it when the END line is
     # missing (truncated output). Until 0.10.16 only the BEGIN line was matched, so the key
@@ -239,6 +269,14 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     ),
     SensitiveDataType.JWT: re.compile(
         r"\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\b", re.ASCII
+    ),
+    # V0.10.36: an opaque bearer token (RFC 6750 ``b64token``, 16+ characters). Group 1
+    # is the token; ``Bearer`` stays. A token the JWT rule matches is left to it.
+    SensitiveDataType.BEARER_TOKEN: re.compile(
+        r"\b(?i:bearer)\s+"
+        r"(?!eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\b)"
+        r"([A-Za-z0-9._~+/-]{16,}=*)",
+        re.ASCII,
     ),
     SensitiveDataType.CONNECTION_STRING: re.compile(
         r"(?i)(?:"
@@ -274,7 +312,15 @@ DEFAULT_MASK_CONFIG: dict[SensitiveDataType, MaskingStrategy] = {
     SensitiveDataType.JWT: MaskingStrategy.PARTIAL,
     SensitiveDataType.CONNECTION_STRING: MaskingStrategy.FULL,
     SensitiveDataType.ENV_DUMP: MaskingStrategy.FULL,
+    SensitiveDataType.BEARER_TOKEN: MaskingStrategy.FULL,
 }
+
+#: Types whose pattern captures the value after a label (``password=``, ``Bearer``): the
+#: detection's span is the value alone, so masking it never touches the label, even when
+#: another detector's match inside the value merges with it.
+_LABELLED_TYPES: frozenset[SensitiveDataType] = frozenset(
+    {SensitiveDataType.PASSWORD, SensitiveDataType.BEARER_TOKEN}
+)
 
 
 #: Hex characters a HASH tag keeps: 64 bits of the HMAC (V0.10.29; the unkeyed sha256 kept 32).
@@ -628,11 +674,10 @@ def detect_sensitive_data(
             continue
 
         for match in pattern.finditer(content):
-            # For password pattern, use the captured group
-            if data_type == SensitiveDataType.PASSWORD:
-                value = match.group(1) if match.lastindex else match.group(0)
-            else:
-                value = match.group(0)
+            # A labelled type's value is the group that matched (one of several
+            # alternatives); its span alone is masked, so the label stays.
+            group = match.lastindex if data_type in _LABELLED_TYPES and match.lastindex else 0
+            value = match.group(group)
 
             # V0.8.9: Aadhaar Verhoeff gate (opt-in). When the caller
             # signals India locale, drop matches that don't pass
@@ -666,8 +711,8 @@ def detect_sensitive_data(
                 {
                     "type": data_type.value,
                     "value": value,
-                    "start": match.start(),
-                    "end": match.end(),
+                    "start": match.start(group),
+                    "end": match.end(group),
                     "full_match": match.group(0),
                 }
             )
@@ -868,18 +913,11 @@ def mask_sensitive_data(
         data_type = SensitiveDataType(detection["type"])
         strategy = _cluster_strategy(detection, mask_config)
 
-        if data_type == SensitiveDataType.PASSWORD:
-            # For passwords, we need to replace just the password value
-            # but keep the "password=" prefix
-            full_match = detection["full_match"]
-            password_value = detection["value"]
-            masked_value = _mask_value(password_value, data_type, strategy, key)
-            replacement = full_match.replace(password_value, masked_value)
-            detection["masked_as"] = "[REDACTED]"
-        else:
-            masked_value = _mask_value(detection["value"], data_type, strategy, key)
-            replacement = masked_value
-            detection["masked_as"] = replacement
+        # A labelled type's span is its value alone (``_LABELLED_TYPES``), so every
+        # detection is masked the same way and the label is never in the span.
+        masked_value = _mask_value(detection["value"], data_type, strategy, key)
+        replacement = masked_value
+        detection["masked_as"] = replacement
         if reverse_map is not None and strategy == MaskingStrategy.HASH:
             reverse_map[masked_value] = detection["value"]
 
@@ -963,6 +1001,7 @@ def _types_to_mask(
                 SensitiveDataType.JWT,
                 SensitiveDataType.CONNECTION_STRING,
                 SensitiveDataType.ENV_DUMP,
+                SensitiveDataType.BEARER_TOKEN,
             ]
         )
     return types_to_mask
@@ -1485,12 +1524,35 @@ class _StructureMasker:
             return node, 0
         return _rebuild_like(node, [new for new, _count in walked]), total
 
+    def _labelled_secret(self, key: Any, item: Any) -> tuple[str, int] | None:
+        """``item`` masked as a password when ``key`` names a secret (V0.10.36), else None.
+
+        Each string is masked on its own, so ``{"password": "hunter2hunter2"}`` had no
+        label next to its value and came back raw: every dict a tool returned through
+        ``@Airlock``. A string of :data:`_SECRET_VALUE_MIN_CHARS` or more characters under
+        a key ending with a :data:`_SECRET_LABEL` label is masked whole with the PASSWORD
+        strategy, as the text pattern masks ``"password": "..."``.
+        """
+        if not self._options.get("mask_secrets", True):
+            return None
+        if not isinstance(key, str) or not isinstance(item, str):
+            return None
+        if len(item.strip()) < _SECRET_VALUE_MIN_CHARS or not _SECRET_KEY.search(key):
+            return None
+        mask_config = self._options.get("mask_config") or DEFAULT_MASK_CONFIG
+        strategy = mask_config.get(SensitiveDataType.PASSWORD, MaskingStrategy.FULL)
+        masked = _mask_value(
+            item, SensitiveDataType.PASSWORD, strategy, self._options.get("hash_key")
+        )
+        return masked, 1
+
     def _walk_mapping(self, node: Any) -> tuple[Any, int]:
         entries: list[tuple[Any, bool, Any]] = []
         total = 0
         for key, item in node.items():
             new_key, key_count = self.walk(key)
-            new_item, item_count = self.walk(item)
+            labelled = self._labelled_secret(key, item)
+            new_item, item_count = labelled if labelled is not None else self.walk(item)
             total += key_count + item_count
             entries.append((new_key, key_count > 0, new_item))
         if not total:
@@ -1536,7 +1598,12 @@ class _StructureMasker:
                 entries = []
                 for key, item in node.items():
                     new_key = rebuild(key)
-                    entries.append((new_key, new_key is not key, rebuild(item)))
+                    labelled = self._labelled_secret(key, item)
+                    if labelled is not None:
+                        total += labelled[1]
+                        entries.append((new_key, new_key is not key, labelled[0]))
+                    else:
+                        entries.append((new_key, new_key is not key, rebuild(item)))
                 return _refill_mapping(shell, entries)
             if isinstance(node, list):
                 shell = copy.copy(node)
@@ -1655,6 +1722,7 @@ def sanitize_with_workspace_config(
         SensitiveDataType.PRIVATE_KEY,
         SensitiveDataType.JWT,
         SensitiveDataType.CONNECTION_STRING,
+        SensitiveDataType.BEARER_TOKEN,
     }
 
     if mask_pii:
@@ -1722,15 +1790,8 @@ def sanitize_with_workspace_config(
             data_type = SensitiveDataType(type_str)
             strategy = _cluster_strategy(detection, mask_config)
 
-            if data_type == SensitiveDataType.PASSWORD:
-                full_match = detection["full_match"]
-                password_value = detection["value"]
-                masked_value = _mask_value(password_value, data_type, strategy, hash_key)
-                masked = full_match.replace(password_value, masked_value)
-                detection["masked_as"] = "[REDACTED]"
-            else:
-                masked = _mask_value(detection["value"], data_type, strategy, hash_key)
-                detection["masked_as"] = masked
+            masked = _mask_value(detection["value"], data_type, strategy, hash_key)
+            detection["masked_as"] = masked
 
         spans.append((detection["start"], detection["end"], masked))
         detections.append(detection)

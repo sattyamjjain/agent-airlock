@@ -51,7 +51,7 @@ def get_config() -> dict:
 
 result = get_config()
 # {
-#     "api_key": "sk-1234...mnop",
+#     "api_key": "[REDACTED]",  # the key names a secret: masked whole (0.10.36)
 #     "aws_key": "AKIAIOS...MPLE",
 #     "db_url": "[REDACTED]",
 #     "jwt": "eyJhbGciOi...[JWT]"
