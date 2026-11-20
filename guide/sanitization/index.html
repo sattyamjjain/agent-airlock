@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -3723,13 +3723,18 @@ mobile numbers.</p>
 </tr>
 <tr>
 <td>Password</td>
-<td><code>password=secret123</code></td>
+<td><code>password=secret123</code>, <code>{"api_key": "..."}</code></td>
 <td><code>password=[REDACTED]</code></td>
 </tr>
 <tr>
 <td>JWT</td>
 <td><code>eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.abc</code></td>
 <td><code>eyJhbGciOi...[JWT]</code></td>
+</tr>
+<tr>
+<td>Bearer token</td>
+<td><code>Authorization: Bearer a8Fk29dLqP0zXv7R</code></td>
+<td><code>Authorization: Bearer [REDACTED]</code></td>
 </tr>
 <tr>
 <td>Connection String</td>
@@ -3756,14 +3761,25 @@ in any case with a body of at least 20 (GitHub) or 10 (Slack) token characters, 
 <code>AKIA</code> id matches in lowercase too (its 16-character body still fixed). An environment dump is
 three or more <code>KEY=VALUE</code> lines (<code>export</code> allowed) or JSON <code>"key": "value"</code> pairs whose key ends
 in <code>_KEY</code>, <code>_TOKEN</code>, <code>_SECRET</code> or <code>_PAT</code> or contains <code>PASSWORD</code>, in any case: each such value
-is masked whatever it looks like. A password is
-the value (8+ characters) after <code>password</code>, <code>passwd</code>, <code>pwd</code>, <code>secret</code> or <code>token</code> and <code>=</code> or
-<code>:</code>. The private-key rule masks the whole PEM block, or the header and the base64 lines after it
-when the <code>END</code> line is missing. There is no separate
-bearer-token type: the JWT in <code>Bearer eyJ...</code> is masked by the JWT rule.</p>
+is masked whatever it looks like. A password is the value (8+ characters) after <code>=</code> or <code>:</code>
+and a label: <code>password</code>, <code>passwd</code>, <code>pwd</code>, <code>secret</code>, <code>token</code>, <code>api_key</code>, <code>access_key</code>,
+<code>private_key</code> or <code>client_secret</code> (<code>_</code> or <code>-</code> optional), also at the end of a longer name
+(<code>OPENAI_API_KEY</code>, <code>refreshToken</code>) and with a JSON key's closing quote after it, so
+<code>{"password": "..."}</code> is masked (since 0.10.36; before, the quote stopped the match). A quoted
+value is read to its closing quote, spaces included. Only the value is masked; the label stays.
+A <code>token</code> after <code>page</code>, <code>next</code>, <code>continuation</code>, <code>sync</code> or <code>skip</code> (<code>nextPageToken</code>, AWS's
+<code>NextToken</code>) is a page cursor and is left alone, so an agent can still read the next page.
+A bearer token is the 16+ characters after <code>Bearer</code> (since 0.10.36); a JWT there keeps the
+JWT rule's partial mask. The private-key rule masks the whole PEM block, or the header and the
+base64 lines after it when the <code>END</code> line is missing.</p>
+<p>A dict, list, tuple or set result is masked string by string, so a value is read apart from
+the key it sits under. Since 0.10.36 a string of 8+ characters under a key that ends with one
+of the labels above (<code>password</code>, <code>api_key</code>, <code>refreshToken</code>, but not <code>nextPageToken</code>) is masked
+whole with the password strategy, as <code>"password": "..."</code> is in text: until then
+<code>{"password": "hunter2hunter2"}</code> came back from <code>@Airlock</code> unmasked.</p>
 <h2 id="masking-strategies">Masking Strategies<a class="headerlink" href="#masking-strategies" title="Permanent link">&para;</a></h2>
 <p><code>@Airlock</code> masks each type with its default strategy, the one the tables above show:
-<code>FULL</code> for SSN, password, private key and connection string, <code>TYPE_ONLY</code> for IFSC, and
+<code>FULL</code> for SSN, password, bearer token, private key and connection string, <code>TYPE_ONLY</code> for IFSC, and
 <code>PARTIAL</code> for the rest. <code>AirlockConfig</code> has no strategy setting. To choose a strategy, run
 the standalone sanitizer with a <code>mask_config</code> mapping:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskingStrategy</span><span class="p">,</span> <span class="n">SensitiveDataType</span><span class="p">,</span> <span class="n">sanitize_output</span>

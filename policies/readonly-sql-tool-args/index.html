@@ -19,11 +19,11 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
-        <title>Read-only SQL guard for tool arguments (CVE-2026-125322 + CVE-2026-61789, v0.10.34+) - Agent-Airlock</title>
+        <title>Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129) - Agent-Airlock</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-v01034" class="md-skip">
+        <a href="#read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Read-only SQL guard for tool arguments (CVE-2026-125322 + CVE-2026-61789, v0.10.34+)
+              Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129)
             
           </span>
         </div>
@@ -3201,6 +3201,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Naming a tool&#39;s fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Aliases
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3256,12 +3273,13 @@
   
 
 
-<h1 id="read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-v01034">Read-only SQL guard for tool arguments (CVE-2026-125322 + CVE-2026-61789, v0.10.34+)<a class="headerlink" href="#read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-v01034" title="Permanent link">&para;</a></h1>
+<h1 id="read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129">Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129)<a class="headerlink" href="#read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129" title="Permanent link">&para;</a></h1>
 <p><code>agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard</code> checks the SQL a model puts
 in a database tool's arguments before the tool runs it. Put it in front of any tool that
 promises read-only access.</p>
 <h2 id="why">Why<a class="headerlink" href="#why" title="Permanent link">&para;</a></h2>
-<p>Two MCP database servers ran model-written SQL while promising the model could only read:</p>
+<p>Three MCP database servers ran model-written SQL, or spliced a model's text into SQL they
+built:</p>
 <table>
 <thead>
 <tr>
@@ -3281,12 +3299,18 @@ promises read-only access.</p>
 <td>bytebase DBHub below 0.22.6</td>
 <td>The read-only check treated every <code>--</code> as a comment. MySQL and MariaDB need whitespace after it, so <code>--1</code> is two minus signs to them, and a second statement after it ran</td>
 </tr>
+<tr>
+<td><a href="https://github.com/advisories/GHSA-2m9m-6cr5-9x25">CVE-2026-63129</a> (CWE-89)</td>
+<td><code>@connorbritain/mssql-mcp-server</code> 0.5.2 and below (<code>-core</code> 0.5.0, <code>-reader</code> and <code>-writer</code> 0.4.2 and below; fixed in 0.6.0 / 0.5.0)</td>
+<td><code>tableName</code> and <code>whereClause</code> in <code>update_data</code> and <code>delete_data</code>, <code>insert_data</code>'s column keys, the DDL tools' names and the reader's <code>list_databases</code> <code>stateFilter</code> (reachable with <code>READONLY=true</code>) were spliced into SQL: stacked statements, and <code>xp_cmdshell</code> where it is enabled. Before 0.10.36 the guard matched field names exactly, so it read none of them</td>
+</tr>
 </tbody>
 </table>
 <p>The same two shapes apply to any server that splices a model's text into SQL or trusts a
 "read-only" check that tokenises differently from its database.</p>
 <h2 id="what-it-refuses">What it refuses<a class="headerlink" href="#what-it-refuses" title="Permanent link">&para;</a></h2>
-<p>The guard reads two kinds of argument, chosen by the argument's name.</p>
+<p>The guard reads four kinds of argument, chosen by the argument's name: statements,
+fragments, names and rows.</p>
 <p><strong>Statement fields</strong> hold one whole statement (<code>sql</code>, <code>query</code>, <code>statement</code> by default).</p>
 <table>
 <thead>
@@ -3348,6 +3372,42 @@ string and number functions of the same name and pass.</p>
 </table>
 <p>String literals, quoted names and comments are told apart from code first, so
 <code>name = 'a;b -- c'</code> passes.</p>
+<p><strong>Identifier fields</strong> hold a table, column, schema, view, index or database name
+(<code>table</code>, <code>table_name</code>, <code>column</code>, <code>columns</code>, <code>schema</code>, <code>database</code>, <code>db</code>, <code>view</code>,
+<code>index_name</code>, <code>column_name</code>, <code>schema_name</code>, <code>database_name</code> by default). A fragment check
+is the wrong test for a name: <code>users WHERE 1=1</code> is a valid fragment and a working
+injection when a server writes <code>SELECT * FROM {table}</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Verdict</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DENY_NOT_AN_IDENTIFIER</code></td>
+<td>The value is not up to three dotted parts, each a bare name (<code>[A-Za-z_][A-Za-z0-9_$]*</code>) or one quoted name, with <code>*</code> allowed as the last part; or it is not text</td>
+</tr>
+</tbody>
+</table>
+<p>A quoted name uses a quote the dialect reads as a name: <code>"..."</code> on PostgreSQL and SQLite,
+backticks on MySQL and SQLite, <code>[...]</code> on SQLite (and SQL Server). <code>generic</code> takes all
+three. Inside the quotes the name may not hold a quote of any style, <code>'</code>, <code>\</code>, <code>;</code>, <code>#</code>,
+<code>--</code>, <code>/*</code>, <code>*/</code> or a control character, so no dialect reads code in it, even one that
+does not take that quote for a name. <code>dbo.orders</code>, <code>[dbo].[orders]</code> and
+<code>[Order Details]</code> pass; <code>users WHERE 1=1</code>, <code>t; DROP TABLE x--</code> and <code>a.b.c.d</code> do not.</p>
+<p>A list of names is read item by item. A mapping under an identifier field is read as a
+definition (<code>create_table</code>'s <code>columns: [{"name": "id", "type": "INT"}]</code>): its <code>name</code> key
+must be a name, and its other keys are read by their own names (the <code>type</code> is not
+checked). <code>None</code> and <code>""</code> name nothing and pass. The refusal names the field and the
+first character that cannot stand there, never the value.</p>
+<p><strong>Row fields</strong> hold a row a server inserts or updates: a mapping, or a list of them, whose
+keys it splices in as column names (<code>data</code>, <code>values</code>, <code>row</code>, <code>rows</code>, <code>record</code>, <code>records</code>,
+<code>updates</code> by default; CVE-2026-63129's <code>insert_data</code>). Each key must pass the identifier
+test; the refusal names it by position (<code>data.keys[0]</code>), since the key is the refused
+text. The values are data a server binds as parameters and are not read. A row field that
+holds text or a number is not a row and is not read.</p>
 <h2 id="dialects">Dialects<a class="headerlink" href="#dialects" title="Permanent link">&para;</a></h2>
 <p>Pass the database the tool talks to:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadOnlySQLGuard</span>
@@ -3371,8 +3431,9 @@ two to PostgreSQL. So <code>generic</code> refuses a little more than a named di
 (<code>SELECT $$a;b$$</code> is fine on PostgreSQL and refused under <code>generic</code>). Name the dialect
 when you know it.</p>
 <h2 id="naming-a-tools-fields">Naming a tool's fields<a class="headerlink" href="#naming-a-tools-fields" title="Permanent link">&para;</a></h2>
-<p>The guard reads only the fields you name. A string is read as a fragment when any key on
-its path is a fragment field, otherwise as a statement when one is a statement field.
+<p>The guard reads only the fields you name, and their aliases. A string is read as a
+fragment when any key on its path is a fragment field, otherwise as a statement when one
+is a statement field, otherwise as a name when its own key is an identifier field.
 Nested values, lists and bytes are walked:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">ReadOnlySQLGuard</span><span class="p">(</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">statement_fields</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">"sql"</span><span class="p">}),</span>
@@ -3387,7 +3448,34 @@ Nested values, lists and bytes are walked:</p>
 </code></pre></div>
 <p><code>query</code> is in the default statement fields, and many search tools use an argument called
 <code>query</code> for plain text. Put the guard on database tools only, or pass your own field sets.
-A name may not be in both sets.</p>
+A name may sit in one set only, and the constructor raises <code>ValueError</code> when the alias
+rules below would read a name in one set as another kind (<code>sqlFilter</code> as a statement
+field ends with <code>filter</code>).</p>
+<h3 id="aliases">Aliases<a class="headerlink" href="#aliases" title="Permanent link">&para;</a></h3>
+<p>Servers spell the same field <code>whereClause</code>, <code>where_clause</code> or <code>WHERE-CLAUSE</code>. With
+<code>match_aliases=True</code>, the default since 0.10.36, a field name is compared after
+normalisation: lower case, every character but <code>a-z</code> and <code>0-9</code> dropped, so all three are
+<code>whereclause</code>.</p>
+<ul>
+<li><strong>Fragment</strong>: the normalised name equals a configured fragment field's, or ends with
+  <code>where</code>, <code>clause</code>, <code>filter</code>, <code>condition</code>, <code>having</code> or <code>orderby</code> (<code>whereClause</code>,
+  <code>stateFilter</code>, <code>filterCondition</code>, <code>orderBy</code>).</li>
+<li><strong>Statement</strong>: the normalised name equals a configured statement field's, or is
+  <code>sqlquery</code>, <code>sqlstatement</code>, <code>rawsql</code> or <code>querytext</code>. There is no suffix rule:
+  <code>searchQuery</code> ends with <code>query</code> and holds plain text, so it is not read.</li>
+<li><strong>Identifier and row</strong>: equality with a configured name only (<code>tableName</code>,
+  <code>TABLE_NAME</code> and <code>table-name</code> are <code>table_name</code>; <code>columnName</code> is <code>column_name</code>).</li>
+</ul>
+<p>A fragment still wins over a statement, and both over a name.</p>
+<p>To switch aliases off and compare names exactly, as before 0.10.36:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">ReadOnlySQLGuard</span><span class="p">(</span><span class="n">match_aliases</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div>
+<p>The identifier and row fields still apply, by exact name. For exactly the 0.10.35
+reading, empty them too:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">ReadOnlySQLGuard</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">match_aliases</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">identifier_fields</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(),</span> <span class="n">row_fields</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">()</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="p">)</span>
+</code></pre></div>
 <p>The decision's <code>detail</code> names the field, the verdict, the token that decided it and the
 dialect reading that saw it. It never repeats the value.</p>
 <h2 id="refused-as-uninspectable">Refused as uninspectable<a class="headerlink" href="#refused-as-uninspectable" title="Permanent link">&para;</a></h2>
@@ -3404,16 +3492,18 @@ than skips:</p>
   text, a number, a bool or <code>None</code>.</li>
 </ul>
 <h2 id="companion-preset">Companion preset<a class="headerlink" href="#companion-preset" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">readonly_sql_tool_args_2026_125322_defaults</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">readonly_sql_tool_args_2026_125322_defaults</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">"mysql"</span><span class="p">)</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># config["preset_id"] == "readonly_sql_tool_args_2026_125322"</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># config["severity"] == "medium"</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="c1"># config["default_action"] == "deny"</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># config["cves"] == ("CVE-2026-125322", "CVE-2026-61789")</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">readonly_sql_tool_args_2026_125322_defaults</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">readonly_sql_tool_args_2026_125322_defaults</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">"mysql"</span><span class="p">)</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># config["preset_id"] == "readonly_sql_tool_args_2026_125322"</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># config["severity"] == "medium"</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="c1"># config["default_action"] == "deny"</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># config["cves"] == ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129")</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># config["identifier_fields"], config["row_fields"], config["match_aliases"] as above</span>
 </code></pre></div>
-<p>The preset checks its arguments by building a guard, so a wrong dialect or field set
-raises before the dict comes back.</p>
+<p>The preset takes <code>statement_fields</code>, <code>fragment_fields</code>, <code>identifier_fields</code>,
+<code>row_fields</code>, <code>dialect</code> and <code>match_aliases</code>, and checks them by building a guard, so a
+wrong dialect or field set raises before the dict comes back.</p>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
 <ul>
 <li>The guard tokenises; it does not parse. It refuses on a keyword's presence, so a column
@@ -3421,10 +3511,11 @@ raises before the dict comes back.</p>
   <code>SELECT ... FOR UPDATE</code> is refused (PostgreSQL refuses it in a read-only transaction
   too).</li>
 <li>SQL only. DQL, Cypher, GraphQL, MongoDB filters and Elasticsearch DSL are out of scope.</li>
-<li>Only the fields you name are read. A server that builds SQL from other arguments, or
-  from mapping keys, is not covered.</li>
-<li>SQL Server and Oracle quoting are not modelled (<code>[name]</code> is read only as SQLite reads
-  it). MySQL in <code>ANSI_QUOTES</code> or <code>NO_BACKSLASH_ESCAPES</code> mode, and PostgreSQL with
+<li>Only the fields you name (and their aliases) are read. A server that builds SQL from
+  other arguments, or from mapping keys outside a row field, is not covered.</li>
+<li>A column definition's <code>type</code> is not checked, only its <code>name</code>.</li>
+<li>SQL Server and Oracle quoting are not modelled in SQL text (<code>[name]</code> is read only as
+  SQLite reads it); a name in an identifier field may use <code>[...]</code> under <code>generic</code>. MySQL in <code>ANSI_QUOTES</code> or <code>NO_BACKSLASH_ESCAPES</code> mode, and PostgreSQL with
   <code>standard_conforming_strings</code> off, read strings differently from the named dialects:
   use <code>generic</code>, whose PostgreSQL and MySQL readings cover them.</li>
 <li>Functions that write or leak outside the list above are not refused: user-defined

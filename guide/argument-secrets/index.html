@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -3386,8 +3386,9 @@ free text. To keep a policy of your own, set its <code>argument_secret_guard</co
 <p>The detectors find secrets by shape, so a secret with no shape passes. On the 25-case
 bypass corpus from chenhz01/mem0-7283-conformance (vendored in
 <code>tests/fixtures/third_party/chenhz01_mem0_7283/</code>), run as the argument of a memory write,
-the guard catches 5 of the 23 cases a gate should refuse and lets both clean controls
-through, with no false positive. The 18 it misses include a plain passphrase with no
+the guard catches 6 of the 23 cases a gate should refuse and lets both clean controls
+through, with no false positive (5 before 0.10.36, which added the JSON-key form
+<code>{"api_key" : "..."}</code>). The 17 it misses include a plain passphrase with no
 label (<code>the wifi password is blue</code>), a credential in another language, a base64 or hex
 value, and a key whose body does not have its provider's length. The counts are pinned in
 <code>tests/test_argument_secret_guard_0_10_29.py</code>.</p>

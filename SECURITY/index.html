@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -4369,12 +4369,17 @@ Indian mobile numbers.</p>
 <p>Automatically detects and masks:
 - API Keys of known shapes: OpenAI keys (legacy <code>sk-...</code> and <code>sk-proj-</code>/<code>sk-svcacct-</code>/
   <code>sk-admin-</code>), Anthropic <code>sk-ant-...</code>, Google <code>AIza...</code>, GitHub <code>ghp_</code>/<code>gho_</code>/<code>github_pat_</code>,
-  Slack <code>xox*</code>. Others, such as <code>sk-live-...</code> or <code>api_key=...</code>, are not detected.
+  Slack <code>xox*</code>. A key of another shape, such as <code>sk-live-...</code>, is not detected as an API
+  key; after a label (<code>api_key=...</code>, <code>"api_key": "..."</code>) it is masked as a password
+  (since 0.10.36).
 - Private keys: the whole <code>-----BEGIN ... PRIVATE KEY-----</code> block
 - AWS Access Keys (<code>AKIA...</code>)
 - JWT Tokens (<code>eyJ...</code>)
+- Bearer tokens (<code>Bearer ...</code>, 16+ characters; a JWT keeps the JWT mask)
 - Connection Strings (<code>postgres://</code>, <code>mongodb://</code>)
-- Generic Passwords (8+ characters after <code>password=</code>, <code>pwd=</code>, <code>secret=</code>, <code>token=</code>, etc.)</p>
+- Generic Passwords (8+ characters after <code>password=</code>, <code>pwd=</code>, <code>secret=</code>, <code>token=</code>,
+  <code>api_key=</code>, <code>client_secret:</code> and the JSON form <code>"password": "..."</code>; in a dict result, a
+  string under a key with one of those labels)</p>
 <p>A string, dict, list, tuple or set result is masked, dictionary keys included. What a
 generator tool yields is masked item by item the same way, and each step of it runs under
 the call's network airgap (until 0.10.20 it did neither). Since 0.10.28 a coroutine or a

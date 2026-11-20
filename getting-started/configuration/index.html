@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -4101,8 +4101,9 @@ To mask specific types, call the standalone <code>mask_sensitive_data</code>, or
 <p><strong>Secrets</strong> (<code>mask_secrets=True</code>):
 - <code>API_KEY</code> - API keys (OpenAI, Anthropic, Google, GitHub, Slack formats)
 - <code>AWS_KEY</code> - AWS access keys
-- <code>PASSWORD</code> - Password patterns
+- <code>PASSWORD</code> - Values after a secret's label (<code>password=</code>, <code>"api_key": "..."</code>)
 - <code>JWT</code> - JSON Web Tokens
+- <code>BEARER_TOKEN</code> - The token after <code>Bearer</code> when it is not a JWT (since 0.10.36)
 - <code>CONNECTION_STRING</code> - Database connection strings
 - <code>PRIVATE_KEY</code> - Private key markers</p>
 <p><strong>India-Specific</strong> (<code>mask_pii=True</code> with <code>pii_locales=["in"]</code>):
