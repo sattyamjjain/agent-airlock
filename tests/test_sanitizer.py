@@ -725,3 +725,166 @@ class TestMaskingInvariantsUnderRandomInput:
                 assert any(d["start"] <= raw["start"] and raw["end"] <= d["end"] for d in kept), (
                     f"{raw['type']} at {raw['start']}-{raw['end']} unmasked in {content!r}"
                 )
+
+
+class TestSecretLabelsInStructuredOutput:
+    """V0.10.36: secret labels in JSON tool results, and opaque Bearer tokens.
+
+    Measured on c2a5df9d (0.10.35): every line in ``UNMASKED_BEFORE`` came back unmasked,
+    and so did a dict returned through ``@Airlock``, whose strings are masked one by one,
+    away from the key that labels them.
+    """
+
+    SECRET = "a8Fk29dLqP0zXv7RtY3mN5bC"
+    BEARER = "a8Fk29dLqP0zXv7RtY3mN5bC9xQw"
+
+    UNMASKED_BEFORE = [
+        ('{"password": "hunter2hunter2"}', "hunter2hunter2", '"password": '),
+        ('{"token": "a8Fk29dLqP0zXv7RtY3mN5bC"}', SECRET, '"token": '),
+        ('{"api_key": "a8Fk29dLqP0zXv7RtY3mN5bC"}', SECRET, '"api_key": '),
+        ('api_key = "a8Fk29dLqP0zXv7RtY3mN5bC"', SECRET, "api_key = "),
+        ("access_key=a8Fk29dLqP0zXv7RtY3mN5bC", SECRET, "access_key="),
+        ("Authorization: Bearer a8Fk29dLqP0zXv7RtY3mN5bC9xQw", BEARER, "Authorization: Bearer "),
+    ]
+
+    def test_each_line_unmasked_before_is_masked_with_its_label_kept(self) -> None:
+        for line, secret, label in self.UNMASKED_BEFORE:
+            content = sanitize_output(line).content
+            assert secret not in content, line
+            assert label in content, line
+            assert "[REDACTED]" in content, line
+
+    def test_a_dict_given_to_sanitize_output_loses_both_secrets(self) -> None:
+        content = sanitize_output({"password": "hunter2hunter2", "api_key": self.SECRET}).content
+        assert "hunter2hunter2" not in content
+        assert self.SECRET not in content
+        assert '"password": "[REDACTED]"' in content
+        assert '"api_key": "[REDACTED]"' in content
+
+    def test_a_bearer_header_in_a_dict_is_masked(self) -> None:
+        content = sanitize_output({"headers": {"Authorization": f"Bearer {self.BEARER}"}}).content
+        assert self.BEARER not in content
+        assert '"Authorization": "Bearer [REDACTED]"' in content
+
+    def test_a_dict_returned_through_airlock_is_masked_by_its_keys(self) -> None:
+        @Airlock()
+        def get_credentials() -> dict:
+            return {
+                "user": "svc",
+                "password": "hunter2hunter2",
+                "refreshToken": self.SECRET,
+                "headers": {"Authorization": f"Bearer {self.BEARER}"},
+            }
+
+        result = get_credentials()
+        assert result == {
+            "user": "svc",
+            "password": "[REDACTED]",
+            "refreshToken": "[REDACTED]",
+            "headers": {"Authorization": "Bearer [REDACTED]"},
+        }
+
+    def test_the_structured_walk_masks_a_labelled_value_once(self) -> None:
+        from agent_airlock.sanitizer import sanitize_structured_report
+
+        report = sanitize_structured_report(
+            {"client_secret": "correct horse battery", "OPENAI_API_KEY": self.SECRET, "n": 1}
+        )
+        assert report.value == {
+            "client_secret": "[REDACTED]",
+            "OPENAI_API_KEY": "[REDACTED]",
+            "n": 1,
+        }
+        assert report.masked_count == 2
+
+    def test_mask_secrets_off_leaves_labelled_values(self) -> None:
+        from agent_airlock.sanitizer import sanitize_structured_report
+
+        value = {"password": "hunter2hunter2"}
+        assert sanitize_structured_report(value, mask_secrets=False).value == value
+        assert "hunter2hunter2" in sanitize_output(value, mask_secrets=False).content
+
+    def test_a_key_rule_value_under_eight_characters_is_kept(self) -> None:
+        from agent_airlock.sanitizer import sanitize_structured_report
+
+        assert sanitize_structured_report({"token": "abc"}).value == {"token": "abc"}
+
+    NEGATIVES = [
+        '{"max_tokens": 40960000}',
+        '{"token_count": 12345678}',
+        "the token: is short",
+        "Bearer of bad news",
+        '{"token": "abc"}',
+    ]
+
+    def test_negatives_are_unchanged(self) -> None:
+        for line in self.NEGATIVES:
+            assert sanitize_output(line).content == line, line
+
+    def test_the_two_lines_masked_before_are_masked_the_same_way(self) -> None:
+        assert sanitize_output('token = "a8Fk29dLqP0zXv7RtY3mN5bC"').content == (
+            'token = "[REDACTED]"'
+        )
+        assert sanitize_output("client_secret: a8Fk29dLqP0zXv7RtY3mN5bC").content == (
+            "client_secret: [REDACTED]"
+        )
+
+    def test_a_jwt_after_bearer_keeps_the_jwt_partial_mask(self) -> None:
+        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.abc"
+        result = sanitize_output(f"Authorization: Bearer {jwt}")
+        assert result.content == "Authorization: Bearer eyJhbGciOi...[JWT]"
+        assert [d["type"] for d in result.detections] == ["jwt"]
+
+    def test_a_bearer_token_is_its_own_type(self) -> None:
+        detections = detect_sensitive_data(
+            f"Bearer {self.BEARER}", [SensitiveDataType.BEARER_TOKEN]
+        )
+        assert [(d["type"], d["value"]) for d in detections] == [("bearer_token", self.BEARER)]
+        assert SensitiveDataType.BEARER_TOKEN.value == "bearer_token"
+
+    def test_a_short_bearer_value_is_not_a_token(self) -> None:
+        assert sanitize_output("Authorization: Bearer abc123").content == (
+            "Authorization: Bearer abc123"
+        )
+
+    def test_a_label_at_the_end_of_a_longer_name_matches(self) -> None:
+        for line in (
+            f"OPENAI_API_KEY={self.SECRET}",
+            f'{{"accessToken": "{self.SECRET}"}}',
+            f'{{"clientSecret": "{self.SECRET}"}}',
+            f"private-key: {self.SECRET}",
+        ):
+            assert self.SECRET not in sanitize_output(line).content, line
+
+    def test_a_quoted_value_is_read_to_its_closing_quote(self) -> None:
+        content = sanitize_output('{"password": "correct horse battery staple"}').content
+        assert content == '{"password": "[REDACTED]"}'
+
+    def test_a_comma_inside_a_password_does_not_hide_it(self) -> None:
+        assert sanitize_output("password=P@ss,word2026").content == "password=[REDACTED]"
+
+    def test_a_page_cursor_is_not_a_secret(self) -> None:
+        from agent_airlock.sanitizer import sanitize_structured_report
+
+        cursor = "CAESBggBEAEYAQabc"
+        for line in (
+            f'{{"nextPageToken": "{cursor}"}}',
+            f'{{"next_page_token": "{cursor}"}}',
+            f'{{"NextToken": "{cursor}"}}',
+            f"continuation_token={cursor}",
+        ):
+            assert cursor in sanitize_output(line).content, line
+        value = {"nextPageToken": cursor, "items": []}
+        assert sanitize_structured_report(value).value == value
+
+    def test_a_shaped_key_under_a_secret_label_keeps_its_label(self) -> None:
+        content = sanitize_output('"api_key": "sk-1234567890abcdefghijklmnop"').content
+        assert content == '"api_key": "[REDACTED]"'
+
+    def test_masked_as_is_what_reached_the_output(self) -> None:
+        text, detections = mask_sensitive_data(
+            f"password=hunter2hunter2 Authorization: Bearer {self.BEARER}"
+        )
+        assert text == "password=[REDACTED] Authorization: Bearer [REDACTED]"
+        for detection in detections:
+            assert detection["masked_as"] in text

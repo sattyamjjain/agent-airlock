@@ -69,8 +69,9 @@ free text. To keep a policy of your own, set its `argument_secret_guard` to `pre
 The detectors find secrets by shape, so a secret with no shape passes. On the 25-case
 bypass corpus from chenhz01/mem0-7283-conformance (vendored in
 `tests/fixtures/third_party/chenhz01_mem0_7283/`), run as the argument of a memory write,
-the guard catches 5 of the 23 cases a gate should refuse and lets both clean controls
-through, with no false positive. The 18 it misses include a plain passphrase with no
+the guard catches 6 of the 23 cases a gate should refuse and lets both clean controls
+through, with no false positive (5 before 0.10.36, which added the JSON-key form
+`{"api_key" : "..."}`). The 17 it misses include a plain passphrase with no
 label (`the wifi password is blue`), a credential in another language, a base64 or hex
 value, and a key whose body does not have its provider's length. The counts are pinned in
 `tests/test_argument_secret_guard_0_10_29.py`.

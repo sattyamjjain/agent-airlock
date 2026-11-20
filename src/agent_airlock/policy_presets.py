@@ -3157,45 +3157,70 @@ def readonly_sql_tool_args_2026_125322_defaults(
     *,
     statement_fields: frozenset[str] | None = None,
     fragment_fields: frozenset[str] | None = None,
+    identifier_fields: frozenset[str] | None = None,
+    row_fields: frozenset[str] | None = None,
     dialect: str = "generic",
+    match_aliases: bool = True,
 ) -> dict[str, Any]:
     """Recommended config for the read-only SQL guard on database tools (v0.10.34+).
 
-    Two MCP database servers ran model-written SQL while promising read-only access:
+    MCP database servers ran model-written SQL, or spliced a model's text into SQL:
 
     - **CVE-2026-125322** (pgEdge Postgres MCP Server below 1.1.0): a subquery in the
       ``where`` parameter of ``count_rows`` read tables the tool never named.
     - **CVE-2026-61789** (bytebase DBHub below 0.22.6): the read-only check took every
       ``--`` for a comment, so on MySQL and MariaDB a second statement ran.
+    - **CVE-2026-63129** (``@connorbritain/mssql-mcp-server`` 0.5.2 and below, with its
+      ``-core``, ``-reader`` and ``-writer`` packages): ``tableName``, ``whereClause``,
+      ``insert_data``'s column keys, DDL names and the reader's ``stateFilter`` were
+      spliced into SQL Server statements. The guard now matches field aliases
+      (``whereClause``, ``stateFilter``) and checks names as names (v0.10.36).
+      https://github.com/advisories/GHSA-2m9m-6cr5-9x25
 
     This preset configures
     :class:`agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard`: statement fields
     must hold one read statement, fragment fields a clause that reads no other table and
-    carries no comment, ``;`` or ``UNION``. ``dialect="generic"`` reads each value as
-    MySQL, PostgreSQL and SQLite and refuses when any reading does. The arguments are
-    checked here, so a wrong field set or dialect raises before the dict is returned.
+    carries no comment, ``;`` or ``UNION``, identifier fields a bare or quoted name, and a
+    row field's keys names too. ``dialect="generic"`` reads each value as MySQL,
+    PostgreSQL and SQLite and refuses when any reading does. ``match_aliases=False``
+    matches field names exactly, as before 0.10.36. The arguments are checked here, so a
+    wrong field set or dialect raises before the dict is returned.
 
     Primary source:
       https://nvd.nist.gov/vuln/detail/CVE-2026-125322
     """
     from .mcp_spec.readonly_sql_guard import (
         DEFAULT_FRAGMENT_FIELDS,
+        DEFAULT_IDENTIFIER_FIELDS,
+        DEFAULT_ROW_FIELDS,
         DEFAULT_STATEMENT_FIELDS,
         ReadOnlySQLGuard,
     )
 
     statements = statement_fields if statement_fields is not None else DEFAULT_STATEMENT_FIELDS
     fragments = fragment_fields if fragment_fields is not None else DEFAULT_FRAGMENT_FIELDS
-    ReadOnlySQLGuard(statement_fields=statements, fragment_fields=fragments, dialect=dialect)
+    identifiers = identifier_fields if identifier_fields is not None else DEFAULT_IDENTIFIER_FIELDS
+    rows = row_fields if row_fields is not None else DEFAULT_ROW_FIELDS
+    ReadOnlySQLGuard(
+        statement_fields=statements,
+        fragment_fields=fragments,
+        identifier_fields=identifiers,
+        row_fields=rows,
+        dialect=dialect,
+        match_aliases=match_aliases,
+    )
     return {
         "preset_id": "readonly_sql_tool_args_2026_125322",
         "severity": "medium",
         "default_action": "deny",
         "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-125322",
-        "cves": ("CVE-2026-125322", "CVE-2026-61789"),
+        "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129"),
         "statement_fields": statements,
         "fragment_fields": fragments,
+        "identifier_fields": identifiers,
+        "row_fields": rows,
         "dialect": dialect,
+        "match_aliases": match_aliases,
     }
 
 

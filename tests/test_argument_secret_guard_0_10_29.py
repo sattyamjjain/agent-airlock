@@ -54,7 +54,9 @@ class TestTheMem0Corpus:
     """All 25 cases as the argument of a memory write. The counts are pinned as measured:
     a regression fails, and an improvement updates the pin. Claim no more than these."""
 
-    CAUGHT = {"B03", "B07", "B08", "B18", "B23"}
+    # B02 (``{"api_key" : "sk-live-..."}``) since 0.10.36: the PASSWORD label now reads
+    # past a JSON key's closing quote and takes ``api_key``.
+    CAUGHT = {"B02", "B03", "B07", "B08", "B18", "B23"}
 
     def _verdicts(self) -> dict[str, bool]:
         guard = ArgumentSecretGuard()
@@ -72,9 +74,9 @@ class TestTheMem0Corpus:
     def test_the_caught_and_bypassed_counts_are_pinned(self) -> None:
         verdicts = self._verdicts()
         refused = {case_id for case_id, allowed in verdicts.items() if not allowed}
-        assert refused == self.CAUGHT  # 5 caught, 18 bypass, 0 false positives
+        assert refused == self.CAUGHT  # 6 caught, 17 bypass, 0 false positives
         rejects = [c["id"] for c in _cases() if c["expected_verdict"] == "REJECT"]
-        assert len(rejects) - len(self.CAUGHT & set(rejects)) == 18
+        assert len(rejects) - len(self.CAUGHT & set(rejects)) == 17
 
 
 class TestTheGuardOnTheCallPath:

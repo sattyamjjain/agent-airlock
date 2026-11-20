@@ -117,8 +117,9 @@ Masked when `mask_secrets=True` (the default).
 |------|-----------------|-----------|
 | API Key | `sk-abcdefghijklmnopqrstuvwxyz` | `sk-abcd...wxyz` |
 | AWS Key | `AKIAIOSFODNN7EXAMPLE` | `AKIAIOS...MPLE` |
-| Password | `password=secret123` | `password=[REDACTED]` |
+| Password | `password=secret123`, `{"api_key": "..."}` | `password=[REDACTED]` |
 | JWT | `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.abc` | `eyJhbGciOi...[JWT]` |
+| Bearer token | `Authorization: Bearer a8Fk29dLqP0zXv7R` | `Authorization: Bearer [REDACTED]` |
 | Connection String | `postgres://user:pass@host` | `[REDACTED]` |
 | Private Key | `-----BEGIN PRIVATE KEY-----` | `[REDACTED]` |
 | Environment dump | three or more `API_KEY=...` lines | each value `[REDACTED]` |
@@ -131,16 +132,28 @@ in any case with a body of at least 20 (GitHub) or 10 (Slack) token characters, 
 `AKIA` id matches in lowercase too (its 16-character body still fixed). An environment dump is
 three or more `KEY=VALUE` lines (`export` allowed) or JSON `"key": "value"` pairs whose key ends
 in `_KEY`, `_TOKEN`, `_SECRET` or `_PAT` or contains `PASSWORD`, in any case: each such value
-is masked whatever it looks like. A password is
-the value (8+ characters) after `password`, `passwd`, `pwd`, `secret` or `token` and `=` or
-`:`. The private-key rule masks the whole PEM block, or the header and the base64 lines after it
-when the `END` line is missing. There is no separate
-bearer-token type: the JWT in `Bearer eyJ...` is masked by the JWT rule.
+is masked whatever it looks like. A password is the value (8+ characters) after `=` or `:`
+and a label: `password`, `passwd`, `pwd`, `secret`, `token`, `api_key`, `access_key`,
+`private_key` or `client_secret` (`_` or `-` optional), also at the end of a longer name
+(`OPENAI_API_KEY`, `refreshToken`) and with a JSON key's closing quote after it, so
+`{"password": "..."}` is masked (since 0.10.36; before, the quote stopped the match). A quoted
+value is read to its closing quote, spaces included. Only the value is masked; the label stays.
+A `token` after `page`, `next`, `continuation`, `sync` or `skip` (`nextPageToken`, AWS's
+`NextToken`) is a page cursor and is left alone, so an agent can still read the next page.
+A bearer token is the 16+ characters after `Bearer` (since 0.10.36); a JWT there keeps the
+JWT rule's partial mask. The private-key rule masks the whole PEM block, or the header and the
+base64 lines after it when the `END` line is missing.
+
+A dict, list, tuple or set result is masked string by string, so a value is read apart from
+the key it sits under. Since 0.10.36 a string of 8+ characters under a key that ends with one
+of the labels above (`password`, `api_key`, `refreshToken`, but not `nextPageToken`) is masked
+whole with the password strategy, as `"password": "..."` is in text: until then
+`{"password": "hunter2hunter2"}` came back from `@Airlock` unmasked.
 
 ## Masking Strategies
 
 `@Airlock` masks each type with its default strategy, the one the tables above show:
-`FULL` for SSN, password, private key and connection string, `TYPE_ONLY` for IFSC, and
+`FULL` for SSN, password, bearer token, private key and connection string, `TYPE_ONLY` for IFSC, and
 `PARTIAL` for the rest. `AirlockConfig` has no strategy setting. To choose a strategy, run
 the standalone sanitizer with a `mask_config` mapping:
 

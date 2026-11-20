@@ -1,4 +1,4 @@
-# Read-only SQL guard for tool arguments (CVE-2026-125322 + CVE-2026-61789, v0.10.34+)
+# Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129)
 
 `agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard` checks the SQL a model puts
 in a database tool's arguments before the tool runs it. Put it in front of any tool that
@@ -6,19 +6,22 @@ promises read-only access.
 
 ## Why
 
-Two MCP database servers ran model-written SQL while promising the model could only read:
+Three MCP database servers ran model-written SQL, or spliced a model's text into SQL they
+built:
 
 | CVE | Server | What got through |
 |---|---|---|
 | [CVE-2026-125322](https://nvd.nist.gov/vuln/detail/CVE-2026-125322) (CWE-89) | pgEdge Postgres MCP Server below 1.1.0 | The `where` parameter of `count_rows` took a subquery on another table, so the row count leaked that table's contents one predicate at a time |
 | [CVE-2026-61789](https://nvd.nist.gov/vuln/detail/CVE-2026-61789) (CWE-436) | bytebase DBHub below 0.22.6 | The read-only check treated every `--` as a comment. MySQL and MariaDB need whitespace after it, so `--1` is two minus signs to them, and a second statement after it ran |
+| [CVE-2026-63129](https://github.com/advisories/GHSA-2m9m-6cr5-9x25) (CWE-89) | `@connorbritain/mssql-mcp-server` 0.5.2 and below (`-core` 0.5.0, `-reader` and `-writer` 0.4.2 and below; fixed in 0.6.0 / 0.5.0) | `tableName` and `whereClause` in `update_data` and `delete_data`, `insert_data`'s column keys, the DDL tools' names and the reader's `list_databases` `stateFilter` (reachable with `READONLY=true`) were spliced into SQL: stacked statements, and `xp_cmdshell` where it is enabled. Before 0.10.36 the guard matched field names exactly, so it read none of them |
 
 The same two shapes apply to any server that splices a model's text into SQL or trusts a
 "read-only" check that tokenises differently from its database.
 
 ## What it refuses
 
-The guard reads two kinds of argument, chosen by the argument's name.
+The guard reads four kinds of argument, chosen by the argument's name: statements,
+fragments, names and rows.
 
 **Statement fields** hold one whole statement (`sql`, `query`, `statement` by default).
 
@@ -46,6 +49,36 @@ string and number functions of the same name and pass.
 
 String literals, quoted names and comments are told apart from code first, so
 `name = 'a;b -- c'` passes.
+
+**Identifier fields** hold a table, column, schema, view, index or database name
+(`table`, `table_name`, `column`, `columns`, `schema`, `database`, `db`, `view`,
+`index_name`, `column_name`, `schema_name`, `database_name` by default). A fragment check
+is the wrong test for a name: `users WHERE 1=1` is a valid fragment and a working
+injection when a server writes `SELECT * FROM {table}`.
+
+| Verdict | When |
+|---|---|
+| `DENY_NOT_AN_IDENTIFIER` | The value is not up to three dotted parts, each a bare name (`[A-Za-z_][A-Za-z0-9_$]*`) or one quoted name, with `*` allowed as the last part; or it is not text |
+
+A quoted name uses a quote the dialect reads as a name: `"..."` on PostgreSQL and SQLite,
+backticks on MySQL and SQLite, `[...]` on SQLite (and SQL Server). `generic` takes all
+three. Inside the quotes the name may not hold a quote of any style, `'`, `\`, `;`, `#`,
+`--`, `/*`, `*/` or a control character, so no dialect reads code in it, even one that
+does not take that quote for a name. `dbo.orders`, `[dbo].[orders]` and
+`[Order Details]` pass; `users WHERE 1=1`, `t; DROP TABLE x--` and `a.b.c.d` do not.
+
+A list of names is read item by item. A mapping under an identifier field is read as a
+definition (`create_table`'s `columns: [{"name": "id", "type": "INT"}]`): its `name` key
+must be a name, and its other keys are read by their own names (the `type` is not
+checked). `None` and `""` name nothing and pass. The refusal names the field and the
+first character that cannot stand there, never the value.
+
+**Row fields** hold a row a server inserts or updates: a mapping, or a list of them, whose
+keys it splices in as column names (`data`, `values`, `row`, `rows`, `record`, `records`,
+`updates` by default; CVE-2026-63129's `insert_data`). Each key must pass the identifier
+test; the refusal names it by position (`data.keys[0]`), since the key is the refused
+text. The values are data a server binds as parameters and are not read. A row field that
+holds text or a number is not a row and is not read.
 
 ## Dialects
 
@@ -76,8 +109,9 @@ when you know it.
 
 ## Naming a tool's fields
 
-The guard reads only the fields you name. A string is read as a fragment when any key on
-its path is a fragment field, otherwise as a statement when one is a statement field.
+The guard reads only the fields you name, and their aliases. A string is read as a
+fragment when any key on its path is a fragment field, otherwise as a statement when one
+is a statement field, otherwise as a name when its own key is an identifier field.
 Nested values, lists and bytes are walked:
 
 ```python
@@ -95,7 +129,42 @@ decision = guard.evaluate({"table": "orders", "where": "1=1 AND (SELECT count(*)
 
 `query` is in the default statement fields, and many search tools use an argument called
 `query` for plain text. Put the guard on database tools only, or pass your own field sets.
-A name may not be in both sets.
+A name may sit in one set only, and the constructor raises `ValueError` when the alias
+rules below would read a name in one set as another kind (`sqlFilter` as a statement
+field ends with `filter`).
+
+### Aliases
+
+Servers spell the same field `whereClause`, `where_clause` or `WHERE-CLAUSE`. With
+`match_aliases=True`, the default since 0.10.36, a field name is compared after
+normalisation: lower case, every character but `a-z` and `0-9` dropped, so all three are
+`whereclause`.
+
+- **Fragment**: the normalised name equals a configured fragment field's, or ends with
+  `where`, `clause`, `filter`, `condition`, `having` or `orderby` (`whereClause`,
+  `stateFilter`, `filterCondition`, `orderBy`).
+- **Statement**: the normalised name equals a configured statement field's, or is
+  `sqlquery`, `sqlstatement`, `rawsql` or `querytext`. There is no suffix rule:
+  `searchQuery` ends with `query` and holds plain text, so it is not read.
+- **Identifier and row**: equality with a configured name only (`tableName`,
+  `TABLE_NAME` and `table-name` are `table_name`; `columnName` is `column_name`).
+
+A fragment still wins over a statement, and both over a name.
+
+To switch aliases off and compare names exactly, as before 0.10.36:
+
+```python
+guard = ReadOnlySQLGuard(match_aliases=False)
+```
+
+The identifier and row fields still apply, by exact name. For exactly the 0.10.35
+reading, empty them too:
+
+```python
+guard = ReadOnlySQLGuard(
+    match_aliases=False, identifier_fields=frozenset(), row_fields=frozenset()
+)
+```
 
 The decision's `detail` names the field, the verdict, the token that decided it and the
 dialect reading that saw it. It never repeats the value.
@@ -123,11 +192,13 @@ config = readonly_sql_tool_args_2026_125322_defaults(dialect="mysql")
 # config["preset_id"] == "readonly_sql_tool_args_2026_125322"
 # config["severity"] == "medium"
 # config["default_action"] == "deny"
-# config["cves"] == ("CVE-2026-125322", "CVE-2026-61789")
+# config["cves"] == ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129")
+# config["identifier_fields"], config["row_fields"], config["match_aliases"] as above
 ```
 
-The preset checks its arguments by building a guard, so a wrong dialect or field set
-raises before the dict comes back.
+The preset takes `statement_fields`, `fragment_fields`, `identifier_fields`,
+`row_fields`, `dialect` and `match_aliases`, and checks them by building a guard, so a
+wrong dialect or field set raises before the dict comes back.
 
 ## Honest scope
 
@@ -136,10 +207,11 @@ raises before the dict comes back.
   `SELECT ... FOR UPDATE` is refused (PostgreSQL refuses it in a read-only transaction
   too).
 - SQL only. DQL, Cypher, GraphQL, MongoDB filters and Elasticsearch DSL are out of scope.
-- Only the fields you name are read. A server that builds SQL from other arguments, or
-  from mapping keys, is not covered.
-- SQL Server and Oracle quoting are not modelled (`[name]` is read only as SQLite reads
-  it). MySQL in `ANSI_QUOTES` or `NO_BACKSLASH_ESCAPES` mode, and PostgreSQL with
+- Only the fields you name (and their aliases) are read. A server that builds SQL from
+  other arguments, or from mapping keys outside a row field, is not covered.
+- A column definition's `type` is not checked, only its `name`.
+- SQL Server and Oracle quoting are not modelled in SQL text (`[name]` is read only as
+  SQLite reads it); a name in an identifier field may use `[...]` under `generic`. MySQL in `ANSI_QUOTES` or `NO_BACKSLASH_ESCAPES` mode, and PostgreSQL with
   `standard_conforming_strings` off, read strings differently from the named dialects:
   use `generic`, whose PostgreSQL and MySQL readings cover them.
 - Functions that write or leak outside the list above are not refused: user-defined

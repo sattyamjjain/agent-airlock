@@ -1,7 +1,7 @@
 """Read-only SQL guard for tool arguments (v0.10.34+, CVE-2026-125322 + CVE-2026-61789).
 
-Two advisories against MCP database servers, one class: a tool that promises read-only
-access runs SQL text a model wrote.
+Three advisories against MCP database servers, one class: a tool runs SQL text a model
+wrote, or splices a model's text into SQL it builds.
 
 - **CVE-2026-125322** (pgEdge Postgres MCP Server below 1.1.0, CWE-89, NVD 2026-11-10):
   the ``where`` parameter of ``count_rows`` accepted subqueries against tables other than
@@ -13,10 +13,19 @@ access runs SQL text a model wrote.
   whitespace, a control character or the end of the line after it, so text the check
   skipped as a comment ran as a second statement.
   https://nvd.nist.gov/vuln/detail/CVE-2026-61789 (GHSA-j656-3hf2-fvjc)
+- **CVE-2026-63129** (``@connorbritain/mssql-mcp-server`` 0.5.2 and below, the ``-core``,
+  ``-reader`` and ``-writer`` packages too, CWE-89, NVD 2026-11-18): ``tableName`` and
+  ``whereClause`` in ``update_data`` and ``delete_data``, the column keys of
+  ``insert_data``, the DDL tools' table, column, index and schema names and the reader's
+  ``list_databases`` ``stateFilter`` were spliced into SQL, so a stacked statement (and
+  ``xp_cmdshell`` where it is enabled) ran. The guard matched field names exactly before
+  0.10.36, so ``whereClause`` and ``stateFilter`` were never read and a table name was
+  never checked as a name.
+  https://github.com/advisories/GHSA-2m9m-6cr5-9x25
 
 What it does
 ------------
-:class:`ReadOnlySQLGuard` reads two kinds of argument, named by field:
+:class:`ReadOnlySQLGuard` reads four kinds of argument, named by field:
 
 - **Statement fields** (``sql``, ``query``, ``statement``) hold a whole statement. It
   must be one statement, start with ``SELECT``, ``WITH``, ``VALUES``, ``SHOW``,
@@ -29,6 +38,31 @@ What it does
   table (``SELECT``, PostgreSQL and MySQL's ``TABLE name`` shorthand, PostgreSQL's
   ``table_to_xml`` family), carry a comment, end the clause (``;``, ``UNION``,
   parentheses that do not balance) or hold anything a statement may not.
+- **Identifier fields** (:data:`DEFAULT_IDENTIFIER_FIELDS`: ``table``, ``table_name``,
+  ``column``, ``schema``, ``database`` and the like) hold a name. The value must be a
+  bare name (``[A-Za-z_][A-Za-z0-9_$]*``) or one quoted name in a quote style the
+  dialect reads as a name, up to three dotted parts (``dbo.orders``, ``[dbo].[orders]``),
+  or ``*`` as the last part. A quoted name may not hold a quote of any style, ``'``,
+  ``\\``, ``;``, ``#``, ``--``, ``/*``, ``*/`` or a control character, so no dialect
+  reads code in it. A list is read item by item; a mapping is read as a definition
+  (``{"name": ..., "type": ...}``), its ``name`` key holding a name. ``None`` and ``""``
+  name nothing and pass. Anything else is ``DENY_NOT_AN_IDENTIFIER``: a fragment check is
+  the wrong test for a name, since ``users WHERE 1=1`` is a valid fragment.
+- **Row fields** (:data:`DEFAULT_ROW_FIELDS`: ``data``, ``values``, ``rows`` and the
+  like) hold a row as a mapping, or a list of them, whose keys a server splices in as
+  column names. Each key must pass the identifier test; the values are data a server
+  binds as parameters and are not read.
+
+With ``match_aliases=True`` (the default) a field name matches whatever its case and
+separators: ``whereClause``, ``where_clause`` and ``WHERE-CLAUSE`` all normalise to
+``whereclause`` (lower case, everything but ``a-z`` and ``0-9`` dropped). A name is then a
+fragment field when it equals a configured fragment name so normalised or ends with
+``where``, ``clause``, ``filter``, ``condition``, ``having`` or ``orderby``
+(``stateFilter``, ``filterCondition``, ``orderBy``); a statement field only when it equals
+a configured statement name or ``sqlquery``, ``sqlstatement``, ``rawsql`` or
+``querytext`` (no suffix rule: ``searchQuery`` is not SQL); an identifier or row field
+only when it equals a configured one (``tableName``, ``TABLE_NAME``, ``table-name``).
+``match_aliases=False`` compares names exactly, as every release before 0.10.36 did.
 
 The text is tokenised once per dialect the way that database reads it: comments
 (``--``, ``/* */``, MySQL's ``#``), string literals and quoted identifiers are told apart
@@ -47,7 +81,10 @@ What it does not cover
   guard reads SQL only; a field holding another language is read as SQL and will
   usually be refused as not a read statement.
 - A server that builds SQL from arguments the guard is not told about. Only the named
-  fields are read; mapping keys are never read as SQL.
+  fields (and their aliases) are read; mapping keys are read only under a row field, as
+  column names, and never as SQL.
+- A column definition's type (``{"name": "id", "type": "INT"}``): only its name is
+  checked.
 - SQL Server and Oracle quoting (``[name]`` is read only as SQLite reads it, Oracle's
   ``q'[...]'`` not at all), MySQL in ``ANSI_QUOTES`` or ``NO_BACKSLASH_ESCAPES`` mode and
   PostgreSQL with ``standard_conforming_strings`` off: use ``generic`` for those, whose
@@ -88,6 +125,49 @@ DEFAULT_STATEMENT_FIELDS: frozenset[str] = frozenset({"sql", "query", "statement
 DEFAULT_FRAGMENT_FIELDS: frozenset[str] = frozenset(
     {"where", "filter", "condition", "having", "order_by"}
 )
+
+#: Argument names whose value is a table, column, schema, view, index or database name
+#: (CVE-2026-63129's ``tableName``). Matched by equality after normalisation, never by
+#: suffix.
+DEFAULT_IDENTIFIER_FIELDS: frozenset[str] = frozenset(
+    {
+        "table",
+        "table_name",
+        "column",
+        "columns",
+        "schema",
+        "database",
+        "db",
+        "view",
+        "index_name",
+        "column_name",
+        "schema_name",
+        "database_name",
+    }
+)
+
+#: Argument names whose value is a row (a mapping, or a list of them) whose keys a
+#: server splices in as column names (CVE-2026-63129's ``insert_data``).
+DEFAULT_ROW_FIELDS: frozenset[str] = frozenset(
+    {"data", "values", "row", "rows", "record", "records", "updates"}
+)
+
+# With match_aliases on, a normalised name ending with one of these is a fragment field
+# (whereClause, stateFilter, filterCondition, orderBy).
+_FRAGMENT_SUFFIXES: tuple[str, ...] = (
+    "where",
+    "clause",
+    "filter",
+    "condition",
+    "having",
+    "orderby",
+)
+
+# With match_aliases on, these normalised names are statement fields too. Equality only:
+# ``searchQuery`` ends with ``query`` and holds plain text.
+_STATEMENT_ALIASES: frozenset[str] = frozenset({"sqlquery", "sqlstatement", "rawsql", "querytext"})
+
+_NOT_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
 #: Accepted ``dialect`` values. ``generic`` reads every value as each of the other three.
 DIALECTS: frozenset[str] = frozenset({"postgres", "mysql", "sqlite", "generic"})
@@ -185,6 +265,8 @@ _SPACE = frozenset(" \t\n\r\f\v")
 _DOLLAR_TAG_RE = re.compile(r"\$(?:[A-Za-z_\x80-\U0010ffff][A-Za-z0-9_\x80-\U0010ffff]*)?\$")
 _STATEMENT = "statement"
 _FRAGMENT = "fragment"
+_IDENTIFIER = "identifier"
+_ROW = "row"
 _GENERIC_READINGS: tuple[str, ...] = ("mysql", "postgres", "sqlite")
 
 
@@ -197,6 +279,7 @@ class ReadOnlySQLVerdict(str, enum.Enum):
     DENY_SUBQUERY_IN_FRAGMENT = "deny_subquery_in_fragment"
     DENY_COMMENT_IN_FRAGMENT = "deny_comment_in_fragment"
     DENY_DANGEROUS_FUNCTION = "deny_dangerous_function"
+    DENY_NOT_AN_IDENTIFIER = "deny_not_an_identifier"
     DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
@@ -212,9 +295,13 @@ class ReadOnlySQLDecision:
         detail: The field, whether it was read as a statement or a fragment, the verdict,
             the token that decided it and the dialect reading that saw it. Never the value.
         matched_field: The field path that was refused (``"where"``,
-            ``"params.where"``, ``"sql[1]"``), or ``None`` when ``allowed=True``.
-        matched_pattern: The deciding token (``"SELECT"``, ``";"``, ``"--"``), or
-            ``"uninspectable"``; ``None`` when ``allowed=True``.
+            ``"params.where"``, ``"sql[1]"``; ``"data.keys[0]"`` for a row's first
+            column key, by position, since the key is the refused text), or ``None``
+            when ``allowed=True``.
+        matched_pattern: The deciding token (``"SELECT"``, ``";"``, ``"--"``); for a
+            name, the first character that cannot stand there (``" "``, ``";"``) or the
+            type of a value that is not text; or ``"uninspectable"``. ``None`` when
+            ``allowed=True``.
     """
 
     allowed: bool
@@ -581,6 +668,77 @@ def _check_fragment(tokens: list[_Token]) -> _Hit | None:
     return _dangerous_hit(code) or _write_hit(code)
 
 
+# -- names -------------------------------------------------------------------------------
+
+_BARE_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
+_NAME_QUOTES: dict[str, str] = {'"': '"', "`": "`", "[": "]"}
+_MAX_NAME_PARTS = 3
+# Refused inside a quoted name, so the text reads as one name under every dialect, even
+# one that does not take that quote for a name (PostgreSQL reads ``[`` as code).
+_NOT_IN_QUOTED_NAME: frozenset[str] = frozenset("\"`[]'\\;#")
+_COMMENT_MARKS: tuple[str, ...] = ("--", "/*", "*/")
+
+
+def _name_quotes(readings: tuple[str, ...]) -> frozenset[str]:
+    """Opening quotes any of ``readings`` reads as a quoted name."""
+    quotes: set[str] = set()
+    for reading in readings:
+        rules = _RULES[reading]
+        if not rules.double_quote_string:
+            quotes.add('"')
+        if rules.backtick_identifiers:
+            quotes.add("`")
+        if rules.bracket_identifiers:
+            quotes.add("[")
+    return frozenset(quotes)
+
+
+def _quoted_body_problem(body: str) -> str | None:
+    if not body:
+        return "empty quoted name"
+    for ch in body:
+        if ch in _NOT_IN_QUOTED_NAME or ord(ch) < 32 or ch == "\x7f":
+            return ch
+    for mark in _COMMENT_MARKS:
+        if mark in body:
+            return mark
+    return None
+
+
+def _name_problem(text: str, quotes: frozenset[str]) -> str | None:
+    """``None`` when ``text`` is a name; else what stops it being one (never the text)."""
+    if text == "":
+        return None  # names nothing; the server's own default applies
+    i, n = 0, len(text)
+    for _part in range(_MAX_NAME_PARTS):
+        ch = text[i]
+        if ch in _NAME_QUOTES:
+            if ch not in quotes:
+                return ch
+            end = text.find(_NAME_QUOTES[ch], i + 1)
+            if end < 0:
+                return ch
+            problem = _quoted_body_problem(text[i + 1 : end])
+            if problem is not None:
+                return problem
+            i = end + 1
+        elif ch == "*" and i + 1 == n:
+            return None  # ``*`` or ``t.*``: every column
+        else:
+            match = _BARE_NAME_RE.match(text, i)
+            if match is None:
+                return ch
+            i = match.end()
+        if i == n:
+            return None
+        if text[i] != ".":
+            return text[i]
+        i += 1
+        if i == n:
+            return "."
+    return "."  # a fourth dotted part
+
+
 def _require_str_frozenset(name: str, value: object) -> frozenset[str]:
     if not isinstance(value, frozenset):
         raise TypeError(f"{name} must be a frozenset[str]; got {type(value).__name__}")
@@ -590,24 +748,43 @@ def _require_str_frozenset(name: str, value: object) -> frozenset[str]:
     return value
 
 
+def _norm(name: str) -> str:
+    """``whereClause``, ``where_clause`` and ``WHERE-CLAUSE`` all become ``whereclause``."""
+    return _NOT_ALNUM_RE.sub("", name.lower())
+
+
 class ReadOnlySQLGuard:
     """Refuse SQL in tool arguments that does more than one read.
 
-    Anchors CVE-2026-125322 (a subquery in a ``where`` fragment) and CVE-2026-61789 (a
-    second statement hidden from a read-only check by MySQL's ``--`` rule). The guard
-    tokenises; it never runs, parses into a plan or rewrites the SQL.
+    Anchors CVE-2026-125322 (a subquery in a ``where`` fragment), CVE-2026-61789 (a
+    second statement hidden from a read-only check by MySQL's ``--`` rule) and
+    CVE-2026-63129 (``whereClause``, ``stateFilter``, ``tableName`` and ``insert_data``'s
+    column keys spliced into SQL). The guard tokenises; it never runs, parses into a plan
+    or rewrites the SQL.
 
     Args:
         statement_fields: Argument names whose value is a whole statement. Defaults to
             :data:`DEFAULT_STATEMENT_FIELDS`.
         fragment_fields: Argument names whose value is spliced into a fixed query.
-            Defaults to :data:`DEFAULT_FRAGMENT_FIELDS`. A name may not be in both sets.
+            Defaults to :data:`DEFAULT_FRAGMENT_FIELDS`.
+        identifier_fields: Argument names whose value is a table, column, schema or
+            database name. Defaults to :data:`DEFAULT_IDENTIFIER_FIELDS`.
+        row_fields: Argument names whose value is a row (or a list of rows) whose keys
+            are column names. Defaults to :data:`DEFAULT_ROW_FIELDS`.
         dialect: ``"postgres"``, ``"mysql"``, ``"sqlite"`` or ``"generic"`` (every one of
             the three; the default, and the right choice when the database is unknown).
+        match_aliases: Match field names after normalisation, with the fragment suffix
+            rule and the statement aliases (see the module docstring). ``False``
+            compares names exactly, as before 0.10.36; the identifier and row fields
+            still apply, by exact name. Pass ``identifier_fields=frozenset()`` and
+            ``row_fields=frozenset()`` too for the 0.10.35 reading.
 
     Raises:
-        TypeError: A field set is not a frozenset of str, or ``dialect`` is not a str.
-        ValueError: ``dialect`` is not one of :data:`DIALECTS`, or a name is in both sets.
+        TypeError: A field set is not a frozenset of str, ``dialect`` is not a str or
+            ``match_aliases`` is not a bool.
+        ValueError: ``dialect`` is not one of :data:`DIALECTS`, a name normalises to
+            nothing, or a name would be read as two kinds of field (in two sets, or in
+            one set while the alias rules read it as another kind).
     """
 
     def __init__(
@@ -615,18 +792,44 @@ class ReadOnlySQLGuard:
         *,
         statement_fields: frozenset[str] = DEFAULT_STATEMENT_FIELDS,
         fragment_fields: frozenset[str] = DEFAULT_FRAGMENT_FIELDS,
+        identifier_fields: frozenset[str] = DEFAULT_IDENTIFIER_FIELDS,
+        row_fields: frozenset[str] = DEFAULT_ROW_FIELDS,
         dialect: str = "generic",
+        match_aliases: bool = True,
     ) -> None:
-        self._statement_fields = _require_str_frozenset("statement_fields", statement_fields)
-        self._fragment_fields = _require_str_frozenset("fragment_fields", fragment_fields)
+        sets = {
+            _STATEMENT: _require_str_frozenset("statement_fields", statement_fields),
+            _FRAGMENT: _require_str_frozenset("fragment_fields", fragment_fields),
+            _IDENTIFIER: _require_str_frozenset("identifier_fields", identifier_fields),
+            _ROW: _require_str_frozenset("row_fields", row_fields),
+        }
         if not isinstance(dialect, str):
             raise TypeError(f"dialect must be a str; got {type(dialect).__name__}")
         if dialect not in DIALECTS:
             raise ValueError(f"dialect must be one of {sorted(DIALECTS)}; got {dialect!r}")
-        both = statement_fields & fragment_fields
-        if both:
-            raise ValueError(f"a field cannot be both a statement and a fragment: {sorted(both)}")
+        if not isinstance(match_aliases, bool):
+            raise TypeError(f"match_aliases must be a bool; got {type(match_aliases).__name__}")
+        self._match_aliases = match_aliases
+        if match_aliases:
+            for kind, names in sets.items():
+                empty = sorted(name for name in names if not _norm(name))
+                if empty:
+                    raise ValueError(f"{kind} field names normalise to nothing: {empty}")
+        self._names = {
+            kind: frozenset(_norm(n) for n in names) if match_aliases else names
+            for kind, names in sets.items()
+        }
+        for kind, names in sets.items():
+            for name in sorted(names):
+                read_as = self._role(name, None)
+                if read_as != kind:
+                    raise ValueError(
+                        f"field {name!r} would be read as both {kind} and {read_as} "
+                        "(it is in two sets, or the alias rules read it as another kind); "
+                        "a name may sit in one set only"
+                    )
         self._readings = _GENERIC_READINGS if dialect == "generic" else (dialect,)
+        self._quotes = _name_quotes(self._readings)
 
     def evaluate(self, args: Mapping[str, Any] | None) -> ReadOnlySQLDecision:
         """Decide whether the SQL in the call's arguments only reads.
@@ -634,10 +837,14 @@ class ReadOnlySQLGuard:
         Values are walked at any depth, as ``FilterEvalRCEGuard`` walks them: inside
         mappings, lists, tuples and sets, with ``bytes`` decoded as strict UTF-8. A string
         is read as a fragment when a key on its path is a fragment field, otherwise as a
-        statement when one is a statement field; other strings are not read. Refused as
-        ``DENY_UNINSPECTABLE``: arguments that are not a mapping, nesting deeper than 32
-        levels, a container that contains itself, bytes that are not UTF-8, and any
-        object in a read field that is not text, a number, a bool or ``None``.
+        statement when one is a statement field, otherwise as a name when its own key is
+        an identifier field (or ``name`` inside a mapping under one); other strings are
+        not read. A row field's mapping has its keys read as names and its values left
+        unread. Refused as ``DENY_UNINSPECTABLE``: arguments that are not a mapping,
+        nesting deeper than 32 levels, a container that contains itself, bytes that are
+        not UTF-8, and any object in a statement or fragment field that is not text, a
+        number, a bool or ``None``. In an identifier field anything but text, ``None`` or
+        a container is ``DENY_NOT_AN_IDENTIFIER``.
 
         Args:
             args: The tool call's argument dict. ``None`` (no args) is allowed.
@@ -660,12 +867,29 @@ class ReadOnlySQLGuard:
                 return decision
         return self._allow("no read-only SQL rule broken")
 
+    def _key(self, key: object) -> object:
+        if self._match_aliases and isinstance(key, str):
+            return _norm(key)
+        return key
+
     def _role(self, key: object, inherited: str | None) -> str | None:
-        # A fragment anywhere on the path wins: it is the stricter reading.
-        if inherited == _FRAGMENT or key in self._fragment_fields:
+        # A fragment anywhere on the path wins: it is the stricter reading. A statement
+        # then wins over a name; the identifier and row roles are a key's own, never
+        # inherited through a mapping (a list keeps its field's role).
+        name = self._key(key)
+        alias = name if self._match_aliases and isinstance(name, str) else ""
+        if inherited == _FRAGMENT or name in self._names[_FRAGMENT]:
             return _FRAGMENT
-        if inherited == _STATEMENT or key in self._statement_fields:
+        if alias and alias.endswith(_FRAGMENT_SUFFIXES):
+            return _FRAGMENT
+        if inherited == _STATEMENT or name in self._names[_STATEMENT]:
             return _STATEMENT
+        if alias in _STATEMENT_ALIASES:
+            return _STATEMENT
+        if name in self._names[_IDENTIFIER] or (inherited == _IDENTIFIER and name == "name"):
+            return _IDENTIFIER
+        if name in self._names[_ROW]:
+            return _ROW
         return None
 
     def _scan_value(
@@ -679,8 +903,8 @@ class ReadOnlySQLGuard:
     ) -> ReadOnlySQLDecision | None:
         """Inspect a str or bytes value, or walk a container; ``None`` when nothing fires."""
         if isinstance(value, (str, bytes, bytearray, memoryview)):
-            if role is None:
-                return None
+            if role is None or role == _ROW:
+                return None  # a row field holding text is not a row
             if isinstance(value, str):
                 text = value
             else:
@@ -690,16 +914,26 @@ class ReadOnlySQLGuard:
                     return self._deny_uninspectable(
                         field, "is bytes that are not valid UTF-8", None
                     )
+            if role == _IDENTIFIER:
+                return self._check_name(field, text)
             return self._inspect(field, text, role)
         children: list[tuple[str, Any, str | None]]
         if isinstance(value, Mapping):
+            if role == _ROW:
+                return self._check_row_keys(field, value)
             children = [
                 (f"{field}.{key}", item, self._role(key, role)) for key, item in value.items()
             ]
         elif isinstance(value, (list, tuple, set, frozenset)):
             children = [(f"{field}[{idx}]", item, role) for idx, item in enumerate(value)]
-        elif role is None or value is None or isinstance(value, (int, float, Decimal, Fraction)):
-            return None  # bool is an int; numbers render as numbers
+        elif role == _IDENTIFIER and value is not None:
+            return self._deny_not_a_name(field, type(value).__name__, "is not text")
+        elif (
+            role in (None, _ROW)
+            or value is None
+            or isinstance(value, (int, float, Decimal, Fraction))
+        ):
+            return None  # bool is an int; numbers render as numbers; None names nothing
         else:
             return self._deny_uninspectable(
                 field, f"holds a {type(value).__name__}, which the guard cannot read as SQL", None
@@ -728,6 +962,42 @@ class ReadOnlySQLGuard:
             if hit is not None:
                 return self._deny(field, role, reading, *hit)
         return None
+
+    def _check_name(self, field: str, text: str) -> ReadOnlySQLDecision | None:
+        problem = _name_problem(text, self._quotes)
+        if problem is None:
+            return None
+        return self._deny_not_a_name(field, problem, "is not a bare or quoted name")
+
+    def _check_row_keys(self, field: str, row: Mapping[Any, Any]) -> ReadOnlySQLDecision | None:
+        # The keys are column names a server splices in; the values are data it binds.
+        for idx, key in enumerate(row):
+            where = f"{field}.keys[{idx}]"
+            if isinstance(key, str):
+                decision = self._check_name(where, key)
+            else:
+                decision = self._deny_not_a_name(where, type(key).__name__, "is not text")
+            if decision is not None:
+                return decision
+        return None
+
+    def _deny_not_a_name(self, field: str, problem: str, why: str) -> ReadOnlySQLDecision:
+        verdict = ReadOnlySQLVerdict.DENY_NOT_AN_IDENTIFIER
+        shown = problem if len(problem) <= _TOKEN_SHOWN else problem[:_TOKEN_SHOWN] + "..."
+        logger.warning(
+            "readonly_sql_refused", matched_field=field, verdict=verdict.value, token=shown
+        )
+        return ReadOnlySQLDecision(
+            allowed=False,
+            verdict=verdict,
+            detail=(
+                f"field {field!r} read as a name {why}: {verdict.value} at {shown!r} "
+                "(a name is up to three dotted parts, each bare or quoted; the value is "
+                "not repeated here)"
+            ),
+            matched_field=field,
+            matched_pattern=shown,
+        )
 
     def _allow(self, reason: str) -> ReadOnlySQLDecision:
         return ReadOnlySQLDecision(
@@ -779,6 +1049,8 @@ class ReadOnlySQLGuard:
 
 __all__ = [
     "DEFAULT_FRAGMENT_FIELDS",
+    "DEFAULT_IDENTIFIER_FIELDS",
+    "DEFAULT_ROW_FIELDS",
     "DEFAULT_STATEMENT_FIELDS",
     "DIALECTS",
     "ReadOnlySQLDecision",

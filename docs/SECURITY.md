@@ -333,12 +333,17 @@ Indian mobile numbers.
 Automatically detects and masks:
 - API Keys of known shapes: OpenAI keys (legacy `sk-...` and `sk-proj-`/`sk-svcacct-`/
   `sk-admin-`), Anthropic `sk-ant-...`, Google `AIza...`, GitHub `ghp_`/`gho_`/`github_pat_`,
-  Slack `xox*`. Others, such as `sk-live-...` or `api_key=...`, are not detected.
+  Slack `xox*`. A key of another shape, such as `sk-live-...`, is not detected as an API
+  key; after a label (`api_key=...`, `"api_key": "..."`) it is masked as a password
+  (since 0.10.36).
 - Private keys: the whole `-----BEGIN ... PRIVATE KEY-----` block
 - AWS Access Keys (`AKIA...`)
 - JWT Tokens (`eyJ...`)
+- Bearer tokens (`Bearer ...`, 16+ characters; a JWT keeps the JWT mask)
 - Connection Strings (`postgres://`, `mongodb://`)
-- Generic Passwords (8+ characters after `password=`, `pwd=`, `secret=`, `token=`, etc.)
+- Generic Passwords (8+ characters after `password=`, `pwd=`, `secret=`, `token=`,
+  `api_key=`, `client_secret:` and the JSON form `"password": "..."`; in a dict result, a
+  string under a key with one of those labels)
 
 A string, dict, list, tuple or set result is masked, dictionary keys included. What a
 generator tool yields is masked item by item the same way, and each step of it runs under

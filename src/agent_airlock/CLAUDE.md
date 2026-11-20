@@ -319,7 +319,11 @@ src/agent_airlock/
 8. `_post_execution` — when `sanitize_output` is on, sanitize output via
    `_sanitize_tool_output` (a string is masked and truncated; a dict, list, tuple, set or
    frozenset is masked value by value, keys included, and keeps its type, masked keys that
-   collide getting a ` (2)` suffix; an MCP tool result (a pydantic model with `content` and
+   collide getting a ` (2)` suffix, and since 0.10.36 a string of 8+ characters under a key
+   ending with a `sanitizer._SECRET_LABEL` label masked whole (`_labelled_secret`), since
+   value-by-value reading never sees the key (page cursors such as `nextPageToken` are
+   excluded, `_PAGE_CURSOR_WORDS`; a PASSWORD or BEARER_TOKEN detection's span is the value
+   alone, `_LABELLED_TYPES`, so the label stays); an MCP tool result (a pydantic model with `content` and
    `structured_content` / `structuredContent`) is rebuilt with `model_copy`, its text
    blocks, structured content and `_meta` masked (`_mask_mcp_result`); any other object,
    top-level or nested, is returned as-is and its detections reported as not masked, or
