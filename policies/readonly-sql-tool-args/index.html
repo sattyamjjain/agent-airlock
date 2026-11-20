@@ -23,7 +23,7 @@
     
     
       
-        <title>Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129) - Agent-Airlock</title>
+        <title>Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129, CVE-2026-77367) - Agent-Airlock</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129" class="md-skip">
+        <a href="#read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129-cve-2026-77367" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129)
+              Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129, CVE-2026-77367)
             
           </span>
         </div>
@@ -3273,13 +3273,12 @@
   
 
 
-<h1 id="read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129">Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129)<a class="headerlink" href="#read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129" title="Permanent link">&para;</a></h1>
+<h1 id="read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129-cve-2026-77367">Read-only SQL guard for tool arguments (CVE-2026-125322, CVE-2026-61789, CVE-2026-63129, CVE-2026-77367)<a class="headerlink" href="#read-only-sql-guard-for-tool-arguments-cve-2026-125322-cve-2026-61789-cve-2026-63129-cve-2026-77367" title="Permanent link">&para;</a></h1>
 <p><code>agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard</code> checks the SQL a model puts
 in a database tool's arguments before the tool runs it. Put it in front of any tool that
 promises read-only access.</p>
 <h2 id="why">Why<a class="headerlink" href="#why" title="Permanent link">&para;</a></h2>
-<p>Three MCP database servers ran model-written SQL, or spliced a model's text into SQL they
-built:</p>
+<p>Database servers ran model-written SQL, or spliced a model's text into SQL they built:</p>
 <table>
 <thead>
 <tr>
@@ -3303,6 +3302,11 @@ built:</p>
 <td><a href="https://github.com/advisories/GHSA-2m9m-6cr5-9x25">CVE-2026-63129</a> (CWE-89)</td>
 <td><code>@connorbritain/mssql-mcp-server</code> 0.5.2 and below (<code>-core</code> 0.5.0, <code>-reader</code> and <code>-writer</code> 0.4.2 and below; fixed in 0.6.0 / 0.5.0)</td>
 <td><code>tableName</code> and <code>whereClause</code> in <code>update_data</code> and <code>delete_data</code>, <code>insert_data</code>'s column keys, the DDL tools' names and the reader's <code>list_databases</code> <code>stateFilter</code> (reachable with <code>READONLY=true</code>) were spliced into SQL: stacked statements, and <code>xp_cmdshell</code> where it is enabled. Before 0.10.36 the guard matched field names exactly, so it read none of them</td>
+</tr>
+<tr>
+<td><a href="https://github.com/advisories/GHSA-hq2p-f2vj-v3cm">CVE-2026-77367</a> (CWE-89)</td>
+<td>Daptin</td>
+<td>Unauthenticated SQL injection through the <code>sort</code> parameter. <code>sort</code> was no field the guard read</td>
 </tr>
 </tbody>
 </table>
@@ -3457,9 +3461,11 @@ field ends with <code>filter</code>).</p>
 normalisation: lower case, every character but <code>a-z</code> and <code>0-9</code> dropped, so all three are
 <code>whereclause</code>.</p>
 <ul>
-<li><strong>Fragment</strong>: the normalised name equals a configured fragment field's, or ends with
+<li><strong>Fragment</strong>: the normalised name equals a configured fragment field's, ends with
   <code>where</code>, <code>clause</code>, <code>filter</code>, <code>condition</code>, <code>having</code> or <code>orderby</code> (<code>whereClause</code>,
-  <code>stateFilter</code>, <code>filterCondition</code>, <code>orderBy</code>).</li>
+  <code>stateFilter</code>, <code>filterCondition</code>, <code>orderBy</code>), or is <code>sort</code>, <code>sortby</code>, <code>orderby</code> or
+  <code>groupby</code> (CVE-2026-77367's <code>sort</code>; <code>sort</code> is matched by equality, so <code>resort</code> is not).
+  <code>{"sort": "name ASC"}</code> passes; <code>{"sort": "name; DROP TABLE x--"}</code> does not.</li>
 <li><strong>Statement</strong>: the normalised name equals a configured statement field's, or is
   <code>sqlquery</code>, <code>sqlstatement</code>, <code>rawsql</code> or <code>querytext</code>. There is no suffix rule:
   <code>searchQuery</code> ends with <code>query</code> and holds plain text, so it is not read.</li>
@@ -3498,7 +3504,7 @@ than skips:</p>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># config["preset_id"] == "readonly_sql_tool_args_2026_125322"</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># config["severity"] == "medium"</span>
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="c1"># config["default_action"] == "deny"</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># config["cves"] == ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129")</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># config["cves"] == ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367")</span>
 <a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># config["identifier_fields"], config["row_fields"], config["match_aliases"] as above</span>
 </code></pre></div>
 <p>The preset takes <code>statement_fields</code>, <code>fragment_fields</code>, <code>identifier_fields</code>,
