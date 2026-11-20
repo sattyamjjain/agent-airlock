@@ -353,7 +353,13 @@ def _build_standalone() -> dict[str, StandaloneAdapter]:
         lambda g, c: g.evaluate(dict(c.kwargs)),
         ForbiddenEffect(
             "publish",
-            frozenset({"deny_blast_list_pair", "deny_blast_list_tarball_url"}),
+            frozenset(
+                {
+                    "deny_blast_list_pair",
+                    "deny_blast_list_tarball_url",
+                    "deny_rescoped_malware_name",
+                }
+            ),
             "blast-list-publish",
         ),
         {"package": _triple[1], "version": _triple[2]},
@@ -742,7 +748,14 @@ def _build_standalone() -> dict[str, StandaloneAdapter]:
         ForbiddenEffect(
             "egress",
             frozenset(
-                {"deny_loopback", "deny_metadata", "deny_private_rfc1918", "deny_link_local"}
+                {
+                    "deny_loopback",
+                    "deny_metadata",
+                    "deny_private_rfc1918",
+                    "deny_link_local",
+                    "deny_shared_address_cgnat",
+                    "deny_multicast",
+                }
             ),
             "169.254.169.254",
         ),
@@ -899,6 +912,8 @@ def _ssrf_forbidden(url: Any) -> bool:
         or ip.is_loopback
         or ip.is_link_local
         or ip.is_reserved
+        or ip.is_multicast
+        or ip in ipaddress.ip_network("100.64.0.0/10")
         or str(ip) == "169.254.169.254"
     )
 

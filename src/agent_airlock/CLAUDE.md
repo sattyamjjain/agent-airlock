@@ -241,7 +241,9 @@ src/agent_airlock/
      `lease_scope`, and names no lease target
 5. Endpoint policy validation: every IP a host stands for (`metadata_ip_candidates`:
    decimal, hex, octal, short and IPv6-transition forms) meets the private and metadata
-   checks, and a hostname that passes `allowed_endpoints` is then resolved
+   checks (`_is_private_ip` counts `100.64.0.0/10` and multicast as private since 0.10.36;
+   the metadata set is `safe_types._CANONICAL_METADATA_IPS`, which `SSRFEgressGuard` reads
+   too), and a hostname that passes `allowed_endpoints` is then resolved
    (`resolve_hostnames`, `resolver`) and refused on an internal or missing answer; a name
    the allowlist refuses is never looked up. `EndpointPolicy.allowed_url_prefixes` (empty
    means no path scope) adds a last check on scheme, host, port and the path resolved by

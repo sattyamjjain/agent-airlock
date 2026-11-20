@@ -89,6 +89,11 @@ Honest scope
   ``typing-extensions``, ``uvicorn`` and hundreds more), so a guard that read a bare name in
   both would refuse them for a pip tool; ``installs_from`` is therefore required with
   ``blocked_packages``. Pairs still match in either ecosystem, as they always have.
+- A rescoped name (v0.10.36, ``rescoped_names``) is refused on its basename alone: a
+  legitimate ``@yourco/md-doc-mcp`` is refused too until it is put on ``rescope_allow``.
+  Only scoped npm names whose basename names MCP and is not generic are indexed
+  (:func:`~agent_airlock.mcp_spec.malware_advisory_feed.rescoped_name_index`); an unscoped
+  copy, or a new basename, still passes until an advisory names it.
 
 Primary sources
 ---------------
@@ -98,6 +103,9 @@ Primary sources
   https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
 - Aikido — Mini Shai-Hulud Is Back (2026-05-11, cross-ecosystem):
   https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised
+- GHSA-m5xq-h2p4-962g (2026-11-19), ``@fdcasj_dfew/md-doc-mcp`` 1.0.0 and 1.0.1, the
+  ``@ifasn`` MCP malware republished under a new scope (the rescoped-name check):
+  https://github.com/advisories/GHSA-m5xq-h2p4-962g
 """
 
 from __future__ import annotations
@@ -304,6 +312,9 @@ class OIDCPublishWindowVerdict(str, enum.Enum):
     ALLOW = "allow"
     DENY_BLAST_LIST_PAIR = "deny_blast_list_pair"
     DENY_BLAST_LIST_TARBALL_URL = "deny_blast_list_tarball_url"
+    # A scoped npm name whose basename a listed MCP malware package carries under another
+    # scope (0.10.36, GHSA-m5xq-h2p4-962g).
+    DENY_RESCOPED_MALWARE_NAME = "deny_rescoped_malware_name"
     # Arguments the guard cannot read: not a mapping, or a package / version / url that
     # is not text or a list of text (0.10.28).
     DENY_UNINSPECTABLE = "deny_uninspectable"
@@ -392,11 +403,21 @@ class OIDCPublishWindowGuard:
             only the operator can say which list a bare name is checked against. A spec whose
             syntax names an ecosystem (``x==1.0`` is PyPI, ``@scope/x`` or ``x@1.0`` npm, a
             tarball URL npm) is read there whatever this says. Pairs are not affected.
+        rescoped_names: Lowercased npm basename to ``(listed full name, advisory ids)``,
+            as :func:`~agent_airlock.mcp_spec.malware_advisory_feed.rescoped_name_index`
+            builds it (v0.10.36). A scoped npm name the pair and whole-package lookups did
+            not match, whose basename is here and which is neither listed itself nor on
+            ``rescope_allow``, is refused at every version
+            (``DENY_RESCOPED_MALWARE_NAME``). Empty by default.
+        rescope_allow: Full npm names (``@yourco/md-doc-mcp``) never refused by the
+            rescoped-name check: a legitimate package that shares a listed basename.
 
     Raises:
         TypeError: ``blast_list`` or ``blocked_packages`` is not a frozenset, an entry is
-            not a tuple of strings of the right length, or ``advisories`` is not a mapping
-            from ``(ecosystem, name)`` to a string.
+            not a tuple of strings of the right length, ``advisories`` is not a mapping
+            from ``(ecosystem, name)`` to a string, ``rescoped_names`` is not a mapping
+            from a string to a 2-tuple of strings, or ``rescope_allow`` is not a frozenset
+            of strings.
         ValueError: ``blocked_packages`` is given without ``installs_from``, or
             ``installs_from`` is not one of its values.
     """
@@ -408,6 +429,8 @@ class OIDCPublishWindowGuard:
         blocked_packages: frozenset[tuple[str, str]] = frozenset(),
         advisories: Mapping[tuple[str, str], str] | None = None,
         installs_from: str | None = None,
+        rescoped_names: Mapping[str, tuple[str, str]] | None = None,
+        rescope_allow: frozenset[str] = frozenset(),
     ) -> None:
         if not isinstance(blast_list, frozenset):
             raise TypeError(
@@ -473,6 +496,26 @@ class OIDCPublishWindowGuard:
                 )
             kind = _kind(key[0])
             self._advisories[(kind, _normalise_name(kind, key[1]))] = advisory
+        if rescoped_names is not None and not isinstance(rescoped_names, Mapping):
+            raise TypeError(
+                f"rescoped_names must be a mapping; got {type(rescoped_names).__name__}"
+            )
+        self._rescoped: dict[str, tuple[str, str]] = {}
+        for basename, listed in (rescoped_names or {}).items():
+            if not isinstance(basename, str) or not _is_str_tuple(listed, 2):
+                raise TypeError(
+                    "rescoped_names must map a basename str to a (full name, advisory ids) "
+                    f"2-tuple of str; got {basename!r}: {listed!r}"
+                )
+            self._rescoped[basename.strip().lower()] = listed
+        if not isinstance(rescope_allow, frozenset):
+            raise TypeError(
+                f"rescope_allow must be a frozenset[str]; got {type(rescope_allow).__name__}"
+            )
+        for allowed in rescope_allow:
+            if not isinstance(allowed, str):
+                raise TypeError(f"rescope_allow members must be str; got {allowed!r}")
+        self._rescope_allow = frozenset(_normalise_name("npm", name) for name in rescope_allow)
 
     def evaluate(self, args: Mapping[str, Any] | None) -> OIDCPublishWindowDecision:
         """Decide whether the call args target a blast-list entry.
@@ -531,6 +574,13 @@ class OIDCPublishWindowGuard:
                     blocked = self._blocked_entry(target, ("npm",))
                     if blocked is not None:
                         return self._deny_package(blocked, spec, version, "package")
+            # 1c) A listed MCP malware package's basename under another scope (0.10.36).
+            for target in dict.fromkeys(
+                [name] + [_version_target(name, version)[0] for version in versions]
+            ):
+                rescoped = self._rescoped_entry(target)
+                if rescoped is not None:
+                    return self._deny_rescoped(target, rescoped, spec, requested, "package")
 
         # 2) Registry tarball URL pointing at a blast-list pair.
         urls = _texts(args.get("url"))
@@ -559,6 +609,59 @@ class OIDCPublishWindowGuard:
             if entry is not None:
                 return entry
         return None
+
+    def _rescoped_entry(self, name: str) -> tuple[str, str] | None:
+        """``(listed full name, advisory ids)`` when scoped npm ``name`` is a rescope, else None.
+
+        A rescope is a scoped name whose basename ``rescoped_names`` carries, that is not on
+        ``rescope_allow`` and is not itself listed (a listed name is judged by its pairs).
+        """
+        if not self._rescoped:
+            return None
+        full = _normalise_name("npm", name)
+        scope, slash, base = full.partition("/")
+        if not (scope.startswith("@") and len(scope) > 1 and slash and base):
+            return None
+        listed = self._rescoped.get(base)
+        if listed is None or full in self._rescope_allow:
+            return None
+        if ("npm", full) in self._index or ("npm", full) in self._blocked:
+            return None
+        if _normalise_name("npm", listed[0]) == full:
+            return None
+        return listed
+
+    def _deny_rescoped(
+        self,
+        name: str,
+        listed: tuple[str, str],
+        requested: str,
+        version: str | None,
+        what: str,
+    ) -> OIDCPublishWindowDecision:
+        """Refuse a rescoped MCP malware name at every version."""
+        listed_name, advisory = listed
+        logger.warning(
+            "oidc_publish_window_rescoped_malware_name",
+            package=name,
+            listed_package=listed_name,
+            requested=requested,
+            requested_version=version,
+            incident=advisory or "malware-blast-list",
+        )
+        cited = f", {advisory}" if advisory else ""
+        return OIDCPublishWindowDecision(
+            allowed=False,
+            verdict=OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME,
+            detail=(
+                f"{name} shares the basename of {listed_name}{cited}: a listed MCP malware "
+                f"package under another scope, refused at every version ({what} "
+                f"{requested!r}). Put the full name on rescope_allow if it is yours"
+            ),
+            matched_ecosystem="npm",
+            matched_package=listed_name,
+            matched_version=None,
+        )
 
     def _advisory_for(self, entry: tuple[str, ...]) -> str | None:
         """The advisory id kept for an entry's ``(ecosystem, name)``, or None."""
@@ -619,6 +722,9 @@ class OIDCPublishWindowGuard:
             )
         if blocked is not None:
             return self._deny_package(blocked, url, None, "tarball URL")
+        rescoped = self._rescoped_entry(pkg)
+        if rescoped is not None:
+            return self._deny_rescoped(pkg, rescoped, url, None, "tarball URL")
         return None
 
     @staticmethod

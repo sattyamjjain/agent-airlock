@@ -23,6 +23,9 @@ Primary sources
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -280,3 +283,147 @@ class TestEveryInstallSpellingIsRead:
         guard = OIDCPublishWindowGuard(blast_list=load_blast_list_from_2026_05_11())
         for args in self._spellings("1.0.0"):
             assert guard.evaluate(args).allowed is True, args
+
+
+_RESCOPED = json.loads(
+    (
+        Path(__file__).resolve().parent.parent / "fixtures" / "malware" / "rescoped_md_doc_mcp.json"
+    ).read_text(encoding="utf-8")
+)
+
+
+@pytest.fixture
+def snapshot_2026_11_14(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Load ``malware_blast_2026_11_14.json``, taken before GHSA-m5xq-h2p4-962g existed.
+
+    The rescoped-name check must catch ``@fdcasj_dfew/md-doc-mcp`` from the list as it stood
+    before any advisory named that scope; the 2026-11-20 snapshot lists it outright.
+    """
+    from agent_airlock.mcp_spec import malware_advisory_feed
+
+    monkeypatch.setattr(
+        malware_advisory_feed, "_newest_snapshot_name", lambda root: _RESCOPED["snapshot"]
+    )
+    malware_advisory_feed.load_malware_blast_snapshot.cache_clear()
+    yield
+    malware_advisory_feed.load_malware_blast_snapshot.cache_clear()
+
+
+def _preset_guard(
+    *, match_rescoped: bool = True, rescope_allow: frozenset[str] = frozenset()
+) -> OIDCPublishWindowGuard:
+    from agent_airlock.policy_presets import npm_oidc_publish_window_guard_defaults
+
+    config = npm_oidc_publish_window_guard_defaults(
+        installs_from="npm", match_rescoped=match_rescoped
+    )
+    return OIDCPublishWindowGuard(
+        blast_list=config["blast_list"],
+        blocked_packages=config["blocked_packages"],
+        advisories=config["advisories"],
+        installs_from=config["installs_from"],
+        rescoped_names=config["rescoped_names"],
+        rescope_allow=rescope_allow,
+    )
+
+
+def _call_id(call: dict[str, Any]) -> str:
+    suffix = " (rescope_allow)" if call.get("rescope_allow") else ""
+    return json.dumps(call["args"], sort_keys=True) + suffix
+
+
+@pytest.mark.usefixtures("snapshot_2026_11_14")
+class TestRescopedMalwareName:
+    """GHSA-m5xq-h2p4-962g: ``@fdcasj_dfew/md-doc-mcp``, the ``@ifasn`` family rescoped.
+
+    https://github.com/advisories/GHSA-m5xq-h2p4-962g
+    """
+
+    def test_the_snapshot_loaded_is_the_one_before_the_advisory(self) -> None:
+        from agent_airlock.mcp_spec.malware_advisory_feed import load_malware_blast_snapshot
+
+        snapshot = load_malware_blast_snapshot()
+        assert snapshot.as_of == "2026-11-14"
+        assert not any(name == "@fdcasj_dfew/md-doc-mcp" for _, name, _ in snapshot.pairs)
+
+    @pytest.mark.parametrize("call", _RESCOPED["calls"], ids=_call_id)
+    def test_each_call_gets_its_verdict(self, call: dict[str, Any]) -> None:
+        guard = _preset_guard(rescope_allow=frozenset(call.get("rescope_allow", ())))
+        decision = guard.evaluate(call["args"])
+        assert decision.verdict.value == call["verdict"]
+        if "listed" in call:
+            assert decision.matched_package == call["listed"]
+
+    @pytest.mark.parametrize("call", _RESCOPED["calls"], ids=_call_id)
+    def test_match_rescoped_off_gives_the_verdicts_before(self, call: dict[str, Any]) -> None:
+        guard = _preset_guard(match_rescoped=False)
+        assert guard.evaluate(call["args"]).verdict.value == call["before"]
+
+    def test_the_refusal_names_the_listed_package_and_its_advisory(self) -> None:
+        decision = _preset_guard().evaluate({"package": "@fdcasj_dfew/md-doc-mcp@1.0.0"})
+        assert decision.verdict is OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME
+        assert decision.detail.startswith(
+            "@fdcasj_dfew/md-doc-mcp shares the basename of @ifasn/md-doc-mcp, GHSA-rvw8-22w3-342v"
+        )
+        assert decision.matched_version is None
+
+    def test_every_version_and_spelling_is_refused(self) -> None:
+        guard = _preset_guard()
+        for args in (
+            {"package": "@fdcasj_dfew/md-doc-mcp@99.0.0"},
+            {"package": "@FDCASJ_DFEW/MD-DOC-MCP"},
+            {"package": "alias@npm:@fdcasj_dfew/md-doc-mcp@1.0.0"},
+            {"package": "md-docs", "version": "npm:@fdcasj_dfew/md-doc-mcp@1.0.0"},
+        ):
+            verdict = guard.evaluate(args).verdict
+            assert verdict is OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME, args
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://registry.npmjs.org/@fdcasj_dfew/md-doc-mcp/-/md-doc-mcp-1.0.0.tgz",
+            "https://registry.yarnpkg.com/@fdcasj_dfew%2fmd-doc-mcp/-/md-doc-mcp-1.0.1.tgz",
+        ],
+    )
+    def test_a_tarball_url_for_it_is_refused(self, url: str) -> None:
+        guard = _preset_guard()
+        for args in ({"url": url}, {"package": url}):
+            verdict = guard.evaluate(args).verdict
+            assert verdict is OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME, args
+
+    def test_an_unscoped_copy_and_a_listed_name_s_other_version_are_not_rescopes(self) -> None:
+        guard = _preset_guard()
+        assert guard.evaluate({"package": "md-doc-mcp@1.0.0"}).allowed is True
+        assert guard.evaluate({"package": "@ifasn/md-doc-mcp@9.9.9"}).allowed is True
+
+
+class TestRescopedNamesConstruction:
+    def test_without_the_keyword_nothing_changes(self) -> None:
+        guard = OIDCPublishWindowGuard()
+        assert guard.evaluate({"package": "@x/md-doc-mcp@1.0.0"}).allowed is True
+
+    def test_a_rescope_needs_no_installs_from(self) -> None:
+        guard = OIDCPublishWindowGuard(
+            rescoped_names={"md-doc-mcp": ("@ifasn/md-doc-mcp", "GHSA-rvw8-22w3-342v")}
+        )
+        decision = guard.evaluate({"package": "@x/md-doc-mcp@1.0.0"})
+        assert decision.verdict is OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"rescoped_names": [("md-doc-mcp", ("@a/md-doc-mcp", "GHSA-x"))]},
+            {"rescoped_names": {"md-doc-mcp": "@a/md-doc-mcp"}},
+            {"rescoped_names": {1: ("@a/md-doc-mcp", "GHSA-x")}},
+            {"rescope_allow": {"@a/md-doc-mcp"}},
+            {"rescope_allow": frozenset({1})},
+        ],
+    )
+    def test_wrong_types_raise_type_error(self, kwargs: dict[str, Any]) -> None:
+        with pytest.raises(TypeError):
+            OIDCPublishWindowGuard(**kwargs)
+
+    def test_the_verdict_value_is_stable(self) -> None:
+        assert OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME.value == (
+            "deny_rescoped_malware_name"
+        )

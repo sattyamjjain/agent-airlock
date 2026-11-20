@@ -174,7 +174,8 @@ preset, and
   list is one module-level frozenset (`_WRITE_KEYWORDS`, `_DANGEROUS_FUNCTIONS`, ...);
   INSERT, REPLACE and TRUNCATE followed by `(` are functions, not writes. Since 0.10.36
   (CVE-2026-63129) field names match after `_norm` (lower case, non-alphanumerics dropped)
-  unless `match_aliases=False`: fragments also by `_FRAGMENT_SUFFIXES`, statements only by
+  unless `match_aliases=False`: fragments also by `_FRAGMENT_SUFFIXES` and the sort names in
+  `_FRAGMENT_NAMES` (CVE-2026-77367, equality), statements only by
   equality or `_STATEMENT_ALIASES` (never a suffix: `searchQuery` is plain text). Two more
   roles: identifier fields (`DEFAULT_IDENTIFIER_FIELDS`, equality only) must hold a name
   (`_name_problem`; quoted per `_name_quotes(readings)`, and a quoted body that would be
@@ -187,7 +188,13 @@ preset, and
   reviewed GHSA in OSV form lists vulnerable, not malicious, versions, so it is skipped. A
   whole package (`blocked_packages` in `OIDCPublishWindowGuard`) has no version to narrow
   it, so it is matched in the ecosystem the argument's syntax names (`_spec_kinds`), while
-  pairs keep matching in either ecosystem as before.
+  pairs keep matching in either ecosystem as before. Since 0.10.36 `rescoped_name_index`
+  maps each scoped npm MCP basename to a listed full name (GHSA-m5xq-h2p4-962g), and the
+  guard's `rescoped_names` refuses that basename under another scope only after the pair and
+  whole-package lookups miss, never for a listed name or one on `rescope_allow`. Tests pin a
+  snapshot by monkeypatching `_newest_snapshot_name` and calling
+  `load_malware_blast_snapshot.cache_clear()` before and after (`snapshot_2026_11_14` in
+  `tests/mcp_spec/test_oidc_publish_window_guard.py`).
 - **`tools/list` paging differs by SDK line.** mcp 2.x's result has `next_cursor` and no
   `nextCursor` (FastMCP 4 adds a `nextCursor` to it that warns on each read); mcp 1.x's has
   only `nextCursor`. `ClientSession.list_tools` takes `params=` (and on 1.x a deprecated

@@ -188,8 +188,13 @@ _METADATA_HOSTS = frozenset(
         "fd00:ec2::254",
         "metadata.google.internal",
         "169.254.169.253",
+        "100.100.100.200",  # Alibaba Cloud (V0.10.36)
     }
 )
+
+#: RFC 6598 shared address space (carrier-grade NAT), where Alibaba Cloud's metadata
+#: address sits. Python calls it neither private nor global (V0.10.36).
+_SHARED_ADDRESS_SPACE = ipaddress.IPv4Network("100.64.0.0/10")
 
 
 def _matches_endpoint_pattern(hostname: str, pattern: str) -> bool:
@@ -212,12 +217,18 @@ def _is_private_ip(hostname: str) -> bool:
     route through ``_is_private_ip`` automatically pick up IPv4-mapped,
     NAT64, 6to4, and documentation ranges that ``ipaddress.is_private``
     does not flag.
+
+    V0.10.36: also the shared address space ``100.64.0.0/10`` (Alibaba Cloud's
+    metadata address ``100.100.100.200`` is in it) and multicast, as
+    :class:`~agent_airlock.ssrf_egress_guard.SSRFEgressGuard` refuses them.
     """
     try:
         ip = ipaddress.ip_address(hostname)
     except ValueError:
         return False
-    if ip.is_private or ip.is_loopback or ip.is_link_local:
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+        return True
+    if isinstance(ip, ipaddress.IPv4Address) and ip in _SHARED_ADDRESS_SPACE:
         return True
     if isinstance(ip, ipaddress.IPv6Address) and is_blocked_ipv6_range(hostname):
         return True

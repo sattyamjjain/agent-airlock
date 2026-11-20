@@ -22,6 +22,10 @@ wrote, or splices a model's text into SQL it builds.
   0.10.36, so ``whereClause`` and ``stateFilter`` were never read and a table name was
   never checked as a name.
   https://github.com/advisories/GHSA-2m9m-6cr5-9x25
+- **CVE-2026-77367** (Daptin, GHSA-hq2p-f2vj-v3cm, 2026-11-20): unauthenticated SQL
+  injection through the ``sort`` parameter. A sort key is a fragment too: ``name ASC``
+  passes, ``name; DROP TABLE x--`` does not.
+  https://github.com/advisories/GHSA-hq2p-f2vj-v3cm
 
 What it does
 ------------
@@ -58,7 +62,8 @@ separators: ``whereClause``, ``where_clause`` and ``WHERE-CLAUSE`` all normalise
 ``whereclause`` (lower case, everything but ``a-z`` and ``0-9`` dropped). A name is then a
 fragment field when it equals a configured fragment name so normalised or ends with
 ``where``, ``clause``, ``filter``, ``condition``, ``having`` or ``orderby``
-(``stateFilter``, ``filterCondition``, ``orderBy``); a statement field only when it equals
+(``stateFilter``, ``filterCondition``, ``orderBy``), or is ``sort``, ``sortby``,
+``orderby`` or ``groupby`` (CVE-2026-77367's ``sort``); a statement field only when it equals
 a configured statement name or ``sqlquery``, ``sqlstatement``, ``rawsql`` or
 ``querytext`` (no suffix rule: ``searchQuery`` is not SQL); an identifier or row field
 only when it equals a configured one (``tableName``, ``TABLE_NAME``, ``table-name``).
@@ -154,6 +159,10 @@ DEFAULT_ROW_FIELDS: frozenset[str] = frozenset(
 
 # With match_aliases on, a normalised name ending with one of these is a fragment field
 # (whereClause, stateFilter, filterCondition, orderBy).
+# With match_aliases on, these normalised names are fragment fields too (equality, not a
+# suffix: ``resort`` is not a sort key). CVE-2026-77367's ``sort``.
+_FRAGMENT_NAMES: frozenset[str] = frozenset({"sort", "sortby", "orderby", "groupby"})
+
 _FRAGMENT_SUFFIXES: tuple[str, ...] = (
     "where",
     "clause",
@@ -759,7 +768,7 @@ class ReadOnlySQLGuard:
     Anchors CVE-2026-125322 (a subquery in a ``where`` fragment), CVE-2026-61789 (a
     second statement hidden from a read-only check by MySQL's ``--`` rule) and
     CVE-2026-63129 (``whereClause``, ``stateFilter``, ``tableName`` and ``insert_data``'s
-    column keys spliced into SQL). The guard tokenises; it never runs, parses into a plan
+    column keys spliced into SQL) and CVE-2026-77367 (Daptin's ``sort``). The guard tokenises; it never runs, parses into a plan
     or rewrites the SQL.
 
     Args:
@@ -880,7 +889,7 @@ class ReadOnlySQLGuard:
         alias = name if self._match_aliases and isinstance(name, str) else ""
         if inherited == _FRAGMENT or name in self._names[_FRAGMENT]:
             return _FRAGMENT
-        if alias and alias.endswith(_FRAGMENT_SUFFIXES):
+        if alias and (alias.endswith(_FRAGMENT_SUFFIXES) or alias in _FRAGMENT_NAMES):
             return _FRAGMENT
         if inherited == _STATEMENT or name in self._names[_STATEMENT]:
             return _STATEMENT
