@@ -1,0 +1,133 @@
+{
+  "advisory": "https://nvd.nist.gov/vuln/detail/CVE-2026-114496",
+  "note": "codebase-memory-mcp below 0.9.0 passed detect_changes' base_branch to git with no leading-dash check (CWE-88). 'before' is ToolArgSinkGuard on 881b66ce (0.10.35 code), measured 2026-11-21.",
+  "refused": [
+    {
+      "guard": {
+        "shell_args": [
+          "base_branch"
+        ],
+        "option_args": [
+          "base_branch"
+        ]
+      },
+      "args": {
+        "base_branch": "--output=/tmp/pwn"
+      },
+      "before": "allow",
+      "argument": "base_branch",
+      "token": "--output"
+    },
+    {
+      "guard": {
+        "shell_args": [
+          "base_branch"
+        ],
+        "option_args": [
+          "base_branch"
+        ]
+      },
+      "args": {
+        "base_branch": "-c core.sshCommand=id"
+      },
+      "before": "allow",
+      "argument": "base_branch",
+      "token": "-c"
+    },
+    {
+      "guard": {
+        "shell_args": [
+          "base_branch"
+        ],
+        "option_args": [
+          "base_branch"
+        ]
+      },
+      "args": {
+        "base_branch": " --upload-pack=x"
+      },
+      "before": "allow",
+      "argument": "base_branch",
+      "token": "--upload-pack"
+    },
+    {
+      "guard": {
+        "shell_args": [
+          "base_branch"
+        ],
+        "option_args": [
+          "base_branch"
+        ]
+      },
+      "args": {
+        "base_branch": [
+          "main",
+          "--output=/tmp/pwn"
+        ]
+      },
+      "before": "allow",
+      "argument": "base_branch[1]",
+      "token": "--output"
+    },
+    {
+      "guard": {
+        "screen_all_str_args": true
+      },
+      "args": {
+        "base_branch": "--upload-pack=touch /tmp/x"
+      },
+      "before": "allow",
+      "argument": "base_branch",
+      "token": "--upload-pack"
+    }
+  ],
+  "allowed": [
+    {
+      "guard": {
+        "shell_args": [
+          "base_branch"
+        ],
+        "option_args": [
+          "base_branch"
+        ]
+      },
+      "args": {
+        "base_branch": "main"
+      }
+    },
+    {
+      "guard": {
+        "shell_args": [
+          "base_branch"
+        ],
+        "option_args": [
+          "base_branch"
+        ]
+      },
+      "args": {
+        "base_branch": "origin/main"
+      }
+    },
+    {
+      "guard": {
+        "shell_args": [
+          "base_branch"
+        ],
+        "option_args": [
+          "base_branch"
+        ]
+      },
+      "args": {
+        "base_branch": "feature/x-1"
+      }
+    },
+    {
+      "guard": {
+        "screen_all_str_args": true
+      },
+      "args": {
+        "message": "-- fixed typo"
+      }
+    }
+  ]
+}
