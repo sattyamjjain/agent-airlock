@@ -4700,12 +4700,20 @@ TOOL_ARG_SINK_CVES: tuple[str, ...] = (
 )
 
 
+#: The arguments :func:`tool_arg_sink_defaults` reads for a leading ``-`` unless told
+#: otherwise: names a server passes to git as one word (CVE-2026-114496's ``base_branch``).
+TOOL_ARG_SINK_OPTION_ARGS: frozenset[str] = frozenset(
+    {"base_branch", "branch", "ref", "rev", "revision", "commit", "tag", "remote"}
+)
+
+
 @preset
 def tool_arg_sink_defaults(
     *,
     free_text_args: Iterable[str] = (),
     installer_args: Iterable[str] = (),
     mode: ToolArgSinkMode = "warn",
+    option_args: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """Screen every string tool argument for shell syntax, warning first (v0.10.28+).
 
@@ -4719,6 +4727,13 @@ def tool_arg_sink_defaults(
     under ``shell=True`` (CVE-2026-117569), hagent's ``args`` (CVE-2026-117573), and
     functype-mcp-server's ``version``, which ``pnpm add`` installed and the server then
     imported (CVE-2026-59176, CWE-829, fixed in 1.4.4).
+
+    Since 0.10.36 it also refuses option injection (CWE-88): codebase-memory-mcp below 0.9.0
+    passed ``detect_changes``' ``base_branch`` to git with no leading-dash check, so
+    ``--output=<file>`` made git write a file the model chose (CVE-2026-114496, NVD
+    2026-11-20). ``option_args`` (:data:`TOOL_ARG_SINK_OPTION_ARGS` by default) and every
+    argument named like a branch or ref may not start with ``-``. That CVE is cited here, not
+    in ``cves``, which lists the October set.
 
     This preset turns on :class:`~agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard` with
     ``screen_all_str_args=True`` in ``warn`` mode, so adopting it cannot break a host on day
@@ -4734,6 +4749,8 @@ def tool_arg_sink_defaults(
         installer_args: Arguments that must be a bare version (``1.4.4``, ``^1.30.0``).
         mode: ``"warn"`` (the default) logs a finding and runs the call; ``"deny"``
             refuses it with block reason ``tool_arg_sink``.
+        option_args: Arguments refused when they start with ``-``. None means
+            :data:`TOOL_ARG_SINK_OPTION_ARGS` without any name in ``free_text_args``.
 
     Returns:
         ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
@@ -4763,16 +4780,24 @@ def tool_arg_sink_defaults(
 
         comment_on_issue(repo="x; id", body="Looks good; merging.")  # logged, then runs
 
-    Primary source:
+    Primary sources:
       https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=2026-10-26T00:00:00.000&pubEndDate=2026-10-29T23:59:59.999
+      https://nvd.nist.gov/vuln/detail/CVE-2026-114496
     """
     from .tool_arg_sink_guard import ToolArgSinkGuard
 
+    free_text = frozenset(_names_of(free_text_args, "free_text_args"))
+    options = (
+        TOOL_ARG_SINK_OPTION_ARGS - free_text
+        if option_args is None
+        else frozenset(_names_of(option_args, "option_args"))
+    )
     guard = ToolArgSinkGuard(
         screen_all_str_args=True,
-        free_text_args=frozenset(_names_of(free_text_args, "free_text_args")),
+        free_text_args=free_text,
         installer_args=frozenset(_names_of(installer_args, "installer_args")),
         mode=mode,
+        option_args=options,
     )
     return {
         "preset_id": "tool_arg_sink",
@@ -6697,6 +6722,7 @@ __all__ = [
     # V0.10.28 shell syntax and package specs in string tool arguments (nine CVEs, 27-28 Oct)
     "tool_arg_sink_defaults",
     "TOOL_ARG_SINK_CVES",
+    "TOOL_ARG_SINK_OPTION_ARGS",
     # Callable names in dispatch arguments (CVE-2026-119050, Agno PandasTools)
     "reflection_sink_defaults",
     # V0.10.29 secrets and personal data in memory-write arguments (mem0ai/mem0#7283)

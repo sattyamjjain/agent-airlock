@@ -192,7 +192,12 @@ src/agent_airlock/
      (`fullmatch`, so a trailing newline fails): in the allowlist exactly (a dotted path
      only so), or with an empty allowlist not matched case-folded by
      `DEFAULT_DISPATCH_DENY`; the refusal shows the name, never the deny pattern. The field
-     is stored as a hashable read-only `_DispatchNames`, so the frozen guard stays hashable
+     is stored as a hashable read-only `_DispatchNames`, so the frozen guard stays hashable.
+     `option_args` (0.10.36, CVE-2026-114496, CWE-88) refuse a string whose first non-space
+     character is `-` (`deny_option_injection`, the token the option up to `=`); with
+     `screen_all_str_args` so does every argument whose `_NOT_ALNUM`-stripped name ends in a
+     `_REF_SHAPED_SUFFIXES` word (`base_branch`, `gitRef`), bar `free_text_args`. The option
+     test runs before the shell test on the same leaf
    - 2.76 secrets and personal data in arguments (V0.10.29, `argument_secret_guard.py`, off
      until the policy sets `argument_secret_guard`): the sanitizer's detectors over every
      string argument, nested ones and mapping keys included. `block` refuses

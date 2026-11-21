@@ -11,10 +11,14 @@ argument that names a function the tool calls: CVE-2026-119050 passed ``read_pic
 Every value here is a harmless string and no test runs a shell: a guarded tool only records
 that it ran, and nothing is unpickled or called by name.
 
+``option_args`` (``TestOptionArgs``, 0.10.36) refuse a value a program would read as an
+option: CVE-2026-114496 passed ``base_branch`` to git, and ``--output=<file>`` wrote a file.
+
 Primary sources:
   https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=2026-10-26T00:00:00.000&pubEndDate=2026-10-29T23:59:59.999
   https://github.com/jordanburke/functype/security/advisories/GHSA-wcjj-9m6g-2fr2
   https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119050
+  https://nvd.nist.gov/vuln/detail/CVE-2026-114496
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ import copy
 import dataclasses
 import json
 from collections import UserString
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -43,6 +47,7 @@ from agent_airlock import core as core_module
 from agent_airlock.mcp_spec import stdio_command_injection_guard as stdio_module
 from agent_airlock.policy_presets import (
     TOOL_ARG_SINK_CVES,
+    TOOL_ARG_SINK_OPTION_ARGS,
     list_active,
     reflection_sink_defaults,
     tool_arg_sink_defaults,
@@ -1086,3 +1091,127 @@ class TestDispatchArgsConstruction:
             }
         )
         assert documented == sink_module.DEFAULT_DISPATCH_DENY
+
+
+_OPTION_CASES = json.loads(
+    (
+        Path(__file__).resolve().parent / "fixtures" / "tool_args" / "option_injection.json"
+    ).read_text(encoding="utf-8")
+)
+
+
+def _guard_from(spec: dict[str, Any]) -> ToolArgSinkGuard:
+    return ToolArgSinkGuard(
+        **{key: (set(value) if isinstance(value, list) else value) for key, value in spec.items()}
+    )
+
+
+def _case_id(case: dict[str, Any]) -> str:
+    return json.dumps(case["args"])[:60]
+
+
+class TestOptionArgs:
+    """CVE-2026-114496 (CWE-88): codebase-memory-mcp below 0.9.0 passed ``base_branch`` to git.
+
+    https://nvd.nist.gov/vuln/detail/CVE-2026-114496
+    """
+
+    @pytest.mark.parametrize("case", _OPTION_CASES["refused"], ids=_case_id)
+    def test_an_option_shaped_value_is_refused(self, case: dict[str, Any]) -> None:
+        decision = _guard_from(case["guard"]).evaluate(case["args"])
+        assert decision.verdict is ToolArgSinkVerdict.DENY_OPTION_INJECTION
+        assert decision.argument == case["argument"]
+        assert decision.token == case["token"]
+        assert decision.fix_hints
+
+    @pytest.mark.parametrize("case", _OPTION_CASES["allowed"], ids=_case_id)
+    def test_a_branch_name_is_allowed(self, case: dict[str, Any]) -> None:
+        assert _guard_from(case["guard"]).evaluate(case["args"]).allowed is True
+
+    def test_shell_args_alone_still_admit_an_option_as_measured_before(self) -> None:
+        guard = ToolArgSinkGuard(shell_args={"base_branch"})
+        for case in _OPTION_CASES["refused"]:
+            if case["guard"].get("shell_args") and case["before"] == "allow":
+                assert guard.evaluate(case["args"]).allowed is True, case["args"]
+
+    def test_the_refusal_names_the_option_never_the_rest(self) -> None:
+        decision = ToolArgSinkGuard(option_args={"ref"}).evaluate(
+            {"ref": "--output=/tmp/zz_marker_zz"}
+        )
+        assert "--output" in decision.detail
+        assert "zz_marker_zz" not in decision.detail
+        assert "CWE-88" in decision.detail
+
+    def test_it_is_refused_through_airlock_and_warned_in_warn_mode(self, events: _Events) -> None:
+        @Airlock(policy=_policy(option_args={"base_branch"}))
+        def detect_changes(base_branch: str) -> str:
+            return RAN
+
+        result = _refused(detect_changes(base_branch="--output=/tmp/pwn"))
+        assert result["metadata"]["verdict"] == "deny_option_injection"
+        assert result["metadata"]["argument"] == "base_branch"
+        assert detect_changes(base_branch="origin/main") == RAN
+
+        @Airlock(policy=_policy(option_args={"base_branch"}, mode="warn"))
+        def detect_changes_warned(base_branch: str) -> str:
+            return RAN
+
+        assert detect_changes_warned(base_branch="-c core.sshCommand=id") == RAN
+        [warned] = events.named("airlock_tool_arg_sink_warn_only")
+        assert warned["verdict"] == "deny_option_injection"
+        assert warned["token"] == "-c"
+
+    @pytest.mark.parametrize(
+        "name",
+        ["base_branch", "gitRef", "target-commit", "TAG", "upstream_remote", "rev", "revision"],
+    )
+    def test_screen_all_reads_ref_shaped_names(self, name: str) -> None:
+        guard = ToolArgSinkGuard(screen_all_str_args=True)
+        assert guard.evaluate({name: "--upload-pack=x"}).verdict is (
+            ToolArgSinkVerdict.DENY_OPTION_INJECTION
+        )
+        assert guard.evaluate({name: "main"}).allowed is True
+
+    def test_screen_all_leaves_other_names_and_free_text_alone(self) -> None:
+        guard = ToolArgSinkGuard(screen_all_str_args=True, free_text_args={"message", "ref"})
+        for args in (
+            {"args": "--fqbn esp32:esp32:esp32"},
+            {"target": "-sV"},
+            {"message": "-- fixed typo"},
+            {"ref": "--not-a-ref-here"},
+        ):
+            assert guard.evaluate(args).allowed is True, args
+
+    def test_a_number_or_none_passes(self) -> None:
+        guard = ToolArgSinkGuard(option_args={"rev"})
+        assert guard.evaluate({"rev": -1}).allowed is True
+        assert guard.evaluate({"rev": None}).allowed is True
+
+    def test_option_args_alone_make_a_guard(self) -> None:
+        assert ToolArgSinkGuard(option_args={"ref"}).option_args == frozenset({"ref"})
+
+    @pytest.mark.parametrize("value", ["base_branch", ["base_branch", 1], 7])
+    def test_option_args_of_a_wrong_type_raise(self, value: Any) -> None:
+        with pytest.raises(TypeError):
+            ToolArgSinkGuard(option_args=value)
+
+    def test_an_option_arg_named_free_text_too_raises(self) -> None:
+        with pytest.raises(ValueError, match="option_args"):
+            ToolArgSinkGuard(screen_all_str_args=True, free_text_args={"ref"}, option_args={"ref"})
+
+    def test_the_preset_reads_git_names_for_options(self) -> None:
+        guard = tool_arg_sink_defaults()["guard"]
+        assert guard.option_args == TOOL_ARG_SINK_OPTION_ARGS
+        assert (
+            frozenset(
+                {"base_branch", "branch", "ref", "rev", "revision", "commit", "tag", "remote"}
+            )
+            == TOOL_ARG_SINK_OPTION_ARGS
+        )
+        assert guard.evaluate({"base_branch": "--output=/tmp/pwn"}).verdict is (
+            ToolArgSinkVerdict.DENY_OPTION_INJECTION
+        )
+        exempt = tool_arg_sink_defaults(free_text_args={"commit"})["guard"]
+        assert "commit" not in exempt.option_args
+        mine = tool_arg_sink_defaults(option_args={"ref"})["guard"]
+        assert mine.option_args == frozenset({"ref"})
