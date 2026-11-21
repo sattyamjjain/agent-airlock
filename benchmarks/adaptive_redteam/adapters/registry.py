@@ -358,6 +358,8 @@ def _build_standalone() -> dict[str, StandaloneAdapter]:
                     "deny_blast_list_pair",
                     "deny_blast_list_tarball_url",
                     "deny_rescoped_malware_name",
+                    "deny_release_too_new",
+                    "deny_release_age_unknown",
                 }
             ),
             "blast-list-publish",

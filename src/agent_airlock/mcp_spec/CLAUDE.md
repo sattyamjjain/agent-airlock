@@ -195,6 +195,15 @@ preset, and
   snapshot by monkeypatching `_newest_snapshot_name` and calling
   `load_malware_blast_snapshot.cache_clear()` before and after (`snapshot_2026_11_14` in
   `tests/mcp_spec/test_oidc_publish_window_guard.py`).
+- **`release_age.py` is the one module here that can reach the network**, and only through
+  `registry_release_time_lookup()`, which a caller builds (GHSA-h82f-cjm4-g22r). The guard's
+  `min_release_age` check runs after every list (pairs, whole packages, rescoped names,
+  tarball URLs; `_AgeQuery`s are collected and answered last), never looks up a git, path or
+  non-registry URL spec (`_is_registry_spec`), judges a spec with no exact version by the
+  registry's default version, and treats a lookup that returns None or raises as an unknown
+  age (`unknown_release_age`, `deny` by default). Only exact-version answers are cached: a
+  cached `latest` would go stale. Tests pass a stub `opener`; `urlopen` carries
+  `# nosec B310` because only the two fixed registry bases reach it.
 - **`tools/list` paging differs by SDK line.** mcp 2.x's result has `next_cursor` and no
   `nextCursor` (FastMCP 4 adds a `nextCursor` to it that warns on each read); mcp 1.x's has
   only `nextCursor`. `ClientSession.list_tools` takes `params=` (and on 1.x a deprecated

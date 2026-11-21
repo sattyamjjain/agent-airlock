@@ -73,6 +73,7 @@ if TYPE_CHECKING:
     from .mcp_spec.header_audit import ResponseHeaderAuditConfig
     from .mcp_spec.meta_trust import MetaPin
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig
+    from .mcp_spec.release_age import ReleaseTimeLookup
     from .mcp_spec.sampling_guard import SamplingGuardConfig
     from .mcp_spec.step_up_scope_guard import AdmissionScopeSnapshot
     from .mcp_spec.tasks_admission_guard import TasksAdmissionState
@@ -2802,6 +2803,8 @@ def npm_oidc_publish_window_guard_defaults(
     include_malware_feed: bool = True,
     installs_from: str | None = None,
     match_rescoped: bool = True,
+    min_release_age_hours: int | None = None,
+    release_time_lookup: ReleaseTimeLookup | None = None,
 ) -> dict[str, Any]:
     """Recommended config for the TanStack 2026-05-11 OIDC publish-window guard.
 
@@ -2831,16 +2834,26 @@ def npm_oidc_publish_window_guard_defaults(
     another scope is refused before any advisory names it (GHSA-m5xq-h2p4-962g:
     ``@fdcasj_dfew/md-doc-mcp``, the ``@ifasn/md-doc-mcp`` family under a new scope). A
     legitimate package sharing a listed basename goes on the guard's ``rescope_allow``.
-    Build the guard from all of them::
 
-        cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm")
+    A list names a package only after someone has reviewed it: GHSA-h82f-cjm4-g22r
+    (``@guicai777/mcp-doctor`` 1.0.1) was installable for four days before its advisory.
+    ``min_release_age_hours`` (v0.10.36, off by default because it calls the registry; 168
+    recommended) refuses a version published less than that many hours before the call, as
+    pnpm's ``minimumReleaseAge`` does, through
+    :func:`agent_airlock.mcp_spec.release_age.registry_release_time_lookup` unless you pass
+    your own ``release_time_lookup``. Build the guard from all of them::
+
+        cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm", min_release_age_hours=168)
         guard = OIDCPublishWindowGuard(
             blast_list=cfg["blast_list"],
             blocked_packages=cfg["blocked_packages"],
             advisories=cfg["advisories"],
             installs_from=cfg["installs_from"],
             rescoped_names=cfg["rescoped_names"],
+            min_release_age=cfg["min_release_age"],
+            release_time_lookup=cfg["release_time_lookup"],
             rescope_allow=frozenset({"@yourco/md-doc-mcp"}),  # only if you publish one
+            release_age_allow=frozenset({"@yourco/internal-tool"}),  # yours, published today
         )
 
     Args:
@@ -2855,21 +2868,56 @@ def npm_oidc_publish_window_guard_defaults(
         match_rescoped: False leaves ``rescoped_names`` empty, so only exact listed names
             are refused (the guard as it was before 0.10.36). Empty too when
             ``include_malware_feed`` is off.
+        min_release_age_hours: Hours a registry version must have been public before the
+            guard admits it; returned as ``min_release_age`` (a ``timedelta``). None, the
+            default, leaves the release-age check off.
+        release_time_lookup: Who says when a version was published. Defaults to
+            :func:`agent_airlock.mcp_spec.release_age.registry_release_time_lookup` when
+            ``min_release_age_hours`` is set, which makes HTTPS requests to
+            registry.npmjs.org and pypi.org at call time.
+
+    Raises:
+        TypeError: ``min_release_age_hours`` is not an int, or ``release_time_lookup`` is
+            not callable.
+        ValueError: ``min_release_age_hours`` is negative.
 
     Primary sources:
       https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
       https://github.com/advisories/GHSA-m5xq-h2p4-962g (rescoped MCP malware names)
+      https://github.com/advisories/GHSA-h82f-cjm4-g22r (the release-age check)
       https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
       https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised
       (the wider wave; its packages are not in the list)
     """
+    from datetime import timedelta
+
     from .mcp_spec.malware_advisory_feed import (
         MalwareBlastList,
         load_malware_blast_snapshot,
         rescoped_name_index,
     )
     from .mcp_spec.oidc_publish_window_guard import load_blast_list_from_2026_05_11
+    from .mcp_spec.release_age import registry_release_time_lookup
 
+    if min_release_age_hours is not None:
+        if isinstance(min_release_age_hours, bool) or not isinstance(min_release_age_hours, int):
+            raise TypeError(
+                f"min_release_age_hours must be an int; got {type(min_release_age_hours).__name__}"
+            )
+        if min_release_age_hours < 0:
+            raise ValueError(
+                f"min_release_age_hours cannot be negative; got {min_release_age_hours}"
+            )
+    if release_time_lookup is not None and not callable(release_time_lookup):
+        raise TypeError(
+            f"release_time_lookup must be callable; got {type(release_time_lookup).__name__}"
+        )
+    min_release_age = (
+        timedelta(hours=min_release_age_hours) if min_release_age_hours is not None else None
+    )
+    lookup = release_time_lookup
+    if lookup is None and min_release_age is not None:
+        lookup = registry_release_time_lookup()
     feed = load_malware_blast_snapshot() if include_malware_feed else MalwareBlastList()
     rescoped = rescoped_name_index(feed if match_rescoped else MalwareBlastList())
     pairs = blast_list if blast_list is not None else load_blast_list_from_2026_05_11() | feed.pairs
@@ -2889,6 +2937,8 @@ def npm_oidc_publish_window_guard_defaults(
         "malware_feed_as_of": feed.as_of,
         "installs_from": installs_from,
         "rescoped_names": rescoped,
+        "min_release_age": min_release_age,
+        "release_time_lookup": lookup,
     }
 
 
