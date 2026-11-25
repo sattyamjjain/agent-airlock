@@ -1134,6 +1134,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#option-arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option arguments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#modes-and-the-refusal" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3382,6 +3393,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#option-arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option arguments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#modes-and-the-refusal" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3493,6 +3515,11 @@ without it behaves exactly as before:</p>
 <td><code>dispatch_args</code></td>
 <td><code>{}</code></td>
 <td>arguments that name a function the tool calls, each with the names it may hold: see <a href="../dispatch-arguments/">Dispatch arguments</a></td>
+</tr>
+<tr>
+<td><code>option_args</code></td>
+<td><code>frozenset()</code></td>
+<td>arguments a server passes to a program as one word, which may not start with <code>-</code> (0.10.36): see <a href="#option-arguments">Option arguments</a></td>
 </tr>
 </tbody>
 </table>
@@ -3721,11 +3748,44 @@ refusal says which kind of thing it found:</p>
 <a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="n">set_functype_version</span><span class="p">(</span><span class="n">version</span><span class="o">=</span><span class="s2">"1.4.4"</span><span class="p">)</span>  <span class="c1"># runs</span>
 <a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">set_functype_version</span><span class="p">(</span><span class="n">version</span><span class="o">=</span><span class="s2">"file:../evil"</span><span class="p">)</span>  <span class="c1"># refused: not a bare version</span>
 </code></pre></div>
+<h2 id="option-arguments">Option arguments<a class="headerlink" href="#option-arguments" title="Permanent link">&para;</a></h2>
+<p>Added in 0.10.36. A server that passes an argument to a program as one argv word, with no
+shell, is safe from shell syntax but not from options: a value starting with <code>-</code> is read
+as an option, not a value (CWE-88). <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-114496">CVE-2026-114496</a>
+(NVD 2026-11-20, Medium 5.5): codebase-memory-mcp below 0.9.0 passed <code>detect_changes</code>'
+<code>base_branch</code> to git with no leading-dash check, so <code>--output=&lt;file&gt;</code> made git write a
+file the model chose.</p>
+<p>An <code>option_args</code> argument holding a string, or a list with a string, whose first non-space
+character is <code>-</code> is refused as <code>deny_option_injection</code>. The refusal shows the option
+(<code>--output</code>, <code>-c</code>), up to <code>=</code> or a space, never the rest of the value:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span><span class="p">,</span> <span class="n">SecurityPolicy</span><span class="p">,</span> <span class="n">ToolArgSinkGuard</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">ToolArgSinkGuard</span><span class="p">(</span><span class="n">option_args</span><span class="o">=</span><span class="p">{</span><span class="s2">"base_branch"</span><span class="p">})</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">SecurityPolicy</span><span class="p">(</span><span class="n">tool_arg_sink_guard</span><span class="o">=</span><span class="n">guard</span><span class="p">))</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">detect_changes</span><span class="p">(</span><span class="n">base_branch</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="k">return</span> <span class="sa">f</span><span class="s2">"diffing against </span><span class="si">{</span><span class="n">base_branch</span><span class="si">}</span><span class="s2">"</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="n">detect_changes</span><span class="p">(</span><span class="n">base_branch</span><span class="o">=</span><span class="s2">"origin/main"</span><span class="p">)</span>  <span class="c1"># runs</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">detect_changes</span><span class="p">(</span><span class="n">base_branch</span><span class="o">=</span><span class="s2">"--output=/tmp/pwn"</span><span class="p">)</span>  <span class="c1"># refused: deny_option_injection</span>
+</code></pre></div>
+<p>With <code>screen_all_str_args=True</code> the same test applies, without naming them, to every
+argument whose name (lower case, punctuation dropped) ends in <code>branch</code>, <code>ref</code>, <code>rev</code>,
+<code>revision</code>, <code>commit</code>, <code>tag</code> or <code>remote</code>: <code>base_branch</code>, <code>gitRef</code>, <code>target_commit</code>.
+<code>free_text_args</code> opts one out. Other arguments may still start with <code>-</code>
+(<code>args="--fqbn esp32:esp32:esp32"</code> is a flag the tool means to pass), and a message such as
+<code>"-- fixed typo"</code> under <code>message</code> passes.</p>
+<p>Before 0.10.36, <code>ToolArgSinkGuard(shell_args={"base_branch"})</code> admitted
+<code>"--output=/tmp/pwn"</code> and <code>"-c core.sshCommand=id"</code>, and <code>screen_all_str_args=True</code>
+admitted <code>"--upload-pack=touch /tmp/x"</code>: none of them is shell syntax.</p>
 <h2 id="modes-and-the-refusal">Modes and the refusal<a class="headerlink" href="#modes-and-the-refusal" title="Permanent link">&para;</a></h2>
 <p>In <code>deny</code> mode a finding is the usual blocked response: <code>block_reason</code> <code>"tool_arg_sink"</code>,
 an <code>error</code>, <code>fix_hints</code> saying what to send instead, and <code>metadata</code> with the <code>argument</code>
 (<code>"repo"</code>, <code>"repo[1]"</code>, <code>"target.repo"</code>), the <code>token</code> that tripped it and the <code>verdict</code>
-(<code>deny_shell_metachar</code>, <code>deny_not_a_version</code> or <code>deny_uninspectable</code>). It names the
+(<code>deny_shell_metachar</code>, <code>deny_not_a_version</code>, <code>deny_option_injection</code> or
+<code>deny_uninspectable</code>). It names the
 argument and the token, never the whole value; a mapping key is reported as "a mapping
 key in argument 'repo'", since its path would spell it out. <code>on_blocked</code> hears it with
 <code>violation_type</code> <code>"tool_arg_sink"</code>, and the log has <code>airlock_tool_arg_sink_block</code>.</p>
@@ -3734,19 +3794,22 @@ argument, token, verdict) and the call runs.</p>
 <h2 id="preset">Preset<a class="headerlink" href="#preset" title="Permanent link">&para;</a></h2>
 <p><code>policy_presets.tool_arg_sink_defaults()</code> screens every string argument in <code>warn</code> mode,
 so adopting it cannot break a host on day one:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">tool_arg_sink_defaults</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">preset</span> <span class="o">=</span> <span class="n">tool_arg_sink_defaults</span><span class="p">(</span><span class="n">free_text_args</span><span class="o">=</span><span class="p">{</span><span class="s2">"body"</span><span class="p">},</span> <span class="n">installer_args</span><span class="o">=</span><span class="p">{</span><span class="s2">"version"</span><span class="p">})</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">preset</span><span class="p">[</span><span class="s2">"policy"</span><span class="p">])</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">comment_on_issue</span><span class="p">(</span><span class="n">repo</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">body</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="k">return</span> <span class="sa">f</span><span class="s2">"commented on </span><span class="si">{</span><span class="n">repo</span><span class="si">}</span><span class="s2">"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Airlock</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">tool_arg_sink_defaults</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">preset</span> <span class="o">=</span> <span class="n">tool_arg_sink_defaults</span><span class="p">(</span><span class="n">free_text_args</span><span class="o">=</span><span class="p">{</span><span class="s2">"body"</span><span class="p">},</span> <span class="n">installer_args</span><span class="o">=</span><span class="p">{</span><span class="s2">"version"</span><span class="p">})</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="nd">@Airlock</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">preset</span><span class="p">[</span><span class="s2">"policy"</span><span class="p">])</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">comment_on_issue</span><span class="p">(</span><span class="n">repo</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">body</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="k">return</span> <span class="sa">f</span><span class="s2">"commented on </span><span class="si">{</span><span class="n">repo</span><span class="si">}</span><span class="s2">"</span>
 </code></pre></div>
 <p>Read the log, name the free-text arguments it flags, then pass <code>mode="deny"</code>. To keep a
 policy of your own, pass <code>preset["guard"]</code> as its <code>tool_arg_sink_guard</code>. The preset lists
 the nine CVEs under <code>"cves"</code> and maps to OWASP MCP05, CWE-78 and CWE-829.</p>
+<p>Since 0.10.36 the preset also sets <code>option_args</code> to <code>base_branch</code>, <code>branch</code>, <code>ref</code>, <code>rev</code>,
+<code>revision</code>, <code>commit</code>, <code>tag</code> and <code>remote</code> (CVE-2026-114496), minus any name you pass in
+<code>free_text_args</code>; pass <code>option_args=</code> to choose your own.</p>
 <h2 id="honest-scope">Honest scope<a class="headerlink" href="#honest-scope" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>It screens text, not how a server quotes it.</strong> A server that passes argv without a
@@ -3757,7 +3820,11 @@ the nine CVEs under <code>"cves"</code> and maps to OWASP MCP05, CWE-78 and CWE-
   mcp-ffmpeg (CVE-2026-117568) took a closing double quote as well as <code>$()</code> and backticks,
   and the guard refuses those two by default but the quote only with
   <code>extra_metachars={'"'}</code>.</li>
-<li><strong>Option injection passes.</strong> A value starting with <code>-</code> (CWE-88) is not shell syntax.</li>
+<li><strong>Option injection is read only where you say.</strong> A value starting with <code>-</code> (CWE-88) is
+  not shell syntax: it is refused in an <code>option_args</code> argument and, with
+  <code>screen_all_str_args</code>, in one named like a git branch or ref. Elsewhere it passes. A
+  server should still end its own options before a passed value (<code>--</code>, or git's
+  <code>--end-of-options</code>).</li>
 <li><strong>Only text is read.</strong> A number or an object the host passed carries no text the model
   wrote.</li>
 </ul>

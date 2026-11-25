@@ -3215,6 +3215,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#release-age" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Release age
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#refreshing-from-malware-advisories" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3333,7 +3344,9 @@ current dated snapshot, <code>data/oidc_publish_blast_2026_10_28.json</code>).</
 added to <code>blast_list</code>, and <code>blocked_packages</code>, <code>advisories</code> and <code>malware_feed_as_of</code> come back
 beside it. <code>include_malware_feed=False</code> leaves it out, and an explicit <code>blast_list</code> still
 replaces the pairs. Since 0.10.36 <code>rescoped_names</code> comes back too (see
-<a href="#rescoped-mcp-malware-names">Rescoped MCP malware names</a>). Build the guard from all of them:</p>
+<a href="#rescoped-mcp-malware-names">Rescoped MCP malware names</a>), and <code>min_release_age</code> with
+<code>release_time_lookup</code> (see <a href="#release-age">Release age</a>, off unless you pass
+<code>min_release_age_hours</code>). Build the guard from all of them:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">OIDCPublishWindowGuard</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">npm_oidc_publish_window_guard_defaults</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
@@ -3344,9 +3357,11 @@ replaces the pairs. Since 0.10.36 <code>rescoped_names</code> comes back too (se
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">advisories</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"advisories"</span><span class="p">],</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">installs_from</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"installs_from"</span><span class="p">],</span>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">rescoped_names</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"rescoped_names"</span><span class="p">],</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="p">)</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">decision</span> <span class="o">=</span> <span class="n">guard</span><span class="o">.</span><span class="n">evaluate</span><span class="p">({</span><span class="s2">"package"</span><span class="p">:</span> <span class="s2">"@ethersphere/bee-js@13.3.0"</span><span class="p">})</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># decision.allowed is False; decision.detail names GHSA-hh7j-5m3j-23pf</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">min_release_age</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"min_release_age"</span><span class="p">],</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">release_time_lookup</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"release_time_lookup"</span><span class="p">],</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">decision</span> <span class="o">=</span> <span class="n">guard</span><span class="o">.</span><span class="n">evaluate</span><span class="p">({</span><span class="s2">"package"</span><span class="p">:</span> <span class="s2">"@ethersphere/bee-js@13.3.0"</span><span class="p">})</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="c1"># decision.allowed is False; decision.detail names GHSA-hh7j-5m3j-23pf</span>
 </code></pre></div>
 <h2 id="rescoped-mcp-malware-names">Rescoped MCP malware names<a class="headerlink" href="#rescoped-mcp-malware-names" title="Permanent link">&para;</a></h2>
 <p>A malicious MCP server is often published again under a fresh npm scope with the same package
@@ -3390,6 +3405,85 @@ from the 2026-11-20 one, 13.</p>
 <p><code>npm_oidc_publish_window_guard_defaults(match_rescoped=False)</code> leaves <code>rescoped_names</code> empty,
 which is the guard as it was before 0.10.36. An unscoped copy (<code>md-doc-mcp</code>) or a copy under a
 new basename still passes until an advisory names it.</p>
+<h2 id="release-age">Release age<a class="headerlink" href="#release-age" title="Permanent link">&para;</a></h2>
+<p>Every list above names a package only after someone has reviewed it.
+<a href="https://github.com/advisories/GHSA-h82f-cjm4-g22r">GHSA-h82f-cjm4-g22r</a> (critical, published 2026-11-20T13:00:09Z) is malicious code in
+<code>@guicai777/mcp-doctor</code>. The npm registry's <code>time</code> for it:</p>
+<table>
+<thead>
+<tr>
+<th>Version</th>
+<th>Published</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0.0.0-stage</code></td>
+<td>2026-11-16T11:10:09Z</td>
+</tr>
+<tr>
+<td><code>1.0.1</code></td>
+<td>2026-11-16T11:15:51Z</td>
+</tr>
+<tr>
+<td><code>0.0.1-security</code></td>
+<td>2026-11-20T13:02:14Z (npm's security holding)</td>
+</tr>
+</tbody>
+</table>
+<p>So 1.0.1 was installable for about four days before any advisory existed. The 2026-11-20
+snapshot (taken 05:08Z) does not list it, and no faster refresh could have before 13:00Z
+that day. The control that covers those four days is a cooldown: refuse a version too new
+to have been reviewed by anyone, as pnpm (<code>minimumReleaseAge</code>), npm (<code>--before</code>) and uv
+(<code>exclude-newer</code>) do at install time. Since 0.10.36 the guard applies it at the tool-call
+boundary:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock</span><span class="w"> </span><span class="kn">import</span> <span class="n">OIDCPublishWindowGuard</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">agent_airlock.policy_presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">npm_oidc_publish_window_guard_defaults</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">npm_oidc_publish_window_guard_defaults</span><span class="p">(</span><span class="n">installs_from</span><span class="o">=</span><span class="s2">"npm"</span><span class="p">,</span> <span class="n">min_release_age_hours</span><span class="o">=</span><span class="mi">168</span><span class="p">)</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">guard</span> <span class="o">=</span> <span class="n">OIDCPublishWindowGuard</span><span class="p">(</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">blast_list</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"blast_list"</span><span class="p">],</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">blocked_packages</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"blocked_packages"</span><span class="p">],</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="n">advisories</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"advisories"</span><span class="p">],</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="n">installs_from</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"installs_from"</span><span class="p">],</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="n">rescoped_names</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"rescoped_names"</span><span class="p">],</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="n">min_release_age</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"min_release_age"</span><span class="p">],</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="n">release_time_lookup</span><span class="o">=</span><span class="n">cfg</span><span class="p">[</span><span class="s2">"release_time_lookup"</span><span class="p">],</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="n">release_age_allow</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">"@yourco/internal-tool"</span><span class="p">}),</span>  <span class="c1"># yours, published today</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="p">)</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="n">decision</span> <span class="o">=</span> <span class="n">guard</span><span class="o">.</span><span class="n">evaluate</span><span class="p">({</span><span class="s2">"package"</span><span class="p">:</span> <span class="s2">"@guicai777/mcp-doctor@1.0.1"</span><span class="p">})</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="c1"># on 2026-11-20 at 12:00Z: decision.verdict == OIDCPublishWindowVerdict.DENY_RELEASE_TOO_NEW</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="c1"># decision.detail == "@guicai777/mcp-doctor@1.0.1 was published 2026-11-16T11:15:51Z,</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="c1">#   4 d 0 h before this call; the policy requires 7 d"</span>
+</code></pre></div>
+<p>We recommend 168 hours (seven days). The check is off by default because it calls the
+registry: <code>registry_release_time_lookup()</code> (<code>agent_airlock.mcp_spec.release_age</code>) makes an
+HTTPS request to <code>registry.npmjs.org</code> or <code>pypi.org</code> per version it has not seen, reads
+npm's <code>time[&lt;version&gt;]</code> (with no version, the one <code>dist-tags.latest</code> names) or the earliest
+<code>upload_time_iso_8601</code> of a PyPI release, and caches an exact version's answer in process
+(1,024 entries). Pass your own <code>release_time_lookup</code> to use a mirror or an internal
+registry: any callable <code>(kind, normalised name, version or None) -&gt; aware datetime or None</code>.
+Return None when the registry does not have that release and raise when you cannot tell
+(<code>ReleaseTimeUnavailableError</code>, or any exception); the shipped lookup returns None only for a
+404 or a version missing from the package's document.</p>
+<ul>
+<li><strong>What is looked up.</strong> Each registry spec the lists did not refuse, in the registry its
+  syntax names, else the one <code>installs_from</code> names, else both (the younger release is
+  judged). A registry tarball URL's package and version are looked up too. A git spec, a
+  path, a link or a URL on any other host is not. A spec with no exact version (none, a
+  range, a dist-tag such as <code>next</code>) is judged by the version the registry installs by
+  default. Every version a call carries is judged, the one in <code>package</code> and each one in
+  <code>version</code>, since which of them the tool installs is not the guard's to guess.</li>
+<li><strong>Lists first.</strong> A listed release still reports <code>deny_blast_list_pair</code> (or its own
+  verdict): <code>@fdcasj_dfew/md-doc-mcp@1.0.0</code> is a pair hit, not an age refusal.</li>
+<li><strong>Unknown age.</strong> A version no registry asked has is <code>DENY_RELEASE_AGE_UNKNOWN</code>, and so is
+  one a registry could not be read for (a timeout, a 5xx, an unreadable answer), even when the
+  other registry answered with an old release. A release that is too new on one of them is
+  <code>DENY_RELEASE_TOO_NEW</code> either way. Pass <code>unknown_release_age="allow"</code> to let the unknown
+  ones through instead.</li>
+<li><strong>Your own new package.</strong> A package you published today is refused like any other: put
+  its full name on <code>release_age_allow</code>.</li>
+</ul>
 <h2 id="refreshing-from-malware-advisories">Refreshing from malware advisories<a class="headerlink" href="#refreshing-from-malware-advisories" title="Permanent link">&para;</a></h2>
 <p>The incident list covers one incident. GitHub's advisory database and OSV publish malicious
 npm and PyPI packages every day, and until 0.10.32 none of them reached the guard until
@@ -3470,6 +3564,14 @@ passes until the next refresh.</p>
 <td>a scoped npm name sharing a listed MCP malware package's basename under another scope (0.10.36)</td>
 </tr>
 <tr>
+<td><code>DENY_RELEASE_TOO_NEW</code></td>
+<td>a registry version published less than <code>min_release_age</code> before the call (0.10.36)</td>
+</tr>
+<tr>
+<td><code>DENY_RELEASE_AGE_UNKNOWN</code></td>
+<td>with <code>min_release_age</code> set, a version whose publish time the lookup could not tell (0.10.36)</td>
+</tr>
+<tr>
 <td><code>DENY_UNINSPECTABLE</code></td>
 <td>an argument shape the guard cannot read</td>
 </tr>
@@ -3504,7 +3606,12 @@ passes until the next refresh.</p>
 <li><a href="https://tanstack.com/blog/npm-supply-chain-compromise-postmortem">TanStack npm supply-chain compromise postmortem (2026-05-11)</a> — 42 pkgs × 84 versions × 12M weekly DL blast radius</li>
 <li><a href="https://github.com/advisories/GHSA-g7cv-rxg3-hmpx">GHSA-g7cv-rxg3-hmpx (CVE-2026-45321)</a> — the affected-version table the shipped list is copied from</li>
 <li><a href="https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised">Aikido — Mini Shai-Hulud Is Back (2026-05-11)</a> — the wider npm wave (Mistral, UiPath and other scopes); its packages are not in the list</li>
-<li><a href="https://github.com/advisories/GHSA-m5xq-h2p4-962g">GHSA-m5xq-h2p4-962g (2026-11-19)</a>, <code>@fdcasj_dfew/md-doc-mcp</code>: the <code>@ifasn</code> MCP malware under a new scope, the reason for the rescoped-name check</li>
+<li>
+<p><a href="https://github.com/advisories/GHSA-m5xq-h2p4-962g">GHSA-m5xq-h2p4-962g (2026-11-19)</a>, <code>@fdcasj_dfew/md-doc-mcp</code>: the <code>@ifasn</code> MCP malware under a new scope, the reason for the rescoped-name check</p>
+</li>
+<li>
+<p><a href="https://github.com/advisories/GHSA-h82f-cjm4-g22r">GHSA-h82f-cjm4-g22r (2026-11-20)</a>, <code>@guicai777/mcp-doctor</code> 1.0.1, installable for four days before its advisory: the reason for the release-age check</p>
+</li>
 </ul>
 
 
