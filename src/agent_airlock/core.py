@@ -2029,10 +2029,10 @@ class Airlock:
             policy resolution and check (2), the delegation ceiling (2.1), loops in the run
             (2.3), source-to-sink data flow (2.4), the sequence guard (2.5), the
             action-contradiction gate (2.6), the deserialization guard (2.7), shell syntax
-            in string arguments (2.75), shell commands by rule (2.77), the amplification
-            budget (2.8), filesystem paths (3), capabilities (4), argument leases (4.5),
-            endpoint policies (5) and the per-model-tier budget (6). The first gate that
-            refuses ends the call.
+            in string arguments (2.75), secrets in arguments (2.76), shell commands by rule
+            (2.77), the amplification budget (2.8), filesystem paths (3), capabilities (4),
+            argument leases (4.5), endpoint policies (5), the per-model-tier budget (6) and
+            at-most-once dispatch (6.5). The first gate that refuses ends the call.
 
             Returns:
                 Tuple of (cleaned_kwargs, start_time, context, error_response or None,
@@ -2099,9 +2099,10 @@ class Airlock:
                 return kwargs, start_time, context, frozen_error, None, None
 
             # Step 0.5: the startup-hook self-check (V0.10.27). A condition of the process,
-            # so it comes before anything about the call. Off by default; when on, the walk
-            # runs once per process, on the first call admitted with it on, and `deny`
-            # refuses the calls of tools guarded by this config, not every tool in the process.
+            # so it comes before anything about the call. `warn` by default since 0.10.36
+            # (off before). The walk runs once per process, on the first call admitted with
+            # it on, and `deny` refuses the calls of tools guarded by this config, not every
+            # tool in the process.
             hook_error = self._check_startup_hooks(func_name)
             if hook_error is not None:
                 context._refused_at = "0.5:startup_hooks"

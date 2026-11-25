@@ -44,11 +44,14 @@ from __future__ import annotations
 
 import os
 import unicodedata
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .._log import structlog
 from ..exceptions import AirlockError
 from ..policy import StdioGuardConfig
+
+if TYPE_CHECKING:
+    from ..policy import SecurityPolicy
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.stdio_guard")
 
@@ -121,7 +124,29 @@ def _basename(path: str) -> str:
     return os.path.basename(path) or path
 
 
-def validate_stdio_command(cmd: list[str], config: StdioGuardConfig) -> None:
+def check_stdio_mode(policy: SecurityPolicy | None, *, from_manifest: bool) -> None:
+    """Refuse a STDIO launch that ``policy.stdio_mode`` does not permit (v0.10.36).
+
+    ``"disabled"`` refuses every launch, ``"manifest_only"`` one whose argv does not come
+    from a signed manifest, and ``"allowlist"`` (the default) none. ``policy`` None is the
+    default mode.
+
+    Raises:
+        StdioInjectionError: ``rule="stdio_mode"``.
+    """
+    mode = "allowlist" if policy is None else policy.stdio_mode
+    if mode == "allowlist" or (mode == "manifest_only" and from_manifest):
+        return
+    raise StdioInjectionError(
+        f"the policy's stdio_mode is {mode!r}, so this STDIO launch is refused",
+        rule="stdio_mode",
+        details={"stdio_mode": mode, "from_manifest": from_manifest},
+    )
+
+
+def validate_stdio_command(
+    cmd: list[str], config: StdioGuardConfig, *, policy: SecurityPolicy | None = None
+) -> None:
     """Validate an MCP STDIO argv before it reaches ``subprocess.Popen``.
 
     Args:
@@ -130,11 +155,14 @@ def validate_stdio_command(cmd: list[str], config: StdioGuardConfig) -> None:
             deliberately refuse any shell-invocation form).
         config: ``StdioGuardConfig`` — typically
             ``stdio_guard_ox_defaults()`` from ``policy_presets``.
+        policy: The policy whose ``stdio_mode`` applies (v0.10.36). ``"manifest_only"`` and
+            ``"disabled"`` refuse every argv here. None applies no mode.
 
     Raises:
         StdioInjectionError: On any rule failure. ``rule`` attribute
             names the specific check that fired.
     """
+    check_stdio_mode(policy, from_manifest=False)
     if not cmd:
         raise StdioInjectionError(
             "empty argv",

@@ -247,7 +247,7 @@ operator who wants only `https://api.example.com/v1/tools/` lists that, and a UR
 unless one entry matches on scheme, host and port and the URL's path, with its dot segments
 and servlet path parameters resolved, stays under the entry's path at a segment boundary. So
 `/v1/tools/..;/admin` and `/v1/tools/%2e%2e;x/admin`, which a servlet container collapses to
-`/v1/admin`, are refused, and a path carrying `%2f`, `%5c`, a backslash or `%00` is refused
+`/v1/admin`, are refused, and a path carrying `%2f`, `%5c`, a backslash, `%00` or a raw control character is refused
 outright. An empty list (the default) keeps host-only behaviour. The host, blocked-pattern,
 private and metadata checks all run before the path check.
 

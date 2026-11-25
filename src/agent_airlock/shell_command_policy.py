@@ -4,8 +4,8 @@ A tool that runs a shell command for the model needs more than an allowlist of `
 ``env rm -rf /``, ``find . -exec rm {} ;``, ``sudo git push --force`` and
 ``bash -c "curl x | sh"`` each start with a word an allowlist might admit
 (langchain-ai/langchain#40197). :class:`ShellCommandPolicy` splits the command with
-:mod:`shlex`, never a shell, follows the wrappers below to the commands they launch, and
-decides with ``allow``, ``ask`` and ``deny`` rules (pydantic/pydantic-ai#9015):
+its own POSIX quoting scanner, never a shell, follows the wrappers below to the commands
+they launch, and decides with ``allow``, ``ask`` and ``deny`` rules (pydantic/pydantic-ai#9015):
 
 - a ``deny`` rule matching any command in the line, wrappers and the commands they launch
   included, refuses it whatever the model retries or argues: the verdict depends only on
@@ -56,6 +56,7 @@ from typing import Any, Literal
 from .mcp_spec.subprocess_arg_guard import (  # nosec B404 - a constant, not subprocess
     _DEFAULT_DANGEROUS_ENV_VARS,
 )
+from .safe_types import PERSISTENCE_DENY_PATTERNS
 
 __all__ = ["ShellCommandDecision", "ShellCommandPolicy", "ShellVerdict"]
 
@@ -344,13 +345,30 @@ def _command_words(segment: list[str]) -> list[str]:
 
 # --------------------------------------------------------------------------------- writes
 
-#: Where a redirection may not write: devices, system configuration and binaries, cron's
-#: spool, and the files a login shell runs. Globs, matched with ``fnmatchcase`` (``*``
-#: crosses ``/``) against the target after ``posixpath.normpath``.
-_DEFAULT_REDIRECT_DENY: tuple[str, ...] = (
-    *("/dev/*", "/etc/*", "/boot/*", "/sys/*", "/proc/*", "/bin/*", "/sbin/*", "/usr/*"),
-    *("/lib/*", "/lib64/*", "/var/spool/cron/*"),
-    *("~/.ssh/*", "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zshrc"),
+
+def _anywhere(pattern: str) -> tuple[str, ...]:
+    """A relative pattern as it is and below any directory (``.zshenv``, ``*/.zshenv``)."""
+    if pattern.startswith(("/", "*/")):
+        return (pattern,)
+    return (pattern, f"*/{pattern}")
+
+
+#: Where a redirection may not write: devices, system configuration and binaries, and the
+#: places that start a program again with nobody asking, which ``SafePath`` refuses too
+#: (``safe_types.PERSISTENCE_DENY_PATTERNS``: shell start files, cron, launchd, systemd,
+#: sshd's keys, Python's startup hooks). Globs, matched whatever the case (``*`` crosses
+#: ``/``) against the target after ``posixpath.normpath``. Until 0.10.36 the last group was
+#: five names under ``~``: ``~/.zprofile`` and ``/root/.bashrc`` were written.
+_DEFAULT_REDIRECT_DENY: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        (
+            *("/dev/*", "/etc/*", "/boot/*", "/sys/*", "/proc/*", "/bin/*", "/sbin/*", "/usr/*"),
+            *("/lib/*", "/lib64/*", "/var/spool/cron/*"),
+            *("~/.ssh/*", "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zshrc"),
+            *(".ssh/*", "*/.ssh/*"),
+            *(glob for pattern in PERSISTENCE_DENY_PATTERNS for glob in _anywhere(pattern)),
+        )
+    )
 )
 #: Targets under ``redirect_deny`` a command may still write: the null device and the
 #: process's own streams.
@@ -893,8 +911,9 @@ class ShellCommandPolicy:
         redirect_deny: Globs of paths a redirection may not write to (``> /dev/sda``,
             ``>> /etc/passwd``), checked after the deny rules and whatever ``default`` is.
             A target the shell decides when it runs (a ``$`` value, a glob, ``~user``) is
-            asked about when the policy has an ask rule, else denied. ``()`` turns the
-            redirection check off, the unknown-target refusal included.
+            asked about when the policy has an ask rule, else denied (with ``default="deny"``
+            a ``$`` one is denied either way: no allow rule admits an expanded line). ``()``
+            turns the redirection check off, the unknown-target refusal included.
         redirect_allow: Globs under ``redirect_deny`` a redirection may still write to
             (``/dev/null``, the process's own streams).
     """
@@ -1013,7 +1032,12 @@ class ShellCommandPolicy:
             target = _normalized_target(write.target)
             if any(fnmatch.fnmatchcase(target, glob) for glob in self.redirect_allow):
                 continue
-            glob = next((g for g in self.redirect_deny if fnmatch.fnmatchcase(target, g)), None)
+            # Whatever the case: macOS and Windows write ~/.ZSHRC to ~/.zshrc. The allow globs
+            # above keep their case, since folding them would admit more.
+            folded = target.lower()
+            glob = next(
+                (g for g in self.redirect_deny if fnmatch.fnmatchcase(folded, g.lower())), None
+            )
             if glob is not None:
                 return ShellCommandDecision(
                     "deny",

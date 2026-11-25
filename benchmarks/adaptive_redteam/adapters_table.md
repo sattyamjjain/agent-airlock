@@ -2,8 +2,9 @@
 
 This table is the human-readable map; `adapters/registry.py` is the executable
 one, and `tests/test_adaptive_redteam_adapters.py` drives every row's
-`known_blocked` (expect `hard_block`) and benign control (expect `benign_pass`),
-so a drift between this file and the code fails the suite.
+`known_blocked` (expect `hard_block`) and benign control (expect `benign_pass`)
+and compares every row's mode, sink, verdicts, sentinel and seeds with the
+registry, so a drift between this file and the code fails the suite.
 
 **Modes.** A = the guard is wired as a `SecurityPolicy` field and run through the
 real `@Airlock` call path; B = a config gate (`filesystem_policy` /
@@ -46,10 +47,10 @@ spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 | `loopback_spawn_guard` | C | `mcp_spec/loopback_spawn_guard.py` | `LoopbackSessionSpawnGuard.check_spawn` | spawn | deny_not_allowlisted, deny_resolved_denied | `spawn` | 10 |
 | `mcp_origin_host_guard` | C | `mcp_spec/mcp_origin_host_guard.py` | `McpOriginHostGuard.check_headers` | origin | deny_forbidden_host, deny_forbidden_origin | `rebind` | 5 |
 | `oauth_state_entropy_guard` | C | `mcp_spec/oauth_state_entropy_guard.py` | `OAuthStateEntropyGuard.evaluate` | oauth | block | `state-injection` | 5 |
-| `oidc_publish_window_guard` | C | `mcp_spec/oidc_publish_window_guard.py` | `OIDCPublishWindowGuard.evaluate` | publish | deny_blast_list_pair, deny_blast_list_tarball_url | `blast-list-publish` | 5 |
+| `oidc_publish_window_guard` | C | `mcp_spec/oidc_publish_window_guard.py` | `OIDCPublishWindowGuard.evaluate` | publish | deny_blast_list_pair, deny_blast_list_tarball_url, deny_release_age_unknown, deny_release_too_new, deny_rescoped_malware_name | `blast-list-publish` | 5 |
 | `openapi_drift_guard` | C | `mcp_spec/openapi_drift_guard.py` | `OpenAPIDriftGuard.evaluate` | drift | deny_drift, deny_unknown_operation | `operation-drift` | 5 |
 | `pr_metadata_guard` | C | `mcp_spec/pr_metadata_guard.py` | `PRMetadataGuard.detect_imperatives` | pr_metadata | deny_imperative | `injected-imperative` | 5 |
-| `readonly_sql_guard` | C | `mcp_spec/readonly_sql_guard.py` | `ReadOnlySQLGuard.evaluate` | sql | deny_comment_in_fragment, deny_dangerous_function, deny_stacked_statement, deny_subquery_in_fragment, deny_write_statement | `readonly-sql` | 10 |
+| `readonly_sql_guard` | C | `mcp_spec/readonly_sql_guard.py` | `ReadOnlySQLGuard.evaluate` | sql | deny_comment_in_fragment, deny_dangerous_function, deny_not_an_identifier, deny_stacked_statement, deny_subquery_in_fragment, deny_write_statement | `readonly-sql` | 10 |
 | `reasoning_replay_guard` | C | `mcp_spec/reasoning_replay_guard.py` | `ReasoningReplayGuard.check_replay/bind` | reasoning | refuse_lease_mismatch, refuse_model_mismatch, refuse_session_mismatch, refuse_unbound | `unbound-replay` | 5 |
 | `sampling_guard` | C | `mcp_spec/sampling_guard.py` | `audit_sampling_request` | sampling | (raises) | `unconsented-sampling` | 5 |
 | `schema_ref_guard` | C | `mcp_spec/schema_ref_guard.py` | `SchemaRefGuard.check_ref` | schema_ref | deny_external_file, deny_external_http, deny_non_local, deny_relative_escape | `external-ref` | 5 |
@@ -69,7 +70,7 @@ spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 | `done_receipt_guard` | C | `done_receipt_guard.py` | `DoneReceiptGuard.check_done` | done_claim | stall_check_failed, stall_forged_receipt, stall_no_receipt, stall_unknown_claim | `false-done-claim` | 5 |
 | `mcp_proxy_guard` | C | `mcp_proxy_guard.py` | `MCPProxyGuard.validate_stdio_spawn` | spawn | (raises) | `proxy-stdio-spawn` | 10 |
 | `sequence_guard` | A | `sequence_guard.py` | `@Airlock policy.sequence_guard` | sequence | sequence_violation | `off-dag-transition` | 10 |
-| `ssrf_egress_guard` | C | `ssrf_egress_guard.py` | `SSRFEgressGuard.check_url` | egress | deny_link_local, deny_loopback, deny_metadata, deny_private_rfc1918 | `169.254.169.254` | 10 |
+| `ssrf_egress_guard` | C | `ssrf_egress_guard.py` | `SSRFEgressGuard.check_url` | egress | deny_link_local, deny_loopback, deny_metadata, deny_multicast, deny_private_rfc1918, deny_shared_address_cgnat | `169.254.169.254` | 10 |
 | `tool_output_trust_guard` | C | `tool_output_trust_guard.py` | `ToolOutputTrustGuard.inspect` | tool_output | fenced_command, imperative_command, override_directive, tool_call_shaped | `injected-directive` | 5 |
 
 ## Value-gate adapters (anchored by the oracle; not among the 40)
@@ -88,7 +89,5 @@ spawn surfaces, 5 for the low-surface inspection guards (`registry.seed_count`).
 - **Mode C (standalone):** 38 — the remaining 38 of the 40 bypass targets.
 - **Total registered:** 43 (40 bypass targets + 3 value-gate adapters).
 
-Regenerate the rows above with `benchmarks/adaptive_redteam/` imported and
-`get_registry()` (the helper lives in the repo history under
-`scratchpad/gen_table.py`); do not hand-edit a verdict set without changing the
-matching `ForbiddenEffect` in `registry.py`.
+A row is edited by hand with the `ForbiddenEffect` it describes in `registry.py`;
+the test above fails when the two disagree.

@@ -29,6 +29,7 @@ def _redirect_default_audit_log() -> None:
 def pytest_configure(config: pytest.Config) -> None:
     # Before collection, so tools decorated at import time get the redirected logger too.
     _redirect_default_audit_log()
+    _hide_host_startup_hooks()
 
 
 @pytest.fixture(autouse=True)
@@ -80,16 +81,17 @@ def _planted_customize_hook(
 ) -> startup_hooks.StartupHookFinding | None:
     hook = _real_customize_hook(name, kind)
     # A hook with no file (a finder that raised reports the bare module name) is a test's.
-    if (
-        hook is not None
-        and os.path.isabs(hook.path)
-        and _resolved(os.path.dirname(hook.path)) in _HOST_DIRECTORIES
-    ):
-        return None
-    return hook
+    if hook is None or not os.path.isabs(hook.path):
+        return hook
+    home = os.path.dirname(hook.path)
+    if os.path.basename(hook.path).startswith("__init__."):
+        home = os.path.dirname(home)  # a package's own directory is below the host's
+    return None if _resolved(home) in _HOST_DIRECTORIES else hook
 
 
-@pytest.fixture(autouse=True)
-def _startup_hook_walk_sees_only_planted_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(startup_hooks, "_directories", _planted_directories)
-    monkeypatch.setattr(startup_hooks, "_customize_hook", _planted_customize_hook)
+def _hide_host_startup_hooks() -> None:
+    # For the whole run, before collection: a function-scoped fixture left a guarded call in a
+    # module- or session-scoped fixture to walk the host, and keep what it found for the rest
+    # of the run (`_process_walk`).
+    startup_hooks._directories = _planted_directories
+    startup_hooks._customize_hook = _planted_customize_hook

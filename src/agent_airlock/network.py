@@ -221,7 +221,8 @@ def _is_private_ip(hostname: str) -> bool:
     does not flag.
 
     V0.10.36: also the shared address space ``100.64.0.0/10`` (Alibaba Cloud's
-    metadata address ``100.100.100.200`` is in it) and multicast, as
+    metadata address ``100.100.100.200`` is in it), multicast, and IPv6 site-local ``fec0::/10``
+    (deprecated, still routed inside a site, and not private to Python), as
     :class:`~agent_airlock.ssrf_egress_guard.SSRFEgressGuard` refuses them.
     """
     try:
@@ -232,8 +233,8 @@ def _is_private_ip(hostname: str) -> bool:
         return True
     if isinstance(ip, ipaddress.IPv4Address) and ip in _SHARED_ADDRESS_SPACE:
         return True
-    if isinstance(ip, ipaddress.IPv6Address) and is_blocked_ipv6_range(hostname):
-        return True
+    if isinstance(ip, ipaddress.IPv6Address):
+        return ip.is_site_local or is_blocked_ipv6_range(hostname)
     return False
 
 
@@ -426,6 +427,10 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
 #: so no single reading of the path exists. Matched case-insensitively (``%2F`` == ``%2f``).
 _AMBIGUOUS_PATH_TOKENS = ("%2f", "%5c", "\\", "%00")
 
+#: A raw control character anywhere in the URL: ``urlsplit`` drops tab, CR and LF, a C
+#: client stops at a NUL, and neither reading is the server's (V0.10.36).
+_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
+
 
 def _url_scheme_host_port(url: str) -> tuple[str, str, int | None]:
     """``(scheme, host, port)`` for a URL or a prefix entry, host lower-cased.
@@ -449,6 +454,18 @@ def _url_scheme_host_port(url: str) -> tuple[str, str, int | None]:
 def _check_url_prefix(url: str, hostname: str, policy: EndpointPolicy) -> None:
     """Refuse a URL whose scheme/host/port/path matches no ``allowed_url_prefixes`` entry."""
     from urllib.parse import urlsplit
+
+    control = _CONTROL_CHARACTER.search(url)
+    if control is not None:
+        token = f"0x{ord(control.group()):02x}"
+        _refuse_endpoint(
+            url,
+            hostname,
+            "ambiguous_path_encoding",
+            f"URL carries a raw control character ({token}), which a server and the "
+            "allowlist read differently; no single reading exists",
+            token=token,
+        )
 
     raw_path = urlsplit(url).path
     lowered = raw_path.lower()

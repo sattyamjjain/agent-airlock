@@ -112,12 +112,14 @@ from __future__ import annotations
 
 import enum
 import re
-from collections.abc import Mapping
+from collections import UserString
+from collections.abc import Mapping, Sequence, Set, ValuesView
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
 from typing import Any
 
+from .._arg_walk import object_fields
 from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.readonly_sql_guard")
@@ -276,6 +278,7 @@ _STATEMENT = "statement"
 _FRAGMENT = "fragment"
 _IDENTIFIER = "identifier"
 _ROW = "row"
+_ROW_VALUE = "row value"
 _GENERIC_READINGS: tuple[str, ...] = ("mysql", "postgres", "sqlite")
 
 
@@ -848,12 +851,14 @@ class ReadOnlySQLGuard:
         is read as a fragment when a key on its path is a fragment field, otherwise as a
         statement when one is a statement field, otherwise as a name when its own key is
         an identifier field (or ``name`` inside a mapping under one); other strings are
-        not read. A row field's mapping has its keys read as names and its values left
-        unread. Refused as ``DENY_UNINSPECTABLE``: arguments that are not a mapping,
-        nesting deeper than 32 levels, a container that contains itself, bytes that are
-        not UTF-8, and any object in a statement or fragment field that is not text, a
-        number, a bool or ``None``. In an identifier field anything but text, ``None`` or
-        a container is ``DENY_NOT_AN_IDENTIFIER``.
+        not read. A row field's mapping has its keys read as names, and its values left
+        unread except under a key that is itself a statement or fragment field
+        (``data.sql``). A pydantic model, a dataclass or a named tuple is read by its
+        fields, as a mapping. Refused as ``DENY_UNINSPECTABLE``: arguments that are not a
+        mapping, nesting deeper than 32 levels, a container that contains itself, bytes
+        that are not UTF-8, and any object in a statement or fragment field that is not
+        text, a number, a bool or ``None``. In an identifier field anything but text,
+        ``None`` or a container is ``DENY_NOT_AN_IDENTIFIER``.
 
         Args:
             args: The tool call's argument dict. ``None`` (no args) is allowed.
@@ -886,6 +891,14 @@ class ReadOnlySQLGuard:
         # then wins over a name; the identifier and row roles are a key's own, never
         # inherited through a mapping (a list keeps its field's role).
         name = self._key(key)
+        if inherited == _ROW_VALUE:
+            # Inside a row a key is a column, so only the configured names count, never the
+            # alias rules: a ``stateFilter`` column is data. Until 0.10.36 every key was
+            # read this way at any depth, and 0.10.36's row fields must not read less.
+            for role in (_FRAGMENT, _STATEMENT):
+                if name in self._names[role]:
+                    return role
+            return _ROW_VALUE
         alias = name if self._match_aliases and isinstance(name, str) else ""
         if inherited == _FRAGMENT or name in self._names[_FRAGMENT]:
             return _FRAGMENT
@@ -911,11 +924,11 @@ class ReadOnlySQLGuard:
         ancestors: frozenset[int],
     ) -> ReadOnlySQLDecision | None:
         """Inspect a str or bytes value, or walk a container; ``None`` when nothing fires."""
-        if isinstance(value, (str, bytes, bytearray, memoryview)):
-            if role is None or role == _ROW:
+        if isinstance(value, (str, bytes, bytearray, memoryview, UserString)):
+            if role in (None, _ROW, _ROW_VALUE):
                 return None  # a row field holding text is not a row
-            if isinstance(value, str):
-                text = value
+            if isinstance(value, (str, UserString)):
+                text = str(value)
             else:
                 try:
                     text = bytes(value).decode("utf-8")
@@ -927,18 +940,24 @@ class ReadOnlySQLGuard:
                 return self._check_name(field, text)
             return self._inspect(field, text, role)
         children: list[tuple[str, Any, str | None]]
-        if isinstance(value, Mapping):
+        named = value if isinstance(value, Mapping) else None
+        if named is None and role in (None, _ROW, _ROW_VALUE):
+            named = object_fields(value)
+        if named is not None:
             if role == _ROW:
-                return self._check_row_keys(field, value)
+                decision = self._check_row_keys(field, named)
+                if decision is not None:
+                    return decision
+            inherited = _ROW_VALUE if role == _ROW else role
             children = [
-                (f"{field}.{key}", item, self._role(key, role)) for key, item in value.items()
+                (f"{field}.{key}", item, self._role(key, inherited)) for key, item in named.items()
             ]
-        elif isinstance(value, (list, tuple, set, frozenset)):
+        elif isinstance(value, (Sequence, Set, ValuesView)):
             children = [(f"{field}[{idx}]", item, role) for idx, item in enumerate(value)]
         elif role == _IDENTIFIER and value is not None:
             return self._deny_not_a_name(field, type(value).__name__, "is not text")
         elif (
-            role in (None, _ROW)
+            role in (None, _ROW, _ROW_VALUE)
             or value is None
             or isinstance(value, (int, float, Decimal, Fraction))
         ):

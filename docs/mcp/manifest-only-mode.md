@@ -23,13 +23,16 @@ There is no surface a runtime caller can use to inject argv.
 
 ## Modes
 
-`SecurityPolicy.stdio_mode` is a `Literal["allowlist", "manifest_only", "disabled"]`:
+`SecurityPolicy.stdio_mode` is a `Literal["allowlist", "manifest_only", "disabled"]`. `@Airlock`
+launches no process, so it never reads the mode. Pass the policy to the function that decides a
+launch, `validate_stdio_command(cmd, config, policy=policy)` or
+`launch_from_manifest(..., policy=policy)` (0.10.36; until then nothing read the mode):
 
 | Mode | Behaviour |
 |---|---|
 | `"allowlist"` *(default)* | v0.5.1 behaviour — runtime argv goes through `validate_stdio_command` |
-| `"manifest_only"` | Only `launch_from_manifest` may spawn STDIO subprocesses |
-| `"disabled"` | No STDIO subprocesses, period |
+| `"manifest_only"` | `validate_stdio_command` raises, so only `launch_from_manifest` may spawn STDIO subprocesses |
+| `"disabled"` | Both raise |
 
 **Allowlist mode remains the default** so existing v0.5.1 callers
 keep working. Manifest-only mode is opt-in for hardening-conscious
@@ -102,7 +105,7 @@ For a controlled rollout:
    shows resolve+verify latency at **~3 µs median** — invisible to
    any human-driven workflow.
 3. Flip to `stdio_mode="manifest_only"` after the manifest list
-   stabilises.
+   stabilises, and pass the policy to every `validate_stdio_command` call.
 
 Dynamic-argv use cases (e.g. LangGraph agents that compose argv at
 runtime) cannot adopt manifest-only — they should stay on

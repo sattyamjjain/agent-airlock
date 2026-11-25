@@ -92,8 +92,9 @@ preset, and
   `LoopbackSessionSpawnGuard` and `McpConfigPinSet` raised a bare `TypeError` /
   `AttributeError` / `ValueError` instead of their own refusal
   (`tests/test_guard_shapes_fail_closed_0_10_26.py`): a crash is not a verdict.
-  A guard that walks nested values refuses input deeper than 32 levels or containing
-  itself, as `DENY_UNINSPECTABLE` where it has a verdict enum
+  A guard that walks nested values reads a model, dataclass or named tuple by its fields
+  (`_arg_walk.object_fields`, `ReadOnlySQLGuard` and `FilterEvalRCEGuard` since 0.10.36) and
+  refuses input deeper than 32 levels or containing itself, as `DENY_UNINSPECTABLE` where it has a verdict enum
   (`tests/test_spawn_guards_fail_closed_0_10_21.py`,
   `tests/test_guard_shapes_fail_closed_0_10_24.py`). v0.10.27 applied the rule to
   `oauth.validate_access_token_audience`, which `@Airlock` now calls (step 0.6 in
@@ -182,10 +183,9 @@ preset, and
   (`_name_problem`; quoted per `_name_quotes(readings)`, and a quoted body that is empty or
   holds a quote or bracket (`_NOT_IN_QUOTED_NAME`), `\`, `;`, `#`, a comment mark or a control
   character is refused whatever the dialect), and row fields
-  (`DEFAULT_ROW_FIELDS`) have their mapping keys checked as names, values unread, refused
-  by position (`data.keys[0]`). Unread includes a statement or fragment key inside a row
-  (`data.sql`), which was refused before 0.10.36; `row_fields=frozenset()` restores that.
-  The constructor's `_role` check raises when a configured
+  (`DEFAULT_ROW_FIELDS`) have their mapping keys checked as names, refused by position
+  (`data.keys[0]`), and their values unread but under a configured statement or fragment name
+  (`data.sql`; never the alias rules, a `stateFilter` column is data). The constructor's `_role` check raises when a configured
   name would be read as another kind.
 - **`malware_advisory_feed` reads a document by its keys, never by file name**, and makes no
   network call. An OSV record is malware only when its id is `MAL-*` or it carries CWE-506: a

@@ -124,7 +124,7 @@ could not be followed. The decision record's layer is `2.77:shell_command`.
 | `default` | `"deny"` | the verdict for an innermost command no rule names |
 | `command_args` | `("command", "cmd")` | the arguments holding the command: a string is a shell line, a list of strings one command's argv |
 | `tools` | `()` | tool-name globs to apply it to; empty means every tool with one of `command_args` |
-| `redirect_deny` | `/dev/*`, `/etc/*`, `/boot/*`, `/sys/*`, `/proc/*`, `/bin/*`, `/sbin/*`, `/usr/*`, `/lib/*`, `/lib64/*`, `/var/spool/cron/*`, `~/.ssh/*`, `~/.bashrc`, `~/.bash_profile`, `~/.profile`, `~/.zshrc` | globs (`fnmatchcase`, `*` crosses `/`) of paths a redirection may not write; `()` turns the redirection check off |
+| `redirect_deny` | `/dev/*`, `/etc/*`, `/boot/*`, `/sys/*`, `/proc/*`, `/bin/*`, `/sbin/*`, `/usr/*`, `/lib/*`, `/lib64/*`, `/var/spool/cron/*`, `~/.ssh/*` and `.ssh/*` anywhere, `~/.bashrc`, `~/.bash_profile`, `~/.profile`, `~/.zshrc`, and the places `SafePath` refuses because they start a program again (shell start files, cron, launchd, systemd, `authorized_keys`, Python startup hooks), in any directory | globs (`*` crosses `/`, matched whatever the case) of paths a redirection may not write; `()` turns the redirection check off |
 | `redirect_allow` | `/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/tty`, `/dev/fd/*` | globs under `redirect_deny` a redirection may still write |
 
 ## With the argument screen
@@ -147,8 +147,7 @@ command.
   they write matters.
 - A relative redirection target is not resolved against a working directory, and a
   symbolic link is not followed: `> ../../etc/passwd` and `> link-to-a-device` are judged
-  as written. Matching is case-sensitive, and the defaults name Linux paths: on macOS,
-  where `/etc` is `/private/etc` and the file system ignores case, add the paths you need
-  to `redirect_deny`.
+  as written. `redirect_allow` is case-sensitive. The system paths are Linux's: on macOS,
+  where `/etc` is `/private/etc`, add the paths you need to `redirect_deny`.
 - With `default="allow"`, a command no rule names is allowed: `find / -delete` included.
   Add `find -delete` to `deny` in a deny-list policy.
