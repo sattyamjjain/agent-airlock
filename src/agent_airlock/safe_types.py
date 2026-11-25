@@ -226,18 +226,19 @@ DEFAULT_PATH_DENY_PATTERNS = [
 
 
 # URLs that should be blocked
+#: Cloud-metadata host names: GCP (full name and short), Alibaba Cloud (CVE-2026-48782). The
+#: one list, as ``_CANONICAL_METADATA_IPS`` is for addresses: ``SafeURL`` reads it through
+#: ``BLOCKED_HOSTS``, and ``network`` and ``mcp_spec.supply_chain`` directly (V0.10.36).
+_METADATA_HOSTNAMES = frozenset({"metadata", "metadata.google.internal", "metadata.aliyuncs.com"})
+
 BLOCKED_HOSTS = [
     # AWS metadata
     "169.254.169.254",
     "fd00:ec2::254",
-    # GCP metadata
-    "metadata.google.internal",
     "169.254.169.253",
     # Azure metadata
     "169.254.169.253",
-    # Alibaba Cloud / GCP secondary metadata hostnames (CVE-2026-48782)
-    "metadata.aliyuncs.com",
-    "metadata",
+    *sorted(_METADATA_HOSTNAMES),
     # Link-local
     "169.254.0.0/16",
 ]

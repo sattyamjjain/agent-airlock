@@ -548,7 +548,8 @@ class SecurityPolicy:
     # all) string arguments may carry no shell metacharacters, and installer arguments
     # must be a bare version. Nine MCP server CVEs of 27-28 Oct 2026 spliced such an
     # argument into a shell or `pnpm add`. Its dispatch arguments must name a function the
-    # tool may call (CVE-2026-119050: a model-chosen name reached `getattr`). OFF by
+    # tool may call (CVE-2026-119050: a model-chosen name reached `getattr`), and its option
+    # arguments may not start with `-` (CVE-2026-114496). OFF by
     # default (None preserves prior behavior exactly). See
     # :class:`agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
     tool_arg_sink_guard: ToolArgSinkGuard | None = None

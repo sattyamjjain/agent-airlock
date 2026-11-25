@@ -41,6 +41,7 @@ from urllib.parse import urlparse
 
 from .._log import structlog
 from ..exceptions import AirlockError
+from ..safe_types import _METADATA_HOSTNAMES
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.supply_chain")
 
@@ -155,7 +156,7 @@ class MCPBridgeSSRFBlocked(AirlockError):
 _BRIDGE_ADVISORY = "CVE-2026-26015"
 
 #: Cloud-metadata host names refused outright, before any DNS lookup.
-_METADATA_HOSTNAMES = frozenset({"metadata", "metadata.google.internal", "169.254.169.254"})
+_METADATA_HOSTS = _METADATA_HOSTNAMES | {"169.254.169.254"}
 
 #: Carrier-grade NAT (RFC 6598). Python's ``ipaddress`` calls it neither private nor
 #: reserved. The bridge has refused it since v0.5.3, and ``SSRFEgressGuard`` does too since
@@ -261,7 +262,7 @@ def check_mcp_bridge_target(
         raise TypeError(f"allowed_hosts must be a collection of host strings: {allowed_hosts!r}")
     host = _bridge_host(target_url).lower()
     allowed = {name.strip().lower() for name in allowed_hosts}
-    if host in _METADATA_HOSTNAMES and host not in allowed:
+    if host in _METADATA_HOSTS and host not in allowed:
         raise MCPBridgeSSRFBlocked(
             target_url=target_url,
             resolved=host,

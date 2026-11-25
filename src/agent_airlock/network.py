@@ -62,7 +62,12 @@ from typing import Any, NoReturn
 
 from ._log import structlog
 from ._url_paths import normalize_url_path
-from .safe_types import _CANONICAL_METADATA_IPS, _default_host_resolver, metadata_ip_candidates
+from .safe_types import (
+    _CANONICAL_METADATA_IPS,
+    _METADATA_HOSTNAMES,
+    _default_host_resolver,
+    metadata_ip_candidates,
+)
 
 logger = structlog.get_logger("agent-airlock.network")
 
@@ -183,16 +188,9 @@ class EndpointPolicy:
     outright, since no single reading of it exists (CVE-2026-120492)."""
 
 
-# Cloud metadata IPs/hosts to block
-_METADATA_HOSTS = frozenset(
-    {
-        "169.254.169.254",
-        "fd00:ec2::254",
-        "metadata.google.internal",
-        "169.254.169.253",
-        "100.100.100.200",  # Alibaba Cloud (V0.10.36)
-    }
-)
+# Cloud metadata IPs/hosts to block. Until V0.10.36 this list lacked Alibaba Cloud's address
+# and host name and GCP's short ``metadata``, which ``SafeURL`` refused.
+_METADATA_HOSTS = _METADATA_HOSTNAMES | {str(ip) for ip in _CANONICAL_METADATA_IPS}
 
 #: RFC 6598 shared address space (carrier-grade NAT), where Alibaba Cloud's metadata
 #: address sits. Python calls it neither private nor global (V0.10.36).
@@ -358,9 +356,13 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
     """
     hostname = _endpoint_hostname(url)
 
+    # ``metadata.google.internal.`` is the same host. Only the deny lists read it without the
+    # dot (V0.10.36): an allowlist entry still has to match the host as written.
+    bare = hostname.rstrip(".")
+
     # Check blocked patterns first
     for pattern in policy.blocked_patterns:
-        if _matches_endpoint_pattern(hostname, pattern):
+        if _matches_endpoint_pattern(hostname, pattern) or _matches_endpoint_pattern(bare, pattern):
             logger.warning(
                 "endpoint_blocked",
                 url=_logged(url),
@@ -379,13 +381,13 @@ def validate_endpoint(url: str, policy: EndpointPolicy) -> None:
                 },
             )
 
-    if not policy.allow_metadata_urls and hostname in _METADATA_HOSTS:
+    if not policy.allow_metadata_urls and bare in _METADATA_HOSTS:
         _refuse_endpoint(url, hostname, "metadata_url", "Cloud metadata endpoint blocked")
     _check_internal(url, hostname, metadata_ip_candidates(hostname), policy)
 
     # Check localhost aliases
     # nosec B104 - "0.0.0.0" is being blocklisted here, not used as a bind address
-    if not policy.allow_private_ips and hostname in ("localhost", "0.0.0.0"):  # nosec B104
+    if not policy.allow_private_ips and bare in ("localhost", "0.0.0.0"):  # nosec B104
         raise NetworkBlockedError(
             f"Localhost blocked: {hostname}",
             operation="endpoint_validation",

@@ -2283,7 +2283,8 @@ class Airlock:
             # (`repo`, `target`, `args`, `version`) into a shell or `pnpm add` on the
             # server; nothing on the call path read it for that. Its `dispatch_args` refuse
             # an argument naming a function the tool must not call: CVE-2026-119050 (Agno
-            # PandasTools) passed a model-chosen name such as `read_pickle` to `getattr`.
+            # PandasTools) passed a model-chosen name such as `read_pickle` to `getattr`. Its
+            # `option_args` refuse a value an argv parser reads as an option (CVE-2026-114496).
             # Inert when policy.tool_arg_sink_guard is None.
             sink_error = self._check_tool_arg_sinks(
                 func_name=func_name,
@@ -5044,9 +5045,10 @@ class Airlock:
 
         Calls ``policy.tool_arg_sink_guard.evaluate(arguments)`` if configured: named (or
         all) string arguments may carry no shell metacharacters, installer arguments must
-        be a bare version, and a dispatch argument must name a function its allowlist (or,
-        without one, the default denylist) admits, the shape of CVE-2026-119050, where a
-        model-chosen ``read_pickle`` reached ``getattr(pandas, ...)``. See
+        be a bare version, an option argument may not start with ``-`` (CVE-2026-114496), and
+        a dispatch argument must name a function its allowlist (or, without one, the default
+        denylist) admits, the shape of CVE-2026-119050, where a model-chosen ``read_pickle``
+        reached ``getattr(pandas, ...)``. See
         :class:`agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard`.
 
         The refusal names the argument and the token that tripped it, never the whole

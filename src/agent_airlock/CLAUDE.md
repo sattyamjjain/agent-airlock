@@ -257,8 +257,8 @@ src/agent_airlock/
    checks (`_is_private_ip` counts `100.64.0.0/10`, multicast and IPv6 site-local as private
    since 0.10.36;
    the metadata set is `safe_types._CANONICAL_METADATA_IPS`, which `SSRFEgressGuard` reads
-   too, while metadata hostnames, `network._METADATA_HOSTS` and `safe_types.BLOCKED_HOSTS`,
-   are two lists that differ), and a hostname that passes `allowed_endpoints` is then resolved
+   too, and the metadata host names are `safe_types._METADATA_HOSTNAMES`, which `SafeURL` and
+   `supply_chain` read too), and a hostname that passes `allowed_endpoints` is then resolved
    (`resolve_hostnames`, `resolver`) and refused on an internal or missing answer; a name
    the allowlist refuses is never looked up. `EndpointPolicy.allowed_url_prefixes` (empty
    means no path scope) adds a last check on scheme, host, port and the path resolved by
