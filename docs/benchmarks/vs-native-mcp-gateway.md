@@ -74,8 +74,9 @@ The airlock column runs the shipped code — no lookup table:
 | arg_injection_* | in-process guard chain (eval / subprocess / env / codegen) |
 | over_privileged | deny-by-default `SecurityPolicy` |
 
-Result: **12/12 malformed blocked, 0/3 benign false-positive**, p50 ≈ 0.05 ms per
-decision on the 2026-11-03 run (0.030 to 0.051 ms across runs; earlier runs measured ≈ 0.08 ms).
+Result: **12/12 malformed blocked, 0/3 benign false-positive**, p50 ≈ 0.04 ms per
+decision on the 2026-11-25 run (0.034 to 0.041 ms across six runs; earlier runs measured 0.03 to
+0.08 ms).
 
 ## Result
 
