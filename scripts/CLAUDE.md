@@ -106,10 +106,11 @@ absolute-link rule is an authoring rule.
   `test_version_consistency.py` allows, and an X.Y.0 bump must cite X.Y.0), the supported
   minor line in `SECURITY.md`, the README badge (`make test-badge`) — and add a dated
   `## [X.Y.Z] - YYYY-MM-DD` CHANGELOG heading (`test_changelog_headings.py`, and
-  `check_changelog_heading.py` in `version-tag-guard`). Tag `vX.Y.Z` within one commit of
-  the bump, or `version-tag-guard` turns `main` red. Push the tag as soon as the squash
-  merge lands: the merge's own push run also runs `check_registry_parity.py`, which fails on
-  a dated CHANGELOG section with no tag yet (re-run that job once the tag exists).
+  `check_changelog_heading.py` in `version-tag-guard`), its notes written from the CHANGELOG
+  lines in the bodies of the PRs merged since the last tag. Tag `vX.Y.Z` within one commit of the
+  bump, or `version-tag-guard` turns `main` red. Push the tag as soon as the squash merge lands:
+  the merge's own push run also runs `check_registry_parity.py`, which fails on a dated CHANGELOG
+  section with no tag yet (re-run that job once the tag exists).
 - **`make test-badge`** rewrites only the README badge (test count, coverage, version). The
   hand-written copies must match it in the same commit: every count and `(vX.Y.Z = N)` pair
   under `docs/distribution/` (`test_numeric_claim_parity.py`) and the `N tests` proof point
@@ -130,13 +131,17 @@ absolute-link rule is an authoring rule.
   `_get_once` offline: renaming them fails the suite. The full feed is over 100,000
   advisories, so the shipped snapshot is a window by publish date (`--since`); its
   `published_since` field says which. Not by update date: GitHub re-touches old malware advisories
-  in bulk.
+  in bulk. Keep `--since` at the current snapshot's `published_since`: `TestTheShippedSnapshot`
+  asserts advisories by name in the newest file. A snapshot a test loads by name
+  (`grep -rnE 'malware_blast_[0-9_]+\.json' tests`) cannot be deleted as superseded.
 - **`smoke_*.py`** build the wheel, install it into a throwaway `.smoke-<name>-venv/`
   (network needed) and drive one guard or preset through the installed package (in
   `smoke_explain.py`, the `airlock-explain` console script), which an editable-tree unit
-  test cannot show. No workflow runs them; a failed run leaves its `.smoke-*` directory
-  behind (gitignored). Add one only when a unit test is not enough. `smoke_frameworks.py`
-  is different: a framework matrix with one venv per framework under
+  test cannot show. Three (`smoke_flowise_mcp_stdio.py`, `smoke_action_contradiction_gate.py`,
+  `smoke_capsule_indirect_injection.py`) compare `__version__` with the release they were
+  written for and exit 1 on any other. No workflow runs them; a failed run leaves its `.smoke-*`
+  directory behind (gitignored). Add one only when a unit test is not enough.
+  `smoke_frameworks.py` is different: a framework matrix with one venv per framework under
   `.smoke-frameworks-venv/<key>/`, whose `--run --budget-usd N` makes paid Claude calls with
   `ANTHROPIC_API_KEY` (ask first) and whose `--write` rewrites the SMOKE-MATRIX block in
   `docs/COMPATIBILITY.md`.
