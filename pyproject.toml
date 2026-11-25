@@ -427,6 +427,9 @@ asyncio_mode = "auto"
 # Anthropic API and spends API credit, so it is never collected by default:
 # `make test-live` names it and clears addopts.
 addopts = "-v --cov=agent_airlock --cov-report=term-missing --ignore=tests/benchmarks --ignore=tests/live -m 'not docker'"
+# A test stuck this long gets every thread's stack printed (the run goes on), so a hang says
+# where it is before the CI job's timeout-minutes ends it.
+faulthandler_timeout = 300
 markers = [
     "docker: integration test that requires a running Docker daemon (opt in with `pytest -m docker`)",
     "live: calls the Anthropic API and spends API credit; needs AIRLOCK_LIVE=1 and ANTHROPIC_API_KEY (`make test-live`)",
