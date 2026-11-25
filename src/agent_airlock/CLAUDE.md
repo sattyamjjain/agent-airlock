@@ -384,6 +384,11 @@ budgets are operational controls.
 - **Context propagation.** `contextvars`-backed `AirlockContext`; `get_current_context()` is
   available inside the wrapped tool, and a policy may be a callable over that context for
   per-tenant / per-workspace rules.
+- **A stream's cleanup can run inside any other code.** The garbage collector closes an
+  abandoned half-read guarded stream wherever it runs, and `_call_scope` then opens and closes
+  an airgap on that thread. So `network._patch_lock` is an `RLock`, the section it guards can
+  be entered again part-way, and nothing on that path logs (structlog's `PrintLogger` writes
+  under a plain `Lock`): keep all three (`tests/test_network_patch_reentry.py`).
 - **A new `BlockReason`** (`self_heal.py`) fails `test_every_block_reason_is_covered` until
   `tests/test_fix_hints_0_10_25.py` has a `_REFUSALS` row whose call is refused with it
   (each row is checked for the `AIRLOCK_BLOCK` prefix and non-empty `fix_hints`), or lists

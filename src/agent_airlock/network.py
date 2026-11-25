@@ -28,7 +28,9 @@ CONTEXT SAFETY:
 
     3. Socket patching: ``_patch_lock`` protects the global monkeypatch; reference
        counting uninstalls it only when the last airgap in the process closes. The
-       patched functions themselves run without the lock.
+       patched functions themselves run without the lock. The lock is re-entrant, and the
+       section it guards tolerates being entered again part-way by the same thread: the
+       garbage collector can close an abandoned guarded stream there.
 
 LIMITS:
     The airgap follows the call's context. Code the tool runs itself, asyncio tasks it
@@ -619,7 +621,10 @@ _active_airgaps: ContextVar[tuple[_AirgapFrame, ...]] = ContextVar(
 # Kept after an uninstall, so a call already inside an interceptor still completes.
 _originals: dict[str, Any] = {}
 _socket_patched = False
-_patch_lock = threading.Lock()
+# Re-entrant, because the thread holding it can enter again: the garbage collector closes an
+# abandoned guarded stream wherever it runs (``core._guard_stream``), and that cleanup opens
+# and closes an airgap. Until 0.10.36 this was a plain Lock, and such a thread waited on itself.
+_patch_lock = threading.RLock()
 
 # Reference counting for socket interceptors
 # Allows proper cleanup when last context manager exits
@@ -1081,9 +1086,15 @@ def _patch_targets() -> list[tuple[str, Any, str, Any]]:
 
 
 def _restore_originals() -> None:
-    """Put back every function the interceptors replaced. Call with ``_patch_lock`` held."""
+    """Put back every function the interceptors replaced.
+
+    Call with ``_patch_lock`` held and ``_socket_patched`` False. Stops when an airgap this
+    thread opened part-way (see ``_install_socket_interceptors``) has patched them again.
+    """
     for name, owner, attribute, _interceptor in _patch_targets():
         original = _originals.get(name)
+        if _socket_patched:
+            return
         if original is not None:
             setattr(owner, attribute, original)
 
@@ -1094,6 +1105,12 @@ def _install_socket_interceptors() -> None:
     Uses reference counting to track how many contexts are using interceptors.
     Interceptors are only installed on first reference and uninstalled when
     the last reference is released.
+
+    The thread holding the lock can enter this, or the uninstall, again at any point: the
+    garbage collector closing an abandoned guarded stream, or a signal handler. So an
+    interceptor is never saved as an original, the flag changes before the functions are put
+    back, and nothing here logs: a log sink's own lock may be the one this thread is inside
+    (structlog's ``PrintLogger`` writes under a plain ``Lock``).
     """
     global _socket_patched, _interceptor_ref_count
 
@@ -1101,29 +1118,22 @@ def _install_socket_interceptors() -> None:
         _interceptor_ref_count += 1
 
         if _socket_patched:
-            # Already installed, just increment ref count
-            logger.debug(
-                "socket_interceptors_ref_incremented",
-                ref_count=_interceptor_ref_count,
-            )
             return
 
         for name, owner, attribute, interceptor in _patch_targets():
-            _originals[name] = getattr(owner, attribute)
-            setattr(owner, attribute, interceptor)
+            current = getattr(owner, attribute)
+            if current is not interceptor:
+                _originals[name] = current
+                setattr(owner, attribute, interceptor)
 
         _socket_patched = True
-        logger.debug(
-            "socket_interceptors_installed",
-            ref_count=_interceptor_ref_count,
-        )
 
 
 def _uninstall_socket_interceptors() -> None:
     """Uninstall socket interceptors when ref count reaches 0 (thread-safe).
 
     Uses reference counting to ensure interceptors are only uninstalled
-    when no contexts are using them.
+    when no contexts are using them. See ``_install_socket_interceptors`` on re-entry.
     """
     global _socket_patched, _interceptor_ref_count
 
@@ -1131,20 +1141,11 @@ def _uninstall_socket_interceptors() -> None:
         if _interceptor_ref_count > 0:
             _interceptor_ref_count -= 1
 
-        if _interceptor_ref_count > 0:
-            # Still in use by other contexts
-            logger.debug(
-                "socket_interceptors_ref_decremented",
-                ref_count=_interceptor_ref_count,
-            )
+        if _interceptor_ref_count > 0 or not _socket_patched:
             return
 
-        if not _socket_patched:
-            return
-
-        _restore_originals()
         _socket_patched = False
-        logger.debug("socket_interceptors_uninstalled")
+        _restore_originals()
 
 
 def _close_airgap(token: Token[tuple[_AirgapFrame, ...]]) -> None:
@@ -1241,8 +1242,8 @@ def _reset_interceptors() -> None:
     with _patch_lock:
         # Force uninstall if patched
         if _socket_patched:
-            _restore_originals()
             _socket_patched = False
+            _restore_originals()
 
         _interceptor_ref_count = 0
 
