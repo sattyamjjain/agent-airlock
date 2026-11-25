@@ -23,12 +23,13 @@ import pytest
 from pydantic import BaseModel
 
 from agent_airlock import Airlock, AirlockConfig, SecurityPolicy
+from agent_airlock import network as network_module
 from agent_airlock.argument_secret_guard import (
     DEFAULT_ARGUMENT_SECRET_TYPES,
     ArgumentSecretGuard,
 )
 from agent_airlock.audit_otel import OTelAuditExporter
-from agent_airlock.mcp_spec import attested_admission
+from agent_airlock.mcp_spec import attested_admission, supply_chain
 from agent_airlock.mcp_spec.filter_eval_rce_guard import FilterEvalRCEGuard, FilterEvalRCEVerdict
 from agent_airlock.mcp_spec.header_integrity import (
     HeaderBodyMismatchError,
@@ -37,6 +38,7 @@ from agent_airlock.mcp_spec.header_integrity import (
 from agent_airlock.mcp_spec.manifest_only_mode import ManifestRegistry, launch_from_manifest
 from agent_airlock.mcp_spec.readonly_sql_guard import ReadOnlySQLGuard, ReadOnlySQLVerdict
 from agent_airlock.mcp_spec.stdio_guard import StdioInjectionError, validate_stdio_command
+from agent_airlock.mcp_spec.supply_chain import MCPBridgeSSRFBlocked, check_mcp_bridge_target
 from agent_airlock.network import (
     EndpointPolicy,
     NetworkBlockedError,
@@ -44,7 +46,13 @@ from agent_airlock.network import (
 )
 from agent_airlock.policy import STRICT_POLICY
 from agent_airlock.policy_presets import stdio_guard_ox_defaults
-from agent_airlock.safe_types import PERSISTENCE_DENY_PATTERNS
+from agent_airlock.safe_types import (
+    _METADATA_HOSTNAMES,
+    BLOCKED_HOSTS,
+    PERSISTENCE_DENY_PATTERNS,
+    SafeURLValidationError,
+    SafeURLValidator,
+)
 from agent_airlock.sanitizer import (
     DEFAULT_MASK_CONFIG,
     SensitiveDataType,
@@ -268,6 +276,36 @@ class TestAddressesAndUrls:
         resolving = EndpointPolicy(resolver=lambda host: [address])
         with pytest.raises(NetworkBlockedError):
             validate_endpoint("http://internal.example/", resolving)
+
+    @pytest.mark.parametrize(
+        "host", ["metadata", "metadata.google.internal", "metadata.aliyuncs.com", "METADATA."]
+    )
+    def test_a_metadata_host_name_is_refused_before_any_lookup(self, host: str) -> None:
+        asked: list[str] = []
+        policy = EndpointPolicy(resolver=lambda name: asked.append(name) or ["93.184.216.34"])
+        for checked in (policy, EndpointPolicy(resolve_hostnames=False)):
+            with pytest.raises(NetworkBlockedError):
+                validate_endpoint(f"http://{host}/latest/meta-data/", checked)
+        with pytest.raises(SafeURLValidationError):
+            SafeURLValidator()(f"http://{host}/")
+        with pytest.raises(MCPBridgeSSRFBlocked):
+            check_mcp_bridge_target(f"http://{host}/")
+        assert asked == []
+
+    def test_a_trailing_dot_does_not_leave_a_deny_list(self) -> None:
+        policy = EndpointPolicy(blocked_patterns=["*.evil.example"], resolve_hostnames=False)
+        for host in ("a.evil.example", "a.evil.example.", "localhost.", "LOCALHOST"):
+            with pytest.raises(NetworkBlockedError):
+                validate_endpoint(f"http://{host}/", policy)
+        allowed = EndpointPolicy(allowed_endpoints=["api.example.com"], resolve_hostnames=False)
+        validate_endpoint("https://api.example.com/", allowed)
+        with pytest.raises(NetworkBlockedError):  # still as written
+            validate_endpoint("https://api.example.com./", allowed)
+
+    def test_every_list_reads_the_one_set(self) -> None:
+        assert set(BLOCKED_HOSTS) >= _METADATA_HOSTNAMES
+        assert network_module._METADATA_HOSTS >= _METADATA_HOSTNAMES
+        assert supply_chain._METADATA_HOSTS >= _METADATA_HOSTNAMES
 
     @pytest.mark.parametrize("char", ["\x00", "\t", "\n", "\r", "\x1f", "\x7f"])
     def test_a_raw_control_character_is_refused_under_a_path_scope(self, char: str) -> None:

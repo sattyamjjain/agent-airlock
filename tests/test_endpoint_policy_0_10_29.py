@@ -84,7 +84,7 @@ class TestAlternateEncodings:
             ("http://0251.0376.0251.0376/", "metadata_url"),
             ("http://169.254.169.254.nip.io/", "metadata_url"),
             ("http://0/", "private_ip"),
-            ("http://localhost./", "private_ip"),
+            ("http://localhost./", "localhost"),
         ],
     )
     def test_alternate_encoding_is_refused(self, url: str, reason: str) -> None:
