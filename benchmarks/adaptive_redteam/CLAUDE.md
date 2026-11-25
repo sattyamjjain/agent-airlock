@@ -60,7 +60,9 @@ Subtree conventions for the adaptive red-team campaign. These extend
   `Canary`, `Attempt`, `classify`.
 - `canaries.py` — the five sentinel sinks + `canary_env` / `read_audit`.
 - `adapters/` — `base.py` (protocol), `standalone.py` (C), `config_gate.py` (B),
-  `policy_field.py` (A), `registry.py` (every adapter), `adapters_table.md` is the map.
+  `policy_field.py` (A), `registry.py` (every adapter).
+- `adapters_table.md` — the hand-kept map. No test reads it, so a guard or verdict added to
+  `registry.py` needs its row edited too.
 - `run_session.py` / `__main__.py` — the resumable CLI.
 - `ledger.py` — schema-1 append-only ledger.
 - `stats.py` — rule-of-three, histograms, plateau.

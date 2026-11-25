@@ -63,16 +63,16 @@ the package: `tests/`, `benchmarks/`, `scripts/`, `docs/` (mkdocs source), `exam
 and marketplace manifests).
 
 **Call flow through `@Airlock`** (`core.py`): `_pre_execution` gates, then execute, then
-`_post_execution`. The numbers match the `# Step N` comments in `core.py`:
+`_post_execution`. Steps 0 to 6.5 match the `# Step N` comments in `core.py`; 7 and 8 have none:
 
 0. Kill switch → 0.5 startup-hook self-check (`warn` by default since 0.10.36) → 0.6 OAuth
    token audience (off until configured) → 0.7 the run's halt latch
 1. Ghost arguments (BLOCK / STRIP_AND_LOG / STRIP_SILENT)
 2. Policy and caller identity → 2.1 a delegated run's ceiling → 2.3 loops in the run → 2.4
    source-to-sink data flow → 2.5 tool-call sequence guard → 2.6 action-time contradiction
-   gate → 2.7 unsafe-deserialization guard → 2.75 shell syntax, package specs and function
-   names in string arguments → 2.76 secrets and personal data in arguments → 2.77 shell
-   commands by rule → 2.8 per-run amplification budget
+   gate → 2.7 unsafe-deserialization guard → 2.75 shell syntax, option-shaped values, package
+   specs and function names in string arguments → 2.76 secrets and personal data in arguments
+   → 2.77 shell commands by rule → 2.8 per-run amplification budget
 3. Filesystem paths → 4. capability requirements → 4.5 argument leases → 5. endpoint policy
    → 6. per-model-tier budget → 0.7 again (a halt while the call waited) → 6.5 at-most-once
    dispatch (`effect_guard`), last, so a replay meets every gate before a stored result
@@ -157,8 +157,8 @@ History is dominated by `feat:` and `fix:`, with steady `docs:`, `chore:` and `b
 (`git log --format=%s | sed -E 's/^([a-z]+)[(!:].*/\1/' | sort | uniq -c | sort -rn`
 recounts it with scopes folded in). Four themes drive it: per-CVE guards and CVE triage
 (`tests/cves/CLAUDE.md`), claims integrity, benchmark honesty (`benchmarks/CLAUDE.md`), and
-fail-closed fixes on the call path, each release's in its own regression modules
-(`tests/CLAUDE.md`).
+fail-closed fixes on the call path, tested in modules named for the release or in the touched
+area's own (`tests/CLAUDE.md`).
 
 **Claims integrity** is a commit class of its own: `fix(meta):` / `fix:` commits that stop
 the README/docs/registry over-claiming ("ten places the repo claimed something the code

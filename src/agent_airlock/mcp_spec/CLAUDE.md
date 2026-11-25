@@ -34,7 +34,8 @@ direction in new branches.
      2026-07-28 spec validators (`meta_trust`, `statelessness`, `header_integrity`,
      `elicitation_provenance`, …), which the package docstring calls guards: they are
      guards, just not triples. `tasks` holds only task-state models, `conformance` the
-     case runner and `malware_advisory_feed` the offline loaders (`load_*`) that feed
+     case runner, `malware_advisory_feed` the offline loaders (`load_*`) and name index
+     (`rescoped_name_index`), and `release_age` the publish-time lookup, that feed
      `OIDCPublishWindowGuard`. Four modules fit none of the three: `LANUnauthRCEGuard` and
      `StdioMetaGuard` return frozen-dataclass verdicts (`Verdict`, `MetaVerdict`) with no
      `*Decision`, `PRMetadataGuard.sanitize()` returns a `SanitizedField`, and
@@ -178,10 +179,13 @@ preset, and
   `_FRAGMENT_NAMES` (CVE-2026-77367, equality), statements only by
   equality or `_STATEMENT_ALIASES` (never a suffix: `searchQuery` is plain text). Two more
   roles: identifier fields (`DEFAULT_IDENTIFIER_FIELDS`, equality only) must hold a name
-  (`_name_problem`; quoted per `_name_quotes(readings)`, and a quoted body that would be
-  code in a dialect not taking that quote is refused), and row fields
+  (`_name_problem`; quoted per `_name_quotes(readings)`, and a quoted body that is empty or
+  holds a quote or bracket (`_NOT_IN_QUOTED_NAME`), `\`, `;`, `#`, a comment mark or a control
+  character is refused whatever the dialect), and row fields
   (`DEFAULT_ROW_FIELDS`) have their mapping keys checked as names, values unread, refused
-  by position (`data.keys[0]`). The constructor's `_role` check raises when a configured
+  by position (`data.keys[0]`). Unread includes a statement or fragment key inside a row
+  (`data.sql`), which was refused before 0.10.36; `row_fields=frozenset()` restores that.
+  The constructor's `_role` check raises when a configured
   name would be read as another kind.
 - **`malware_advisory_feed` reads a document by its keys, never by file name**, and makes no
   network call. An OSV record is malware only when its id is `MAL-*` or it carries CWE-506: a
@@ -189,20 +193,27 @@ preset, and
   whole package (`blocked_packages` in `OIDCPublishWindowGuard`) has no version to narrow
   it, so it is matched in the ecosystem the argument's syntax names (`_spec_kinds`), while
   pairs keep matching in either ecosystem as before. Since 0.10.36 `rescoped_name_index`
-  maps each scoped npm MCP basename to a listed full name (GHSA-m5xq-h2p4-962g), and the
-  guard's `rescoped_names` refuses that basename under another scope only after the pair and
-  whole-package lookups miss, never for a listed name or one on `rescope_allow`. Tests pin a
-  snapshot by monkeypatching `_newest_snapshot_name` and calling
-  `load_malware_blast_snapshot.cache_clear()` before and after (`snapshot_2026_11_14` in
-  `tests/mcp_spec/test_oidc_publish_window_guard.py`).
-- **`release_age.py` is the one module here that can reach the network**, and only through
-  `registry_release_time_lookup()`, which a caller builds (GHSA-h82f-cjm4-g22r). The guard's
-  `min_release_age` check runs after every list (pairs, whole packages, rescoped names,
-  tarball URLs; `_AgeQuery`s are collected and answered last), never looks up a git, path or
-  non-registry URL spec (`_is_registry_spec`), judges a spec with no exact version by the
-  registry's default version, and treats a lookup that returns None or raises as an unknown
-  age (`unknown_release_age`, `deny` by default). Only exact-version answers are cached: a
-  cached `latest` would go stale. Tests pass a stub `opener`; `urlopen` carries
+  maps each scoped npm MCP basename not in `_GENERIC_MCP_BASENAMES` (`mcp`, `mcp-server`, ...)
+  to a listed full name (GHSA-m5xq-h2p4-962g), and the guard's `rescoped_names` refuses that
+  basename under another scope only after the pair and whole-package lookups miss, never for a
+  listed name or one on `rescope_allow`. Tests pin a snapshot by monkeypatching
+  `_newest_snapshot_name` and calling `load_malware_blast_snapshot.cache_clear()` before and
+  after (`snapshot_2026_11_14` in `tests/mcp_spec/test_oidc_publish_window_guard.py`, and
+  `SNAPSHOT` in `test_release_age.py`): a pinned file stays in `data/`.
+- **`release_age.py` makes HTTPS requests only through `registry_release_time_lookup()`**
+  (GHSA-h82f-cjm4-g22r), which a caller builds, or the preset does when
+  `min_release_age_hours` is set. The other network paths here are
+  `attested_admission._default_fetcher` (`urlopen`, when the config sets no `fetcher`) and DNS
+  lookups: `supply_chain`'s own, and those `SSRFEgressGuard` makes for it and
+  `schema_ref_guard`. The guard's `min_release_age` check runs after every list (pairs, whole
+  packages, rescoped names, tarball URLs; `_AgeQuery`s are collected and answered last) and
+  reads one version per spec, the embedded one, else the first of `version`. It never looks up a
+  git, path or non-registry URL written in `package` (`_is_registry_spec`); one in `version` is
+  judged by the named package's default version, as any spec with no exact version is. A lookup
+  that returns None or raises is no answer, and no answer from any registry asked is an unknown
+  age (`unknown_release_age`, `deny` by default); a bare name asks both registries unless
+  `installs_from` names one, and the youngest answer is judged. Only exact-version answers are
+  cached: a cached `latest` would go stale. Tests pass a stub `opener`; `urlopen` carries
   `# nosec B310` because only the two fixed registry bases reach it.
 - **`tools/list` paging differs by SDK line.** mcp 2.x's result has `next_cursor` and no
   `nextCursor` (FastMCP 4 adds a `nextCursor` to it that warns on each read); mcp 1.x's has
@@ -252,8 +263,10 @@ preset, and
 - **Tests:** CVE-numbered guards go in `tests/cves/test_cve_<yyyy>_<n>_<slug>.py`, guards
   for an advisory with no CVE id in `tests/cves/test_<slug>.py`, other guards in
   `tests/mcp_spec/test_<module>.py`, and the 2026-07-28 validators in
-  `tests/test_mcp_*_preset.py` (`config_path_guard`, `code_sandbox_bridge_guard` and
-  `readonly_sql_guard`, all CVE-numbered, are tested only under `tests/mcp_spec/`).
+  `tests/test_mcp_*_preset.py`. `config_path_guard`, `code_sandbox_bridge_guard`,
+  `filter_eval_rce_guard`, `oidc_publish_window_guard` (its GHSA-only rescoped-name and
+  release-age checks too) and `readonly_sql_guard`, all CVE-numbered, have no `tests/cves/`
+  module: their own tests are under `tests/mcp_spec/`.
   `tests/cves/CLAUDE.md` holds the fixture and no-mock rules.
 - A guard whose behaviour a unit test cannot show may also get a `scripts/smoke_*.py`
   driver, as `attested_admission` and the Flowise stdio preset have.

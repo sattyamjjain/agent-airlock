@@ -60,12 +60,20 @@ which `make test-badge` also counts as excluded: the docker-marked tests, `tests
   negotiation-bench CLIs call `structlog.configure(...)` with a stderr logger factory that,
   under `capsys`, binds a stream closed after the test (a later ERROR log then fails with
   "I/O operation on closed file", order-dependent). It is a no-op without structlog.
-- **The startup-hook walk skips the host interpreter's own hooks.** Since 0.10.36 every guarded
-  call walks startup hooks by default, so the autouse `_startup_hook_walk_sees_only_planted_hooks`
-  fixture patches `startup_hooks._directories` and `_customize_hook` to ignore the directories
-  the interpreter started with (`_HOST_DIRECTORIES`, e.g. coverage's `a1_coverage.pth` in CI).
-  Hooks planted in tmp or `tests/fixtures/startup_hooks/` dirs on `sys.path` are still walked;
-  that directory's `README.md` says what each case is.
+- **The startup-hook walk skips the host interpreter's own hooks.** Since 0.10.36 a process's
+  first guarded call walks startup hooks by default (once, kept in
+  `startup_hooks._process_walk`; a test that plants hooks calls
+  `testing.reset_startup_hook_check()`), so the autouse
+  `_startup_hook_walk_sees_only_planted_hooks` fixture patches `startup_hooks._directories` and
+  `_customize_hook` to ignore the directories the interpreter started with (`_HOST_DIRECTORIES`,
+  e.g. coverage's `a1_coverage.pth` in CI). Hooks planted in tmp or
+  `tests/fixtures/startup_hooks/` dirs on `sys.path` are still walked; that directory's
+  `README.md` says what each case is. The fixture is function-scoped and in-process: a guarded
+  call in a module- or session-scoped fixture, or in a subprocess, still walks the host and
+  issues the `RuntimeWarning`, and so does a host `sitecustomize` in package form
+  (`sitecustomize/__init__.py`, whose directory is not a host directory).
+- **`tests/fixtures/<area>/`** holds payloads for guard tests outside `tests/cves/`. The CVE
+  watcher's ledger reads none of it, a CVE id in a file name included.
 - **An `importorskip` needs a CI job that installs its dependency**, added in the same PR,
   and an extra-backed file joins the `test` job's step that runs those files and fails on
   any skip: a skipped module reads like a passing one in the summary line.
@@ -107,8 +115,11 @@ crewai, smolagents, anthropic, llama_index, autogen, agentdojo and openai-agents
 no CI job installs, so they skip in every run (`grep -rn importorskip tests/ --include='*.py'`).
 The openai-agents one (`TestTheOpenAIAgentsSDK` in `tests/test_call_path_0_10_28.py`) has a
 CI-run twin: the same module calls each tool positionally, which is what that SDK does. The
-E2B tests in `tests/test_remaining_coverage.py` skip in every run too, through an inline
-`pytest.skip` that grep misses: no job installs `[sandbox]`.
+E2B tests in `tests/test_remaining_coverage.py` (an inline `pytest.skip`) and all of
+`tests/test_sandbox_integration.py` (a module `skipif`) skip in every run too, which that grep
+misses: no job installs `[sandbox]`. So does `TestDockerBackendRootless` in
+`tests/test_sandbox_backend.py`: only `docker-sandbox` installs the `docker` SDK, and it
+collects only the files that hold docker-marked tests.
 
 <!-- END AUTO-MANAGED -->
 

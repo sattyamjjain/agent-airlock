@@ -10,7 +10,8 @@ The installed package: `@Airlock` (`core.py`, sync and async) and every layer it
 - Pydantic V2 strict validation, no type coercion; self-healing errors carrying `fix_hints`
 - Policy engine: RBAC, token-bucket rate limits, time windows, per-model-tier cost budgets,
   per-run resource-amplification budgets
-- PII/secret detection and masking; Indic PII is opt-in (`pii_locales=["in"]`)
+- PII/secret detection and masking; the Indic types are opt-in (`pii_locales=["in"]`), though
+  a `+91` mobile written in groups is masked as `PHONE` by default since 0.10.36
 - Sandboxed execution: `@Airlock(sandbox=True)` dispatches only to E2B Firecracker. The
   Docker, Modal and local backends in `sandbox_backend.py` are used directly:
   `get_default_backend()` picks E2B, then Docker, and returns the local backend only with
@@ -119,11 +120,12 @@ src/agent_airlock/
      directory as `benign`, by content and place, the imported module resolving beside the
      hook, and `_claimants` (every `RECORD` in the walked directories) naming no other owner;
      a finding named in `KNOWN_INCIDENT_HOOKS` carries its advisory and logs at error level.
-     `warn` logs each finding and issues one `RuntimeWarning` per process (raised from the
-     first guarded call under `-W error`); `deny` refuses every call guarded by a config
-     that sets it while a hook is not on `startup_hook_allowlist`, whose entries pin a hook
+     Both modes log each finding once and issue one `RuntimeWarning` per process, raised from
+     the first guarded call under `-W error` (under `deny` that call raises instead of
+     returning its refusal); `deny` refuses every call guarded by a config that sets it while
+     a hook is neither benign nor on `startup_hook_allowlist`, whose entries pin a hook
      file's bytes, not the modules its `import` lines load. `tests/conftest.py` keeps the
-     host interpreter's own directories out of the walk
+     host interpreter's own directories out of the walk (its limits are in `tests/CLAUDE.md`)
    - 0.6 OAuth token audience (`expected_token_audience`, inert until set, `warn` by
      default): the `aud` of the claims the host put on context metadata under
      `access_token_claims` (`_call_metadata`), never a tool argument; `deny` also refuses a
@@ -199,8 +201,10 @@ src/agent_airlock/
      `_REF_SHAPED_SUFFIXES` word (`base_branch`, `gitRef`), bar `free_text_args`. The option
      test runs before the shell test on the same leaf
    - 2.76 secrets and personal data in arguments (V0.10.29, `argument_secret_guard.py`, off
-     until the policy sets `argument_secret_guard`): the sanitizer's detectors over every
-     string argument, nested ones and mapping keys included. `block` refuses
+     until the policy sets `argument_secret_guard`): the detectors in
+     `DEFAULT_ARGUMENT_SECRET_TYPES` (no `IP_ADDRESS`, no Indic types, no `BEARER_TOKEN`) over
+     every string argument, nested ones and mapping keys included, each string read alone
+     (step 8's `_labelled_secret` key rule does not run here). `block` refuses
      (`argument_secret`, naming the argument and the kind of data, never the value);
      `mask` masks a top-level keyword string in place through `_BoundCall.replace`, so the
      later steps, the decision record and an approval read the masked value, and refuses
@@ -218,10 +222,11 @@ src/agent_airlock/
      `_segments` records each writing redirection on `_Walk.writes`, wrapper lines
      included; a target `redirect_deny` names and `redirect_allow` does not is denied
      whatever `default` is, an undecided one, `$` / glob / brace / `~user`, asked about
-     with an ask rule else denied; `redirect_deny=()` turns it off), then ask rules, then
-     `_worst`. A command carrying a `_ACTION_OPTIONS` option (`find -delete`, `-fprint*`,
-     `-fls`) is admitted only by an allow rule naming it, a wrapper `find` too. Ask
-     escalates (rule `shell_command`)
+     with an ask rule else denied (a `$` one is denied under `default="deny"` even with an ask
+     rule, since no allow rule admits an expanded line); `redirect_deny=()` turns it off),
+     then ask rules, then `_worst`. A command carrying a `_ACTION_OPTIONS` option
+     (`find -delete`, `-fprint*`, `-fls`) is admitted only by an allow rule naming it, a wrapper
+     `find` too. Ask escalates (rule `shell_command`)
    - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one
      anonymous ledger when there is none) — after the gates above, so a call they refuse
      is never charged to the run's ledger (one that steps 3–7 refuse already has been)
@@ -248,7 +253,8 @@ src/agent_airlock/
    decimal, hex, octal, short and IPv6-transition forms) meets the private and metadata
    checks (`_is_private_ip` counts `100.64.0.0/10` and multicast as private since 0.10.36;
    the metadata set is `safe_types._CANONICAL_METADATA_IPS`, which `SSRFEgressGuard` reads
-   too), and a hostname that passes `allowed_endpoints` is then resolved
+   too, while metadata hostnames, `network._METADATA_HOSTS` and `safe_types.BLOCKED_HOSTS`,
+   are two lists that differ), and a hostname that passes `allowed_endpoints` is then resolved
    (`resolve_hostnames`, `resolver`) and refused on an internal or missing answer; a name
    the allowlist refuses is never looked up. `EndpointPolicy.allowed_url_prefixes` (empty
    means no path scope) adds a last check on scheme, host, port and the path resolved by
@@ -418,6 +424,8 @@ budgets are operational controls.
   unregistered preset never shows up in `list_active()`. Many guards are re-exported from
   the package root (`agent_airlock.__all__`); `mcp_spec/__init__.py` exports no per-CVE
   guard — its `__all__` is the protocol surface only.
+  `npm_oidc_publish_window_guard_defaults(min_release_age_hours=...)` builds a lookup that
+  makes registry requests at call time; off by default.
 - **Declarative presets.** `presets/*.yaml` use a restricted YAML dialect
   (`schema_version: 1`) that `preset_loader` parses without PyYAML. Every `factory:` value,
   even on an `enabled: false` entry, must name a preset registered in
@@ -440,7 +448,8 @@ budgets are operational controls.
   GHSA-g7cv-rxg3-hmpx. The malware advisory snapshot is the exception: `scripts/refresh_malware_blast.py`
   writes `data/malware_blast_<YYYY_MM_DD>.json` and `load_malware_blast_snapshot` reads the
   newest by name, so a refresh adds a file and repoints nothing; delete the previous one
-  only after the new one has shipped.
+  only after the new one has shipped, and never one a test or fixture loads by name
+  (`grep -rnE 'malware_blast_[0-9_]+\.json' tests` lists them, comments included).
   `cost_tracking.DEFAULT_PRICING` is the undated in-process fallback, so a price refresh
   edits it too; `tests/test_budget_pricing_0_10_24.py` fails when it lacks a model the
   current snapshot prices.
@@ -453,13 +462,18 @@ budgets are operational controls.
   `except AirlockError` does not catch `PolicyViolation`, `PathValidationError` and the
   like (`grep -rnE 'class \w+\((ValueError|TypeError|RuntimeError|TimeoutError|Exception|PolicyViolation)\)' src/agent_airlock`
   lists the candidates); do not rebase any of them in a patch release.
+- **A new `SensitiveDataType`** joins these by hand: `PATTERNS` (a test checks it),
+  `DEFAULT_MASK_CONFIG`, `_types_to_mask`, the type sets in `sanitize_with_workspace_config`
+  and, for a secret, `argument_secret_guard.DEFAULT_ARGUMENT_SECRET_TYPES`; no test compares
+  the last three with the enum. `.claude-plugin/marketplace.json` states the count
+  (`tests/test_marketplace_metadata.py`), so it moves in the same PR.
 - **Logger names.** `from .._log import structlog` one package down; `core.py` alone uses the
   bare root name (`tests/test_tooling_honesty_0_10_28.py` checks every `get_logger` call). In
   `src/` the shim is the only module that imports `structlog`.
 - **Forbidden-pattern greps.** `mcp_spec/manifest_only_mode.py` is the only `subprocess`
   importer in `src/` and does not use `shell=True`; the `shell=True` grep hits in
-  `capabilities.py` (a docstring) and `cli/doctor.py` (a detection regex) are text, not
-  calls.
+  `capabilities.py`, `tool_arg_sink_guard.py`, `policy_presets.py` (docstrings) and
+  `cli/doctor.py` (its detection rules) are text, not calls.
 - **Also by name** — `airlock attest` receipts (identity plus assume/guarantee
   `LayerContract`); `SandboxPool` of single-use sandboxes, one pool per E2B key, timeout
   and pool size, hiding cold starts; `vaccinate()` monkeypatching third-party `@tool`

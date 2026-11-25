@@ -80,9 +80,10 @@ what counts as in scope is in `docs/cve-triage.md`.
   the spawn. See `_spawn_config` in `test_cve_2026_79538_metamcp_stdio_proxy.py`.
 - **No mocks.** The only `unittest.mock.patch` fakes `socket.getaddrinfo`
   (`test_ox_supply_chain_2026_04.py`); SSRF and DNS-rebinding modules inject a stub through
-  the guard's own `resolver=` parameter instead (`grep -l 'resolver=' tests/cves/`), the
-  pattern a new one copies. Everything else runs against real fixtures; a few allow-path
-  tests resolve real public hosts and fail offline.
+  the guard's own `resolver=` parameter instead
+  (`grep -rl 'resolver=' tests/cves --include='*.py'`), the pattern a new one copies. Everything
+  else runs against real fixtures; a few allow-path tests resolve real public hosts and fail
+  offline.
 - **Triage workflow.** `cve-watcher.yml` files triage issues for argument-shaped CVEs;
   each gets a disposition from the vocabulary in `docs/cve-triage.md`
   (`in-scope-and-scheduled`, `in-scope-and-deferred-until-<DATE>`,
@@ -129,7 +130,8 @@ what counts as in scope is in `docs/cve-triage.md`.
   The marketplace
   proof point says "N tests", not "N tests passing", because a strict `xfail` would be
   collected and counted but never pass (none exists today:
-  `grep -rnE 'mark\.xfail|pytest\.xfail\(' tests` checks). `test_proof_point_test_count_matches_the_badge`
+  `grep -rnE 'mark\.xfail|pytest\.xfail\(' tests --include='*.py'` checks).
+  `test_proof_point_test_count_matches_the_badge`
   pins only the number, so that wording is on whoever edits the proof point.
 - **Fixture gates.** CI runs the egress walker over the fixtures through
   `tests/cli/test_egress_bench_since.py`, `tests/test_numeric_claim_parity.py` and, via the

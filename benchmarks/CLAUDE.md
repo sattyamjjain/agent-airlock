@@ -41,8 +41,9 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   command), because a CLI's configured default can change between runs; `--run` refuses a
   claude-code cell without one. A CLI that exits
   non-zero before any observable work is an `error` cell, never a non-action, and a resumed
-  checkpoint re-runs every `error` cell and any cell recorded under a different model or
-  auth method (`--allow-any-auth` widens the latter). A harness whose every cell errored
+  checkpoint re-runs, for each harness that runs now, every `error` cell and any cell recorded
+  under a different model or auth (`--allow-any-auth` only lets a harness logged in another way
+  run instead of being skipped; it keeps no old cell). A harness whose every cell errored
   renders as "measured nothing", never as a 0 of 0 that reads as finishing every cell.
 - **`vs_gateway/`** — airlock measured live against a gateway column replayed from
   `gateway_measurement.json`, which only `gateway_harness/regen.py` rewrites.
@@ -127,6 +128,9 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   `docs/benchmarks/index.md` whose bold first cell matches README's (case, `*`, backticks
   and hyphens ignored) with the same date: the default mode, run by CI's `docs` job, pairs
   rows by title and fails on a missing or mismatched twin.
+- **Warm up before timing a guarded call.** Since 0.10.36 the first `@Airlock` call in a process
+  pays the startup-hook walk, hundreds of times a later call's cost, and may issue its
+  `RuntimeWarning` on stderr.
 - **Tests pin published figures** (`grep -rln 'from benchmarks' tests/`): move a pin and its
   `RESULTS.md` together, make run-dependent asserts conditional, and leave `power.Z_95`
   alone — the published intervals were computed with it.
@@ -156,7 +160,8 @@ suite is a different thing: `tests/benchmarks/`, run by `make bench`.
   `ANTHROPIC_API_KEY="$(security find-generic-password -s anthropic-credits -w)"` before the
   command. An exported key overrides the Claude Code login, so every `claude -p` run would
   bill the credit.
-- **Internal:** mostly the package root and `agent_airlock.policy`; recount with
+- **Internal:** the package root, `agent_airlock.policy`, `agent_airlock.filesystem` and,
+  through `adaptive_redteam/adapters/registry.py`, every guard it drives; recount with
   `grep -rhoE 'from agent_airlock[.a-z_]*' benchmarks/ --include='*.py' | sort -u`.
   `vs_gateway/__main__.py` imports `structlog` directly, so it needs `[logging]` or `[dev]`.
 - **No lint, type or security gate covers this tree** (CI's ruff targets `src/ tests/`,
