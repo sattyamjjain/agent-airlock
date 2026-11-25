@@ -589,9 +589,47 @@ class TestCVE202663129Aliases:
         assert _verdict({"Values": {1: "x"}}) is V.DENY_NOT_AN_IDENTIFIER
 
     def test_a_row_s_values_are_not_read(self) -> None:
-        assert _verdict({"data": {"note": "1=1; DROP TABLE x", "where": "x'--"}}) is V.ALLOW
+        assert _verdict({"data": {"note": "1=1; DROP TABLE x"}}) is V.ALLOW
+        assert _verdict({"data": {"table": "users WHERE 1=1"}}) is V.ALLOW
         assert _verdict({"values": [1, 2, "three"]}) is V.ALLOW
         assert _verdict({"data": "plain text"}) is V.ALLOW
+
+    @pytest.mark.parametrize(
+        ("args", "verdict", "field"),
+        [
+            ({"data": {"sql": "DROP TABLE users"}}, V.DENY_WRITE_STATEMENT, "data.sql"),
+            ({"values": [{"query": "DELETE FROM t"}]}, V.DENY_WRITE_STATEMENT, "values[0].query"),
+            (
+                {"updates": {"where": "1=1; DROP TABLE x"}},
+                V.DENY_SUBQUERY_IN_FRAGMENT,
+                "updates.where",
+            ),
+            (
+                {"records": [{"filter": "1 OR (SELECT pw FROM users)"}]},
+                V.DENY_SUBQUERY_IN_FRAGMENT,
+                "records[0].filter",
+            ),
+            ({"data": {"where": "x'--"}}, V.DENY_UNINSPECTABLE, "data.where"),
+            ({"row": {"meta": {"sql": "DROP TABLE t"}}}, V.DENY_WRITE_STATEMENT, "row.meta.sql"),
+            (
+                {"rows": [{"meta": [{"statement": b"DROP TABLE t"}]}]},
+                V.DENY_WRITE_STATEMENT,
+                "rows[0].meta[0].statement",
+            ),
+        ],
+    )
+    def test_a_statement_or_fragment_key_inside_a_row_is_read(
+        self, args: dict[str, Any], verdict: V, field: str
+    ) -> None:
+        """Refused through 0.10.35; the row fields of #513 left every value unread."""
+        decision = ReadOnlySQLGuard().evaluate(args)
+        assert decision.verdict is verdict
+        assert decision.matched_field == field
+
+    def test_a_column_the_alias_rules_would_read_is_data_inside_a_row(self) -> None:
+        for column in ("stateFilter", "whereClause", "sort", "rawSql"):
+            assert _verdict({"data": {column: "1=1; DROP TABLE x"}}) is V.ALLOW, column
+            assert _verdict({column: "1=1; DROP TABLE x"}) is not V.ALLOW, column
 
     def test_the_refusal_never_repeats_the_name(self) -> None:
         marker = "zz_name_marker_zz"

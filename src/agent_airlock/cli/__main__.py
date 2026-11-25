@@ -64,7 +64,7 @@ def _print_usage(stream: object = None) -> None:
     lines = [
         f"usage: {_PROG} <command> [options]",
         "",
-        "Agent-Airlock — a deny-by-default type-checker and contract layer for AI",
+        "Agent-Airlock — an in-process type-checker and contract layer for AI",
         "agent tool calls. Pick a command:",
         "",
     ]

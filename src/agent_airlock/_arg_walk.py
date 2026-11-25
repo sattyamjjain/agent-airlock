@@ -654,6 +654,25 @@ def _children(
     return None
 
 
+def object_fields(value: Any) -> dict[str, Any] | None:
+    """The named fields of a structured object, or None when it is not one.
+
+    A named tuple, a pydantic model, or a dataclass that no agent framework defines: what a
+    model-typed parameter is once a framework has validated its JSON. For the guards that
+    walk an argument mapping themselves (``mcp_spec``) and read a value by its key.
+    """
+    if isinstance(value, (type, *_URL_RESULT_TYPES, *_TEXT_TYPES)):
+        return None
+    names = getattr(value, "_fields", None) if isinstance(value, tuple) else None
+    if names is not None:
+        return {str(name): item for name, item in zip(names, value, strict=False)}
+    if isinstance(value, BaseModel):
+        return {str(name): item for name, item in BaseModel.__iter__(value)}
+    if dataclasses.is_dataclass(value) and not is_framework_object(value):
+        return {f.name: getattr(value, f.name) for f in dataclasses.fields(value)}
+    return None
+
+
 def _mapping_children(
     value: Mapping[Any, Any], key: str, path: str
 ) -> Iterator[tuple[str, str, Any, bool]]:

@@ -25,8 +25,11 @@ add_memories(fact="export DB_PASSWORD=hunter2-prod")
 The guard runs at step 2.76, after the shell-syntax screen. It reads every string in the
 call's arguments, positional and nested ones included (a mapping's keys too), and an integer
 as its digits, through the sanitizer's detectors: every secret detector (API keys, AWS keys,
-passwords, private keys, JWTs, connection strings, environment dumps) and email, phone, SSN
-and card numbers. IP addresses are left out by default, since hosts are ordinary arguments.
+passwords, private keys, JWTs, bearer tokens, connection strings, environment dumps) and email,
+phone, SSN and card numbers. IP addresses are left out by default, since hosts are ordinary
+arguments. A string of eight or more characters under a mapping key that names a secret
+(`data={"password": "..."}`) is refused too, as the same pair in one JSON string is (0.10.36).
+The argument's own name does not count, since a tool that declares `password` takes one.
 
 The refusal names the argument (or its nested place, such as `profile.contacts[1]`) and the
 kind of data. It never repeats the value.

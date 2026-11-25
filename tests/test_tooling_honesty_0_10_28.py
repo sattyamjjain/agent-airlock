@@ -63,7 +63,15 @@ EXTRA_BACKED_FILES = (
     "tests/test_result_masking_0_10_29.py",
     "tests/test_mcp_tool_pins_0_10_29.py",
     "tests/test_permission_prompt_0_10_29.py",
+    "tests/test_fixes_0_10_33.py",
+    "tests/test_guard_shapes_fail_closed_0_10_28.py",
+    "tests/test_rate_limit_reset_hint.py",
+    "tests/test_review_runtime_0_10_28.py",
 )
+#: The modules the ``test`` job's extras install, by top-level name.
+_EXTRA_MODULES = frozenset({"redis", "fakeredis", "lupa", "fastmcp", "mcp", "cryptography"})
+#: Extra-backed files that cannot join the step, with what else they ``importorskip``.
+_ALWAYS_SKIPS_SOMETHING = {"tests/test_call_path_0_10_28.py": "agents"}
 
 
 def _ci_step(name: str) -> str:
@@ -164,6 +172,18 @@ class TestTheExtraBackedStepRunsTheTests:
         for path in EXTRA_BACKED_FILES:
             assert path in script
             assert (REPO_ROOT / path).is_file(), path
+
+    def test_no_extra_backed_file_is_missing(self) -> None:
+        """Four were until 0.10.36: nothing compared the list with the ``importorskip``s."""
+        wanted = set()
+        for path in (REPO_ROOT / "tests").rglob("test_*.py"):
+            text = path.read_text(encoding="utf-8")
+            modules = set(re.findall(r"importorskip\(\s*[\"']([\w.]+)[\"']", text))
+            if any(module.split(".")[0] in _EXTRA_MODULES for module in modules):
+                wanted.add(path.relative_to(REPO_ROOT).as_posix())
+        for path, module in _ALWAYS_SKIPS_SOMETHING.items():
+            assert f'importorskip("{module}")' in (REPO_ROOT / path).read_text(encoding="utf-8")
+        assert wanted - set(_ALWAYS_SKIPS_SOMETHING) <= set(EXTRA_BACKED_FILES)
 
     def test_the_three_import_lines_stay(self) -> None:
         script = self._script()

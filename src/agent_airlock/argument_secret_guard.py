@@ -15,6 +15,11 @@ and PII detectors over every string argument, nested ones included, before the t
 * ``mode="mask"`` masks a top-level string argument passed by keyword, where the masked
   value keeps the argument's type and JSON shape, and refuses anything else it finds.
 
+A string under a mapping key that names a secret (``{"password": "..."}``) is refused too
+(V0.10.36), as the same pair in one JSON string is. Each string is read on its own, so a key
+was never beside its value. The argument's own name does not count: a tool that declares a
+``password`` parameter takes one.
+
 ``free_text_args`` are left unscreened, ``tools`` limits the guard to tool-name patterns,
 and the preset :func:`agent_airlock.policy_presets.argument_secret_defaults` covers
 memory-write tools.
@@ -33,7 +38,13 @@ from ._arg_walk import (
     BoundArguments,
     iter_argument_values,
 )
-from .sanitizer import SensitiveDataType, detect_sensitive_data, mask_sensitive_data
+from .sanitizer import (
+    _SECRET_KEY,
+    _SECRET_VALUE_MIN_CHARS,
+    SensitiveDataType,
+    detect_sensitive_data,
+    mask_sensitive_data,
+)
 
 __all__ = [
     "DEFAULT_ARGUMENT_SECRET_TYPES",
@@ -54,6 +65,7 @@ DEFAULT_ARGUMENT_SECRET_TYPES: tuple[SensitiveDataType, ...] = (
     SensitiveDataType.JWT,
     SensitiveDataType.CONNECTION_STRING,
     SensitiveDataType.ENV_DUMP,
+    SensitiveDataType.BEARER_TOKEN,
     SensitiveDataType.EMAIL,
     SensitiveDataType.PHONE,
     SensitiveDataType.SSN,
@@ -143,7 +155,9 @@ class ArgumentSecretGuard:
             argument = BoundArguments({name: value})
             argument.named_models = named
             try:
-                refusal = self._screen(name, argument, masked, maskable)
+                refusal = self._screen(name, argument, masked, maskable) or self._labelled(
+                    str(name), value
+                )
             except ArgumentNestingError as error:
                 return ArgumentSecretDecision(
                     allowed=False,
@@ -186,6 +200,39 @@ class ArgumentSecretGuard:
                 kinds=kinds,
                 detail=f"argument {place!r} carries {', '.join(kinds)}",
             )
+        return None
+
+    def _labelled(self, path: str, value: Any) -> ArgumentSecretDecision | None:
+        """The refusal for a string under a mapping key that names a secret, or None.
+
+        Called after :meth:`_screen`, whose walk refuses nesting too deep to read and a
+        container that contains itself.
+        """
+        if SensitiveDataType.PASSWORD not in self.detectors:
+            return None
+        if isinstance(value, Mapping):
+            children = [(f"{path}.{key}", key, item) for key, item in value.items()]
+        elif isinstance(value, (list, tuple)):
+            children = [(f"{path}[{index}]", None, item) for index, item in enumerate(value)]
+        else:
+            return None
+        for place, key, item in children:
+            if (
+                isinstance(key, str)
+                and isinstance(item, str)
+                and len(item.strip()) >= _SECRET_VALUE_MIN_CHARS
+                and _SECRET_KEY.search(key)
+            ):
+                kind = SensitiveDataType.PASSWORD.value
+                return ArgumentSecretDecision(
+                    allowed=False,
+                    argument=place,
+                    kinds=(kind,),
+                    detail=f"argument {place!r} carries {kind}",
+                )
+            refusal = self._labelled(place, item)
+            if refusal is not None:
+                return refusal
         return None
 
     def _kinds_in(self, text: str) -> tuple[str, ...]:

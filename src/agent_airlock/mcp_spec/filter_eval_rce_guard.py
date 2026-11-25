@@ -55,10 +55,16 @@ from __future__ import annotations
 
 import enum
 import re
-from collections.abc import Mapping
+from collections import UserString
+from collections.abc import Mapping, Sequence, Set, ValuesView
 from dataclasses import dataclass
+from datetime import date, time, timedelta
+from decimal import Decimal
+from fractions import Fraction
 from typing import Any
+from uuid import UUID
 
+from .._arg_walk import object_fields
 from .._log import structlog
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.filter_eval_rce_guard")
@@ -120,6 +126,10 @@ _TEMPLATE_EVAL_RE = re.compile(
 #: Nesting deeper than this is refused rather than walked. A guard that stopped looking at
 #: some depth would fail open on the payload placed one level below it.
 _MAX_DEPTH = 32
+
+
+#: Values that hold no expression text: numbers, dates and times, a UUID, ``None``.
+_INERT = (int, float, complex, Decimal, Fraction, date, time, timedelta, UUID, type(None))
 
 
 class FilterEvalRCEVerdict(str, enum.Enum):
@@ -210,9 +220,12 @@ class FilterEvalRCEGuard:
         ``bytes`` decoded. A string is inspected when a key on its path is a suspect field
         (``{"condition": ["lambda ..."]}``, ``{"payload": {"condition": "lambda ..."}}``),
         or always under ``scan_all_fields``. Until v0.10.24 only top-level string values
-        were inspected, so both of those passed. Nesting deeper than the guard walks, a
-        container that contains itself, and bytes in an inspected field that are not UTF-8
-        (v0.10.28; they were decoded with replacement characters) are refused
+        were inspected, so both of those passed. Since v0.10.36 a pydantic model, a
+        dataclass or a named tuple is read by its fields, and an enum member by its value.
+        Nesting deeper than the guard walks, a container that contains itself, bytes in an
+        inspected field that are not UTF-8 (v0.10.28; they were decoded with replacement
+        characters), and any other object in an inspected field that is not a number, a
+        date or time, a UUID or ``None`` (v0.10.36; a callable among them) are refused
         (``DENY_UNINSPECTABLE``).
 
         Args:
@@ -256,11 +269,13 @@ class FilterEvalRCEGuard:
         expression from the patterns while a consumer that drops the byte still ran it,
         so bytes that are not UTF-8 are refused as ``DENY_UNINSPECTABLE``.
         """
-        if isinstance(value, (str, bytes, bytearray, memoryview)):
+        if isinstance(value, enum.Enum):
+            value = value.value
+        if isinstance(value, (str, bytes, bytearray, memoryview, UserString)):
             if not (suspect or self._scan_all_fields):
                 return None
-            if isinstance(value, str):
-                text = value
+            if isinstance(value, (str, UserString)):
+                text = str(value)
             else:
                 try:
                     text = bytes(value).decode("utf-8")
@@ -268,15 +283,18 @@ class FilterEvalRCEGuard:
                     return self._deny_uninspectable(field, "is bytes that are not valid UTF-8")
             return self._inspect_value(field=field, value=text)
         children: list[tuple[str, Any, bool]]
-        if isinstance(value, Mapping):
+        named = value if isinstance(value, Mapping) else object_fields(value)
+        if named is not None:
             children = [
                 (f"{field}.{key}", item, suspect or key in self._suspect_fields)
-                for key, item in value.items()
+                for key, item in named.items()
             ]
-        elif isinstance(value, (list, tuple, set, frozenset)):
+        elif isinstance(value, (Sequence, Set, ValuesView)):
             children = [(f"{field}[{idx}]", item, suspect) for idx, item in enumerate(value)]
+        elif isinstance(value, _INERT) or not (suspect or self._scan_all_fields):
+            return None  # no expression text, or a field the guard does not read
         else:
-            return None  # numbers, booleans, None and other objects carry no expression text
+            return self._deny_uninspectable(field, f"holds a {type(value).__name__}")
         if depth >= _MAX_DEPTH:
             return self._deny_uninspectable(field, f"nests deeper than {_MAX_DEPTH} levels")
         if id(value) in ancestors:

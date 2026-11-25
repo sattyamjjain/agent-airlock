@@ -158,8 +158,8 @@ _BRIDGE_ADVISORY = "CVE-2026-26015"
 _METADATA_HOSTNAMES = frozenset({"metadata", "metadata.google.internal", "169.254.169.254"})
 
 #: Carrier-grade NAT (RFC 6598). Python's ``ipaddress`` calls it neither private nor
-#: reserved, so ``SSRFEgressGuard`` admits it; the bridge has refused it since v0.5.3 and
-#: still does, on top of the guard's own ranges.
+#: reserved. The bridge has refused it since v0.5.3, and ``SSRFEgressGuard`` does too since
+#: v0.10.36, so this is a second check.
 _CARRIER_GRADE_NAT = ipaddress.ip_network("100.64.0.0/10")
 
 
@@ -238,7 +238,7 @@ def check_mcp_bridge_target(
     every address a host name resolves to. Until 0.10.28 a hand-rolled range list here
     admitted ``0.0.0.0``, ``[::ffff:127.0.0.1]``, ``[::]`` and NAT64. The bridge adds two
     refusals of its own: the cloud-metadata host names, before any lookup, and
-    carrier-grade NAT (100.64.0.0/10), which the guard admits.
+    carrier-grade NAT (100.64.0.0/10), which the guard also refuses since v0.10.36.
 
     Args:
         target_url: The URL a tool wants to fetch. Anything but a ``str`` is refused.

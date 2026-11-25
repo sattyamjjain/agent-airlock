@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from .mcp_spec.attested_admission import AdmissionDecision, AttestedAdmissionConfig
     from .mcp_spec.header_audit import ResponseHeaderAuditConfig
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig, OAuthAuditReport
+    from .policy import SecurityPolicy
 
 logger = structlog.get_logger("agent-airlock.mcp_proxy_guard")
 
@@ -694,7 +695,7 @@ class MCPProxyGuard:
 
         return audit_oauth_exchange(token_response, client_id, self.config.oauth_audit)
 
-    def validate_stdio_spawn(self, cmd: list[str]) -> None:
+    def validate_stdio_spawn(self, cmd: list[str], *, policy: SecurityPolicy | None = None) -> None:
         """Validate a STDIO-transport spawn against the configured guard.
 
         Call this immediately before ``subprocess.Popen(cmd, shell=False)``
@@ -704,10 +705,12 @@ class MCPProxyGuard:
 
         Args:
             cmd: argv list, as for ``subprocess.Popen(args=[...])``.
+            policy: The policy whose ``stdio_mode`` applies (v0.10.36).
 
         Raises:
             MCPSecurityError: If no ``stdio_guard`` is configured.
-            StdioInjectionError: If the argv fails any sanitiser rule.
+            StdioInjectionError: If the argv fails any sanitiser rule, or
+                ``policy.stdio_mode`` refuses the spawn.
                 Subclass of ``agent_airlock.exceptions.AirlockError``.
         """
         if self.config.stdio_guard is None:
@@ -719,7 +722,7 @@ class MCPProxyGuard:
         # StdioGuardConfig from policy.py, but is itself inside mcp_spec/).
         from .mcp_spec.stdio_guard import validate_stdio_command
 
-        validate_stdio_command(cmd, self.config.stdio_guard)
+        validate_stdio_command(cmd, self.config.stdio_guard, policy=policy)
 
     def audit_tool_admission(
         self,

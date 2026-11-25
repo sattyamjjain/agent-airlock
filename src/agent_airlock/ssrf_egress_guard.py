@@ -219,6 +219,9 @@ def _blocked_reason(ip: _IPv4 | _IPv6) -> tuple[SSRFEgressVerdict, str] | None:
         return SSRFEgressVerdict.DENY_UNSPECIFIED, "unspecified (0.0.0.0 or ::)"
     if isinstance(ip, ipaddress.IPv6Address) and is_blocked_ipv6_range(str(ip)):
         return SSRFEgressVerdict.DENY_IPV6_INTERNAL, "internal IPv6 (ULA / mapped / NAT64 / 6to4)"
+    if isinstance(ip, ipaddress.IPv6Address) and ip.is_site_local:
+        # Deprecated (RFC 3879), still routed inside a site, not private to Python (0.10.36).
+        return SSRFEgressVerdict.DENY_IPV6_INTERNAL, "internal IPv6 (site-local fec0::/10)"
     if ip.is_private:
         return SSRFEgressVerdict.DENY_PRIVATE, "RFC1918 private (10/8, 172.16/12, 192.168/16)"
     if isinstance(ip, ipaddress.IPv4Address) and ip in _SHARED_ADDRESS_SPACE:

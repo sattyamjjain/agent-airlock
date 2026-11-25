@@ -281,7 +281,7 @@ class AirlockGuardrails:
 
         agent = guardrails.wrap_agent(Agent(name="my_agent", tools=[function_tool(my_tool)]))
 
-    ``wrap_agent`` appends the SDK's own ``InputGuardrail`` / ``OutputGuardrail`` objects.
+    ``wrap_agent`` appends the SDK's own ``OutputGuardrail`` objects.
     ``get_input_guardrails`` / ``get_output_guardrails`` return plain
     ``(ctx, data) -> GuardrailResult`` checkers, which the SDK cannot run on its own.
     """
@@ -488,9 +488,9 @@ def policy_to_guardrails(
 ) -> dict[str, list[Any]]:
     """Convert an Airlock SecurityPolicy to guardrail checks.
 
-    The checks are plain ``(ctx, data) -> GuardrailResult`` callables; the Agents SDK
-    runs ``InputGuardrail`` / ``OutputGuardrail`` objects, which
-    :meth:`AirlockGuardrails.wrap_agent` builds. Each policy check spends one rate-limit
+    The checks are plain ``(ctx, data) -> GuardrailResult`` callables, which the Agents SDK
+    cannot run on its own; :meth:`AirlockGuardrails.wrap_agent` builds an
+    ``OutputGuardrail`` object for the PII check. Each policy check spends one rate-limit
     token when it passes (``PolicyGuardrail(consume_rate_limit=True)``).
 
     Args:

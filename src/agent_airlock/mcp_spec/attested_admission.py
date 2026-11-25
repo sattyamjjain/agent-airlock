@@ -45,6 +45,7 @@ References
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import math
 import urllib.error
@@ -263,7 +264,8 @@ def _default_fetcher(server_url: str, path: str) -> bytes:
     :class:`AttestedAdmissionConfig` instead.
 
     Raises:
-        MissingClearance: 404/410 or any connection error.
+        MissingClearance: 404/410, a URL that cannot be requested, or any connection error,
+            a read that times out included.
     """
     url = server_url.rstrip("/") + path
     try:
@@ -280,6 +282,10 @@ def _default_fetcher(server_url: str, path: str) -> bytes:
         raise MissingClearance(f"clearance fetch failed: HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
         raise MissingClearance(f"clearance fetch failed: {exc.reason}") from exc
+    except (OSError, http.client.HTTPException, ValueError) as exc:
+        # Raised by the read, after urlopen returned (until 0.10.36 a TimeoutError escaped,
+        # in WARN mode too), or by a URL urlopen does not take.
+        raise MissingClearance(f"clearance fetch failed: {type(exc).__name__}") from exc
 
 
 # ---------------------------------------------------------------------------
