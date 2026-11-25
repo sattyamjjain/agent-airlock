@@ -77,11 +77,10 @@ def install_wheel(py: Path, wheel: Path) -> None:
 CHILD_SMOKE_SCRIPT = textwrap.dedent(
     """\
     import sys
-    from dataclasses import dataclass, field
-    from typing import Any
+    from dataclasses import dataclass
 
     # Imports from the *installed* package, not the source tree.
-    from agent_airlock import Airlock, SecurityPolicy, __version__
+    from agent_airlock import Airlock, AirlockContext, SecurityPolicy, __version__
     from agent_airlock.action_contradiction_gate import (
         ActionContradictionGate,
         ActionContradictionViolation,
@@ -89,16 +88,10 @@ CHILD_SMOKE_SCRIPT = textwrap.dedent(
 
 
     @dataclass
-    class _Inner:
-        agent_id: str
-        metadata: dict = field(default_factory=dict)
-
-
-    @dataclass
     class _Wrapper:
-        # RunContextWrapper-style: the seam reads .context off the
-        # first positional arg and pulls agent_id + metadata.
-        context: _Inner
+        # RunContextWrapper-style: the seam reads .context off the first positional arg. A
+        # dataclass of the tool's own counts only when that is an AirlockContext.
+        context: AirlockContext
 
 
     def main() -> int:
@@ -123,7 +116,7 @@ CHILD_SMOKE_SCRIPT = textwrap.dedent(
         # 1. Simulated 'acknowledged contradiction' trace — privileged
         #    sink blocked by default.
         contradicted = _Wrapper(
-            context=_Inner(
+            context=AirlockContext(
                 agent_id="ag-rag",
                 metadata={"evidence_contradiction": True},
             )
@@ -149,7 +142,7 @@ CHILD_SMOKE_SCRIPT = textwrap.dedent(
 
         # 3. Clean session — no contradiction → privileged tool admits.
         clean = _Wrapper(
-            context=_Inner(
+            context=AirlockContext(
                 agent_id="ag-clean",
                 metadata={"evidence_contradiction": False},
             )
