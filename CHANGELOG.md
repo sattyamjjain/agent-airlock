@@ -11,6 +11,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.36] - 2026-11-25
+
+Fixes a deadlock in the network airgap, runs the startup-hook check as `warn` by default, adds
+a minimum release age for npm and PyPI versions and an option-injection check for tool
+arguments, widens the read-only SQL guard, and closes the fail-opens an audit of this work
+found. Refreshes the malware advisory snapshot and triages seven CVEs.
+
+### Security
+
+- A guarded call could hang for good. The garbage collector closes an abandoned, half-read guarded stream wherever it runs, and the cleanup opens and closes an airgap; when that happened while the same thread held `network._patch_lock`, a plain `Lock`, the thread waited on itself. The lock is an `RLock`, the section it guards can be entered again part-way, and it no longer logs (structlog's `PrintLogger` writes under a plain `Lock` of its own). The `socket_interceptors_*` debug events are removed.
+- `OIDCPublishWindowGuard` reads a `version` that names another package: an alias with no version (`npm:real`, `npm:@scope/real`) as that package, and a registry tarball URL as that URL. Both walked past every list.
+- `ArgumentSecretGuard` refuses bearer tokens, and a string of eight or more characters under a mapping key that names a secret (`data={"password": "..."}`), as it already refused the same pair in one JSON string. The argument's own name does not count.
+- `ShellCommandPolicy`'s default `redirect_deny` covers every path `SafePath` treats as persistence (shell start files, cron, launchd, systemd, sshd keys, Python startup hooks) in any directory, whatever the case. `> ~/.zprofile`, `> /root/.bashrc` and `> ~/.ZSHRC` were allowed. `redirect_allow` keeps its case.
+- `SSRFEgressGuard` refuses Alibaba Cloud's metadata address `100.100.100.200`, the shared address space `100.64.0.0/10` (`DENY_SHARED_ADDRESS`), multicast (`DENY_MULTICAST`) and IPv6 site-local. `NetworkPolicy` and `EndpointPolicy` treat the same ranges as internal. Metadata addresses and host names are one list each: `EndpointPolicy` now also refuses `metadata` and `metadata.aliyuncs.com`, and its deny checks read a host without its trailing dot (`metadata.`, `localhost.`).
+- `allowed_url_prefixes` refuses a raw control character in the URL; it refused `%00` and admitted a NUL.
+- `FilterEvalRCEGuard` and `ReadOnlySQLGuard` read a pydantic model, a dataclass or a named tuple by its fields, and `FilterEvalRCEGuard` refuses any other object in an inspected field (a callable among them; numbers, dates, UUIDs and `None` pass).
+- An `Mcp-Param-*` header given twice with different values is refused naming the header; the message repeated both values.
+
+### Added
+
+- Startup hooks: a recogniser for the hooks every install has (`StartupHookReport.benign`): setuptools' `distutils-precedence.pth` (`SETUPTOOLS_DISTUTILS_PRECEDENCE_LINES`, every line shipped from 49.3.0 to 84.2.1), virtualenv's `_virtualenv.pth`, a setuptools editable install's `__editable__.*.pth` and a `sitecustomize` / `usercustomize` in the standard-library directory, by content, place, the module the line imports and the `RECORD` that owns it. `KNOWN_INCIDENT_HOOKS` names `af_runtime_diag.pth` and `agent_framework_meta.pth` (agent-framework 1.26.2 and 1.26.1, GHSA-764m-3ppc-5m73); such a finding carries `known_incident` and logs at error level.
+- `OIDCPublishWindowGuard(min_release_age=, release_time_lookup=, unknown_release_age=, release_age_allow=, clock=)` with verdicts `DENY_RELEASE_TOO_NEW` and `DENY_RELEASE_AGE_UNKNOWN`, `agent_airlock.mcp_spec.release_age.registry_release_time_lookup()`, `ReleaseTimeUnavailableError`, and `npm_oidc_publish_window_guard_defaults(min_release_age_hours=)` (off by default; 168 recommended). Every version a call carries is judged, and a registry that could not be read is an unknown age, not an absent release. GHSA-h82f-cjm4-g22r.
+- `OIDCPublishWindowGuard(rescoped_names=, rescope_allow=)`, verdict `DENY_RESCOPED_MALWARE_NAME`, and `rescoped_name_index()`: a listed MCP malware package's basename under another npm scope is refused at every version. GHSA-m5xq-h2p4-962g.
+- `ToolArgSinkGuard(option_args=)` with verdict `DENY_OPTION_INJECTION`: a value an argv parser would read as an option. With `screen_all_str_args`, arguments named like a branch or ref are read for a leading `-` too. `tool_arg_sink_defaults()` sets `option_args` to `TOOL_ARG_SINK_OPTION_ARGS`. CVE-2026-114496.
+- `ReadOnlySQLGuard` matches field aliases (`match_aliases=True`): `whereClause`, `stateFilter` and `orderBy` are fragments, `sqlQuery` and `rawSql` statements, and `sort`, `sortBy` and `groupBy` fragments (CVE-2026-77367). Identifier fields (`DEFAULT_IDENTIFIER_FIELDS`) must hold a name (`DENY_NOT_AN_IDENTIFIER`), and row fields (`DEFAULT_ROW_FIELDS`) have their keys checked as names. A statement or fragment key inside a row is still read. CVE-2026-63129 (GHSA-2m9m-6cr5-9x25).
+- `SensitiveDataType.BEARER_TOKEN`: the token after `Bearer`, masked FULL with `Bearer` kept; a JWT keeps the JWT mask.
+- `policy=` on `validate_stdio_command`, `launch_from_manifest` and `MCPProxyGuard.validate_stdio_spawn` applies `SecurityPolicy.stdio_mode`, and on `OTelAuditExporter` applies `SecurityPolicy.trace_redaction`. Nothing read either field before; `@Airlock` launches and exports nothing, so it still does not.
+
+### Changed
+
+- `startup_hook_check` defaults to `warn`; set `startup_hook_check='off'` to restore the old behaviour. The first unknown hook also issues one `RuntimeWarning` per process (raised from the first guarded call under `-W error`).
+- `SanitizationResult`'s repr leaves out `detections`, which hold the original values.
+- A page cursor under `nextPageToken`, `NextToken`, `continuation_token` and the like is no longer masked, and a shaped key under a secret label (`"api_key": "sk-..."`) is masked FULL instead of PARTIAL.
+- `ArgumentSecretGuard` can refuse a call it admitted: a tool that takes a dict with a `password` key needs that argument on `free_text_args`. The default `redirect_deny` is longer, so the digest of every `SecurityPolicy` with a shell policy changes.
+- Refreshed the malware advisory snapshot to `data/malware_blast_2026_11_20.json` (2,860 advisories published since 2026-10-11).
+
+### Fixed
+
+- `sanitize_output` masks secret labels in JSON (`{"password": "..."}`, `{"api_key": "..."}`) and the labels `api_key`, `access_key`, `private_key` and `client_secret`, and `@Airlock` masks a string of eight or more characters under a secret-labelled key in a dict, list or MCP structured result. `{"password": "..."}` came back unmasked.
+- `INDIA_MOBILE` and the default `PHONE` detector mask a `+91` / `91` / `0`-prefixed mobile written in 5-5 groups (`+91 98765 43210`).
+- `sanitize_with_workspace_config` masks environment dumps.
+- A clearance read that fails after the connection opened is `MissingClearance`, so `attested_admission`'s WARN mode warns instead of raising `TimeoutError`.
+
+### CVE triage
+
+- In scope, refused by an existing guard, second-defence fixtures: CVE-2026-67546 (Heym `fetch-tools` stdio spawn), CVE-2026-126197 (pgEdge `pl-do` dollar quotes), CVE-2026-129995 (mcp-ssh-manager `ssh_backup_*`), CVE-2026-134293 (SurrealDB MCP escaped backtick), CVE-2026-130008 (sqlite-mcp read-only bypass).
+- Out of scope: CVE-2026-67543 (Heym skill executor), CVE-2026-48710 (Starlette `Host` header).
+
 ## [0.10.35] - 2026-11-14
 
 `ShellCommandPolicy` now checks where a command writes: redirection targets, and `find`'s
