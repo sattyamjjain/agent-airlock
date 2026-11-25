@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A run takes 3 to 6 minutes. Without this a test that hangs holds the job for GitHub's
+    # 6-hour limit, as `test (3.13)` did on 2026-11-11 and 2026-11-21.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
