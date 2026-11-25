@@ -190,18 +190,24 @@ npm's `time[<version>]` (with no version, the one `dist-tags.latest` names) or t
 `upload_time_iso_8601` of a PyPI release, and caches an exact version's answer in process
 (1,024 entries). Pass your own `release_time_lookup` to use a mirror or an internal
 registry: any callable `(kind, normalised name, version or None) -> aware datetime or None`.
+Return None when the registry does not have that release and raise when you cannot tell
+(`ReleaseTimeUnavailableError`, or any exception); the shipped lookup returns None only for a
+404 or a version missing from the package's document.
 
 - **What is looked up.** Each registry spec the lists did not refuse, in the registry its
   syntax names, else the one `installs_from` names, else both (the younger release is
   judged). A registry tarball URL's package and version are looked up too. A git spec, a
   path, a link or a URL on any other host is not. A spec with no exact version (none, a
   range, a dist-tag such as `next`) is judged by the version the registry installs by
-  default.
+  default. Every version a call carries is judged, the one in `package` and each one in
+  `version`, since which of them the tool installs is not the guard's to guess.
 - **Lists first.** A listed release still reports `deny_blast_list_pair` (or its own
   verdict): `@fdcasj_dfew/md-doc-mcp@1.0.0` is a pair hit, not an age refusal.
-- **Unknown age.** A lookup that cannot tell (a 404, a timeout, an unreadable answer) is
-  `DENY_RELEASE_AGE_UNKNOWN`; pass `unknown_release_age="allow"` to let those through
-  instead.
+- **Unknown age.** A version no registry asked has is `DENY_RELEASE_AGE_UNKNOWN`, and so is
+  one a registry could not be read for (a timeout, a 5xx, an unreadable answer), even when the
+  other registry answered with an old release. A release that is too new on one of them is
+  `DENY_RELEASE_TOO_NEW` either way. Pass `unknown_release_age="allow"` to let the unknown
+  ones through instead.
 - **Your own new package.** A package you published today is refused like any other: put
   its full name on `release_age_allow`.
 

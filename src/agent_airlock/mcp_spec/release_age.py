@@ -17,10 +17,14 @@ applies the policy (``min_release_age``, ``release_time_lookup``).
   ``upload_time_iso_8601`` among its files; with no version, ``/pypi/<name>/json``, whose
   files are those of ``info.version``.
 
-A 404, a missing key, a timeout, a body over 32 MiB and any network or JSON error give
-``None``; the lookup never raises. An exact version's time is cached in process (1,024
-entries, least recently used dropped first), since a publish time does not change. The
-latest version's is not: a new release changes which version that is.
+"Not published there" and "could not be read" are two answers. A 404, or a package document
+without that version, gives ``None``. A timeout, any other HTTP status, a network or JSON
+error, a body over 32 MiB or a document of another shape raises
+:class:`ReleaseTimeUnavailableError`: the guard asks both registries about a bare name, and a
+registry that did not answer must not pass for one that does not have it. An exact version's
+time is cached in process (1,024 entries, least recently used dropped first), since a publish
+time does not change. The latest version's is not: a new release changes which version that
+is.
 
 Nothing in this module touches the network unless a caller builds
 :func:`registry_release_time_lookup` and calls what it returns.
@@ -34,6 +38,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import urllib.error
 import urllib.request
 from collections import OrderedDict
 from collections.abc import Callable
@@ -42,11 +47,13 @@ from typing import Any
 from urllib.parse import quote
 
 from .._log import structlog
+from ..exceptions import AirlockError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.release_age")
 
 #: ``(kind, normalised name, version or None)`` to the aware UTC time that version was
-#: published, or None when it cannot be told. ``kind`` is ``"npm"`` or ``"pypi"``; ``None``
+#: published, or None when the registry does not have it. Raise when it cannot be told: the
+#: guard reads any exception as an unknown age. ``kind`` is ``"npm"`` or ``"pypi"``; ``None``
 #: as the version means the version the registry installs by default.
 ReleaseTimeLookup = Callable[[str, str, str | None], datetime | None]
 
@@ -70,6 +77,24 @@ _MAX_BODY_BYTES = 32 * 1024 * 1024
 _NPM_NAME = re.compile(r"(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*", re.ASCII)
 _PYPI_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?", re.ASCII)
 _PYPI_VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+!-]*", re.ASCII)
+
+
+class ReleaseTimeUnavailableError(AirlockError):
+    """A registry did not say when a version was published, though it may have it.
+
+    Attributes:
+        kind: ``"npm"`` or ``"pypi"``.
+        package: The package name asked about.
+        version: The version asked about, or None for the default one.
+        reason: What went wrong, an exception's class name or a short phrase.
+    """
+
+    def __init__(self, kind: str, package: str, version: str | None, reason: str) -> None:
+        self.kind = kind
+        self.package = package
+        self.version = version
+        self.reason = reason
+        super().__init__(f"the {kind} registry did not say when {package} was published: {reason}")
 
 
 def _default_opener(url: str, timeout: float) -> bytes:
@@ -128,28 +153,43 @@ class _Recent:
                 self._items.popitem(last=False)
 
 
-def _document(body: bytes) -> dict[str, Any] | None:
+def _document(body: bytes) -> dict[str, Any]:
     parsed = json.loads(body.decode("utf-8"))
-    return parsed if isinstance(parsed, dict) else None
+    if not isinstance(parsed, dict):
+        raise ValueError("response is not a JSON object")
+    return parsed
 
 
-def _npm_time(fetch: RegistryOpener, timeout: float, name: str, version: str | None) -> Any:
+def _read_time(text: object) -> datetime:
+    parsed = parse_release_time(text)
+    if parsed is None:
+        raise ValueError("publish time cannot be read")
+    return parsed
+
+
+def _npm_time(
+    fetch: RegistryOpener, timeout: float, name: str, version: str | None
+) -> datetime | None:
     if not _NPM_NAME.fullmatch(name):
         return None
     url = _NPM_REGISTRY + quote(name, safe="@").replace("%2F", "%2f")
     document = _document(fetch(url, timeout))
-    times = document.get("time") if document else None
+    times = document.get("time")
     if not isinstance(times, dict):
-        return None
+        raise ValueError("package document has no time map")
     if version is None:
-        tags = document.get("dist-tags") if document else None
+        tags = document.get("dist-tags")
         version = tags.get("latest") if isinstance(tags, dict) else None
         if not isinstance(version, str):
-            return None
-    return parse_release_time(times.get(version))
+            raise ValueError("package document names no latest version")
+    elif version not in times:
+        return None
+    return _read_time(times.get(version))
 
 
-def _pypi_time(fetch: RegistryOpener, timeout: float, name: str, version: str | None) -> Any:
+def _pypi_time(
+    fetch: RegistryOpener, timeout: float, name: str, version: str | None
+) -> datetime | None:
     if not _PYPI_NAME.fullmatch(name):
         return None
     if version is None:
@@ -158,17 +198,18 @@ def _pypi_time(fetch: RegistryOpener, timeout: float, name: str, version: str | 
         url = f"{_PYPI_JSON_API}{name}/{quote(version, safe='')}/json"
     else:
         return None
-    document = _document(fetch(url, timeout))
-    files = document.get("urls") if document else None
+    files = _document(fetch(url, timeout)).get("urls")
     if not isinstance(files, list):
-        return None
+        raise ValueError("release document has no file list")
     times = [
         parse_release_time(item.get("upload_time_iso_8601"))
         for item in files
         if isinstance(item, dict)
     ]
     found = [time for time in times if time is not None]
-    return min(found) if found else None
+    if not found:
+        raise ValueError("release document has no upload time")
+    return min(found)
 
 
 def registry_release_time_lookup(
@@ -183,8 +224,9 @@ def registry_release_time_lookup(
             stub; nothing else should need to.
 
     Returns:
-        The lookup. Calling it makes at most one request; it returns None, never raises,
-        when the time cannot be read.
+        The lookup. Calling it makes at most one request. It returns None when the registry
+        does not have that package or version, and raises
+        :class:`ReleaseTimeUnavailableError`, nothing else, when the time cannot be read.
 
     Raises:
         TypeError: ``timeout`` is not a number, or ``opener`` is not callable.
@@ -213,6 +255,8 @@ def registry_release_time_lookup(
             else:
                 return None
         except Exception as error:  # noqa: BLE001 - an unreadable answer is an unknown time
+            if isinstance(error, urllib.error.HTTPError) and error.code == 404:
+                return None
             logger.warning(
                 "release_time_lookup_failed",
                 kind=kind,
@@ -220,10 +264,8 @@ def registry_release_time_lookup(
                 version=version,
                 error=type(error).__name__,
             )
-            return None
-        if not isinstance(found, datetime):
-            return None
-        if version is not None:
+            raise ReleaseTimeUnavailableError(kind, name, version, type(error).__name__) from error
+        if version is not None and found is not None:
             recent.put((kind, name, version), found)
         return found
 
@@ -234,6 +276,7 @@ __all__ = [
     "CACHE_ENTRIES",
     "RegistryOpener",
     "ReleaseTimeLookup",
+    "ReleaseTimeUnavailableError",
     "parse_release_time",
     "registry_release_time_lookup",
 ]
