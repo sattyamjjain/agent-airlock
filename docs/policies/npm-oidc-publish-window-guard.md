@@ -68,7 +68,9 @@ Since 0.10.32 it also carries the malware advisory snapshot (below): its exact r
 added to `blast_list`, and `blocked_packages`, `advisories` and `malware_feed_as_of` come back
 beside it. `include_malware_feed=False` leaves it out, and an explicit `blast_list` still
 replaces the pairs. Since 0.10.36 `rescoped_names` comes back too (see
-[Rescoped MCP malware names](#rescoped-mcp-malware-names)). Build the guard from all of them:
+[Rescoped MCP malware names](#rescoped-mcp-malware-names)), and `min_release_age` with
+`release_time_lookup` (see [Release age](#release-age), off unless you pass
+`min_release_age_hours`). Build the guard from all of them:
 
 ```python
 from agent_airlock import OIDCPublishWindowGuard
@@ -81,6 +83,8 @@ guard = OIDCPublishWindowGuard(
     advisories=cfg["advisories"],
     installs_from=cfg["installs_from"],
     rescoped_names=cfg["rescoped_names"],
+    min_release_age=cfg["min_release_age"],
+    release_time_lookup=cfg["release_time_lookup"],
 )
 decision = guard.evaluate({"package": "@ethersphere/bee-js@13.3.0"})
 # decision.allowed is False; decision.detail names GHSA-hh7j-5m3j-23pf
@@ -138,6 +142,74 @@ guard = OIDCPublishWindowGuard(
 `npm_oidc_publish_window_guard_defaults(match_rescoped=False)` leaves `rescoped_names` empty,
 which is the guard as it was before 0.10.36. An unscoped copy (`md-doc-mcp`) or a copy under a
 new basename still passes until an advisory names it.
+
+## Release age
+
+Every list above names a package only after someone has reviewed it.
+[GHSA-h82f-cjm4-g22r][h82f] (critical, published 2026-11-20T13:00:09Z) is malicious code in
+`@guicai777/mcp-doctor`. The npm registry's `time` for it:
+
+| Version | Published |
+|---|---|
+| `0.0.0-stage` | 2026-11-16T11:10:09Z |
+| `1.0.1` | 2026-11-16T11:15:51Z |
+| `0.0.1-security` | 2026-11-20T13:02:14Z (npm's security holding) |
+
+So 1.0.1 was installable for about four days before any advisory existed. The 2026-11-20
+snapshot (taken 05:08Z) does not list it, and no faster refresh could have before 13:00Z
+that day. The control that covers those four days is a cooldown: refuse a version too new
+to have been reviewed by anyone, as pnpm (`minimumReleaseAge`), npm (`--before`) and uv
+(`exclude-newer`) do at install time. Since 0.10.36 the guard applies it at the tool-call
+boundary:
+
+```python
+from agent_airlock import OIDCPublishWindowGuard
+from agent_airlock.policy_presets import npm_oidc_publish_window_guard_defaults
+
+cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm", min_release_age_hours=168)
+guard = OIDCPublishWindowGuard(
+    blast_list=cfg["blast_list"],
+    blocked_packages=cfg["blocked_packages"],
+    advisories=cfg["advisories"],
+    installs_from=cfg["installs_from"],
+    rescoped_names=cfg["rescoped_names"],
+    min_release_age=cfg["min_release_age"],
+    release_time_lookup=cfg["release_time_lookup"],
+    release_age_allow=frozenset({"@yourco/internal-tool"}),  # yours, published today
+)
+decision = guard.evaluate({"package": "@guicai777/mcp-doctor@1.0.1"})
+# on 2026-11-20 at 12:00Z: decision.verdict == OIDCPublishWindowVerdict.DENY_RELEASE_TOO_NEW
+# decision.detail == "@guicai777/mcp-doctor@1.0.1 was published 2026-11-16T11:15:51Z,
+#   4 d 0 h before this call; the policy requires 7 d"
+```
+
+We recommend 168 hours (seven days). The check is off by default because it calls the
+registry: `registry_release_time_lookup()` (`agent_airlock.mcp_spec.release_age`) makes an
+HTTPS request to `registry.npmjs.org` or `pypi.org` per version it has not seen, reads
+npm's `time[<version>]` (with no version, the one `dist-tags.latest` names) or the earliest
+`upload_time_iso_8601` of a PyPI release, and caches an exact version's answer in process
+(1,024 entries). Pass your own `release_time_lookup` to use a mirror or an internal
+registry: any callable `(kind, normalised name, version or None) -> aware datetime or None`.
+Return None when the registry does not have that release and raise when you cannot tell
+(`ReleaseTimeUnavailableError`, or any exception); the shipped lookup returns None only for a
+404 or a version missing from the package's document.
+
+- **What is looked up.** Each registry spec the lists did not refuse, in the registry its
+  syntax names, else the one `installs_from` names, else both (the younger release is
+  judged). A registry tarball URL's package and version are looked up too. A git spec, a
+  path, a link or a URL on any other host is not. A spec with no exact version (none, a
+  range, a dist-tag such as `next`) is judged by the version the registry installs by
+  default. Every version a call carries is judged, the one in `package` and each one in
+  `version`, since which of them the tool installs is not the guard's to guess.
+- **Lists first.** A listed release still reports `deny_blast_list_pair` (or its own
+  verdict): `@fdcasj_dfew/md-doc-mcp@1.0.0` is a pair hit, not an age refusal.
+- **Unknown age.** A version no registry asked has is `DENY_RELEASE_AGE_UNKNOWN`, and so is
+  one a registry could not be read for (a timeout, a 5xx, an unreadable answer), even when the
+  other registry answered with an old release. A release that is too new on one of them is
+  `DENY_RELEASE_TOO_NEW` either way. Pass `unknown_release_age="allow"` to let the unknown
+  ones through instead.
+- **Your own new package.** A package you published today is refused like any other: put
+  its full name on `release_age_allow`.
 
 ## Refreshing from malware advisories
 
@@ -204,6 +276,8 @@ passes until the next refresh.
 | `DENY_BLAST_LIST_PAIR` | `(package, version)` arg pair on the list |
 | `DENY_BLAST_LIST_TARBALL_URL` | npm-registry tarball URL targeting a blast pair |
 | `DENY_RESCOPED_MALWARE_NAME` | a scoped npm name sharing a listed MCP malware package's basename under another scope (0.10.36) |
+| `DENY_RELEASE_TOO_NEW` | a registry version published less than `min_release_age` before the call (0.10.36) |
+| `DENY_RELEASE_AGE_UNKNOWN` | with `min_release_age` set, a version whose publish time the lookup could not tell (0.10.36) |
 | `DENY_UNINSPECTABLE` | an argument shape the guard cannot read |
 
 ## Honest scope
@@ -237,5 +311,8 @@ passes until the next refresh.
 - [Aikido — Mini Shai-Hulud Is Back (2026-05-11)](https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised) — the wider npm wave (Mistral, UiPath and other scopes); its packages are not in the list
 - [GHSA-m5xq-h2p4-962g (2026-11-19)][m5xq], `@fdcasj_dfew/md-doc-mcp`: the `@ifasn` MCP malware under a new scope, the reason for the rescoped-name check
 
+- [GHSA-h82f-cjm4-g22r (2026-11-20)][h82f], `@guicai777/mcp-doctor` 1.0.1, installable for four days before its advisory: the reason for the release-age check
+
 [ghsa]: https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
 [m5xq]: https://github.com/advisories/GHSA-m5xq-h2p4-962g
+[h82f]: https://github.com/advisories/GHSA-h82f-cjm4-g22r

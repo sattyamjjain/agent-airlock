@@ -55,7 +55,9 @@ its Yarn alias, read as Node's ``new URL()`` reads it (a backslash is a path
 separator; ``.`` / ``..`` segments, ``%2e`` spellings included, are resolved).
 A ``package`` that is a tarball URL, or ``name@<url>``, is read as that URL, and
 a ``version`` written ``npm:1.2.3`` or ``npm:@scope/real@1.2.3`` (Yarn, pnpm) as
-the release it installs. Arguments that are not a mapping, and a field of any
+the release it installs. Since v0.10.36 a ``version`` that is a registry tarball URL
+is read as that URL too, and an alias with no version (``npm:@scope/real``,
+``npm:real``) as the package it names. Arguments that are not a mapping, and a field of any
 other shape, are refused (``DENY_UNINSPECTABLE``). Until v0.10.28 the guard
 compared exact strings only, so each of those spellings walked past it, and
 a top-level list raised ``AttributeError``.
@@ -106,6 +108,9 @@ Primary sources
 - GHSA-m5xq-h2p4-962g (2026-11-19), ``@fdcasj_dfew/md-doc-mcp`` 1.0.0 and 1.0.1, the
   ``@ifasn`` MCP malware republished under a new scope (the rescoped-name check):
   https://github.com/advisories/GHSA-m5xq-h2p4-962g
+- GHSA-h82f-cjm4-g22r (2026-11-20), ``@guicai777/mcp-doctor`` 1.0.1, installable for four
+  days before any advisory (the release-age check):
+  https://github.com/advisories/GHSA-h82f-cjm4-g22r
 """
 
 from __future__ import annotations
@@ -113,14 +118,16 @@ from __future__ import annotations
 import enum
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from importlib.resources import files
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import unquote, urlsplit
 
 from .._log import structlog
 from .._url_paths import normalize_url_path
+from .release_age import ReleaseTimeLookup, ReleaseTimeUnavailableError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oidc_publish_window_guard")
 
@@ -246,22 +253,34 @@ def _spec_names(spec: str) -> list[str]:
     return [name for name in dict.fromkeys((npm_name, pep508_name)) if name]
 
 
-def _version_target(name: str, version: str) -> tuple[str, str]:
-    """The package and version a ``version`` field installs, beside package ``name``.
+#: What follows ``npm:`` when it is a version or a range: ``1.2.3``, ``^1.2``, ``1.x``, ``*``.
+_VERSION_LIKE_RE = re.compile(
+    r"[\^~<>=*].*|[vV]?[0-9]+(?:\.(?:[0-9]+|[xX*]))*(?:[-+].*)?", re.ASCII
+)
+
+
+def _version_targets(name: str, version: str) -> list[tuple[str, str | None]]:
+    """Every package and version a ``version`` field can install, beside package ``name``.
 
     Yarn and pnpm write a registry version as ``npm:1.2.3``, and an alias in the version
     field as ``npm:@scope/real@1.2.3``, which installs ``@scope/real``. Until 0.10.28 both
-    were compared as written, and matched nothing.
+    were compared as written, and matched nothing; until 0.10.36 an alias with no version
+    (``npm:@scope/real``, ``npm:real``) was read as a version of ``name``. npm reads a bare
+    ``npm:real`` as the package and Yarn as a dist-tag of ``name``, so both are returned.
+    A version of None is the one the registry installs by default.
     """
     text = version.strip()
     if not text.lower().startswith("npm:"):
-        return name, text
+        return [(name, text)]
     target = text[4:].strip()
     if "@" in target[1:]:
         aliased, aliased_version = _split_spec(target)
-        if aliased_version:
-            return aliased, aliased_version
-    return name, target
+        return [(aliased, aliased_version or None)]
+    if target.startswith("@"):
+        return [(target, None)]
+    if not target or _VERSION_LIKE_RE.fullmatch(target):
+        return [(name, target)]
+    return [(name, target), (target, None)]
 
 
 def _normalised_path(path: str) -> str:
@@ -298,6 +317,88 @@ def _texts(value: object) -> list[str] | None:
     return out
 
 
+@dataclass(frozen=True)
+class _AgeQuery:
+    """One spec's release-age question: ``(kind, normalised name, exact version)`` per
+    registry it may come from, the spec as asked, and how a refusal names it."""
+
+    lookups: tuple[tuple[str, str, str | None], ...]
+    requested: str
+    label: str
+
+
+#: Spec prefixes that install from somewhere other than a registry: git, a path, a link.
+_NON_REGISTRY_PREFIXES: tuple[str, ...] = (
+    "git+",
+    "git:",
+    "github:",
+    "gitlab:",
+    "bitbucket:",
+    "gist:",
+    "file:",
+    "link:",
+    "workspace:",
+    "portal:",
+    "patch:",
+    "http:",
+    "https:",
+)
+
+_NPM_EXACT_VERSION_RE = re.compile(
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?",
+    re.ASCII,
+)
+_PYPI_EXACT_VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+!-]*", re.ASCII)
+
+
+def _is_registry_spec(spec: str, embedded: str | None) -> bool:
+    """Whether a package spec installs from a registry (not git, a path or a URL)."""
+    text = spec.strip().lower()
+    if "@npm:" in text:
+        text = text.split("@npm:", 1)[1]
+    elif text.startswith("npm:"):
+        text = text[4:]
+    if not text or text.startswith(_NON_REGISTRY_PREFIXES) or text[0] in "./~\\":
+        return False
+    if " @ " in text or "://" in text:
+        return False  # a PEP 508 direct reference, or a URL
+    if not text.startswith("@") and "/" in text.split("@", 1)[0]:
+        return False  # npm's GitHub shorthand, user/repo
+    version = (embedded or "").strip().lower()
+    return not (version.startswith(_NON_REGISTRY_PREFIXES) or "/" in version)
+
+
+def _exact_npm_version(version: str) -> str | None:
+    """``version`` when it names one npm release; None for a range or a dist-tag."""
+    text = version.strip().lstrip("=").lstrip("vV")
+    return text if _NPM_EXACT_VERSION_RE.fullmatch(text) else None
+
+
+def _exact_pypi_version(version: str) -> str | None:
+    """``version`` when it names one PyPI release; None for a wildcard or anything else."""
+    text = version.strip()
+    return text if _PYPI_EXACT_VERSION_RE.fullmatch(text) and "*" not in text else None
+
+
+def _age_label(kind: str, name: str, version: str | None) -> str:
+    if version is None:
+        return f"{name} (the version the registry installs by default)"
+    return f"{name}=={version}" if kind == "pypi" else f"{name}@{version}"
+
+
+def _span(span: timedelta, *, compact: bool = False) -> str:
+    """``4 d 0 h``; with ``compact``, ``7 d`` or ``12 h`` when that is all of it."""
+    total = int(span.total_seconds())
+    days, rest = divmod(total, 86_400)
+    hours = rest // 3_600
+    if compact and rest == 0:
+        return f"{days} d"
+    if compact and days == 0 and rest % 3_600 == 0:
+        return f"{hours} h"
+    return f"{days} d {hours} h"
+
+
 def _is_str_tuple(value: object, length: int) -> bool:
     return (
         isinstance(value, tuple)
@@ -315,6 +416,10 @@ class OIDCPublishWindowVerdict(str, enum.Enum):
     # A scoped npm name whose basename a listed MCP malware package carries under another
     # scope (0.10.36, GHSA-m5xq-h2p4-962g).
     DENY_RESCOPED_MALWARE_NAME = "deny_rescoped_malware_name"
+    # A registry version younger than ``min_release_age``, or one whose publish time the
+    # lookup could not tell (0.10.36, GHSA-h82f-cjm4-g22r).
+    DENY_RELEASE_TOO_NEW = "deny_release_too_new"
+    DENY_RELEASE_AGE_UNKNOWN = "deny_release_age_unknown"
     # Arguments the guard cannot read: not a mapping, or a package / version / url that
     # is not text or a list of text (0.10.28).
     DENY_UNINSPECTABLE = "deny_uninspectable"
@@ -411,15 +516,37 @@ class OIDCPublishWindowGuard:
             (``DENY_RESCOPED_MALWARE_NAME``). Empty by default.
         rescope_allow: Full npm names (``@yourco/md-doc-mcp``) never refused by the
             rescoped-name check: a legitimate package that shares a listed basename.
+        min_release_age: Refuse a registry version published less than this long before the
+            call (``DENY_RELEASE_TOO_NEW``), as pnpm's ``minimumReleaseAge``, npm's
+            ``--before`` and uv's ``exclude-newer`` do (v0.10.36, GHSA-h82f-cjm4-g22r). Off
+            (None) by default. Checked after every list, so a listed release reports its own
+            verdict; a git, path or non-registry URL spec is not looked up. Every version a
+            call carries is judged, the one in ``package`` and each in ``version``. A spec
+            with no exact version (none, a range, a dist-tag) is judged by the version the
+            registry installs by default.
+        release_time_lookup: When a version was published
+            (:data:`~agent_airlock.mcp_spec.release_age.ReleaseTimeLookup`);
+            :func:`~agent_airlock.mcp_spec.release_age.registry_release_time_lookup` asks
+            the registries. Required with ``min_release_age``.
+        unknown_release_age: ``"deny"`` (the default) refuses a version no registry asked
+            has, or that one of them could not be read for, unless another already says it is
+            too new (``DENY_RELEASE_AGE_UNKNOWN``); ``"allow"`` lets it through.
+        release_age_allow: Full package names the release-age check skips: your own
+            package published today.
+        clock: The current time, aware; ``datetime.now(timezone.utc)`` by default. Tests
+            pin it.
 
     Raises:
         TypeError: ``blast_list`` or ``blocked_packages`` is not a frozenset, an entry is
             not a tuple of strings of the right length, ``advisories`` is not a mapping
             from ``(ecosystem, name)`` to a string, ``rescoped_names`` is not a mapping
-            from a string to a 2-tuple of strings, or ``rescope_allow`` is not a frozenset
-            of strings.
-        ValueError: ``blocked_packages`` is given without ``installs_from``, or
-            ``installs_from`` is not one of its values.
+            from a string to a 2-tuple of strings, ``rescope_allow`` or
+            ``release_age_allow`` is not a frozenset of strings, ``min_release_age`` is not
+            a ``timedelta``, or ``release_time_lookup`` or ``clock`` is not callable.
+        ValueError: ``blocked_packages`` is given without ``installs_from``,
+            ``installs_from`` is not one of its values, ``min_release_age`` is negative or
+            set without ``release_time_lookup``, or ``unknown_release_age`` is neither
+            ``"allow"`` nor ``"deny"``.
     """
 
     def __init__(
@@ -431,6 +558,11 @@ class OIDCPublishWindowGuard:
         installs_from: str | None = None,
         rescoped_names: Mapping[str, tuple[str, str]] | None = None,
         rescope_allow: frozenset[str] = frozenset(),
+        min_release_age: timedelta | None = None,
+        release_time_lookup: ReleaseTimeLookup | None = None,
+        unknown_release_age: Literal["allow", "deny"] = "deny",
+        release_age_allow: frozenset[str] = frozenset(),
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         if not isinstance(blast_list, frozenset):
             raise TypeError(
@@ -516,6 +648,64 @@ class OIDCPublishWindowGuard:
             if not isinstance(allowed, str):
                 raise TypeError(f"rescope_allow members must be str; got {allowed!r}")
         self._rescope_allow = frozenset(_normalise_name("npm", name) for name in rescope_allow)
+        self._init_release_age(
+            min_release_age, release_time_lookup, unknown_release_age, release_age_allow, clock
+        )
+
+    def _init_release_age(
+        self,
+        min_release_age: object,
+        release_time_lookup: object,
+        unknown_release_age: object,
+        release_age_allow: object,
+        clock: object,
+    ) -> None:
+        """Check and store the release-age keywords (0.10.36)."""
+        if min_release_age is not None:
+            if not isinstance(min_release_age, timedelta):
+                raise TypeError(
+                    "min_release_age must be a datetime.timedelta; "
+                    f"got {type(min_release_age).__name__}"
+                )
+            if min_release_age < timedelta(0):
+                raise ValueError(f"min_release_age cannot be negative; got {min_release_age}")
+            if release_time_lookup is None:
+                raise ValueError(
+                    "min_release_age needs release_time_lookup, which says when a version was "
+                    "published: registry_release_time_lookup() asks the npm registry and PyPI"
+                )
+        if release_time_lookup is not None and not callable(release_time_lookup):
+            raise TypeError(
+                f"release_time_lookup must be callable; got {type(release_time_lookup).__name__}"
+            )
+        if not isinstance(unknown_release_age, str):
+            raise TypeError(
+                "unknown_release_age must be 'allow' or 'deny'; "
+                f"got {type(unknown_release_age).__name__}"
+            )
+        if unknown_release_age not in ("allow", "deny"):
+            raise ValueError(
+                f"unknown_release_age must be 'allow' or 'deny'; got {unknown_release_age!r}"
+            )
+        if not isinstance(release_age_allow, frozenset):
+            raise TypeError(
+                "release_age_allow must be a frozenset[str]; "
+                f"got {type(release_age_allow).__name__}"
+            )
+        for allowed in release_age_allow:
+            if not isinstance(allowed, str):
+                raise TypeError(f"release_age_allow members must be str; got {allowed!r}")
+        if clock is not None and not callable(clock):
+            raise TypeError(f"clock must be callable; got {type(clock).__name__}")
+        self._min_release_age: timedelta | None = min_release_age
+        self._release_time_lookup = release_time_lookup
+        self._unknown_release_age = unknown_release_age
+        self._release_age_allow = frozenset(
+            (kind, _normalise_name(kind, name))
+            for name in release_age_allow
+            for kind in ("npm", "pypi")
+        )
+        self._clock = clock
 
     def evaluate(self, args: Mapping[str, Any] | None) -> OIDCPublishWindowDecision:
         """Decide whether the call args target a blast-list entry.
@@ -546,22 +736,35 @@ class OIDCPublishWindowGuard:
         versions = _texts(args.get("version")) if packages else []
         if versions is None:
             return self._deny_uninspectable("version", self._shape(args.get("version")))
+        # Release-age queries, answered only after every list has been checked (0.10.36).
+        aging: list[_AgeQuery] = []
         for spec in packages:
             # A package spec that is (or ends in) a registry tarball URL installs that
             # tarball: until 0.10.28 it was read as a name and matched nothing.
             remote = _spec_url(spec)
             if remote is not None:
-                decision = self._inspect_tarball_url(remote)
+                decision = self._inspect_tarball_url(remote, aging)
                 if decision is not None:
                     return decision
                 continue
             name, embedded = _split_spec(spec)
             candidates = ([embedded] if embedded else []) + versions
+            dated = len(aging)  # queries before this spec's own
+            from_registry = list(versions)
             for version in candidates:
-                target, target_version = _version_target(name, version)
-                entry = self._lookup(target, target_version)
-                if entry is not None:
-                    return self._deny_pair(entry, spec, version, self._advisory_for(entry))
+                # A version written as a registry tarball URL installs that tarball (0.10.36).
+                remote = _spec_url(version)
+                if remote is not None:
+                    decision = self._inspect_tarball_url(remote, aging)
+                    if decision is not None:
+                        return decision
+                    if len(aging) > dated:  # its own query, so not the package's default one
+                        dated = len(aging)
+                        from_registry.remove(version)
+                for target, target_version in _version_targets(name, version):
+                    entry = self._lookup(target, target_version) if target_version else None
+                    if entry is not None:
+                        return self._deny_pair(entry, spec, version, self._advisory_for(entry))
             # 1b) A package every version of which is malicious, whatever version is asked.
             requested = embedded or (versions[0] if versions else None)
             for candidate in _spec_names(spec):
@@ -569,25 +772,35 @@ class OIDCPublishWindowGuard:
                 if blocked is not None:
                     return self._deny_package(blocked, spec, requested, "package")
             for version in versions:
-                target, _ = _version_target(name, version)
-                if target != name:
-                    blocked = self._blocked_entry(target, ("npm",))
-                    if blocked is not None:
-                        return self._deny_package(blocked, spec, version, "package")
+                for target, _ in _version_targets(name, version):
+                    if target != name:
+                        blocked = self._blocked_entry(target, ("npm",))
+                        if blocked is not None:
+                            return self._deny_package(blocked, spec, version, "package")
             # 1c) A listed MCP malware package's basename under another scope (0.10.36).
             for target in dict.fromkeys(
-                [name] + [_version_target(name, version)[0] for version in versions]
+                [name] + [t for version in versions for t, _ in _version_targets(name, version)]
             ):
                 rescoped = self._rescoped_entry(target)
                 if rescoped is not None:
                     return self._deny_rescoped(target, rescoped, spec, requested, "package")
+            if self._min_release_age is not None:
+                tarballs_only = bool(versions) and not from_registry
+                if embedded or not tarballs_only:
+                    aging.extend(self._age_queries(spec, name, embedded, from_registry))
 
         # 2) Registry tarball URL pointing at a blast-list pair.
         urls = _texts(args.get("url"))
         if urls is None:
             return self._deny_uninspectable("url", self._shape(args.get("url")))
         for url in urls:
-            decision = self._inspect_tarball_url(url)
+            decision = self._inspect_tarball_url(url, aging)
+            if decision is not None:
+                return decision
+
+        # 3) A registry version too new to have been reviewed (0.10.36, GHSA-h82f-cjm4-g22r).
+        for query in dict.fromkeys(aging):
+            decision = self._release_age_decision(query)
             if decision is not None:
                 return decision
 
@@ -663,12 +876,177 @@ class OIDCPublishWindowGuard:
             matched_version=None,
         )
 
+    def _age_queries(
+        self, spec: str, name: str, embedded: str | None, versions: list[str]
+    ) -> list[_AgeQuery]:
+        """What to look up for a spec's release age, one query per version it carries.
+
+        Every version is judged, the embedded one and each in ``version``: which of them the
+        tool installs is not the guard's to guess. Git, path and URL specs have none.
+        """
+        queries: list[_AgeQuery] = []
+        if embedded and _is_registry_spec(spec, embedded):
+            queries.extend(self._age_query(spec, name, embedded))
+        if _is_registry_spec(name, None):
+            for version in versions:
+                queries.extend(self._age_query(spec, name, version))
+        if not embedded and not versions and _is_registry_spec(spec, None):
+            queries.extend(self._age_query(spec, name, None))
+        return queries
+
+    def _age_query(self, spec: str, name: str, version: str | None) -> list[_AgeQuery]:
+        """The query for one version of ``spec`` (None: the registry's default), or none."""
+        kinds = _spec_kinds(spec) or self._bare_kinds or ("npm", "pypi")
+        if version is not None and version.strip().lower().startswith("npm:"):
+            kinds = ("npm",)
+        lookups: list[tuple[str, str, str | None]] = []
+        for kind in kinds:
+            if kind == "npm":
+                targets = _version_targets(name, version) if version else [(name, None)]
+                for target, target_version in targets:
+                    exact = _exact_npm_version(target_version) if target_version else None
+                    lookups.append(("npm", _normalise_name("npm", target), exact))
+            else:
+                pypi_name = _PEP508_NAME_END_RE.split(spec.strip(), maxsplit=1)[0]
+                exact = _exact_pypi_version(version) if version else None
+                lookups.append(("pypi", _normalise_name("pypi", pypi_name), exact))
+        if not lookups or not all(found_name for _, found_name, _ in lookups):
+            return []
+        kind, first_name, first_version = lookups[0]
+        return [_AgeQuery(tuple(lookups), spec, _age_label(kind, first_name, first_version))]
+
+    def _published(self, kind: str, name: str, version: str | None) -> datetime | None:
+        """The lookup's answer as an aware UTC time; None when the registry does not have it.
+
+        Raises:
+            ReleaseTimeUnavailableError: The lookup raised, or answered something else.
+        """
+        lookup = self._release_time_lookup
+        if lookup is None:
+            return None
+        try:
+            found = lookup(kind, name, version)
+        except Exception as error:  # noqa: BLE001 - a lookup that fails is an unknown age
+            logger.warning(
+                "oidc_publish_window_release_lookup_failed",
+                ecosystem=kind,
+                package=name,
+                version=version,
+                error=type(error).__name__,
+            )
+            raise ReleaseTimeUnavailableError(kind, name, version, type(error).__name__) from error
+        if found is None:
+            return None
+        if not isinstance(found, datetime):
+            raise ReleaseTimeUnavailableError(kind, name, version, "not a datetime")
+        if found.tzinfo is None:
+            found = found.replace(tzinfo=timezone.utc)
+        return found.astimezone(timezone.utc)
+
+    def _now(self) -> datetime | None:
+        now = self._clock() if self._clock is not None else datetime.now(timezone.utc)
+        if not isinstance(now, datetime):
+            return None
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        return now.astimezone(timezone.utc)
+
+    def _release_age_decision(self, query: _AgeQuery) -> OIDCPublishWindowDecision | None:
+        """Refuse a version younger than ``min_release_age``, or one whose age is unknown."""
+        minimum = self._min_release_age
+        if minimum is None:
+            return None
+        asked = [
+            (kind, name, version)
+            for kind, name, version in query.lookups
+            if (kind, name) not in self._release_age_allow
+        ]
+        if not asked:
+            return None
+        found: list[tuple[datetime, str, str, str | None]] = []
+        unread: list[str] = []
+        for kind, name, version in asked:
+            try:
+                published = self._published(kind, name, version)
+            except ReleaseTimeUnavailableError:
+                unread.append(kind)
+                continue
+            if published is not None:
+                found.append((published, kind, name, version))
+        now = self._now()
+        required = _span(minimum, compact=True)
+        # The youngest release any registry has. One that could not be read may be younger
+        # still, so an old answer beside it settles nothing.
+        youngest = max(found, key=lambda release: release[0]) if found else None
+        if now is None or youngest is None or (unread and now - youngest[0] >= minimum):
+            if self._unknown_release_age == "allow":
+                return None
+            return self._deny_age_unknown(query, required, unread, clock_failed=now is None)
+        published, kind, name, version = youngest
+        age = now - published
+        if age >= minimum:
+            return None
+        label = _age_label(kind, name, version)
+        stamp = published.strftime("%Y-%m-%dT%H:%M:%SZ")
+        when = (
+            f"{_span(age)} before this call"
+            if age >= timedelta(0)
+            else f"{_span(-age)} after this call's clock"
+        )
+        logger.warning(
+            "oidc_publish_window_release_too_new",
+            ecosystem=kind,
+            package=name,
+            version=version,
+            published=stamp,
+            requested=query.requested,
+            min_release_age=required,
+        )
+        return OIDCPublishWindowDecision(
+            allowed=False,
+            verdict=OIDCPublishWindowVerdict.DENY_RELEASE_TOO_NEW,
+            detail=f"{label} was published {stamp}, {when}; the policy requires {required}",
+            matched_ecosystem=kind,
+            matched_package=name,
+            matched_version=version,
+        )
+
+    def _deny_age_unknown(
+        self, query: _AgeQuery, required: str, unread: list[str], *, clock_failed: bool
+    ) -> OIDCPublishWindowDecision:
+        kinds = " or ".join(sorted(set(unread) or {kind for kind, _, _ in query.lookups}))
+        why = (
+            "the guard's clock did not return a datetime"
+            if clock_failed
+            else f"its publish time could not be read from the {kinds} registry"
+        )
+        logger.warning(
+            "oidc_publish_window_release_age_unknown",
+            requested=query.requested,
+            reason=why,
+            min_release_age=required,
+        )
+        kind, name, version = query.lookups[0]
+        return OIDCPublishWindowDecision(
+            allowed=False,
+            verdict=OIDCPublishWindowVerdict.DENY_RELEASE_AGE_UNKNOWN,
+            detail=(
+                f"{query.label}: {why}, and the policy requires {required} and refuses a "
+                "version whose age it cannot tell (unknown_release_age='deny')"
+            ),
+            matched_ecosystem=kind if len(query.lookups) == 1 else None,
+            matched_package=name,
+            matched_version=version,
+        )
+
     def _advisory_for(self, entry: tuple[str, ...]) -> str | None:
         """The advisory id kept for an entry's ``(ecosystem, name)``, or None."""
         kind = _kind(entry[0])
         return self._advisories.get((kind, _normalise_name(kind, entry[1])))
 
-    def _inspect_tarball_url(self, url: str) -> OIDCPublishWindowDecision | None:
+    def _inspect_tarball_url(
+        self, url: str, aging: list[_AgeQuery] | None = None
+    ) -> OIDCPublishWindowDecision | None:
         """Return a deny decision if the URL targets a blast-list pair.
 
         The URL is read as Node's ``new URL()`` reads it: a backslash is a path separator
@@ -725,6 +1103,15 @@ class OIDCPublishWindowGuard:
         rescoped = self._rescoped_entry(pkg)
         if rescoped is not None:
             return self._deny_rescoped(pkg, rescoped, url, None, "tarball URL")
+        if aging is not None and self._min_release_age is not None:
+            basename = pkg.rsplit("/", 1)[-1]
+            version = None
+            if tail.startswith(f"{basename.lower()}-") and tail.endswith(".tgz"):
+                version = _exact_npm_version(match.group("tail")[len(basename) + 1 : -4])
+            npm_name = _normalise_name("npm", pkg)
+            aging.append(
+                _AgeQuery((("npm", npm_name, version),), url, _age_label("npm", npm_name, version))
+            )
         return None
 
     @staticmethod

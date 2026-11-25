@@ -23,6 +23,14 @@ the call reaches a server that builds a command line:
   plus ``extra_metachars``.
 - ``installer_args`` must be a bare version: a PEP 440 version (:data:`PEP440_VERSION`) or
   an npm semver (:data:`NPM_SEMVER`).
+- ``option_args`` (v0.10.36) are passed to a program as one argv word, where a value starting
+  with ``-`` is read as an option, not a value (CWE-88): codebase-memory-mcp below 0.9.0
+  passed ``detect_changes``' ``base_branch`` to git, so ``--output=<file>`` made git write
+  a file the model chose (CVE-2026-114496). A value of one, or a string in a list it holds,
+  whose first non-space character is ``-`` is refused. With ``screen_all_str_args`` the
+  same test applies to every argument whose name ends in ``branch``, ``ref``, ``rev``,
+  ``revision``, ``commit``, ``tag`` or ``remote`` (``base_branch``, ``gitRef``), bar
+  ``free_text_args``.
 - ``dispatch_args`` names arguments that select a function by name, as Agno's PandasTools
   passed ``create_using_function`` to ``getattr(pandas, ...)`` and ``operation`` to
   ``getattr(dataframe, ...)`` (CVE-2026-119050, CWE-470): ``read_pickle`` is a plain
@@ -48,7 +56,9 @@ Honest scope
   rather than commands; mcp-ffmpeg (CVE-2026-117568) took a closing double quote as well as
   ``$()`` and backticks. Add ``'"'`` and ``"'"`` to ``extra_metachars`` for a server known
   to quote its arguments.
-- A value starting with ``-`` (option injection, CWE-88) is not shell syntax and passes.
+- A value starting with ``-`` (option injection, CWE-88) is not shell syntax: it is refused
+  only in an ``option_args`` argument or, with ``screen_all_str_args``, one named like a git
+  branch or ref. Elsewhere (``args="--fqbn esp32"``) it passes.
 - Only text is read: strings, bytes, and path and URL objects. A number, or an object the
   host passed, carries no text the model wrote.
 - A dispatch argument is read at the top level only: a name inside another argument (a
@@ -64,6 +74,7 @@ https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=
 https://github.com/jordanburke/functype/security/advisories/GHSA-wcjj-9m6g-2fr2
 https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119050
 https://github.com/agno-agi/agno/issues/8699
+https://nvd.nist.gov/vuln/detail/CVE-2026-114496
 """
 
 from __future__ import annotations
@@ -189,6 +200,22 @@ _DOTTED_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*"
 _NOT_A_NAME_CHARACTER = re.compile(r"[^A-Za-z0-9_]", re.ASCII)
 # A refused name is shown, so a retry knows what was refused; one longer than this is cut.
 _SHOWN_NAME_LENGTH = 64
+
+# With screen_all_str_args, an argument whose name (lowercased, non-alphanumerics dropped)
+# ends in one of these is read for a leading "-" too: git branches, refs and remotes
+# (CVE-2026-114496's base_branch).
+_REF_SHAPED_SUFFIXES: tuple[str, ...] = (
+    "branch",
+    "ref",
+    "rev",
+    "revision",
+    "commit",
+    "tag",
+    "remote",
+)
+_NOT_ALNUM = re.compile(r"[^a-z0-9]+")
+# The option a refused value starts with, up to "=" or whitespace: what the refusal shows.
+_OPTION = re.compile(r"-+[^\s=]*")
 # How many allowed names a refusal lists before it says how many more there are.
 _LISTED_NAMES = 20
 
@@ -200,6 +227,7 @@ class ToolArgSinkVerdict(str, enum.Enum):
     DENY_SHELL_METACHAR = "deny_shell_metachar"
     DENY_NOT_A_VERSION = "deny_not_a_version"
     DENY_DISPATCH_NAME = "deny_dispatch_name"
+    DENY_OPTION_INJECTION = "deny_option_injection"
     DENY_UNINSPECTABLE = "deny_uninspectable"
 
 
@@ -217,7 +245,8 @@ class ToolArgSinkDecision:
         token: The text that tripped it: a metacharacter (``";"``, ``"$("``); for an
             installer argument the scheme, separator or character that is not a version;
             for a dispatch argument the refused name, or the character that keeps it from
-            being one.
+            being one; for an option argument the option (``"--output"``), up to ``=`` or a
+            space.
         fix_hints: What the caller can send instead.
     """
 
@@ -278,6 +307,11 @@ class ToolArgSinkGuard:
             an empty allowlist admits any identifier :data:`DEFAULT_DISPATCH_DENY` does not
             match. A non-string value, ``None`` included, is refused; an argument the call
             does not pass is not read. Stored as a read-only mapping of frozensets.
+        option_args: Arguments a server passes to a program as one argv word (a git
+            branch, ref or remote): a string, or a string in a list, whose first non-space
+            character is ``-`` is refused (``DENY_OPTION_INJECTION``, CWE-88,
+            CVE-2026-114496). With ``screen_all_str_args``, arguments named like a branch or
+            ref are read this way too.
 
     Each name set accepts any collection of strings and is stored as a ``frozenset``.
 
@@ -287,7 +321,8 @@ class ToolArgSinkGuard:
             string; or ``screen_all_str_args`` is not a bool.
         ValueError: ``mode`` is not ``"deny"`` or ``"warn"``; a name or metacharacter is
             empty; an argument is named both free text and screened, or both a dispatch
-            argument and free text or an installer argument; an allowlist entry is not an
+            argument and free text or an installer argument, or both an option argument and
+            free text; an allowlist entry is not an
             identifier or a dotted path of them; ``free_text_args`` is set without
             ``screen_all_str_args``; or the guard screens nothing.
     """
@@ -299,10 +334,17 @@ class ToolArgSinkGuard:
     extra_metachars: frozenset[str] = frozenset()
     mode: ToolArgSinkMode = "deny"
     dispatch_args: Mapping[str, Collection[str]] = field(default_factory=dict)
+    option_args: frozenset[str] = frozenset()
     _ordered: tuple[str, ...] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        for name in ("shell_args", "free_text_args", "installer_args", "extra_metachars"):
+        for name in (
+            "shell_args",
+            "free_text_args",
+            "installer_args",
+            "extra_metachars",
+            "option_args",
+        ):
             object.__setattr__(self, name, _string_set(getattr(self, name), name))
         object.__setattr__(self, "dispatch_args", _dispatch_names(self.dispatch_args))
         if not isinstance(self.screen_all_str_args, bool):
@@ -311,7 +353,7 @@ class ToolArgSinkGuard:
             )
         if self.mode not in ("deny", "warn"):
             raise ValueError(f"mode must be 'deny' or 'warn'; got {self.mode!r}")
-        for screened in ("shell_args", "installer_args"):
+        for screened in ("shell_args", "installer_args", "option_args"):
             both = sorted(self.free_text_args & getattr(self, screened))
             if both:
                 raise ValueError(f"{both} named in both free_text_args and {screened}")
@@ -326,11 +368,15 @@ class ToolArgSinkGuard:
                 "screen_all_str_args=True, or drop free_text_args"
             )
         if not (
-            self.shell_args or self.installer_args or self.dispatch_args or self.screen_all_str_args
+            self.shell_args
+            or self.installer_args
+            or self.dispatch_args
+            or self.option_args
+            or self.screen_all_str_args
         ):
             raise ValueError(
-                "this ToolArgSinkGuard screens nothing: name shell_args, installer_args or "
-                "dispatch_args, or set screen_all_str_args=True"
+                "this ToolArgSinkGuard screens nothing: name shell_args, installer_args, "
+                "dispatch_args or option_args, or set screen_all_str_args=True"
             )
         # Longest first, then alphabetical, as in the stdio guard: "&&" reports before "&",
         # and the token reported does not depend on frozenset iteration order.
@@ -383,7 +429,8 @@ class ToolArgSinkGuard:
                 if finding is not None:
                     return finding
             installer, shell = self._reads(name, key)
-            if not shell:
+            option = self._reads_options(key)
+            if not (shell or option):
                 continue
             # One argument at a time, so a value is screened by the argument it sits in,
             # not by the nearest mapping key (``config={"repo": ...}`` is read as config).
@@ -397,11 +444,13 @@ class ToolArgSinkGuard:
                         if leaf.is_key
                         else (leaf.path, f"argument {leaf.path!r}")
                     )
-                    finding = (
-                        self._installer_finding(leaf, *place)
-                        if installer
-                        else self._finding(leaf, *place)
-                    )
+                    finding = self._option_finding(leaf, *place) if option else None
+                    if finding is None and shell:
+                        finding = (
+                            self._installer_finding(leaf, *place)
+                            if installer
+                            else self._finding(leaf, *place)
+                        )
                     if finding is not None:
                         return finding
             except ArgumentNestingError as error:
@@ -426,6 +475,42 @@ class ToolArgSinkGuard:
         if not isinstance(name, ArgumentName) and _UNATTRIBUTED.fullmatch(key):
             return False, True
         return False, self.screen_all_str_args and key not in self.free_text_args
+
+    def _reads_options(self, key: str) -> bool:
+        """Whether an argument's values are read for a leading ``-`` (CWE-88)."""
+        if key in self.option_args:
+            return True
+        if not self.screen_all_str_args or key in self.free_text_args:
+            return False
+        return _NOT_ALNUM.sub("", key.lower()).endswith(_REF_SHAPED_SUFFIXES)
+
+    def _option_finding(
+        self, leaf: ArgumentValue, argument: str, where: str
+    ) -> ToolArgSinkDecision | None:
+        text, unreadable = _text_of(leaf, argument, where)
+        if unreadable is not None:
+            return unreadable
+        if text is None:
+            return None
+        stripped = text.lstrip()
+        if not stripped.startswith("-"):
+            return None
+        option = _OPTION.match(stripped)
+        token = option.group(0) if option else "-"
+        if len(token) > _SHOWN_NAME_LENGTH:
+            token = token[:_SHOWN_NAME_LENGTH] + "..."
+        return _refusal(
+            ToolArgSinkVerdict.DENY_OPTION_INJECTION,
+            f"{where} starts with {token!r}: the program it is passed to reads it as an option, "
+            "not a branch, ref or name (CWE-88)",
+            argument=argument,
+            token=token,
+            hints=(
+                f"Send {where} as a value that does not start with '-'",
+                "A server should end its own options before a passed value ('--', or git's "
+                "'--end-of-options')",
+            ),
+        )
 
     def _finding(
         self, leaf: ArgumentValue, argument: str, where: str

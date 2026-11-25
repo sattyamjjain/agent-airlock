@@ -73,6 +73,7 @@ if TYPE_CHECKING:
     from .mcp_spec.header_audit import ResponseHeaderAuditConfig
     from .mcp_spec.meta_trust import MetaPin
     from .mcp_spec.oauth_audit import OAuthAppAuditConfig
+    from .mcp_spec.release_age import ReleaseTimeLookup
     from .mcp_spec.sampling_guard import SamplingGuardConfig
     from .mcp_spec.step_up_scope_guard import AdmissionScopeSnapshot
     from .mcp_spec.tasks_admission_guard import TasksAdmissionState
@@ -2802,6 +2803,8 @@ def npm_oidc_publish_window_guard_defaults(
     include_malware_feed: bool = True,
     installs_from: str | None = None,
     match_rescoped: bool = True,
+    min_release_age_hours: int | None = None,
+    release_time_lookup: ReleaseTimeLookup | None = None,
 ) -> dict[str, Any]:
     """Recommended config for the TanStack 2026-05-11 OIDC publish-window guard.
 
@@ -2831,16 +2834,26 @@ def npm_oidc_publish_window_guard_defaults(
     another scope is refused before any advisory names it (GHSA-m5xq-h2p4-962g:
     ``@fdcasj_dfew/md-doc-mcp``, the ``@ifasn/md-doc-mcp`` family under a new scope). A
     legitimate package sharing a listed basename goes on the guard's ``rescope_allow``.
-    Build the guard from all of them::
 
-        cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm")
+    A list names a package only after someone has reviewed it: GHSA-h82f-cjm4-g22r
+    (``@guicai777/mcp-doctor`` 1.0.1) was installable for four days before its advisory.
+    ``min_release_age_hours`` (v0.10.36, off by default because it calls the registry; 168
+    recommended) refuses a version published less than that many hours before the call, as
+    pnpm's ``minimumReleaseAge`` does, through
+    :func:`agent_airlock.mcp_spec.release_age.registry_release_time_lookup` unless you pass
+    your own ``release_time_lookup``. Build the guard from all of them::
+
+        cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm", min_release_age_hours=168)
         guard = OIDCPublishWindowGuard(
             blast_list=cfg["blast_list"],
             blocked_packages=cfg["blocked_packages"],
             advisories=cfg["advisories"],
             installs_from=cfg["installs_from"],
             rescoped_names=cfg["rescoped_names"],
+            min_release_age=cfg["min_release_age"],
+            release_time_lookup=cfg["release_time_lookup"],
             rescope_allow=frozenset({"@yourco/md-doc-mcp"}),  # only if you publish one
+            release_age_allow=frozenset({"@yourco/internal-tool"}),  # yours, published today
         )
 
     Args:
@@ -2855,21 +2868,56 @@ def npm_oidc_publish_window_guard_defaults(
         match_rescoped: False leaves ``rescoped_names`` empty, so only exact listed names
             are refused (the guard as it was before 0.10.36). Empty too when
             ``include_malware_feed`` is off.
+        min_release_age_hours: Hours a registry version must have been public before the
+            guard admits it; returned as ``min_release_age`` (a ``timedelta``). None, the
+            default, leaves the release-age check off.
+        release_time_lookup: Who says when a version was published. Defaults to
+            :func:`agent_airlock.mcp_spec.release_age.registry_release_time_lookup` when
+            ``min_release_age_hours`` is set, which makes HTTPS requests to
+            registry.npmjs.org and pypi.org at call time.
+
+    Raises:
+        TypeError: ``min_release_age_hours`` is not an int, or ``release_time_lookup`` is
+            not callable.
+        ValueError: ``min_release_age_hours`` is negative.
 
     Primary sources:
       https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
       https://github.com/advisories/GHSA-m5xq-h2p4-962g (rescoped MCP malware names)
+      https://github.com/advisories/GHSA-h82f-cjm4-g22r (the release-age check)
       https://tanstack.com/blog/npm-supply-chain-compromise-postmortem
       https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised
       (the wider wave; its packages are not in the list)
     """
+    from datetime import timedelta
+
     from .mcp_spec.malware_advisory_feed import (
         MalwareBlastList,
         load_malware_blast_snapshot,
         rescoped_name_index,
     )
     from .mcp_spec.oidc_publish_window_guard import load_blast_list_from_2026_05_11
+    from .mcp_spec.release_age import registry_release_time_lookup
 
+    if min_release_age_hours is not None:
+        if isinstance(min_release_age_hours, bool) or not isinstance(min_release_age_hours, int):
+            raise TypeError(
+                f"min_release_age_hours must be an int; got {type(min_release_age_hours).__name__}"
+            )
+        if min_release_age_hours < 0:
+            raise ValueError(
+                f"min_release_age_hours cannot be negative; got {min_release_age_hours}"
+            )
+    if release_time_lookup is not None and not callable(release_time_lookup):
+        raise TypeError(
+            f"release_time_lookup must be callable; got {type(release_time_lookup).__name__}"
+        )
+    min_release_age = (
+        timedelta(hours=min_release_age_hours) if min_release_age_hours is not None else None
+    )
+    lookup = release_time_lookup
+    if lookup is None and min_release_age is not None:
+        lookup = registry_release_time_lookup()
     feed = load_malware_blast_snapshot() if include_malware_feed else MalwareBlastList()
     rescoped = rescoped_name_index(feed if match_rescoped else MalwareBlastList())
     pairs = blast_list if blast_list is not None else load_blast_list_from_2026_05_11() | feed.pairs
@@ -2889,6 +2937,8 @@ def npm_oidc_publish_window_guard_defaults(
         "malware_feed_as_of": feed.as_of,
         "installs_from": installs_from,
         "rescoped_names": rescoped,
+        "min_release_age": min_release_age,
+        "release_time_lookup": lookup,
     }
 
 
@@ -4650,12 +4700,20 @@ TOOL_ARG_SINK_CVES: tuple[str, ...] = (
 )
 
 
+#: The arguments :func:`tool_arg_sink_defaults` reads for a leading ``-`` unless told
+#: otherwise: names a server passes to git as one word (CVE-2026-114496's ``base_branch``).
+TOOL_ARG_SINK_OPTION_ARGS: frozenset[str] = frozenset(
+    {"base_branch", "branch", "ref", "rev", "revision", "commit", "tag", "remote"}
+)
+
+
 @preset
 def tool_arg_sink_defaults(
     *,
     free_text_args: Iterable[str] = (),
     installer_args: Iterable[str] = (),
     mode: ToolArgSinkMode = "warn",
+    option_args: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """Screen every string tool argument for shell syntax, warning first (v0.10.28+).
 
@@ -4669,6 +4727,13 @@ def tool_arg_sink_defaults(
     under ``shell=True`` (CVE-2026-117569), hagent's ``args`` (CVE-2026-117573), and
     functype-mcp-server's ``version``, which ``pnpm add`` installed and the server then
     imported (CVE-2026-59176, CWE-829, fixed in 1.4.4).
+
+    Since 0.10.36 it also refuses option injection (CWE-88): codebase-memory-mcp below 0.9.0
+    passed ``detect_changes``' ``base_branch`` to git with no leading-dash check, so
+    ``--output=<file>`` made git write a file the model chose (CVE-2026-114496, NVD
+    2026-11-20). ``option_args`` (:data:`TOOL_ARG_SINK_OPTION_ARGS` by default) and every
+    argument named like a branch or ref may not start with ``-``. That CVE is cited here, not
+    in ``cves``, which lists the October set.
 
     This preset turns on :class:`~agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard` with
     ``screen_all_str_args=True`` in ``warn`` mode, so adopting it cannot break a host on day
@@ -4684,6 +4749,8 @@ def tool_arg_sink_defaults(
         installer_args: Arguments that must be a bare version (``1.4.4``, ``^1.30.0``).
         mode: ``"warn"`` (the default) logs a finding and runs the call; ``"deny"``
             refuses it with block reason ``tool_arg_sink``.
+        option_args: Arguments refused when they start with ``-``. None means
+            :data:`TOOL_ARG_SINK_OPTION_ARGS` without any name in ``free_text_args``.
 
     Returns:
         ``dict[str, Any]`` with the canonical ``preset_id`` / ``severity`` /
@@ -4713,16 +4780,24 @@ def tool_arg_sink_defaults(
 
         comment_on_issue(repo="x; id", body="Looks good; merging.")  # logged, then runs
 
-    Primary source:
+    Primary sources:
       https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=2026-10-26T00:00:00.000&pubEndDate=2026-10-29T23:59:59.999
+      https://nvd.nist.gov/vuln/detail/CVE-2026-114496
     """
     from .tool_arg_sink_guard import ToolArgSinkGuard
 
+    free_text = frozenset(_names_of(free_text_args, "free_text_args"))
+    options = (
+        TOOL_ARG_SINK_OPTION_ARGS - free_text
+        if option_args is None
+        else frozenset(_names_of(option_args, "option_args"))
+    )
     guard = ToolArgSinkGuard(
         screen_all_str_args=True,
-        free_text_args=frozenset(_names_of(free_text_args, "free_text_args")),
+        free_text_args=free_text,
         installer_args=frozenset(_names_of(installer_args, "installer_args")),
         mode=mode,
+        option_args=options,
     )
     return {
         "preset_id": "tool_arg_sink",
@@ -6647,6 +6722,7 @@ __all__ = [
     # V0.10.28 shell syntax and package specs in string tool arguments (nine CVEs, 27-28 Oct)
     "tool_arg_sink_defaults",
     "TOOL_ARG_SINK_CVES",
+    "TOOL_ARG_SINK_OPTION_ARGS",
     # Callable names in dispatch arguments (CVE-2026-119050, Agno PandasTools)
     "reflection_sink_defaults",
     # V0.10.29 secrets and personal data in memory-write arguments (mem0ai/mem0#7283)

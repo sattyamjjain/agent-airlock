@@ -14,6 +14,7 @@ without it behaves exactly as before:
 | `extra_metachars` | `frozenset()` | tokens refused on top of the default set |
 | `mode` | `"deny"` | `"deny"` refuses a finding, `"warn"` logs it and runs the call |
 | `dispatch_args` | `{}` | arguments that name a function the tool calls, each with the names it may hold: see [Dispatch arguments](dispatch-arguments.md) |
+| `option_args` | `frozenset()` | arguments a server passes to a program as one word, which may not start with `-` (0.10.36): see [Option arguments](#option-arguments) |
 
 Each name collection takes a set, list or tuple of strings and is stored as a `frozenset`.
 A config that could not mean what it says raises when the guard is built: a lone string
@@ -159,12 +160,52 @@ set_functype_version(version="1.4.4")  # runs
 set_functype_version(version="file:../evil")  # refused: not a bare version
 ```
 
+## Option arguments
+
+Added in 0.10.36. A server that passes an argument to a program as one argv word, with no
+shell, is safe from shell syntax but not from options: a value starting with `-` is read
+as an option, not a value (CWE-88). [CVE-2026-114496](https://nvd.nist.gov/vuln/detail/CVE-2026-114496)
+(NVD 2026-11-20, Medium 5.5): codebase-memory-mcp below 0.9.0 passed `detect_changes`'
+`base_branch` to git with no leading-dash check, so `--output=<file>` made git write a
+file the model chose.
+
+An `option_args` argument holding a string, or a list with a string, whose first non-space
+character is `-` is refused as `deny_option_injection`. The refusal shows the option
+(`--output`, `-c`), up to `=` or a space, never the rest of the value:
+
+```python
+from agent_airlock import Airlock, SecurityPolicy, ToolArgSinkGuard
+
+guard = ToolArgSinkGuard(option_args={"base_branch"})
+
+
+@Airlock(policy=SecurityPolicy(tool_arg_sink_guard=guard))
+def detect_changes(base_branch: str) -> str:
+    return f"diffing against {base_branch}"
+
+
+detect_changes(base_branch="origin/main")  # runs
+detect_changes(base_branch="--output=/tmp/pwn")  # refused: deny_option_injection
+```
+
+With `screen_all_str_args=True` the same test applies, without naming them, to every
+argument whose name (lower case, punctuation dropped) ends in `branch`, `ref`, `rev`,
+`revision`, `commit`, `tag` or `remote`: `base_branch`, `gitRef`, `target_commit`.
+`free_text_args` opts one out. Other arguments may still start with `-`
+(`args="--fqbn esp32:esp32:esp32"` is a flag the tool means to pass), and a message such as
+`"-- fixed typo"` under `message` passes.
+
+Before 0.10.36, `ToolArgSinkGuard(shell_args={"base_branch"})` admitted
+`"--output=/tmp/pwn"` and `"-c core.sshCommand=id"`, and `screen_all_str_args=True`
+admitted `"--upload-pack=touch /tmp/x"`: none of them is shell syntax.
+
 ## Modes and the refusal
 
 In `deny` mode a finding is the usual blocked response: `block_reason` `"tool_arg_sink"`,
 an `error`, `fix_hints` saying what to send instead, and `metadata` with the `argument`
 (`"repo"`, `"repo[1]"`, `"target.repo"`), the `token` that tripped it and the `verdict`
-(`deny_shell_metachar`, `deny_not_a_version` or `deny_uninspectable`). It names the
+(`deny_shell_metachar`, `deny_not_a_version`, `deny_option_injection` or
+`deny_uninspectable`). It names the
 argument and the token, never the whole value; a mapping key is reported as "a mapping
 key in argument 'repo'", since its path would spell it out. `on_blocked` hears it with
 `violation_type` `"tool_arg_sink"`, and the log has `airlock_tool_arg_sink_block`.
@@ -193,6 +234,10 @@ Read the log, name the free-text arguments it flags, then pass `mode="deny"`. To
 policy of your own, pass `preset["guard"]` as its `tool_arg_sink_guard`. The preset lists
 the nine CVEs under `"cves"` and maps to OWASP MCP05, CWE-78 and CWE-829.
 
+Since 0.10.36 the preset also sets `option_args` to `base_branch`, `branch`, `ref`, `rev`,
+`revision`, `commit`, `tag` and `remote` (CVE-2026-114496), minus any name you pass in
+`free_text_args`; pass `option_args=` to choose your own.
+
 ## Honest scope
 
 - **It screens text, not how a server quotes it.** A server that passes argv without a
@@ -203,7 +248,11 @@ the nine CVEs under `"cves"` and maps to OWASP MCP05, CWE-78 and CWE-829.
   mcp-ffmpeg (CVE-2026-117568) took a closing double quote as well as `$()` and backticks,
   and the guard refuses those two by default but the quote only with
   `extra_metachars={'"'}`.
-- **Option injection passes.** A value starting with `-` (CWE-88) is not shell syntax.
+- **Option injection is read only where you say.** A value starting with `-` (CWE-88) is
+  not shell syntax: it is refused in an `option_args` argument and, with
+  `screen_all_str_args`, in one named like a git branch or ref. Elsewhere it passes. A
+  server should still end its own options before a passed value (`--`, or git's
+  `--end-of-options`).
 - **Only text is read.** A number or an object the host passed carries no text the model
   wrote.
 

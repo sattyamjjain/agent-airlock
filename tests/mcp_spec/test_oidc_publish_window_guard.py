@@ -427,3 +427,56 @@ class TestRescopedNamesConstruction:
         assert OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME.value == (
             "deny_rescoped_malware_name"
         )
+
+
+class TestAVersionFieldThatInstallsAnotherPackage:
+    """``version`` beside ``package`` can name another package (an alias) or a tarball.
+
+    Until 0.10.36 an alias with no version was read as a version of ``package`` and a tarball
+    URL as a version that matched nothing, so both walked past every list.
+    """
+
+    GUARD = OIDCPublishWindowGuard(
+        blast_list=frozenset({("npm", "listed", "1.2.3")}),
+        blocked_packages=frozenset({("npm", "evil"), ("npm", "@bad/pkg")}),
+        rescoped_names={"md-doc-mcp": ("@ifasn/md-doc-mcp", "GHSA-rvw8-22w3-342v")},
+        installs_from="npm",
+    )
+
+    @pytest.mark.parametrize(
+        ("version", "verdict"),
+        [
+            ("npm:evil", OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR),
+            ("NPM:Evil", OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR),
+            ("npm:evil@", OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR),
+            ("npm:@bad/pkg", OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR),
+            ("npm:@bad/pkg@1.0.0", OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR),
+            ("npm:@x/md-doc-mcp", OIDCPublishWindowVerdict.DENY_RESCOPED_MALWARE_NAME),
+            (
+                "https://registry.npmjs.org/evil/-/evil-1.0.0.tgz",
+                OIDCPublishWindowVerdict.DENY_BLAST_LIST_TARBALL_URL,
+            ),
+            (
+                "https://registry.npmjs.org/listed/-/listed-1.2.3.tgz",
+                OIDCPublishWindowVerdict.DENY_BLAST_LIST_TARBALL_URL,
+            ),
+        ],
+    )
+    def test_it_is_refused(self, version: str, verdict: OIDCPublishWindowVerdict) -> None:
+        for args in (
+            {"package": "safe", "version": version},
+            {"package": "safe", "version": ["1.0.0", version]},
+        ):
+            assert self.GUARD.evaluate(args).verdict is verdict, args
+
+    @pytest.mark.parametrize(
+        "version",
+        ["npm:1.2.3", "npm:^1.2", "npm:1.x", "npm:latest", "npm:*", "latest", "npm:fine", "npm:"],
+    )
+    def test_a_version_or_another_package_passes(self, version: str) -> None:
+        decision = self.GUARD.evaluate({"package": "safe", "version": version})
+        assert decision.verdict is OIDCPublishWindowVerdict.ALLOW
+
+    def test_the_outer_packages_own_pair_is_still_read_through_npm(self) -> None:
+        decision = self.GUARD.evaluate({"package": "listed", "version": "npm:1.2.3"})
+        assert decision.verdict is OIDCPublishWindowVerdict.DENY_BLAST_LIST_PAIR
