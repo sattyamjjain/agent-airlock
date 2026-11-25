@@ -202,9 +202,10 @@ src/agent_airlock/
      test runs before the shell test on the same leaf
    - 2.76 secrets and personal data in arguments (V0.10.29, `argument_secret_guard.py`, off
      until the policy sets `argument_secret_guard`): the detectors in
-     `DEFAULT_ARGUMENT_SECRET_TYPES` (no `IP_ADDRESS`, no Indic types, no `BEARER_TOKEN`) over
-     every string argument, nested ones and mapping keys included, each string read alone
-     (step 8's `_labelled_secret` key rule does not run here). `block` refuses
+     `DEFAULT_ARGUMENT_SECRET_TYPES` (no `IP_ADDRESS`, no Indic types) over every string
+     argument, nested ones and mapping keys included, then `_labelled`: a string under a
+     mapping key that names a secret (`sanitizer._SECRET_KEY`), never the argument's own name.
+     `block` refuses
      (`argument_secret`, naming the argument and the kind of data, never the value);
      `mask` masks a top-level keyword string in place through `_BoundCall.replace`, so the
      later steps, the decision record and an approval read the masked value, and refuses
@@ -221,7 +222,9 @@ src/agent_airlock/
      is denied. Order in `_judge`: deny rules, then where the line writes (V0.10.35:
      `_segments` records each writing redirection on `_Walk.writes`, wrapper lines
      included; a target `redirect_deny` names and `redirect_allow` does not is denied
-     whatever `default` is, an undecided one, `$` / glob / brace / `~user`, asked about
+     whatever `default` is (the default list is system paths plus every
+     `safe_types.PERSISTENCE_DENY_PATTERNS` entry, matched whatever the case since 0.10.36), an
+     undecided one, `$` / glob / brace / `~user`, asked about
      with an ask rule else denied (a `$` one is denied under `default="deny"` even with an ask
      rule, since no allow rule admits an expanded line); `redirect_deny=()` turns it off),
      then ask rules, then `_worst`. A command carrying a `_ACTION_OPTIONS` option
@@ -251,14 +254,16 @@ src/agent_airlock/
      `lease_scope`, and names no lease target
 5. Endpoint policy validation: every IP a host stands for (`metadata_ip_candidates`:
    decimal, hex, octal, short and IPv6-transition forms) meets the private and metadata
-   checks (`_is_private_ip` counts `100.64.0.0/10` and multicast as private since 0.10.36;
+   checks (`_is_private_ip` counts `100.64.0.0/10`, multicast and IPv6 site-local as private
+   since 0.10.36;
    the metadata set is `safe_types._CANONICAL_METADATA_IPS`, which `SSRFEgressGuard` reads
    too, while metadata hostnames, `network._METADATA_HOSTS` and `safe_types.BLOCKED_HOSTS`,
    are two lists that differ), and a hostname that passes `allowed_endpoints` is then resolved
    (`resolve_hostnames`, `resolver`) and refused on an internal or missing answer; a name
    the allowlist refuses is never looked up. `EndpointPolicy.allowed_url_prefixes` (empty
    means no path scope) adds a last check on scheme, host, port and the path resolved by
-   `_url_paths`, and refuses `%2f`, `%5c`, `\` and `%00` in the path. Redirects and rebinds
+   `_url_paths`, and refuses `%2f`, `%5c`, `\` and `%00` in the path, and a
+   raw control character anywhere in the URL (0.10.36). Redirects and rebinds
    inside the tool are the airgap's, with `NetworkPolicy(block_private_ips=True)`
 
    Steps 2.7, 2.75, 2.76, 3 and 5 read every argument the call passes (`_arg_walk`): positional ones
@@ -437,7 +442,10 @@ budgets are operational controls.
   `MCPProxyConfig(tool_scopes=...)` is the one such field), so
   `_warn_on_settings_not_applied` emits a `FutureWarning` (deprecated, removal in v1.0.0)
   when it's set away from its default. `FutureWarning`, because Python hides
-  `DeprecationWarning` outside `__main__`.
+  `DeprecationWarning` outside `__main__`. Two `SecurityPolicy` fields are carriers too:
+  `stdio_mode`, applied by `validate_stdio_command` / `launch_from_manifest` /
+  `MCPProxyGuard.validate_stdio_spawn` given `policy=`, and `trace_redaction`, by
+  `OTelAuditExporter(policy=)`. Nothing read either before 0.10.36.
 - **Dated snapshots.** Pricing tables, advisory blast-radius data and redaction patterns
   ship as dated files under `data/` and `fixtures/`; a refresh is a new dated file, not an
   edit to the old one, plus a repoint of the one constant naming the current file
@@ -463,9 +471,9 @@ budgets are operational controls.
   like (`grep -rnE 'class \w+\((ValueError|TypeError|RuntimeError|TimeoutError|Exception|PolicyViolation)\)' src/agent_airlock`
   lists the candidates); do not rebase any of them in a patch release.
 - **A new `SensitiveDataType`** joins these by hand: `PATTERNS` (a test checks it),
-  `DEFAULT_MASK_CONFIG`, `_types_to_mask`, the type sets in `sanitize_with_workspace_config`
-  and, for a secret, `argument_secret_guard.DEFAULT_ARGUMENT_SECRET_TYPES`; no test compares
-  the last three with the enum. `.claude-plugin/marketplace.json` states the count
+  `DEFAULT_MASK_CONFIG`, `_types_to_mask`
+  and, for a secret, `argument_secret_guard.DEFAULT_ARGUMENT_SECRET_TYPES`
+  (`test_a_new_type_joins_every_list`). `.claude-plugin/marketplace.json` states the count
   (`tests/test_marketplace_metadata.py`), so it moves in the same PR.
 - **Logger names.** `from .._log import structlog` one package down; `core.py` alone uses the
   bare root name (`tests/test_tooling_honesty_0_10_28.py` checks every `get_logger` call). In

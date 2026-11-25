@@ -567,7 +567,14 @@ def _check_param_headers(request: Mapping[str, Any], schema: Any) -> None:
         try:
             raw = _header_value(top_pairs, header_pairs, header, "conflicting_param_header")
         except _Refusal as refusal:
-            raise _Refusal(refusal.reason, refusal.message, header_value=header) from None
+            # Not refusal.message: it repeats both values, and this header mirrors an
+            # argument (V0.10.36).
+            raise _Refusal(
+                refusal.reason,
+                f"{header!r} is given more than once, or as a body member too, with values "
+                "that disagree; refusing an ambiguous parameter header (SEP-2243)",
+                header_value=header,
+            ) from None
         body = _argument_at(arguments, path)
         if body is _ABSENT:
             if raw is not None:

@@ -7,6 +7,7 @@ what proves the campaign actually drives each guard — not a stub.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -30,7 +31,7 @@ from benchmarks.adaptive_redteam.oracle import Intent, Outcome, classify  # noqa
 _NAMES = all_adapter_names()
 
 
-def test_registry_covers_all_38_bypass_targets() -> None:
+def test_registry_covers_every_bypass_target() -> None:
     assert len(BYPASS_TARGETS) == 40
     assert len(set(BYPASS_TARGETS)) == 40
     registry = get_registry()
@@ -39,6 +40,31 @@ def test_registry_covers_all_38_bypass_targets() -> None:
     for name in VALUE_GATE_TARGETS:
         assert name in registry, f"missing value-gate adapter {name!r}"
     assert len(registry) == 43
+
+
+def _table_rows() -> dict[str, list[str]]:
+    text = (_ROOT / "benchmarks" / "adaptive_redteam" / "adapters_table.md").read_text(
+        encoding="utf-8"
+    )
+    rows = [line for line in text.splitlines() if re.match(r"\| `\w+` \| [ABC] \|", line)]
+    cells = [[cell.strip() for cell in row.strip("|").split(" | ")] for row in rows]
+    return {row[0].strip("` "): row for row in cells}
+
+
+def test_the_table_lists_every_adapter() -> None:
+    assert set(_table_rows()) == set(get_registry())
+
+
+@pytest.mark.parametrize("name", _NAMES)
+def test_the_table_row_matches_the_adapter(name: str) -> None:
+    adapter = get_registry()[name]
+    effect = adapter.intent()
+    _, mode, _, _, sink, verdicts, sentinel, seeds = _table_rows()[name]
+    assert mode == adapter.mode
+    assert sink == effect.sink
+    assert verdicts == (", ".join(sorted(effect.deny_verdicts)) or "(raises)")
+    assert sentinel.strip("`") == (effect.sentinel or "")
+    assert seeds == str(seed_count(name))
 
 
 def test_mode_counts() -> None:

@@ -505,7 +505,9 @@ class SecurityPolicy:
     # v0.5.1 ``validate_stdio_command`` behaviour. ``"manifest_only"``
     # forces all spawns through ``launch_from_manifest`` (signed
     # registry; runtime cannot construct argv). ``"disabled"`` blocks
-    # STDIO subprocesses entirely.
+    # STDIO subprocesses entirely. @Airlock launches no process, so it never reads this:
+    # pass the policy to ``validate_stdio_command(..., policy=)`` and
+    # ``launch_from_manifest(..., policy=)``, which apply it (V0.10.36).
     stdio_mode: Literal["allowlist", "manifest_only", "disabled"] = "allowlist"
     # V0.8.7 per-model-tier cost budgets. When set, the @Airlock seam
     # runs a worst-case cost estimate against the resolved tier's cap
@@ -562,7 +564,9 @@ class SecurityPolicy:
     # are redacted (protected fields localized + rewritten to keep
     # verifier-critical evidence, recipe dropped) and watermarked. OFF by
     # default (None preserves prior behavior exactly); the STRICT preset
-    # turns it ON. The local JSON-Lines audit keeps full fidelity. See
+    # turns it ON. The local JSON-Lines audit keeps full fidelity. @Airlock exports no
+    # traces, so it never reads this: build ``OTelAuditExporter(policy=policy)``, which
+    # applies it (V0.10.36). See
     # :class:`agent_airlock.trace_redaction.TraceRedactionPolicy`.
     trace_redaction: TraceRedactionPolicy | None = None
     # V0.8.74 third verdict — escalate to a human (issue #143).
@@ -1405,7 +1409,7 @@ def _get_strict_trace_redaction() -> TraceRedactionPolicy:
     ``tenant_id`` / ``watermark_secret`` by constructing a
     :class:`~agent_airlock.trace_redaction.TraceRedactionPolicy` and assigning
     it to their policy's ``trace_redaction`` field. STRICT turning it ON means
-    a non-local sink gets redacted + watermarked traces by default.
+    an ``OTelAuditExporter(policy=STRICT_POLICY)`` redacts and watermarks what it sends.
     """
     from .trace_redaction import TraceRedactionPolicy
 

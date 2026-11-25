@@ -77,8 +77,11 @@ first character that cannot stand there, never the value.
 keys it splices in as column names (`data`, `values`, `row`, `rows`, `record`, `records`,
 `updates` by default; CVE-2026-63129's `insert_data`). Each key must pass the identifier
 test; the refusal names it by position (`data.keys[0]`), since the key is the refused
-text. The values are data a server binds as parameters and are not read. A row field that
-holds text or a number is not a row and is not read.
+text. The values are data a server binds as parameters and are not read, except under a key
+that is itself one of the configured statement or fragment fields, at any depth
+(`{"data": {"sql": "DROP TABLE users"}}` is refused): a tool may wrap its whole input in
+`data`. The alias rules do not apply inside a row, so a `stateFilter` column is data. A row
+field that holds text or a number is not a row and is not read.
 
 ## Dialects
 
@@ -112,7 +115,8 @@ when you know it.
 The guard reads only the fields you name, and their aliases. A string is read as a
 fragment when any key on its path is a fragment field, otherwise as a statement when one
 is a statement field, otherwise as a name when its own key is an identifier field.
-Nested values, lists and bytes are walked:
+Nested values, lists and bytes are walked, and a pydantic model, a dataclass or a named tuple
+is read by its fields, as a mapping:
 
 ```python
 guard = ReadOnlySQLGuard(

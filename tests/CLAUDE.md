@@ -63,15 +63,13 @@ which `make test-badge` also counts as excluded: the docker-marked tests, `tests
 - **The startup-hook walk skips the host interpreter's own hooks.** Since 0.10.36 a process's
   first guarded call walks startup hooks by default (once, kept in
   `startup_hooks._process_walk`; a test that plants hooks calls
-  `testing.reset_startup_hook_check()`), so the autouse
-  `_startup_hook_walk_sees_only_planted_hooks` fixture patches `startup_hooks._directories` and
-  `_customize_hook` to ignore the directories the interpreter started with (`_HOST_DIRECTORIES`,
+  `testing.reset_startup_hook_check()`), so `conftest.py`'s `pytest_configure` replaces
+  `startup_hooks._directories` and `_customize_hook` for the whole run with versions that
+  ignore the directories the interpreter started with (`_HOST_DIRECTORIES`,
   e.g. coverage's `a1_coverage.pth` in CI). Hooks planted in tmp or
   `tests/fixtures/startup_hooks/` dirs on `sys.path` are still walked; that directory's
-  `README.md` says what each case is. The fixture is function-scoped and in-process: a guarded
-  call in a module- or session-scoped fixture, or in a subprocess, still walks the host and
-  issues the `RuntimeWarning`, and so does a host `sitecustomize` in package form
-  (`sitecustomize/__init__.py`, whose directory is not a host directory).
+  `README.md` says what each case is. A guarded call in a subprocess still walks the host and
+  issues the `RuntimeWarning`.
 - **`tests/fixtures/<area>/`** holds payloads for guard tests outside `tests/cves/`. The CVE
   watcher's ledger reads none of it, a CVE id in a file name included.
 - **An `importorskip` needs a CI job that installs its dependency**, added in the same PR,

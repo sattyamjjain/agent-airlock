@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test: pip-install the v0.8.16 wheel + exercise the CVE-2026-40933
+"""Smoke test: pip-install the wheel built from this tree + exercise the CVE-2026-40933
 Flowise MCP-stdio adapter guard preset end-to-end.
 
 Runs *outside* the editable source tree:
@@ -14,7 +14,7 @@ Runs *outside* the editable source tree:
    - admits a benign Flowise CustomMCP stdio argv,
    - blocks a malicious shell-metachar command serialization,
    - blocks a malicious metachar smuggled into an args element,
-   - confirms __version__ == "0.8.16".
+   - confirms __version__ is the built wheel's.
 
 Exit codes:
 
@@ -80,8 +80,8 @@ CHILD_SMOKE_SCRIPT = textwrap.dedent(
 
 
     def main() -> int:
-        if __version__ != "0.8.16":
-            print(f"FAIL: __version__={__version__!r}, expected 0.8.16", file=sys.stderr)
+        if __version__ != sys.argv[1]:
+            print(f"FAIL: __version__={__version__!r}, expected {sys.argv[1]}", file=sys.stderr)
             return 1
 
         guard = flowise_mcp_stdio_guard_2026_defaults()
@@ -126,9 +126,10 @@ CHILD_SMOKE_SCRIPT = textwrap.dedent(
 )
 
 
-def run_child(py: Path) -> int:
+def run_child(py: Path, version: str) -> int:
     print("$ <venv-python> -c <SMOKE>", flush=True)
-    proc = subprocess.run([str(py), "-c", CHILD_SMOKE_SCRIPT], check=False)  # noqa: S603
+    argv = [str(py), "-c", CHILD_SMOKE_SCRIPT, version]
+    proc = subprocess.run(argv, check=False)  # noqa: S603
     return proc.returncode
 
 
@@ -150,7 +151,8 @@ def main() -> int:
         print(f"ERROR: venv setup failed: {exc}", file=sys.stderr)
         return 2
 
-    rc = run_child(py)
+    # The child must import the wheel just built: ``agent_airlock-<version>-py3-none-any.whl``.
+    rc = run_child(py, wheel.name.split("-")[1])
     if rc == 0 and not args.keep_venv:
         shutil.rmtree(VENV_DIR, ignore_errors=True)
     elif rc != 0:

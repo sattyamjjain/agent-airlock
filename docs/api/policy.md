@@ -85,8 +85,8 @@ class SecurityPolicy:
 | `data_flow_policy` | `DataFlowPolicy \| None` | Refuses (`deny`, the default) or escalates (`escalate`) a call of an `@sink` tool made after an `@source(trust="untrusted")` call completed in the same run, until the host calls `clear_taint()` on the run's context (step 2.4). A sink called outside any run is refused. See [Sources and sinks](../guide/data-flow.md) |
 | `run_guard` | `RunGuard \| None` | Halts the run after a hard stop (a refusal in `halt_on`, or of an `irreversible_tools` match), so every later call is refused as `run_halted` (step 0.7); and refuses the call that completes a repeated block of calls, then halts on the next repeat (step 2.3). See [Halting a run, and loops](../guide/run-guard.md) |
 | `shell_command_policy` | `ShellCommandPolicy \| None` | Allows, escalates (rule `shell_command`) or refuses an agent shell tool's command by rule, following wrappers (`env`, `xargs`, `find -exec`, `sudo`, `sh -c`, ...) to the command they launch (step 2.77). See [Shell commands](../guide/shell-commands.md) |
-| `trace_redaction` | `TraceRedactionPolicy \| None` | Redacts traces sent to a non-local sink |
-| `stdio_mode` | `str` | How STDIO subprocess launches are allowed: `"allowlist"`, `"manifest_only"` or `"disabled"` |
+| `trace_redaction` | `TraceRedactionPolicy \| None` | Redacts traces sent to a non-local sink; applied by `OTelAuditExporter(policy=...)`, not by `@Airlock` |
+| `stdio_mode` | `str` | How STDIO subprocess launches are allowed: `"allowlist"`, `"manifest_only"` or `"disabled"`; applied by `validate_stdio_command(..., policy=)` and `launch_from_manifest(..., policy=)`, not by `@Airlock` |
 
 How a call carries its identity for `require_agent_id` and `allowed_roles` is described in
 [Agent Identity](../guide/policy.md#agent-identity).

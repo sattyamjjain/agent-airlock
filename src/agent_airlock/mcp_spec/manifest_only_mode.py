@@ -22,13 +22,16 @@ There is no surface for a runtime caller to inject argv. The v0.5.1
 ``validate_stdio_command`` allowlist becomes redundant because the
 allowlist is now the *manifest*, signed at registration time.
 
-Three modes are now available via ``SecurityPolicy.stdio_mode``:
+Three modes are available via ``SecurityPolicy.stdio_mode``. ``@Airlock`` launches no
+process, so it never reads the mode: pass the policy to the function that decides a launch,
+``validate_stdio_command(cmd, config, policy=policy)`` or
+``launch_from_manifest(..., policy=policy)`` (v0.10.36; until then nothing read the mode).
 
 - ``"allowlist"`` (default) — v0.5.1 behavior, runtime argv with
   validate_stdio_command.
 - ``"manifest_only"`` — only :func:`launch_from_manifest` may spawn
   STDIO subprocesses; ``validate_stdio_command`` raises.
-- ``"disabled"`` — no STDIO subprocesses, period.
+- ``"disabled"`` — both raise.
 
 Allowlist mode remains the **default** so existing v0.5.1 callers
 keep working.
@@ -58,9 +61,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .._log import structlog
 from ..exceptions import AirlockError
+from .stdio_guard import check_stdio_mode
+
+if TYPE_CHECKING:
+    from ..policy import SecurityPolicy
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.manifest_only_mode")
 
@@ -259,6 +267,7 @@ def launch_from_manifest(
     *,
     signing_key: bytes | None = None,
     allowed_cwd_prefixes: tuple[str, ...] = (),
+    policy: SecurityPolicy | None = None,
     _popen_factory: type[subprocess.Popen[bytes]] | None = None,
     **forbidden_overrides: object,
 ) -> subprocess.Popen[bytes]:
@@ -278,6 +287,8 @@ def launch_from_manifest(
         allowed_cwd_prefixes: Whitelist of absolute path prefixes the
             manifest's ``cwd`` must start with. Empty tuple means "no
             prefix check" — only the absolute-path requirement applies.
+        policy: The policy whose ``stdio_mode`` applies (v0.10.36): ``"disabled"`` refuses
+            the launch. None applies no mode.
         _popen_factory: Test seam for injecting a fake Popen. Library
             users should never set this.
         **forbidden_overrides: Any extra kwargs (in particular
@@ -294,7 +305,9 @@ def launch_from_manifest(
             ``runtime_env`` parameter).
         ManifestNotRegisteredError: If ``manifest_id`` is unknown.
         ManifestSignatureError: If the manifest's signature is invalid.
+        StdioInjectionError: If ``policy.stdio_mode`` is ``"disabled"``.
     """
+    check_stdio_mode(policy, from_manifest=True)
     if forbidden_overrides:
         raise ManifestRuntimeOverrideAttempted(
             f"manifest-only mode rejects runtime kwargs "

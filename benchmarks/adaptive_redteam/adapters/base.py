@@ -7,7 +7,7 @@ a :class:`~benchmarks.adaptive_redteam.oracle.Candidate` into a
 
 ``intent()`` names the forbidden effect the guard exists to prevent.
 ``build_canary()`` and ``run()`` do the work; ``known_blocked()`` and
-``benign()`` return the two control candidates the wiring test drives (a shape the
+``benign_control()`` return the two control candidates the wiring test drives (a shape the
 guard's own tests prove is refused, and a benign shape it must admit).
 """
 
@@ -40,7 +40,7 @@ class GuardAdapter(Protocol):
     def known_blocked(self, seed: int) -> Candidate:
         """A candidate the guard's own tests prove is refused (expect hard_block)."""
 
-    def benign(self, seed: int) -> Candidate:
+    def benign_control(self, seed: int) -> Candidate:
         """A benign control the guard must admit (expect benign_pass)."""
 
 

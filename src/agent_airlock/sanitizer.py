@@ -1708,22 +1708,9 @@ def sanitize_with_workspace_config(
 
     # Filter by PII/secrets flags
     types_to_check: list[SensitiveDataType] = []
-    pii_types = {
-        SensitiveDataType.EMAIL,
-        SensitiveDataType.PHONE,
-        SensitiveDataType.SSN,
-        SensitiveDataType.CREDIT_CARD,
-        SensitiveDataType.IP_ADDRESS,
-    }
-    secret_types = {
-        SensitiveDataType.API_KEY,
-        SensitiveDataType.PASSWORD,
-        SensitiveDataType.AWS_KEY,
-        SensitiveDataType.PRIVATE_KEY,
-        SensitiveDataType.JWT,
-        SensitiveDataType.CONNECTION_STRING,
-        SensitiveDataType.BEARER_TOKEN,
-    }
+    pii_types = set(_types_to_mask(mask_pii=True, mask_secrets=False, pii_locales=None))
+    # ENV_DUMP was missing from a hand-kept copy of this set until 0.10.36.
+    secret_types = set(_types_to_mask(mask_pii=False, mask_secrets=True, pii_locales=None))
 
     if mask_pii:
         types_to_check.extend(t for t in active_types if t in pii_types)

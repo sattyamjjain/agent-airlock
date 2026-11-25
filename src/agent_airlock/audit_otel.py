@@ -32,6 +32,7 @@ from ._log import structlog
 if TYPE_CHECKING:
     from opentelemetry.trace import Tracer
 
+    from .policy import SecurityPolicy
     from .trace_redaction import TraceRedactionPolicy
 
 logger = structlog.get_logger("agent-airlock.audit_otel")
@@ -129,6 +130,7 @@ class OTelAuditExporter:
         service_name: str = "agent-airlock",
         enabled: bool = True,
         redaction_policy: TraceRedactionPolicy | None = None,
+        policy: SecurityPolicy | None = None,
     ) -> None:
         """Initialize OTel exporter.
 
@@ -143,7 +145,11 @@ class OTelAuditExporter:
                 (recipe gone), verifier-critical evidence is kept, and the
                 per-tenant watermark token is attached. ``None`` (default)
                 preserves prior behavior exactly.
+            policy: The policy whose ``trace_redaction`` applies when ``redaction_policy``
+                is None (v0.10.36; until then nothing read that field).
         """
+        if redaction_policy is None and policy is not None:
+            redaction_policy = policy.trace_redaction
         self.endpoint = endpoint
         self.service_name = service_name
         self.enabled = enabled

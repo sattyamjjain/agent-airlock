@@ -137,13 +137,12 @@ absolute-link rule is an authoring rule.
 - **`smoke_*.py`** build the wheel, install it into a throwaway `.smoke-<name>-venv/`
   (network needed) and drive one guard or preset through the installed package (in
   `smoke_explain.py`, the `airlock-explain` console script), which an editable-tree unit
-  test cannot show. Three (`smoke_flowise_mcp_stdio.py`, `smoke_action_contradiction_gate.py`,
-  `smoke_capsule_indirect_injection.py`) compare `__version__` with the release they were
-  written for and exit 1 on any other. No workflow runs them; a failed run leaves its `.smoke-*`
-  directory behind (gitignored). Add one only when a unit test is not enough.
-  `smoke_frameworks.py` is different: a framework matrix with one venv per framework under
-  `.smoke-frameworks-venv/<key>/`, whose `--run --budget-usd N` makes paid Claude calls with
-  `ANTHROPIC_API_KEY` (ask first) and whose `--write` rewrites the SMOKE-MATRIX block in
+  test cannot show. A child compares `__version__` with the built wheel's, never with a release
+  number (three did until 0.10.36 and failed on every later one). No workflow runs them; a failed
+  run leaves its `.smoke-*` directory behind (gitignored). Add one only when a unit test is not
+  enough. `smoke_frameworks.py` is different: a framework matrix with one venv per framework
+  under `.smoke-frameworks-venv/<key>/`, whose `--run --budget-usd N` makes paid Claude calls
+  with `ANTHROPIC_API_KEY` (ask first) and whose `--write` rewrites the SMOKE-MATRIX block in
   `docs/COMPATIBILITY.md`.
 
 <!-- END AUTO-MANAGED -->
