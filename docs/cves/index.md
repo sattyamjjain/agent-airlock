@@ -63,6 +63,10 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-123271](#cve-2026-123271) | ChatCLI MCP OAuth: a server-supplied resource used as the resource indicator | 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346 | Partial |
 | [CVE-2026-123272](#cve-2026-123272) | mcp-go OAuth: protected resource metadata names another server's resource | 8.0 (HIGH) — AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:N, CWE-346 | Partial |
 | [CVE-2026-123783](#cve-2026-123783) | Skyvern script sandbox: functions rebuilt from raw bytecode with ``types.CodeType`` | 8.8 (HIGH) — AV:N/AC:L/PR:L/UI:N, CWE-184 | Partial |
+| [CVE-2026-126197](#cve-2026-126197) | pgEdge Postgres MCP splices pl-do tool arguments between fixed dollar quotes | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-89 | Partial |
+| [CVE-2026-129995](#cve-2026-129995) | mcp-ssh-manager splices ssh_backup_* tool arguments into a shell command | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78 | Strong |
+| [CVE-2026-130008](#cve-2026-130008) | sqlite-mcp's read-only mode is bypassed by a second statement | 8.2 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:N, CWE-89, CWE-863 | Partial |
+| [CVE-2026-134293](#cve-2026-134293) | SurrealDB's MCP server lets an escaped backtick close a quoted identifier | 8.2 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N, CWE-89 | Partial |
 | [CVE-2026-19591](#cve-2026-19591) | Codex command-safety parser disagreed with PowerShell about `--%` | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-150 | Strong |
 | [CVE-2026-19753](#cve-2026-19753) | mcp-rdf-explorer explore_url takes an attacker-supplied URL into SSRF | 7.3 (HIGH) — CWE-918 | Strong |
 | [CVE-2026-21520](#cve-2026-21520) | Capsule ShareLeak / PipeLeak | 7.5 (HIGH) | — |
@@ -90,6 +94,7 @@ catalog and the tests stay in lockstep.
 | [CVE-2026-57124](#cve-2026-57124) | PraisonAI UI /api/mcp/connect spawns caller-chosen local commands | 9.8 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H, CWE-306 + CWE-78 | Partial |
 | [CVE-2026-57496](#cve-2026-57496) | NetLicensing MCP splices product_number into a REST path, no segment check | 9.6 (CRITICAL) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N | Partial |
 | [CVE-2026-59176](#cve-2026-59176) | functype-mcp-server: ``set_functype_version``'s ``version`` installs any package as functype through ``pnpm add`` | 7.8 (HIGH) — CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H, CWE-829 | Strong |
+| [CVE-2026-67546](#cve-2026-67546) | Heym's fetch-tools endpoint spawns a caller-supplied MCP stdio command | 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-94 | Partial |
 | [CVE-2026-6980](#cve-2026-6980) | GitPilot-MCP repo_path injection | — | — |
 | [CVE-2026-75062](#cve-2026-75062) | Google langfun lf.query evaluates model-generated Python unsandboxed | 9.2 (CRITICAL) — CWE-95, CWE-1188 | Partial |
 | [CVE-2026-75130](#cve-2026-75130) | Upstash Context7 "ContextCrush" MCP instruction injection | 9.0 (Critical, CVSS v3.1; NVD also records 6.4 Medium under v4.0) | Strongest |
@@ -1252,6 +1257,124 @@ fixture covers the rest of the class, in its own routes g to p.
 
 <a id="cve-2026-123783"></a>
 
+### CVE-2026-126197
+
+**pgEdge Postgres MCP splices pl-do tool arguments between fixed dollar quotes**
+
+- **CVSS:** 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-89
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-126197](https://nvd.nist.gov/vuln/detail/CVE-2026-126197)
+- **Advisory:** [https://github.com/pgEdge/pgedge-postgres-mcp/security/advisories/GHSA-r5pp-jx86-r6r9](https://github.com/pgEdge/pgedge-postgres-mcp/security/advisories/GHSA-r5pp-jx86-r6r9)
+- **Regression test:** [`tests/cves/test_cve_2026_126197_pgedge_pl_do.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_126197_pgedge_pl_do.py)
+
+**Vulnerability**
+
+pgEdge Postgres MCP Server before 1.1.0: a custom ``pl-do`` tool's JSON arguments are
+interpolated into a ``DO`` block delimited by the fixed tag ``$mcp_custom_tool$`` (and
+``$mcp_args$`` for plpgsql), which nothing checked the values against. A string holding the
+tag closes the block, and the rest runs over the simple query protocol as statements of the
+caller's, transaction control included, so ``read_only`` is bypassed. ``sql`` and
+``pl-func`` tools bind their arguments and are not affected.
+
+**Airlock mitigation**
+
+The payload is a tool-call argument. After the closing tag PostgreSQL needs a ``;`` before
+the next statement, and a plpgsql argument needs one to end the assignment it lands in, so
+:class:`~agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard` with ``screen_all_str_args``
+refuses every payload that runs something. Partial, because the arguments of a custom tool
+are free text: text with a ``;`` in it is refused too, and a tool that needs one declares
+the shape it takes instead (``TestATypedArgument``). A second-defence fixture, not a new
+guard.
+
+<a id="cve-2026-126197"></a>
+
+### CVE-2026-129995
+
+**mcp-ssh-manager splices ssh_backup_* tool arguments into a shell command**
+
+- **CVSS:** 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-78
+- **Airlock fit:** strong
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-129995](https://nvd.nist.gov/vuln/detail/CVE-2026-129995)
+- **Advisory:** [https://github.com/bvisible/mcp-ssh-manager/security/advisories/GHSA-qwwm-vrm9-4mw8](https://github.com/bvisible/mcp-ssh-manager/security/advisories/GHSA-qwwm-vrm9-4mw8)
+- **Regression test:** [`tests/cves/test_cve_2026_129995_mcp_ssh_manager_backup.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_129995_mcp_ssh_manager_backup.py)
+
+**Vulnerability**
+
+mcp-ssh-manager before 3.8.5: the builders in ``src/backup-manager.js`` concatenate the
+``ssh_backup_create`` / ``restore`` / ``schedule`` / ``list`` tools' arguments
+(``database``, ``dbUser``, ``dbHost``, ``backupDir``, ``paths``, ``exclude``,
+``schedule``, ``cronComment``) into a string that ``ssh.execCommand`` runs through the
+remote login shell. ``ssh_backup_schedule`` writes it to cron, and ``ssh_backup_list``
+skips the server policy, so it runs in readonly mode too. The earlier fix for
+the sibling database builders (GHSA-4jx9-2fwj-pg4j) did not cover these.
+
+**Airlock mitigation**
+
+The command is carried in the tool-call arguments, and
+:class:`~agent_airlock.tool_arg_sink_guard.ToolArgSinkGuard` refuses shell syntax in the
+arguments the operator names, at step 2.75 of the call path. A second-defence fixture
+against an existing guard, not a new guard.
+
+<a id="cve-2026-129995"></a>
+
+### CVE-2026-130008
+
+**sqlite-mcp's read-only mode is bypassed by a second statement**
+
+- **CVSS:** 8.2 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:N, CWE-89, CWE-863
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-130008](https://nvd.nist.gov/vuln/detail/CVE-2026-130008)
+- **Advisory:** [https://github.com/StacklokLabs/sqlite-mcp/security/advisories/GHSA-q433-mp6c-8v4f](https://github.com/StacklokLabs/sqlite-mcp/security/advisories/GHSA-q433-mp6c-8v4f)
+- **Regression test:** [`tests/cves/test_cve_2026_130008_sqlite_mcp_readonly.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_130008_sqlite_mcp_readonly.py)
+
+**Vulnerability**
+
+sqlite-mcp before 0.1.2, read-only mode (the default): ``execute_query`` checks only that
+its ``query`` starts with ``SELECT``, and the driver runs every ``;``-separated
+statement; ``describe_table`` splices ``table_name`` into ``PRAGMA table_info(...)``.
+Either path reaches ``ATTACH DATABASE``, which opens a file read-write whatever the main
+connection's ``mode=ro``: the protected database becomes writable, and other SQLite files
+are read or created.
+
+**Airlock mitigation**
+
+Both payloads are tool-call arguments, and
+:class:`~agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard` refuses both: a
+second statement in ``query`` and anything but a name in ``table_name``. The server
+listening on all interfaces with no authentication is its own. A second-defence fixture
+against an existing guard, not a new guard.
+
+<a id="cve-2026-130008"></a>
+
+### CVE-2026-134293
+
+**SurrealDB's MCP server lets an escaped backtick close a quoted identifier**
+
+- **CVSS:** 8.2 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N, CWE-89
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-134293](https://nvd.nist.gov/vuln/detail/CVE-2026-134293)
+- **Advisory:** [https://github.com/surrealdb/surrealdb/security/advisories/GHSA-cr79-9p8r-p5wx](https://github.com/surrealdb/surrealdb/security/advisories/GHSA-cr79-9p8r-p5wx)
+- **Regression test:** [`tests/cves/test_cve_2026_134293_surrealdb_mcp_identifier.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_134293_surrealdb_mcp_identifier.py)
+
+**Vulnerability**
+
+SurrealDB 3.1.0 before 4.0.0: ``consume_backtick_ident`` in ``surrealdb/mcp/src/tools/mod.rs``
+ends a quoted identifier at the first backtick, while the SurrealQL parser reads ``\``` as an
+escaped one. The ``target`` / ``table`` argument of the CRUD tools passes validation and then
+breaks out of the identifier into a statement of the caller's.
+
+**Airlock mitigation**
+
+The payload is a tool-call argument, and
+:class:`~agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard` refuses a backslash, a
+quote of any style and a ``;`` inside a quoted name whatever the dialect, so it does not
+depend on agreeing with SurrealQL's lexer about where the name ends. ``table`` is an
+identifier field by default and ``target`` has to be named. Partial, because a record id
+(``person:john``), which those tools also take, is not a name to the guard: a tool that
+needs one declares its own shape. A second-defence fixture, not a new guard.
+
+<a id="cve-2026-134293"></a>
+
 ### CVE-2026-19591
 
 **Codex command-safety parser disagreed with PowerShell about `--%`**
@@ -2000,6 +2123,39 @@ host. An existing guard (0.10.28) already refuses the shape, so this is a second
 fixture, not a new guard. Triage: #395.
 
 <a id="cve-2026-59176"></a>
+
+### CVE-2026-67546
+
+**Heym's fetch-tools endpoint spawns a caller-supplied MCP stdio command**
+
+- **CVSS:** 8.8 (HIGH) — CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H, CWE-94
+- **Airlock fit:** partial
+- **NVD:** [https://nvd.nist.gov/vuln/detail/CVE-2026-67546](https://nvd.nist.gov/vuln/detail/CVE-2026-67546)
+- **Advisory:** [https://github.com/heymrun/heym/security/advisories/GHSA-378x-q589-34mv](https://github.com/heymrun/heym/security/advisories/GHSA-378x-q589-34mv)
+- **Regression test:** [`tests/cves/test_cve_2026_67546_heym_mcp_stdio.py`](https://github.com/sattyamjjain/agent-airlock/blob/main/tests/cves/test_cve_2026_67546_heym_mcp_stdio.py)
+
+**Vulnerability**
+
+Heym before 0.0.75: ``POST /api/mcp/fetch-tools`` accepts a connection of any
+authenticated user, lowest role included. Its stdio transport resolves
+``connection["command"]`` and spawns it with ``connection["args"]`` and an
+environment merged over ``os.environ``, on the shared backend host, before any MCP
+handshake. Fixed in 0.0.75, which starts stdio servers in a hardened container.
+
+**Airlock mitigation**
+
+The "both" case from ``docs/cve-triage.md``, splitting as CVE-2026-105797 and
+CVE-2026-79748 do.
+
+**Out of scope: the missing role gate.** Which principal may reach the endpoint is
+Heym's own identity model.
+
+**In scope: the spawn primitive it hands over.** The connection carries a stdio
+``command`` / ``args`` of the caller's choosing, the shape
+:class:`~agent_airlock.mcp_spec.subprocess_arg_guard.McpSubprocessArgInjectionGuard`
+already refuses. A second-defence fixture against an existing guard, not a new guard.
+
+<a id="cve-2026-67546"></a>
 
 ### CVE-2026-6980
 
