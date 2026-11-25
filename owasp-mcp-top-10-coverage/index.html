@@ -3283,7 +3283,7 @@
 
 <h1 id="owasp-mcp-top-10-coverage">OWASP MCP Top 10 coverage<a class="headerlink" href="#owasp-mcp-top-10-coverage" title="Permanent link">&para;</a></h1>
 <p>Spec: https://owasp.org/www-project-mcp-top-10/ (beta)
-Last verified (global): 2026-11-10</p>
+Last verified (global): 2026-11-25</p>
 <p>The evidence behind the README's MCP Top-10 table. <strong>Full</strong>: the controls that run on the <code>@Airlock</code> call path cover the risk where it reaches a tool call, and nothing the risk names is out of scope. <strong>Partial</strong>: part of the risk is out of scope, or the control that covers it runs only where the host calls it. No benchmark in this repository maps its corpus to MCP01-MCP10, so no row has a measured block-rate.</p>
 <h2 id="risks">Risks<a class="headerlink" href="#risks" title="Permanent link">&para;</a></h2>
 <table>
@@ -3303,7 +3303,7 @@ Last verified (global): 2026-11-10</p>
 <td>Token Mismanagement &amp; Secret Exposure</td>
 <td>Partial</td>
 <td>On the call path, <code>ArgumentSecretGuard</code> refuses secrets in arguments when a policy sets it, and the sanitizer masks the secrets its detectors find in output; <code>MCPProxyGuard</code> runs only where a proxy calls it. Hard-coded credentials, token lifetime, and secrets the host keeps in model memory or its own logs are out of scope.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3311,7 +3311,7 @@ Last verified (global): 2026-11-10</p>
 <td>Privilege Escalation via Scope Creep</td>
 <td>Partial</td>
 <td>Agent identity (step 2) and capability gating (step 4) run on every call. <code>CredentialScope</code> runs only where the host calls <code>MCPProxyGuard.validate_tool_credentials()</code>, and the union boundary only at <code>CapabilityCapEngine.grant_lease()</code>. The scopes an authorization server grants a server, and how they grow, are set outside the call boundary. Was Full until 2026-11-10.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3319,7 +3319,7 @@ Last verified (global): 2026-11-10</p>
 <td>Tool Poisoning</td>
 <td>Partial</td>
 <td>Ghost-argument rejection, the tool-name deny list and <code>SafePath</code> / <code>SafeURL</code> check each call. The description-manifest guard runs only where the host checks a tool at admission, and compares declared arguments and side effects, not instructions written into a description. A poisoned description that steers the model into well-formed calls to allowed tools passes all four; the <a href="../benchmarks/mcptox/">MCPTox replay</a> counts how often. Was Full until 2026-11-10.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3327,7 +3327,7 @@ Last verified (global): 2026-11-10</p>
 <td>Software Supply Chain Attacks &amp; Dependency Tampering</td>
 <td>Partial</td>
 <td>The tool-name deny list refuses <code>download_plugin_*</code> / <code>fetch_plugin_*</code> calls on the call path. The Ox stdio defaults screen a server's launch command only where the host calls <code>validate_stdio_command()</code> before spawning it. A tampered package or dependency inside an MCP server is out of scope. Was Full until 2026-11-10.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3335,7 +3335,7 @@ Last verified (global): 2026-11-10</p>
 <td>Command Injection &amp; Execution</td>
 <td>Full</td>
 <td>Untrusted input reaches a command through a tool argument or a server's launch command, and a control covers each. On the call path, <code>ToolArgSinkGuard</code> (step 2.75) and <code>ShellCommandPolicy</code> (step 2.77) screen arguments when a policy sets them, the tool-name deny list (step 2) refuses shell-shaped tools, and <code>sandbox=True</code> runs the tool in E2B. The stdio guard screens launch commands and <code>CodeSandboxBridgeGuard</code> is a second argument screen; the host calls both.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3343,7 +3343,7 @@ Last verified (global): 2026-11-10</p>
 <td>Intent Flow Subversion</td>
 <td>Partial</td>
 <td><code>ToolOutputTrustGuard</code> checks each result after the tool runs when the config sets one, and <code>@requires_human_oversight</code> holds a decorated tool for an approver. Instructions the output screen does not flag, and prompts that reach the model outside a tool result, are out of scope.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3351,7 +3351,7 @@ Last verified (global): 2026-11-10</p>
 <td>Insufficient Authentication &amp; Authorization</td>
 <td>Partial</td>
 <td>Every listed control is a helper or preset the host calls at an OAuth or MCP protocol step (authorization, discovery, request routing, step-up, Tasks); the <code>@Airlock</code> wrapper calls none of them. Transport-level authentication stays with the MCP server.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3359,7 +3359,7 @@ Last verified (global): 2026-11-10</p>
 <td>Lack of Audit and Telemetry</td>
 <td>Partial</td>
 <td>The <code>@Airlock</code> wrapper writes a JSON Lines record for every call it handles, refused calls included (on by default), and a hash-chained decision record when the config sets a <code>DecisionLog</code>. OpenTelemetry export and spans and metrics run only where the host wires them; the wrapper emits neither. Context changes and model interactions outside a tool call are not recorded. Was Full until 2026-11-10.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3367,7 +3367,7 @@ Last verified (global): 2026-11-10</p>
 <td>Shadow MCP Servers</td>
 <td>Partial</td>
 <td>Attested admission and the LAN guard check a server the host routes through them, before its tools are used. Finding an MCP server deployed outside governance, which never reaches these checks, is out of scope.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 <tr>
@@ -3375,7 +3375,7 @@ Last verified (global): 2026-11-10</p>
 <td>Context Injection &amp; Over-Sharing</td>
 <td>Partial</td>
 <td>The sanitizer masks the PII and secrets its detectors find in each result (on by default), and <code>ToolOutputTrustGuard</code> envelopes flagged output when the config sets one. The workspace-scoped <code>WorkspacePIIConfig</code> applies only through <code>sanitize_with_workspace_config()</code>, which the host calls. Context the host shares or keeps across tasks, users or agents, and sensitive data no detector matches, are out of scope. Was Full until 2026-11-10.</td>
-<td>2026-11-10</td>
+<td>2026-11-25</td>
 <td>not measured</td>
 </tr>
 </tbody>
