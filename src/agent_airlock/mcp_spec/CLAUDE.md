@@ -196,7 +196,9 @@ preset, and
   maps each scoped npm MCP basename not in `_GENERIC_MCP_BASENAMES` (`mcp`, `mcp-server`, ...)
   to a listed full name (GHSA-m5xq-h2p4-962g), and the guard's `rescoped_names` refuses that
   basename under another scope only after the pair and whole-package lookups miss, never for a
-  listed name or one on `rescope_allow`. Tests pin a snapshot by monkeypatching
+  listed name or one on `rescope_allow`. A `version` can name another package, so every
+  list reads `_version_targets` (an `npm:` alias, with or without a version) and a registry
+  tarball URL there. Tests pin a snapshot by monkeypatching
   `_newest_snapshot_name` and calling `load_malware_blast_snapshot.cache_clear()` before and
   after (`snapshot_2026_11_14` in `tests/mcp_spec/test_oidc_publish_window_guard.py`, and
   `SNAPSHOT` in `test_release_age.py`): a pinned file stays in `data/`.
@@ -207,14 +209,16 @@ preset, and
   lookups: `supply_chain`'s own, and those `SSRFEgressGuard` makes for it and
   `schema_ref_guard`. The guard's `min_release_age` check runs after every list (pairs, whole
   packages, rescoped names, tarball URLs; `_AgeQuery`s are collected and answered last) and
-  reads one version per spec, the embedded one, else the first of `version`. It never looks up a
-  git, path or non-registry URL written in `package` (`_is_registry_spec`); one in `version` is
-  judged by the named package's default version, as any spec with no exact version is. A lookup
-  that returns None or raises is no answer, and no answer from any registry asked is an unknown
-  age (`unknown_release_age`, `deny` by default); a bare name asks both registries unless
-  `installs_from` names one, and the youngest answer is judged. Only exact-version answers are
-  cached: a cached `latest` would go stale. Tests pass a stub `opener`; `urlopen` carries
-  `# nosec B310` because only the two fixed registry bases reach it.
+  judges every version a call carries, the embedded one and each of `version`. It never looks
+  up a git, path or non-registry URL written in `package` (`_is_registry_spec`); one in
+  `version` is judged by the named package's default version, as any spec with no exact version
+  is. None from a lookup means the registry does not have it, and any exception that it could
+  not be read (the shipped one raises `ReleaseTimeUnavailableError`). A bare name asks both
+  registries unless `installs_from` names one: a young answer refuses, and with none young,
+  no answer at all or one that could not be read is an unknown age (`unknown_release_age`,
+  `deny` by default). Only exact-version answers are cached: a cached `latest` would go stale.
+  Tests pass a stub `opener`; `urlopen` carries `# nosec B310` because only the two fixed
+  registry bases reach it.
 - **`tools/list` paging differs by SDK line.** mcp 2.x's result has `next_cursor` and no
   `nextCursor` (FastMCP 4 adds a `nextCursor` to it that warns on each read); mcp 1.x's has
   only `nextCursor`. `ClientSession.list_tools` takes `params=` (and on 1.x a deprecated
