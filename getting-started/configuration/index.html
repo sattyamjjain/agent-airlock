@@ -3879,7 +3879,7 @@ operator who wants only <code>https://api.example.com/v1/tools/</code> lists tha
 unless one entry matches on scheme, host and port and the URL's path, with its dot segments
 and servlet path parameters resolved, stays under the entry's path at a segment boundary. So
 <code>/v1/tools/..;/admin</code> and <code>/v1/tools/%2e%2e;x/admin</code>, which a servlet container collapses to
-<code>/v1/admin</code>, are refused, and a path carrying <code>%2f</code>, <code>%5c</code>, a backslash or <code>%00</code> is refused
+<code>/v1/admin</code>, are refused, and a path carrying <code>%2f</code>, <code>%5c</code>, a backslash, <code>%00</code> or a raw control character is refused
 outright. An empty list (the default) keeps host-only behaviour. The host, blocked-pattern,
 private and metadata checks all run before the path check.</p>
 <p><code>NetworkPolicy(block_private_ips=True)</code> refuses the same internal addresses inside the network

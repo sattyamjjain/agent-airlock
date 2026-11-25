@@ -3547,8 +3547,8 @@ could not be followed. The decision record's layer is <code>2.77:shell_command</
 </tr>
 <tr>
 <td><code>redirect_deny</code></td>
-<td><code>/dev/*</code>, <code>/etc/*</code>, <code>/boot/*</code>, <code>/sys/*</code>, <code>/proc/*</code>, <code>/bin/*</code>, <code>/sbin/*</code>, <code>/usr/*</code>, <code>/lib/*</code>, <code>/lib64/*</code>, <code>/var/spool/cron/*</code>, <code>~/.ssh/*</code>, <code>~/.bashrc</code>, <code>~/.bash_profile</code>, <code>~/.profile</code>, <code>~/.zshrc</code></td>
-<td>globs (<code>fnmatchcase</code>, <code>*</code> crosses <code>/</code>) of paths a redirection may not write; <code>()</code> turns the redirection check off</td>
+<td><code>/dev/*</code>, <code>/etc/*</code>, <code>/boot/*</code>, <code>/sys/*</code>, <code>/proc/*</code>, <code>/bin/*</code>, <code>/sbin/*</code>, <code>/usr/*</code>, <code>/lib/*</code>, <code>/lib64/*</code>, <code>/var/spool/cron/*</code>, <code>~/.ssh/*</code> and <code>.ssh/*</code> anywhere, <code>~/.bashrc</code>, <code>~/.bash_profile</code>, <code>~/.profile</code>, <code>~/.zshrc</code>, and the places <code>SafePath</code> refuses because they start a program again (shell start files, cron, launchd, systemd, <code>authorized_keys</code>, Python startup hooks), in any directory</td>
+<td>globs (<code>*</code> crosses <code>/</code>, matched whatever the case) of paths a redirection may not write; <code>()</code> turns the redirection check off</td>
 </tr>
 <tr>
 <td><code>redirect_allow</code></td>
@@ -3575,9 +3575,8 @@ command.</p>
   they write matters.</li>
 <li>A relative redirection target is not resolved against a working directory, and a
   symbolic link is not followed: <code>&gt; ../../etc/passwd</code> and <code>&gt; link-to-a-device</code> are judged
-  as written. Matching is case-sensitive, and the defaults name Linux paths: on macOS,
-  where <code>/etc</code> is <code>/private/etc</code> and the file system ignores case, add the paths you need
-  to <code>redirect_deny</code>.</li>
+  as written. <code>redirect_allow</code> is case-sensitive. The system paths are Linux's: on macOS,
+  where <code>/etc</code> is <code>/private/etc</code>, add the paths you need to <code>redirect_deny</code>.</li>
 <li>With <code>default="allow"</code>, a command no rule names is allowed: <code>find / -delete</code> included.
   Add <code>find -delete</code> to <code>deny</code> in a deny-list policy.</li>
 </ul>

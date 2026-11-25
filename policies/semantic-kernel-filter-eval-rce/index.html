@@ -3374,7 +3374,7 @@ single short-circuit predicate.</p>
 </tr>
 <tr>
 <td><code>DENY_UNINSPECTABLE</code></td>
-<td>an argument nested more than 32 levels deep, or a container that contains itself (since 0.10.24); bytes in an inspected field that are not valid UTF-8 (since 0.10.28; they were decoded with replacement characters, which could hide a match from the patterns)</td>
+<td>an argument nested more than 32 levels deep, or a container that contains itself (since 0.10.24); bytes in an inspected field that are not valid UTF-8 (since 0.10.28; they were decoded with replacement characters, which could hide a match from the patterns); any other object in an inspected field, a callable included (since 0.10.36; numbers, dates, UUIDs and <code>None</code> pass, and a pydantic model, dataclass or named tuple is read by its fields)</td>
 </tr>
 </tbody>
 </table>

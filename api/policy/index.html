@@ -3929,12 +3929,12 @@
 <tr>
 <td><code>trace_redaction</code></td>
 <td><code>TraceRedactionPolicy \| None</code></td>
-<td>Redacts traces sent to a non-local sink</td>
+<td>Redacts traces sent to a non-local sink; applied by <code>OTelAuditExporter(policy=...)</code>, not by <code>@Airlock</code></td>
 </tr>
 <tr>
 <td><code>stdio_mode</code></td>
 <td><code>str</code></td>
-<td>How STDIO subprocess launches are allowed: <code>"allowlist"</code>, <code>"manifest_only"</code> or <code>"disabled"</code></td>
+<td>How STDIO subprocess launches are allowed: <code>"allowlist"</code>, <code>"manifest_only"</code> or <code>"disabled"</code>; applied by <code>validate_stdio_command(..., policy=)</code> and <code>launch_from_manifest(..., policy=)</code>, not by <code>@Airlock</code></td>
 </tr>
 </tbody>
 </table>

@@ -3287,7 +3287,10 @@ from runtime input</strong>.</p>
 </ol>
 <p>There is no surface a runtime caller can use to inject argv.</p>
 <h2 id="modes">Modes<a class="headerlink" href="#modes" title="Permanent link">&para;</a></h2>
-<p><code>SecurityPolicy.stdio_mode</code> is a <code>Literal["allowlist", "manifest_only", "disabled"]</code>:</p>
+<p><code>SecurityPolicy.stdio_mode</code> is a <code>Literal["allowlist", "manifest_only", "disabled"]</code>. <code>@Airlock</code>
+launches no process, so it never reads the mode. Pass the policy to the function that decides a
+launch, <code>validate_stdio_command(cmd, config, policy=policy)</code> or
+<code>launch_from_manifest(..., policy=policy)</code> (0.10.36; until then nothing read the mode):</p>
 <table>
 <thead>
 <tr>
@@ -3302,11 +3305,11 @@ from runtime input</strong>.</p>
 </tr>
 <tr>
 <td><code>"manifest_only"</code></td>
-<td>Only <code>launch_from_manifest</code> may spawn STDIO subprocesses</td>
+<td><code>validate_stdio_command</code> raises, so only <code>launch_from_manifest</code> may spawn STDIO subprocesses</td>
 </tr>
 <tr>
 <td><code>"disabled"</code></td>
-<td>No STDIO subprocesses, period</td>
+<td>Both raise</td>
 </tr>
 </tbody>
 </table>
@@ -3387,7 +3390,7 @@ guarantee.</p>
    shows resolve+verify latency at <strong>~3 µs median</strong> — invisible to
    any human-driven workflow.</li>
 <li>Flip to <code>stdio_mode="manifest_only"</code> after the manifest list
-   stabilises.</li>
+   stabilises, and pass the policy to every <code>validate_stdio_command</code> call.</li>
 </ol>
 <p>Dynamic-argv use cases (e.g. LangGraph agents that compose argv at
 runtime) cannot adopt manifest-only — they should stay on
