@@ -304,13 +304,22 @@ def _default_host_resolver(host: str) -> list[str]:
     return out
 
 
+def _is_ipv6_site_local(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Whether ``ip`` is IPv6 site-local ``fec0::/10`` (CVE-2026-134492).
+
+    Deprecated by RFC 3879, still routed inside a site, and neither private nor reserved to
+    :mod:`ipaddress`, so ``is_private`` alone admitted it until 0.10.37.
+    """
+    return isinstance(ip, ipaddress.IPv6Address) and ip.is_site_local
+
+
 def _resolved_ip_is_internal(addr: str) -> str | None:
     """Return a reason string if ``addr`` is an internal IP, else ``None``.
 
     Covers loopback (127/8, ::1), RFC1918 private (10/8, 172.16/12, 192.168/16),
-    link-local (169.254/16, fe80::/10), IPv6 ULA (fc00::/7 — flagged by
-    ``ipaddress.is_private``), and the cloud-metadata IP set (incl. its
-    IPv6-transition encodings via :func:`metadata_ip_candidates`).
+    link-local (169.254/16, fe80::/10), IPv6 site-local (fec0::/10, since 0.10.37), IPv6
+    ULA (fc00::/7 — flagged by ``ipaddress.is_private``), and the cloud-metadata IP set
+    (incl. its IPv6-transition encodings via :func:`metadata_ip_candidates`).
     """
     if _CANONICAL_METADATA_IPS.intersection(metadata_ip_candidates(addr)):
         return "cloud metadata"
@@ -322,6 +331,8 @@ def _resolved_ip_is_internal(addr: str) -> str | None:
         return "loopback"
     if ip.is_link_local:
         return "link-local"
+    if _is_ipv6_site_local(ip):
+        return "site-local"
     if ip.is_private:  # RFC1918 + IPv6 ULA fc00::/7
         return "private"
     if ip.is_unspecified:
@@ -744,7 +755,9 @@ class SafeURLValidator:
                 )
             except ValueError:
                 ip = None  # Not an IP literal — fine, fall through to host checks
-            if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local):
+            if ip is not None and (
+                ip.is_private or ip.is_loopback or ip.is_link_local or _is_ipv6_site_local(ip)
+            ):
                 raise SafeURLValidationError(
                     f"URL points to private/loopback/link-local IP: {hostname}",
                     url=value,

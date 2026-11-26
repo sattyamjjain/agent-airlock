@@ -138,8 +138,10 @@ def _is_lan_bound(addr: str) -> bool:
         return True
     if ip.is_loopback:
         return False  # loopback is OK in default profile
-    # Private (RFC1918), link-local, ULA — all LAN.
-    return ip.is_private or ip.is_link_local
+    # Private (RFC1918), link-local, ULA, IPv6 site-local fec0::/10 (CVE-2026-134492;
+    # deprecated, still routed inside a site, not private to ipaddress) — all LAN.
+    site_local = isinstance(ip, ipaddress.IPv6Address) and ip.is_site_local
+    return ip.is_private or ip.is_link_local or site_local
 
 
 def _has_auth_header(
