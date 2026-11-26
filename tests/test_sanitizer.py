@@ -888,3 +888,54 @@ class TestSecretLabelsInStructuredOutput:
         assert text == "password=[REDACTED] Authorization: Bearer [REDACTED]"
         for detection in detections:
             assert detection["masked_as"] in text
+
+
+class TestAnUnquotedSecretRunsPastAQuote:
+    """V0.10.37: an unquoted labelled value is masked to its end, not to its first quote.
+
+    Measured on 099fcef0: ``api_key=sk-abc123"def456ghi789jkl`` came back as
+    ``api_key=[REDACTED]"def456ghi789jkl`` (the tail after the quote leaked), and
+    ``password=Sup3r"S3cretValue9`` came back unchanged: the unquoted branch stopped at the
+    first quote, and ``Sup3r`` is under eight characters.
+    """
+
+    @staticmethod
+    def _masked(text: str) -> str:
+        return str(sanitize_output(text).content)
+
+    def test_the_tail_after_a_quote_is_masked(self) -> None:
+        assert self._masked('api_key=sk-abc123"def456ghi789jkl') == "api_key=[REDACTED]"
+
+    def test_a_short_head_before_a_quote_no_longer_hides_the_value(self) -> None:
+        assert self._masked('password=Sup3r"S3cretValue9') == "password=[REDACTED]"
+        assert self._masked('password: Sup3r"S3cretValue9') == "password: [REDACTED]"
+
+    def test_an_escaped_quote_in_json_text_is_masked_too(self) -> None:
+        text = '{"env": "PASSWORD=\\"Sup3rS3cretValue9\\""}'
+        assert self._masked(text) == '{"env": "PASSWORD=[REDACTED]"}'
+
+    def test_quoted_values_keep_their_quotes(self) -> None:
+        assert self._masked('password="Sup3rS3cretValue9"') == 'password="[REDACTED]"'
+        assert self._masked("password='Sup3rS3cretValue9'") == "password='[REDACTED]'"
+        assert self._masked('{"password": "Sup3r\\"S3cretValue9"}') == (
+            '{"password": "[REDACTED]"}'
+        )
+        assert self._masked('password="Sup3rS3cretValue9') == 'password="[REDACTED]'
+
+    def test_a_quote_that_closes_the_string_around_the_value_stays(self) -> None:
+        """The value ends at a quote followed by whitespace, the end, or ``, ; ) ] } >``."""
+        assert self._masked('{"command": "mysql --password=Sup3rS3cretValue9", "exit": 0}') == (
+            '{"command": "mysql --password=[REDACTED]", "exit": 0}'
+        )
+        assert self._masked("{'cmd': 'mysql --password=Sup3rS3cretValue9', 'x': 0}") == (
+            "{'cmd': 'mysql --password=[REDACTED]', 'x': 0}"
+        )
+        assert self._masked('echo "password=Sup3rS3cretValue9"') == 'echo "password=[REDACTED]"'
+
+    def test_short_values_and_prose_are_left_alone(self) -> None:
+        for text in (
+            "password=short",
+            "the password is changed daily",
+            '{"password":"abc","user":"bob","note":"x"}',
+        ):
+            assert self._masked(text) == text, text

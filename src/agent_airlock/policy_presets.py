@@ -2796,6 +2796,13 @@ def openapi_doc_drift_guard_defaults(
     }
 
 
+#: Hours a registry version must have been public before a guard built from
+#: :func:`npm_oidc_publish_window_guard_defaults` admits it: seven days, as pnpm recommends
+#: for ``minimumReleaseAge``. The preset's default since 0.10.37; ``min_release_age_hours=None``
+#: turns the check off.
+DEFAULT_MIN_RELEASE_AGE_HOURS = 168
+
+
 @preset
 def npm_oidc_publish_window_guard_defaults(
     *,
@@ -2803,8 +2810,10 @@ def npm_oidc_publish_window_guard_defaults(
     include_malware_feed: bool = True,
     installs_from: str | None = None,
     match_rescoped: bool = True,
-    min_release_age_hours: int | None = None,
+    min_release_age_hours: int | None = DEFAULT_MIN_RELEASE_AGE_HOURS,
     release_time_lookup: ReleaseTimeLookup | None = None,
+    unknown_release_age: Literal["allow", "deny"] = "deny",
+    release_age_allow: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Recommended config for the TanStack 2026-05-11 OIDC publish-window guard.
 
@@ -2836,14 +2845,28 @@ def npm_oidc_publish_window_guard_defaults(
     legitimate package sharing a listed basename goes on the guard's ``rescope_allow``.
 
     A list names a package only after someone has reviewed it: GHSA-h82f-cjm4-g22r
-    (``@guicai777/mcp-doctor`` 1.0.1) was installable for four days before its advisory.
-    ``min_release_age_hours`` (v0.10.36, off by default because it calls the registry; 168
-    recommended) refuses a version published less than that many hours before the call, as
-    pnpm's ``minimumReleaseAge`` does, through
+    (``@guicai777/mcp-doctor`` 1.0.1) was installable for four days before its advisory, and
+    the five malware advisories of 2026-11-25 (GHSA-jxr7-4663-2qrm, GHSA-7vxr-6h54-ww37,
+    GHSA-5gwx-j786-m4mq, GHSA-3fgm-7pvj-pj4r, GHSA-4c46-v99r-6h9r) named releases no
+    snapshot listed. So the preset refuses a version published less than
+    ``min_release_age_hours`` before the call, as pnpm's ``minimumReleaseAge`` does: on by
+    default since 0.10.37, at :data:`DEFAULT_MIN_RELEASE_AGE_HOURS` (168, seven days); it was
+    opt-in in 0.10.36. The publish time comes from
     :func:`agent_airlock.mcp_spec.release_age.registry_release_time_lookup` unless you pass
-    your own ``release_time_lookup``. Build the guard from all of them::
+    your own ``release_time_lookup``: an HTTPS request to registry.npmjs.org or pypi.org for
+    each name and version the guard has not seen (it keeps exact-version answers; a spec with
+    no exact version is asked each time). A version whose age cannot be read is refused
+    (``unknown_release_age="deny"``), so an offline or air-gapped host passes a
+    ``release_time_lookup`` of its own (a mirror's publish times), lists the names it trusts
+    in ``release_age_allow``, or passes ``min_release_age_hours=None`` to turn the check off.
+    :class:`~agent_airlock.mcp_spec.oidc_publish_window_guard.OIDCPublishWindowGuard` built
+    by hand keeps its own default, no release-age check, and logs a warning saying so. Build
+    the guard from all of them::
 
-        cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm", min_release_age_hours=168)
+        cfg = npm_oidc_publish_window_guard_defaults(
+            installs_from="npm",
+            release_age_allow=frozenset({"@yourco/internal-tool"}),  # yours, published today
+        )
         guard = OIDCPublishWindowGuard(
             blast_list=cfg["blast_list"],
             blocked_packages=cfg["blocked_packages"],
@@ -2852,8 +2875,9 @@ def npm_oidc_publish_window_guard_defaults(
             rescoped_names=cfg["rescoped_names"],
             min_release_age=cfg["min_release_age"],
             release_time_lookup=cfg["release_time_lookup"],
+            unknown_release_age=cfg["unknown_release_age"],
+            release_age_allow=cfg["release_age_allow"],
             rescope_allow=frozenset({"@yourco/md-doc-mcp"}),  # only if you publish one
-            release_age_allow=frozenset({"@yourco/internal-tool"}),  # yours, published today
         )
 
     Args:
@@ -2869,17 +2893,24 @@ def npm_oidc_publish_window_guard_defaults(
             are refused (the guard as it was before 0.10.36). Empty too when
             ``include_malware_feed`` is off.
         min_release_age_hours: Hours a registry version must have been public before the
-            guard admits it; returned as ``min_release_age`` (a ``timedelta``). None, the
-            default, leaves the release-age check off.
+            guard admits it; returned as ``min_release_age`` (a ``timedelta``).
+            :data:`DEFAULT_MIN_RELEASE_AGE_HOURS` (168) by default; None turns the
+            release-age check off.
         release_time_lookup: Who says when a version was published. Defaults to
             :func:`agent_airlock.mcp_spec.release_age.registry_release_time_lookup` when
             ``min_release_age_hours`` is set, which makes HTTPS requests to
             registry.npmjs.org and pypi.org at call time.
+        unknown_release_age: Passed back for the guard: ``"deny"`` (the default) refuses a
+            version whose publish time no registry could give, ``"allow"`` admits it.
+        release_age_allow: Passed back for the guard: full package names the release-age
+            check skips, such as your own package published today.
 
     Raises:
-        TypeError: ``min_release_age_hours`` is not an int, or ``release_time_lookup`` is
-            not callable.
-        ValueError: ``min_release_age_hours`` is negative.
+        TypeError: ``min_release_age_hours`` is not an int, ``release_time_lookup`` is
+            not callable, ``unknown_release_age`` is not a string, or
+            ``release_age_allow`` is not a frozenset of strings.
+        ValueError: ``min_release_age_hours`` is negative, or ``unknown_release_age`` is
+            neither ``"allow"`` nor ``"deny"``.
 
     Primary sources:
       https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
@@ -2912,6 +2943,22 @@ def npm_oidc_publish_window_guard_defaults(
         raise TypeError(
             f"release_time_lookup must be callable; got {type(release_time_lookup).__name__}"
         )
+    if not isinstance(unknown_release_age, str):
+        raise TypeError(
+            "unknown_release_age must be 'allow' or 'deny'; "
+            f"got {type(unknown_release_age).__name__}"
+        )
+    if unknown_release_age not in ("allow", "deny"):
+        raise ValueError(
+            f"unknown_release_age must be 'allow' or 'deny'; got {unknown_release_age!r}"
+        )
+    if not isinstance(release_age_allow, frozenset):
+        raise TypeError(
+            f"release_age_allow must be a frozenset[str]; got {type(release_age_allow).__name__}"
+        )
+    for allowed in release_age_allow:
+        if not isinstance(allowed, str):
+            raise TypeError(f"release_age_allow members must be str; got {allowed!r}")
     min_release_age = (
         timedelta(hours=min_release_age_hours) if min_release_age_hours is not None else None
     )
@@ -2939,6 +2986,8 @@ def npm_oidc_publish_window_guard_defaults(
         "rescoped_names": rescoped,
         "min_release_age": min_release_age,
         "release_time_lookup": lookup,
+        "unknown_release_age": unknown_release_age,
+        "release_age_allow": release_age_allow,
     }
 
 
@@ -6666,6 +6715,7 @@ __all__ = [
     "semantic_kernel_filter_eval_rce_2026_25592_26030_defaults",
     "readonly_sql_tool_args_2026_125322_defaults",
     "npm_oidc_publish_window_guard_defaults",
+    "DEFAULT_MIN_RELEASE_AGE_HOURS",
     "mcp_stdio_command_injection_preset_defaults",
     "stdio_guard_eval_defaults_2026_05_15",
     "mcp_inspector_exposure_guard_defaults",

@@ -69,8 +69,9 @@ added to `blast_list`, and `blocked_packages`, `advisories` and `malware_feed_as
 beside it. `include_malware_feed=False` leaves it out, and an explicit `blast_list` still
 replaces the pairs. Since 0.10.36 `rescoped_names` comes back too (see
 [Rescoped MCP malware names](#rescoped-mcp-malware-names)), and `min_release_age` with
-`release_time_lookup` (see [Release age](#release-age), off unless you pass
-`min_release_age_hours`). Build the guard from all of them:
+`release_time_lookup`, `unknown_release_age` and `release_age_allow` (see
+[Release age](#release-age): on by default since 0.10.37, at 168 hours). Build the guard from
+all of them:
 
 ```python
 from agent_airlock import OIDCPublishWindowGuard
@@ -85,6 +86,8 @@ guard = OIDCPublishWindowGuard(
     rescoped_names=cfg["rescoped_names"],
     min_release_age=cfg["min_release_age"],
     release_time_lookup=cfg["release_time_lookup"],
+    unknown_release_age=cfg["unknown_release_age"],
+    release_age_allow=cfg["release_age_allow"],
 )
 decision = guard.evaluate({"package": "@ethersphere/bee-js@13.3.0"})
 # decision.allowed is False; decision.detail names GHSA-hh7j-5m3j-23pf
@@ -160,13 +163,16 @@ snapshot (taken 05:08Z) does not list it, and no faster refresh could have befor
 that day. The control that covers those four days is a cooldown: refuse a version too new
 to have been reviewed by anyone, as pnpm (`minimumReleaseAge`), npm (`--before`) and uv
 (`exclude-newer`) do at install time. Since 0.10.36 the guard applies it at the tool-call
-boundary:
+boundary, and since 0.10.37 the preset turns it on by default:
 
 ```python
 from agent_airlock import OIDCPublishWindowGuard
 from agent_airlock.policy_presets import npm_oidc_publish_window_guard_defaults
 
-cfg = npm_oidc_publish_window_guard_defaults(installs_from="npm", min_release_age_hours=168)
+cfg = npm_oidc_publish_window_guard_defaults(
+    installs_from="npm",
+    release_age_allow=frozenset({"@yourco/internal-tool"}),  # yours, published today
+)
 guard = OIDCPublishWindowGuard(
     blast_list=cfg["blast_list"],
     blocked_packages=cfg["blocked_packages"],
@@ -175,7 +181,8 @@ guard = OIDCPublishWindowGuard(
     rescoped_names=cfg["rescoped_names"],
     min_release_age=cfg["min_release_age"],
     release_time_lookup=cfg["release_time_lookup"],
-    release_age_allow=frozenset({"@yourco/internal-tool"}),  # yours, published today
+    unknown_release_age=cfg["unknown_release_age"],
+    release_age_allow=cfg["release_age_allow"],
 )
 decision = guard.evaluate({"package": "@guicai777/mcp-doctor@1.0.1"})
 # on 2026-11-20 at 12:00Z: decision.verdict == OIDCPublishWindowVerdict.DENY_RELEASE_TOO_NEW
@@ -183,9 +190,14 @@ decision = guard.evaluate({"package": "@guicai777/mcp-doctor@1.0.1"})
 #   4 d 0 h before this call; the policy requires 7 d"
 ```
 
-We recommend 168 hours (seven days). The check is off by default because it calls the
-registry: `registry_release_time_lookup()` (`agent_airlock.mcp_spec.release_age`) makes an
-HTTPS request to `registry.npmjs.org` or `pypi.org` per version it has not seen, reads
+The preset's default is `DEFAULT_MIN_RELEASE_AGE_HOURS`, 168 hours (seven days). In 0.10.36
+the check was opt-in; on 2026-11-25 GitHub published five Critical malware advisories
+(GHSA-jxr7-4663-2qrm `mcp-sysinfo-tools`, GHSA-7vxr-6h54-ww37 `mcp-runtime-report`,
+GHSA-5gwx-j786-m4mq `mcp-env-report` and GHSA-3fgm-7pvj-pj4r `mcp-diag-7f3a` on PyPI,
+GHSA-4c46-v99r-6h9r `create-ai-agent-setup` on npm) whose releases no snapshot listed, and a
+guard built from the preset admitted every one, so 0.10.37 made it the default.
+It calls the registry: `registry_release_time_lookup()` (`agent_airlock.mcp_spec.release_age`)
+makes an HTTPS request to `registry.npmjs.org` or `pypi.org` per version it has not seen, reads
 npm's `time[<version>]` (with no version, the one `dist-tags.latest` names) or the earliest
 `upload_time_iso_8601` of a PyPI release, and caches an exact version's answer in process
 (1,024 entries). Pass your own `release_time_lookup` to use a mirror or an internal
@@ -210,6 +222,14 @@ Return None when the registry does not have that release and raise when you cann
   ones through instead.
 - **Your own new package.** A package you published today is refused like any other: put
   its full name on `release_age_allow`.
+- **Offline or air-gapped hosts.** With no route to the registries every version is an
+  unknown age, so every install is refused. Pass a `release_time_lookup` of your own (your
+  mirror's publish times), list the names you trust in `release_age_allow`, or pass
+  `min_release_age_hours=None` to turn the check off.
+- **A guard built by hand.** `OIDCPublishWindowGuard`'s own default is unchanged: no
+  `min_release_age`, no check. A guard given `installs_from` without one logs
+  `oidc_publish_window_release_age_off` once per process, naming
+  `DEFAULT_MIN_RELEASE_AGE_HOURS`.
 
 ## Refreshing from malware advisories
 

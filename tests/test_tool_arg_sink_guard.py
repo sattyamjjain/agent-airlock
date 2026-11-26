@@ -12,13 +12,15 @@ Every value here is a harmless string and no test runs a shell: a guarded tool o
 that it ran, and nothing is unpickled or called by name.
 
 ``option_args`` (``TestOptionArgs``, 0.10.36) refuse a value a program would read as an
-option: CVE-2026-114496 passed ``base_branch`` to git, and ``--output=<file>`` wrote a file.
+option: CVE-2026-114496 passed ``base_branch`` to git, and ``--output=<file>`` wrote a file;
+CVE-2026-134817 (``TestKubectlFlagInjection``) passed dash-prefixed values to kubectl.
 
 Primary sources:
   https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=MCP&pubStartDate=2026-10-26T00:00:00.000&pubEndDate=2026-10-29T23:59:59.999
   https://github.com/jordanburke/functype/security/advisories/GHSA-wcjj-9m6g-2fr2
   https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-119050
   https://nvd.nist.gov/vuln/detail/CVE-2026-114496
+  https://nvd.nist.gov/vuln/detail/CVE-2026-134817
 """
 
 from __future__ import annotations
@@ -1187,6 +1189,12 @@ class TestOptionArgs:
         assert guard.evaluate({"rev": -1}).allowed is True
         assert guard.evaluate({"rev": None}).allowed is True
 
+    def test_a_negative_number_written_as_a_string_is_an_option(self) -> None:
+        """As documented: ``git log -1`` reads ``-1`` as ``--max-count=1``."""
+        decision = ToolArgSinkGuard(option_args={"rev"}).evaluate({"rev": "-1"})
+        assert decision.verdict is ToolArgSinkVerdict.DENY_OPTION_INJECTION
+        assert decision.token == "-1"
+
     def test_option_args_alone_make_a_guard(self) -> None:
         assert ToolArgSinkGuard(option_args={"ref"}).option_args == frozenset({"ref"})
 
@@ -1215,3 +1223,42 @@ class TestOptionArgs:
         assert "commit" not in exempt.option_args
         mine = tool_arg_sink_defaults(option_args={"ref"})["guard"]
         assert mine.option_args == frozenset({"ref"})
+
+
+class TestKubectlFlagInjection:
+    """CVE-2026-134817 (CWE-88): mcp-server-kubernetes before 4.2.0 passed dash-prefixed values
+    to kubectl, so ``--kubeconfig`` or ``--server`` changed which cluster it talked to.
+
+    On 099fcef0 ``ToolArgSinkGuard(screen_all_str_args=True)`` admitted both shapes: neither
+    ``resource`` nor ``flags`` is named like a git ref. Naming them in ``option_args`` refuses
+    them; the values are harmless strings and nothing runs kubectl.
+
+    https://nvd.nist.gov/vuln/detail/CVE-2026-134817
+    """
+
+    GUARD = ToolArgSinkGuard(option_args={"resource", "flags", "args"})
+
+    @pytest.mark.parametrize(
+        ("args", "argument", "token"),
+        [
+            ({"resource": "--kubeconfig=/etc/evil"}, "resource", "--kubeconfig"),
+            ({"flags": "--server=https://evil.example"}, "flags", "--server"),
+            ({"args": ["get", "--token=x"]}, "args[1]", "--token"),
+        ],
+    )
+    def test_a_dash_prefixed_value_is_refused(
+        self, args: dict[str, Any], argument: str, token: str
+    ) -> None:
+        decision = self.GUARD.evaluate(args)
+        assert decision.verdict is ToolArgSinkVerdict.DENY_OPTION_INJECTION
+        assert (decision.argument, decision.token) == (argument, token)
+        assert "evil" not in decision.detail
+
+    def test_a_resource_name_is_allowed(self) -> None:
+        assert self.GUARD.evaluate({"resource": "pods"}).allowed is True
+        assert self.GUARD.evaluate({"args": ["get", "pods"]}).allowed is True
+
+    def test_screen_all_alone_does_not_read_these_names(self) -> None:
+        guard = ToolArgSinkGuard(screen_all_str_args=True)
+        assert guard.evaluate({"resource": "--kubeconfig=/etc/evil"}).allowed is True
+        assert guard.evaluate({"flags": "--server=https://evil.example"}).allowed is True

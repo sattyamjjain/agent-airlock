@@ -203,8 +203,10 @@ preset, and
   after (`snapshot_2026_11_14` in `tests/mcp_spec/test_oidc_publish_window_guard.py`, and
   `SNAPSHOT` in `test_release_age.py`): a pinned file stays in `data/`.
 - **`release_age.py` makes HTTPS requests only through `registry_release_time_lookup()`**
-  (GHSA-h82f-cjm4-g22r), which a caller builds, or the preset does when
-  `min_release_age_hours` is set. The other network paths here are
+  (GHSA-h82f-cjm4-g22r), which a caller builds, or the preset does by default since 0.10.37
+  (`min_release_age_hours=None` stops it; a guard given `installs_from` with no
+  `min_release_age` logs `oidc_publish_window_release_age_off` once per process, a module
+  flag a test resets). The other network paths here are
   `attested_admission._default_fetcher` (`urlopen`, when the config sets no `fetcher`) and DNS
   lookups: `supply_chain`'s own, and those `SSRFEgressGuard` makes for it and
   `schema_ref_guard`. The guard's `min_release_age` check runs after every list (pairs, whole

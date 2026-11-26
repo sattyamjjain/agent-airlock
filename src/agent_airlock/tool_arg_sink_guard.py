@@ -310,8 +310,10 @@ class ToolArgSinkGuard:
         option_args: Arguments a server passes to a program as one argv word (a git
             branch, ref or remote): a string, or a string in a list, whose first non-space
             character is ``-`` is refused (``DENY_OPTION_INJECTION``, CWE-88,
-            CVE-2026-114496). With ``screen_all_str_args``, arguments named like a branch or
-            ref are read this way too.
+            CVE-2026-114496, CVE-2026-134817), a negative number written as a string
+            included, since ``git log -1`` reads ``-1`` as an option; an ``int`` is not read.
+            With ``screen_all_str_args``, arguments named like a branch or ref are read this
+            way too.
 
     Each name set accepts any collection of strings and is stored as a ``frozenset``.
 
