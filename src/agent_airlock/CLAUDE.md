@@ -255,7 +255,10 @@ src/agent_airlock/
 5. Endpoint policy validation: every IP a host stands for (`metadata_ip_candidates`:
    decimal, hex, octal, short and IPv6-transition forms) meets the private and metadata
    checks (`_is_private_ip` counts `100.64.0.0/10`, multicast and IPv6 site-local as private
-   since 0.10.36;
+   since 0.10.36, and `SafeURL`'s literal and post-resolution checks count site-local since
+   0.10.37: four predicates, `network._is_private_ip`, `ssrf_egress_guard._blocked_reason`,
+   `safe_types._resolved_ip_is_internal` and the LAN guard's `_is_lan_bound`, so a range
+   added to one goes into each;
    the metadata set is `safe_types._CANONICAL_METADATA_IPS`, which `SSRFEgressGuard` reads
    too, and the metadata host names are `safe_types._METADATA_HOSTNAMES`, which `SafeURL` and
    `supply_chain` read too), and a hostname that passes `allowed_endpoints` is then resolved
@@ -429,8 +432,10 @@ budgets are operational controls.
   unregistered preset never shows up in `list_active()`. Many guards are re-exported from
   the package root (`agent_airlock.__all__`); `mcp_spec/__init__.py` exports no per-CVE
   guard — its `__all__` is the protocol surface only.
-  `npm_oidc_publish_window_guard_defaults(min_release_age_hours=...)` builds a lookup that
-  makes registry requests at call time; off by default.
+  `npm_oidc_publish_window_guard_defaults()` builds a lookup that makes registry requests at
+  call time: since 0.10.37 its release-age check is on by default
+  (`DEFAULT_MIN_RELEASE_AGE_HOURS`, 168), `min_release_age_hours=None` turns it off, and a
+  test that builds a guard from it passes a stub `release_time_lookup` or that None.
 - **Declarative presets.** `presets/*.yaml` use a restricted YAML dialect
   (`schema_version: 1`) that `preset_loader` parses without PyYAML. Every `factory:` value,
   even on an `enabled: false` entry, must name a preset registered in

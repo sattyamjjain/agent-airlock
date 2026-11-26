@@ -198,6 +198,44 @@ class TestMcpDoctorBeforeItsAdvisory:
         assert asked == []
 
 
+@pytest.mark.usefixtures("snapshot_2026_11_20")
+class TestTheMalwareOf24November:
+    """Two npm malware advisories of 24 Nov 2026 that no snapshot listed yet.
+
+    GHSA-8q2p-w9w5-552h (``@apexfdn/copilot-mcp``, every version), published
+    2026-11-24T17:41:37Z, and GHSA-vfqh-3659-q56x (``@guangnao/claude-cli`` 1.0.0 to
+    1.0.17), published 2026-11-24T18:25:36Z.
+
+    https://github.com/advisories/GHSA-8q2p-w9w5-552h
+    https://github.com/advisories/GHSA-vfqh-3659-q56x
+    """
+
+    NOW = datetime(2026, 11, 24, 18, 0, tzinfo=timezone.utc)
+    SPECS = ("@apexfdn/copilot-mcp@1.0.0", "@guangnao/claude-cli@1.0.17")
+
+    def _six_hours_old(self, kind: str, name: str, version: str | None) -> datetime | None:
+        if kind == "npm" and name in {"@apexfdn/copilot-mcp", "@guangnao/claude-cli"}:
+            return self.NOW - timedelta(hours=6)
+        return None
+
+    def test_the_snapshot_lists_neither(self) -> None:
+        snapshot = malware_advisory_feed.load_malware_blast_snapshot()
+        names = {name for _, name, _ in snapshot.pairs} | {name for _, name in snapshot.packages}
+        assert not names & {"@apexfdn/copilot-mcp", "@guangnao/claude-cli"}
+
+    @pytest.mark.parametrize("spec", SPECS)
+    def test_six_hours_old_with_a_three_day_minimum_each_is_too_new(self, spec: str) -> None:
+        guard = _guard(self.NOW, min_release_age=timedelta(days=3), lookup=self._six_hours_old)
+        decision = guard.evaluate({"package": spec})
+        assert decision.verdict is V.DENY_RELEASE_TOO_NEW
+        assert "the policy requires 3 d" in decision.detail
+
+    @pytest.mark.parametrize("spec", SPECS)
+    def test_without_min_release_age_each_is_allowed(self, spec: str) -> None:
+        """No list names them: only the age check refuses them."""
+        assert _guard(self.NOW, min_release_age=None).evaluate({"package": spec}).allowed
+
+
 class TestOtherRegistries:
     def test_a_pypi_pin_a_day_old_is_refused(self) -> None:
         at = _at("before_the_advisory")
@@ -434,12 +472,16 @@ class TestConstruction:
 
 
 class TestThePreset:
-    def test_it_is_off_by_default(self) -> None:
+    def test_it_is_on_by_default_since_0_10_37(self) -> None:
+        """Off by default in 0.10.36; ``test_release_age_default_on.py`` says why it moved."""
         from agent_airlock.policy_presets import npm_oidc_publish_window_guard_defaults
 
         config = npm_oidc_publish_window_guard_defaults()
-        assert config["min_release_age"] is None
-        assert config["release_time_lookup"] is None
+        assert config["min_release_age"] == SEVEN_DAYS
+        assert callable(config["release_time_lookup"])
+        off = npm_oidc_publish_window_guard_defaults(min_release_age_hours=None)
+        assert off["min_release_age"] is None
+        assert off["release_time_lookup"] is None
 
     def test_hours_turn_it_on_with_the_registry_lookup(self) -> None:
         from agent_airlock.policy_presets import npm_oidc_publish_window_guard_defaults

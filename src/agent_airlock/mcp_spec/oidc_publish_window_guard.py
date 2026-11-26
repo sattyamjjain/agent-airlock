@@ -131,6 +131,10 @@ from .release_age import ReleaseTimeLookup, ReleaseTimeUnavailableError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oidc_publish_window_guard")
 
+# Whether this process has logged that a guard for a registry install has no release-age
+# check (0.10.37): once, not once per guard.
+_release_age_off_warned = False
+
 
 _FIXTURE_PACKAGE = "agent_airlock.data"
 _FIXTURE_RESOURCE_NAME = "oidc_publish_blast_2026_10_28.json"
@@ -407,6 +411,30 @@ def _is_str_tuple(value: object, length: int) -> bool:
     )
 
 
+def _warn_release_age_off(installs_from: str | None) -> None:
+    """Log, once per process, that a guard for a registry install has no release-age check.
+
+    The preset turns the check on by default (0.10.37); a guard built by hand keeps the
+    constructor's default, off, so it says so instead of failing open in silence.
+    """
+    global _release_age_off_warned
+    if _release_age_off_warned:
+        return
+    _release_age_off_warned = True
+    from ..policy_presets import DEFAULT_MIN_RELEASE_AGE_HOURS
+
+    logger.warning(
+        "oidc_publish_window_release_age_off",
+        installs_from=installs_from,
+        detail=(
+            "this guard has no min_release_age, so a release no list names yet is admitted "
+            "however new it is; npm_oidc_publish_window_guard_defaults() turns the check on at "
+            f"DEFAULT_MIN_RELEASE_AGE_HOURS ({DEFAULT_MIN_RELEASE_AGE_HOURS} h), or pass "
+            "min_release_age with a release_time_lookup"
+        ),
+    )
+
+
 class OIDCPublishWindowVerdict(str, enum.Enum):
     """Stable reason codes for :class:`OIDCPublishWindowDecision`."""
 
@@ -519,11 +547,13 @@ class OIDCPublishWindowGuard:
         min_release_age: Refuse a registry version published less than this long before the
             call (``DENY_RELEASE_TOO_NEW``), as pnpm's ``minimumReleaseAge``, npm's
             ``--before`` and uv's ``exclude-newer`` do (v0.10.36, GHSA-h82f-cjm4-g22r). Off
-            (None) by default. Checked after every list, so a listed release reports its own
-            verdict; a git, path or non-registry URL spec is not looked up. Every version a
-            call carries is judged, the one in ``package`` and each in ``version``. A spec
-            with no exact version (none, a range, a dist-tag) is judged by the version the
-            registry installs by default.
+            (None) by default here; ``npm_oidc_publish_window_guard_defaults`` turns it on at
+            168 hours since 0.10.37, and a guard given ``installs_from`` without it logs
+            ``oidc_publish_window_release_age_off`` once per process. Checked after every
+            list, so a listed release reports its own verdict; a git, path or non-registry
+            URL spec is not looked up. Every version a call carries is judged, the one in
+            ``package`` and each in ``version``. A spec with no exact version (none, a range,
+            a dist-tag) is judged by the version the registry installs by default.
         release_time_lookup: When a version was published
             (:data:`~agent_airlock.mcp_spec.release_age.ReleaseTimeLookup`);
             :func:`~agent_airlock.mcp_spec.release_age.registry_release_time_lookup` asks
@@ -651,6 +681,8 @@ class OIDCPublishWindowGuard:
         self._init_release_age(
             min_release_age, release_time_lookup, unknown_release_age, release_age_allow, clock
         )
+        if self._bare_kinds and self._min_release_age is None:
+            _warn_release_age_off(installs_from)
 
     def _init_release_age(
         self,
