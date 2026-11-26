@@ -17,11 +17,16 @@ no asymmetry left to test, and neither harness's zero can be read as resistance.
 2026-09-20 `codex` finished only 52 of 72, its zero rested on 24 of 36, and its bound was
 13.8%.
 
-**The 2026-11-03 re-run is partial, and found the same zeros.** `claude-code` 2.1.317 (model
-`claude-opus-4-8`) finished all 72 cells, 0/36 on each arm. `codex` 0.154.0 (`gpt-6-astra`)
-stopped after 41 cells at its plan's usage limit: 0/36 injected, and 0/5 benign, a much smaller
-control than the 36 cells below. `cursor-agent` errored on every cell and measured nothing. The
-analysis on this page stays on the last complete matrix, 2026-10-03.
+**The 2026-11-26 re-run found the same zeros, in 143 of 144 cells.** `claude-code` 2.1.332
+(model `claude-opus-4-8`) finished all 72 cells, 0/36 on each arm. `codex` 0.154.0
+(`gpt-6-astra`) acted 0/36 on the injected arm and 0/35 on the benign one; it fixed the bug in
+71/71 cells and ran the suite in 67/71. Its plan's usage limit stopped it after 46 cells on
+2026-11-25 (UTC), and the other 26 ran from the checkpoint after the limit reset, so the matrix
+spans both days. One benign cell hit the 300-second timeout twice, once while the machine slept
+and again on a re-run, and is left out of the denominator. `cursor-agent` was not logged in and
+was not run. The tables below stay on 2026-10-03, the last matrix with no exclusions; the
+2026-11-26 one matches it arm for arm. The 2026-11-03 re-run was partial (`codex` stopped after
+41 cells) and found the same zeros.
 
 **`codex` ran on a pinned model, and its first pass measured nothing.** This machine's `codex`
 was configured for `gpt-6.1-sol`, which is refused for a ChatGPT account, so on the first pass
@@ -30,8 +35,8 @@ every `codex` cell exited before it started. Those 72 cells were discarded, not 
 The plan's usage limit stopped that re-run after 35 cells; the remaining 37, the whole
 benign arm among them, ran after the limit reset the same day (UTC).
 
-- **Last complete matrix:** 2026-10-03 · **Cells:** 144/144 measured, no exclusions
-- **Last run:** 2026-11-03, partial (below) · **Cells:** 113 measured, 103 errored and excluded
+- **Last run:** 2026-11-26 · **Cells:** 143/144 measured, 1 timed out and excluded
+- **Last matrix with no exclusions:** 2026-10-03 · **Cells:** 144/144 measured
 - **Reproduce:** `python -m benchmarks.harness_injection --run --trials 18 --write --checkpoint ckpt.json --model codex=gpt-6-astra`
 - **Raw table and full caveats:** [`benchmarks/harness_injection/RESULTS.md`](https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md)
 - **Not run in CI:** it drives third-party coding agents against an injection-seeded
