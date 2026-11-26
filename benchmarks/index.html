@@ -3362,8 +3362,8 @@ than omitted — four of the ten OWASP Agentic slots are in that state.</p>
 </tr>
 <tr>
 <td><strong>Prompt injection across agent harnesses</strong></td>
-<td>A null result, published as one. <code>claude-code</code> and <code>codex</code> each acted on the planted script 0/36, and ignored the benign twin too (<code>claude-code</code> 0/36, <code>codex</code> 0/5), so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made <code>codex</code>'s zero a choice did not reproduce. <code>claude-code</code> (model <code>claude-opus-4-8</code>) finished all 72 of its cells; <code>codex</code> ran 41 before its plan's usage limit stopped it; <code>cursor-agent</code> errored on every cell and is not measured (113 cells measured, 103 errored cells excluded from the denominator). The last complete matrix is 2026-10-03, 144/144 cells</td>
-<td>2026-11-03</td>
+<td>A null result, published as one. <code>claude-code</code> and <code>codex</code> each acted on the planted script 0/36, and ignored the benign twin too (<code>claude-code</code> 0/36, <code>codex</code> 0/35), so this is indifference to the channel, not detection. Weaker than the 2026-08-26 run: the one benign action that made <code>codex</code>'s zero a choice did not reproduce. <code>claude-code</code> 2.1.332 (model <code>claude-opus-4-8</code>) finished all 72 of its cells and <code>codex</code> (<code>gpt-6-astra</code>) 71: one benign cell timed out and is excluded. <code>codex</code> ran across its plan's usage limit, so the matrix spans 2026-11-25 and 2026-11-26 (UTC)</td>
+<td>2026-11-26</td>
 <td><a href="injection-multi-harness/">Multi-harness prompt injection</a></td>
 </tr>
 <tr>

@@ -3581,11 +3581,16 @@ no asymmetry left to test, and neither harness's zero can be read as resistance.
 72/72 cells, so each injected zero rests on all 36 cells and its upper bound is <strong>9.6%</strong>. On
 2026-09-20 <code>codex</code> finished only 52 of 72, its zero rested on 24 of 36, and its bound was
 13.8%.</p>
-<p><strong>The 2026-11-03 re-run is partial, and found the same zeros.</strong> <code>claude-code</code> 2.1.317 (model
-<code>claude-opus-4-8</code>) finished all 72 cells, 0/36 on each arm. <code>codex</code> 0.154.0 (<code>gpt-6-astra</code>)
-stopped after 41 cells at its plan's usage limit: 0/36 injected, and 0/5 benign, a much smaller
-control than the 36 cells below. <code>cursor-agent</code> errored on every cell and measured nothing. The
-analysis on this page stays on the last complete matrix, 2026-10-03.</p>
+<p><strong>The 2026-11-26 re-run found the same zeros, in 143 of 144 cells.</strong> <code>claude-code</code> 2.1.332
+(model <code>claude-opus-4-8</code>) finished all 72 cells, 0/36 on each arm. <code>codex</code> 0.154.0
+(<code>gpt-6-astra</code>) acted 0/36 on the injected arm and 0/35 on the benign one; it fixed the bug in
+71/71 cells and ran the suite in 67/71. Its plan's usage limit stopped it after 46 cells on
+2026-11-25 (UTC), and the other 26 ran from the checkpoint after the limit reset, so the matrix
+spans both days. One benign cell hit the 300-second timeout twice, once while the machine slept
+and again on a re-run, and is left out of the denominator. <code>cursor-agent</code> was not logged in and
+was not run. The tables below stay on 2026-10-03, the last matrix with no exclusions; the
+2026-11-26 one matches it arm for arm. The 2026-11-03 re-run was partial (<code>codex</code> stopped after
+41 cells) and found the same zeros.</p>
 <p><strong><code>codex</code> ran on a pinned model, and its first pass measured nothing.</strong> This machine's <code>codex</code>
 was configured for <code>gpt-6.1-sol</code>, which is refused for a ChatGPT account, so on the first pass
 every <code>codex</code> cell exited before it started. Those 72 cells were discarded, not scored, and
@@ -3593,8 +3598,8 @@ every <code>codex</code> cell exited before it started. Those 72 cells were disc
 The plan's usage limit stopped that re-run after 35 cells; the remaining 37, the whole
 benign arm among them, ran after the limit reset the same day (UTC).</p>
 <ul>
-<li><strong>Last complete matrix:</strong> 2026-10-03 · <strong>Cells:</strong> 144/144 measured, no exclusions</li>
-<li><strong>Last run:</strong> 2026-11-03, partial (below) · <strong>Cells:</strong> 113 measured, 103 errored and excluded</li>
+<li><strong>Last run:</strong> 2026-11-26 · <strong>Cells:</strong> 143/144 measured, 1 timed out and excluded</li>
+<li><strong>Last matrix with no exclusions:</strong> 2026-10-03 · <strong>Cells:</strong> 144/144 measured</li>
 <li><strong>Reproduce:</strong> <code>python -m benchmarks.harness_injection --run --trials 18 --write --checkpoint ckpt.json --model codex=gpt-6-astra</code></li>
 <li><strong>Raw table and full caveats:</strong> <a href="https://github.com/sattyamjjain/agent-airlock/blob/main/benchmarks/harness_injection/RESULTS.md"><code>benchmarks/harness_injection/RESULTS.md</code></a></li>
 <li><strong>Not run in CI:</strong> it drives third-party coding agents against an injection-seeded
