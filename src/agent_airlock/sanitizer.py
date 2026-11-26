@@ -112,6 +112,12 @@ _SECRET_LABEL = (
 #: A mapping key that names a secret: one ending with a :data:`_SECRET_LABEL` label.
 _SECRET_KEY = re.compile(rf"(?i){_SECRET_LABEL}\Z")
 
+# An unquoted labelled value (PASSWORD's group 3): its first character is neither a quote
+# nor whitespace; after it, any non-whitespace character, a quote included unless what
+# follows the quote (whitespace, the end, ``, ; ) ] } >``) shows it closes a string.
+_UNQUOTED_VALUE_HEAD = r"[^\s'\"]"
+_UNQUOTED_VALUE_CHAR = r"(?:[^\s'\"]|['\"](?![\s,;)\]}>]|$))"
+
 #: The fewest characters a labelled secret value has, as in the PASSWORD pattern.
 _SECRET_VALUE_MIN_CHARS = 8
 
@@ -253,11 +259,18 @@ PATTERNS: dict[SensitiveDataType, re.Pattern[str]] = {
     # end a longer name (``client_secret``, ``OPENAI_API_KEY``, ``accessToken``) and be
     # followed by its closing quote: until 0.10.36 the quote after a JSON key stopped the
     # match, so ``{"password": "..."}`` and every dict result were returned unmasked. A
-    # quoted value is read to its closing quote (spaces and JSON escapes included).
+    # quoted value is read to its closing quote (spaces and JSON escapes included). An
+    # unquoted one (0.10.37) runs to the next whitespace, quotes after its first character
+    # included: until then it stopped at the first quote, so ``api_key=sk-abc"def...``
+    # masked ``sk-abc`` and returned the rest, and ``password=Sup3r"S3cret...`` masked
+    # nothing. A quote followed by whitespace, the end, or ``, ; ) ] } >`` still ends it:
+    # that one closes the string the value sits in (``"cmd": "x --password=...",``).
     # Group 1, 2 or 3 is the value; only it is masked, so the label stays.
     SensitiveDataType.PASSWORD: re.compile(
         rf"(?i){_SECRET_LABEL}['\"]?\s*[=:]\s*"
-        r"(?:\"((?:[^\"\\\n]|\\.){8,})\"|'((?:[^'\\\n]|\\.){8,})'|['\"]?([^\s'\"]{8,})['\"]?)",
+        r"(?:\"((?:[^\"\\\n]|\\.){8,})\"|'((?:[^'\\\n]|\\.){8,})'|['\"]?"
+        rf"(?={_UNQUOTED_VALUE_HEAD}{_UNQUOTED_VALUE_CHAR}{{7}})"
+        rf"({_UNQUOTED_VALUE_HEAD}{_UNQUOTED_VALUE_CHAR}*)['\"]?)",
     ),
     # The whole PEM block, or the header and the base64 lines after it when the END line is
     # missing (truncated output). Until 0.10.16 only the BEGIN line was matched, so the key
@@ -595,8 +608,18 @@ _INDIA_LOCALE_PII_TYPES: tuple[SensitiveDataType, ...] = (
 #: A secret-sounding variable or key name: ``*_KEY``, ``*_TOKEN``, ``*_SECRET``, ``*_PAT``,
 #: or anything with ``PASSWORD`` in it, in any case.
 _SECRET_NAME = re.compile(r"(?i)(?:.*_(?:KEY|TOKEN|SECRET|PAT)|.*PASSWORD.*)")
+# An environment line's prefix: ``export``, or ``declare`` / ``typeset`` with a flag set
+# holding ``x`` (``-x``, ``-rx``, ``-gx``, ``-r -x``), the form ``declare -x``, ``export -p``
+# and ``typeset -x`` print. Until 0.10.37 only ``export`` was read, so a dump in bash's own
+# format counted only the entries the PASSWORD label rule happened to mask. ``declare -a``
+# or ``-i`` alone declares a shell variable, not an environment entry.
+_ENV_PREFIX = (
+    r"(?:export|(?:declare|typeset)(?:[ \t]+-[A-Za-z]+)*?[ \t]+-[A-Za-z]*x[A-Za-z]*"
+    r"(?:[ \t]+-[A-Za-z]+)*)"
+)
 _ENV_LINE = re.compile(
-    r"(?m)^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(\S[^\r\n]*?)[ \t]*$"
+    rf"(?m)^[ \t]*(?:{_ENV_PREFIX}[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*"
+    r"(\S[^\r\n]*?)[ \t]*$"
 )
 _JSON_PAIR = re.compile(r'"([^"\\\r\n]{1,128})"[ \t]*:[ \t]*"((?:[^"\\\r\n]|\\.)*)"')
 

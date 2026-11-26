@@ -262,6 +262,53 @@ class TestEnvDump:
         assert sorted(d["value"] for d in found) == ["a", "b", "c"]
 
 
+class TestDeclareXEnvDump:
+    """V0.10.37: ``declare -x`` / ``typeset -x`` lines, what ``export -p`` prints in bash.
+
+    Measured on 099fcef0: the three lines below came back with ``AWS_SECRET_KEY``'s value in
+    clear, and the other two masked only because the PASSWORD label rule matched their
+    names. ``_ENV_LINE`` read only an ``export`` prefix, so no line counted as an entry.
+    """
+
+    DUMP = (
+        'declare -x AWS_SECRET_KEY="aZ9kQ2mX7pL4vR8t"\n'
+        'declare -x GH_TOKEN="ghx_notarealtoken123"\n'
+        'declare -x DB_PASSWORD="hunter2hunter2"'
+    )
+    VALUES = ["aZ9kQ2mX7pL4vR8t", "ghx_notarealtoken123", "hunter2hunter2"]
+
+    def test_all_three_values_are_masked(self) -> None:
+        out = sanitize_output(self.DUMP).content
+        assert out == (
+            'declare -x AWS_SECRET_KEY="[REDACTED]"\n'
+            'declare -x GH_TOKEN="[REDACTED]"\n'
+            'declare -x DB_PASSWORD="[REDACTED]"'
+        )
+        found = detect_sensitive_data(self.DUMP, [SensitiveDataType.ENV_DUMP])
+        assert sorted(d["value"] for d in found) == sorted(self.VALUES)
+
+    @pytest.mark.parametrize(
+        "prefix", ["declare -rx", "declare -xr", "declare -r -x", "typeset -x", "typeset -gx"]
+    )
+    def test_other_flag_spellings_count_too(self, prefix: str) -> None:
+        dump = self.DUMP.replace("declare -x", prefix)
+        found = detect_sensitive_data(dump, [SensitiveDataType.ENV_DUMP])
+        assert sorted(d["value"] for d in found) == sorted(self.VALUES), prefix
+        assert "aZ9kQ2mX7pL4vR8t" not in sanitize_output(dump).content
+
+    def test_two_entries_are_not_a_dump(self) -> None:
+        two = "\n".join(self.DUMP.splitlines()[:2])
+        assert not detect_sensitive_data(two, [SensitiveDataType.ENV_DUMP])
+
+    @pytest.mark.parametrize(
+        "line", ["declare -a ARR_TOKEN=(a b c)", "declare -i N_KEY=3", "declare X_KEY=v"]
+    )
+    def test_a_shell_variable_is_not_an_entry(self, line: str) -> None:
+        """No ``x`` flag: a shell variable, not part of the environment."""
+        dump = "\n".join(self.DUMP.splitlines()[:2] + [line])
+        assert not detect_sensitive_data(dump, [SensitiveDataType.ENV_DUMP])
+
+
 class TestTokenPrefixesInAnyCase:
     @pytest.mark.parametrize(
         "token",
