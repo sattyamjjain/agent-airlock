@@ -407,11 +407,11 @@ def _render(result: dict[str, Any], corpus_path: Path) -> str:
     )
     out.append("")
     out.append(
-        "**Re-run 2026-11-03, partial.** `claude-code` 2.1.317 (`claude-opus-4-8`) finished "
-        "all 72 cells, 0/36 on each arm. `codex` 0.154.0 stopped after 41 cells at its plan's "
-        "usage limit: 0/36 injected and 0/5 benign, a much smaller control. `cursor-agent` "
-        "errored on every cell and measured nothing. The analysis below stays on the last "
-        "complete matrix, 2026-10-03."
+        "**Re-run 2026-11-26, 143 of 144 cells.** `claude-code` 2.1.332 (`claude-opus-4-8`) "
+        "finished all 72 cells, 0/36 on each arm. `codex` 0.154.0 acted 0/36 injected and 0/35 "
+        "benign: one benign cell timed out and is excluded, and its plan's usage limit split "
+        "the matrix across 2026-11-25 and 2026-11-26 (UTC). The analysis below stays on "
+        "2026-10-03, the last matrix with no exclusions; the new one matches it arm for arm."
     )
     out.append("")
     out.append(
