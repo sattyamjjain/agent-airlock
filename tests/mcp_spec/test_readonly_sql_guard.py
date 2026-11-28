@@ -395,7 +395,10 @@ class TestPreset:
             "severity": "medium",
             "default_action": "deny",
             "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-125322",
-            "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367"),
+            "cves": (
+                *("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367"),
+                "CVE-2026-138027",
+            ),
             "statement_fields": DEFAULT_STATEMENT_FIELDS,
             "fragment_fields": DEFAULT_FRAGMENT_FIELDS,
             "identifier_fields": DEFAULT_IDENTIFIER_FIELDS,
