@@ -3493,8 +3493,15 @@ or sits in a system directory (<code>/usr/bin/git</code>): <code>./git</code> is
 <li><code>git --config-env</code>, <code>--exec-path=</code>, an alias or <code>include.path</code> set with <code>-c</code>, and any
   <code>-c</code> key the policy does not know to be harmless.</li>
 </ul>
-<p>A script file is different: <code>bash scripts/test.sh</code> is the shell running that file, and the
-rules judge it as written.</p>
+<p>A script file is held, not followed: <code>sh FILE</code>, <code>/bin/sh FILE</code>, <code>bash -x FILE</code> and
+<code>bash -- FILE</code> run text the policy never reads. Since 0.10.37 such a command is asked about
+when the policy has an ask rule and denied when it has none, the way an undecided redirect
+target is. An allow rule that names the exact path, with no glob, still allows that file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">ShellCommandPolicy</span><span class="p">(</span><span class="n">allow</span><span class="o">=</span><span class="p">(</span><span class="s2">"sh ./scripts/ci.sh"</span><span class="p">,))</span>  <span class="c1"># allows sh ./scripts/ci.sh only</span>
+</code></pre></div>
+<p>Until 0.10.37 the shell was judged as itself, so <code>allow=("sh *",)</code> admitted
+<code>sh /tmp/x/cmds.txt</code>, a file the model could have written. An interpreter running a script
+(<code>python script.py</code>) is still judged as the interpreter.</p>
 <h2 id="rules">Rules<a class="headerlink" href="#rules" title="Permanent link">&para;</a></h2>
 <p>A rule is words, then options: <code>git push --force</code> matches a command whose program is
 <code>git</code> and whose next word is <code>push</code>, with <code>--force</code> anywhere after. Each part is a

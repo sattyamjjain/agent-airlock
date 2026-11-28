@@ -3226,6 +3226,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#install-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#refreshing-from-malware-advisories" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3504,6 +3515,50 @@ Return None when the registry does not have that release and raise when you cann
   <code>oidc_publish_window_release_age_off</code> once per process, naming
   <code>DEFAULT_MIN_RELEASE_AGE_HOURS</code>.</li>
 </ul>
+<h2 id="install-commands">Install commands<a class="headerlink" href="#install-commands" title="Permanent link">&para;</a></h2>
+<p>An agent installs through a shell tool far more often than through a <code>{"package": ...}</code>
+argument. Until 0.10.37 the guard read only <code>package</code>, <code>version</code> and <code>url</code>, so
+<a href="https://github.com/advisories/GHSA-pm3r-rxg9-cj5j">GHSA-pm3r-rxg9-cj5j</a> (<code>tzero-mcp</code> 12.3.0 on npm, 2026-11-26) written as
+<code>npm i tzero-mcp@12.3.0</code> and <a href="https://github.com/advisories/GHSA-v3pr-5www-qwjr">GHSA-v3pr-5www-qwjr</a> (<code>qwen-tts-runtime</code> 0.3.0 on PyPI,
+2026-11-27) written as <code>pip install</code> or <code>uvx</code> reached no list and no release-age check.</p>
+<p>The guard now reads <code>command</code>, <code>cmd</code> and <code>argv</code> too. A string is a shell line, split and
+followed through its wrappers (<code>cd x &amp;&amp; ...</code>, <code>sudo</code>, <code>env</code>, <code>sh -c</code>, <code>python -m pip</code>) the
+way <a href="../../guide/shell-commands/"><code>ShellCommandPolicy</code></a> reads it; a list of strings is one
+argv; a bare <code>command</code> beside an <code>args</code> list (an MCP server launch,
+<code>{"command": "npx", "args": ["-y", "x"]}</code>) is the argv <code>[command, *args]</code>. Each package an
+install names takes the path a <code>package</code> argument takes, in the registry its installer
+names:</p>
+<table>
+<thead>
+<tr>
+<th>Installer</th>
+<th>Read as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pip</code> / <code>pip3</code> / <code>python -m pip</code> <code>install</code>, <code>uv pip install</code>, <code>uv add</code>, <code>uv tool install</code>, <code>uvx</code> / <code>uv tool run</code> (or <code>--from</code>), <code>uv run --with</code>, <code>pipx install</code> / <code>run</code> / <code>inject</code></td>
+<td>PyPI</td>
+</tr>
+<tr>
+<td><code>npm install</code> (<code>i</code>, <code>add</code> ...), <code>npm exec</code> / <code>npx</code> (or <code>-p</code>), <code>pnpm add</code> / <code>dlx</code>, <code>yarn add</code> / <code>dlx</code>, <code>bun add</code>, <code>bunx</code></td>
+<td>npm</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">guard</span><span class="o">.</span><span class="n">evaluate</span><span class="p">({</span><span class="s2">"command"</span><span class="p">:</span> <span class="s2">"cd app &amp;&amp; npm i tzero-mcp@12.3.0"</span><span class="p">})</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># 12 hours after it was published: decision.verdict == DENY_RELEASE_TOO_NEW</span>
+</code></pre></div>
+<p><code>installs_from</code> decides only what a bare <code>package</code> name means: a guard set to <code>"pypi"</code> still
+judges <code>npm i x</code>, as it judges <code>{"package": "x@1.0"}</code>. A command with no install
+(<code>ls -la</code>, <code>npm test</code>, <code>npm install</code> with no package) passes. Refused as
+<code>DENY_UNINSPECTABLE</code>, naming why: text the scanner cannot follow (<code>npm i $(cat pkgs)</code>,
+<code>python -c ...</code>), a requirements or constraints file (<code>-r</code>, <code>-c</code>), an editable or local
+install (<code>-e</code>, <code>.</code>, <code>./x.tgz</code>), a <code>$</code> value, packages <code>xargs</code> or <code>find -exec</code> add, and shell
+text an installer runs (<code>npx -c</code>).</p>
+<p>Not read: an install of a project's own manifest (<code>npm ci</code>, <code>uv sync</code>), other installers
+(<code>poetry</code>, <code>pdm</code>, <code>pipenv</code>, <code>conda</code>), and which index an install uses (<code>--index-url</code>,
+<code>--registry</code>): every spec is judged against the public registry's lists and times.</p>
 <h2 id="refreshing-from-malware-advisories">Refreshing from malware advisories<a class="headerlink" href="#refreshing-from-malware-advisories" title="Permanent link">&para;</a></h2>
 <p>The incident list covers one incident. GitHub's advisory database and OSV publish malicious
 npm and PyPI packages every day, and until 0.10.32 none of them reached the guard until
