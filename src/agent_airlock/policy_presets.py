@@ -3297,6 +3297,11 @@ def readonly_sql_tool_args_2026_125322_defaults(
     - **CVE-2026-77367** (Daptin): unauthenticated SQL injection through ``sort``. ``sort``,
       ``sortBy``, ``orderBy`` and ``groupBy`` are read as fragments.
       https://github.com/advisories/GHSA-hq2p-f2vj-v3cm
+    - **CVE-2026-138027** (bagel-mcp before 2.5.5): a "read-only" tool ran DuckDB SQL, and
+      DuckDB's table functions read local files and internal URLs. DuckDB's file and URL
+      readers, ClickHouse's ``url`` / ``file`` / ``s3`` / ``remote`` family and a quoted
+      string where a table stands are refused (v0.10.37).
+      https://github.com/advisories/GHSA-xrqm-r82m-j847
 
     This preset configures
     :class:`agent_airlock.mcp_spec.readonly_sql_guard.ReadOnlySQLGuard`: statement fields
@@ -3335,7 +3340,10 @@ def readonly_sql_tool_args_2026_125322_defaults(
         "severity": "medium",
         "default_action": "deny",
         "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-125322",
-        "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367"),
+        "cves": (
+            *("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367"),
+            "CVE-2026-138027",
+        ),
         "statement_fields": statements,
         "fragment_fields": fragments,
         "identifier_fields": identifiers,
