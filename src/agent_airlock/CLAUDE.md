@@ -227,7 +227,12 @@ src/agent_airlock/
      undecided one, `$` / glob / brace / `~user`, asked about
      with an ask rule else denied (a `$` one is denied under `default="deny"` even with an ask
      rule, since no allow rule admits an expanded line); `redirect_deny=()` turns it off),
-     then ask rules, then `_worst`. A command carrying a `_ACTION_OPTIONS` option
+     then ask rules, then `_worst`, then (0.10.37) a shell running a script file
+     (`_Walk.scripts`, `sh FILE`): asked about with an ask rule else denied, like an
+     undecided target, unless an allow rule names that exact path with no glob.
+     `_innermost_argvs` hands the walk's leaves (with `_Walk.fed`: words `xargs` /
+     `find -exec` add) to `OIDCPublishWindowGuard`'s install reading. A command carrying a
+     `_ACTION_OPTIONS` option
      (`find -delete`, `-fprint*`, `-fls`) is admitted only by an allow rule naming it, a wrapper
      `find` too. Ask escalates (rule `shell_command`)
    - 2.8 per-run resource-amplification budget, keyed by the call's `session_id` (one

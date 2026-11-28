@@ -231,6 +231,44 @@ Return None when the registry does not have that release and raise when you cann
   `oidc_publish_window_release_age_off` once per process, naming
   `DEFAULT_MIN_RELEASE_AGE_HOURS`.
 
+## Install commands
+
+An agent installs through a shell tool far more often than through a `{"package": ...}`
+argument. Until 0.10.37 the guard read only `package`, `version` and `url`, so
+[GHSA-pm3r-rxg9-cj5j][pm3r] (`tzero-mcp` 12.3.0 on npm, 2026-11-26) written as
+`npm i tzero-mcp@12.3.0` and [GHSA-v3pr-5www-qwjr][v3pr] (`qwen-tts-runtime` 0.3.0 on PyPI,
+2026-11-27) written as `pip install` or `uvx` reached no list and no release-age check.
+
+The guard now reads `command`, `cmd` and `argv` too. A string is a shell line, split and
+followed through its wrappers (`cd x && ...`, `sudo`, `env`, `sh -c`, `python -m pip`) the
+way [`ShellCommandPolicy`](../guide/shell-commands.md) reads it; a list of strings is one
+argv; a bare `command` beside an `args` list (an MCP server launch,
+`{"command": "npx", "args": ["-y", "x"]}`) is the argv `[command, *args]`. Each package an
+install names takes the path a `package` argument takes, in the registry its installer
+names:
+
+| Installer | Read as |
+|---|---|
+| `pip` / `pip3` / `python -m pip` `install`, `uv pip install`, `uv add`, `uv tool install`, `uvx` / `uv tool run` (or `--from`), `uv run --with`, `pipx install` / `run` / `inject` | PyPI |
+| `npm install` (`i`, `add` ...), `npm exec` / `npx` (or `-p`), `pnpm add` / `dlx`, `yarn add` / `dlx`, `bun add`, `bunx` | npm |
+
+```python
+guard.evaluate({"command": "cd app && npm i tzero-mcp@12.3.0"})
+# 12 hours after it was published: decision.verdict == DENY_RELEASE_TOO_NEW
+```
+
+`installs_from` decides only what a bare `package` name means: a guard set to `"pypi"` still
+judges `npm i x`, as it judges `{"package": "x@1.0"}`. A command with no install
+(`ls -la`, `npm test`, `npm install` with no package) passes. Refused as
+`DENY_UNINSPECTABLE`, naming why: text the scanner cannot follow (`npm i $(cat pkgs)`,
+`python -c ...`), a requirements or constraints file (`-r`, `-c`), an editable or local
+install (`-e`, `.`, `./x.tgz`), a `$` value, packages `xargs` or `find -exec` add, and shell
+text an installer runs (`npx -c`).
+
+Not read: an install of a project's own manifest (`npm ci`, `uv sync`), other installers
+(`poetry`, `pdm`, `pipenv`, `conda`), and which index an install uses (`--index-url`,
+`--registry`): every spec is judged against the public registry's lists and times.
+
 ## Refreshing from malware advisories
 
 The incident list covers one incident. GitHub's advisory database and OSV publish malicious
@@ -336,3 +374,5 @@ passes until the next refresh.
 [ghsa]: https://github.com/advisories/GHSA-g7cv-rxg3-hmpx
 [m5xq]: https://github.com/advisories/GHSA-m5xq-h2p4-962g
 [h82f]: https://github.com/advisories/GHSA-h82f-cjm4-g22r
+[pm3r]: https://github.com/advisories/GHSA-pm3r-rxg9-cj5j
+[v3pr]: https://github.com/advisories/GHSA-v3pr-5www-qwjr

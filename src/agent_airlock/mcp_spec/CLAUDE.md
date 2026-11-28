@@ -35,7 +35,8 @@ direction in new branches.
      `elicitation_provenance`, …), which the package docstring calls guards: they are
      guards, just not triples. `tasks` holds only task-state models, `conformance` the
      case runner, `malware_advisory_feed` the offline loaders (`load_*`) and name index
-     (`rescoped_name_index`), and `release_age` the publish-time lookup, that feed
+     (`rescoped_name_index`), `release_age` the publish-time lookup, and `install_command`
+     the packages an install command names (`install_specs`, 0.10.37), that feed
      `OIDCPublishWindowGuard`. Four modules fit none of the three: `LANUnauthRCEGuard` and
      `StdioMetaGuard` return frozen-dataclass verdicts (`Verdict`, `MetaVerdict`) with no
      `*Decision`, `PRMetadataGuard.sanitize()` returns a `SanitizedField`, and
@@ -202,6 +203,13 @@ preset, and
   `_newest_snapshot_name` and calling `load_malware_blast_snapshot.cache_clear()` before and
   after (`snapshot_2026_11_14` in `tests/mcp_spec/test_oidc_publish_window_guard.py`, and
   `SNAPSHOT` in `test_release_age.py`): a pinned file stays in `data/`.
+- **`OIDCPublishWindowGuard` reads `command`, `cmd` and `argv` since 0.10.37**
+  (GHSA-pm3r-rxg9-cj5j): split with `shell_command_policy._innermost_argvs` (a lazy import:
+  that module imports `mcp_spec.subprocess_arg_guard`), each leaf through
+  `install_command.install_specs`, each spec through `_judge_spec`, the `package` path, with
+  the installer's registry forced as `kinds`, so `installs_from` never skips an install. An
+  `_Unanalyzable` line or an `InstallSpec.uninspectable` is `DENY_UNINSPECTABLE`. A new
+  installer is a `_READERS` entry plus a `_Syntax`; an unknown option is read as a flag.
 - **`release_age.py` makes HTTPS requests only through `registry_release_time_lookup()`**
   (GHSA-h82f-cjm4-g22r), which a caller builds, or the preset does by default since 0.10.37
   (`min_release_age_hours=None` stops it; a guard given `installs_from` with no

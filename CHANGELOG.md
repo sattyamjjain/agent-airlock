@@ -11,6 +11,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (no entries yet)
 
+## [0.10.37] - 2026-11-28
+
+Turns the release-age check on by default in the publish-window preset and makes the guard
+read install commands, so a malicious release no list names yet is refused whether an agent
+asks for it as a package or runs `npm i`. Holds a shell running a script file, masks secrets
+in argv words, cookies and env name/value pairs, and refuses DuckDB and ClickHouse file and
+URL reads in read-only SQL.
+
+### Added
+
+- `policy_presets.DEFAULT_MIN_RELEASE_AGE_HOURS` (168), and `unknown_release_age` and `release_age_allow` on `npm_oidc_publish_window_guard_defaults`, returned for the guard so it is built from the dict in one call.
+- `agent_airlock.mcp_spec.install_command`: `install_specs(argv)` and `InstallSpec`, the packages an install command names (`pip`, `uv`, `uvx`, `pipx`, `npm`, `npx`, `pnpm`, `yarn`, `bun`), or why the command cannot be read.
+
+### Changed
+
+- `npm_oidc_publish_window_guard_defaults` turns the release-age check on by default: `min_release_age` is 168 hours with the registry lookup, an unknown age is refused, and `min_release_age_hours=None` turns it off. A guard built from it on 0.10.36 admitted the releases in GHSA-jxr7-4663-2qrm, GHSA-7vxr-6h54-ww37, GHSA-5gwx-j786-m4mq, GHSA-3fgm-7pvj-pj4r and GHSA-4c46-v99r-6h9r (2026-11-25), which no snapshot listed. It makes one registry request per name and version it has not seen; an offline host passes its own `release_time_lookup`, lists names in `release_age_allow`, or turns the check off. `OIDCPublishWindowGuard` keeps its own default and logs `oidc_publish_window_release_age_off` once per process when built for a registry with no minimum.
+- `OIDCPublishWindowGuard` reads `command`, `cmd` and `argv`: a shell line, split and followed through its wrappers as `ShellCommandPolicy` reads it, an argv list, or an MCP server launch (`{"command": "npx", "args": [...]}`). Each package an install names is judged as a `package` argument is, in the registry its installer names. A line it cannot follow (a substitution, inline code) or an install it cannot read (`-r FILE`, a local path, packages from `xargs`) is `DENY_UNINSPECTABLE`. `{"command": "npm i tzero-mcp@12.3.0"}` (GHSA-pm3r-rxg9-cj5j) and `pip install qwen-tts-runtime==0.3.0` (GHSA-v3pr-5www-qwjr) were allowed while the same package arguments were refused.
+- `ShellCommandPolicy` asks about a shell running a script file (`sh FILE`, `/bin/sh FILE`, `bash -x FILE`) when the policy has an ask rule and denies it otherwise; an allow rule naming that exact path, with no glob, still allows it. The shell was judged as itself, so `allow=("sh *",)` admitted any file the model could write. This changes documented behaviour.
+- `ReadOnlySQLGuard` refuses DuckDB's file and URL readers (`read_text`, `read_blob`, `read_csv_auto`, `read_parquet`, `glob` and their kin) and ClickHouse's `url`, `file`, `s3`, `hdfs`, `remote` and `executable` table functions where `(` follows, and a single-quoted string where a table stands (`FROM 'http://...'`). CVE-2026-138027 (bagel-mcp). SQLite's `glob()` function is refused with them; its `GLOB` operator is not.
+- `ArgumentSecretGuard` runs the same detectors as the masker, so it can refuse an argument it admitted: one carrying a cookie header, a secret flag's value (`--token VALUE`) or a secret env name/value pair.
+
+### Fixed
+
+- An unquoted secret after a label is masked to its end: `api_key=sk-abc123"def456...` leaked the part after the quote, and `password=Sup3r"S3cret...` was not masked at all.
+- `declare -x` / `typeset -x` lines (what `export -p` prints in bash) count as environment dump entries; `AWS_SECRET_KEY` in such a dump came back in clear.
+- `sanitize_output` masks a secret flag's value in the next argv word (`--token VALUE`, `["--token", "VALUE"]`), every cookie value on a `Cookie:` line and the first pair's on a `Set-Cookie:` line, and the value of a name/value pair whose name names a secret (`{"name": "DB_PASSWORD", "value": ...}`, and the `- name:` / `value:` lines `kubectl -o yaml` prints). `secret_key` is a secret label, so `AWS_SECRET_KEY=...` is masked on its own.
+- `SafeURL` refuses IPv6 site-local `fec0::/10` as a literal and after DNS resolution, and the LAN guard reads a site-local bind as LAN (CVE-2026-134492).
+
 ## [0.10.36] - 2026-11-25
 
 Fixes a deadlock in the network airgap, runs the startup-hook check as `warn` by default, adds

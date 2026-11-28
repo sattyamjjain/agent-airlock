@@ -939,3 +939,111 @@ class TestAnUnquotedSecretRunsPastAQuote:
             '{"password":"abc","user":"bob","note":"x"}',
         ):
             assert self._masked(text) == text, text
+
+
+class TestSecretsInArgvCookiesAndNameValuePairs:
+    """V0.10.37: three shapes a secret sat in unmasked.
+
+    Measured on d763fb5c, each returned unchanged by ``sanitize_output``:
+
+    - a secret flag's value as the next argv word: ``run --token Zq8x...``,
+      ``args = ["--token", "Zq8x..."]``, ``["--password", "Sup3r..."]`` (only
+      ``--token=...`` was masked);
+    - cookie values: ``Cookie: session=...``, ``Cookie: theme=dark; sessionid=...``,
+      ``Set-Cookie: sid=...; HttpOnly``;
+    - a name/value pair, the env-list shape Kubernetes, Docker and many tool APIs return:
+      ``{"name": "DEMO_SECRET", "value": "dummy-value-123"}``, alone or in an ``env`` list
+      (``{"DEMO_SECRET": ...}`` and ``DEMO_SECRET=...`` were masked).
+    """
+
+    TOKEN = "Zq8xY2mK7pL4vR8tW3nB"
+
+    @staticmethod
+    def _masked(text: str) -> str:
+        return str(sanitize_output(text).content)
+
+    def test_a_secret_flag_s_next_word_is_masked_flag_and_quotes_kept(self) -> None:
+        cases = {
+            f'args = ["--token", "{self.TOKEN}"]': 'args = ["--token", "[REDACTED]"]',
+            f"run --token {self.TOKEN}": "run --token [REDACTED]",
+            '["--password", "Sup3rS3cretValue9"]': '["--password", "[REDACTED]"]',
+            f"['--api-key', '{self.TOKEN}']": "['--api-key', '[REDACTED]']",
+            f'login --client-secret "{self.TOKEN}"': 'login --client-secret "[REDACTED]"',
+            f'{{"cmd": "run --token {self.TOKEN}", "x": 1}}': (
+                '{"cmd": "run --token [REDACTED]", "x": 1}'
+            ),
+        }
+        for text, expected in cases.items():
+            assert self._masked(text) == expected, text
+
+    def test_flags_that_name_no_secret_or_carry_none_are_left_alone(self) -> None:
+        for text in (
+            f'args = ["--token={self.TOKEN}"]',  # masked as before, by the PASSWORD pattern
+            "--token short",
+            "--verbose --dry-run",
+            "the token expires daily",
+            "--token --verbose",
+            "pip install -p something-long",
+            f"--page-token {self.TOKEN}",
+            "--password-file /etc/secretpw",
+        ):
+            expected = 'args = ["--token=[REDACTED]"]' if "=" in text else text
+            assert self._masked(text) == expected, text
+
+    def test_every_cookie_value_is_masked_and_names_kept(self) -> None:
+        """Every value, ``theme=dark`` included: a session cookie need not look like one."""
+        cases = {
+            f"Cookie: session={self.TOKEN}": "Cookie: session=[REDACTED]",
+            f"Cookie: theme=dark; sessionid={self.TOKEN}": (
+                "Cookie: theme=[REDACTED]; sessionid=[REDACTED]"
+            ),
+            f"curl -H 'Cookie: sid={self.TOKEN}' https://x": "curl -H 'Cookie: sid=[REDACTED]' https://x",
+            f'{{"Cookie": "a=1; b={self.TOKEN}"}}': '{"Cookie": "a=[REDACTED]; b=[REDACTED]"}',
+            f'Cookie: sid="{self.TOKEN}"': 'Cookie: sid="[REDACTED]"',
+        }
+        for text, expected in cases.items():
+            assert self._masked(text) == expected, text
+        assert self._masked("Cookie: chocolate chip") == "Cookie: chocolate chip"
+
+    def test_set_cookie_masks_the_first_pair_and_keeps_its_attributes(self) -> None:
+        assert self._masked(f"Set-Cookie: sid={self.TOKEN}; HttpOnly; Path=/") == (
+            "Set-Cookie: sid=[REDACTED]; HttpOnly; Path=/"
+        )
+
+    def test_a_secret_name_value_pair_is_masked_wherever_it_sits(self) -> None:
+        assert self._masked('{"name": "DEMO_SECRET", "value": "dummy-value-123"}') == (
+            '{"name": "DEMO_SECRET", "value": "[REDACTED]"}'
+        )
+        env = (
+            '{"env": [{"name": "DB_PASSWORD", "value": "hunter2-opaque-77"}, '
+            '{"name": "LOG_LEVEL", "value": "info"}]}'
+        )
+        assert self._masked(env) == (
+            '{"env": [{"name": "DB_PASSWORD", "value": "[REDACTED]"}, '
+            '{"name": "LOG_LEVEL", "value": "info"}]}'
+        )
+        assert self._masked('{"Key": "API_KEY", "Value": "abc"}') == (
+            '{"Key": "API_KEY", "Value": "[REDACTED]"}'
+        )
+
+    def test_kubectl_yaml_env_entries_are_masked_too(self) -> None:
+        yaml = (
+            "    env:\n    - name: DB_PASSWORD\n      value: hunter2-opaque-77\n"
+            "    - name: LOG_LEVEL\n      value: info"
+        )
+        assert self._masked(yaml) == (
+            "    env:\n    - name: DB_PASSWORD\n      value: [REDACTED]\n"
+            "    - name: LOG_LEVEL\n      value: info"
+        )
+
+    def test_a_non_secret_name_keeps_its_value(self) -> None:
+        text = '{"name": "LOG_LEVEL", "value": "info"}'
+        assert self._masked(text) == text
+
+    def test_secret_key_is_a_label_now(self) -> None:
+        """``AWS_SECRET_KEY=...`` ended in ``_KEY``, no label, until 0.10.37."""
+        assert self._masked("AWS_SECRET_KEY=aZ9kQ2mX7pL4vR8t") == "AWS_SECRET_KEY=[REDACTED]"
+
+    def test_the_new_detections_use_the_existing_types(self) -> None:
+        found = detect_sensitive_data(f"run --token {self.TOKEN}\nCookie: sid={self.TOKEN}")
+        assert {d["type"] for d in found} == {"password", "bearer_token"}

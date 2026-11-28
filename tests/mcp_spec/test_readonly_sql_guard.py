@@ -395,7 +395,10 @@ class TestPreset:
             "severity": "medium",
             "default_action": "deny",
             "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-125322",
-            "cves": ("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367"),
+            "cves": (
+                *("CVE-2026-125322", "CVE-2026-61789", "CVE-2026-63129", "CVE-2026-77367"),
+                "CVE-2026-138027",
+            ),
             "statement_fields": DEFAULT_STATEMENT_FIELDS,
             "fragment_fields": DEFAULT_FRAGMENT_FIELDS,
             "identifier_fields": DEFAULT_IDENTIFIER_FIELDS,
@@ -762,3 +765,80 @@ class TestAliasAndSortFields:
         from agent_airlock.policy_presets import readonly_sql_tool_args_2026_125322_defaults
 
         assert "CVE-2026-77367" in readonly_sql_tool_args_2026_125322_defaults()["cves"]
+
+
+class TestDuckDBAndClickHouseFileReads:
+    """CVE-2026-138027 (bagel-mcp before 2.5.5, High 7.5, NVD 2026-11-27): a "read-only" tool
+    ran DuckDB SQL, and prompt injection read local files and reached internal URLs through
+    DuckDB's table functions.
+
+    https://nvd.nist.gov/vuln/detail/CVE-2026-138027 (GHSA-xrqm-r82m-j847)
+
+    On d763fb5c every query in ``READS`` was allowed: DuckDB's readers were on no list, and a
+    quoted string in a FROM clause is a file or URL to DuckDB.
+    """
+
+    READS = [
+        "SELECT * FROM read_text('/etc/passwd')",
+        "SELECT * FROM read_csv_auto('http://169.254.169.254/latest/meta-data/')",
+        "SELECT content FROM read_blob('~/.ssh/id_rsa')",
+        "SELECT * FROM 'http://10.0.0.5/x.parquet'",
+        "SELECT * FROM read_parquet('s3://b/x.parquet')",
+        "SELECT * FROM glob('/home/*')",
+    ]
+
+    @pytest.mark.parametrize("query", READS)
+    def test_each_file_or_url_read_is_refused(self, query: str) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"query": query})
+        assert decision.verdict is V.DENY_DANGEROUS_FUNCTION
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "SELECT * FROM url('http://10.0.0.5/x', CSV)",
+            "SELECT * FROM file('/etc/passwd', 'LineAsString')",
+            "SELECT * FROM s3('https://b.s3.amazonaws.com/x.csv')",
+            "SELECT * FROM remote('10.0.0.5', db.t)",
+            "SELECT * FROM executable('id.sh', TabSeparated, 'x String')",
+            "SELECT * FROM query('DELETE FROM t')",
+            "SELECT * FROM t, '/etc/x.csv'",
+            "SELECT * FROM a JOIN 'f.parquet' USING (id)",
+            "SELECT * FROM (SELECT * FROM a) s, '/etc/x.csv'",
+        ],
+    )
+    def test_clickhouse_table_functions_and_other_table_places_are_refused(
+        self, query: str
+    ) -> None:
+        assert ReadOnlySQLGuard().evaluate({"query": query}).verdict is (V.DENY_DANGEROUS_FUNCTION)
+
+    def test_the_refusal_names_the_function_never_the_path(self) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"query": self.READS[0]})
+        assert decision.matched_pattern == "READ_TEXT"
+        assert "/etc/passwd" not in decision.detail
+        quoted = ReadOnlySQLGuard().evaluate({"query": self.READS[3]})
+        assert quoted.matched_pattern == "FROM '...'"
+        assert "10.0.0.5" not in quoted.detail
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "SELECT * FROM users",
+            "SELECT glob FROM t",
+            "SELECT file, url, query FROM t",
+            "SELECT * FROM t WHERE name GLOB 'a*'",
+            "SELECT * FROM t WHERE x IN ('a', 'b')",
+            "SELECT 'a', 'b' FROM t",
+            'SELECT * FROM "users"',
+            "SELECT * FROM t ORDER BY 'x'",
+        ],
+    )
+    def test_names_and_strings_elsewhere_are_allowed(self, query: str) -> None:
+        assert ReadOnlySQLGuard().evaluate({"query": query}).allowed is True
+
+    def test_pg_read_file_stays_denied(self) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"query": "SELECT pg_read_file('/etc/passwd')"})
+        assert decision.verdict is V.DENY_DANGEROUS_FUNCTION
+
+    def test_a_fragment_calling_one_is_refused_too(self) -> None:
+        decision = ReadOnlySQLGuard().evaluate({"where": "x = read_text('/etc/passwd')"})
+        assert decision.verdict is V.DENY_DANGEROUS_FUNCTION

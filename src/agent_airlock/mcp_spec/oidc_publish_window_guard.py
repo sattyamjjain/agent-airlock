@@ -122,11 +122,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from importlib.resources import files
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard
 from urllib.parse import unquote, urlsplit
 
 from .._log import structlog
 from .._url_paths import normalize_url_path
+from .install_command import install_specs
 from .release_age import ReleaseTimeLookup, ReleaseTimeUnavailableError
 
 logger = structlog.get_logger("agent-airlock.mcp_spec.oidc_publish_window_guard")
@@ -297,6 +298,16 @@ def _normalised_path(path: str) -> str:
     has no servlet path parameters, so its behaviour is unchanged.
     """
     return normalize_url_path(path)
+
+
+#: The arguments read as a command (0.10.37): a shell line, or one argv as a list.
+_COMMAND_FIELDS: tuple[str, ...] = ("command", "cmd", "argv")
+#: A ``command`` that is one program, so an ``args`` list beside it is its argv.
+_BARE_PROGRAM_RE = re.compile(r"[^\s;&|<>()$`'\"\\]+")
+
+
+def _is_str_list(value: object) -> TypeGuard[list[str] | tuple[str, ...]]:
+    return isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value)
 
 
 def _texts(value: object) -> list[str] | None:
@@ -748,8 +759,21 @@ class OIDCPublishWindowGuard:
                 are each read as a string, UTF-8 bytes, or a list of them;
                 ``package`` may carry its version (``name@1.2.3``,
                 ``name==1.2.3``). ``version`` is read only beside a
-                ``package``. Arguments that are not a mapping, and a field
-                of any other shape, are refused (``DENY_UNINSPECTABLE``).
+                ``package``. Since 0.10.37 ``command``, ``cmd`` and ``argv``
+                are read too (GHSA-pm3r-rxg9-cj5j, GHSA-v3pr-5www-qwjr): a
+                string is a shell line, split and followed through its wrappers
+                as :class:`~agent_airlock.shell_command_policy.ShellCommandPolicy`
+                reads it, a list of strings one argv, and a bare ``command``
+                beside an ``args`` list (an MCP server launch) the argv
+                ``[command, *args]``. Each package an install in it names
+                (:func:`~agent_airlock.mcp_spec.install_command.install_specs`:
+                pip, uv, uvx, pipx, npm, npx, pnpm, yarn, bun) is judged as a
+                ``package`` argument is, in the registry its installer names.
+                A command with no install passes. Arguments that are not a
+                mapping, a field of any other shape, a command the scanner
+                cannot follow (a substitution, inline code) and an install it
+                cannot read (``-r FILE``, a local path, packages from
+                ``xargs``) are refused (``DENY_UNINSPECTABLE``).
 
         Returns:
             :class:`OIDCPublishWindowDecision`. Callers map
@@ -771,55 +795,14 @@ class OIDCPublishWindowGuard:
         # Release-age queries, answered only after every list has been checked (0.10.36).
         aging: list[_AgeQuery] = []
         for spec in packages:
-            # A package spec that is (or ends in) a registry tarball URL installs that
-            # tarball: until 0.10.28 it was read as a name and matched nothing.
-            remote = _spec_url(spec)
-            if remote is not None:
-                decision = self._inspect_tarball_url(remote, aging)
-                if decision is not None:
-                    return decision
-                continue
-            name, embedded = _split_spec(spec)
-            candidates = ([embedded] if embedded else []) + versions
-            dated = len(aging)  # queries before this spec's own
-            from_registry = list(versions)
-            for version in candidates:
-                # A version written as a registry tarball URL installs that tarball (0.10.36).
-                remote = _spec_url(version)
-                if remote is not None:
-                    decision = self._inspect_tarball_url(remote, aging)
-                    if decision is not None:
-                        return decision
-                    if len(aging) > dated:  # its own query, so not the package's default one
-                        dated = len(aging)
-                        from_registry.remove(version)
-                for target, target_version in _version_targets(name, version):
-                    entry = self._lookup(target, target_version) if target_version else None
-                    if entry is not None:
-                        return self._deny_pair(entry, spec, version, self._advisory_for(entry))
-            # 1b) A package every version of which is malicious, whatever version is asked.
-            requested = embedded or (versions[0] if versions else None)
-            for candidate in _spec_names(spec):
-                blocked = self._blocked_entry(candidate, _spec_kinds(spec) or self._bare_kinds)
-                if blocked is not None:
-                    return self._deny_package(blocked, spec, requested, "package")
-            for version in versions:
-                for target, _ in _version_targets(name, version):
-                    if target != name:
-                        blocked = self._blocked_entry(target, ("npm",))
-                        if blocked is not None:
-                            return self._deny_package(blocked, spec, version, "package")
-            # 1c) A listed MCP malware package's basename under another scope (0.10.36).
-            for target in dict.fromkeys(
-                [name] + [t for version in versions for t, _ in _version_targets(name, version)]
-            ):
-                rescoped = self._rescoped_entry(target)
-                if rescoped is not None:
-                    return self._deny_rescoped(target, rescoped, spec, requested, "package")
-            if self._min_release_age is not None:
-                tarballs_only = bool(versions) and not from_registry
-                if embedded or not tarballs_only:
-                    aging.extend(self._age_queries(spec, name, embedded, from_registry))
+            decision = self._judge_spec(spec, versions, aging)
+            if decision is not None:
+                return decision
+
+        # 1d) Package installs written as a command (0.10.37, GHSA-pm3r-rxg9-cj5j).
+        decision = self._inspect_commands(args, aging)
+        if decision is not None:
+            return decision
 
         # 2) Registry tarball URL pointing at a blast-list pair.
         urls = _texts(args.get("url"))
@@ -837,6 +820,136 @@ class OIDCPublishWindowGuard:
                 return decision
 
         return self._allow("no blast-list pattern matched")
+
+    def _judge_spec(
+        self,
+        spec: str,
+        versions: list[str],
+        aging: list[_AgeQuery],
+        *,
+        kinds: tuple[str, ...] | None = None,
+        field_name: str = "package",
+    ) -> OIDCPublishWindowDecision | None:
+        """Judge one package spec against every list, queueing its release-age questions.
+
+        ``kinds`` forces the registry a bare name is read in (an install command names it:
+        ``pip install x`` is PyPI whatever ``installs_from`` says); None reads it as the
+        spec's syntax names it, else ``installs_from``. ``field_name`` names the argument
+        in a refusal.
+        """
+        # A package spec that is (or ends in) a registry tarball URL installs that
+        # tarball: until 0.10.28 it was read as a name and matched nothing.
+        remote = _spec_url(spec)
+        if remote is not None:
+            return self._inspect_tarball_url(remote, aging)
+        name, embedded = _split_spec(spec)
+        candidates = ([embedded] if embedded else []) + versions
+        dated = len(aging)  # queries before this spec's own
+        from_registry = list(versions)
+        for version in candidates:
+            # A version written as a registry tarball URL installs that tarball (0.10.36).
+            remote = _spec_url(version)
+            if remote is not None:
+                decision = self._inspect_tarball_url(remote, aging)
+                if decision is not None:
+                    return decision
+                if len(aging) > dated:  # its own query, so not the package's default one
+                    dated = len(aging)
+                    from_registry.remove(version)
+            for target, target_version in _version_targets(name, version):
+                entry = self._lookup(target, target_version) if target_version else None
+                if entry is not None:
+                    return self._deny_pair(entry, spec, version, self._advisory_for(entry))
+        # 1b) A package every version of which is malicious, whatever version is asked.
+        requested = embedded or (versions[0] if versions else None)
+        for candidate in _spec_names(spec):
+            blocked = self._blocked_entry(candidate, kinds or _spec_kinds(spec) or self._bare_kinds)
+            if blocked is not None:
+                return self._deny_package(blocked, spec, requested, field_name)
+        for version in versions:
+            for target, _ in _version_targets(name, version):
+                if target != name:
+                    blocked = self._blocked_entry(target, ("npm",))
+                    if blocked is not None:
+                        return self._deny_package(blocked, spec, version, field_name)
+        # 1c) A listed MCP malware package's basename under another scope (0.10.36).
+        for target in dict.fromkeys(
+            [name] + [t for version in versions for t, _ in _version_targets(name, version)]
+        ):
+            rescoped = self._rescoped_entry(target)
+            if rescoped is not None:
+                return self._deny_rescoped(target, rescoped, spec, requested, field_name)
+        if self._min_release_age is not None:
+            tarballs_only = bool(versions) and not from_registry
+            if embedded or not tarballs_only:
+                aging.extend(self._age_queries(spec, name, embedded, from_registry, kinds))
+        return None
+
+    def _inspect_commands(
+        self, args: Mapping[str, Any], aging: list[_AgeQuery]
+    ) -> OIDCPublishWindowDecision | None:
+        """Judge every package an install in ``command``, ``cmd`` or ``argv`` names.
+
+        A string is a shell line, split and followed through its wrappers the way
+        :class:`~agent_airlock.shell_command_policy.ShellCommandPolicy` reads it; a list of
+        strings is one argv. A ``command`` that is a bare program beside an ``args`` list
+        (an MCP server launch, ``{"command": "npx", "args": ["-y", "x"]}``) is read as
+        ``[command, *args]``. Each spec takes the path a ``package`` argument takes, read in
+        the registry its installer names (``pip install x`` is PyPI): ``installs_from``
+        decides only what a bare ``package`` name means, so a guard set to ``"pypi"`` still
+        judges ``npm i x``, as it judges ``{"package": "x@1.0"}``.
+        """
+        for field_name in _COMMAND_FIELDS:
+            value = args.get(field_name)
+            if value is None:
+                continue
+            launch = args.get("args") if field_name == "command" else None
+            read = self._command_argvs(field_name, value, launch)
+            if isinstance(read, OIDCPublishWindowDecision):
+                return read
+            for argv, fed in read:
+                for install in install_specs(argv, fed=fed):
+                    if install.uninspectable is not None:
+                        return self._deny_uninspectable(
+                            field_name,
+                            "an install the guard cannot read "
+                            f"({install.program}: {install.uninspectable})",
+                        )
+                    decision = self._judge_spec(
+                        install.spec, [], aging, kinds=(install.kind,), field_name=field_name
+                    )
+                    if decision is not None:
+                        return decision
+        return None
+
+    def _command_argvs(
+        self, field_name: str, value: object, launch: object
+    ) -> list[tuple[list[str], bool]] | OIDCPublishWindowDecision:
+        """The innermost argvs a command field runs, or the refusal for one it cannot read."""
+        from ..shell_command_policy import _innermost_argvs, _Unanalyzable
+
+        if isinstance(value, (bytes, bytearray)):
+            try:
+                value = bytes(value).decode("utf-8")
+            except UnicodeDecodeError:
+                return self._deny_uninspectable(field_name, "bytes that are not UTF-8")
+        command: str | list[str]
+        if isinstance(value, str):
+            if not value.strip():
+                return []
+            command = value
+            if _is_str_list(launch) and _BARE_PROGRAM_RE.fullmatch(value.strip()):
+                command = [value.strip(), *launch]
+        elif _is_str_list(value):
+            command = list(value)
+        else:
+            return self._deny_uninspectable(field_name, self._shape(value))
+        try:
+            return _innermost_argvs(command)
+        except _Unanalyzable as why:
+            return self._deny_uninspectable(
+                field_name, f"a command the guard cannot follow ({why})"
+            )
 
     def _lookup(self, name: str, version: str) -> tuple[str, str, str] | None:
         """The blast-list entry ``(name, version)`` spells, in either ecosystem, or None."""
@@ -909,7 +1022,12 @@ class OIDCPublishWindowGuard:
         )
 
     def _age_queries(
-        self, spec: str, name: str, embedded: str | None, versions: list[str]
+        self,
+        spec: str,
+        name: str,
+        embedded: str | None,
+        versions: list[str],
+        kinds: tuple[str, ...] | None = None,
     ) -> list[_AgeQuery]:
         """What to look up for a spec's release age, one query per version it carries.
 
@@ -918,17 +1036,19 @@ class OIDCPublishWindowGuard:
         """
         queries: list[_AgeQuery] = []
         if embedded and _is_registry_spec(spec, embedded):
-            queries.extend(self._age_query(spec, name, embedded))
+            queries.extend(self._age_query(spec, name, embedded, kinds))
         if _is_registry_spec(name, None):
             for version in versions:
-                queries.extend(self._age_query(spec, name, version))
+                queries.extend(self._age_query(spec, name, version, kinds))
         if not embedded and not versions and _is_registry_spec(spec, None):
-            queries.extend(self._age_query(spec, name, None))
+            queries.extend(self._age_query(spec, name, None, kinds))
         return queries
 
-    def _age_query(self, spec: str, name: str, version: str | None) -> list[_AgeQuery]:
+    def _age_query(
+        self, spec: str, name: str, version: str | None, kinds: tuple[str, ...] | None = None
+    ) -> list[_AgeQuery]:
         """The query for one version of ``spec`` (None: the registry's default), or none."""
-        kinds = _spec_kinds(spec) or self._bare_kinds or ("npm", "pypi")
+        kinds = kinds or _spec_kinds(spec) or self._bare_kinds or ("npm", "pypi")
         if version is not None and version.strip().lower().startswith("npm:"):
             kinds = ("npm",)
         lookups: list[tuple[str, str, str | None]] = []

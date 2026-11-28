@@ -36,7 +36,13 @@ What it does
   ``DESCRIBE`` / ``DESC`` or ``EXPLAIN``, and contain no data-changing keyword
   (``EXPLAIN ANALYZE DELETE`` runs the ``DELETE``, so the whole text is read), no
   ``SELECT ... INTO`` and no function from a short list that reads files, runs commands
-  or runs SQL held in a string.
+  or runs SQL held in a string. Since 0.10.37 that list holds DuckDB's file and URL
+  readers (``read_text``, ``read_csv_auto``, ``read_parquet``, ``glob`` ...) and
+  ClickHouse's ``url``, ``file``, ``s3``, ``hdfs``, ``remote`` and ``executable`` table
+  functions, each refused only where ``(`` follows it, and a single-quoted string where a
+  table stands (``FROM 'http://...'``), which DuckDB reads as a file or URL
+  (CVE-2026-138027, bagel-mcp). SQLite's ``glob()`` function is refused with them; its
+  ``GLOB`` operator is not, and SQLite's legacy ``FROM 'table'`` must use a name's quotes.
 - **Fragment fields** (``where``, ``filter``, ``condition``, ``having``, ``order_by``)
   hold a piece the server splices into a fixed query. A fragment may not read another
   table (``SELECT``, PostgreSQL and MySQL's ``TABLE name`` shorthand, PostgreSQL's
@@ -248,6 +254,40 @@ _DANGEROUS_FUNCTIONS: frozenset[str] = frozenset(
         "dumpfile",
     }
 )
+
+# Table functions that read a file or URL, or run SQL held in a string: DuckDB's readers
+# (CVE-2026-138027: bagel-mcp's "read-only" tool ran DuckDB SQL, and ``read_text`` /
+# ``read_csv_auto`` read local files and reached internal URLs) and ClickHouse's
+# ``url`` / ``file`` / ``s3`` / ``hdfs`` / ``remote`` family. Matched only when ``(``
+# follows, so a column named ``glob`` or ``file`` is not refused (0.10.37).
+_FILE_TABLE_FUNCTIONS: frozenset[str] = frozenset(
+    {
+        # DuckDB
+        *("read_text", "read_blob", "read_csv", "read_csv_auto", "read_json", "read_json_auto"),
+        *("read_json_objects", "read_json_objects_auto", "read_ndjson", "read_ndjson_auto"),
+        *("read_ndjson_objects", "read_parquet", "parquet_scan", "parquet_metadata"),
+        *("parquet_schema", "parquet_file_metadata", "parquet_kv_metadata", "read_xlsx"),
+        *("glob", "sniff_csv", "iceberg_scan", "iceberg_metadata", "iceberg_snapshots"),
+        *("delta_scan", "sqlite_scan", "postgres_scan", "postgres_query", "mysql_query"),
+        *("query", "query_table"),
+        # ClickHouse
+        *("url", "urlcluster", "file", "filecluster", "s3", "s3cluster", "gcs", "hdfs"),
+        *("hdfscluster", "azureblobstorage", "azureblobstoragecluster", "remote"),
+        *("remotesecure", "executable", "mysql", "postgresql", "mongodb", "redis", "jdbc"),
+        *("odbc", "sqlite", "iceberg", "deltalake", "hudi"),
+    }
+)
+
+# A FROM list: a single-quoted string at a table's place there is a file or URL DuckDB
+# reads (``FROM 'http://...'``, ``FROM '/etc/x.csv'``). These words end the list.
+_FROM_LIST_ENDS: frozenset[str] = frozenset(
+    {
+        *("WHERE", "GROUP", "ORDER", "HAVING", "LIMIT", "OFFSET", "FETCH", "WINDOW"),
+        *("QUALIFY", "UNION", "EXCEPT", "INTERSECT", "ON", "USING", "SELECT", "RETURNING"),
+    }
+)
+# Literal openers that are strings in every reading (``"`` is a name outside MySQL).
+_STRING_OPENERS: frozenset[str] = frozenset({"'", "E'", "$"})
 
 # What reads another table from inside a fragment: a SELECT, the ``TABLE name`` shorthand
 # (PostgreSQL, MySQL 8), and PostgreSQL functions that return a table's rows by name.
@@ -610,9 +650,24 @@ def _named(token: _Token, names: frozenset[str]) -> bool:
 
 
 def _dangerous_hit(code: list[_Token]) -> _Hit | None:
-    for token in code:
+    in_from_list = False  # between FROM / JOIN and the clause after the list
+    table_next = False  # the next token stands where a table does
+    for idx, token in enumerate(code):
         if _named(token, _DANGEROUS_FUNCTIONS):
             return ReadOnlySQLVerdict.DENY_DANGEROUS_FUNCTION, token[1]
+        called = code[idx + 1 : idx + 2] == [("punct", "(")]
+        if called and _named(token, _FILE_TABLE_FUNCTIONS):
+            return ReadOnlySQLVerdict.DENY_DANGEROUS_FUNCTION, token[1]
+        kind, text = token
+        if table_next and kind == "literal" and text in _STRING_OPENERS:
+            return ReadOnlySQLVerdict.DENY_DANGEROUS_FUNCTION, "FROM '...'"
+        table_next = False
+        if kind == "word" and text in ("FROM", "JOIN"):
+            in_from_list = table_next = True
+        elif kind == "word" and text in _FROM_LIST_ENDS:
+            in_from_list = False
+        elif in_from_list and token == ("punct", ","):
+            table_next = True
     return None
 
 
