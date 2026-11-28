@@ -103,8 +103,10 @@ _PAGE_CURSOR_WORDS: tuple[str, ...] = ("page", "next", "continuation", "sync", "
 #: The labels a secret's value follows, matched at the end of a longer name too
 #: (``client_secret``, ``OPENAI_API_KEY``, ``refreshToken``). Shared by the PASSWORD
 #: pattern and the mapping-key rule of :func:`sanitize_structured_report` (V0.10.36).
+#: ``secret_key`` since 0.10.37: ``AWS_SECRET_KEY=...`` ended in ``_KEY``, no label, and
+#: was masked only inside an environment dump.
 _SECRET_LABEL = (
-    r"(?:password|passwd|pwd|secret|"
+    r"(?:password|passwd|pwd|secret[_-]?key|secret|"
     + "".join(f"(?<!{w})(?<!{w}_)(?<!{w}-)" for w in _PAGE_CURSOR_WORDS)
     + r"token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)"
 )
@@ -663,6 +665,103 @@ def _env_dump_detections(content: str) -> list[dict[str, Any]]:
     ]
 
 
+# A command-line flag named like a secret (``--token``, ``--api-key``, ``--client-secret``,
+# ``-password``), then its value as the next word: after whitespace, or after a list
+# separator when the argv is written as a JSON, TOML or Python list
+# (``["--token", "..."]``). ``--token=...`` is the PASSWORD pattern's; ``-p`` names no
+# secret. A value starting with ``-`` is the next flag, not a value (0.10.37).
+_FLAG_SECRET = re.compile(
+    rf"(?i)(?<![\w-])-{{1,2}}[a-z0-9_-]*?{_SECRET_LABEL}"
+    r"(?:\"[ \t]*,[ \t]*\"(?!-)((?:[^\"\\\n]|\\.){8,})\""
+    r"|'[ \t]*,[ \t]*'(?!-)((?:[^'\\\n]|\\.){8,})'"
+    r"|[ \t]+\"(?!-)((?:[^\"\\\n]|\\.){8,})\""
+    r"|[ \t]+'(?!-)((?:[^'\\\n]|\\.){8,})'"
+    rf"|[ \t]+(?!-)(?={_UNQUOTED_VALUE_HEAD}{_UNQUOTED_VALUE_CHAR}{{7}})"
+    rf"({_UNQUOTED_VALUE_HEAD}{_UNQUOTED_VALUE_CHAR}*))"
+)
+# ``Cookie:`` / ``Set-Cookie:`` as a header line, a curl ``-H`` value or a JSON header map
+# key (``"cookie": "..."``), up to its first ``name=value`` pair.
+_COOKIE_HEADER = re.compile(r"(?i)(?<![\w-])(set-)?cookie['\"]?[ \t]*:[ \t]*\[?[ \t]*['\"]?")
+# One ``name=value`` pair; a value may be double-quoted (RFC 6265).
+_COOKIE_PAIR = re.compile(r"[ \t]*([^=;,\s'\"]+)=(\"[^\"\r\n]*\"|[^;\r\n'\"]*)")
+_COOKIE_NEXT = re.compile(r"[ \t]*;")
+# A JSON object with no object inside it: an ``env`` entry (``{"name": ..., "value": ...}``).
+_JSON_OBJECT = re.compile(r"\{[^{}]*\}")
+# A YAML ``name:`` line and the ``value:`` line right after it, as ``kubectl -o yaml`` prints
+# an env entry (``- name: DB_PASSWORD`` then ``  value: ...``).
+_YAML_NAME_VALUE = re.compile(
+    r"(?im)^([ \t]*)(?:-[ \t]+)?name:[ \t]*(['\"]?)([^'\"\s#]+)\2[ \t]*\r?\n"
+    r"\1(?:[ \t]{2})?value:[ \t]*(['\"]?)([^\r\n]*?)\4[ \t]*$"
+)
+
+
+def _secret_named(name: str) -> bool:
+    """Whether a variable or key name names a secret (``DB_PASSWORD``, ``api_key``)."""
+    return bool(_SECRET_NAME.fullmatch(name) or _SECRET_KEY.search(name))
+
+
+def _detection(kind: SensitiveDataType, content: str, start: int, end: int) -> dict[str, Any]:
+    return {
+        "type": kind.value,
+        "value": content[start:end],
+        "start": start,
+        "end": end,
+        "full_match": content[start:end],
+    }
+
+
+def _named_value_detections(content: str) -> list[dict[str, Any]]:
+    """PASSWORD detections the pattern cannot make (0.10.37): a secret flag's next argv word
+    (``--token VALUE``, ``["--token", "VALUE"]``), and the value of a name/value pair whose
+    name names a secret (``{"name": "DB_PASSWORD", "value": ...}``, Kubernetes, Docker and
+    many tool APIs' env lists, in JSON or as ``kubectl -o yaml`` prints them)."""
+    found: list[dict[str, Any]] = []
+    for match in _FLAG_SECRET.finditer(content):
+        group = match.lastindex or 0
+        found.append(_detection(SensitiveDataType.PASSWORD, content, *match.span(group)))
+    for obj in _JSON_OBJECT.finditer(content):
+        named: str | None = None
+        value: tuple[int, int] | None = None
+        for pair in _JSON_PAIR.finditer(content, obj.start(), obj.end()):
+            key = pair.group(1).lower()
+            if key in ("name", "key") and named is None:
+                named = pair.group(2)
+            elif key == "value" and value is None:
+                value = pair.span(2)
+        if named is not None and value is not None and value[1] > value[0]:
+            if _secret_named(named):
+                found.append(_detection(SensitiveDataType.PASSWORD, content, *value))
+    for match in _YAML_NAME_VALUE.finditer(content):
+        if match.group(5) and _secret_named(match.group(3)):
+            found.append(_detection(SensitiveDataType.PASSWORD, content, *match.span(5)))
+    return found
+
+
+def _cookie_detections(content: str) -> list[dict[str, Any]]:
+    """BEARER_TOKEN detections for cookie values (0.10.37): every value on a ``Cookie:``
+    line, whatever it looks like (a session cookie need not look like a token), and the
+    first pair's value on a ``Set-Cookie:`` line, its attributes kept. Names are kept."""
+    found: list[dict[str, Any]] = []
+    for header in _COOKIE_HEADER.finditer(content):
+        position = header.end()
+        while True:
+            pair = _COOKIE_PAIR.match(content, position)
+            if pair is None:
+                break
+            start, end = pair.span(2)
+            if end - start >= 2 and content[start] == '"' and content[end - 1] == '"':
+                start, end = start + 1, end - 1
+            while end > start and content[end - 1] in " \t":
+                end -= 1
+            if end > start:
+                found.append(_detection(SensitiveDataType.BEARER_TOKEN, content, start, end))
+            following = _COOKIE_NEXT.match(content, pair.end())
+            if header.group(1) or following is None:
+                break  # Set-Cookie: the rest are attributes
+            position = following.end()
+    return found
+
+
 def detect_sensitive_data(
     content: str,
     types: list[SensitiveDataType] | None = None,
@@ -692,6 +791,10 @@ def detect_sensitive_data(
         if data_type is SensitiveDataType.ENV_DUMP:
             detections.extend(_env_dump_detections(content))
             continue
+        if data_type is SensitiveDataType.PASSWORD:
+            detections.extend(_named_value_detections(content))
+        elif data_type is SensitiveDataType.BEARER_TOKEN:
+            detections.extend(_cookie_detections(content))
         pattern = PATTERNS.get(data_type)
         if not pattern:  # pragma: no cover - all types have patterns
             continue
