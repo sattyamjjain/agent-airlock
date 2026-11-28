@@ -25,6 +25,11 @@ inline code, a shell or interpreter reading its program from a pipe or stdin, an
 wrapper's parser does not know, an environment assignment that changes which program runs
 (``PATH=``, ``LD_PRELOAD=``, ``GIT_*``), and a git config key it cannot vouch for.
 Single-quoted text is text, as it is to the shell: ``grep '`' a.txt`` substitutes nothing.
+A shell given a script file (``sh FILE``, ``/bin/sh FILE``, ``bash -x FILE``) runs text the
+policy never reads: since 0.10.37 it is asked about when the policy has an ask rule, else
+denied, unless an allow rule names that exact path with no glob (``sh ./scripts/ci.sh``).
+Until then it was judged as the shell alone, so ``allow=("sh *",)`` admitted any file.
+Interpreters (``python script.py``) are still judged as the interpreter.
 
 A rule is words, then options: ``git push --force`` matches a command whose program is
 ``git`` and whose next word is ``push`` (git's global options such as ``-C dir`` skipped),
@@ -386,6 +391,8 @@ _ACTION_OPTIONS: dict[str, frozenset[str]] = {
 #: Characters that leave a redirection target to the shell: a ``$`` value, a glob, a
 #: brace expansion (``/de{v..v}/sda``).
 _UNDECIDED_TARGET = frozenset("$*?[{")
+#: Characters that make a rule word a glob rather than a literal word.
+_GLOB = frozenset("*?[")
 
 
 @dataclass(frozen=True)
@@ -555,8 +562,10 @@ _SHELL_LONG_FLAGS = frozenset(
 
 
 def _shell(argv: list[str]) -> list[Inner]:
-    """``bash -c LINE`` runs LINE; ``bash script`` is the shell running a file, judged as
-    itself; a shell with neither reads its program from stdin or a terminal: refused."""
+    """``bash -c LINE`` runs LINE; ``bash script`` is the shell running a file: a leaf,
+    which ``_Walk`` records with its file (:func:`_script_operand`) so the policy asks about
+    or denies it (0.10.37); a shell with neither reads its program from stdin or a
+    terminal: refused."""
     args = argv[1:]
     index = 0
     while index < len(args) and args[index].startswith(("-", "+")):
@@ -582,6 +591,23 @@ def _shell(argv: list[str]) -> list[Inner]:
     if index < len(args) and args[index - 1] == "--":
         return []
     raise _Unanalyzable(f"{_program(argv[0])} reads its program from stdin or a terminal")
+
+
+def _script_operand(argv: list[str]) -> str | None:
+    """The script file a shell leaf runs (``sh FILE``, ``bash -x FILE``, ``bash -- FILE``),
+    found as :func:`_shell` finds it."""
+    args = argv[1:]
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            return args[index + 1] if index + 1 < len(args) else None
+        if not arg.startswith(("-", "+")):
+            return arg
+        if arg[1:] in ("o", "O"):
+            index += 1  # -o / +o take an option name
+        index += 1
+    return None
 
 
 @dataclass(frozen=True)
@@ -1006,9 +1032,44 @@ class ShellCommandPolicy:
                 break
         if decision is None:
             decision = self._worst(walk, argument, ask=None)
-        if redirect is not None and decision.verdict != "deny":
-            return redirect  # an undecided target, asked about
+        # An undecided redirect target, or a script file nobody read: asked about (with an
+        # ask rule in the policy), else denied.
+        held = [d for d in (redirect, self._script(walk, argument)) if d is not None]
+        if held and decision.verdict != "deny":
+            return max(held, key=lambda d: _RANK[d.verdict])
         return decision
+
+    def _script(self, walk: _Walk, argument: str) -> ShellCommandDecision | None:
+        """The verdict on a shell running a script file, or None when there is none or an
+        allow rule names that file as a literal path (``allow=("sh ./scripts/ci.sh",)``).
+
+        The policy reads the command, never the file it runs, so until 0.10.37 an allow rule
+        for the shell (``sh *``) admitted any file: ``sh /tmp/x/cmds.txt`` ran whatever the
+        model had written there. It is now treated as an undecided redirect target is:
+        asked about when the policy has an ask rule, else denied.
+        """
+        for argv, script in walk.scripts:
+            if (
+                script is not None
+                and "$" not in script
+                and any(
+                    rule.matches(argv, anywhere=False)
+                    and any(
+                        word == script and not _GLOB.intersection(word) for word in rule.words[1:]
+                    )
+                    for rule in self._rules["allow"]
+                )
+            ):
+                continue
+            program = _program(argv[0])
+            return ShellCommandDecision(
+                "ask" if self._rules["ask"] else "deny",
+                argument,
+                program,
+                "script (unread file)",
+                f"`{program}` runs a script file whose contents were not read",
+            )
+        return None
 
     @staticmethod
     def _first_match(rule: _Rule, walk: _Walk) -> str | None:
@@ -1115,6 +1176,11 @@ class _Walk:
     leaves: list[list[str]] = field(default_factory=list)
     expands: bool = False
     writes: list[_Write] = field(default_factory=list)
+    #: Beside ``leaves``: whether a wrapper adds words to that command when it runs
+    #: (``xargs`` appends its input, ``find -exec`` puts a path where ``{}`` is).
+    fed: list[bool] = field(default_factory=list)
+    #: Shells running a script file, with the file: text the policy never reads (0.10.37).
+    scripts: list[tuple[list[str], str | None]] = field(default_factory=list)
 
     @classmethod
     def of(cls, command: Any) -> _Walk:
@@ -1136,7 +1202,7 @@ class _Walk:
             walk.command(segment, 0)
         return walk
 
-    def command(self, argv: list[str], depth: int) -> None:
+    def command(self, argv: list[str], depth: int, fed: bool = False) -> None:
         if depth > _MAX_DEPTH:
             raise _Unanalyzable("its wrappers nest too deep")
         argv = _command_words(argv)
@@ -1149,6 +1215,28 @@ class _Walk:
         if not inner:
             _refuse_shell_text(argv)
             self.leaves.append(argv)
+            self.fed.append(fed)
+            if wrapper is _shell:
+                self.scripts.append((argv, _script_operand(argv)))
+        feeds = fed or wrapper in (_xargs, _find)
         for item in [*inner, *launched]:
             for segment in _segments(item, self) if isinstance(item, str) else [item]:
-                self.command(segment, depth + 1)
+                self.command(segment, depth + 1, feeds)
+
+
+def _innermost_argvs(command: str | list[str]) -> list[tuple[list[str], bool]]:
+    """The innermost commands a shell line (or one argv) runs, as :class:`ShellCommandPolicy`
+    reads it: split with its scanner and followed through the wrappers it follows (``env``,
+    ``sudo``, ``timeout``, ``sh -c``, ``xargs``, ``python -m`` ...).
+
+    Each comes with whether a wrapper adds words to it when it runs (``xargs``,
+    ``find -exec``). For callers that judge what a command runs, not whether it may run
+    (``OIDCPublishWindowGuard`` reads package installs from it, 0.10.37).
+
+    Raises:
+        _Unanalyzable: What the policy itself refuses as unanalyzable: a substitution, an
+            unclosed quote, a shell reading its program from stdin, inline code, an option
+            a wrapper's parser does not know.
+    """
+    walk = _Walk.of(command)
+    return list(zip(walk.leaves, walk.fed, strict=True))

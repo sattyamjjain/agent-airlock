@@ -90,8 +90,18 @@ What the policy cannot follow is refused, whatever the rules say:
 - `git --config-env`, `--exec-path=`, an alias or `include.path` set with `-c`, and any
   `-c` key the policy does not know to be harmless.
 
-A script file is different: `bash scripts/test.sh` is the shell running that file, and the
-rules judge it as written.
+A script file is held, not followed: `sh FILE`, `/bin/sh FILE`, `bash -x FILE` and
+`bash -- FILE` run text the policy never reads. Since 0.10.37 such a command is asked about
+when the policy has an ask rule and denied when it has none, the way an undecided redirect
+target is. An allow rule that names the exact path, with no glob, still allows that file:
+
+```python
+ShellCommandPolicy(allow=("sh ./scripts/ci.sh",))  # allows sh ./scripts/ci.sh only
+```
+
+Until 0.10.37 the shell was judged as itself, so `allow=("sh *",)` admitted
+`sh /tmp/x/cmds.txt`, a file the model could have written. An interpreter running a script
+(`python script.py`) is still judged as the interpreter.
 
 ## Rules
 

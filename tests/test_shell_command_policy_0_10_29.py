@@ -369,3 +369,63 @@ class TestThePreset:
         run = _shell(shell_command_defaults()["policy"])
         assert run(command="git status") == "ran git status"
         assert _reason(run(command="git push --force")) == "shell_command_denied"
+
+
+class TestAShellRunningAScriptFile:
+    """V0.10.37: ``sh FILE`` runs text the policy never reads.
+
+    Measured on d763fb5c with ``ShellCommandPolicy(allow=("sh *", "cat *"), ask=("rm -rf",))``:
+    ``sh /tmp/x/cmds.txt`` and ``/bin/sh /tmp/x/cmds.txt`` were allowed by ``sh *``, while
+    ``sh -s < /tmp/x/cmds.txt`` and ``cat f | sh``, the same file through stdin, were denied.
+    The shell was judged as itself, so a model that could write a file could run anything
+    in it. This changes documented behaviour: the module docstring said a script file was
+    "the shell itself ... judged".
+    """
+
+    WITH_ASK = ShellCommandPolicy(allow=("sh *", "cat *"), ask=("rm -rf",))
+    WITHOUT_ASK = ShellCommandPolicy(allow=("sh *",))
+
+    @pytest.mark.parametrize(
+        "command",
+        ["sh /tmp/x/cmds.txt", "/bin/sh /tmp/x/cmds.txt", "sh -x /tmp/x.sh", "sh -- /tmp/x.sh"],
+    )
+    def test_it_is_asked_about_with_an_ask_rule_and_denied_without(self, command: str) -> None:
+        asked = self.WITH_ASK.decide(command)
+        assert (asked.verdict, asked.rule) == ("ask", "script (unread file)")
+        assert "contents were not read" in asked.detail
+        assert _verdict(command, self.WITHOUT_ASK) == "deny"
+
+    def test_bash_with_an_allow_rule_for_it_is_held_the_same_way(self) -> None:
+        policy = ShellCommandPolicy(allow=("bash *",))
+        assert _verdict("bash -x ./deploy.sh", policy) == "deny"
+        assert _verdict(
+            "sudo bash ./deploy.sh", ShellCommandPolicy(allow=("bash *", "sudo *"))
+        ) == ("deny")
+
+    def test_an_allow_rule_naming_the_exact_path_still_allows_that_file(self) -> None:
+        policy = ShellCommandPolicy(allow=("sh ./scripts/ci.sh",))
+        assert _verdict("sh ./scripts/ci.sh", policy) == "allow"
+        assert _verdict("sh ./scripts/other.sh", policy) == "deny"
+        both = ShellCommandPolicy(allow=("sh *", "sh ./scripts/ci.sh"), ask=("rm -rf",))
+        assert _verdict("sh ./scripts/ci.sh", both) == "allow"
+        assert _verdict("sh ./scripts/other.sh", both) == "ask"
+
+    def test_a_glob_or_a_shell_value_is_never_a_literal_path(self) -> None:
+        assert _verdict("sh ./scripts/ci.sh", ShellCommandPolicy(allow=("sh ./scripts/*.sh",))) == (
+            "deny"
+        )
+        assert _verdict("sh $SCRIPT", ShellCommandPolicy(allow=("sh $SCRIPT",))) == "deny"
+
+    @pytest.mark.parametrize(
+        ("command", "verdict"),
+        [
+            ("sh -c 'rm -rf /'", "ask"),
+            ("sh -s < /tmp/x/cmds.txt", "deny"),
+            ("cat f | sh", "deny"),
+        ],
+    )
+    def test_inline_stdin_and_pipe_verdicts_are_unchanged(self, command: str, verdict: str) -> None:
+        assert _verdict(command, self.WITH_ASK) == verdict
+
+    def test_an_interpreter_running_a_script_keeps_its_verdict(self) -> None:
+        assert _verdict("python script.py", ShellCommandPolicy(allow=("python *",))) == "allow"
